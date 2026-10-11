@@ -41,9 +41,9 @@ WorkspaceOverview {
 
 `WorkspaceSummary` contains the ID, name, lifecycle state, current user's owner role, and timestamps. IDs and timestamps support routing and diagnostics; the card leads with the Workspace name.
 
-`WorkspaceRuntimeSummary` contains connection state, safe machine facts, app version, capabilities where appropriate, and last-seen timestamps. Missing facts remain unknown; AX does not fabricate machine state.
+`WorkspaceRuntimeSummary` contains connection state, safe machine facts, app version, and last-seen timestamps. Missing facts remain unknown; AX does not fabricate machine state.
 
-`WorkspaceWorkerSummary` contains the logical Worker ID and type, owning Workspace ID, activation and readiness states, a safe attention code, Engine/Profile/provider CLI version facts, capabilities, local concurrency ceiling, and last-seen time. The projection excludes executable paths, credentials, local permission names, tokens, model defaults, raw command output, and authentication files.
+`WorkspaceWorkerSummary` contains the logical Worker ID and type, owning Workspace ID, activation and readiness states, a safe attention code, Engine/Profile/provider CLI version facts, model options, local concurrency ceiling, and last-seen time. Legacy Worker/Profile capability arrays are not exposed. The projection excludes executable paths, credentials, local permission names, tokens, model defaults, raw command output, and authentication files.
 
 Activation and readiness are independent. Disabling a Worker does not erase its readiness result. When a Space owner selects a Workflow Workspace, ready locally enabled Workers in that Workspace become available for Cloud scheduling; Cloud still owns scheduling limits and assignment admission.
 

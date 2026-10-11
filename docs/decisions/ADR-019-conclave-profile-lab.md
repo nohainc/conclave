@@ -213,7 +213,7 @@ Production Profile signing keys **MUST NEVER** be stored in, accessible to, or m
 The publication workflow delegates signing to a secure Cloud/CI signing boundary:
 1. Profile Lab completes local testing and validates all test evidence against the candidate `payloadDigest`.
 2. Profile Lab submits a publication request to Conclave Cloud containing the candidate payload and normalized test evidence.
-3. Conclave Cloud validates the payload schema and requires release-manager authorization. Stable promotion, channel rollback, release revocation, and assignment to the Stable channel require fresh session-bound step-up authentication.
+3. Conclave Cloud validates the payload schema and requires release-manager authorization. Stable promotion, channel rollback, and assignment to the Stable channel require fresh session-bound step-up authentication. Release revocation requires a mandatory reason and explicit Profile Lab confirmation.
 4. The isolated Cloud/CI signer signs the canonical payload digest with the production private key.
 5. Cloud records the immutable `SignedProfileRelease` row and assigns it to the initial release stage (e.g., `Testing`).
 
@@ -341,7 +341,7 @@ Every administrative endpoint is guarded by `authorizeToolProfileAdmin(request, 
 2. Required permissions (`profiles:admin` or `profiles:release:manage`).
 3. The dedicated desktop audience `conclave.profile-lab.management`.
 
-Stable promotion, Stable channel assignment, release revocation, and channel rollback additionally require a fresh session-bound passkey step-up (five-minute maximum age). The desktop session binds a browser-completed passkey ceremony through `POST /api/desktop-auth/profile-lab/step-up/complete`; stale ceremonies are rejected. Missing or stale step-up proof returns HTTP 428. Publication and other release-manager actions require `profiles:release:manage` but do not require step-up.
+Stable promotion, Stable channel assignment, and channel rollback additionally require a fresh session-bound passkey step-up (five-minute maximum age). The desktop session binds a browser-completed passkey ceremony through `POST /api/desktop-auth/profile-lab/step-up/complete`; stale ceremonies are rejected. Missing or stale step-up proof returns HTTP 428. Release revocation requires `profiles:release:manage`, a mandatory reason, and explicit confirmation in Profile Lab; it does not require step-up. Publication and other release-manager actions require `profiles:release:manage` but do not require step-up.
 
 Profile Lab execution creates unique scratch directories under its dedicated sandbox root. The root and run directory must be real directories contained at the expected path. Active Engine assignments are cancelled and the supervisor is disposed during teardown; cleanup errors are surfaced and prevent a passing ladder result.
 

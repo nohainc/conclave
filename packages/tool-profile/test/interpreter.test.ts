@@ -184,9 +184,8 @@ describe("Tool Profile v1 pure interpreter", () => {
     ]);
   });
 
-  it("does not attest Gemini sandbox as enforceable read-only execution", () => {
+  it("uses AGY plan mode for Chat and accept-edits for Work", () => {
     const profile = loadProfile("gemini-antigravity.v1");
-    expect(profile.capabilities).not.toContain("thread_read");
     expect(
       expandExecutionArguments(
         profile,
@@ -204,7 +203,7 @@ describe("Tool Profile v1 pure interpreter", () => {
         profile,
         context({ executionPolicy: "provider_default" }),
       ),
-    ).not.toContain("--mode");
+    ).toEqual(expect.arrayContaining(["--sandbox", "--mode", "plan"]));
   });
 
   it("evaluates only the fixed present/absent argument conditions", () => {

@@ -54,13 +54,14 @@ Conceptual JSON:
   "sandbox": {},
   "progress": {},
   "errors": {},
-  "capabilities": [],
   "compatibilityOverrides": []
 }
 ~~~
 
 Unknown fields are rejected unless a later schema version explicitly permits
-extensions.
+extensions. The former top-level `capabilities` field is retired; v1 no longer
+accepts or interprets it. Development databases must apply the destructive
+release reset migration before authoring new releases.
 
 The canonical v1 validator and inferred TypeScript model are maintained
 together in [`packages/tool-profile/src/index.ts`](../../packages/tool-profile/src/index.ts).
@@ -86,20 +87,15 @@ Work's `restricted` policy expands to `--sandbox workspace-write`. Argument
 expansion tests cover the default and all compatibility override layouts, both
 fresh and resumed conversations, and preserve the existing full-access mapping.
 
-For read-only assignments, Workspace additionally requires the admitted Profile
-to declare the existing `thread_read` capability before launching the Engine.
-This capability attests that `provider_default` enforces read-only Thread
-access; a sandbox flag or planning prompt alone is insufficient. Capability
-claims must be reviewed during official Profile qualification, not inferred from
-provider identity or CLI flag names. Writable assignments retain their existing
-policy. Older releases without this attestation fail closed for read-only tasks;
-publish a qualified successor rather than editing an immutable release.
+Workflow policy is resolved by Cloud and carried in the assignment. Workspace
+does not require a Worker or Profile capability declaration for Chat or Work.
+The Profile's signed sandbox mapping still determines the provider arguments;
+the web app owns which workflows and Workers may be selected.
 
-The Antigravity v1 starter deliberately does not declare `thread_read`.
-Its `--sandbox` mapping allows space writes, while `--mode plan` supplies
-planning instructions rather than a filesystem write prohibition. It remains
-available for Work but cannot execute Chat or other read-only assignments until
-a genuinely enforceable mapping is qualified. See the official
+The Antigravity starter uses `--mode plan` for Chat's provider-default policy
+and `--mode accept-edits` for Work's restricted policy. AGY does not expose a
+separate Conclave-style chat mode; plan mode is the closest provider mode and
+the web app remains responsible for workflow selection. See the official
 [sandbox contract](https://www.agy.dev/docs/sandbox/) and
 [execution modes](https://www.agy.dev/docs/cli/modes/).
 
@@ -722,24 +718,14 @@ Requirements:
 
 Materially different behavior should become a new Profile release instead.
 
-## 24. Capabilities
+## 24. Retired capability metadata
 
-Profile declares safe product capabilities such as:
-
-~~~text
-text
-local_file
-thread_read
-thread_write
-durable_session
-image
-audio
-video
-~~~
-
-Engine/Workspace intersect Profile claims with actual local/product permissions.
-
-A Profile cannot grant capabilities forbidden by Workspace.
+The former top-level `capabilities` array is not part of Tool Profile v1.
+Strict readers reject it. The development cutover migration deletes releases,
+channel pointers, and evidence created with that field, so there is no legacy
+release compatibility path. Workflow enablement, Worker selection,
+model/effort choices, and product restrictions are owned by the web app and
+Cloud workflow policy.
 
 ## 25. Profile release envelope
 
@@ -848,7 +834,7 @@ The profile testing workflow incorporates an iterative draft testing lifecycle i
    - Conclave Workspace strictly requires `isSigned => true` for admission. Unsigned draft objects are rejected by static types and runtime verifiers (`WorkerTrustPolicy`).
 
 3. **Evidence-Bound Transition:**
-   - The supported Profile Lab sandbox emits a capability-aware contract after applicable Engine scenarios pass. Cloud checks the submitted contract's identity, canonical digest, reported version ranges, freshness, and scenario map, then stores it for lifecycle gating. This is an authenticated client assertion, not remote attestation that a local provider binary executed the scenarios; see the [evidence contract](TOOL_PROFILE_EVIDENCE_CONTRACT.md).
+   - The supported Profile Lab sandbox emits an execution-contract result after applicable Engine scenarios pass. Cloud checks the submitted contract's identity, canonical digest, reported version ranges, freshness, and scenario map, then stores it for lifecycle gating. This is an authenticated client assertion, not remote attestation that a local provider binary executed the scenarios; see the [evidence contract](TOOL_PROFILE_EVIDENCE_CONTRACT.md).
    - Any edit to a draft payload recalculates its SHA-256 `payloadDigest` and immediately invalidates all accumulated evidence.
    - Cloud verifies evidence completeness and signs the payload upon publication (`POST /api/admin/workers/definitions/:id/releases`).
 
@@ -901,7 +887,7 @@ Tool Profile v1 is not:
 If Profile v1 cannot represent a provider safely:
 
 1. If the missing concept is generic across multiple CLI tools, add a typed
-   Engine/Profile capability in a new schema version.
+   Engine/Profile execution option in a new schema version.
 2. If it is provider-specific, prefer a specialized driver/engine rather than
    making the Profile schema a programming language.
 
@@ -935,3 +921,28 @@ layout, without resume arguments; successful execution replaces the local native
 mapping while retaining the Conversation scope. Failure preserves the previous
 mapping. No provider-specific executable or Profile schema addition is introduced.
 See [Conversation Continuity Phase 14](CONVERSATION_CONTINUITY_V1.md#phase-14--same-worker-different-model).
+
+## Generic CLI model discovery (Engine 1.1.0)
+
+Optional `model.discovery` declares version 1 provider discovery:
+`schemaVersion`, `arguments` (1–32), `timeoutMs` (100–10000), `format`, and
+`idPrefix`. It runs without a shell on the Profile's resolved provider CLI.
+`format: "tsv"` parses bounded rows of
+`model-id<TAB>label<TAB>effort1,effort2<TAB>default-effort` (the last two
+fields are optional). `format: "codex_app_server"` starts the declared Codex
+app-server command, performs the JSON-RPC `initialize` handshake, then calls
+`model/list`; its `displayName`, `id`, `supportedReasoningEfforts`, and
+`defaultReasoningEffort` fields become the sanitized catalog. Runtime inventory
+supplies the matching versioned catalog; it cannot widen a Profile without that
+declaration. For discovery-backed Profiles, the runtime catalog is the only
+source of model and effort choices: the Profile must not contain a fallback
+catalog or guessed effort rules. Model Auto remains the provider default;
+explicit discovered IDs and per-model efforts are checked locally and by Cloud
+with no substitution. The app-server protocol is used only for discovery;
+execution remains generic CLI Worker Engine behavior.
+
+Optional `probe.live.requiredForReadiness` binds scheduling readiness to a
+successful explicit live test for the current Profile digest and CLI version.
+Passive discovery does not authenticate the account. See
+[Gemini/AGY implementation contract](../architecture/GEMINI_AGY_PROFILE.md)
+for cache ownership, wire metadata, availability states, security and release gates.

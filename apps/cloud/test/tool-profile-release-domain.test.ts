@@ -61,7 +61,7 @@ describe("v8 Tool Profile Cloud release domain", () => {
     expect(
       apply(`
       SELECT worker_type_id, engine_family, visibility_state, release_stage,
-             capabilities_json, sort_order FROM worker_catalog ORDER BY sort_order;
+             sort_order FROM worker_catalog ORDER BY sort_order;
     `),
     ).toEqual([
       {
@@ -69,8 +69,6 @@ describe("v8 Tool Profile Cloud release domain", () => {
         engine_family: "cli",
         visibility_state: "visible",
         release_stage: "stable",
-        capabilities_json:
-          '["text","local_file","thread_read","thread_write","durable_session"]',
         sort_order: 10,
       },
       {
@@ -78,8 +76,6 @@ describe("v8 Tool Profile Cloud release domain", () => {
         engine_family: "cli",
         visibility_state: "visible",
         release_stage: "stable",
-        capabilities_json:
-          '["text","local_file","thread_read","thread_write","durable_session"]',
         sort_order: 20,
       },
     ]);

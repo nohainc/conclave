@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'package:crypto/crypto.dart';
 
@@ -57,6 +58,9 @@ class LocalWorker {
     this.toolVersion,
     this.toolName,
     this.toolPath,
+    this.modelCatalog,
+    this.lastLiveTestProfileDigest,
+    this.lastLiveTestToolVersion,
   })  : activationState = activationState ??
             (status == LocalWorkerStatus.disabled ||
                     status == LocalWorkerStatus.removed
@@ -104,6 +108,9 @@ class LocalWorker {
   final String? toolVersion;
   final String? toolName;
   final String? toolPath;
+  final DiscoveredModelCatalog? modelCatalog;
+  final String? lastLiveTestProfileDigest;
+  final String? lastLiveTestToolVersion;
 
   /// Bounded, provider-neutral local diagnostic. Raw CLI output is never kept.
   final String? lastLiveTestDetails;
@@ -126,6 +133,9 @@ class LocalWorker {
     String? toolVersion,
     String? toolName,
     bool clearToolName = false,
+    DiscoveredModelCatalog? modelCatalog,
+    String? lastLiveTestProfileDigest,
+    String? lastLiveTestToolVersion,
     String? toolPath,
     bool clearToolPath = false,
     bool clearToolVersion = false,
@@ -163,6 +173,11 @@ class LocalWorker {
             : lastLiveTestIssueCode ?? this.lastLiveTestIssueCode,
         toolVersion: clearToolVersion ? null : toolVersion ?? this.toolVersion,
         toolName: clearToolName ? null : toolName ?? this.toolName,
+        modelCatalog: modelCatalog ?? this.modelCatalog,
+        lastLiveTestProfileDigest:
+            lastLiveTestProfileDigest ?? this.lastLiveTestProfileDigest,
+        lastLiveTestToolVersion:
+            lastLiveTestToolVersion ?? this.lastLiveTestToolVersion,
         toolPath: clearToolPath ? null : toolPath ?? this.toolPath,
         lastLiveTestDetails: clearLastLiveTestDetails
             ? null
@@ -189,6 +204,11 @@ class LocalWorker {
         'providerToolVersion': toolVersion,
         'providerToolName': toolName,
         'providerToolPath': toolPath,
+        if (modelCatalog != null) 'modelCatalog': modelCatalog!.toJson(),
+        if (lastLiveTestProfileDigest != null)
+          'lastLiveTestProfileDigest': lastLiveTestProfileDigest,
+        if (lastLiveTestToolVersion != null)
+          'lastLiveTestToolVersion': lastLiveTestToolVersion,
       };
 
   factory LocalWorker.fromJson(Map<String, dynamic> json) {
@@ -212,6 +232,9 @@ class LocalWorker {
       'providerToolVersion',
       'providerToolName',
       'providerToolPath',
+      'modelCatalog',
+      'lastLiveTestProfileDigest',
+      'lastLiveTestToolVersion',
     };
     if (json.keys.any((key) => !allowedKeys.contains(key))) {
       throw const FormatException(
@@ -243,6 +266,18 @@ class LocalWorker {
     final toolVersion = json['providerToolVersion'];
     final toolName = json['providerToolName'];
     final toolPath = json['providerToolPath'];
+    if (json['lastLiveTestProfileDigest'] != null &&
+        (json['lastLiveTestProfileDigest'] is! String ||
+            !RegExp(r'^[0-9a-f]{64}$')
+                .hasMatch(json['lastLiveTestProfileDigest'] as String))) {
+      throw const FormatException('Invalid live Profile identity');
+    }
+    if (json['lastLiveTestToolVersion'] != null &&
+        (json['lastLiveTestToolVersion'] is! String ||
+            !RegExp(r'^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$')
+                .hasMatch(json['lastLiveTestToolVersion'] as String))) {
+      throw const FormatException('Invalid live CLI identity');
+    }
     if (lastLiveTestAt != null && lastLiveTestAt is! String ||
         lastLiveTestPassed != null && lastLiveTestPassed is! bool ||
         lastPassiveProbeAt != null && lastPassiveProbeAt is! String ||
@@ -328,6 +363,12 @@ class LocalWorker {
       toolVersion: toolVersion as String?,
       toolName: toolName as String?,
       toolPath: toolPath as String?,
+      lastLiveTestProfileDigest: json['lastLiveTestProfileDigest'] as String?,
+      lastLiveTestToolVersion: json['lastLiveTestToolVersion'] as String?,
+      modelCatalog: json['modelCatalog'] == null
+          ? null
+          : DiscoveredModelCatalog.fromJson(
+              Map<String, Object?>.from(json['modelCatalog'] as Map)),
     );
   }
 }

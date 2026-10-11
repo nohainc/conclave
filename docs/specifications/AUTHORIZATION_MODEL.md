@@ -42,11 +42,10 @@ unknown names are rejected. Space access policy values such as `view`,
 execution permissions.
 
 Workspace Grant writes validate permission IDs against that four-value set and
-reject duplicates. Worker capability values must be current Work v1 or Worker
-input capabilities. Explicit Worker IDs must be bounded IDs of Workers already
+reject duplicates. Explicit Worker IDs must be bounded IDs of Workers already
 inventoried on the granted Workspace; an empty list leaves all its Workers
-eligible (with at most 64 explicit IDs). An empty capability list leaves capability filtering to the
-Workflow/Worker compatibility check. Network policy accepts only
+eligible (with at most 64 explicit IDs). There is no Worker capability filter;
+workflow enablement and access policy are Cloud-owned. Network policy accepts only
 `deny_all` with no hosts or `allowlist` with unique, lowercase exact DNS
 hostnames (no scheme, port, path, wildcard, or IP literal). Concurrency must be
 an integer from 1 through 1024 and is intersected with the Worker and Cloud

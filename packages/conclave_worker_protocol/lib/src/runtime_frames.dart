@@ -1,3 +1,4 @@
+import 'discovered_models.dart';
 import 'dart:convert';
 
 import 'initialize_frames.dart';
@@ -176,6 +177,7 @@ final class ProbeResult extends WorkerFrame {
     required this.mode,
     required this.ready,
     required Iterable<ProbeCheck> checks,
+    this.modelCatalog,
     ProviderToolInfo? tool,
     String? providerToolName,
     String? providerToolVersion,
@@ -233,6 +235,7 @@ final class ProbeResult extends WorkerFrame {
   ProviderToolInfo? get tool => providerToolName == null
       ? null
       : ProviderToolInfo(name: providerToolName!, version: providerToolVersion);
+  final DiscoveredModelCatalog? modelCatalog;
   final List<ProbeCheck> checks;
   final String? issueCode;
   final String? diagnostics;
@@ -248,6 +251,7 @@ final class ProbeResult extends WorkerFrame {
         'ready': ready,
         'providerToolName': providerToolName,
         'providerToolVersion': providerToolVersion,
+        if (modelCatalog != null) 'modelCatalog': modelCatalog!.toJson(),
         'checks': checks.map((check) => check.toJson()).toList(growable: false),
         'issueCode': issueCode,
         'diagnostics': diagnostics,
@@ -262,10 +266,13 @@ final class ProbeResult extends WorkerFrame {
       'providerToolName',
       'providerToolVersion',
       'checks',
+      'modelCatalog',
       'issueCode',
       'diagnostics',
     });
     _expectType(json, 'probe.result');
+    if (json['modelCatalog'] != null && json['modelCatalog'] is! Map)
+      throw const FormatException('modelCatalog must be an object');
     final rawMode = _requiredString(json, 'mode');
     final rawReady = json['ready'];
     final rawToolName = json['providerToolName'];
@@ -293,6 +300,10 @@ final class ProbeResult extends WorkerFrame {
       ),
       mode: _parseProbeMode(rawMode),
       ready: rawReady,
+      modelCatalog: json['modelCatalog'] == null
+          ? null
+          : DiscoveredModelCatalog.fromJson(
+              Map<String, Object?>.from(json['modelCatalog'] as Map)),
       providerToolName: rawToolName as String?,
       providerToolVersion: rawToolVersion as String?,
       checks: rawChecks.map((check) {

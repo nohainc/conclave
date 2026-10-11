@@ -14,8 +14,6 @@ import {
   type WorkflowId,
   WORKFLOW_IDS,
   THREAD_BINDING_IDS,
-  WORKER_INPUT_CAPABILITIES,
-  validateWorkspaceGrantCapabilities,
   validateWorkspaceGrantPermissions,
   validateWorkspaceGrantWorkerIds,
 } from "@conclave/core";
@@ -287,10 +285,6 @@ export function eligibilityMessage(
     return `${step}: this Worker is no longer available in the Workspace catalog.`;
   if (code === "worker_scheduling_disabled")
     return `${step}: ${worker} is not enabled for scheduling.`;
-  if (code === "capability_missing")
-    return `${step}: ${worker} does not have the capability required by this Step.`;
-  if (code === "capability_not_granted")
-    return `${step}: the Space Workspace grant does not allow this Step's capability.`;
   if (code === "permission_not_granted")
     return `${step}: the Space Workspace grant does not allow the access this Step needs.`;
   if (code === "worker_not_allowed_by_grant")
@@ -323,7 +317,6 @@ export async function validateWorkflowWorkerEligibility(
     string,
     { workerId?: string; model?: string; reasoningEffort?: string }
   >,
-  attachments: readonly unknown[] = [],
 ): Promise<{
   issues: WorkEligibilityIssue[];
   primaryWorkspaceId: string | null;
@@ -354,12 +347,13 @@ export async function validateWorkflowWorkerEligibility(
     const row = await env.CONCLAVE_DB.prepare(
       `SELECT i.workspace_id AS workspaceId, i.worker_type_id AS workerTypeId,
               i.activation_state AS activationState, i.readiness_state AS readinessState,
-              i.readiness_issue_code AS readinessIssueCode, i.capabilities_json AS capabilitiesJson,
+              i.readiness_issue_code AS readinessIssueCode,
               i.engine_version AS engineVersion,
               i.profile_definition_id AS profileDefinitionId,
               i.profile_release_version AS profileReleaseVersion,
               i.provider_tool_version AS providerToolVersion,
               release.payload_json AS executionProfileJson,
+              release.payload_digest AS executionProfileDigest, i.model_catalog_json AS modelCatalogJson,
               catalog.lifecycle_state AS workerCatalogLifecycleState,
               catalog.visibility_state AS workerCatalogVisibilityState,
               catalog.release_stage AS workerCatalogReleaseStage,
@@ -369,7 +363,6 @@ export async function validateWorkflowWorkerEligibility(
               vs.state AS schedulingState,
               g.id AS grantId, g.status AS grantStatus, g.expires_at AS grantExpiresAt,
               g.allowed_worker_ids_json AS allowedWorkerIdsJson,
-              g.allowed_worker_capabilities_json AS grantCapabilitiesJson,
               g.allowed_permissions_json AS grantPermissionsJson,
               ep.allowed_models_json AS allowedModelsJson,
               ep.primary_workspace_id AS primaryWorkspaceId,
@@ -470,83 +463,9 @@ export async function validateWorkflowWorkerEligibility(
       push("engine_profile_unavailable");
     if (row.workspaceStatus !== "online") push("workspace_offline");
     if (row.runtimeIdentityId == null) push("workspace_offline");
-    const capabilities = parseJson<unknown[]>(row.capabilitiesJson, []).filter(
-      (value): value is string => typeof value === "string",
-    );
-    const requiredCapabilities = [...step.requiredCapabilities];
-    if (
-      !requiredCapabilities.every((capability) =>
-        capabilities.includes(capability),
-      )
-    )
-      push("capability_missing");
-    const rawGrantCapabilities = parseJson<unknown>(
-      row.grantCapabilitiesJson,
-      null,
-    );
-    if (!validateWorkspaceGrantCapabilities(rawGrantCapabilities)) {
-      push("workspace_grant_policy_invalid");
-    }
-    const grantCapabilities = validateWorkspaceGrantCapabilities(
-      rawGrantCapabilities,
-    )
-      ? rawGrantCapabilities
-      : [];
-    if (
-      grantCapabilities.length > 0 &&
-      !requiredCapabilities.every((capability) =>
-        grantCapabilities.includes(capability),
-      )
-    )
-      push("capability_not_granted");
-    const receivesAttachments =
-      step.kind === "research" || step.kind === "implement";
-    const requiredInputCapabilities = [
-      "text",
-      ...(receivesAttachments
-        ? attachmentRequiredCapabilities(attachments)
-        : []),
-    ];
-    const availableInputCapabilities = capabilities.filter((capability) =>
-      (WORKER_INPUT_CAPABILITIES as readonly string[]).includes(capability),
-    );
-    for (const capability of requiredInputCapabilities) {
-      if (!availableInputCapabilities.includes(capability)) {
-        issues.push({
-          stepKind: step.kind,
-          workerTypeId,
-          code: "input_capability_missing",
-          message: inputCapabilityMessage(
-            step.kind,
-            workerTypeId,
-            capability,
-            false,
-            row.workerDisplayName == null
-              ? null
-              : String(row.workerDisplayName),
-          ),
-        });
-      }
-      if (
-        grantCapabilities.length > 0 &&
-        !grantCapabilities.includes(capability)
-      ) {
-        issues.push({
-          stepKind: step.kind,
-          workerTypeId,
-          code: "input_capability_not_granted",
-          message: inputCapabilityMessage(
-            step.kind,
-            workerTypeId,
-            capability,
-            true,
-            row.workerDisplayName == null
-              ? null
-              : String(row.workerDisplayName),
-          ),
-        });
-      }
-    }
+    // Worker/Profile capability metadata is intentionally not part of
+    // eligibility. Workflow enablement and access policy are owned by Cloud;
+    // the selected Profile only supplies the engine invocation contract.
     const rawGrantPermissions = parseJson<unknown>(
       row.grantPermissionsJson,
       null,
@@ -600,6 +519,8 @@ export async function validateWorkflowWorkerEligibility(
     const executionOptions = spaceWorkerExecutionOptions(
       row.executionProfileJson,
       row.providerToolVersion,
+      row.modelCatalogJson,
+      row.executionProfileDigest,
     );
     if (executionOptions) {
       const error = validateWorkerExecutionSelection(
@@ -647,43 +568,6 @@ export async function validateWorkflowWorkerEligibility(
       push("workspace_not_primary");
   }
   return { issues, primaryWorkspaceId, workerProfiles };
-}
-
-export function attachmentRequiredCapabilities(
-  attachments: readonly unknown[],
-): string[] {
-  const required = new Set<string>();
-  for (const value of attachments) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const attachment = value as Record<string, unknown>;
-    if (attachment.kind !== "file") continue;
-    required.add("local_file");
-    const mediaType =
-      typeof attachment.mediaType === "string"
-        ? attachment.mediaType.toLowerCase()
-        : "";
-    if (mediaType.startsWith("text/")) required.add("text");
-    else if (mediaType.startsWith("image/")) required.add("image");
-    else if (mediaType.startsWith("audio/")) required.add("audio");
-    else if (mediaType.startsWith("video/")) required.add("video");
-  }
-  return [...required];
-}
-
-export function inputCapabilityMessage(
-  stepKind: string,
-  workerTypeId: string,
-  capability: string,
-  grantDenied = false,
-  displayName?: string | null,
-): string {
-  const step = stepKind[0]?.toUpperCase() + stepKind.slice(1);
-  const worker =
-    displayName?.trim() || (workerTypeId ? "Selected Worker" : "Worker");
-  const input = capability === "local_file" ? "local file" : capability;
-  return grantDenied
-    ? `${step} ${worker} is not granted ${input} input by the Space Workspace grant.`
-    : `${step} ${worker} does not support ${input} input.`;
 }
 
 export function summarizeTestCounts(text: string): string | null {

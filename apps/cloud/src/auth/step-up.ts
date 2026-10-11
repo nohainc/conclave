@@ -3,7 +3,6 @@ export const SENSITIVE_OPERATIONS = {
   billingSecurityChange: "billing.security.change",
   toolProfileStablePromotion: "tool_profile.stable_promotion",
   toolProfileRollback: "tool_profile.rollback",
-  toolProfileRevoke: "tool_profile.revoke",
 } as const;
 
 export type SensitiveOperation =
@@ -41,10 +40,6 @@ export const STEP_UP_REQUIREMENTS: Record<
     methods: ["passkey"],
   },
   [SENSITIVE_OPERATIONS.toolProfileRollback]: {
-    maxAgeMs: 5 * 60 * 1000,
-    methods: ["passkey"],
-  },
-  [SENSITIVE_OPERATIONS.toolProfileRevoke]: {
     maxAgeMs: 5 * 60 * 1000,
     methods: ["passkey"],
   },

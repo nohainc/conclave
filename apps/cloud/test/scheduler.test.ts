@@ -158,7 +158,6 @@ describe("Space execution scheduler", () => {
 
   it.each([
     ["Worker IDs", { allowed_worker_ids_json: '["../foreign"]' }],
-    ["capabilities", { allowed_worker_capabilities_json: '["run_shell"]' }],
     ["network policy", { network_policy_json: '{"mode":"allow_all"}' }],
     ["concurrency", { concurrency_json: '{"maxConcurrentAssignments":0}' }],
     ["status", { grant_status: "revoked" }],

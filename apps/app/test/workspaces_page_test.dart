@@ -358,7 +358,6 @@ void main() {
         status: 'ready',
         readinessState: 'ready',
         localConcurrencyLimit: 2,
-        capabilities: ['code'],
       );
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: snapshot.workspaces,
@@ -495,7 +494,6 @@ void main() {
             status: 'ready',
             readinessState: 'ready',
             localConcurrencyLimit: 1,
-            capabilities: const [],
           );
 
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
@@ -636,7 +634,6 @@ void main() {
             status: 'ready',
             readinessState: 'ready',
             localConcurrencyLimit: 1,
-            capabilities: [],
           ),
         ],
         onAdd: () {},

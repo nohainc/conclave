@@ -53,7 +53,6 @@ class ProfileDomainDiffCalculator {
       _diffTimeout(payloadA, payloadB),
       _diffProgress(payloadA, payloadB),
       _diffErrorMappings(payloadA, payloadB),
-      _diffCapabilities(payloadA, payloadB),
     ];
   }
 
@@ -168,6 +167,8 @@ class ProfileDomainDiffCalculator {
     final probeB = (b['probe'] as Map<String, dynamic>?) ?? {};
 
     final items = <DomainDiffItem>[
+      _compareField('Live Readiness Policy', 'probe.live',
+          _formatJson(probeA['live']), _formatJson(probeB['live'])),
       _compareField(
         'Passive Probes',
         'probe.passive',
@@ -234,6 +235,13 @@ class ProfileDomainDiffCalculator {
         _formatJson(modelA['arguments']),
         _formatJson(modelB['arguments']),
       ),
+      _compareField('Model Discovery', 'model.discovery',
+          _formatJson(modelA['discovery']), _formatJson(modelB['discovery'])),
+      _compareField(
+          'Execution Options',
+          'model.executionOptions',
+          _formatJson(modelA['executionOptions']),
+          _formatJson(modelB['executionOptions'])),
       _compareField(
         'Unknown Model Policy',
         'model.unknownModelPolicy',
@@ -332,24 +340,6 @@ class ProfileDomainDiffCalculator {
     return DomainDiffGroup(
       domainName: 'Error Classification Mappings',
       icon: Icons.warning_amber_outlined,
-      items: items,
-    );
-  }
-
-  static DomainDiffGroup _diffCapabilities(
-      Map<String, dynamic> a, Map<String, dynamic> b) {
-    final items = <DomainDiffItem>[
-      _compareField(
-        'Declared Capabilities',
-        'capabilities',
-        _formatJson(a['capabilities']),
-        _formatJson(b['capabilities']),
-      ),
-    ];
-
-    return DomainDiffGroup(
-      domainName: 'Capabilities',
-      icon: Icons.verified_user_outlined,
       items: items,
     );
   }

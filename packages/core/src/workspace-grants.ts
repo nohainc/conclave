@@ -2,8 +2,6 @@ import {
   isExecutionPermission,
   type ExecutionPermission,
 } from "./execution-permissions.js";
-import { WORKER_INPUT_CAPABILITIES } from "./worker-inventory.js";
-import { WORKFLOW_CAPABILITIES } from "./thread.js";
 
 /** Space authorization to execute work through a Workspace. */
 
@@ -16,13 +14,6 @@ export const WORKSPACE_SPACE_GRANT_STATUSES = [
   "revoked",
   "expired",
 ] as const satisfies readonly WorkspaceSpaceGrantStatus[];
-
-export const WORKSPACE_GRANT_CAPABILITIES = [
-  ...WORKFLOW_CAPABILITIES,
-  ...WORKER_INPUT_CAPABILITIES,
-  "thread_read",
-  "durable_session",
-] as const;
 
 export function isWorkspaceSpaceGrantStatus(
   value: unknown,
@@ -45,13 +36,6 @@ export function canTransitionWorkspaceSpaceGrantStatus(
   return false;
 }
 
-export function isWorkspaceGrantCapability(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    (WORKSPACE_GRANT_CAPABILITIES as readonly string[]).includes(value)
-  );
-}
-
 export function isWorkspaceWorkerId(value: unknown): value is string {
   return (
     typeof value === "string" &&
@@ -66,17 +50,6 @@ export function validateWorkspaceGrantPermissions(
     Array.isArray(value) &&
     value.length <= 4 &&
     value.every(isExecutionPermission) &&
-    new Set(value).size === value.length
-  );
-}
-
-export function validateWorkspaceGrantCapabilities(
-  value: unknown,
-): value is readonly string[] {
-  return (
-    Array.isArray(value) &&
-    value.length <= WORKSPACE_GRANT_CAPABILITIES.length &&
-    value.every(isWorkspaceGrantCapability) &&
     new Set(value).size === value.length
   );
 }
@@ -161,7 +134,6 @@ export interface WorkspaceSpaceGrant {
   readonly grantedByUserId: string;
   readonly status: WorkspaceSpaceGrantStatus;
   readonly allowedWorkerIds: readonly string[];
-  readonly allowedWorkerCapabilities: readonly string[];
   readonly allowedPermissions: readonly ExecutionPermission[];
   readonly networkPolicy: WorkspaceNetworkPolicy;
   readonly concurrency: WorkspaceConcurrencyPolicy;

@@ -23,18 +23,9 @@ describe("Workspace Grant execution permissions", () => {
     ).toThrow(/invalid or duplicate/);
   });
 
-  it("rejects unsupported or duplicate capability and Worker ID values", () => {
-    expect(() =>
-      grantStringArray(
-        ["authorized_context_read", "run_shell"],
-        "allowedWorkerCapabilities",
-      ),
-    ).toThrow(/invalid or duplicate/);
+  it("rejects duplicate Worker ID values", () => {
     expect(() =>
       grantStringArray(["worker-a", "worker-a"], "allowedWorkerIds"),
     ).toThrow(/invalid or duplicate/);
-    expect(grantStringArray(["text"], "allowedWorkerCapabilities")).toBe(
-      '["text"]',
-    );
   });
 });

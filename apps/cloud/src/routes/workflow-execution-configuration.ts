@@ -153,7 +153,6 @@ export async function resolveWorkflowExecutionBindings(
         threadId,
         { ...definition, steps: [step] },
         { [id]: value },
-        attachments,
       );
       if (admission.issues.length)
         throw new HttpError(

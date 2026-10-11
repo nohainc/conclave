@@ -16,7 +16,7 @@ export interface WorkerExecutionOptions {
   readonly models: {
     readonly supported: boolean;
     /** Current qualified source; live provider discovery is not inferred. */
-    readonly discovery: "profile_catalog";
+    readonly discovery: "profile_catalog" | "provider_catalog";
     readonly allowsCustomModel: boolean;
     readonly allowedModelIds: readonly string[];
     /** null means provider Default; it is not a resolved provider model. */

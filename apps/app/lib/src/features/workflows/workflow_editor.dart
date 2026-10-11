@@ -308,7 +308,7 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
             : '${selected.displayName} is ${_availability(selected).toLowerCase()}. You can keep its configuration; execution requires an available Worker.'),
       if (selected != null && selected.executionOptions == null)
         _notice(
-            'Model and effort options are unavailable until this Worker’s Profile capabilities are available.'),
+            'Model and effort options are unavailable until this Worker’s Profile is ready.'),
     ]);
   }
 

@@ -54,6 +54,7 @@ const stderrPatternId = z.enum([
   "deadline_exceeded",
   "provider_tool_unavailable",
   "provider_authentication_required",
+  "model_not_supported",
   "permission_denied",
   "quota_exhausted",
   "provider_unavailable",
@@ -450,6 +451,7 @@ const profileSchema = z
         live: z
           .object({
             timeoutMs: z.number().int().min(100).max(60_000),
+            requiredForReadiness: z.boolean().optional(),
             expectedFinalText: z
               .object({ kind: z.literal("exact"), value: z.literal("OK") })
               .strict(),
@@ -519,6 +521,18 @@ const profileSchema = z
         arguments: z.array(templatedString).max(TOOL_PROFILE_LIMITS.arguments),
         unknownModelPolicy: z.enum(["pass_through", "profile_allowlist"]),
         allowlist: z.array(modelId).max(128).optional(),
+        discovery: z
+          .object({
+            schemaVersion: z.literal(1),
+            arguments: z.array(templatedString).min(1).max(32),
+            timeoutMs: z.number().int().min(100).max(10000),
+            format: z.enum(["tsv", "codex_app_server"]),
+            // Empty means that the provider command is already scoped to
+            // models and every returned ID is accepted.
+            idPrefix: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/).or(z.literal("")),
+          })
+          .strict()
+          .optional(),
         catalog: z.array(modelCatalogEntry).max(128).optional(),
         executionOptions: z
           .object({
@@ -572,20 +586,6 @@ const profileSchema = z
         mappings: z.array(errorMapping).max(TOOL_PROFILE_LIMITS.errorMappings),
       })
       .strict(),
-    capabilities: z
-      .array(
-        z.enum([
-          "text",
-          "local_file",
-          "thread_read",
-          "thread_write",
-          "durable_session",
-          "image",
-          "audio",
-          "video",
-        ]),
-      )
-      .max(32),
     compatibilityOverrides: z
       .array(
         z
@@ -895,19 +895,6 @@ export const toolProfileV1Schema = profileSchema.superRefine((profile, ctx) => {
           "An environment variable cannot be both set and passed through",
       });
   }
-  const capabilities = profile.capabilities;
-  if (new Set(capabilities).size !== capabilities.length)
-    ctx.addIssue({
-      code: "custom",
-      path: ["capabilities"],
-      message: "Capabilities must be unique",
-    });
-  if (capabilities.includes("durable_session") && !profile.session.supported)
-    ctx.addIssue({
-      code: "custom",
-      path: ["capabilities"],
-      message: "durable_session requires session support",
-    });
 });
 
 export const toolProfileV1JsonSchema = z.toJSONSchema(profileSchema, {

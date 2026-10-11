@@ -8,7 +8,7 @@ import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'platform_process_supervisor.dart';
 import 'worker_process_cleanup.dart';
 
-const cliWorkerEngineVersion = '1.0.0';
+const cliWorkerEngineVersion = '1.1.0';
 
 /// Runs one isolated generic Engine process for one passive or live probe,
 /// or for normal / sandbox assignment execution.
@@ -165,9 +165,7 @@ final class CliWorkerEngineSupervisor {
           initialized.profileDefinitionId != release.profileDefinitionId ||
           initialized.profileReleaseVersion !=
               release.releaseVersion.toString() ||
-          initialized.profileSchemaVersion !=
-              release.profile['schemaVersion'] ||
-          !_sameCapabilities(initialized.capabilities, release.profile)) {
+          initialized.profileSchemaVersion != release.profile['schemaVersion']) {
         throw const FormatException('CLI Worker Engine initialize mismatch');
       }
       final result = await channel.exchange(
@@ -327,9 +325,7 @@ final class CliWorkerEngineSupervisor {
           initialized.profileDefinitionId != release.profileDefinitionId ||
           initialized.profileReleaseVersion !=
               release.releaseVersion.toString() ||
-          initialized.profileSchemaVersion !=
-              release.profile['schemaVersion'] ||
-          !_sameCapabilities(initialized.capabilities, release.profile)) {
+          initialized.profileSchemaVersion != release.profile['schemaVersion']) {
         throw const FormatException('CLI Worker Engine initialize mismatch');
       }
       final result = await channel.exchangeUntilTerminal(
@@ -502,13 +498,6 @@ final class CliWorkerEngineSupervisor {
       throw TimeoutException('probe deadline elapsed');
     }
     return value;
-  }
-
-  bool _sameCapabilities(List<String> values, Map<String, Object?> profile) {
-    final raw = profile['capabilities'];
-    if (raw is! List || raw.length != values.length) return false;
-    return values.toSet().length == values.length &&
-        values.toSet().containsAll(raw.whereType<String>());
   }
 
   Future<File?> _writeProcessRecord(

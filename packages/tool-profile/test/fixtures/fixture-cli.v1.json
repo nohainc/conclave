@@ -72,6 +72,5 @@
       }
     ]
   },
-  "capabilities": ["text"],
   "compatibilityOverrides": []
 }

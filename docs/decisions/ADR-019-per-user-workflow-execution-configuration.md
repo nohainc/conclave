@@ -26,9 +26,10 @@ User preferences store enabled state, explicit Worker defaults, sparse model/eff
 defaults, and sparse fixed-step overrides. A step may omit Worker to inherit the
 workflow default; model and effort omission means `Auto`. Definitions,
 structure, prompts, and internal contracts are never copied into preferences or
-made editable. Profile capabilities determine allowed model/effort combinations.
-Offline Workers remain configured; execution admission independently rechecks
-ownership, readiness, capabilities, grants, permissions, and Workspace eligibility.
+made editable. Signed Profile execution options determine supported model/effort
+combinations; legacy Worker/Profile capability arrays are ignored. Offline Workers
+remain configured; execution admission independently rechecks ownership, readiness,
+grants, permissions, and Workspace eligibility.
 
 Cloud resolves owner-global defaults plus shared Space overrides at request acceptance.
 Every enabled step must name a Worker in one Workspace; Cloud never chooses a
@@ -86,8 +87,8 @@ application menu rather than dedicated sidebar or rail buttons.
 
 Workspace selection is part of the execution scope, stored separately from sparse
 workflow preferences. Both Workflows views expose it. Only selected-Workspace
-Workers and Profile capabilities participate in editing, validation, and runtime
-resolution. A confirmed switch atomically resets all scope preferences. Spaces
+Workers and signed Profile execution options participate in editing, validation,
+and runtime resolution. A confirmed switch atomically resets all scope preferences. Spaces
 inherit the owner's global Workspace until explicitly forked; global switches
 reset inheriting Spaces but preserve independent scopes. Returning a Space to
 inheritance restores the current global configuration. Every Thread uses this

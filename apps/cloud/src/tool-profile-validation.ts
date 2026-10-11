@@ -63,7 +63,6 @@ export interface ToolProfileDefinitionInput {
 export interface ApprovedLogicalWorkerInput extends ToolProfileDefinitionInput {
   readonly description: string;
   readonly releaseStage: ToolProfileChannel;
-  readonly capabilities: readonly string[];
   readonly sortOrder: number;
 }
 
@@ -91,16 +90,6 @@ export const channelNames = new Set<ToolProfileChannel>([
   "beta",
   "stable",
 ]);
-export const productCapabilities = new Set([
-  "text",
-  "local_file",
-  "thread_read",
-  "thread_write",
-  "durable_session",
-  "image",
-  "audio",
-  "video",
-]);
 const acceptanceScenarios = [
   "passive_probe",
   "live_probe",
@@ -118,22 +107,18 @@ export type ToolProfileAcceptanceScenarioStatus = "passed" | "not_applicable";
 
 /**
  * Returns the exact scenario statuses expected for a Tool Profile. Cloud and
- * Profile Lab retain all eight scenario keys; optional capabilities are
- * explicitly recorded as not_applicable rather than omitted or passed.
+ * Profile Lab retain all eight scenario keys; unsupported execution scenarios
+ * are explicitly recorded as not_applicable rather than omitted or passed.
  */
 export function toolProfileAcceptanceScenarioStatuses(
   profile: ToolProfileV1,
 ): Readonly<
   Record<ToolProfileAcceptanceScenario, ToolProfileAcceptanceScenarioStatus>
 > {
-  const supportsDurableSession =
-    profile.capabilities.includes("durable_session");
-  if (supportsDurableSession !== profile.session.supported) {
-    throw new ToolProfileRegistryError(
-      409,
-      "Tool Profile durable_session capability does not match its session configuration",
-    );
-  }
+  // Session support is declared by the session contract itself. The former
+  // Profile capability list is legacy metadata and is not required for
+  // qualification or execution admission.
+  const supportsDurableSession = profile.session.supported;
   const statuses: Record<
     ToolProfileAcceptanceScenario,
     ToolProfileAcceptanceScenarioStatus
@@ -144,9 +129,10 @@ export function toolProfileAcceptanceScenarioStatuses(
       profile.model.supported && (profile.model.allowlist?.length ?? 0) > 0
         ? "passed"
         : "not_applicable",
-    representative_thread_write: profile.capabilities.includes("thread_write")
-      ? "passed"
-      : "not_applicable",
+    representative_thread_write:
+      profile.sandbox.mappings.restricted.length > 0
+        ? "passed"
+        : "not_applicable",
     durable_session_start: supportsDurableSession ? "passed" : "not_applicable",
     durable_session_resume: supportsDurableSession
       ? "passed"

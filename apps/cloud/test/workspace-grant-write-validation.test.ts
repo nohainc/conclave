@@ -85,7 +85,6 @@ async function createGrant(
 describe("Workspace Grant write validation", () => {
   it.each([
     ["permissions", { allowedPermissions: ["workspace:read"] }],
-    ["capabilities", { allowedWorkerCapabilities: ["run_shell"] }],
     ["network policy", { networkPolicy: { mode: "allow_all" } }],
     ["concurrency", { concurrency: { maxConcurrentAssignments: 0 } }],
     ["unknown fields", { legacyScope: "all" }],
@@ -124,7 +123,6 @@ describe("Workspace Grant write validation", () => {
     const writes = await createGrant(
       {
         allowedWorkerIds: ["worker-local"],
-        allowedWorkerCapabilities: ["text", "authorized_context_read"],
         allowedPermissions: ["repository:read", "network:use"],
         networkPolicy: {
           mode: "allowlist",

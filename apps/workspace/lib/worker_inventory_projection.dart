@@ -19,14 +19,6 @@ Map<String, Object?> spaceWorkerInventory({
   final runnable = descriptor.workerTypeId == worker.workerTypeId &&
       profileMatches &&
       engineAvailable;
-  final declaredCapabilities =
-      runnable ? descriptor.capabilities : const <String>[];
-  final capabilities = <String>{
-    ...declaredCapabilities,
-    if (declaredCapabilities.contains('thread_read')) 'authorized_context_read',
-  }.toList()
-    ..sort();
-
   return {
     'workerId': worker.id,
     'workerTypeId': worker.workerTypeId,
@@ -48,7 +40,10 @@ Map<String, Object?> spaceWorkerInventory({
     'profileReleaseVersion': runnable ? eligibleProfile.releaseVersion : null,
     'providerToolName': descriptor.providerToolName,
     'providerToolVersion': worker.toolVersion,
-    'capabilities': capabilities,
+    if (runnable &&
+        worker.modelCatalog?.profileDigest == eligibleProfile.payloadDigest &&
+        worker.modelCatalog?.providerToolVersion == worker.toolVersion)
+      'modelCatalog': worker.modelCatalog!.toJson(),
     'localConcurrencyLimit': worker.localConcurrencyLimit,
     'revision': worker.revision,
     'createdAt': worker.createdAt,

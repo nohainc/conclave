@@ -85,7 +85,6 @@ void main() {
           'formatId': 'profile-defined-session',
           'resumeArguments': ['--continue', '{{sessionId}}'],
         },
-        'capabilities': ['text'],
       };
       final context = AiAssistantContext(
         workerMetadata: {'workerTypeId': 'dynamic-worker'},

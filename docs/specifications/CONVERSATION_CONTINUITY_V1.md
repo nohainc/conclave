@@ -121,8 +121,8 @@ Core remains provider-independent.
 ## Workflow execution policy (Phase 2)
 
 Every product Workflow definition includes `executionPolicy: WorkflowCapabilities`.
-These product controls are distinct from the existing `capabilities` array of
-required Worker execution capabilities and from access/permission policy.
+These product controls are distinct from Profile metadata and from
+access/permission policy.
 
 | Capability | Chat | Work | Meaning |
 | --- | --- | --- | --- |
@@ -427,7 +427,7 @@ in the two-pane layout. Rows can scroll horizontally on narrower screens, while
 Send stays visible. Preview has one Send control. Text input remains editable
 while an execution is active; sending another request stays disabled until it ends.
 
-Workflow capability metadata determines which values are shown; graph workflows
+Workflow policy determines which values are shown; graph workflows
 retain their per-Step Work settings in the Workflows surface. The composer shows
 the eligible Space Worker with its name, Workspace label, and existing provider
 icon or generic initial. Worker/model/effort selection remains in Workflows.
@@ -945,7 +945,7 @@ recorded Worker attribution. No extra timeline event is needed while the
 selected Worker is already visible beside Send.
 
 Switching clears the prior Worker's model/effort before reconciling the target
-Profile's capabilities and restoring its remembered choices. It also refreshes
+Profile's execution options and restoring its remembered choices. It also refreshes
 the display label and clears the previous fallback Worker and fallback label,
 so the next-turn binding cannot carry another Worker's identity metadata.
 
@@ -1130,7 +1130,7 @@ continuity preparation, context construction and provider invocation explicitly.
 | Execution Engine | Snapshot selected Worker/model/effort and execution policy; return generic Step results | Cloud `execution-engine.ts` |
 | Conversation Router | Choose continuity action and prepare full/delta/new-request context | Core `conversation-router.ts`; local `conversation_execution_router.dart` |
 | Context Engine | Assemble canonical conversation and receiving-step workflow context | Core Context Engine, supplied by Cloud-owned context loading |
-| Worker Engine | Validate local native state and Profile capabilities; supervise CLI, reconstruct and persist | Generic CLI Worker Engine and signed Tool Profiles |
+| Worker Engine | Validate local native state and the signed Profile execution contract; supervise CLI, reconstruct and persist | Generic CLI Worker Engine and signed Tool Profiles |
 
 The Workflow runner calls `prepareWorkerStepExecution` rather than deriving
 session keys, runtime policy or Worker options itself. It calls
@@ -1171,7 +1171,7 @@ boundary; routing decisions alone are not evidence that a provider resumed.
 | --- | --- | --- |
 | Same Worker/model/effort | Continue, new request only | Core `conversation-router.test.ts`; Engine `conversation_execution_router_test.dart`, `engine_session_release_compatibility_test.dart` |
 | Effort change only | Same native scope, new turn effort | Core routing matrix; Cloud `conversation-turns.test.ts`; Engine `worker_session_test.dart` |
-| Model change | Keep session or reconstruct according to Profile capability | Core routing matrix; Engine release compatibility subprocess fixtures |
+| Model change | Keep session or reconstruct according to Profile session/model options | Core routing matrix; Engine release compatibility subprocess fixtures |
 | New Worker | Bootstrap existing canonical context | Core routing matrix; Cloud bootstrap fixtures |
 | Return to previous Worker | Resume its own session with bounded delta | Core round-trip regression; Engine delta-context fixtures |
 | Worker switch in Chat/Work | No warning | AX `spaces_pages_test.dart` |
@@ -1214,7 +1214,8 @@ of the v8 product contract. The fixture that previously supplied `worker_id` now
 uses that contract. SQL column names and runtime protocol fields are unaffected.
 The Worker icon/name mapping shared by composer and responses is isolated in
 `worker_presentation.dart`; unknown Workers retain catalog names and a generic
-visual fallback. Signed Profiles remain the source of execution capabilities.
+visual fallback. Signed Profiles remain the source of provider execution
+options and session contracts.
 
 The existing v8 architecture guard now checks that Workflow dispatch and result
 handling use the Execution Engine, session keys/policies do not move back into

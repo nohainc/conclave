@@ -139,7 +139,6 @@ Environment: API_KEY=super_secret_val; DATABASE_URL=postgres://localhost:5432/db
           },
           'progress': [],
           'errors': {'mappings': []},
-          'capabilities': ['code_generation'],
           'compatibilityOverrides': [],
         };
         final unsafeCandidate =

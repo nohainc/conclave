@@ -38,7 +38,6 @@ class ProfileAiHeuristicRepairService {
         {
           'workerTypeId': controller.selectedDefinitionId ?? 'unknown-worker',
           'displayName': controller.selectedDefinitionId ?? 'Unknown Worker',
-          'capabilities': ['code_generation'],
         };
 
     // 2. Stable profile
@@ -122,7 +121,6 @@ class ProfileAiHeuristicRepairService {
           'argv': ['--version'],
           'exitCode': 0,
         },
-        'capabilities': ['code_generation'],
       });
     }
 
@@ -228,14 +226,6 @@ class ProfileAiHeuristicRepairService {
       }
       exec['argv'] = argv;
       base['execution'] = exec;
-    }
-
-    if (promptLower.contains('capability') ||
-        promptLower.contains('capabilities')) {
-      final caps = List<String>.from(base['capabilities'] as List? ?? []);
-      if (!caps.contains('code_generation')) caps.add('code_generation');
-      if (!caps.contains('tool_execution')) caps.add('tool_execution');
-      base['capabilities'] = caps;
     }
 
     return base;

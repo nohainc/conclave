@@ -86,7 +86,6 @@ void main() {
         description: descriptorJson['description']! as String,
         providerToolName: 'Phase 13 Fixture CLI',
         releaseStage: 'testing',
-        capabilities: ['text', 'thread_write', 'durable_session'],
         sortOrder: 9000,
       );
       expect(created['success'], isTrue);

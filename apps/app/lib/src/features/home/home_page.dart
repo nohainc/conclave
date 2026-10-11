@@ -2128,9 +2128,9 @@ const defaultProductUpdates = [
     slug: 'tool-profiles',
     title: 'Tool Profiles',
     summary:
-        'Workers now load provider capabilities dynamically from signed Tool Profiles with strict credential isolation.',
+        'Workers now load provider execution options dynamically from signed Tool Profiles with strict credential isolation.',
     details:
-        'Signed cryptographic tool profiles define explicit capabilities, CLI execution constraints, and isolate local model credentials from cloud telemetry.',
+        'Signed cryptographic Tool Profiles define provider execution constraints and isolate local model credentials from Cloud telemetry.',
     category: AxProductUpdateCategory.security,
     publishedAt: '2026-10-04T00:00:00Z',
     dateDisplay: 'Oct 4',
@@ -2211,7 +2211,7 @@ class AxAiUpdatesDialog extends StatelessWidget {
                               fontSize: 22, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 2),
                       Text(
-                        'New worker capabilities and model updates',
+                        'New Worker execution options and model updates',
                         style: TextStyle(
                             fontSize: 13, color: colorScheme.onSurfaceVariant),
                       ),

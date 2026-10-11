@@ -16,6 +16,7 @@ import '../profile_lab_session_store.dart';
 import '../profile_lab_test_sandbox.dart';
 import '../profile_lab_release_trust.dart';
 import '../utils/profile_lab_model_proposals.dart';
+import '../utils/profile_payload_migrations.dart';
 
 import '../models/selected_worker_state.dart';
 
@@ -196,6 +197,8 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   String? evidenceError;
   String? auditError;
   String? definitionsError;
+  String? draftError;
+  String? startupError;
   bool get isLoadingWorkerCatalog => _refreshes.containsKey('catalog');
   bool get isLoadingDefinitions =>
       _refreshes.keys.any((k) => k.startsWith('definition:'));

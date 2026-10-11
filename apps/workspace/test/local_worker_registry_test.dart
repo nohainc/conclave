@@ -141,7 +141,6 @@ void main() {
       engineFamily: 'cli',
       visibilityState: 'visible',
       releaseStage: 'testing',
-      capabilities: ['text'],
       sortOrder: 30,
     );
     final worker = await registry.create(catalogEntry: entry);
@@ -157,7 +156,6 @@ void main() {
           engineFamily: 'native',
           visibilityState: 'visible',
           releaseStage: 'testing',
-          capabilities: ['text'],
           sortOrder: 1,
         ),
       ),

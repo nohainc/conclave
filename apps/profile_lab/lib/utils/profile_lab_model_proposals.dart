@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import '../profile_admin_api_client.dart';
 import '../profile_lab_test_sandbox.dart';
@@ -32,6 +33,8 @@ class ProfileLabModelProposalService {
   Future<List<ProfileLabAiModelOption>> loadAvailableModels({
     required ProfileAdminApiClient apiClient,
     required WorkerTrustPolicy trustPolicy,
+    Future<DiscoveredModelCatalog?> Function(ToolProfileReleaseAdmission)?
+        discoverModels,
   }) async {
     final trustState = await apiClient.fetchReleaseTrust();
     trustPolicy.updateRevocations(
@@ -96,12 +99,28 @@ class ProfileLabModelProposalService {
         final modelSelectionSupported =
             modelConfig is Map && modelConfig['supported'] == true;
         final allowlist = modelConfig is Map ? modelConfig['allowlist'] : null;
-        final supportedModels = modelSelectionSupported && allowlist is List
+        var supportedModels = modelSelectionSupported && allowlist is List
             ? allowlist
                 .whereType<String>()
                 .where((value) => value.isNotEmpty)
                 .toList()
             : const <String>[];
+        if (modelSelectionSupported && modelConfig['discovery'] is Map) {
+          if (discoverModels == null) continue;
+          final discovered = await discoverModels(release);
+          if (discovered == null ||
+              discovered.profileDigest != release.payloadDigest) {
+            continue;
+          }
+          final prefix =
+              (modelConfig['discovery'] as Map)['idPrefix'] as String?;
+          if (prefix == null) continue;
+          supportedModels = discovered.models
+              .where((model) =>
+                  model.status != 'unavailable' && model.id.startsWith(prefix))
+              .map((model) => model.id)
+              .toList();
+        }
         if (modelSelectionSupported && supportedModels.isEmpty) continue;
         final selectedModels = modelSelectionSupported
             ? supportedModels.cast<String?>()

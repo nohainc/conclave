@@ -432,7 +432,6 @@ This is standard body paragraph text with **bold** and `inline_code`.
                   status: 'ready',
                   readinessState: 'ready',
                   localConcurrencyLimit: 4,
-                  capabilities: ['code', 'review'],
                 ),
               ],
             ),

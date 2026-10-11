@@ -125,6 +125,15 @@ void main() {
     expect(cache.peek('w').olderCursor, older);
     expect(() => cache.peek('w').requests.clear(), throwsUnsupportedError);
   });
+
+  test('ignores stale legacy workstream thread identifiers', () async {
+    const id = 'workstream-b70292a0-5e90-4955-bac1-bcb6f75c760a';
+    await cache.refresh(id);
+
+    expect(source.calls, isEmpty);
+    expect(cache.peek(id).initialLoaded, isTrue);
+  });
+
   test(
       '5,000 Work Requests: initial 50, older 50 only on demand, no cursor traversal',
       () async {

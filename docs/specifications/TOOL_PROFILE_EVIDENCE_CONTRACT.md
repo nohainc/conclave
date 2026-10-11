@@ -75,7 +75,7 @@ Draft v19 (Payload B)
 
 ### Staleness Rules:
 1. **No Cross-Digest Reuse:** Profile Lab associates local results with the candidate digest. Cloud checks submitted evidence identity and digest against the current draft or immutable release before storing or using the record.
-2. **Draft → Testing Blocker:** Before publication, Profile Lab submits its complete local execution contract to `POST /api/admin/tool-profiles/{definitionId}/releases/{version}/qualification`. Cloud accepts qualification only while the exact release remains a mutable draft and the evidence identity, digest, Engine/provider version ranges, freshness, and capability-aware scenarios all validate against the stored draft.
+2. **Draft → Testing Blocker:** Before publication, Profile Lab submits its complete local execution contract to `POST /api/admin/tool-profiles/{definitionId}/releases/{version}/qualification`. Cloud accepts qualification only while the exact release remains a mutable draft and the evidence identity, digest, Engine/provider version ranges, freshness, and contract-derived scenarios all validate against the stored draft.
 3. **Publication Blocker:** `publishDraftToolProfileRelease` requires a `qualificationEvidenceId`. Cloud reloads that immutable record and repeats all qualification checks against the current draft digest in the signing operation. Missing, stale, mismatched, incomplete, or malformed qualification blocks signature generation and publication.
 4. **Promotion Blocker:** Conclave Cloud accepts only an `acceptanceEvidenceId` that names a separately submitted immutable post-publication record for the same release and payload digest. Promotion requests never contain evidence JSON.
 
@@ -83,7 +83,7 @@ Draft v19 (Payload B)
 
 ## 4. Normalized Evidence Schema
 
-Local qualification and post-publication acceptance use the same shape validated by `ToolProfileAcceptanceEvidence` in `apps/cloud/src/tool-profile-validation.ts`. It retains all eight scenario keys. Cloud derives applicability from the actual Tool Profile: required scenarios must be `passed`, while scenarios for undeclared or untestable optional capabilities must be `not_applicable`. Failed or incomplete run details stay in the local Test Workbench result and are never submitted as qualification or acceptance evidence.
+Local qualification and post-publication acceptance use the same shape validated by `ToolProfileAcceptanceEvidence` in `apps/cloud/src/tool-profile-validation.ts`. It retains all eight scenario keys. Cloud derives applicability from the actual signed execution contract: supported scenarios must be `passed`, while unsupported or untestable scenarios must be `not_applicable`. Failed or incomplete run details stay in the local Test Workbench result and are never submitted as qualification or acceptance evidence.
 
 ```json
 {
@@ -137,7 +137,7 @@ The publish endpoint rejects client signature/key fields and requires a stored l
 
 | Field | Type | Description |
 | :--- | :--- | :--- |
-| `formatVersion` | `2` | Schema version of the capability-aware evidence format. |
+| `formatVersion` | `2` | Schema version of the execution evidence format. |
 | `profileDefinitionId` | `string` | Target Profile Definition identifier (e.g. `chatgpt-codex`). |
 | `releaseVersion` | `integer` | Target integer release version (e.g. `19`). |
 | `profileReleaseVersion` | `string` | Decimal representation of `releaseVersion`. |
@@ -147,7 +147,7 @@ The publish endpoint rejects client signature/key fields and requires a stored l
 | `providerToolName` | `string` | Binary name of the provider CLI (e.g. `codex`). |
 | `providerToolVersion`| `string` | Semver of the installed provider CLI tool tested against. |
 | `acceptedAt` | `ISO 8601` | Client-reported UTC completion time for required scenarios. Cloud checks its format and freshness. |
-| `scenarios` | `map<string, "passed" | "not_applicable">` | Exactly the eight Cloud scenarios. Statuses must match capability applicability derived by Cloud. |
+| `scenarios` | `map<string, "passed" | "not_applicable">` | Exactly the eight Cloud scenarios. Statuses must match the signed execution contract derived by Cloud. |
 
 ---
 
@@ -210,7 +210,7 @@ Promotion through the lifecycle channels requires meeting specific evidence crit
 ```
 
 Cloud's gate validates the submitted contract's shape, identity, digest,
-version claims, freshness, and capability-aware statuses. It does not verify
+version claims, freshness, and contract-derived statuses. It does not verify
 the local executable, observe the test process, or provide device attestation.
 The Profile Lab client enforces the supported execution flow by producing a
 contract only after its sandbox scenarios pass; a caller with API access can
@@ -229,11 +229,10 @@ also execute the applicable real Engine scenarios:
   required and must be `passed`;
 - `model_selection` must be `passed` when the Profile supports model selection
   and has an allowlisted test model, otherwise `not_applicable`;
-- `representative_thread_write` must be `passed` when the Profile declares
-  `thread_write`, otherwise `not_applicable`;
+- `representative_thread_write` must be `passed` when the signed sandbox
+  mapping supports the scenario, otherwise `not_applicable`;
 - `durable_session_start` and `durable_session_resume` must be `passed` when
-  `durable_session` is declared and `session.supported` is true, otherwise
-  `not_applicable`.
+  `session.supported` is true, otherwise `not_applicable`.
 
 The sandbox emits the evidence contract only after its real Engine scenarios
 pass, and Profile Lab submits that contract to Cloud before publication. Cloud
@@ -254,15 +253,14 @@ As enforced by `validateToolProfileAcceptanceEvidence()` in `apps/cloud/src/tool
 3. **Engine Range Inclusion:** `evidence.engineVersion` must fall within `profile.engineCompatibility` range `[min, maxExclusive)`.
 4. **Tool Range Inclusion:** `evidence.providerToolVersion` must fall within one of `profile.providerTool.supportedVersions` ranges.
 5. **Freshness:** `acceptedAt` timestamp must not be in the future (within clock skew) and must be $\le 90\text{ days}$ old.
-6. **Capability-Aware Scenarios:** Cloud expects every scenario key and derives applicable statuses from the signed Tool Profile:
+6. **Contract-Derived Scenarios:** Cloud expects every scenario key and derives applicable statuses from the signed Tool Profile:
    - `passive_probe`
    - `live_probe`
    - `model_selection` (`passed` when model selection is supported with an allowlisted test model; otherwise `not_applicable`)
-   - `representative_thread_write` (`passed` only when `thread_write` is declared; otherwise `not_applicable`)
-   - `durable_session_start` and `durable_session_resume` (`passed` only when `durable_session` is declared and `session.supported` is true; otherwise `not_applicable`)
+   - `representative_thread_write` (`passed` only when the signed restricted sandbox mapping is available; otherwise `not_applicable`)
+   - `durable_session_start` and `durable_session_resume` (`passed` only when `session.supported` is true; otherwise `not_applicable`)
    - `cancellation`
    - `timeout`
-   The `durable_session` capability and `session.supported` must agree; inconsistent Profile declarations cannot be promoted.
 7. **Database Persistence:** Evidence is stored immutably in `tool_profile_acceptance_evidence` when submitted, separately from promotion. Multiple immutable records may exist for one release digest.
 
 ---

@@ -153,9 +153,6 @@ export async function handleRetryWorkRequest(
     String(row.threadId),
     { ...workflow, steps: [step] },
     bindings,
-    Array.isArray(attachmentInput.attachments)
-      ? attachmentInput.attachments
-      : [],
   );
   if (eligibility.issues.length > 0) {
     return json(

@@ -210,8 +210,7 @@ are part of the immutable Workflow version.
 Before creating a Work Request, Cloud resolves every required Step binding and
 checks that each Worker exists, belongs to an active Space Workspace grant,
 is enabled locally and for Cloud scheduling, and is Ready. Cloud also checks
-that the Worker and grant provide every required Step capability and the grant
-allows the permissions needed by the Step. Any explicitly configured model must
+that the grant allows the permissions needed by the Step. Any explicitly configured model must
 be permitted by the Thread execution policy; if that policy has an explicit
 model allowlist, a model must be selected from it.
 
@@ -588,18 +587,13 @@ file is also limited to 1 MiB. Links are limited to 2,048 characters and may
 not embed URL credentials. Cloud stores bounded file bytes in the Work Request
 input and stores only safe metadata/URL references in the immutable snapshot.
 
-The safe Worker inventory exposes the closed input capability set `text`,
-`image`, `audio`, `video`, and `local_file`, derived from each Worker release's
-declared capabilities. The composer eligibility check verifies text support
-for every selected Step, then checks attachment modalities for the bound
-Chat, Research and Implement Workers (Work uses the `direct` binding). Local
-files require `local_file` plus the matching text/image/audio/video capability
-when their MIME type identifies one. The Workspace grant must allow each
-required input capability. Incompatibility is reported before submission with
-the affected Step, Worker, and input type. URL references are ordinary text
-references and do not request provider fetching by Workspace. Chat, Work,
-Research, and Implement receive safe relative file references; Plan receives
-attachment metadata, and Test/Verify use their defined handoff inputs.
+Attachments are validated as bounded request inputs and are materialized inside
+the authorized Space work directory. Worker/Profile capability metadata is not
+used to admit or reject them; workflow policy and the Space grant's execution
+permissions remain authoritative. URL references are ordinary text references
+and do not request provider fetching by Workspace. Chat, Work, Research, and
+Implement receive safe relative file references; Plan receives attachment
+metadata, and Test/Verify use their defined handoff inputs.
 Thread-local execution materializes file bytes under
 `.conclave/inputs/<work-request-id>/file-NNN`; paths are derived from
 server-generated request identity and attachment order, never accepted from
@@ -807,7 +801,7 @@ requires authoring and publishing a new signed release through Profile Lab.
 Chat/Work Worker, model, and effort values sit beside Send as the effective
 Space Workflow configuration. One-step Work requests can edit these controls
 for the current request only; multi-step Workflows continue to use their
-configured Space values. Workflow policy and Profile capabilities gate the
+configured Space values. Workflow policy and signed Profile execution options gate the
 values shown. See
 [dynamic composer](CONVERSATION_CONTINUITY_V1.md#phase-8--dynamic-next-turn-composer).
 

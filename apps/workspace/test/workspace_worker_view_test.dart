@@ -14,7 +14,6 @@ void main() {
     engineFamily: 'cli',
     visibilityState: 'visible',
     releaseStage: 'testing',
-    capabilities: ['text'],
     sortOrder: 1,
   );
 

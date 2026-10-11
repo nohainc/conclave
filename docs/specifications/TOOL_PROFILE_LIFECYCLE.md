@@ -156,7 +156,7 @@ State transitions are strictly validated by Cloud registry routes and enforced i
   5. Controlled execution & output parsing (JSONL events).
   6. Session creation & session resumption.
   7. Timeout, error mapping, and cancellation process cleanup.
-- **Evidence Binding:** A passing run emits the capability-aware Cloud evidence contract bound to the candidate's canonical SHA-256 `payloadDigest`. Profile Lab submits it as local qualification before publication. Cloud validates the submitted contract against the stored draft and returns the qualification ID required by publication.
+- **Evidence Binding:** A passing run emits the Cloud execution evidence contract bound to the candidate's canonical SHA-256 `payloadDigest`. Profile Lab submits it as local qualification before publication. Cloud validates the submitted contract against the stored draft and returns the qualification ID required by publication.
 - **Digest Binding:** If a draft edit changes its canonical payload, its `payloadDigest` changes. A record for the prior digest cannot qualify the changed payload.
 
 ### Step 4: Publish & Freeze (`draft` $\to$ `testing`)
@@ -190,7 +190,7 @@ State transitions are strictly validated by Cloud registry routes and enforced i
 - **Evidence Gate:** Stable promotion requires an acceptance contract stored in `tool_profile_acceptance_evidence` and meeting the Cloud checks in the [Tool Profile Evidence-Bound Promotion Contract](TOOL_PROFILE_EVIDENCE_CONTRACT.md):
   - Must match the release's exact `payload_digest`.
   - Must be referenced by its stored `acceptanceEvidenceId`; promotion requests do not carry evidence JSON.
-  - Cloud reloads the immutable record and revalidates all eight capability-aware scenarios.
+  - Cloud reloads the immutable record and revalidates all eight execution-contract scenarios.
   - The client-reported provider CLI version must be within the Profile's declared range. Cloud cannot attest to the local binary.
   - Must be no older than 90 days.
 - **Payload Effect:** **ZERO.** Payload is never edited.

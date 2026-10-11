@@ -194,7 +194,6 @@ void main() {
         'description': 'Codex CLI worker',
         'providerToolName': 'codex',
         'releaseStage': 'testing',
-        'capabilities': ['text'],
       }),
       ProfileLabWorkerReadModel.fromJson({
         'workerTypeId': 'gemini',
@@ -203,7 +202,6 @@ void main() {
         'description': 'Gemini CLI worker',
         'providerToolName': 'gemini-cli',
         'releaseStage': 'stable',
-        'capabilities': ['text'],
       }),
     ]);
     await tester.pumpAndSettle();

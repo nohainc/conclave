@@ -2519,7 +2519,6 @@ class _GenericWorkerConfigDataSource extends _WorkFormDataSource {
           status: 'ready',
           readinessState: 'ready',
           localConcurrencyLimit: 1,
-          capabilities: [],
         ),
       ];
   @override
@@ -2814,7 +2813,6 @@ class _ModelSelectionTestDataSource extends _GenericWorkerConfigDataSource {
           status: 'ready',
           readinessState: 'ready',
           localConcurrencyLimit: 1,
-          capabilities: [],
           modelOptions: {
             'catalog': [
               {

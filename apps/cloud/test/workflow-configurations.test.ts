@@ -84,7 +84,7 @@ it("persists only user overrides, isolates users, retains offline choices, reset
         env,
         "chat",
       ),
-    ).rejects.toThrow("capabilities");
+    ).rejects.toThrow("execution options");
     await handleWorkflowConfigurations(
       request("PUT", "U", { ...configuration, enabled: true }),
       env,
@@ -267,7 +267,7 @@ it("persists only user overrides, isolates users, retains offline choices, reset
         env,
         "chat",
       ),
-    ).rejects.toThrow("capabilities");
+    ).rejects.toThrow("execution options");
     await handleWorkflowConfigurations(request("DELETE"), env, "chat");
   } finally {
     sqlite.close();

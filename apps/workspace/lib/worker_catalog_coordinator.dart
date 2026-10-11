@@ -493,7 +493,9 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
                 : WorkspaceWorkerProfileState.unavailable,
             message: switch (resolution.reason) {
               ToolProfileUnavailableReason.noEligibleRelease =>
-                'No eligible signed Profile release is downloaded.',
+                'No eligible signed Profile release is available for the '
+                    'selected channel. Publish and promote a qualified '
+                    'release to the channel selected for this Workspace.',
               ToolProfileUnavailableReason.unsupportedProviderVersion =>
                 'The installed Provider CLI version is not supported by a Profile release.',
               ToolProfileUnavailableReason.incompatibleEngineVersion =>

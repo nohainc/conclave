@@ -159,7 +159,6 @@ describe("approved logical Worker catalog projection", () => {
         engineFamily: "cli",
         visibilityState: "visible",
         releaseStage: "testing",
-        capabilities: ["text", "thread_read"],
         sortOrder: 15,
         profileDefinitionId: "claude-code",
         providerToolName: "claude",
@@ -168,7 +167,7 @@ describe("approved logical Worker catalog projection", () => {
     expect(statement.bind).toHaveBeenCalledWith("testing", null);
   });
 
-  it("fails closed on an unknown product capability", async () => {
+  it("ignores legacy Worker capability metadata", async () => {
     const statement = {
       bind: vi.fn(function (this: unknown) {
         return this;
@@ -191,12 +190,12 @@ describe("approved logical Worker catalog projection", () => {
       })),
     };
     const db = { prepare: vi.fn(() => statement) } as unknown as D1Database;
-    await expect(resolveLogicalWorkerCatalog(db)).rejects.toThrow(
-      /capabilities are invalid/,
-    );
+    await expect(resolveLogicalWorkerCatalog(db)).resolves.toMatchObject([
+      { workerTypeId: "fixture-worker" },
+    ]);
   });
 
-  it("normalizes retired workstream capability names from persisted catalogs", async () => {
+  it("does not project legacy capability metadata", async () => {
     const statement = {
       bind: vi.fn(function (this: unknown) {
         return this;
@@ -221,10 +220,7 @@ describe("approved logical Worker catalog projection", () => {
     const db = { prepare: vi.fn(() => statement) } as unknown as D1Database;
 
     await expect(resolveLogicalWorkerCatalog(db)).resolves.toMatchObject([
-      {
-        workerTypeId: "legacy-worker",
-        capabilities: ["text", "thread_read", "thread_write"],
-      },
+      { workerTypeId: "legacy-worker" },
     ]);
   });
 });
@@ -465,7 +461,7 @@ describe("stable Tool Profile acceptance evidence", () => {
     ).toThrow(ToolProfileRegistryError);
   });
 
-  it("derives optional scenario applicability from Profile capabilities", () => {
+  it("derives optional scenario applicability from the Profile contract", () => {
     const modelProfile = structuredClone(profile) as ToolProfileV1;
     modelProfile.model.supported = true;
     modelProfile.model.allowlist = ["fixture-model"];
@@ -482,7 +478,7 @@ describe("stable Tool Profile acceptance evidence", () => {
     ).toMatchObject(modelEvidence);
 
     const threadProfile = structuredClone(profile) as ToolProfileV1;
-    (threadProfile.capabilities as string[]).push("thread_write");
+    threadProfile.sandbox.mappings.restricted = ["--mode", "restricted"];
     const applicableEvidence = {
       ...evidence,
       scenarios: {
@@ -499,7 +495,6 @@ describe("stable Tool Profile acceptance evidence", () => {
     ).toMatchObject(applicableEvidence);
 
     const sessionProfile = structuredClone(profile) as ToolProfileV1;
-    (sessionProfile.capabilities as string[]).push("durable_session");
     sessionProfile.session.supported = true;
     const sessionEvidence = {
       ...evidence,
@@ -532,21 +527,6 @@ describe("stable Tool Profile acceptance evidence", () => {
       /Stable promotion requires complete real Profile acceptance evidence/,
     );
 
-    const inconsistentSessionProfile = structuredClone(
-      profile,
-    ) as ToolProfileV1;
-    (inconsistentSessionProfile.capabilities as string[]).push(
-      "durable_session",
-    );
-    expect(() =>
-      validateToolProfileAcceptanceEvidence(evidence, {
-        identity,
-        payloadDigest: "a".repeat(64),
-        profile: inconsistentSessionProfile,
-      }),
-    ).toThrow(
-      /Stable promotion requires complete real Profile acceptance evidence/,
-    );
   });
 });
 
@@ -579,7 +559,6 @@ describe("Phase 7 Profile Admin read models and operations", () => {
     expect(result.workers[0]).toMatchObject({
       workerTypeId: "claude",
       displayName: "Claude Code",
-      capabilities: ["text", "tools"],
       profileDefinitionId: "claude-code",
       providerToolName: "claude",
       releaseStage: "beta",

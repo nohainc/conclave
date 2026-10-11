@@ -25,6 +25,8 @@ class WorkerReadinessAssessment {
     this.replaceToolName = false,
     this.toolPath,
     this.replaceToolPath = false,
+    this.modelCatalog,
+    this.profileDigest,
   });
 
   final WorkerReadinessState state;
@@ -36,6 +38,8 @@ class WorkerReadinessAssessment {
   final bool replaceToolName;
   final String? toolPath;
   final bool replaceToolPath;
+  final DiscoveredModelCatalog? modelCatalog;
+  final String? profileDigest;
 }
 
 class WorkerReadinessMonitor {
@@ -284,6 +288,7 @@ class WorkerReadinessMonitor {
             lastPassiveProbeAt: checkedAt,
             readinessIssueCode: assessment.issueCode,
             clearReadinessIssueCode: assessment.issueCode == null,
+            modelCatalog: assessment.modelCatalog,
             toolVersion: assessment.toolVersion,
             clearToolVersion:
                 assessment.replaceToolVersion && assessment.toolVersion == null,
@@ -313,10 +318,13 @@ class WorkerReadinessMonitor {
           activationState: current.activationState,
           lastLiveTestAt: checkedAt,
           lastLiveTestPassed: passed,
+          lastLiveTestProfileDigest: assessment.profileDigest,
+          lastLiveTestToolVersion: assessment.toolVersion,
           lastLiveTestIssueCode: assessment.issueCode,
           clearLastLiveTestIssueCode: assessment.issueCode == null,
           lastLiveTestDetails: details,
           clearLastLiveTestDetails: passed,
+          modelCatalog: assessment.modelCatalog,
           toolVersion: assessment.toolVersion,
           clearToolVersion:
               assessment.replaceToolVersion && assessment.toolVersion == null,
@@ -474,12 +482,14 @@ class WorkerReadinessMonitor {
               : _profileProbeFailureLayer(probe.issueCode!));
       return WorkerReadinessAssessment(
         probe.ready
-            ? WorkerReadinessState.ready
+            ? profileProbeReadiness(worker, candidate, probe, mode)
             : probe.issueCode == 'provider_authentication_required'
                 ? WorkerReadinessState.signInRequired
                 : WorkerReadinessState.testFailed,
         issueCode: probe.issueCode,
         toolName: probe.providerToolName,
+        modelCatalog: probe.modelCatalog,
+        profileDigest: candidate.payloadDigest,
         toolVersion: probe.providerToolVersion,
         replaceToolName: true,
         replaceToolVersion: true,
@@ -509,7 +519,10 @@ class WorkerReadinessMonitor {
       return WorkerReadinessAssessment(
         WorkerReadinessState.runtimeUnavailable,
         issueCode: issueCode,
-        diagnosticDetails: 'No eligible signed Tool Profile is available.',
+        diagnosticDetails:
+            'No eligible signed Tool Profile is available for the selected '
+            'channel. Publish and promote a qualified release to that '
+            'channel, then refresh the Worker catalog.',
       );
     }
 
@@ -653,7 +666,7 @@ class WorkerReadinessMonitor {
       failureLayer: issue == null ? null : _profileProbeFailureLayer(issue),
     );
     final state = probe.ready
-        ? WorkerReadinessState.ready
+        ? profileProbeReadiness(worker, release, probe, mode)
         : switch (issue) {
             'provider_authentication_required' =>
               WorkerReadinessState.signInRequired,
@@ -670,6 +683,8 @@ class WorkerReadinessMonitor {
       issueCode: issue,
       diagnosticDetails:
           issue == null ? null : 'Provider readiness check failed ($issue).',
+      modelCatalog: probe.modelCatalog,
+      profileDigest: release.payloadDigest,
       toolVersion: probe.providerToolVersion,
       replaceToolVersion: true,
       toolName: probe.providerToolName,
@@ -741,4 +756,22 @@ class WorkerReadinessMonitor {
   Future<void> dispose() async {
     await _activeCheck;
   }
+}
+
+WorkerReadinessState profileProbeReadiness(
+    LocalWorker worker,
+    ToolProfileCandidate profile,
+    ProbeResult probe,
+    LocalWorkerProbeMode mode) {
+  final rawProbe = profile.profile['probe'];
+  final live = rawProbe is Map ? rawProbe['live'] : null;
+  if (mode == LocalWorkerProbeMode.passive &&
+      live is Map &&
+      live['requiredForReadiness'] == true &&
+      !(worker.lastLiveTestPassed == true &&
+          worker.lastLiveTestProfileDigest == profile.payloadDigest &&
+          worker.lastLiveTestToolVersion == probe.providerToolVersion)) {
+    return WorkerReadinessState.notProbed;
+  }
+  return WorkerReadinessState.ready;
 }

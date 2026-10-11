@@ -45,7 +45,6 @@ import {
   toolProfileReleaseVersion,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
-import { WORKER_INPUT_CAPABILITIES } from "@conclave/core";
 import { SENSITIVE_OPERATIONS } from "../auth/step-up.js";
 import { WorkspaceRuntimeAuthenticator } from "../workspace-gateway/runtime-authenticator.js";
 
@@ -59,7 +58,7 @@ export async function handleListWorkspaceWorkerInventory(
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT i.worker_id, i.workspace_id, ew.name AS workspace_name,
             i.worker_type_id, i.activation_state, i.readiness_state,
-            i.readiness_issue_code, i.capabilities_json,
+            i.readiness_issue_code,
             i.local_concurrency_limit, i.engine_version,
             i.profile_definition_id, i.profile_release_version,
             i.provider_tool_name, i.provider_tool_version, i.last_seen_at,
@@ -69,7 +68,7 @@ export async function handleListWorkspaceWorkerInventory(
             catalog.visibility_state AS catalog_visibility_state,
             -- Display choices must describe the same published Profile
             -- used by Workspace; authoring templates cannot widen them.
-            release.payload_json AS model_profile_json
+            release.payload_json AS model_profile_json, release.payload_digest AS model_profile_digest, i.model_catalog_json
        FROM workspace_worker_inventory i
        JOIN execution_workspaces ew ON ew.id = i.workspace_id
        LEFT JOIN worker_catalog catalog
@@ -86,23 +85,19 @@ export async function handleListWorkspaceWorkerInventory(
   )
     .bind(context.userId, workspaceId)
     .all<Record<string, unknown>>();
-  const parseArray = (value: unknown): unknown[] => {
-    try {
-      const decoded: unknown = JSON.parse(String(value ?? "[]"));
-      return Array.isArray(decoded) ? decoded : [];
-    } catch {
-      return [];
-    }
-  };
   return json({
     workers: (rows.results ?? []).map((row) => ({
       executionOptions: spaceWorkerExecutionOptions(
         row.model_profile_json,
         row.provider_tool_version,
+        row.model_catalog_json,
+        row.model_profile_digest,
       ),
       modelOptions: spaceModelOptions(
         row.model_profile_json,
         row.provider_tool_version,
+        row.model_catalog_json,
+        row.model_profile_digest,
       ),
       id: String(row.worker_id),
       workspaceId: String(row.workspace_id),
@@ -130,12 +125,6 @@ export async function handleListWorkspaceWorkerInventory(
         row.readiness_issue_code == null
           ? null
           : String(row.readiness_issue_code),
-      capabilities: parseArray(row.capabilities_json),
-      inputCapabilities: parseArray(row.capabilities_json).filter(
-        (capability): capability is string =>
-          typeof capability === "string" &&
-          (WORKER_INPUT_CAPABILITIES as readonly string[]).includes(capability),
-      ),
       localConcurrencyLimit: Number(row.local_concurrency_limit),
       engineVersion:
         row.engine_version == null ? null : String(row.engine_version),
@@ -342,7 +331,6 @@ export async function handleCreateApprovedLogicalWorker(
     "description",
     "providerToolName",
     "releaseStage",
-    "capabilities",
     "sortOrder",
   ]);
   if (
@@ -352,8 +340,6 @@ export async function handleCreateApprovedLogicalWorker(
     typeof body.description !== "string" ||
     typeof body.providerToolName !== "string" ||
     typeof body.releaseStage !== "string" ||
-    !Array.isArray(body.capabilities) ||
-    !body.capabilities.every((item) => typeof item === "string") ||
     typeof body.sortOrder !== "number"
   ) {
     throw new HttpError(400, "Logical Worker catalog fields are required");
@@ -365,7 +351,6 @@ export async function handleCreateApprovedLogicalWorker(
     description: body.description,
     providerToolName: body.providerToolName,
     releaseStage: body.releaseStage as ToolProfileChannel,
-    capabilities: body.capabilities as string[],
     sortOrder: body.sortOrder,
     actorUserId: actor.userId,
   });
@@ -578,7 +563,7 @@ export async function handleChangeToolProfileReleaseLifecycle(
   env: SecurityEnv,
   profileDefinitionId: string,
   versionText: string,
-  lifecycle: "retired" | "revoked",
+  lifecycleAction: "retire" | "revoke",
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const actor = await authorizeToolProfileAdmin(
@@ -587,16 +572,13 @@ export async function handleChangeToolProfileReleaseLifecycle(
     ctx,
     "profiles:release:manage",
   );
-  if (lifecycle === "revoked") {
-    await requireRecentStepUp(
-      env,
-      actor,
-      SENSITIVE_OPERATIONS.toolProfileRevoke,
-    );
-  }
+  // Revocation is authorized by the release-manager scope and the explicit
+  // reason/confirmation flow in Profile Lab. Passkey step-up remains reserved
+  // for channel promotion and rollback operations.
   const body = await readToolProfileAdminBody(request, ["reason"]);
   if (typeof body.reason !== "string")
     throw new HttpError(400, "reason is required");
+  const lifecycle = lifecycleAction === "revoke" ? "revoked" : "retired";
   return json(
     await changeToolProfileLifecycle(
       env.CONCLAVE_DB,

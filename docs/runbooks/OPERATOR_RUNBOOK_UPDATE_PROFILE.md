@@ -5,7 +5,7 @@
 
 ## Prerequisites and context
 
-Sign in with `profiles:admin` for catalog/Draft work and `profiles:release:manage` for signed publication and rollout. Stable promotion/assignment, rollback, and revocation require a recent passkey verification in the Profile Lab session. Provider credentials remain local. Cloud must enable publishing and report a ready signer before publication is available.
+Sign in with `profiles:admin` for catalog/Draft work and `profiles:release:manage` for signed publication and rollout. Stable promotion/assignment and rollback require a recent passkey verification in the Profile Lab session. Revocation requires release-manager authorization, a mandatory reason, and explicit confirmation. Provider credentials remain local. Cloud must enable publishing and report a ready signer before publication is available.
 
 Open **Workers**, select the logical Worker, and keep it selected throughout **Overview**, **Draft & Test**, and **Releases**. Catalog stage is catalog maturity; the Testing/Beta/Stable cards show actual Profile channel pointers.
 
@@ -45,7 +45,7 @@ Select a new Channel, review the old/new assignment and runtime effect, then cho
 Open the selected Worker’s **Releases** and use **Release actions**:
 
 - **Rollback channel…** requires a target channel, eligible prior release, and reason. It shifts the Cloud pointer without editing release payloads. Verify the channel card after refresh and validate subsequent Workspace assignments; do not assume a running session has switched versions.
-- **Revoke release…** requires a reason, the exact `REVOKE-vN` confirmation, and recent passkey authorization. Revocation is irreversible. Verify Cloud lifecycle and runtime rejection using the [release trust contract](../security/RELEASE_TRUST_AND_ROTATION.md).
+- **Revoke release…** requires release-manager authorization, a reason, and the exact `REVOKE-vN` confirmation. Revocation is irreversible. Verify Cloud lifecycle and runtime rejection using the [release trust contract](../security/RELEASE_TRUST_AND_ROTATION.md).
 
 ## Review Activity
 

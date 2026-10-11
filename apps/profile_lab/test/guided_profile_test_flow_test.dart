@@ -87,7 +87,7 @@ void main() {
           providerToolName: 'Codex CLI',
           providerToolVersion: '0.180.0',
           acceptedAt: DateTime.now().toUtc().toIso8601String(),
-          scenarios: cloudAcceptanceScenarioStatuses(c.currentDraft!.profile)!)
+          scenarios: cloudAcceptanceScenarioStatuses(c.currentDraft!.profile))
       .toJson();
 
   testWidgets(

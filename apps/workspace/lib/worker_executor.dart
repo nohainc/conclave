@@ -16,13 +16,6 @@ WorkerExecutionPolicy assignmentExecutionPolicy(Map<String, Object?> payload) =>
         ? WorkerExecutionPolicy.providerDefault
         : WorkerExecutionPolicy.restricted;
 
-/// Admission requires an official Profile to attest enforceable read-only scope.
-bool profileAllowsAssignment(
-        Map<String, Object?> payload, Iterable<String> capabilities) =>
-    assignmentExecutionPolicy(payload) !=
-        WorkerExecutionPolicy.providerDefault ||
-    capabilities.contains('thread_read');
-
 Future<void> _materializeWorkRequestInputs({
   required Directory threadDirectory,
   required Map<String, Object?> payload,

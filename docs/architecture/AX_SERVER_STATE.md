@@ -612,7 +612,7 @@ effort selection, and Chat/Work draft text. Drafts and selections never enter
 Cloud queries, mutation payloads, or Workflow configuration APIs. Attachments,
 pending mutations, and credentials are excluded. Restore reconciles the saved
 Workflow and execution choices against the current catalog, selected Workspace,
-Worker readiness and Profile capabilities; stale choices are ignored rather than
+Worker readiness and signed Profile execution options; stale choices are ignored rather than
 silently substituted. Logout removes the authenticated user's local view records.
 
 

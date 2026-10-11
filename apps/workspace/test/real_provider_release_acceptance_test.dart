@@ -199,7 +199,6 @@ Future<void> _runRealProviderReleaseAcceptance(
     description: 'Release candidate for ${official.definitionId}',
     providerToolName: official.providerToolName,
     releaseStage: 'testing',
-    capabilities: const ['text'],
     sortOrder: 1,
   );
 

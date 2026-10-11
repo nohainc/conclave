@@ -82,9 +82,6 @@ extension _ThreadActions on _ThreadPageState {
               : (prompt, workflow, inputs, key, selection) =>
                   widget.onRunWorkWithSelection!(
                       prompt, workflow, inputs, key, selection));
-      if (mounted && widget.thread.id == threadId) {
-        _updateState(() => _workExecutionSelection = {});
-      }
     } catch (error) {
       if (!mounted ||
           widget.thread.id != threadId ||

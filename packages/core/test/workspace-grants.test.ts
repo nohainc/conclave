@@ -3,7 +3,6 @@ import {
   canTransitionWorkspaceSpaceGrantStatus,
   resolveExecutionPermissions,
   validateWorkspaceConcurrencyPolicy,
-  validateWorkspaceGrantCapabilities,
   validateWorkspaceGrantPermissions,
   validateWorkspaceGrantWorkerIds,
   validateWorkspaceNetworkPolicy,
@@ -19,7 +18,7 @@ describe("Workspace Grant execution permissions", () => {
     ).toEqual(["repository:read", "shell:execute"]);
   });
 
-  it("validates the canonical grant permission, capability, and Worker ID sets", () => {
+  it("validates the canonical grant permission and Worker ID sets", () => {
     expect(
       validateWorkspaceGrantPermissions(["repository:read", "network:use"]),
     ).toBe(true);
@@ -27,10 +26,6 @@ describe("Workspace Grant execution permissions", () => {
       validateWorkspaceGrantPermissions(["repository:read", "repository:read"]),
     ).toBe(false);
     expect(validateWorkspaceGrantPermissions(["workspace:read"])).toBe(false);
-    expect(
-      validateWorkspaceGrantCapabilities(["authorized_context_read", "text"]),
-    ).toBe(true);
-    expect(validateWorkspaceGrantCapabilities(["run_shell"])).toBe(false);
     expect(validateWorkspaceGrantWorkerIds(["worker:chatgpt-1"])).toBe(true);
     expect(validateWorkspaceGrantWorkerIds(["../other-workspace"])).toBe(false);
     expect(validateWorkspaceGrantWorkerIds(["worker-1", "worker-1"])).toBe(

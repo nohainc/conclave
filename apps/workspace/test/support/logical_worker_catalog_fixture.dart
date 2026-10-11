@@ -30,6 +30,5 @@ WorkerDescriptor logicalWorkerCatalogFixture(
       engineFamily: 'cli',
       visibilityState: 'visible',
       releaseStage: 'testing',
-      capabilities: const ['text'],
       sortOrder: 1,
     );

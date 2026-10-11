@@ -301,3 +301,8 @@ are rejected, and manual changes do not move user files. Service IPC readiness
 is independent of Cloud handshake completion. Native Start refreshes an enabled
 but stopped macOS registration after bundle changes without stopping a running
 job or resetting installation identity.
+
+Profile-declared CLI model discovery and its Service/Cloud inventory boundary are
+documented in [Gemini/AGY Profile](docs/architecture/GEMINI_AGY_PROFILE.md). The
+Engine remains provider-independent; unsigned authoring templates never grant
+production execution capabilities.

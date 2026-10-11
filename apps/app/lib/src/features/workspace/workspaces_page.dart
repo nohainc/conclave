@@ -246,11 +246,6 @@ class _WorkerRowState extends State<_WorkerRow> {
                     value: worker.providerToolVersion ?? '—',
                   ),
                   _Diagnostic(
-                      label: 'Capabilities',
-                      value: worker.capabilities.isEmpty
-                          ? '—'
-                          : worker.capabilities.join(', ')),
-                  _Diagnostic(
                       label: 'Local concurrency',
                       value: '${worker.localConcurrencyLimit}'),
                   if (worker.attentionReasonCode != null)

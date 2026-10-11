@@ -231,6 +231,15 @@ class _WorkersTabState extends State<_WorkersTab> {
                         spacing: 4,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
+                            if (worker.modelCatalog != null)
+                              IconButton(
+                                  tooltip: 'Refresh models',
+                                  icon: const Icon(Icons.refresh),
+                                  onPressed: canConfigure
+                                      ? () => widget.onReadinessCheck?.call(
+                                          mode: LocalWorkerProbeMode.passive,
+                                          workerTypeId: worker.workerTypeId)
+                                      : null),
                             TextButton(
                                 onPressed: canConfigure
                                     ? () => _testCatalogWorker(entry, worker)
@@ -251,6 +260,23 @@ class _WorkersTabState extends State<_WorkersTab> {
                                 )),
                           ]),
           ),
+          if (worker?.modelCatalog != null)
+            ExpansionTile(
+              title: const Text('Models'),
+              subtitle:
+                  const Text('Choose a model in workflow or request settings.'),
+              children: [
+                for (final model in worker!.modelCatalog!.models)
+                  ListTile(
+                      title: Text(model.name),
+                      subtitle: Text(model.id),
+                      trailing: Text(switch (model.status) {
+                        'verified' => 'Verified',
+                        'unavailable' => 'Unavailable',
+                        _ => 'Listed',
+                      })),
+              ],
+            ),
         ],
       ),
     );

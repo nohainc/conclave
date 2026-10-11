@@ -294,7 +294,7 @@ extension _AxAppController on _AxAppStateMixin {
       }));
     }
     if (type == 'realtime.connection') {
-      _clearQueuedRealtimeNotice();
+      _clearPendingRealtimeNotice();
       final status = event['status'];
       _realtimeTransportConnected = status == 'connected';
       _updateLiveState(() {
@@ -306,14 +306,14 @@ extension _AxAppController on _AxAppStateMixin {
       return;
     }
     if (type == 'realtime.ready') {
-      _clearQueuedRealtimeNotice();
+      _clearPendingRealtimeNotice();
       _realtimeTransportConnected = true;
       unawaited(_refreshRealtimeFeatures('space.updated'));
       _updateLiveState(() => realtimeStale = false);
       return;
     }
     if (type == 'reconnect.required') {
-      _clearQueuedRealtimeNotice();
+      _clearPendingRealtimeNotice();
       final scope = AxSyncScope.fromEvent(event);
       _updateLiveState(() {
         realtimeStale = true;
@@ -759,10 +759,21 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
-  void _clearQueuedRealtimeNotice() {
-    _queuedRealtimeNoticeTimer?.cancel();
-    _queuedRealtimeNoticeTimer = null;
-    _pendingQueuedRealtimeNotice = null;
+  void _clearPendingRealtimeNotice() {
+    _pendingRealtimeNoticeTimer?.cancel();
+    _pendingRealtimeNoticeTimer = null;
+    _pendingRealtimeNotice = null;
+  }
+
+  bool _isTransientRealtimeNotice(String notice) {
+    final lower = notice.toLowerCase();
+    return lower.contains('queued') ||
+        lower.contains('running') ||
+        lower.contains('working') ||
+        lower.contains('processing') ||
+        lower.contains('starting') ||
+        lower.contains('waiting') ||
+        lower.contains('in progress');
   }
 
   void _announceRealtimeProgress(Map<String, dynamic> event) {
@@ -772,19 +783,19 @@ extension _AxAppController on _AxAppStateMixin {
         : null;
     if (summary is String && summary.trim().isNotEmpty) {
       final notice = summary.trim();
-      if (notice.toLowerCase().contains('queued')) {
-        _pendingQueuedRealtimeNotice = notice;
-        _queuedRealtimeNoticeTimer ??= Timer(const Duration(seconds: 3), () {
-          _queuedRealtimeNoticeTimer = null;
-          final pending = _pendingQueuedRealtimeNotice;
-          _pendingQueuedRealtimeNotice = null;
+      if (_isTransientRealtimeNotice(notice)) {
+        _pendingRealtimeNotice = notice;
+        _pendingRealtimeNoticeTimer ??= Timer(const Duration(seconds: 3), () {
+          _pendingRealtimeNoticeTimer = null;
+          final pending = _pendingRealtimeNotice;
+          _pendingRealtimeNotice = null;
           if (mounted && pending != null) {
             _updateLiveState(() => realtimeNotice = pending);
           }
         });
         return;
       }
-      _clearQueuedRealtimeNotice();
+      _clearPendingRealtimeNotice();
       final now = DateTime.now();
       if (_lastRealtimeAnnouncement != null &&
           now.difference(_lastRealtimeAnnouncement!).inMilliseconds < 750) {

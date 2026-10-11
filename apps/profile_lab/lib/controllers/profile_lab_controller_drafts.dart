@@ -3,7 +3,23 @@ part of 'profile_lab_controller.dart';
 mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
   @override
   Future<void> refreshDrafts() async {
-    draftDefinitionIds = await store.listDraftDefinitionIds();
+    draftError = null;
+    final discoveredDrafts = await store.listDraftDefinitionIds();
+    final validDrafts = <String>[];
+    for (final profileDefinitionId in discoveredDrafts) {
+      try {
+        // Validate persisted drafts before selecting one. This also gives the
+        // development-only contract cutover a safe way to retire local drafts
+        // written with the removed top-level capabilities field.
+        await store.loadDraft(profileDefinitionId);
+        validDrafts.add(profileDefinitionId);
+      } on FormatException catch (error) {
+        await store.deleteDraft(profileDefinitionId);
+        draftError =
+            'Removed obsolete local draft $profileDefinitionId: $error';
+      }
+    }
+    draftDefinitionIds = validDrafts;
     if (selectedDefinitionId != null &&
         draftDefinitionIds.contains(selectedDefinitionId)) {
       await selectDraft(selectedDefinitionId!);
@@ -24,6 +40,16 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     selectedDefinitionId = profileDefinitionId;
     pendingAiProvenance = null;
     currentDraft = await store.loadDraft(profileDefinitionId);
+    if (currentDraft != null) {
+      final migrated = migrateProfilePayload(currentDraft!.profile);
+      if (migrated != null) {
+        currentDraft = await store.saveDraft(
+          profileDefinitionId: profileDefinitionId,
+          profileJson: migrated,
+          notes: 'Migrated legacy ChatGPT model discovery to Codex app-server.',
+        );
+      }
+    }
     currentMetadata = await store.loadDraftMetadata(profileDefinitionId);
     baseCloudDigest = null;
     cloudDigest = null;
@@ -400,10 +426,13 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
             throw StateError(
                 'Starter template does not match the selected Worker');
           }
+          final migrated = migrateProfilePayload(payload);
           await store.saveDraft(
               profileDefinitionId: id,
-              profileJson: payload,
-              notes: 'Created from Cloud starter template');
+              profileJson: migrated ?? payload,
+              notes: migrated == null
+                  ? 'Created from Cloud starter template'
+                  : 'Created from Cloud starter template and migrated legacy ChatGPT model discovery.');
           draftDefinitionIds = await store.listDraftDefinitionIds();
           if (selectedDefinitionId == id) {
             await selectDraft(id);
@@ -502,7 +531,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
           }
         ]
       },
-      'capabilities': ['text'],
       'compatibilityOverrides': []
     };
 

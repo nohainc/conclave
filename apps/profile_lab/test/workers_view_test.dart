@@ -6,7 +6,6 @@ import 'package:conclave_profile_lab/profile_lab_auth.dart';
 import 'package:conclave_profile_lab/profile_lab_paths.dart';
 import 'package:conclave_profile_lab/profile_lab_session_store.dart';
 import 'package:conclave_profile_lab/views/workers_view.dart';
-import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -43,7 +42,40 @@ class _ImmediateApi extends ProfileAdminApiClient {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Create Worker uses catalog stages and canonical capabilities',
+  testWidgets('shows Gemini beside ChatGPT before any Gemini release exists',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final temp = Directory.systemTemp.createTempSync('gemini-catalog-view-');
+    addTearDown(() => temp.deleteSync(recursive: true));
+    final paths = ProfileLabPaths(homeDirectory: temp.path);
+    final controller = ProfileLabController(
+        paths: paths,
+        sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths),
+        apiClientOverride: _ImmediateApi());
+    addTearDown(controller.dispose);
+    controller.cloudWorkers = [
+      {
+        'workerTypeId': 'chatgpt',
+        'displayName': 'ChatGPT',
+        'profileDefinitionId': 'chatgpt-codex',
+        'providerToolName': 'codex'
+      },
+      {
+        'workerTypeId': 'gemini',
+        'displayName': 'Gemini',
+        'profileDefinitionId': 'gemini-antigravity',
+        'providerToolName': 'agy'
+      },
+    ];
+    await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: WorkersView(controller: controller))));
+    expect(find.text('ChatGPT'), findsOneWidget);
+    expect(find.text('Gemini'), findsOneWidget);
+    expect(find.text('gemini · CLI: agy'), findsOneWidget);
+  });
+
+  testWidgets('Create Worker uses catalog stages without capabilities',
       (tester) async {
     final tempDir = Directory.systemTemp.createTempSync('workers_view_test_');
     addTearDown(() => tempDir.deleteSync(recursive: true));
@@ -82,38 +114,7 @@ void main() {
 
     expect(find.text('Testing'), findsOneWidget);
     expect(find.text('Draft'), findsNothing);
-    expect(find.byType(FilterChip), findsNWidgets(8));
-    for (final capability in canonicalWorkerCapabilities) {
-      expect(find.widgetWithText(FilterChip, capability), findsOneWidget);
-    }
-    expect(
-      tester
-          .widget<FilterChip>(
-            find.widgetWithText(FilterChip, 'text'),
-          )
-          .selected,
-      isTrue,
-    );
-    expect(
-      tester
-          .widget<FilterChip>(
-            find.widgetWithText(FilterChip, 'thread_write'),
-          )
-          .selected,
-      isFalse,
-    );
-
-    final imageCapability = find.widgetWithText(FilterChip, 'image');
-    await tester.ensureVisible(imageCapability);
-    await tester.tap(imageCapability);
-    await tester.pumpAndSettle(const Duration(milliseconds: 100),
-        EnginePhase.sendSemanticsUpdate, const Duration(seconds: 2));
-    expect(
-      tester
-          .widget<FilterChip>(find.widgetWithText(FilterChip, 'image'))
-          .selected,
-      isTrue,
-    );
+    expect(find.byType(FilterChip), findsNothing);
   });
 
   testWidgets(
@@ -150,7 +151,6 @@ void main() {
           'description': 'Codex CLI worker',
           'providerToolName': 'codex',
           'releaseStage': 'stable',
-          'capabilities': ['text'],
         },
       ];
     addTearDown(() async {

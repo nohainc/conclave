@@ -38,6 +38,13 @@ passed through only when an official Profile explicitly declares them.
 The provider working directory is fixed to the Engine's assigned Thread
 directory; Profile data cannot select an arbitrary working directory.
 
+Model discovery is Profile-declared. TSV discovery is suitable for providers
+that expose a bounded listing command. ChatGPT/Codex Profiles may instead use
+`format: "codex_app_server"`; the Engine starts `codex app-server`, performs
+the `initialize` and `model/list` JSON-RPC exchange, and stores only sanitized
+model and reasoning-effort metadata. The app-server is terminated after the
+probe and is not used as a second execution runtime.
+
 The host process supervisor owns cancellation of the Engine process. Within an
 assignment, the Engine enforces an outer provider deadline and terminates the
 provider process if its output consumer fails or the deadline expires.

@@ -4,7 +4,7 @@ Global per-user preferences are separate from Conclave-owned Workflow definition
 and Space/Thread authored context. Preferences
 are keyed by authenticated user and stable Workflow ID, not definition version.
 The newest definition validates step IDs. Definition graphs, prompts, labels,
-and capabilities are never copied into preferences.
+and signed Profile execution metadata are never copied into preferences.
 
 ```json
 {
@@ -38,7 +38,7 @@ inventory entries.
 
 No user ID is accepted in the payload. Existing human authentication and cookie
 mutation origin protection apply. Model/effort validation uses owned Worker
-inventory and published, non-revoked Profile capabilities. Every enabled
+inventory and published, non-revoked Profile execution options. Every enabled
 Workflow step must resolve to an explicit owned Worker. Offline readiness does
 not invalidate preferences. Unchanged selections are retained
 when inventory/Profile metadata is unavailable; execution must still perform
@@ -87,7 +87,7 @@ identified inline and block Save; a default change may require correcting a
 step override.
 Cloud independently validates each write through the existing v1 API.
 
-Offline readiness is separate from capability compatibility. Offline Workers
+Offline readiness is separate from Profile execution-option compatibility. Offline Workers
 remain selectable and labeled. Missing saved Workers and model/effort choices
 remain visible instead of silently reverting to `Auto` or another Worker. Unchanged selections
 with missing inventory or Profile metadata can be preserved, matching the Cloud
@@ -113,7 +113,7 @@ Cloud resolves the Space owner’s global defaults plus a shared Space workflow 
 for both validation and submission, regardless of the requester.
 Defaults are overlaid by sparse step overrides. Every step must name an explicit
 Worker from the selected Space Workflow Workspace inventory; Cloud's internal
-execution grant, Thread permissions, Profile capability, readiness, and
+execution grant, Thread permissions, Profile execution options, readiness, and
 Workspace eligibility rules still apply. Resolution verifies every configured
 Worker in one Workspace before freezing the request. A missing, offline, or
 incompatible Worker fails admission; it is never silently replaced. `Auto`
@@ -248,7 +248,7 @@ not copy workflow definitions or execution selections.
 ## Workspace selection
 
 Global Workflows and the Space Workflows tab select one Workspace before editing
-or executing workflows. Only its Workers and signed Profile capabilities are
+or executing workflows. Only its Workers and signed Profile execution options are
 available to the editor, write validation, and runtime Worker resolution. An
 explicit Worker outside that Workspace is rejected. Offline Workers in the
 selected Workspace retain their saved choices; execution still requires readiness.

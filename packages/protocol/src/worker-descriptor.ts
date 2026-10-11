@@ -17,23 +17,11 @@ export const WORKER_DESCRIPTOR_VISIBILITY_STATES = [
 export type WorkerDescriptorVisibilityState =
   (typeof WORKER_DESCRIPTOR_VISIBILITY_STATES)[number];
 
-export const WORKER_DESCRIPTOR_CAPABILITIES = [
-  "text",
-  "local_file",
-  "thread_read",
-  "thread_write",
-  "durable_session",
-  "image",
-  "audio",
-  "video",
-] as const;
-
 export interface WorkerDescriptor {
   readonly workerTypeId: string;
   readonly displayName: string;
   readonly description: string;
   readonly engineFamily: WorkerDescriptorEngineFamily;
-  readonly capabilities: readonly string[];
   readonly profileDefinitionId: string;
   readonly providerToolName: string;
   readonly releaseStage: WorkerDescriptorReleaseStage;
@@ -46,7 +34,6 @@ const fields = new Set([
   "displayName",
   "description",
   "engineFamily",
-  "capabilities",
   "profileDefinitionId",
   "providerToolName",
   "releaseStage",
@@ -72,17 +59,6 @@ export function parseWorkerDescriptor(value: unknown): WorkerDescriptor {
     typeof item.description !== "string" ||
     item.description.length > 500 ||
     item.engineFamily !== "cli" ||
-    !Array.isArray(item.capabilities) ||
-    item.capabilities.length > 32 ||
-    item.capabilities.some(
-      (capability) =>
-        typeof capability !== "string" ||
-        capability.length > 64 ||
-        !(WORKER_DESCRIPTOR_CAPABILITIES as readonly string[]).includes(
-          capability,
-        ),
-    ) ||
-    new Set(item.capabilities).size !== item.capabilities.length ||
     typeof item.profileDefinitionId !== "string" ||
     item.profileDefinitionId.length > 96 ||
     !identifier.test(item.profileDefinitionId) ||
@@ -106,7 +82,6 @@ export function parseWorkerDescriptor(value: unknown): WorkerDescriptor {
     displayName: item.displayName,
     description: item.description,
     engineFamily: item.engineFamily,
-    capabilities: [...item.capabilities] as string[],
     profileDefinitionId: item.profileDefinitionId,
     providerToolName: item.providerToolName,
     releaseStage: item.releaseStage as WorkerDescriptorReleaseStage,

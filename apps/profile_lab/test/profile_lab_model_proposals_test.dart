@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'dart:io';
 
 import 'package:conclave_profile_lab/profile_admin_api_client.dart';
@@ -28,6 +29,44 @@ void main() {
     expect(options.every((option) => option.release.isSigned), isTrue);
     expect(options.first.modelIdentifier,
         'model-worker/model-profile@2#model-fast');
+  });
+
+  test(
+      'discovers exact Gemini IDs through a trusted Profile and filters unavailable models',
+      () async {
+    final signed = await _createSignedRelease(dynamicModels: true);
+    final publicKey = await signed.keyPair.extractPublicKey();
+    final policy = WorkerTrustPolicy(trustedPublicKeys: {
+      'conclave': {'test-profile-key': base64.encode(publicKey.bytes)},
+    });
+    final options =
+        await const ProfileLabModelProposalService().loadAvailableModels(
+      apiClient: _SignedReleaseApi(signed),
+      trustPolicy: policy,
+      discoverModels: (release) async => DiscoveredModelCatalog(
+        profileDigest: release.payloadDigest,
+        providerToolVersion: '1.3.3',
+        discoveredAt: '2026-10-11T00:00:00Z',
+        models: [
+          DiscoveredModel(id: 'gemini-new-high', name: 'Gemini New High'),
+          DiscoveredModel(id: 'gemini-old', name: 'Old', status: 'unavailable'),
+          DiscoveredModel(id: 'other-provider', name: 'Other'),
+        ],
+      ),
+    );
+    expect(options.map((o) => o.model), ['gemini-new-high']);
+    var invoked = false;
+    final revoked =
+        await const ProfileLabModelProposalService().loadAvailableModels(
+      apiClient: _SignedReleaseApi(signed, revokedKeyIds: ['test-profile-key']),
+      trustPolicy: policy,
+      discoverModels: (_) async {
+        invoked = true;
+        return null;
+      },
+    );
+    expect(revoked, isEmpty);
+    expect(invoked, isFalse);
   });
 
   test('current Cloud key revocation removes otherwise valid model Profiles',
@@ -100,7 +139,8 @@ class _SignedRelease {
   final SimpleKeyPair keyPair;
 }
 
-Future<_SignedRelease> _createSignedRelease() async {
+Future<_SignedRelease> _createSignedRelease(
+    {bool dynamicModels = false}) async {
   final repositoryRoot = Directory.current.parent.parent;
   final fixtureFile = File(
     '${repositoryRoot.path}/packages/tool-profile/test/fixtures/fixture-cli.v1.json',
@@ -117,6 +157,20 @@ Future<_SignedRelease> _createSignedRelease() async {
     'allowlist': ['model-safe', 'model-fast'],
     'unknownModelPolicy': 'profile_allowlist',
   };
+  if (dynamicModels) {
+    profile['model'] = {
+      'supported': true,
+      'arguments': ['--model', '{{model}}'],
+      'unknownModelPolicy': 'pass_through',
+      'discovery': {
+        'schemaVersion': 1,
+        'arguments': ['models'],
+        'timeoutMs': 10000,
+        'format': 'tsv',
+        'idPrefix': 'gemini-'
+      },
+    };
+  }
   final digest = sha256.convert(utf8.encode(canonicalJson(profile))).toString();
   const publisher = 'conclave';
   const keyId = 'test-profile-key';

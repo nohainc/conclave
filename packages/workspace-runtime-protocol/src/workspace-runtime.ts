@@ -93,9 +93,67 @@ export const WorkspaceWorkerInventoryEntrySchema = z
       .string()
       .regex(/^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$/)
       .nullable(),
-    capabilities: z
-      .array(z.string().regex(/^[a-z][a-z0-9_:-]{0,127}$/))
-      .max(128),
+    modelCatalog: z
+      .object({
+        schemaVersion: z.literal(1),
+        profileDigest: z.string().regex(/^[0-9a-f]{64}$/),
+        providerToolVersion: z
+          .string()
+          .regex(/^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$/),
+        discoveredAt: timestamp,
+        models: z
+          .array(
+            z
+              .object({
+                id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
+                name: z
+                  .string()
+                  .min(1)
+                  .max(256)
+                  .regex(/^[^\x00-\x1f\x7f]+$/),
+                status: z.enum(["listed", "verified", "unavailable"]),
+                supportedReasoningEfforts: z
+                  .array(
+                    z
+                      .string()
+                      .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/),
+                  )
+                  .max(16)
+                  .refine(
+                    (efforts) => new Set(efforts).size === efforts.length,
+                    "Duplicate reasoning efforts",
+                  )
+                  .optional(),
+                defaultReasoningEffort: z
+                  .string()
+                  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/)
+                  .optional(),
+              })
+              .strict()
+              .superRefine((model, ctx) => {
+                if (
+                  model.defaultReasoningEffort !== undefined &&
+                  !model.supportedReasoningEfforts?.includes(
+                    model.defaultReasoningEffort,
+                  )
+                ) {
+                  ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ["defaultReasoningEffort"],
+                    message:
+                      "Default reasoning effort must be listed as supported",
+                  });
+                }
+              }),
+          )
+          .max(128)
+          .refine(
+            (models) => new Set(models.map((m) => m.id)).size === models.length,
+            "Duplicate model IDs",
+          ),
+      })
+      .strict()
+      .optional(),
     localConcurrencyLimit: z.number().int().min(1).max(1024),
     revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
     createdAt: timestamp,

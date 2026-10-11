@@ -83,7 +83,6 @@ Map<String, Object?> validProfileMap({
           }
         ]
       },
-      'capabilities': ['text'],
       'compatibilityOverrides': []
     };
 
@@ -104,6 +103,14 @@ void main() {
       expect(
         ToolProfileCompatibility.recommendedProviderRange('1.4.0-beta.1'),
         {'min': '1.4.0-beta.1', 'maxExclusive': '1.5.0'},
+      );
+    });
+
+    test('legacy capability metadata is rejected', () {
+      final profile = validProfileMap()..['capabilities'] = ['text'];
+      expect(
+        () => EngineProfile.parse(utf8.encode(canonicalJson(profile))),
+        throwsA(isA<FormatException>()),
       );
     });
 

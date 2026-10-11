@@ -319,8 +319,6 @@ class _StructuredSummaryPanel extends StatelessWidget {
         (providerTool['executableCandidates'] as List?)?.cast<String>() ?? [];
     final discovery = providerTool['discovery'] as Map<String, dynamic>? ?? {};
     final env = parsedJson['environment'] as Map<String, dynamic>? ?? {};
-    final capabilities =
-        (parsedJson['capabilities'] as List?)?.cast<String>() ?? [];
     final sandbox = parsedJson['sandbox'] as Map<String, dynamic>? ?? {};
 
     return Container(
@@ -373,19 +371,6 @@ class _StructuredSummaryPanel extends StatelessWidget {
               _SummaryRow(
                   label: 'PATH Search',
                   value: (discovery['allowPathSearch'] ?? false).toString()),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Capabilities Card
-          _SummaryCard(
-            title: 'Capabilities & Scope',
-            icon: Icons.star_outline,
-            children: [
-              _SummaryRow(
-                  label: 'Capabilities',
-                  value:
-                      capabilities.isEmpty ? 'none' : capabilities.join(', ')),
             ],
           ),
           const SizedBox(height: 10),

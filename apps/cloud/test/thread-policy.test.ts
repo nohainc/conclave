@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   eligibilityMessage,
-  inputCapabilityMessage,
   normalizeThreadWorkConfig,
 } from "../src/routes/thread-policy.js";
 
@@ -12,22 +11,11 @@ describe("catalog-backed Worker validation messages", () => {
       eligibilityMessage(
         "implement",
         "dynamic-test-worker",
-        "capability_missing",
+        "worker_not_ready",
         null,
         "Dynamic Test Worker",
       ),
-    ).toBe(
-      "Implement: Dynamic Test Worker does not have the capability required by this Step.",
-    );
-    expect(
-      inputCapabilityMessage(
-        "implement",
-        "dynamic-test-worker",
-        "image",
-        false,
-        "Dynamic Test Worker",
-      ),
-    ).toBe("Implement Dynamic Test Worker does not support image input.");
+    ).toBe("Implement: Dynamic Test Worker is not Ready.");
   });
 
   it("uses a neutral label when catalog display metadata is unavailable", () => {
@@ -38,9 +26,6 @@ describe("catalog-backed Worker validation messages", () => {
         "worker_not_ready",
       ),
     ).toBe("Implement: Selected Worker is not Ready.");
-    expect(
-      inputCapabilityMessage("implement", "dynamic-test-worker", "image"),
-    ).toBe("Implement Selected Worker does not support image input.");
   });
 
   it("ignores blank catalog display metadata and stays Worker-neutral", () => {

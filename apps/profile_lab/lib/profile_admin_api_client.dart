@@ -114,7 +114,6 @@ class ProfileAdminApiClient {
     required String description,
     required String providerToolName,
     required String releaseStage,
-    required List<String> capabilities,
     required int sortOrder,
   }) async {
     final result = await _request(
@@ -127,7 +126,6 @@ class ProfileAdminApiClient {
         'description': description,
         'providerToolName': providerToolName,
         'releaseStage': releaseStage,
-        'capabilities': capabilities,
         'sortOrder': sortOrder,
       },
     );
@@ -438,10 +436,22 @@ class ProfileAdminApiClient {
     required String lifecycle,
     required String reason,
   }) async {
+    // Cloud routes use imperative actions (`revoke`/`retire`) while domain
+    // responses use the resulting lifecycle state (`revoked`/`retired`).
+    // Accept both at this boundary, but never send the state name as a route.
+    final action = switch (lifecycle) {
+      'revoke' || 'revoked' => 'revoke',
+      'retire' || 'retired' => 'retire',
+      _ => throw ArgumentError.value(
+          lifecycle,
+          'lifecycle',
+          'expected revoke, revoked, retire, or retired',
+        ),
+    };
     final result = await _request(
       'POST',
       _api(
-          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/$lifecycle'),
+          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/$action'),
       body: {'reason': reason},
     );
     if (result is Map) {

@@ -255,45 +255,61 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       }
       final profileFile =
           await toolProfileReleaseStore.executionProfileFile(release);
-      final profilePayload =
-          jsonDecode(await profileFile.readAsString()) as Map;
-      if (!profileAllowsAssignment(
-          payload, (profilePayload['capabilities'] as List).cast<String>())) {
-        throw AssignmentExecutionFailure(
-          code: 'worker_not_ready',
-          message:
-              'This Profile has no verified read-only execution policy. Select a compatible Worker for Chat.',
+      try {
+        return await supervisor.execute(
+          release,
+          profileFile: profileFile,
+          stateDirectory: workspacePaths.workerStateDirectory(worker.id),
+          workingDirectory: workingDirectory,
+          workerId: worker.id,
+          maxConcurrentAssignments: worker.localConcurrencyLimit,
+          assignmentId: context.assignmentId,
+          prompt: prompt,
+          timeout: Duration(milliseconds: timeoutValue),
+          sessionPolicy: sessionPolicyValue == 'durable_session'
+              ? WorkerSessionPolicy.durableSession
+              : WorkerSessionPolicy.stateless,
+          sessionKey: sessionKeyValue as String?,
+          workerSession: workerSession,
+          statelessContext: payload["statelessContext"] == null
+              ? null
+              : ConversationBootstrap.fromJson(Map<String, Object?>.from(
+                  payload["statelessContext"] as Map)),
+          model: modelValue is String && modelValue.trim().isNotEmpty
+              ? modelValue.trim()
+              : null,
+          reasoningEffort: reasoningEffortValue is String &&
+                  reasoningEffortValue.trim().isNotEmpty
+              ? reasoningEffortValue.trim()
+              : null,
+          executionPolicy: assignmentExecutionPolicy(context.payload),
+          onProgress: onProgress,
         );
+      } finally {
+        // The service republishes bounded Engine metadata after execution;
+        // no additional readiness/model request is necessary.
+        if ((release.profile['model'] as Map?)?['discovery'] != null) {
+          try {
+            final file = File(
+                '${workspacePaths.workerStateDirectory(worker.id).path}/model-catalog.json');
+            if (await file.length() > 128 * 1024) {
+              throw const FormatException('Catalog exceeds limit');
+            }
+            final catalog = DiscoveredModelCatalog.fromJson(
+                Map<String, Object?>.from(
+                    jsonDecode(await file.readAsString()) as Map));
+            if (catalog.profileDigest == release.payloadDigest) {
+              await localWorkerRegistry.update(
+                  worker.id,
+                  (current) => current.copyWith(
+                      modelCatalog: catalog,
+                      toolVersion: catalog.providerToolVersion));
+            }
+          } on Object {
+            // A catalog/cache failure must not replace the assignment outcome.
+          }
+        }
       }
-      return supervisor.execute(
-        release,
-        profileFile: profileFile,
-        stateDirectory: workspacePaths.workerStateDirectory(worker.id),
-        workingDirectory: workingDirectory,
-        workerId: worker.id,
-        maxConcurrentAssignments: worker.localConcurrencyLimit,
-        assignmentId: context.assignmentId,
-        prompt: prompt,
-        timeout: Duration(milliseconds: timeoutValue),
-        sessionPolicy: sessionPolicyValue == 'durable_session'
-            ? WorkerSessionPolicy.durableSession
-            : WorkerSessionPolicy.stateless,
-        sessionKey: sessionKeyValue as String?,
-        workerSession: workerSession,
-        statelessContext: payload["statelessContext"] == null
-            ? null
-            : ConversationBootstrap.fromJson(
-                Map<String, Object?>.from(payload["statelessContext"] as Map)),
-        model: modelValue is String && modelValue.trim().isNotEmpty
-            ? modelValue.trim()
-            : null,
-        reasoningEffort: reasoningEffortValue is String &&
-                reasoningEffortValue.trim().isNotEmpty
-            ? reasoningEffortValue.trim()
-            : null,
-        executionPolicy: assignmentExecutionPolicy(context.payload),
-        onProgress: onProgress,
-      );
     },
   );
   WorkspaceUpdateController? updateController;

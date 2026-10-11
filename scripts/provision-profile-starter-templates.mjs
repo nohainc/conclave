@@ -42,11 +42,20 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
         "0007_chat_profile_starter_attestation.sql",
         "0008_codex_compatibility_approval_policy.sql",
         "0017_chatgpt_starter_model_catalog.sql",
+        "0030_gemini_model_discovery_starter.sql",
+        "0034_runtime_model_catalog_starters.sql",
+        "0035_codex_app_server_model_discovery.sql",
       ]
         .map((name) =>
           readFileSync(join(root, "apps/cloud/migrations-v8", name), "utf8"),
         )
         .join("\n"),
+      // The provisioning script intentionally creates only the starter-table
+      // subset. Apply the Profile cleanup here without replaying the full
+      // capability-column migration against unrelated tables.
+      `UPDATE tool_profile_starter_templates
+       SET profile_json = json_remove(profile_json, '$.capabilities')
+       WHERE json_valid(profile_json) = 1;`,
     ),
   );
   console.log(

@@ -17,13 +17,57 @@ const fixture = (name: string): Record<string, any> =>
     ),
   );
 
-describe("Tool Profile v1 canonical schema", () => {
-  it.each(["chatgpt-codex.v1", "gemini-antigravity.v1", "fixture-cli.v1"])(
-    "accepts the complete %s fixture",
-    (name) => {
-      expect(parseToolProfileV1(fixture(name)).schemaVersion).toBe(1);
-    },
+const template = (name: string): Record<string, any> =>
+  JSON.parse(
+    readFileSync(
+      fileURLToPath(
+        new URL(
+          `../../../docs/profile-templates/${name}.json`,
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    ),
   );
+
+describe("Tool Profile v1 canonical schema", () => {
+  it.each([
+    "chatgpt-codex.v1",
+    "chatgpt-codex.v2",
+    "gemini-antigravity.v1",
+    "gemini-antigravity.v2",
+    "gemini-antigravity.v3",
+    "fixture-cli.v1",
+  ])("accepts the complete %s fixture", (name) => {
+    expect(parseToolProfileV1(fixture(name)).schemaVersion).toBe(1);
+  });
+
+  it.each([
+    "chatgpt-codex-runtime-catalog.v1",
+    "gemini-antigravity-runtime-catalog.v1",
+  ])("accepts the runtime catalog template %s", (name) => {
+    const parsed = parseToolProfileV1(template(name));
+    expect(parsed.model.discovery?.format).toBe(
+      name.startsWith("chatgpt") ? "codex_app_server" : "tsv",
+    );
+    expect(parsed.model.catalog).toBeUndefined();
+    expect(parsed.model.supportedReasoningEfforts).toBeUndefined();
+  });
+
+  it("rejects legacy capability metadata", () => {
+    for (const name of [
+      "chatgpt-codex.v1",
+      "chatgpt-codex.v2",
+      "gemini-antigravity.v1",
+      "gemini-antigravity.v2",
+      "gemini-antigravity.v3",
+      "fixture-cli.v1",
+    ]) {
+      const profile = fixture(name);
+      profile.capabilities = ["text"];
+      expect(() => parseToolProfileV1(profile)).toThrow();
+    }
+  });
 
   it("exports a strict JSON Schema and inferred model from the same source", () => {
     expect(toolProfileV1JsonSchema.type).toBe("object");
@@ -283,12 +327,6 @@ describe("Tool Profile v1 canonical schema", () => {
         },
       ],
       [
-        "capability",
-        (p) => {
-          p.capabilities.push("arbitrary_shell");
-        },
-      ],
-      [
         "compatibility override overlap",
         (p) => {
           p.compatibilityOverrides.push({
@@ -377,7 +415,7 @@ describe("versioned generic execution options", () => {
     };
     return profile;
   };
-  it("accepts declared capabilities and provider-specific effort mapping", () => {
+  it("accepts provider-specific effort mapping without capability metadata", () => {
     expect(toolProfileV1Schema.safeParse(withOptions()).success).toBe(true);
   });
   it.each([

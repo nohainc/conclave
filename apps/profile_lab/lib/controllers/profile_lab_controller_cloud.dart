@@ -509,7 +509,6 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     required String description,
     required String providerToolName,
     required String releaseStage,
-    required List<String> capabilities,
     required int sortOrder,
   }) async {
     final client = apiClient;
@@ -520,7 +519,6 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       description: description,
       providerToolName: providerToolName,
       releaseStage: releaseStage,
-      capabilities: capabilities,
       sortOrder: sortOrder,
     );
     await fetchCloudCatalog();

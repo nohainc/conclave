@@ -69,6 +69,11 @@ class SqliteD1 {
       "0006_chat_workflow_admission.sql",
       "0007_chat_profile_starter_attestation.sql",
       "0008_codex_compatibility_approval_policy.sql",
+      "0029_worker_model_discovery.sql",
+      "0030_gemini_model_discovery_starter.sql",
+      "0031_remove_worker_profile_capabilities.sql",
+      "0032_drop_worker_capability_columns.sql",
+      "0033_reset_legacy_tool_profile_releases.sql",
     ]) {
       this.sqlite.exec(
         readFileSync(
@@ -265,7 +270,6 @@ async function createWorker(
       description: "Cloud route acceptance Worker",
       providerToolName: "route-fixture-cli",
       releaseStage: "testing",
-      capabilities: ["text"],
       sortOrder: 9000,
     },
   );
@@ -376,6 +380,13 @@ describe("Tool Profile Cloud draft route acceptance", () => {
           .prepare("SELECT COUNT(*) AS count FROM tool_profile_releases")
           .get()?.count,
       ).toBe(1);
+      const revoked = await assertOk(
+        env,
+        "POST",
+        "/api/admin/tool-profiles/development-profile/releases/1/revoke",
+        { reason: "Replace the development release" },
+      );
+      expect(revoked).toMatchObject({ lifecycleState: "revoked" });
     } finally {
       db.close();
     }
@@ -421,17 +432,24 @@ describe("Tool Profile Cloud draft route acceptance", () => {
           "GET",
           `/api/admin/tool-profiles/definitions/${id}`,
         );
+        const expectedFixture =
+          id === "gemini-antigravity"
+            ? "gemini-antigravity.v2.json"
+            : `${id}.v1.json`;
         const expected = JSON.parse(
           readFileSync(
             fileURLToPath(
               new URL(
-                `../../../packages/tool-profile/test/fixtures/${id}.v1.json`,
+                `../../../packages/tool-profile/test/fixtures/${expectedFixture}`,
                 import.meta.url,
               ),
             ),
             "utf8",
           ),
         );
+        // The starter remains draft version 1 while carrying the latest
+        // provider contract used to author the next signed release.
+        if (id === "gemini-antigravity") expected.releaseVersion = 1;
         expect(definition.starterTemplate).toEqual({
           schemaVersion: 1,
           profile: expected,

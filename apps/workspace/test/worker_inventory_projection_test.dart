@@ -22,7 +22,6 @@ void main() {
     engineFamily: 'cli',
     visibilityState: 'visible',
     releaseStage: 'testing',
-    capabilities: ['text', 'thread_read'],
     sortOrder: 1,
   );
 
@@ -62,7 +61,6 @@ void main() {
     expect(inventory['readinessIssueCode'], 'tool_profile_unavailable');
     expect(inventory['profileDefinitionId'], 'fixture-cli');
     expect(inventory['profileReleaseVersion'], isNull);
-    expect(inventory['capabilities'], isEmpty);
   });
 
   test('reports Ready only with a signed eligible Profile and Engine',
@@ -112,8 +110,6 @@ void main() {
     expect(inventory['readinessState'], 'ready');
     expect(inventory['profileReleaseVersion'], 1);
     expect(inventory['engineVersion'], '1.0.0');
-    expect(inventory['capabilities'],
-        ['authorized_context_read', 'text', 'thread_read']);
   });
 
   test('a missing Engine also forces a non-ready inventory projection',

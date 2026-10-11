@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'worker_process_cleanup.dart';
 
 class CliCommandResult {
   const CliCommandResult({
@@ -16,9 +17,13 @@ class CliCommandResult {
 }
 
 class CliCommandRunner {
-  const CliCommandRunner({this.maxOutputBytes = 1024 * 1024});
+  const CliCommandRunner({
+    this.maxOutputBytes = 1024 * 1024,
+    this.cleanup = const WorkerProcessCleanup(),
+  });
 
   final int maxOutputBytes;
+  final WorkerProcessCleanup cleanup;
 
   Future<CliCommandResult> run(
     String executable,
@@ -35,23 +40,22 @@ class CliCommandRunner {
       includeParentEnvironment: false,
       runInShell: false,
     );
-    final stdoutFuture = _readBounded(process.stdout, process);
-    final stderrFuture = _readBounded(process.stderr, process);
+    final stdoutFuture = _readBounded(process.stdout);
+    final stderrFuture = _readBounded(process.stderr);
     try {
-      final code = await process.exitCode.timeout(
-        timeout,
-        onTimeout: () {
-          process.kill(ProcessSignal.sigterm);
-          throw TimeoutException('CLI command exceeded its deadline', timeout);
-        },
-      );
+      // Bound the entire command, including inherited child stdout/stderr pipes.
+      final result = await Future.wait<Object>([
+        process.exitCode,
+        stdoutFuture,
+        stderrFuture,
+      ], eagerError: true).timeout(timeout);
       return CliCommandResult(
-        exitCode: code,
-        stdout: await stdoutFuture,
-        stderr: await stderrFuture,
+        exitCode: result[0] as int,
+        stdout: result[1] as String,
+        stderr: result[2] as String,
       );
     } on Object {
-      process.kill(ProcessSignal.sigkill);
+      await cleanup.terminate(process);
       rethrow;
     }
   }
@@ -59,11 +63,10 @@ class CliCommandRunner {
   Stream<String> lines(Stream<List<int>> stream) =>
       stream.transform(utf8.decoder).transform(const LineSplitter());
 
-  Future<String> _readBounded(Stream<List<int>> stream, Process process) async {
+  Future<String> _readBounded(Stream<List<int>> stream) async {
     final bytes = BytesBuilder(copy: false);
     await for (final chunk in stream) {
       if (bytes.length + chunk.length > maxOutputBytes) {
-        process.kill(ProcessSignal.sigterm);
         throw const FormatException('CLI output exceeds configured limit');
       }
       bytes.add(chunk);

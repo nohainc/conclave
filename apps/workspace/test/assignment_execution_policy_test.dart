@@ -3,18 +3,6 @@ import 'package:conclave_workspace/worker_executor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('read-only assignments require Profile read-only capability', () {
-    for (final identity in ['chatgpt', 'gemini', 'future-worker']) {
-      final readOnly = <String, Object?>{
-        'readOnly': true,
-        'workerTypeId': identity
-      };
-      expect(
-          profileAllowsAssignment(readOnly, ['text', 'local_file']), isFalse);
-      expect(profileAllowsAssignment(readOnly, ['thread_read']), isTrue);
-      expect(profileAllowsAssignment({'readOnly': false}, ['text']), isTrue);
-    }
-  });
   test('Cloud permissions choose the generic provider policy', () {
     expect(
         assignmentExecutionPolicy({

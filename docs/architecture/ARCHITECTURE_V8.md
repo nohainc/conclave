@@ -225,8 +225,10 @@ Tool Profile administration and release operations use separate Cloud
 allowlists: `CONCLAVE_PROFILE_ADMIN_USER_IDS` grants catalog and draft
 administration, while `CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS` grants
 publication and rollout management. Workspace ownership and Space roles do
-not grant either permission. Stable promotion, channel rollback, and release
-revocation require fresh session-bound passkey step-up authentication.
+not grant either permission. Stable promotion and channel rollback require
+fresh session-bound passkey step-up authentication. Release revocation uses
+release-manager authorization, a mandatory reason, and explicit Profile Lab
+confirmation.
 Profile Lab stores its desktop session in the macOS Keychain and removes legacy
 plaintext session files during migration. Sandbox runs use unique private
 scratch directories, cancel active Engine work during teardown, and fail if
@@ -368,7 +370,6 @@ profileReleaseVersion
 profileSchemaVersion
 providerToolName
 providerToolVersion
-capabilities
 ~~~
 
 Workspace supplies the admitted profile payload/reference and expected logical
@@ -847,7 +848,6 @@ worker_catalog
   engine_family
   visibility_state
   release_stage
-  capabilities_json
   sort_order
 
 worker_catalog = stable logical product identity and presentation metadata
@@ -856,7 +856,7 @@ tool_profile_releases = immutable, signed, versioned implementation behavior
 
 WorkerDescriptor = worker_catalog row joined to its active
 tool_profile_definitions row:
-  workerTypeId, displayName, description, engineFamily, capabilities,
+  workerTypeId, displayName, description, engineFamily,
   profileDefinitionId, providerToolName, releaseStage, visibilityState,
   sortOrder
 ~~~
@@ -931,11 +931,11 @@ retains its local record for diagnostics, but Workspace excludes it from ready
 inventory, readiness probes, and assignment execution. If the descriptor later
 returns, the existing local slot is reused.
 
-The v8 product-capability list is closed and validated by Cloud and Workspace.
-Workspace maps declared capabilities through fixed permission policy; a Tool
-Profile cannot grant itself filesystem or general shell access. A new catalog
-entry can use the existing Workspace UI and generic Engine once its approved
-Profile release is available.
+Worker and Profile capability arrays are not part of the v8 execution contract.
+Cloud owns workflow enablement and access policy; signed Profiles provide the
+provider execution options and sandbox mappings. A new catalog entry can use
+the existing Workspace UI and generic Engine once its approved Profile release
+is available.
 
 Assignment permission IDs are canonical across Cloud and Workspace:
 `repository:read`, `repository:write`, `shell:execute`, and `network:use`.
@@ -1008,7 +1008,6 @@ profile_release_version
 provider_tool_name
 provider_tool_version
 
-capabilities
 concurrency
 last_seen
 ~~~
@@ -1024,12 +1023,12 @@ current cached or authoritative catalog. Orphan local records are retained
 for diagnostics but omitted from full inventory snapshots. Cloud composes the
 human inventory read model by joining each local Worker row to its catalog
 display name and description. AX receives those fields directly alongside
-Workspace, activation, readiness, capability, Engine, Profile, and provider
+Workspace, activation, readiness, Engine, Profile, and provider
 tool details; it does not derive product names from Worker Type IDs or combine
 multiple API responses. For each reported Worker, Workspace resolves a
 verified Profile compatible with the Worker Type and Engine before reporting
 readiness. Missing or ineligible Profile material or a missing Engine produces
-a non-ready record with no Profile release identity or capabilities, so Cloud
+a non-ready record with no Profile release identity, so Cloud
 scheduling cannot treat stale local readiness as executable.
 
 Cloud independently enforces the same catalog boundary when selecting an

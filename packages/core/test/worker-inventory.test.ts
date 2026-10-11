@@ -22,8 +22,6 @@ function worker(
     profileReleaseVersion: 1,
     providerToolName: "codex",
     providerToolVersion: "1.0.0",
-    capabilities: ["code"],
-    inputCapabilities: [],
     localConcurrencyLimit: 1,
     revision: 1,
     createdAt: "2026-09-26T00:00:00Z",
@@ -51,7 +49,7 @@ describe("Workspace Worker inventory domain", () => {
     ).toThrow(/workerIds must be unique/);
   });
 
-  it("enforces safe bounded concurrency, version, and capability metadata", () => {
+  it("enforces safe bounded concurrency and version metadata", () => {
     expect(() =>
       validateWorkspaceWorkerInventory({
         ...worker("worker-a", "workspace-a"),
@@ -64,12 +62,6 @@ describe("Workspace Worker inventory domain", () => {
         engineVersion: "v".repeat(65),
       }),
     ).toThrow(/engineVersion/);
-    expect(() =>
-      validateWorkspaceWorkerInventory({
-        ...worker("worker-a", "workspace-a"),
-        capabilities: ["code", "code"],
-      }),
-    ).toThrow(/capabilities must be unique/);
     expect(() =>
       validateWorkspaceWorkerInventory({
         ...worker("worker-a", "workspace-a"),

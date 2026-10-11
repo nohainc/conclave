@@ -28,7 +28,6 @@ const _topLevelKeys = {
   'sandbox',
   'progress',
   'errors',
-  'capabilities',
   'compatibilityOverrides',
 };
 
@@ -47,8 +46,7 @@ class EngineProfile {
   int get releaseVersion => _integer(json, 'releaseVersion');
   String get workerTypeId => _text(json, 'logicalWorkerTypeId');
   int get schemaVersion => _integer(json, 'schemaVersion');
-  List<String> get capabilities =>
-      _strings(json['capabilities'], 'capabilities');
+
   Map<String, Object?> get providerTool =>
       _object(json['providerTool'], 'providerTool');
   Map<String, Object?> get environment =>
@@ -217,8 +215,12 @@ class EngineProfile {
           const {
             'timeoutMs',
             'expectedFinalText',
+            'requiredForReadiness',
           },
           'probe.live');
+      if (liveMap['requiredForReadiness'] != null &&
+          liveMap['requiredForReadiness'] is! bool)
+        throw const FormatException('Invalid live readiness policy');
       final expected = liveMap['expectedFinalText'];
       if (expected is! Map ||
           expected['kind'] != 'exact' ||

@@ -34,6 +34,22 @@ void main() {
     return value;
   }
 
+  test('accepts the live readiness policy and rejects invalid values', () {
+    final value = profile();
+    final probe = Map<String, Object?>.from(value['probe'] as Map);
+    value['probe'] = probe;
+    probe['live'] = {
+      'timeoutMs': 30000,
+      'expectedFinalText': {'kind': 'exact', 'value': 'OK'},
+      'requiredForReadiness': true,
+    };
+    expect(() => EngineProfile.parse(utf8.encode(jsonEncode(value))),
+        returnsNormally);
+    (probe['live'] as Map)['requiredForReadiness'] = 'true';
+    expect(() => EngineProfile.parse(utf8.encode(jsonEncode(value))),
+        throwsFormatException);
+  });
+
   test('validates generic options and maps provider-specific effort values',
       () {
     final parsed = EngineProfile.parse(utf8.encode(jsonEncode(profile())));

@@ -16,7 +16,7 @@ export type ConversationRouteAction =
   | "RECONSTRUCT_SESSION"
   | "STATELESS_EXECUTION";
 
-/** Local runtime spaces these capabilities from its verified Profile. */
+/** Local runtime receives these session facts from its verified Profile. */
 export interface ConversationSessionCapabilities {
   readonly durableSessions: boolean;
   readonly incrementalContextSync: boolean;

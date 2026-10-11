@@ -139,35 +139,40 @@ CONCLAVE_MODEL_OUTPUT
           reason: 'The model request sandbox is removed after execution.');
     });
 
-    test('derives optional evidence scenarios from Profile capabilities', () {
+    test('derives optional evidence scenarios from the execution contract', () {
       final statuses = cloudAcceptanceScenarioStatuses({
-        'capabilities': ['text'],
         'session': {'supported': false},
+        'sandbox': {
+          'mappings': {'restricted': []}
+        },
       });
-      expect(statuses?['representative_thread_write'], 'not_applicable');
-      expect(statuses?['durable_session_start'], 'not_applicable');
-      expect(statuses?['durable_session_resume'], 'not_applicable');
-      expect(statuses?['model_selection'], 'not_applicable');
-      expect(statuses?['passive_probe'], 'passed');
-      expect(statuses?['cancellation'], 'passed');
+      expect(statuses['representative_thread_write'], 'not_applicable');
+      expect(statuses['durable_session_start'], 'not_applicable');
+      expect(statuses['durable_session_resume'], 'not_applicable');
+      expect(statuses['model_selection'], 'not_applicable');
+      expect(statuses['passive_probe'], 'passed');
+      expect(statuses['cancellation'], 'passed');
       final capableStatuses = cloudAcceptanceScenarioStatuses({
-        'capabilities': ['thread_write', 'durable_session'],
         'session': {'supported': true},
         'model': {
           'supported': true,
           'allowlist': ['fixture-model']
         },
+        'sandbox': {
+          'mappings': {
+            'restricted': ['--sandbox']
+          }
+        },
       });
-      expect(capableStatuses?['representative_thread_write'], 'passed');
-      expect(capableStatuses?['durable_session_start'], 'passed');
-      expect(capableStatuses?['durable_session_resume'], 'passed');
-      expect(capableStatuses?['model_selection'], 'passed');
+      expect(capableStatuses['representative_thread_write'], 'passed');
+      expect(capableStatuses['durable_session_start'], 'passed');
+      expect(capableStatuses['durable_session_resume'], 'passed');
+      expect(capableStatuses['model_selection'], 'passed');
       expect(
         cloudAcceptanceScenarioStatuses({
-          'capabilities': ['durable_session'],
           'session': {'supported': false},
         }),
-        isNull,
+        isNotNull,
       );
     });
 
@@ -190,7 +195,7 @@ case "$*" in
   *cancellation*|*timeout*) sleep 30 ;;
 esac
 case "$*" in
-  *acceptance-write.txt*) printf 'conclave-profile-lab-write-verified' > acceptance-write.txt ;;
+  *acceptance-write.txt*) printf 'conclave-profile-lab-write-verified\n' > acceptance-write.txt ;;
 esac
 printf '{"sessionId":"fixture-session","text":"OK"}\n'
 ''');
@@ -281,7 +286,7 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
         'timeout': {'providerArguments': [], 'providerReserveMs': 0},
         'sandbox': {
           'mappings': {
-            'restricted': [],
+            'restricted': ['--sandbox', 'workspace-write'],
             'provider_default': [],
             'full_access': []
           }
@@ -295,7 +300,6 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
             }
           ]
         },
-        'capabilities': ['thread_write', 'durable_session'],
         'compatibilityOverrides': [],
       };
 

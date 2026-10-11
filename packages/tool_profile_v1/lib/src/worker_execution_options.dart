@@ -46,6 +46,33 @@ class ProfileExecutionOptions {
       return result;
     }
 
+    final discovery = model['discovery'];
+    if (discovery != null) {
+      if (discovery is! Map ||
+          discovery.keys.any((key) => !const {
+                'schemaVersion',
+                'arguments',
+                'timeoutMs',
+                'format',
+                'idPrefix'
+              }.contains(key)) ||
+          discovery['schemaVersion'] != 1 ||
+          !const {'tsv', 'codex_app_server'}.contains(discovery['format']) ||
+          discovery['timeoutMs'] is! int ||
+          (discovery['timeoutMs'] as int) < 100 ||
+          (discovery['timeoutMs'] as int) > 10000 ||
+          discovery['idPrefix'] is! String ||
+          !RegExp(r'^(?:[A-Za-z0-9][A-Za-z0-9._-]{0,63})?$')
+              .hasMatch(discovery['idPrefix'] as String) ||
+          discovery['arguments'] is! List ||
+          (discovery['arguments'] as List).isEmpty ||
+          (discovery['arguments'] as List).length > 32 ||
+          (discovery['arguments'] as List).any((v) =>
+              v is! String ||
+              v.isEmpty ||
+              v.length > 256 ||
+              RegExp(r'[\x00-\x1f\x7f]').hasMatch(v))) fail();
+    }
     final allowlist = model['allowlist'];
     if (allowlist != null &&
         (allowlist is! List ||

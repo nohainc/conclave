@@ -38,21 +38,19 @@ void main() {
       expect(release.toJson()['futureCloudField'], isTrue);
     });
 
-    test('worker catalog fields are typed and capabilities are immutable', () {
+    test('worker catalog fields are typed without capability metadata', () {
       final worker = ProfileLabWorkerReadModel.fromJson({
         'workerTypeId': 'new-worker',
         'profileDefinitionId': 'new-worker-profile',
         'displayName': 'New Worker',
         'providerToolName': 'new-cli',
         'releaseStage': 'draft',
-        'capabilities': ['code_generation'],
         'sortOrder': 4,
       });
 
       expect(worker.workerTypeId, 'new-worker');
       expect(worker.providerToolName, 'new-cli');
-      expect(worker.capabilities, ['code_generation']);
-      expect(() => worker.capabilities.add('mutate'), throwsUnsupportedError);
+      expect(worker.toJson().containsKey('capabilities'), isFalse);
     });
 
     test('signing preflight keeps a typed readiness result and issue list', () {

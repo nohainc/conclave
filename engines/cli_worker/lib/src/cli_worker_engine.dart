@@ -1,4 +1,5 @@
 import 'worker_session.dart';
+import 'model_discovery.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -99,6 +100,8 @@ class CliWorkerEngine {
   late final EngineSessionStore _sessions;
   String? _resolvedExecutable;
   String? _providerVersion;
+  DiscoveredModelCatalog? _modelCatalog;
+  bool _discoveryUsedCache = false;
   bool _initialized = false;
   final _operationStarts = <String, Stopwatch>{};
 
@@ -221,7 +224,9 @@ class CliWorkerEngine {
         profileDefinitionId: _profile.definitionId,
         profileReleaseVersion: _profile.releaseVersion.toString(),
         profileSchemaVersion: _profile.schemaVersion,
-        capabilities: _profile.capabilities,
+        // Kept on the wire for protocol compatibility; capability metadata is
+        // no longer sourced from or enforced by Tool Profiles.
+        capabilities: const [],
       ),
     );
   }
@@ -291,6 +296,26 @@ class CliWorkerEngine {
             code: 'provider_tool_version',
             status: ProbeCheckStatus.passed,
             message: 'Provider CLI version is supported.',
+          ),
+        );
+      }
+      if (issue == null && _profile.model['discovery'] is Map) {
+        _modelCatalog = await _discoverModels(
+          executable,
+          env,
+          version,
+          refresh: true,
+          timeout: remaining(profileLimitMs: 10000),
+        );
+        checks.add(
+          ProbeCheck(
+            code: 'model_discovery',
+            status: _discoveryUsedCache
+                ? ProbeCheckStatus.warning
+                : ProbeCheckStatus.passed,
+            message: _discoveryUsedCache
+                ? 'Model refresh failed; last successful catalog retained.'
+                : 'Provider model catalog discovered; listed models are not execution tests.',
           ),
         );
       }
@@ -446,9 +471,140 @@ class CliWorkerEngine {
         ready: issue == null,
         providerToolName: _string(_profile.providerTool['name']),
         providerToolVersion: _providerVersion,
+        modelCatalog: _modelCatalog,
         checks: checks,
         issueCode: issue,
       ),
+    );
+  }
+
+  Future<DiscoveredModelCatalog> _discoverModels(
+    String executable,
+    Map<String, String> env,
+    String version, {
+    bool refresh = false,
+    Duration? timeout,
+  }) async {
+    final cache = ModelDiscoveryCache(options.statePath);
+    _discoveryUsedCache = false;
+    final cached = await cache.load(_profile.digest, version);
+    if (!refresh && cached != null) return cached;
+    final spec = _map(_profile.model['discovery']);
+    try {
+      final format = _string(spec['format']);
+      final models = format == 'codex_app_server'
+          ? await discoverCodexAppServerModels(
+              executable: executable,
+              arguments: _stringList(spec['arguments']),
+              environment: env,
+              workingDirectory: options.statePath,
+              idPrefix: _string(spec['idPrefix']),
+              timeout:
+                  timeout ?? Duration(milliseconds: _int(spec['timeoutMs'])),
+            )
+          : await _discoverTsvModels(
+              executable,
+              env,
+              spec,
+              timeout ?? Duration(milliseconds: _int(spec['timeoutMs'])),
+            );
+      final catalog = DiscoveredModelCatalog(
+        profileDigest: _profile.digest,
+        providerToolVersion: version,
+        discoveredAt: DateTime.now().toUtc().toIso8601String(),
+        models: models.map(
+          (model) => DiscoveredModel(
+            id: model.id,
+            name: model.name,
+            supportedReasoningEfforts: model.supportedReasoningEfforts,
+            defaultReasoningEffort: model.defaultReasoningEffort,
+            status:
+                cached?.models
+                    .where((m) => m.id == model.id)
+                    .firstOrNull
+                    ?.status ??
+                'listed',
+          ),
+        ),
+      );
+      await cache.save(catalog);
+      return catalog;
+    } on Object {
+      // Retain the last successful list only for this exact Profile and CLI.
+      if (cached != null) {
+        _discoveryUsedCache = true;
+        return cached;
+      }
+      rethrow;
+    }
+  }
+
+  Future<List<DiscoveredModel>> _discoverTsvModels(
+    String executable,
+    Map<String, String> env,
+    Map<String, Object?> spec,
+    Duration timeout,
+  ) async {
+    final result = await _commandRunner.run(
+      executable,
+      _stringList(spec['arguments']),
+      environment: env,
+      workingDirectory: options.statePath,
+      timeout: timeout,
+    );
+    if (result.exitCode != 0) {
+      throw const FormatException('Model discovery failed');
+    }
+    return parseDiscoveredModels(result.stdout, _string(spec['idPrefix']));
+  }
+
+  Future<void> _recordModelOutcome(String? modelId, String status) async {
+    final catalog = _modelCatalog;
+    if (modelId == null || catalog == null) return;
+    _modelCatalog = DiscoveredModelCatalog(
+      profileDigest: catalog.profileDigest,
+      providerToolVersion: catalog.providerToolVersion,
+      discoveredAt: catalog.discoveredAt,
+      models: catalog.models.map(
+        (m) => m.id == modelId
+            ? DiscoveredModel(
+                id: m.id,
+                name: m.name,
+                status: status,
+                supportedReasoningEfforts: m.supportedReasoningEfforts,
+                defaultReasoningEffort: m.defaultReasoningEffort,
+              )
+            : m,
+      ),
+    );
+    await ModelDiscoveryCache(options.statePath).save(_modelCatalog!);
+  }
+
+  Future<void> _ensureModelCatalog() async {
+    if (_profile.model['discovery'] is! Map) return;
+    final executable = await _resolveTool();
+    final context = ProfileVersionProbe.buildContext(
+      profile: _profile,
+      workingDirectory: options.statePath,
+      homeDirectory: Platform.environment['HOME'] ?? options.statePath,
+      workerStateDirectory: options.statePath,
+    );
+    final result = await ProfileVersionProbe.run(
+      profile: _profile,
+      executable: executable,
+      commandRunner: _commandRunner,
+      environment: _environment(),
+      workingDirectory: options.statePath,
+      context: context,
+      deadline: const Duration(seconds: 10),
+    );
+    if (!result.supported || result.version == null)
+      throw const FormatException('Unsupported CLI version');
+    _providerVersion = result.version;
+    _modelCatalog = await _discoverModels(
+      executable,
+      _environment(),
+      result.version!,
     );
   }
 
@@ -612,16 +768,36 @@ class CliWorkerEngine {
         sink,
         _notInitialized(request.requestId, assignmentId: request.assignmentId),
       );
+    // Read/write policy is resolved by Cloud and carried in the assignment.
+    // Profile capability metadata is legacy and must not gate execution.
     final execution = _profile.execution;
     final sessionPolicy =
         request.sessionPolicy == WorkerSessionPolicy.durableSession
         ? 'durable'
         : 'stateless';
     final sessionProfile = _profile.session;
+    try {
+      await _ensureModelCatalog();
+    } on Object {
+      return _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          assignmentId: request.assignmentId,
+          code: WorkerIssueCode.providerFailure,
+          message: 'Provider model catalog could not be loaded',
+        ),
+      );
+    }
     if (request.model != null) {
       final model = _profile.model;
       final allowlist = model['allowlist'];
-      if (model['supported'] != true ||
+      if ((model['discovery'] is Map &&
+              !(_modelCatalog?.models.any(
+                    (m) => m.id == request.model && m.status != 'unavailable',
+                  ) ??
+                  false)) ||
+          model['supported'] != true ||
           (model['unknownModelPolicy'] == 'profile_allowlist' &&
               (allowlist is! List || !allowlist.contains(request.model)))) {
         return _write(
@@ -636,10 +812,23 @@ class CliWorkerEngine {
       }
     }
     final executionOptions = ProfileExecutionOptions(_profile.model);
-    if (!executionOptions.acceptsEffort(
-      request.model,
-      request.reasoningEffort,
-    )) {
+    final dynamicModel = _profile.model['discovery'] is Map;
+    final discovered = request.model == null
+        ? null
+        : _modelCatalog?.models
+              .where((model) => model.id == request.model)
+              .firstOrNull;
+    final effortSupported = dynamicModel
+        ? request.reasoningEffort == null ||
+              (discovered?.supportedReasoningEfforts.contains(
+                    request.reasoningEffort!,
+                  ) ??
+                  false)
+        : executionOptions.acceptsEffort(
+            request.model,
+            request.reasoningEffort,
+          );
+    if (request.reasoningEffort != null && !effortSupported) {
       return _write(
         sink,
         WorkerErrorFrame(
@@ -857,6 +1046,9 @@ class CliWorkerEngine {
             continue;
           }
         }
+        if (interpreted.issueCode == WorkerIssueCode.modelNotSupported) {
+          await _recordModelOutcome(request.model, 'unavailable');
+        }
         if (interpreted.issueCode != null || result.exitCode != 0) {
           await _write(
             sink,
@@ -870,6 +1062,7 @@ class CliWorkerEngine {
           );
           return;
         }
+        await _recordModelOutcome(request.model, 'verified');
         final sessionId = interpreted.sessionId;
         if (request.sessionPolicy == WorkerSessionPolicy.durableSession) {
           if (sessionId == null || sessionId.isEmpty) {
@@ -1457,6 +1650,10 @@ class CliWorkerEngine {
       ),
       'provider_authentication_required': RegExp(
         r'unauthori[sz]ed|authentication required|not authenticated|sign in|login required|credentials? (missing|expired|invalid)',
+        caseSensitive: false,
+      ),
+      'model_not_supported': RegExp(
+        r'invalid model selection|(?:unknown|unsupported) model|model.{0,100}(?:not recognized|not found|not available|access denied)',
         caseSensitive: false,
       ),
       'permission_denied': RegExp(

@@ -55,7 +55,6 @@ workerTypeId
 displayName
 description
 engineFamily
-capabilities
 profileDefinitionId
 providerToolName
 releaseStage
@@ -184,7 +183,7 @@ Cloud inventory snapshots include only configured local Workers whose type is
 present in the current catalog. For each included record, Workspace resolves a
 verified Profile compatible with the Worker Type and Engine. If that Profile
 or the Engine is unavailable, Workspace may retain the record for diagnostics,
-but reports non-ready state, no Profile release version, and no capabilities.
+but reports non-ready state and no Profile release version.
 Cloud eligibility already rejects non-ready Workers and records without a
 Profile release identity, so stale local readiness cannot make an orphan or
 unrunnable Worker schedulable.
@@ -270,12 +269,11 @@ The Engine/Profile maps that model to the provider CLI only when supported.
 
 No Profile may silently substitute a different model.
 
-## Capabilities
+## Execution options
 
-The logical Worker advertises the safe intersection of:
-- product/catalog capabilities;
-- Profile capabilities;
-- provider tool/version capabilities;
+The logical Worker exposes the safe intersection of:
+- signed Profile execution options;
+- provider tool/version behavior;
 - Workspace local permissions.
 
 Cloud scheduling must never assume a capability solely because the Worker Type

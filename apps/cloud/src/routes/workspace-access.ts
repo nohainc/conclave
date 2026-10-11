@@ -5,7 +5,6 @@ import {
 } from "@conclave/security";
 import {
   validateWorkspaceConcurrencyPolicy,
-  validateWorkspaceGrantCapabilities,
   validateWorkspaceGrantPermissions,
   validateWorkspaceGrantWorkerIds,
   validateWorkspaceNetworkPolicy,
@@ -71,10 +70,6 @@ export function workspaceSpaceGrantMetadata(
     grantedByUserId: String(row.granted_by_user_id),
     status: String(row.status),
     allowedWorkerIds: parseJson(row.allowed_worker_ids_json, []),
-    allowedWorkerCapabilities: parseJson(
-      row.allowed_worker_capabilities_json,
-      [],
-    ),
     allowedPermissions: parseJson(row.allowed_permissions_json, []),
     networkPolicy: parseJson(row.network_policy_json, {}),
     concurrency: parseJson(row.concurrency_json, {}),
@@ -100,10 +95,7 @@ export async function loadWorkspaceSpaceGrant(
 
 export function grantStringArray(value: unknown, field: string): string {
   if (value === undefined) return "[]";
-  const valid =
-    field === "allowedWorkerIds"
-      ? validateWorkspaceGrantWorkerIds(value)
-      : validateWorkspaceGrantCapabilities(value);
+  const valid = validateWorkspaceGrantWorkerIds(value);
   if (!valid) {
     throw new HttpError(400, `${field} contains invalid or duplicate values`);
   }
@@ -167,7 +159,6 @@ export async function createWorkspaceSpaceGrant(
 ): Promise<Response> {
   const body = recordBody(await request.json().catch(() => null), [
     "allowedWorkerIds",
-    "allowedWorkerCapabilities",
     "allowedPermissions",
     "networkPolicy",
     "concurrency",
@@ -268,10 +259,6 @@ export async function createWorkspaceSpaceGrant(
       );
     }
   }
-  const allowedWorkerCapabilities = grantStringArray(
-    body.allowedWorkerCapabilities,
-    "allowedWorkerCapabilities",
-  );
   const now = new Date().toISOString();
   const allowedPermissions = grantExecutionPermissions(body.allowedPermissions);
   const networkPolicyValue =
@@ -295,11 +282,10 @@ export async function createWorkspaceSpaceGrant(
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO workspace_space_grants
        (id, space_id, workspace_id, granted_by_user_id, status,
-        allowed_worker_ids_json,
-        allowed_worker_capabilities_json, allowed_permissions_json,
+        allowed_worker_ids_json, allowed_permissions_json,
         network_policy_json, concurrency_json,
         expires_at, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?11)
+     VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?6, ?7, ?8, ?9, ?10, ?10)
      ON CONFLICT(id, space_id, workspace_id) DO NOTHING`,
   )
     .bind(
@@ -308,7 +294,6 @@ export async function createWorkspaceSpaceGrant(
       workspaceId,
       context.userId,
       allowedWorkerIds,
-      allowedWorkerCapabilities,
       allowedPermissions,
       networkPolicy,
       concurrency,

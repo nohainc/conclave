@@ -25,7 +25,7 @@ void main() {
       '/bin/sh',
       [
         '-c',
-        'sleep 30',
+        'while :; do sleep 30; done',
         'conclave-engine-test',
         '--state-directory',
         state.path
@@ -190,7 +190,7 @@ Future<void> main(List<String> args) async {
           'protocolVersion': '4.0',
           'requestId': request['requestId'],
           'workerTypeId': profile['logicalWorkerTypeId'],
-          'engineVersion': '1.0.0',
+          'engineVersion': valueAfter(args, '--engine-version'),
           'profileDefinitionId': profile['profileDefinitionId'],
           'profileReleaseVersion': '${profile['releaseVersion']}',
           'profileSchemaVersion': profile['schemaVersion'],

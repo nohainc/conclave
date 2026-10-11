@@ -216,10 +216,40 @@ void main() {
     });
     await tester.pump();
     expect(find.text(queued), findsNothing);
-    expect(find.text('Working on your request'), findsOneWidget);
+    expect(find.text('Working on your request'), findsNothing);
 
     await tester.pump(const Duration(seconds: 3));
     expect(find.text(queued), findsNothing);
+    expect(find.text('Working on your request'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('running progress notice stays hidden when work resolves quickly',
+      (tester) async {
+    final source = PollingSource();
+    final realtime = TestRealtime();
+    await mount(tester, source, realtime);
+
+    const running = 'Running your request';
+    realtime.controller.add({
+      'type': 'assignment.progress',
+      'workspaceId': 'workspace',
+      'payload': {'summary': running},
+    });
+    await tester.pump();
+    expect(find.text(running), findsNothing);
+
+    realtime.controller.add({
+      'type': 'assignment.completed',
+      'workspaceId': 'workspace',
+      'payload': {'summary': 'Request completed'},
+    });
+    await tester.pump();
+    expect(find.text(running), findsNothing);
+    expect(find.text('Request completed'), findsWidgets);
+
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text(running), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 }

@@ -567,8 +567,6 @@ class AxWorker {
     this.activationState = 'enabled',
     this.attentionReasonCode,
     required this.localConcurrencyLimit,
-    required this.capabilities,
-    this.inputCapabilities = const [],
     this.engineVersion,
     this.profileDefinitionId,
     this.profileReleaseVersion,
@@ -603,8 +601,6 @@ class AxWorker {
   final String? providerToolVersion;
   final Map<String, dynamic> modelOptions;
   final AxWorkerExecutionOptions? executionOptions;
-  final List<String> capabilities;
-  final List<String> inputCapabilities;
 
   factory AxWorker.fromJson(Map<String, dynamic> json) => AxWorker(
         executionOptions: json['executionOptions'] is Map
@@ -638,8 +634,6 @@ class AxWorker {
         profileReleaseVersion: json['profileReleaseVersion'] as int?,
         providerToolName: json['providerToolName']?.toString(),
         providerToolVersion: json['providerToolVersion']?.toString(),
-        capabilities: _strings(json, 'capabilities'),
-        inputCapabilities: _strings(json, 'inputCapabilities'),
       );
 }
 

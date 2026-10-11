@@ -176,7 +176,7 @@
   "sandbox": {
     "mappings": {
       "restricted": ["--sandbox", "--mode", "accept-edits"],
-      "provider_default": ["--sandbox"],
+      "provider_default": ["--sandbox", "--mode", "plan"],
       "full_access": []
     }
   },
@@ -267,6 +267,5 @@
       }
     ]
   },
-  "capabilities": ["text", "local_file", "durable_session"],
   "compatibilityOverrides": []
 }

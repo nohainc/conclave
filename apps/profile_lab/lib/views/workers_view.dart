@@ -1,5 +1,4 @@
 import 'package:conclave_design/conclave_design.dart';
-import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:flutter/material.dart';
 import '../widgets/lab_components.dart';
 
@@ -60,7 +59,6 @@ class _WorkersViewState extends State<WorkersView> {
     final descriptionCtrl = TextEditingController();
     final providerToolCtrl = TextEditingController();
     final sortOrderCtrl = TextEditingController(text: '10');
-    final selectedCapabilities = <String>{'text'};
     String releaseStage = 'testing';
 
     showDialog<void>(
@@ -119,32 +117,6 @@ class _WorkersViewState extends State<WorkersView> {
                     decoration: const InputDecoration(
                       labelText: 'Provider Tool Identity (providerToolName)',
                       hintText: 'e.g. provider-tool',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Capabilities',
-                    ),
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: canonicalWorkerCapabilities
-                          .map((capability) => FilterChip(
-                                label: Text(capability),
-                                selected:
-                                    selectedCapabilities.contains(capability),
-                                onSelected: (selected) {
-                                  setDlgState(() {
-                                    if (selected) {
-                                      selectedCapabilities.add(capability);
-                                    } else {
-                                      selectedCapabilities.remove(capability);
-                                    }
-                                  });
-                                },
-                              ))
-                          .toList(),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -209,9 +181,6 @@ class _WorkersViewState extends State<WorkersView> {
                 final dName = displayNameCtrl.text.trim();
                 final desc = descriptionCtrl.text.trim();
                 final pTool = providerToolCtrl.text.trim();
-                final caps = canonicalWorkerCapabilities
-                    .where(selectedCapabilities.contains)
-                    .toList();
                 final sortOrder = int.tryParse(sortOrderCtrl.text.trim()) ?? 10;
 
                 if (wId.isEmpty ||
@@ -225,15 +194,6 @@ class _WorkersViewState extends State<WorkersView> {
                   );
                   return;
                 }
-                if (caps.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content:
-                            CopyableMessage('Select at least one capability.')),
-                  );
-                  return;
-                }
-
                 Navigator.of(ctx).pop();
                 try {
                   await c.createWorkerCatalogEntry(
@@ -243,7 +203,6 @@ class _WorkersViewState extends State<WorkersView> {
                     description: desc,
                     providerToolName: pTool,
                     releaseStage: releaseStage,
-                    capabilities: caps,
                     sortOrder: sortOrder,
                   );
                   if (mounted) {
@@ -734,47 +693,6 @@ class _WorkerDetailsPane extends StatelessWidget {
               const Divider(color: ProfileLabTheme.borderColor),
               _PropertyRow(
                   label: 'Sort Order', value: workerState.sortOrder.toString()),
-              if (workerState.capabilities.isNotEmpty) ...[
-                const Divider(color: ProfileLabTheme.borderColor),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Capabilities',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: ProfileLabTheme.secondaryText)),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Wrap(
-                          alignment: WrapAlignment.end,
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: workerState.capabilities
-                              .map(
-                                (cap) => Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: ProfileLabTheme.darkCard,
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    cap,
-                                    style: ConclaveTypography.monoSmall
-                                        .copyWith(color: Colors.white),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ],
           ),
           const SizedBox(height: 24),

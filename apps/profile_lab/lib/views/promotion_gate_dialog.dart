@@ -155,7 +155,6 @@ class _PromotionGateDialogState extends State<PromotionGateDialog> {
     final gate5Passed = scenarios['passive_probe'] == 'passed';
     final gate6Passed = scenarios['live_probe'] == 'passed';
     final gate7Passed = evidenceMatchesProfile &&
-        expectedScenarios != null &&
         const [
           'model_selection',
           'representative_thread_write',

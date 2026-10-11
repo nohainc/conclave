@@ -6,6 +6,7 @@ import 'package:conclave_profile_lab/profile_admin_api_client.dart';
 import 'package:conclave_profile_lab/profile_lab_auth.dart';
 import 'package:conclave_profile_lab/profile_lab_paths.dart';
 import 'package:conclave_profile_lab/profile_lab_session_store.dart';
+import 'package:conclave_profile_lab/utils/profile_payload_migrations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 
@@ -75,7 +76,10 @@ void main() {
           'starterTemplate': {'schemaVersion': 1, 'profile': payload}
         };
         await controller.createInitialDraft();
-        expect(controller.currentDraft!.profile, payload);
+        final expectedPayload = entry.$1 == 'chatgpt'
+            ? migrateProfilePayload(payload) ?? payload
+            : payload;
+        expect(controller.currentDraft!.profile, expectedPayload);
         expect(controller.currentDraft!.isSigned, isFalse);
         expect(controller.currentEvidence, isEmpty);
         final digest = controller.currentDraft!.payloadDigest;
@@ -95,6 +99,40 @@ void main() {
       ];
       await controller.createInitialDraft();
       expect(await controller.store.loadDraft('future-profile'), isNull);
+    });
+
+    test('removes obsolete local drafts during startup refresh', () async {
+      final obsoleteDirectory =
+          Directory('${paths.draftsDirectory.path}/obsolete-profile');
+      await obsoleteDirectory.create(recursive: true);
+      await File('${obsoleteDirectory.path}/draft.json').writeAsString(
+        jsonEncode({
+          'capabilities': ['text']
+        }),
+      );
+
+      await controller.refreshDrafts();
+
+      expect(controller.draftDefinitionIds, isEmpty);
+      expect(controller.draftError, contains('obsolete-profile'));
+      expect(await obsoleteDirectory.exists(), isFalse);
+    });
+
+    test('migrates an existing legacy ChatGPT draft before testing', () async {
+      final payload = Map<String, Object?>.from(jsonDecode(await File(
+        '../../packages/tool-profile/test/fixtures/chatgpt-codex.v2.json',
+      ).readAsString()) as Map);
+      await controller.store.saveDraft(
+        profileDefinitionId: 'chatgpt-codex',
+        profileJson: payload,
+      );
+
+      await controller.refreshDrafts();
+
+      final model = controller.currentDraft!.profile['model'] as Map;
+      expect(model['unknownModelPolicy'], 'pass_through');
+      expect(model.containsKey('catalog'), isFalse);
+      expect((model['discovery'] as Map)['format'], 'codex_app_server');
     });
 
     test(
@@ -436,7 +474,6 @@ void main() {
             }
           ]
         },
-        'capabilities': ['code_generation'],
         'compatibilityOverrides': [],
       };
 
@@ -448,6 +485,8 @@ void main() {
       expect(controller.selectedDefinitionId, 'published-worker-profile');
       expect(controller.currentDraft, isNotNull);
       expect(controller.currentDraft!.releaseVersion, 4);
+      expect(controller.currentDraft!.profile.containsKey('capabilities'),
+          isFalse);
       expect(controller.selectedArea, LabArea.workers);
     });
 
@@ -466,9 +505,12 @@ void main() {
       expect(controller.syncState, DraftSyncState.saved);
 
       // Make local edit
-      controller.updateJsonText(controller.currentJsonText.replaceFirst(
-          '"capabilities": [\n    "text"\n  ]',
-          '"capabilities": [\n    "text",\n    "code_generation"\n  ]'));
+      final firstEdit =
+          Map<String, dynamic>.from(jsonDecode(controller.currentJsonText));
+      (firstEdit['providerTool'] as Map<String, dynamic>)['name'] =
+          'codex-edited';
+      controller.updateJsonText(
+          const JsonEncoder.withIndent('  ').convert(firstEdit));
       expect(controller.isDirty, isTrue);
       expect(controller.syncState, DraftSyncState.modifiedLocally);
 
@@ -483,9 +525,12 @@ void main() {
       final conflictApi = FakeProfileAdminApiClient(simulateConflict: true);
       controller.setApiClientForTesting(conflictApi);
       controller.baseCloudDigest = 'old-digest';
-      controller.updateJsonText(controller.currentJsonText.replaceFirst(
-          '"capabilities": [\n    "text",\n    "code_generation"\n  ]',
-          '"capabilities": [\n    "text"\n  ]'));
+      final secondEdit =
+          Map<String, dynamic>.from(jsonDecode(controller.currentJsonText));
+      (secondEdit['providerTool'] as Map<String, dynamic>)['name'] =
+          'codex-restored';
+      controller.updateJsonText(
+          const JsonEncoder.withIndent('  ').convert(secondEdit));
       expect(controller.syncState, DraftSyncState.conflict);
 
       expect(controller.saveCurrentDraftToCloud(), throwsA(isA<StateError>()));
@@ -566,7 +611,6 @@ void main() {
             }
           ]
         },
-        'capabilities': ['text', 'code_generation'],
         'compatibilityOverrides': []
       };
       controller.cloudDigest = 'remote-ai-digest';
@@ -574,7 +618,7 @@ void main() {
       await controller.resolveConflictKeepCloud();
       expect(controller.syncState, DraftSyncState.saved);
       expect(controller.isDirty, isFalse);
-      expect(controller.currentJsonText, contains('"code_generation"'));
+      expect(controller.currentJsonText, contains('sync-test-worker'));
     });
 
     test('creates an absent Cloud v1 draft with POST before updating it',

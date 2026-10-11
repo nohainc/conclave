@@ -22,7 +22,6 @@ AxWorker worker(String id,
       status: offline ? 'offline' : 'ready',
       readinessState: offline ? 'offline' : 'ready',
       localConcurrencyLimit: 1,
-      capabilities: const [],
       executionOptions: !metadata
           ? null
           : AxWorkerExecutionOptions(

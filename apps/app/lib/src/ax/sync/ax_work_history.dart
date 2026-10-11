@@ -123,6 +123,11 @@ class AxWorkHistoryCache {
       ? AxWorkHistoryCache(null)
       : _sources[source] ??= AxWorkHistoryCache(source);
   final _contexts = <String, _HistoryContext>{};
+  // Older clients used `workstream-*` identifiers. Those records are no
+  // longer valid Cloud thread IDs; treating them as empty local history keeps
+  // stale persisted navigation from repeatedly polling a route that returns
+  // 404.
+  static bool _isLegacyThreadId(String id) => id.startsWith('workstream-');
   AxQuery<AxWorkHistory> query(String id, {bool activeOnly = false}) => AxQuery(
       key: AxQueryKey(['thread', id, 'work-requests']),
       load: () => _load(id, activeOnly));
@@ -173,6 +178,9 @@ class AxWorkHistoryCache {
           return time == 0 ? a.id.compareTo(b.id) : time;
         });
   Future<AxWorkHistory> _load(String id, bool activeOnly) async {
+    if (_isLegacyThreadId(id)) {
+      return AxWorkHistory(initialLoaded: true);
+    }
     if (source == null) {
       return AxWorkHistory(requests: peek(id).requests, initialLoaded: true);
     }
@@ -489,6 +497,7 @@ class AxWorkHistoryCache {
   }
 
   Future<void> loadOlder(String id) {
+    if (_isLegacyThreadId(id)) return Future.value();
     final context = _context(id);
     if (context.olderFlight != null) return context.olderFlight!;
     final cursor = peek(id).olderCursor;
@@ -684,6 +693,7 @@ class AxWorkHistoryCache {
   }
 
   Future<Set<String>> discoverRecent(String id) async {
+    if (_isLegacyThreadId(id)) return {};
     if (source == null || !peek(id).initialLoaded) return {};
     final context = _context(id);
     final revisions = Map.of(context.revisions);
@@ -706,6 +716,7 @@ class AxWorkHistoryCache {
 
   /// Discover only active/recent changes after a durable gap, retaining history.
   Future<Set<String>> discoverActive(String id) async {
+    if (_isLegacyThreadId(id)) return {};
     if (source == null || !peek(id).initialLoaded) return {};
     final context = _context(id);
     final revisions = Map.of(context.revisions);

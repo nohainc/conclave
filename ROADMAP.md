@@ -26,3 +26,14 @@ Consult the [Workspace release runbook](docs/deployment/WORKSPACE_RELEASES.md), 
 ## How to plan new work
 
 Use the v8 implementation plan for architecture and release gates, then update the owning current contract when behavior changes. Do not create a new versioned architecture snapshot or a parallel implementation roadmap for work already covered there.
+
+### Gemini AGY discovery candidate
+
+Engine 1.1.0 supports signed generic CLI model discovery, version/Profile-bound
+caching, Service inventory projection and explicit live-readiness gating. Gemini
+release 2 is an authoring candidate, not a promoted stable release. Real AGY
+1.3.3 discovery, selected-model execution and durable resume evidence are in
+`docs/acceptance/real-provider/2026-10-11/gemini-discovery.json`.
+Protected release qualification/signing, signed LaunchAgent execution and
+verified read-only isolation remain gates; Gemini Chat eligibility is withheld.
+See `docs/architecture/GEMINI_AGY_PROFILE.md`.

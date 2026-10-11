@@ -11,8 +11,9 @@ class AxSpaceThreads {
 
   AxQuery<List<AxThread>> query(String spaceId) => AxQuery(
         key: AxQueryKey(['space', spaceId, 'threads']),
-        load: () async =>
-            List.unmodifiable(await source.loadSpaceThreads(spaceId: spaceId)),
+        load: () async => List.unmodifiable(
+            (await source.loadSpaceThreads(spaceId: spaceId))
+                .where((thread) => !thread.id.startsWith('workstream-'))),
       );
 
   List<AxThread> peek(String spaceId) =>

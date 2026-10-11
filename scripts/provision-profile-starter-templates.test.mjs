@@ -22,6 +22,8 @@ it("provisions only the missing baseline starter table and preserves Drafts and 
         "0007_chat_profile_starter_attestation.sql",
         "0008_codex_compatibility_approval_policy.sql",
         "0017_chatgpt_starter_model_catalog.sql",
+        "0034_runtime_model_catalog_starters.sql",
+        "0035_codex_app_server_model_discovery.sql",
       ]
         .map((name) =>
           readFileSync(
@@ -35,7 +37,7 @@ it("provisions only the missing baseline starter table and preserves Drafts and 
     const canonical = JSON.parse(
       readFileSync(
         new URL(
-          "../packages/tool-profile/test/fixtures/chatgpt-codex.v1.json",
+          "../docs/profile-templates/chatgpt-codex-runtime-catalog.v1.json",
           import.meta.url,
         ),
         "utf8",
@@ -49,14 +51,6 @@ it("provisions only the missing baseline starter table and preserves Drafts and 
         .get("chatgpt-codex").profile_json,
     );
     expect(starter).toEqual(canonical);
-    const manifestUrl = new URL(
-      "../packages/tool-profile/test/fixtures/profiles/chatgpt-codex/manifest.json",
-      import.meta.url,
-    );
-    const manifest = JSON.parse(readFileSync(manifestUrl, "utf8"));
-    expect(
-      JSON.parse(readFileSync(new URL(manifest.profile, manifestUrl), "utf8")),
-    ).toEqual(canonical);
     expect(
       db
         .prepare("SELECT COUNT(*) AS count FROM tool_profile_starter_templates")

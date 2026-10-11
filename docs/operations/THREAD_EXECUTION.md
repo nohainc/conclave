@@ -42,8 +42,9 @@ and composer menu still show Direct and omit Chat, the connected Cloud is runnin
 the older catalog; deploy the updated Cloud after migrations, then reopen the
 Thread. The default local launcher proxies this same hosted catalog.
 
-Older signed Profiles without qualified `thread_read` capability fail closed
-for Chat; publish a qualified successor rather than editing a signed release.
-Antigravity's current starter cannot enforce read-only Thread access and is
-not eligible for Chat. It may still run Work. Release qualification and live
-provider acceptance remain required; see [regression coverage](../acceptance/CHAT_WORKFLOW.md).
+Cloud owns Chat versus Work workflow eligibility. Legacy signed Profiles may
+still contain a `capabilities` array for migration compatibility, but Cloud,
+Workspace, and the Engine ignore that metadata. AGY Chat uses the signed
+Profile's `--mode plan` mapping and Work uses its restricted `accept-edits`
+mapping. Release qualification and live provider acceptance remain required;
+see [regression coverage](../acceptance/CHAT_WORKFLOW.md).

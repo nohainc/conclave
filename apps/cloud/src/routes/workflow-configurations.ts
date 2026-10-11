@@ -241,7 +241,7 @@ export async function handleWorkflowConfigurations(
       throw new HttpError(400, "Worker is not owned by the current user");
     if (!selection.model && !selection.effort) continue;
     if (!worker.executionOptions)
-      throw new HttpError(400, "Worker Profile capabilities are unavailable");
+      throw new HttpError(400, "Worker execution options are unavailable");
     const error = validateWorkerExecutionSelection(
       worker.executionOptions,
       selection.model ?? null,

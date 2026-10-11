@@ -80,7 +80,6 @@ void main() {
     },
     'progress': [],
     'errors': {'mappings': []},
-    'capabilities': ['code_generation'],
     'compatibilityOverrides': [],
   };
 

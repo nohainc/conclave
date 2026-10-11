@@ -1,3 +1,4 @@
+import { WorkspaceWorkerInventoryEntrySchema } from "@conclave/workspace-runtime-protocol";
 import type { WorkspaceGatewayEnv } from "./contracts.js";
 
 /** Persists the Workspace-owned logical Worker snapshot and prunes omissions. */
@@ -97,14 +98,18 @@ export async function recordWorkspaceWorkerInventory(
       /^[a-z][a-z0-9_]{0,127}$/.test(item.readinessIssueCode)
         ? item.readinessIssueCode
         : null;
+    const validatedCatalog =
+      WorkspaceWorkerInventoryEntrySchema.shape.modelCatalog.safeParse(
+        item.modelCatalog,
+      );
     await env.CONCLAVE_DB.prepare(
       `INSERT INTO workspace_worker_inventory
           (worker_id, workspace_id, owner_user_id, worker_type_id,
            activation_state, readiness_state, readiness_issue_code,
            engine_version, profile_definition_id, profile_release_version,
            provider_tool_name, provider_tool_version,
-           capabilities_json, local_concurrency_limit, revision,
-           created_at, updated_at, last_seen_at)
+           local_concurrency_limit, revision,
+           created_at, updated_at, last_seen_at, model_catalog_json)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
          ON CONFLICT(worker_id) DO UPDATE SET
            worker_type_id = excluded.worker_type_id,
@@ -116,7 +121,7 @@ export async function recordWorkspaceWorkerInventory(
            profile_release_version = excluded.profile_release_version,
            provider_tool_name = excluded.provider_tool_name,
            provider_tool_version = excluded.provider_tool_version,
-           capabilities_json = excluded.capabilities_json,
+           model_catalog_json = excluded.model_catalog_json,
            local_concurrency_limit = excluded.local_concurrency_limit,
            revision = excluded.revision,
            updated_at = excluded.updated_at,
@@ -153,12 +158,14 @@ export async function recordWorkspaceWorkerInventory(
           item.providerToolVersion,
           /^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$/,
         ),
-        arrayJson(item.capabilities, 128),
         Math.min(1024, concurrency as number),
         revision,
         nullableText(item.createdAt, 40) ?? now,
         now,
         nullableText(item.lastSeenAt, 40) ?? now,
+        validatedCatalog.success && validatedCatalog.data
+          ? JSON.stringify(validatedCatalog.data)
+          : null,
       )
       .run();
     await env.CONCLAVE_DB.prepare(

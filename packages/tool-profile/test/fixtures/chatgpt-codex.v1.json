@@ -418,7 +418,6 @@
       }
     ]
   },
-  "capabilities": ["text", "local_file", "durable_session", "thread_read"],
   "compatibilityOverrides": [
     {
       "providerVersion": {

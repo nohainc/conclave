@@ -199,7 +199,6 @@ void main() {
           status: 'ready',
           readinessState: 'ready',
           localConcurrencyLimit: 1,
-          capabilities: [],
         ),
       ],
       invitations: const [testInvite1],
@@ -1244,7 +1243,6 @@ void main() {
                 status: 'ready',
                 readinessState: 'ready',
                 localConcurrencyLimit: 2,
-                capabilities: ['chat'],
               ),
             ],
             run: null,
@@ -1300,7 +1298,6 @@ void main() {
               status: 'ready',
               readinessState: 'ready',
               localConcurrencyLimit: 1,
-              capabilities: ['chat'],
             ),
           ],
           aiUpdates: [update],
@@ -1337,7 +1334,6 @@ void main() {
       status: 'ready',
       readinessState: 'ready',
       localConcurrencyLimit: 1,
-      capabilities: ['chat'],
     );
 
     const updates = [
@@ -1747,7 +1743,6 @@ void main() {
       status: 'ready',
       readinessState: 'ready',
       localConcurrencyLimit: 1,
-      capabilities: ['chat', 'work'],
     );
 
     const testPublishedUpdate = AxProductUpdate(
@@ -1839,7 +1834,6 @@ void main() {
       status: 'ready',
       readinessState: 'ready',
       localConcurrencyLimit: 1,
-      capabilities: ['chat', 'work'],
     );
 
     const testPublishedUpdate = AxProductUpdate(
@@ -1946,7 +1940,6 @@ void main() {
       status: 'ready',
       readinessState: 'ready',
       localConcurrencyLimit: 1,
-      capabilities: ['chat', 'work'],
     );
 
     const testProductUpdate = AxProductUpdate(
@@ -2201,7 +2194,6 @@ void main() {
               status: 'ready',
               readinessState: 'ready',
               localConcurrencyLimit: 1,
-              capabilities: ['work', 'chat'],
             ),
           ],
           attentionItems: attentionItems,
@@ -2541,7 +2533,6 @@ void main() {
       status: 'ready',
       readinessState: 'ready',
       localConcurrencyLimit: 1,
-      capabilities: ['code'],
     );
 
     await tester.pumpWidget(
@@ -3335,7 +3326,6 @@ void main() {
         status: 'ready',
         readinessState: 'ready',
         localConcurrencyLimit: 2,
-        capabilities: ['code', 'chat'],
       );
 
       final aiUpdates = [
@@ -3380,7 +3370,6 @@ void main() {
         status: 'ready',
         readinessState: 'ready',
         localConcurrencyLimit: 2,
-        capabilities: ['code', 'chat'],
       );
 
       final aiUpdates = [
@@ -3427,7 +3416,6 @@ void main() {
         status: 'ready',
         readinessState: 'ready',
         localConcurrencyLimit: 1,
-        capabilities: ['code'],
       );
 
       final aiUpdates = [
@@ -3863,7 +3851,6 @@ void main() {
         status: 'ready',
         readinessState: 'ready',
         localConcurrencyLimit: 2,
-        capabilities: ['code', 'chat'],
       );
 
       final aiUpdates = [

@@ -164,7 +164,7 @@ void main() {
         prompt: 'unsigned-development-ok',
         timeout: const Duration(seconds: 30),
         sessionPolicy: WorkerSessionPolicy.stateless,
-        executionPolicy: WorkerExecutionPolicy.providerDefault);
+        executionPolicy: WorkerExecutionPolicy.restricted);
     expect(result.output, contains('unsigned-development-ok'));
     expect(await store.activeRelease('fixture-cli'), isNull);
   });

@@ -256,7 +256,6 @@ void main() {
           status: 'offline',
           readinessState: 'offline',
           localConcurrencyLimit: 1,
-          capabilities: [],
           executionOptions: AxWorkerExecutionOptions(
               modelSelectionSupported: true,
               modelDiscovery: 'profile_catalog',

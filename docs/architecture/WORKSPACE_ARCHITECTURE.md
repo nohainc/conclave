@@ -88,7 +88,7 @@ separate lifecycle semantics.
 ## Worker subsystem
 
 `WorkspaceWorkerSubsystem` is the service composition boundary. It owns the
-local Worker registry, catalog/profile resolution, capability-aware readiness,
+local Worker registry, catalog/profile resolution, Profile/readiness checks,
 Engine supervision, and the small API used by runtime and IPC:
 
 ```text
@@ -215,3 +215,25 @@ The shared service and protocol remain platform-independent Dart. macOS host
 registration is behind `WorkspaceServiceManager`; Windows and Linux adapters
 (SCM/systemd, named pipes/Unix sockets, and platform secret stores) are future
 work and are not part of this implementation.
+
+### Profile-declared model discovery
+
+The Worker Engine owns bounded CLI model discovery under the signed Profile;
+the Service persists and republishes public metadata through existing inventory
+and IPC events. UI refresh requests go through the Service and do not run provider
+commands. Workflow/request settings remain the authoritative selection surface.
+See [Gemini/AGY profile and discovery contract](GEMINI_AGY_PROFILE.md), including
+its required live readiness test and Cloud-owned Chat/Work policy boundary.
+
+For discovery-backed Profiles, Workspace is the source of truth for the current
+model and effort list. The Engine uses the provider's declared discovery
+protocol: Gemini/AGY uses bounded TSV output, while ChatGPT/Codex uses the
+newline-delimited JSON-RPC `initialize` and `model/list` requests of
+`codex app-server`. The Service publishes the sanitized catalog with the Worker
+inventory, and Cloud exposes only a matching Profile digest and CLI version to
+AX. AX therefore reads the catalog through its normal Cloud/cache
+synchronization path; it never talks to a provider CLI directly.
+Discovery-backed Profiles contain no static fallback catalog or guessed effort
+rules. A missing or stale catalog leaves the choices unavailable until the
+Worker is refreshed. The app-server is used only for discovery; generic Profile
+execution remains the Worker Engine's responsibility.

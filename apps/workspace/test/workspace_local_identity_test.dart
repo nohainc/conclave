@@ -28,7 +28,6 @@ void main() {
         engineFamily: 'cli',
         visibilityState: 'visible',
         releaseStage: 'testing',
-        capabilities: const ['text'],
         sortOrder: 0,
       ),
     );

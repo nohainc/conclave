@@ -24,7 +24,6 @@ class ProfileLabWorkerReadModel extends ProfileAdminReadModel {
         displayName = _string(json, 'displayName') ?? '',
         providerToolName = _string(json, 'providerToolName') ?? '',
         releaseStage = _string(json, 'releaseStage') ?? 'draft',
-        capabilities = _stringList(json, 'capabilities'),
         sortOrder = _int(json, 'sortOrder');
 
   final String workerTypeId;
@@ -32,7 +31,6 @@ class ProfileLabWorkerReadModel extends ProfileAdminReadModel {
   final String displayName;
   final String providerToolName;
   final String releaseStage;
-  final List<String> capabilities;
   final int? sortOrder;
 }
 

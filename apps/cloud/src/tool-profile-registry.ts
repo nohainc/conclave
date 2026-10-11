@@ -11,7 +11,6 @@ import {
   channelNames,
   parseProfile,
   profileDigest,
-  productCapabilities,
   toolProfileReleaseSigningMessage,
   validateId,
   validateToolProfileAcceptanceEvidence,
@@ -50,15 +49,6 @@ export interface ToolProfileSigningPreflight {
     | "revocation_check_failed"
   )[];
 }
-
-// Production databases created before the space/thread cutover can still
-// contain the retired workstream capability names. Normalize those persisted
-// values at the Cloud boundary so catalog reads remain available while the
-// data migration is completed; all downstream contracts use thread names.
-const retiredCapabilityAliases: Readonly<Record<string, string>> = {
-  workstream_read: "thread_read",
-  workstream_write: "thread_write",
-};
 
 const signingPreflightMessage =
   "conclave-tool-profile-signing-preflight-v1\nconclave";
@@ -220,13 +210,7 @@ export async function createApprovedLogicalWorker(
     !channelNames.has(input.releaseStage) ||
     !Number.isInteger(input.sortOrder) ||
     input.sortOrder < 0 ||
-    input.sortOrder > 10_000 ||
-    input.capabilities.length > 32 ||
-    input.capabilities.length === 0 ||
-    input.capabilities.some(
-      (capability) => !productCapabilities.has(capability),
-    ) ||
-    new Set(input.capabilities).size !== input.capabilities.length
+    input.sortOrder > 10_000
   ) {
     throw new ToolProfileRegistryError(
       400,
@@ -240,16 +224,15 @@ export async function createApprovedLogicalWorker(
         .prepare(
           `INSERT INTO worker_catalog (
         worker_type_id, display_name, description, lifecycle_state,
-        engine_family, visibility_state, release_stage, capabilities_json,
+        engine_family, visibility_state, release_stage,
         sort_order, created_at, updated_at
-      ) VALUES (?1, ?2, ?3, 'active', 'cli', 'visible', ?4, ?5, ?6, ?7, ?7)`,
+      ) VALUES (?1, ?2, ?3, 'active', 'cli', 'visible', ?4, ?5, ?6, ?6)`,
         )
         .bind(
           input.workerTypeId,
           input.displayName.trim(),
           input.description,
           input.releaseStage,
-          JSON.stringify(input.capabilities),
           input.sortOrder,
           now,
         ),
@@ -1210,7 +1193,7 @@ export async function resolveLogicalWorkerCatalog(
     .prepare(
       `SELECT worker.worker_type_id, worker.display_name, worker.description,
             worker.engine_family, worker.visibility_state, worker.release_stage,
-            worker.capabilities_json, worker.sort_order,
+            worker.sort_order,
             definition.profile_definition_id, definition.provider_tool_name
        FROM worker_catalog worker
        JOIN tool_profile_definitions definition
@@ -1232,40 +1215,11 @@ export async function resolveLogicalWorkerCatalog(
       engine_family: string;
       visibility_state: string;
       release_stage: string;
-      capabilities_json: string;
       sort_order: number;
       profile_definition_id: string;
       provider_tool_name: string;
     }>();
   return (rows.results ?? []).map((row) => {
-    let capabilities: unknown;
-    try {
-      capabilities = JSON.parse(row.capabilities_json);
-    } catch {
-      throw new ToolProfileRegistryError(
-        500,
-        "logical Worker metadata is invalid",
-      );
-    }
-    if (Array.isArray(capabilities)) {
-      capabilities = capabilities.map((value) =>
-        typeof value === "string"
-          ? (retiredCapabilityAliases[value] ?? value)
-          : value,
-      );
-    }
-    if (
-      !Array.isArray(capabilities) ||
-      capabilities.length > 32 ||
-      capabilities.some(
-        (value) => typeof value !== "string" || !productCapabilities.has(value),
-      )
-    ) {
-      throw new ToolProfileRegistryError(
-        500,
-        "logical Worker capabilities are invalid",
-      );
-    }
     try {
       return parseWorkerDescriptor({
         workerTypeId: row.worker_type_id,
@@ -1274,7 +1228,6 @@ export async function resolveLogicalWorkerCatalog(
         engineFamily: row.engine_family,
         visibilityState: row.visibility_state,
         releaseStage: row.release_stage,
-        capabilities,
         sortOrder: row.sort_order,
         profileDefinitionId: row.profile_definition_id,
         providerToolName: row.provider_tool_name,
@@ -1377,7 +1330,6 @@ export interface AdminWorkerCatalogEntry {
   engineFamily: string;
   visibilityState: string;
   releaseStage: string;
-  capabilities: string[];
   sortOrder: number;
   profileDefinitionId: string | null;
   providerToolName: string | null;
@@ -1448,7 +1400,7 @@ export async function listAdminWorkerCatalog(
     .prepare(
       `SELECT worker.worker_type_id, worker.display_name, worker.description,
               worker.lifecycle_state, worker.engine_family, worker.visibility_state,
-              worker.release_stage, worker.capabilities_json, worker.sort_order,
+              worker.release_stage, worker.sort_order,
               worker.created_at, worker.updated_at,
               definition.profile_definition_id, definition.provider_tool_name
          FROM worker_catalog worker
@@ -1466,7 +1418,6 @@ export async function listAdminWorkerCatalog(
       engine_family: string;
       visibility_state: string;
       release_stage: string;
-      capabilities_json: string;
       sort_order: number;
       created_at: string;
       updated_at: string;
@@ -1475,13 +1426,6 @@ export async function listAdminWorkerCatalog(
     }>();
   return {
     workers: (rows.results ?? []).map((row) => {
-      let capabilities: string[] = [];
-      try {
-        const parsed = JSON.parse(row.capabilities_json);
-        if (Array.isArray(parsed)) capabilities = parsed;
-      } catch {
-        capabilities = [];
-      }
       return {
         workerTypeId: row.worker_type_id,
         displayName: row.display_name,
@@ -1490,7 +1434,6 @@ export async function listAdminWorkerCatalog(
         engineFamily: row.engine_family,
         visibilityState: row.visibility_state,
         releaseStage: row.release_stage,
-        capabilities,
         sortOrder: row.sort_order,
         profileDefinitionId: row.profile_definition_id,
         providerToolName: row.provider_tool_name,

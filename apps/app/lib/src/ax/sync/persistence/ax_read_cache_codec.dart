@@ -58,8 +58,6 @@ class AxReadCacheCodec {
         'activationState': value.activationState,
         'attentionReasonCode': value.attentionReasonCode,
         'localConcurrencyLimit': value.localConcurrencyLimit,
-        'capabilities': value.capabilities,
-        'inputCapabilities': value.inputCapabilities,
         'engineVersion': value.engineVersion,
         'profileDefinitionId': value.profileDefinitionId,
         'profileReleaseVersion': value.profileReleaseVersion,

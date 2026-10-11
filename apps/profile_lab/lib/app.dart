@@ -324,6 +324,15 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                       _ProfileLabSignInError(
                         message: 'Profile Lab sign-in failed: ${c.authError}',
                       ),
+                    if (c.startupError != null)
+                      _ProfileLabSignInError(
+                        message:
+                            'Profile Lab startup failed: ${c.startupError}',
+                      ),
+                    if (c.draftError != null)
+                      _ProfileLabSignInError(
+                        message: c.draftError!,
+                      ),
 
                     // Tab view content
                     Expanded(

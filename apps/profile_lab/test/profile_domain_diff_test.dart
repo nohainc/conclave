@@ -39,7 +39,7 @@ void main() {
       final groups =
           ProfileDomainDiffCalculator.computeDiff(payloadA, payloadB);
 
-      expect(groups, hasLength(11));
+      expect(groups, hasLength(10));
 
       final providerToolGroup =
           groups.firstWhere((g) => g.domainName == 'Provider Tool & Discovery');
@@ -60,6 +60,32 @@ void main() {
       expect(argsItem.changeType, DiffChangeType.modified);
       expect(argsItem.valueA, '["exec","--model","gpt-4o"]');
       expect(argsItem.valueB, '["exec","--model","gpt-4.5-turbo"]');
+    });
+
+    test('includes generic discovery and live readiness changes in review', () {
+      final groups = ProfileDomainDiffCalculator.computeDiff({}, {
+        'model': {
+          'discovery': {
+            'schemaVersion': 1,
+            'arguments': ['models'],
+            'format': 'tsv',
+            'idPrefix': 'gemini-',
+            'timeoutMs': 1000
+          },
+          'executionOptions': {'schemaVersion': 1}
+        },
+        'probe': {
+          'live': {'requiredForReadiness': true}
+        },
+      });
+      final changes = groups
+          .expand((g) => g.items)
+          .where((i) => i.changeType == DiffChangeType.added)
+          .map((i) => i.fieldPath);
+      expect(
+          changes,
+          containsAll(
+              ['model.discovery', 'model.executionOptions', 'probe.live']));
     });
 
     test('returns no changes when comparing identical payloads', () {

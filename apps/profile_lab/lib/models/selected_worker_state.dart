@@ -80,7 +80,6 @@ class SelectedWorkerState {
     required this.catalogReleaseStage,
     required this.lifecycleState,
     required this.visibilityState,
-    required this.capabilities,
     required this.sortOrder,
     required this.profileDefinitionId,
     required this.definitionDisplayName,
@@ -115,7 +114,6 @@ class SelectedWorkerState {
   final String catalogReleaseStage;
   final String lifecycleState;
   final String visibilityState;
-  final List<String> capabilities;
   final int sortOrder;
 
   final String? profileDefinitionId;
@@ -184,10 +182,6 @@ class SelectedWorkerState {
     final catalogReleaseStage = worker['releaseStage'] as String? ?? 'testing';
     final lifecycleState = worker['lifecycleState'] as String? ?? 'active';
     final visibilityState = worker['visibilityState'] as String? ?? 'visible';
-    final rawCaps = worker['capabilities'] as List?;
-    final capabilities = rawCaps != null
-        ? List<String>.unmodifiable(rawCaps.map((c) => c.toString()))
-        : const <String>[];
     final sortOrder = (worker['sortOrder'] as num?)?.toInt() ?? 100;
 
     final profileDefId = worker['profileDefinitionId'] as String? ??
@@ -378,7 +372,6 @@ class SelectedWorkerState {
       catalogReleaseStage: catalogReleaseStage,
       lifecycleState: lifecycleState,
       visibilityState: visibilityState,
-      capabilities: capabilities,
       sortOrder: sortOrder,
       profileDefinitionId: profileDefId,
       definitionDisplayName: defDisplayName,
@@ -416,7 +409,6 @@ class SelectedWorkerState {
       catalogReleaseStage: 'testing',
       lifecycleState: 'inactive',
       visibilityState: 'hidden',
-      capabilities: [],
       sortOrder: 100,
       profileDefinitionId: null,
       definitionDisplayName: null,

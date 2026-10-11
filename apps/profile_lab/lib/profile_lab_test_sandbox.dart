@@ -172,6 +172,9 @@ Future<void> _deleteSandboxTreeWithoutFollowingLinks(
   }
 }
 
+bool _matchesExpectedTextFile(String actual, String expected) =>
+    actual == expected || actual == '$expected\n' || actual == '$expected\r\n';
+
 const cloudAcceptanceScenarioNames = <String>[
   'passive_probe',
   'live_probe',
@@ -184,18 +187,19 @@ const cloudAcceptanceScenarioNames = <String>[
 ];
 
 /// Derives the Cloud scenario status map from the candidate Tool Profile.
-/// A null result means the Profile contradicts itself about durable sessions.
-Map<String, String>? cloudAcceptanceScenarioStatuses(
+///
+/// Worker/Profile capability declarations are intentionally not consulted.
+/// Applicability comes from the executable contract itself: sandbox mappings,
+/// session support, and model configuration.
+Map<String, String> cloudAcceptanceScenarioStatuses(
   Map<String, Object?> profile,
 ) {
-  final capabilities =
-      (profile['capabilities'] as List?)?.whereType<String>().toSet() ??
-          const <String>{};
   final session = profile['session'] as Map<String, Object?>? ?? const {};
   final model = profile['model'] as Map<String, Object?>? ?? const {};
-  final hasDurableSessionCapability = capabilities.contains('durable_session');
   final sessionSupported = session['supported'] == true;
-  if (hasDurableSessionCapability != sessionSupported) return null;
+  final sandbox = profile['sandbox'] as Map<String, Object?>? ?? const {};
+  final mappings = sandbox['mappings'] as Map<String, Object?>? ?? const {};
+  final restricted = mappings['restricted'];
 
   return {
     'passive_probe': 'passed',
@@ -204,12 +208,11 @@ Map<String, String>? cloudAcceptanceScenarioStatuses(
             ((model['allowlist'] as List?)?.isNotEmpty ?? false)
         ? 'passed'
         : 'not_applicable',
-    'representative_thread_write':
-        capabilities.contains('thread_write') ? 'passed' : 'not_applicable',
-    'durable_session_start':
-        hasDurableSessionCapability ? 'passed' : 'not_applicable',
-    'durable_session_resume':
-        hasDurableSessionCapability ? 'passed' : 'not_applicable',
+    'representative_thread_write': restricted is List && restricted.isNotEmpty
+        ? 'passed'
+        : 'not_applicable',
+    'durable_session_start': sessionSupported ? 'passed' : 'not_applicable',
+    'durable_session_resume': sessionSupported ? 'passed' : 'not_applicable',
     'cancellation': 'passed',
     'timeout': 'passed',
   };
@@ -239,6 +242,47 @@ class ProfileLabTestSandbox {
     final assignmentId = _activeAssignmentId;
     if (supervisor == null || assignmentId == null) return false;
     return supervisor.cancel(assignmentId);
+  }
+
+  /// Discovers model metadata without invoking a model or bypassing trust admission.
+  Future<DiscoveredModelCatalog?> discoverTrustedModels(
+      ToolProfileReleaseAdmission profile) async {
+    if (!profile.isSigned) {
+      throw StateError('Discovery requires a signed Profile.');
+    }
+    if (_activeSupervisor != null) {
+      throw StateError('An Engine operation is active.');
+    }
+    final root = sandboxRoot.absolute;
+    if (await FileSystemEntity.type(root.path, followLinks: false) !=
+        FileSystemEntityType.directory) {
+      throw FileSystemException(
+          'Sandbox root is not a real directory', root.path);
+    }
+    final scratch = await Directory(await root.resolveSymbolicLinks())
+        .createTemp('model_discovery_');
+    final supervisor = CliWorkerEngineSupervisor(
+      engineExecutable: engineExecutable.path,
+      platformRuntime: _processSupervisor,
+      environmentOverrides: environmentOverrides,
+    );
+    _activeSupervisor = supervisor;
+    try {
+      final profileFile = File('${scratch.path}/profile.json');
+      await profileFile.writeAsString(canonicalJson(profile.profile));
+      final result = await supervisor.probe(
+        profile,
+        profileFile: profileFile,
+        stateDirectory: Directory('${scratch.path}/state'),
+        mode: WorkerProbeMode.passive,
+      );
+      return result.modelCatalog;
+    } finally {
+      _activeSupervisor = null;
+      await supervisor.shutdown();
+      await _deleteSandboxTreeWithoutFollowingLinks(scratch);
+      await scratch.delete();
+    }
   }
 
   /// Runs a draft proposal through a trusted, signed Worker Profile. The
@@ -341,7 +385,7 @@ class ProfileLabTestSandbox {
     final startedAt = DateTime.now().toUtc();
     bool haltExecution = false;
     final observedAcceptanceScenarios = <String, String>{};
-    Map<String, String>? expectedAcceptanceScenarios;
+    var expectedAcceptanceScenarios = const <String, String>{};
     String? detectedProviderToolVersion;
 
     void addStage({
@@ -387,11 +431,6 @@ class ProfileLabTestSandbox {
       );
       expectedAcceptanceScenarios =
           cloudAcceptanceScenarioStatuses(candidate.profile);
-      if (expectedAcceptanceScenarios == null) {
-        throw const FormatException(
-          'durable_session capability does not match session.supported',
-        );
-      }
       s1Timer.stop();
       addStage(
         stageId: 'schema',
@@ -859,7 +898,7 @@ class ProfileLabTestSandbox {
       const writeSentinel = 'conclave-profile-lab-write-verified';
       final writeTarget = File('${scratchDir.path}/acceptance-write.txt');
       final threadWriteApplicable =
-          expectedAcceptanceScenarios?['representative_thread_write'] ==
+          expectedAcceptanceScenarios['representative_thread_write'] ==
               'passed';
       if (!threadWriteApplicable) {
         s7Timer.stop();
@@ -871,7 +910,7 @@ class ProfileLabTestSandbox {
           status: 'skipped',
           durationMs: 0,
           diagnostics:
-              'This Tool Profile does not declare the thread_write capability.',
+              'This Tool Profile does not define a restricted execution mapping.',
           consumesQuota: false,
           details: {'applicability': 'not_applicable'},
         );
@@ -890,12 +929,16 @@ class ProfileLabTestSandbox {
           await executeAssignment(
             label: 'representative-thread-write',
             prompt: 'Create the file "acceptance-write.txt" in the current '
-                'working directory and write exactly this UTF-8 text into it: '
+                'working directory and write exactly this UTF-8 text into it '
+                '(a single final line ending is acceptable): '
                 '$writeSentinel. Do not just describe the action. Then reply '
                 'that the file was written.',
           );
           final wroteExpectedContent = await writeTarget.exists() &&
-              await writeTarget.readAsString() == writeSentinel;
+              _matchesExpectedTextFile(
+                await writeTarget.readAsString(),
+                writeSentinel,
+              );
           s7Timer.stop();
           observedAcceptanceScenarios['representative_thread_write'] =
               wroteExpectedContent ? 'passed' : 'failed';
@@ -906,7 +949,7 @@ class ProfileLabTestSandbox {
               status: 'passed',
               durationMs: s7Timer.elapsedMilliseconds,
               diagnostics:
-                  'Engine assignment wrote and verified the expected file in the isolated sandbox.',
+                  'Engine assignment wrote and verified the expected file in the isolated sandbox (allowing one conventional trailing line ending).',
               consumesQuota: true,
             );
           } else {
@@ -943,7 +986,7 @@ class ProfileLabTestSandbox {
       // --- STAGE 8: Session Test ---
       final s8Timer = Stopwatch()..start();
       final durableSessionApplicable =
-          expectedAcceptanceScenarios?['durable_session_start'] == 'passed';
+          expectedAcceptanceScenarios['durable_session_start'] == 'passed';
       if (!durableSessionApplicable) {
         observedAcceptanceScenarios['durable_session_start'] = 'not_applicable';
         observedAcceptanceScenarios['durable_session_resume'] =
@@ -1029,7 +1072,7 @@ class ProfileLabTestSandbox {
       final modelMap =
           candidate.profile['model'] as Map<String, Object?>? ?? {};
       final modelSelectionApplicable =
-          expectedAcceptanceScenarios?['model_selection'] == 'passed';
+          expectedAcceptanceScenarios['model_selection'] == 'passed';
       if (!modelSelectionApplicable) {
         observedAcceptanceScenarios['model_selection'] = 'not_applicable';
         s9Timer.stop();
@@ -1283,13 +1326,11 @@ class ProfileLabTestSandbox {
     final overallResult =
         stages.any((s) => s.status == 'failed') ? 'fail' : 'pass';
 
-    final allAcceptanceScenariosObserved =
-        expectedAcceptanceScenarios != null &&
-            cloudAcceptanceScenarioNames.every(
-              (scenario) =>
-                  observedAcceptanceScenarios[scenario] ==
-                  expectedAcceptanceScenarios![scenario],
-            );
+    final allAcceptanceScenariosObserved = cloudAcceptanceScenarioNames.every(
+      (scenario) =>
+          observedAcceptanceScenarios[scenario] ==
+          expectedAcceptanceScenarios[scenario],
+    );
     final acceptanceEvidence = overallResult == 'pass' &&
             allAcceptanceScenariosObserved &&
             detectedProviderToolVersion != null

@@ -82,7 +82,7 @@ class AxWorkflowSelectionOptions {
     }
     if (value.model == null && value.effort == null) return null;
     if (selected.executionOptions == null) {
-      return 'Model and effort capabilities are unavailable for this Worker.';
+      return 'Model and effort options are unavailable for this Worker.';
     }
     return _validateProfile(selected.executionOptions!, value);
   }

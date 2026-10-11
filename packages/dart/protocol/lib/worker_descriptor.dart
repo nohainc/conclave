@@ -1,23 +1,11 @@
 /// Cloud-owned logical Worker metadata. Local readiness and installed Profile
 /// state belong to Workspace inventory and are intentionally absent.
-const canonicalWorkerCapabilities = <String>[
-  'text',
-  'local_file',
-  'thread_read',
-  'thread_write',
-  'durable_session',
-  'image',
-  'audio',
-  'video',
-];
-
 class WorkerDescriptor {
   const WorkerDescriptor({
     required this.workerTypeId,
     required this.displayName,
     required this.description,
     required this.engineFamily,
-    required this.capabilities,
     required this.profileDefinitionId,
     required this.providerToolName,
     required this.releaseStage,
@@ -29,7 +17,6 @@ class WorkerDescriptor {
   final String displayName;
   final String description;
   final String engineFamily;
-  final List<String> capabilities;
   final String profileDefinitionId;
   final String providerToolName;
   final String releaseStage;
@@ -42,7 +29,6 @@ class WorkerDescriptor {
       'displayName',
       'description',
       'engineFamily',
-      'capabilities',
       'profileDefinitionId',
       'providerToolName',
       'releaseStage',
@@ -53,7 +39,6 @@ class WorkerDescriptor {
     final displayName = json['displayName'];
     final description = json['description'];
     final engineFamily = json['engineFamily'];
-    final capabilities = json['capabilities'];
     final profileDefinitionId = json['profileDefinitionId'];
     final providerToolName = json['providerToolName'];
     final releaseStage = json['releaseStage'];
@@ -69,13 +54,6 @@ class WorkerDescriptor {
         description is! String ||
         description.length > 500 ||
         engineFamily != 'cli' ||
-        capabilities is! List ||
-        capabilities.length > 32 ||
-        capabilities.any((value) =>
-            value is! String ||
-            value.length > 64 ||
-            !canonicalWorkerCapabilities.contains(value)) ||
-        capabilities.toSet().length != capabilities.length ||
         profileDefinitionId is! String ||
         !_identifier.hasMatch(profileDefinitionId) ||
         profileDefinitionId.length > 96 ||
@@ -94,7 +72,6 @@ class WorkerDescriptor {
       displayName: displayName,
       description: description,
       engineFamily: engineFamily as String,
-      capabilities: List.unmodifiable(capabilities.cast<String>()),
       profileDefinitionId: profileDefinitionId,
       providerToolName: providerToolName,
       releaseStage: releaseStage as String,
@@ -108,7 +85,6 @@ class WorkerDescriptor {
         'displayName': displayName,
         'description': description,
         'engineFamily': engineFamily,
-        'capabilities': capabilities,
         'profileDefinitionId': profileDefinitionId,
         'providerToolName': providerToolName,
         'releaseStage': releaseStage,

@@ -4,7 +4,6 @@ import {
   isWorkspaceSpaceGrantStatus,
   resolveExecutionPermissions,
   validateWorkspaceConcurrencyPolicy,
-  validateWorkspaceGrantCapabilities,
   validateWorkspaceGrantPermissions,
   validateWorkspaceGrantWorkerIds,
   validateWorkspaceNetworkPolicy,
@@ -244,7 +243,7 @@ export async function selectSpaceExecutionTarget(
   const candidateRows = await db
     .prepare(
       `SELECT g.id AS grant_id, g.space_id, g.workspace_id, g.status AS grant_status,
-            g.allowed_worker_ids_json, g.allowed_worker_capabilities_json,
+            g.allowed_worker_ids_json,
             g.allowed_permissions_json, g.network_policy_json,
             g.concurrency_json, g.expires_at,
             ep.allowed_worker_type_ids_json,
@@ -265,7 +264,6 @@ export async function selectSpaceExecutionTarget(
             i.profile_definition_id, i.profile_release_version,
             i.provider_tool_name,
             i.provider_tool_version,
-            i.capabilities_json,
             i.activation_state AS local_worker_activation_state,
             i.readiness_state AS local_worker_readiness_state,
             vs.state AS cloud_scheduling_state,
@@ -389,16 +387,9 @@ export async function selectSpaceExecutionTarget(
     const preferredWorkerIds = [
       ...(typeof binding.workerId === "string" ? [binding.workerId] : []),
     ];
-    const capabilities = strings(row.capabilities_json).map((value) =>
-      value.toLowerCase(),
-    );
-    const requiredCapabilities = request.capabilities.map((value) =>
-      value.toLowerCase(),
-    );
-    const grantCapabilities = parsedGrantJson(
-      row.allowed_worker_capabilities_json,
-      validateWorkspaceGrantCapabilities,
-    );
+    // Worker/Profile capability metadata is legacy and is deliberately not
+    // consulted for scheduling. Cloud workflow policy and explicit grant
+    // permissions determine the effective execution scope.
     const selectedModel = turnConfig
       ? typeof turnConfig.modelId === "string"
         ? turnConfig.modelId
@@ -442,7 +433,6 @@ export async function selectSpaceExecutionTarget(
       isWorkspaceSpaceGrantStatus(row.grant_status) &&
       row.grant_status === "active" &&
       grantWorkerIds !== null &&
-      grantCapabilities !== null &&
       grantPermissions !== null &&
       networkPolicy !== null &&
       concurrency !== null;
@@ -548,23 +538,6 @@ export async function selectSpaceExecutionTarget(
     }
     if (request.workerId && request.workerId !== workerId) {
       reject("explicit_worker_mismatch");
-      continue;
-    }
-    if (
-      !requiredCapabilities.every((capability) =>
-        capabilities.includes(capability),
-      )
-    ) {
-      reject("worker_capability_missing");
-      continue;
-    }
-    if (
-      grantCapabilities.length > 0 &&
-      !requiredCapabilities.every((capability) =>
-        grantCapabilities.includes(capability),
-      )
-    ) {
-      reject("capability_not_allowed_by_grant");
       continue;
     }
     if (grantWorkerIds.length > 0 && !grantWorkerIds.includes(workerId)) {

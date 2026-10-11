@@ -200,15 +200,23 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Second').last);
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('work-composer-model')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Other model').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('careful').last);
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Run with Auto');
     await tester.tap(find.byTooltip('Send request'));
     await tester.pumpAndSettle();
     expect(submitted, 1);
     expect(submittedSelection, {
       'workerId': 'b',
-      'model': null,
-      'reasoningEffort': null,
+      'model': 'other',
+      'reasoningEffort': 'careful',
     });
+    expect(find.textContaining('Other model'), findsOneWidget);
+    expect(find.textContaining('careful'), findsOneWidget);
     await tester.pumpWidget(page('two'));
     await tester.pumpAndSettle();
     expect(source.reads, 1);

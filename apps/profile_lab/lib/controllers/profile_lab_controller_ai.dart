@@ -12,6 +12,18 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
     final models = await _modelProposalService.loadAvailableModels(
       apiClient: apiClient,
       trustPolicy: profileLabReleaseTrustPolicy(),
+      discoverModels: (profile) async {
+        final engine = engineExecutable;
+        if (engine == null) {
+          throw StateError('Generic Worker Engine is unavailable.');
+        }
+        return ProfileLabTestSandbox(
+          sandboxRoot: paths.sandboxDirectory,
+          engineExecutable: engine,
+          processSupervisor: _processSupervisor,
+          environmentOverrides: sandboxEnvironmentOverrides,
+        ).discoverTrustedModels(profile);
+      },
     );
     availableAiModels = models;
     aiProposalError = models.isEmpty

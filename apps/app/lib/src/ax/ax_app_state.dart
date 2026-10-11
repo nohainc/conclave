@@ -60,8 +60,10 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   String? desktopAuthError;
   String? authNotice;
   String? authError;
-  Timer? _queuedRealtimeNoticeTimer;
-  String? _pendingQueuedRealtimeNotice;
+  /// Delays transient execution progress notices so a quick state transition
+  /// does not flash a banner at the top of the app.
+  Timer? _pendingRealtimeNoticeTimer;
+  String? _pendingRealtimeNotice;
   final promptResponseController = TextEditingController();
   final TextEditingController _searchQueryController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -283,7 +285,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   @override
   void dispose() {
     _desktopAuthStatusTimer?.cancel();
-    _queuedRealtimeNoticeTimer?.cancel();
+    _pendingRealtimeNoticeTimer?.cancel();
     _searchQueryController.removeListener(_onSearchQueryChanged);
     _searchQueryController.dispose();
     _searchFocusNode.dispose();

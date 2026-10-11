@@ -56,6 +56,17 @@ describe("v8 Workspace inventory recovery", () => {
         "utf8",
       ),
     );
+    database.exec(
+      readFileSync(
+        fileURLToPath(
+          new URL(
+            "../migrations-v8/0029_worker_model_discovery.sql",
+            import.meta.url,
+          ),
+        ),
+        "utf8",
+      ),
+    );
     database.exec(`
       INSERT INTO users (id, email, display_name, created_at, updated_at)
         VALUES ('owner-a', 'a@example.test', 'Owner A', '2026-01-01', '2026-01-01');
@@ -116,7 +127,8 @@ describe("v8 Workspace inventory recovery", () => {
       profile_release_version: 3,
       provider_tool_name: "Codex CLI",
       provider_tool_version: "1.0.0",
-      capabilities_json: '["code"]',
+      // Legacy Worker capability metadata is ignored by inventory writes.
+      capabilities_json: '[]',
       revision: 1,
     });
 

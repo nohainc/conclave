@@ -9,15 +9,6 @@ export type WorkerReadinessState =
   | "worker_runtime_unavailable"
   | "test_failed";
 
-export const WORKER_INPUT_CAPABILITIES = [
-  "text",
-  "image",
-  "audio",
-  "video",
-  "local_file",
-] as const;
-export type WorkerInputCapability = (typeof WORKER_INPUT_CAPABILITIES)[number];
-
 /** Cloud-safe projection of a Workspace-owned fixed-catalog Worker slot. */
 export interface WorkspaceWorkerInventory {
   readonly workerId: string;
@@ -32,8 +23,6 @@ export interface WorkspaceWorkerInventory {
   readonly profileReleaseVersion: number | null;
   readonly providerToolName: string | null;
   readonly providerToolVersion: string | null;
-  readonly capabilities: readonly string[];
-  readonly inputCapabilities: readonly WorkerInputCapability[];
   readonly localConcurrencyLimit: number;
   readonly revision: number;
   readonly createdAt: string;
@@ -155,36 +144,6 @@ export function validateWorkspaceWorkerInventory(
   }
   optionalText(worker.providerToolName, "providerToolName", 128);
   optionalText(worker.providerToolVersion, "providerToolVersion", 128);
-  unique(worker.capabilities, "WorkerInventory capabilities");
-  unique(worker.inputCapabilities, "WorkerInventory inputCapabilities");
-  if (
-    worker.capabilities.some(
-      (value) => !/^[a-z][a-z0-9_:-]{0,127}$/.test(value),
-    )
-  ) {
-    throw new DomainInvariantError(
-      "WorkerInventory capabilities contain unsupported characters",
-    );
-  }
-  if (
-    worker.inputCapabilities.some(
-      (capability) =>
-        !(WORKER_INPUT_CAPABILITIES as readonly string[]).includes(capability),
-    )
-  ) {
-    throw new DomainInvariantError(
-      "WorkerInventory inputCapabilities contains an unsupported value",
-    );
-  }
-  if (
-    worker.inputCapabilities.some(
-      (capability) => !worker.capabilities.includes(capability),
-    )
-  ) {
-    throw new DomainInvariantError(
-      "WorkerInventory inputCapabilities must be declared in capabilities",
-    );
-  }
   for (const [field, value] of [
     ["createdAt", worker.createdAt],
     ["updatedAt", worker.updatedAt],

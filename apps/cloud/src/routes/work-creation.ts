@@ -111,7 +111,6 @@ export async function handleValidateWorkRequest(
       attachments,
       executionSelection,
     ),
-    attachments,
   );
   if (
     !env.CONCLAVE_THREAD_COORDINATOR &&
@@ -382,7 +381,6 @@ export async function handleCreateWorkRequest(
     threadId,
     workflowSnapshot,
     resolvedBindings,
-    normalizedAttachments,
   );
   if (eligibility.issues.length > 0) {
     return json(

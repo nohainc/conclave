@@ -166,6 +166,11 @@ void main() {
             'signingKeyId': 'profile-key-v2',
             'publisher': 'conclave',
           }));
+        } else if (req.uri.path.endsWith('/releases/1/revoke') &&
+            req.method == 'POST') {
+          req.response.statusCode = 200;
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({'lifecycleState': 'revoked'}));
         } else if (req.uri.path.endsWith('/releases/1/qualification') &&
             req.method == 'POST') {
           req.response.statusCode = 201;
@@ -211,7 +216,6 @@ void main() {
         description: 'Anthropic Claude Code AI Assistant Worker',
         providerToolName: 'claude',
         releaseStage: 'draft',
-        capabilities: ['code_generation', 'tool_execution'],
         sortOrder: 10,
       );
 
@@ -224,7 +228,7 @@ void main() {
           lastBody['description'], 'Anthropic Claude Code AI Assistant Worker');
       expect(lastBody['providerToolName'], 'claude');
       expect(lastBody['releaseStage'], 'draft');
-      expect(lastBody['capabilities'], ['code_generation', 'tool_execution']);
+      expect(lastBody.containsKey('capabilities'), isFalse);
       expect(lastBody['sortOrder'], 10);
       expect(res['status'], 'created');
     });
@@ -392,6 +396,24 @@ void main() {
       expect(
           lastPath, '/api/admin/tool-profiles/claude-code/releases/1/promote');
       expect(lastBody, {'channel': 'beta'});
+    });
+
+    test('lifecycle state revoked uses the Cloud revoke action route',
+        () async {
+      final result = await client.changeLifecycle(
+        profileDefinitionId: 'claude-code',
+        releaseVersion: 1,
+        lifecycle: 'revoked',
+        reason: 'Security vulnerability',
+      );
+
+      expect(lastMethod, 'POST');
+      expect(
+        lastPath,
+        '/api/admin/tool-profiles/claude-code/releases/1/revoke',
+      );
+      expect(lastBody, {'reason': 'Security vulnerability'});
+      expect(result['lifecycleState'], 'revoked');
     });
 
     test('acceptance evidence is submitted in its separate endpoint', () async {
