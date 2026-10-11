@@ -74,11 +74,12 @@ extension _AxAppController on _AxAppStateMixin {
         _startRealtime();
         _ensureNavigationResources(navigation);
       }
+      final accountSecurityLoad = navigation.kind == AxRouteKind.profileSecurity
+          ? _loadAccountSecurity()
+          : null;
       await _loadWorkspaces();
       await _loadBootstrapState(showSpinner: !hydrated);
-      if (navigation.kind == AxRouteKind.profileSecurity) {
-        await _loadAccountSecurity();
-      }
+      if (accountSecurityLoad != null) await accountSecurityLoad;
     } catch (_) {
       if (mounted) {
         _updateState(() {
@@ -294,7 +295,6 @@ extension _AxAppController on _AxAppStateMixin {
       }));
     }
     if (type == 'realtime.connection') {
-      _clearPendingRealtimeNotice();
       final status = event['status'];
       _realtimeTransportConnected = status == 'connected';
       _updateLiveState(() {
@@ -306,14 +306,12 @@ extension _AxAppController on _AxAppStateMixin {
       return;
     }
     if (type == 'realtime.ready') {
-      _clearPendingRealtimeNotice();
       _realtimeTransportConnected = true;
       unawaited(_refreshRealtimeFeatures('space.updated'));
       _updateLiveState(() => realtimeStale = false);
       return;
     }
     if (type == 'reconnect.required') {
-      _clearPendingRealtimeNotice();
       final scope = AxSyncScope.fromEvent(event);
       _updateLiveState(() {
         realtimeStale = true;
@@ -759,23 +757,6 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
-  void _clearPendingRealtimeNotice() {
-    _pendingRealtimeNoticeTimer?.cancel();
-    _pendingRealtimeNoticeTimer = null;
-    _pendingRealtimeNotice = null;
-  }
-
-  bool _isTransientRealtimeNotice(String notice) {
-    final lower = notice.toLowerCase();
-    return lower.contains('queued') ||
-        lower.contains('running') ||
-        lower.contains('working') ||
-        lower.contains('processing') ||
-        lower.contains('starting') ||
-        lower.contains('waiting') ||
-        lower.contains('in progress');
-  }
-
   void _announceRealtimeProgress(Map<String, dynamic> event) {
     final payload = event['payload'];
     final summary = payload is Map
@@ -783,25 +764,6 @@ extension _AxAppController on _AxAppStateMixin {
         : null;
     if (summary is String && summary.trim().isNotEmpty) {
       final notice = summary.trim();
-      if (_isTransientRealtimeNotice(notice)) {
-        _pendingRealtimeNotice = notice;
-        _pendingRealtimeNoticeTimer ??= Timer(const Duration(seconds: 3), () {
-          _pendingRealtimeNoticeTimer = null;
-          final pending = _pendingRealtimeNotice;
-          _pendingRealtimeNotice = null;
-          if (mounted && pending != null) {
-            _updateLiveState(() => realtimeNotice = pending);
-          }
-        });
-        return;
-      }
-      _clearPendingRealtimeNotice();
-      final now = DateTime.now();
-      if (_lastRealtimeAnnouncement != null &&
-          now.difference(_lastRealtimeAnnouncement!).inMilliseconds < 750) {
-        return;
-      }
-      _lastRealtimeAnnouncement = now;
       _updateLiveState(() => realtimeNotice = notice);
     }
   }
@@ -811,16 +773,19 @@ extension _AxAppController on _AxAppStateMixin {
     if (run == null) return;
     final diagnostics = <String, Object?>{
       'format': 'conclave-run-diagnostics-v1',
+      'diagnosticSchemaVersion': 1,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'workspaceId': executionSnapshot.workspaceId,
       'spaceId': selectedSpaceId,
       'runId': run.id,
       'status': run.status.name,
+      'requestSubmissionState': run.status.name,
       'tasks': executionSnapshot.tasks
           .map((task) => {
                 'id': task.id,
                 'status': task.status.name,
                 'worker': task.worker,
+                if (task.errorCode != null) 'errorCode': task.errorCode,
               })
           .toList(),
       'events': executionSnapshot.events
@@ -829,7 +794,6 @@ extension _AxAppController on _AxAppStateMixin {
                 'correlationId': event.correlationId,
                 'time': event.time,
                 'type': event.kind,
-                'detail': event.detail,
               })
           .toList(),
     };
@@ -861,18 +825,33 @@ extension _AxAppController on _AxAppStateMixin {
   }
 
   Future<void> _loadAccountSecurity() async {
+    final existing = _accountSecurityLoadFlight;
+    if (existing != null) return existing;
+    final flight = _loadAccountSecurityOnce();
+    _accountSecurityLoadFlight = flight;
+    try {
+      await flight;
+    } finally {
+      if (identical(_accountSecurityLoadFlight, flight)) {
+        _accountSecurityLoadFlight = null;
+      }
+    }
+  }
+
+  Future<void> _loadAccountSecurityOnce() async {
     if (!mounted) return;
     store.securityError.value = null;
     _updateSecurity(() => accountSecurityLoading = true);
+    final sessionId = store.auth.session?.sessionId;
     try {
       final loaded = await widget.dataSource.loadAccountSecurity();
-      if (!mounted) return;
+      if (!mounted || store.auth.session?.sessionId != sessionId) return;
       _updateSecurity(() {
         accountSecurity = loaded;
         accountSecurityLoading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || store.auth.session?.sessionId != sessionId) return;
       _updateSecurity(() {
         accountSecurityLoading = false;
         store.securityError.value = error.toString();
@@ -881,6 +860,7 @@ extension _AxAppController on _AxAppStateMixin {
   }
 
   Future<void> _revokeAccountSession(AxAuthSession session) async {
+    if (_isCurrentAccountSession(session)) return;
     if (!revokingAccountSessionTokens.add(session.token)) return;
     _updateState(() {});
     try {
@@ -898,6 +878,54 @@ extension _AxAppController on _AxAppStateMixin {
     } finally {
       revokingAccountSessionTokens.remove(session.token);
       if (mounted) _updateState(() {});
+    }
+  }
+
+  Future<void> _revokeAllAccountSessions() async {
+    if (revokingAllAccountSessions) return;
+    final security = accountSecurity;
+    if (security == null) return;
+    final sessions = security.sessions
+        .where((session) => !_isCurrentAccountSession(session))
+        .toList(growable: false);
+    if (sessions.isEmpty) return;
+
+    _updateState(() {
+      revokingAllAccountSessions = true;
+      revokingAccountSessionTokens
+          .addAll(sessions.map((session) => session.token));
+    });
+    final revokedTokens = <String>[];
+    var failed = false;
+    try {
+      await Future.wait(sessions.map((session) async {
+        try {
+          await widget.dataSource.revokeAccountSession(session.token);
+          revokedTokens.add(session.token);
+        } catch (_) {
+          failed = true;
+        }
+      }));
+      final current = accountSecurity;
+      if (current != null && revokedTokens.isNotEmpty) {
+        final revoked = revokedTokens.toSet();
+        accountSecurity = current.copyWith(
+          sessions: current.sessions
+              .where((session) => !revoked.contains(session.token))
+              .toList(growable: false),
+        );
+      }
+      if (failed && mounted) {
+        _showSnackBar('Some sessions could not be revoked.',
+            type: ToastType.error);
+      }
+    } finally {
+      revokingAccountSessionTokens.removeAll(sessions.map((s) => s.token));
+      if (mounted) {
+        _updateState(() => revokingAllAccountSessions = false);
+      } else {
+        revokingAllAccountSessions = false;
+      }
     }
   }
 

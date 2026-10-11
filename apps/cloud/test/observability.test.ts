@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   isTrustedRealtimeOrigin,
+  logDiagnosticEvent,
   requestIdFor,
   sanitizeDiagnostics,
   structuredLogRecord,
+  tryLogDiagnosticEvent,
 } from "../src/observability.js";
+import { parseDiagnosticEvent } from "@conclave/protocol";
 
 describe("observability", () => {
   it("redacts secrets and bounds diagnostic values", () => {
@@ -59,6 +62,61 @@ describe("observability", () => {
       eventId: "event-1",
       assignmentId: "assignment-1",
     });
+  });
+
+  it("creates a bounded correlated diagnostic event", () => {
+    const event = logDiagnosticEvent({
+      requestId: "request-1",
+      assignmentId: "assignment-1",
+      workspaceId: "workspace-1",
+      component: "cloud",
+      operation: "assignment",
+      stage: "transport",
+      severity: "error",
+      errorCode: "provider_unavailable",
+      retryable: true,
+      context: {
+        providerToolVersion: "1.2.3",
+        status: "gateway_unavailable",
+      },
+    });
+
+    expect(parseDiagnosticEvent(event)).toMatchObject({
+      schemaVersion: 1,
+      requestId: "request-1",
+      assignmentId: "assignment-1",
+      stage: "transport",
+      retryable: true,
+    });
+  });
+
+  it("rejects unexpected diagnostic context instead of redacting it", () => {
+    expect(() =>
+      logDiagnosticEvent({
+        component: "cloud",
+        operation: "assignment",
+        stage: "provider_execution",
+        severity: "error",
+        retryable: false,
+        context: {
+          prompt: "private input",
+          nested: { response: "private output" },
+        } as never,
+      }),
+    ).toThrow();
+  });
+
+  it("keeps malformed telemetry from changing execution", () => {
+    expect(
+      tryLogDiagnosticEvent({
+        component: "cloud",
+        operation: "assignment",
+        stage: "provider_execution",
+        severity: "error",
+        retryable: true,
+        context: { modelId: "models/provider/model" } as never,
+      }),
+    ).toBeNull();
   });
 
   it("uses Cloudflare's generated Ray ID to correlate forwarded requests", () => {

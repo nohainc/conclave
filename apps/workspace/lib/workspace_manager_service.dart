@@ -17,6 +17,7 @@ import 'workspace_registration.dart';
 import 'workspace_registration_models.dart';
 import 'workspace_service_state.dart';
 import 'worker_readiness.dart';
+import 'worker_diagnostic_store.dart';
 
 /// Runtime command boundary and event publisher for the local management UI.
 class WorkspaceManagerService {
@@ -621,6 +622,7 @@ class WorkspaceManagerService {
           'reconnectCount': connection?.reconnectCount ?? 0,
         };
       case 'diagnostics.getDiagnostics':
+        final paths = WorkspacePaths(workspace.config.dataDirectory);
         final file = await writeWorkspaceDiagnostics(
           config: workspace.config,
           connection: connection,
@@ -628,6 +630,12 @@ class WorkspaceManagerService {
           workerRegistry: registry,
           toolProfileReleaseStore: workspace.toolProfileReleaseStore,
           workRootPath: workspace.workRoot?.path,
+          workerDiagnosticStore: (workerTypeId) => WorkerDiagnosticStore(
+            directory: Directory(
+              '${paths.workerStateDirectory(workerTypeId).parent.path}'
+              '${Platform.pathSeparator}logs',
+            ),
+          ),
         );
         return {'path': file.path, 'text': await file.readAsString()};
       default:

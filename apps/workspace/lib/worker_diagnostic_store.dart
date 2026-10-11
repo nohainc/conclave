@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'platform_runtime.dart';
 
@@ -29,6 +30,7 @@ final class WorkerDiagnosticStore {
   final PlatformRuntime _platformRuntime;
 
   static final Map<String, Future<void>> _writeQueues = {};
+  static int _eventSequence = 0;
   File get currentFile => File('${directory.path}/worker.jsonl');
 
   Future<void> record({
@@ -36,6 +38,19 @@ final class WorkerDiagnosticStore {
     required String workerVersion,
     required String protocolStage,
     required String event,
+    String? eventId,
+    String? requestId,
+    String? assignmentId,
+    String? workspaceId,
+    String? workspaceRuntimeId,
+    String? workerId,
+    String? runId,
+    String? taskId,
+    String? attemptId,
+    String component = 'workspace_service',
+    String? operation,
+    String? stage,
+    bool retryable = false,
     String? workspaceVersion,
     String? engineVersion,
     String? profileDefinitionId,
@@ -44,7 +59,6 @@ final class WorkerDiagnosticStore {
     String? probeStage,
     String? failureLayer,
     String level = 'info',
-    String? runId,
     String? providerToolName,
     String? providerToolVersion,
     int? durationMs,
@@ -52,8 +66,43 @@ final class WorkerDiagnosticStore {
     int? processExitCode,
     Map<String, Object?> context = const {},
   }) {
+    final diagnostic = DiagnosticEvent(
+      eventId: eventId ?? _nextEventId(),
+      timestamp: DateTime.now().toUtc().toIso8601String(),
+      requestId: requestId,
+      assignmentId: assignmentId,
+      workspaceId: workspaceId,
+      workspaceRuntimeId: workspaceRuntimeId,
+      workerId: workerId,
+      workerTypeId: workerTypeId,
+      runId: runId,
+      taskId: taskId,
+      attemptId: attemptId,
+      component: component,
+      operation: operation ?? _operationFor(event),
+      stage: stage ?? failureLayer ?? protocolStage,
+      severity: _severity(level),
+      errorCode: errorCode,
+      retryable: retryable,
+      context: {
+        ...context,
+        'workspaceVersion': workspaceVersion,
+        'engineVersion': engineVersion,
+        'profileDefinitionId': profileDefinitionId,
+        'profileReleaseVersion': profileReleaseVersion,
+        'profileResolutionSource': profileResolutionSource,
+        'providerToolName': providerToolName,
+        'providerToolVersion': providerToolVersion,
+        'protocolStage': protocolStage,
+        'failureLayer': failureLayer,
+        'durationMs': durationMs,
+        'processExitCode': processExitCode,
+      },
+    );
     final normalized = <String, Object?>{
-      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      ...diagnostic.toJson(),
+      // Preserve the existing local diagnostic fields for older readers.
+      'timestamp': diagnostic.timestamp,
       'level': _safeLevel(level),
       'event': _safeEvent(event),
       'workerTypeId': _safeToken(workerTypeId, maxLength: 64),
@@ -108,6 +157,11 @@ final class WorkerDiagnosticStore {
     required String workerVersion,
     required String protocolStage,
     String? runId,
+    String? requestId,
+    String? assignmentId,
+    String? workspaceId,
+    String? workspaceRuntimeId,
+    String? workerId,
   }) async {
     try {
       final decoded = jsonDecode(line);
@@ -118,8 +172,8 @@ final class WorkerDiagnosticStore {
       final context = rawContext is Map
           ? Map<String, Object?>.from(rawContext)
           : const <String, Object?>{};
-      // The workspace supplies run identity; Worker-provided identity fields are
-      // discarded so user text cannot be smuggled through a mislabeled key.
+      // Structured identity is accepted only as bounded correlation metadata;
+      // arbitrary messages and context fields remain discarded.
       context.remove('assignmentId');
       context.remove('requestId');
       await record(
@@ -141,6 +195,18 @@ final class WorkerDiagnosticStore {
                     .hasMatch(event)
             ? 'worker.$event'
             : 'worker.log.invalid_event',
+        eventId:
+            decoded['eventId'] is String ? decoded['eventId'] as String : null,
+        requestId: requestId ?? _optionalToken(decoded['requestId']),
+        assignmentId: assignmentId ?? _optionalToken(decoded['assignmentId']),
+        workspaceId: workspaceId ?? _optionalToken(decoded['workspaceId']),
+        workspaceRuntimeId:
+            workspaceRuntimeId ?? _optionalToken(decoded['workspaceRuntimeId']),
+        workerId: workerId ?? _optionalToken(decoded['workerId']),
+        operation: _optionalToken(decoded['operation']),
+        stage: _optionalToken(decoded['stage']),
+        component: _optionalToken(decoded['component']) ?? 'cli_worker_engine',
+        retryable: decoded['retryable'] == true,
         level: level is String ? level : 'info',
         runId: runId,
         providerToolName: _stringContext(context, 'providerToolName'),
@@ -199,6 +265,39 @@ final class WorkerDiagnosticStore {
     return output.substring(0, maxCharacters);
   }
 
+  /// Returns a bounded, allowlisted view of recent records for inclusion in a
+  /// larger diagnostics export. The files are read newest-first and malformed
+  /// or incomplete records are ignored so a crash cannot make reporting fail.
+  Future<List<Map<String, Object?>>> readSafeRecords({
+    int maxRecords = 50,
+  }) async {
+    if (maxRecords < 1) {
+      throw ArgumentError.value(maxRecords, 'maxRecords', 'must be positive');
+    }
+    final files = <File>[];
+    if (await currentFile.exists()) files.add(currentFile);
+    for (var index = 1; index < maxFiles; index++) {
+      final file = File('${directory.path}/worker.jsonl.$index');
+      if (await file.exists()) files.add(file);
+    }
+    final records = <Map<String, Object?>>[];
+    for (final file in files) {
+      final lines = await file.readAsLines();
+      for (final line in lines.reversed) {
+        try {
+          final decoded = jsonDecode(line);
+          if (decoded is Map<String, dynamic>) {
+            records.add(_safeStoredRecord(decoded));
+            if (records.length >= maxRecords) return records;
+          }
+        } on Object {
+          // Ignore malformed or partially written records.
+        }
+      }
+    }
+    return records;
+  }
+
   Future<void> _append(String line) async {
     await directory.create(recursive: true);
     await _platformRuntime.restrictPermissions(directory.path, directory: true);
@@ -245,16 +344,58 @@ final class WorkerDiagnosticStore {
 
   static Map<String, Object?> _safeStoredRecord(Map<String, dynamic> value) {
     return {
+      'schemaVersion': value['schemaVersion'] is int
+          ? value['schemaVersion']
+          : DiagnosticEvent.schemaVersion,
+      if (value['eventId'] is String)
+        'eventId': _safeToken(value['eventId'] as String, maxLength: 128),
       'timestamp': value['timestamp'] is String &&
               DateTime.tryParse(value['timestamp'] as String) != null
           ? value['timestamp']
           : 'unknown',
       'level': _safeLevel(value['level']?.toString() ?? 'info'),
       'event': _safeEvent(value['event']?.toString() ?? ''),
+      if (value['requestId'] is String)
+        'requestId': _safeToken(value['requestId'] as String, maxLength: 128),
+      if (value['assignmentId'] is String)
+        'assignmentId':
+            _safeToken(value['assignmentId'] as String, maxLength: 128),
+      if (value['workspaceId'] is String)
+        'workspaceId':
+            _safeToken(value['workspaceId'] as String, maxLength: 128),
+      if (value['workspaceRuntimeId'] is String)
+        'workspaceRuntimeId': _safeToken(
+          value['workspaceRuntimeId'] as String,
+          maxLength: 128,
+        ),
+      if (value['workerId'] is String)
+        'workerId': _safeToken(value['workerId'] as String, maxLength: 128),
       'workerTypeId': _safeToken(
         value['workerTypeId']?.toString() ?? '',
         maxLength: 64,
       ),
+      if (value['runId'] is String)
+        'runId': _safeToken(value['runId'] as String, maxLength: 128),
+      if (value['taskId'] is String)
+        'taskId': _safeToken(value['taskId'] as String, maxLength: 128),
+      if (value['attemptId'] is String)
+        'attemptId': _safeToken(value['attemptId'] as String, maxLength: 128),
+      'component': _safeToken(
+        value['component']?.toString() ?? 'workspace_service',
+        maxLength: 64,
+      ),
+      'operation': _safeToken(
+        value['operation']?.toString() ?? 'diagnostic',
+        maxLength: 64,
+      ),
+      'stage': _safeToken(
+        value['stage']?.toString() ?? 'unknown',
+        maxLength: 64,
+      ),
+      'severity': _severity(value['severity']?.toString() ?? 'info'),
+      if (value['retryable'] is bool) 'retryable': value['retryable'],
+      if (value['errorCode'] is String)
+        'errorCode': _safeToken(value['errorCode'] as String, maxLength: 64),
       'workerVersion': _safeToken(
         value['workerVersion']?.toString() ?? '',
         maxLength: 64,
@@ -293,8 +434,6 @@ final class WorkerDiagnosticStore {
           value['failureLayer'] as String,
           maxLength: 32,
         ),
-      if (value['runId'] is String)
-        'runId': _safeToken(value['runId'] as String, maxLength: 128),
       if (value['providerToolName'] is String)
         'providerToolName': _safeToken(
           value['providerToolName'] as String,
@@ -307,8 +446,6 @@ final class WorkerDiagnosticStore {
         ),
       if (value['durationMs'] is int)
         'durationMs': (value['durationMs'] as int).clamp(0, 0x7fffffff),
-      if (value['errorCode'] is String)
-        'errorCode': _safeToken(value['errorCode'] as String, maxLength: 64),
       if (value['processExitCode'] is int)
         'processExitCode': value['processExitCode'],
       if (value['context'] is Map)
@@ -328,6 +465,7 @@ final class WorkerDiagnosticStore {
       'engineVersion',
       'profileDefinitionId',
       'profileReleaseVersion',
+      'profileDigest',
       'profileResolutionSource',
       'probeStage',
       'failureLayer',
@@ -336,6 +474,16 @@ final class WorkerDiagnosticStore {
       'protocolStage',
       'sessionPolicy',
       'processExitCode',
+      'connectionState',
+      'transport',
+      'status',
+      'modelId',
+      'effort',
+      'catalogRevision',
+      'selectionSource',
+      'lineBytes',
+      'httpStatusCode',
+      'recovered',
     };
     return {
       for (final entry in context.entries)
@@ -347,6 +495,29 @@ final class WorkerDiagnosticStore {
               ? _safeText(entry.value as String, maxLength: 128)
               : entry.value,
     };
+  }
+
+  static String _nextEventId() {
+    final now = DateTime.now().toUtc().microsecondsSinceEpoch;
+    _eventSequence = (_eventSequence + 1) & 0xFFFF;
+    return 'diag-$now-$_eventSequence';
+  }
+
+  static String _operationFor(String event) {
+    final first = event.split('.').first;
+    return first.isEmpty ? 'diagnostic' : first;
+  }
+
+  static String _severity(String level) => switch (level.toLowerCase()) {
+        'warn' || 'warning' => 'warning',
+        'debug' => 'debug',
+        'error' => 'error',
+        _ => 'info',
+      };
+
+  static String? _optionalToken(Object? value) {
+    if (value is! String || value.isEmpty || value.length > 128) return null;
+    return RegExp(r'^[A-Za-z0-9._:-]+$').hasMatch(value) ? value : null;
   }
 
   static String? _stringContext(Map<String, Object?> context, String key) {

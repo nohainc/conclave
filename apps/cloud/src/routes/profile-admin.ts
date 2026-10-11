@@ -110,12 +110,17 @@ export async function handleProfileLabAccess(
     "profiles:release:manage",
   );
   const signer = profilesAdmin ? await toolProfileSigningPreflight(env) : null;
+  const issueSupport = (env.CONCLAVE_ISSUE_SUPPORT_USER_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .includes(actor.userId);
   return new Response(
     JSON.stringify({
       schemaVersion: 1,
       authenticated: true,
       audience: actor.audience ?? null,
-      permissions: { profilesAdmin, releaseManager },
+      permissions: { profilesAdmin, releaseManager, issueSupport },
       signer: {
         ready: signer?.ready ?? false,
         issues: signer?.issues ?? [],

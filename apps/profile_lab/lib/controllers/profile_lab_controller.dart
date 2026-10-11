@@ -31,6 +31,7 @@ part 'profile_lab_controller_ai.dart';
 enum LabArea {
   workers,
   workspaces,
+  issues,
   audit;
 }
 
@@ -196,6 +197,11 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   String? releasesError;
   String? evidenceError;
   String? auditError;
+  String? issueReportsError;
+  bool isLoadingIssueReports = false;
+  List<Map<String, dynamic>> issueReports = [];
+  List<Map<String, dynamic>> issueReportGroups = [];
+  Map<String, dynamic>? selectedIssueReport;
   String? definitionsError;
   String? draftError;
   String? startupError;
@@ -324,6 +330,8 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
         if (!hasLoadedWorkerCatalog) await fetchCloudCatalog();
       case LabArea.workspaces:
         if (!_loaded.contains('workspaces')) await fetchWorkspaceChannels();
+      case LabArea.issues:
+        if (!_loaded.contains('issues')) await fetchIssueReports();
       case LabArea.audit:
         await fetchCloudAudit();
     }
@@ -331,6 +339,63 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
 
   Future<void> fetchWorkspaceChannels() =>
       _refresh('workspaces', _fetchWorkspaceChannels);
+
+  Future<void> fetchIssueReports() =>
+      _refresh('issues', _fetchIssueReports);
+
+  Future<void> _fetchIssueReports() async {
+    isLoadingIssueReports = true;
+    issueReportsError = null;
+    notifyListeners();
+    try {
+      final reports = await apiClient.fetchIssueReports();
+      final groups = await apiClient.fetchIssueReportGroups();
+      issueReports = reports.map((item) => item.toJson()).toList();
+      issueReportGroups = groups.map((item) => item.toJson()).toList();
+      _loaded.add('issues');
+    } catch (error) {
+      issueReportsError = 'Failed to load issue reports: $error';
+      _loaded.remove('issues');
+    } finally {
+      isLoadingIssueReports = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> selectIssueReport(String id) async {
+    try {
+      selectedIssueReport = await apiClient.fetchIssueReport(id);
+      notifyListeners();
+    } catch (error) {
+      issueReportsError = 'Failed to load issue report: $error';
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateIssueReport(
+    String id, {
+    String? status,
+    String? note,
+    String? groupId,
+    bool clearGroup = false,
+  }) async {
+    try {
+      await apiClient.updateIssueReport(
+        id,
+        status: status,
+        note: note,
+        groupId: groupId,
+        clearGroup: clearGroup,
+      );
+      await fetchIssueReports();
+      if (selectedIssueReport?['report']?['id'] == id) {
+        await selectIssueReport(id);
+      }
+    } catch (error) {
+      issueReportsError = 'Failed to update issue report: $error';
+      notifyListeners();
+    }
+  }
 
   Future<void> _fetchWorkspaceChannels() async {
     final generation = _cloudGeneration;
@@ -429,6 +494,11 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
     releasesError = null;
     evidenceError = null;
     auditError = null;
+    issueReportsError = null;
+    isLoadingIssueReports = false;
+    issueReports = [];
+    issueReportGroups = [];
+    selectedIssueReport = null;
     definitionsError = null;
     workerCatalogError = null;
     workerCatalogUnauthorized = false;

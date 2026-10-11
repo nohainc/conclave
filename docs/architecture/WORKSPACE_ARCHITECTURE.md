@@ -43,6 +43,13 @@ those product names. This affects only Activity Monitor/process diagnostics;
 it does not change the executable, IPC protocol, Workspace credentials, or
 Cloud authentication.
 
+Execution failures use the versioned, privacy-safe diagnostic event contract in
+[`DIAGNOSTIC_EVENTS_V1.md`](../specifications/DIAGNOSTIC_EVENTS_V1.md). The
+service and Engine keep bounded correlated records locally, while Cloud records
+the corresponding admission, transport, and result/error events. Diagnostic
+exports report completeness and omit prompts, provider output, credentials, and
+local filesystem paths.
+
 ## Lifecycle and state
 
 Host registration and process state are separate from Cloud state:

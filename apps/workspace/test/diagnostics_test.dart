@@ -26,7 +26,11 @@ void main() {
       ..writeAsStringSync(jsonEncode({
         'level': 'error',
         'message': 'worker failed',
-        'details': {'assignmentId': 'assignment-1', 'apiKey': 'secret-value'},
+        'details': {
+          'assignmentId': 'assignment-1',
+          'apiKey': 'secret-value',
+          'providerToolPath': '/Users/private/.agy/bin/agy',
+        },
       }));
     final journal =
         AssignmentJournal(File('${directory.path}/assignments.jsonl'));
@@ -55,7 +59,11 @@ void main() {
     expect(exported, contains('cliWorkerEngineVersion'));
     expect(exported, contains('activeAssignmentCount'));
     expect(exported, contains('workRoot'));
+    expect(exported, contains('diagnosticCompleteness'));
+    expect(exported, contains('workerDiagnosticEvents'));
+    expect((export['workRoot'] as Map)['configured'], isFalse);
     expect(exported, isNot(contains('secret-value')));
+    expect(exported, isNot(contains('/Users/private/.agy/bin/agy')));
     expect(exported, contains('[redacted]'));
     await directory.delete(recursive: true);
   });

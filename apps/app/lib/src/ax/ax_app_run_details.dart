@@ -13,6 +13,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
       case AxRouteKind.workflows:
         return WorkflowsPage(
             catalogs: store.catalogs,
+            viewerEmail: store.auth.viewer?.email,
             configurations: store.workflowConfigurations);
       case AxRouteKind.workspaces:
         return _workspacesView();

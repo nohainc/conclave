@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/brand.dart';
@@ -36,7 +38,13 @@ void main() {
     expect(find.byType(Divider), findsNothing);
     expect(find.text('Passkeys'), findsNothing);
     expect(find.text('Add passkey'), findsNothing);
+    expect(find.text('Linked account gh-1'), findsNothing);
+    expect(find.text('Revoke all'), findsOneWidget);
     expect(find.text('Current'), findsOneWidget);
+    final currentButton = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Current'),
+    );
+    expect(currentButton.onPressed, isNull);
     expect(find.text('Change avatar'), findsOneWidget);
     expect(find.text('Rename'), findsOneWidget);
     expect(find.text('Update email'), findsOneWidget);
@@ -59,6 +67,47 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Fixture browser'), findsOneWidget);
     expect(find.text('Other browser'), findsNothing);
+  });
+
+  testWidgets('profile revoke all keeps the current session', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: ConclaveBrand.lightTheme(),
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: const AxFixtureDataSource(),
+        initialUri: Uri.parse('/settings/profile'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Revoke all'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Current'), findsOneWidget);
+    expect(find.text('Fixture browser'), findsOneWidget);
+    expect(find.text('Other browser'), findsNothing);
+  });
+
+  testWidgets('profile security remains loading until both lists arrive',
+      (tester) async {
+    final data = _DelayedAccountSecurityDataSource();
+    await tester.pumpWidget(MaterialApp(
+      theme: ConclaveBrand.lightTheme(),
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: data,
+        initialUri: Uri.parse('/settings/profile'),
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(data.securityLoadCalls, 1);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+
+    data.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('Fixture browser'), findsOneWidget);
+    expect(find.text('Other browser'), findsOneWidget);
+    expect(find.text('Credentials'), findsNothing);
   });
 
   testWidgets('clicking another space loads and reveals its Threads',
@@ -2327,6 +2376,51 @@ class _SpaceScopedFixture extends AxFixtureDataSource {
           primaryWorkspace: '',
           queueStatus: 'Idle')
     ];
+  }
+}
+
+class _DelayedAccountSecurityDataSource extends AxFixtureDataSource {
+  _DelayedAccountSecurityDataSource();
+
+  final _securityCompleter = Completer<AxAccountSecurity>();
+  var securityLoadCalls = 0;
+
+  void complete() {
+    if (_securityCompleter.isCompleted) return;
+    _securityCompleter.complete(
+      const AxAccountSecurity(
+        accounts: [
+          AxAuthAccount(
+              id: 'account-github', providerId: 'github', accountId: 'gh-1'),
+          AxAuthAccount(
+              id: 'account-credentials',
+              providerId: 'credentials',
+              accountId: 'user@example.com'),
+        ],
+        sessions: [
+          AxAuthSession(
+            token: 'fixture-session-token',
+            id: 'fixture-session',
+            createdAt: '2026-09-23T10:00:00Z',
+            expiresAt: '2026-10-07T10:00:00Z',
+            userAgent: 'Fixture browser',
+          ),
+          AxAuthSession(
+            token: 'fixture-other-session-token',
+            id: 'fixture-other-session',
+            createdAt: '2026-09-22T10:00:00Z',
+            expiresAt: '2026-10-06T10:00:00Z',
+            userAgent: 'Other browser',
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Future<AxAccountSecurity> loadAccountSecurity() {
+    securityLoadCalls++;
+    return _securityCompleter.future;
   }
 }
 

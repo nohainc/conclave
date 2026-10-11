@@ -152,6 +152,7 @@ export type SecurityEnv = Env & {
   readonly CONCLAVE_PROFILE_ADMIN_USER_IDS?: string;
   readonly CONCLAVE_PROFILE_LAB_OWNER_EMAIL?: string;
   readonly CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS?: string;
+  readonly CONCLAVE_ISSUE_SUPPORT_USER_IDS?: string;
   readonly CONCLAVE_RELEASE_TRUST_KEYS_JSON?: string;
   readonly CONCLAVE_RELEASE_PUBLISHER?: string;
   readonly CONCLAVE_RELEASE_PRIVATE_KEY?: string;

@@ -13,6 +13,7 @@ class SpacePage extends StatelessWidget {
     this.spaceThreads,
     this.tabQueries,
     this.mutations,
+    this.viewerEmail,
   });
 
   final AxSpace space;
@@ -25,6 +26,7 @@ class SpacePage extends StatelessWidget {
   final AxSpaceThreads? spaceThreads;
   final AxSpaceTabQueries? tabQueries;
   final AxCollaborationMutations? mutations;
+  final String? viewerEmail;
 
   @override
   Widget build(BuildContext context) => _SpaceWorkspace(
@@ -39,6 +41,7 @@ class SpacePage extends StatelessWidget {
         spaceThreads: spaceThreads,
         tabQueries: tabQueries,
         mutations: mutations,
+        viewerEmail: viewerEmail,
       );
 }
 
@@ -55,6 +58,7 @@ class _SpaceWorkspace extends StatefulWidget {
     this.spaceThreads,
     this.tabQueries,
     this.mutations,
+    this.viewerEmail,
   });
 
   final AxSpace space;
@@ -67,6 +71,7 @@ class _SpaceWorkspace extends StatefulWidget {
   final AxSpaceThreads? spaceThreads;
   final AxSpaceTabQueries? tabQueries;
   final AxCollaborationMutations? mutations;
+  final String? viewerEmail;
 
   @override
   State<_SpaceWorkspace> createState() => _SpaceWorkspaceState();
@@ -366,6 +371,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
                               catalogs: AxSessionCatalogs.forSource(
                                   widget.dataSource),
                               configurations: _workflowConfigurations,
+                              viewerEmail: widget.viewerEmail,
                               canEdit: widget.space.role == 'owner')
                         else
                           _membersTab(),

@@ -42,6 +42,11 @@ void main() {
           'durationMs': 345,
           'errorCode': 'provider_auth_required',
           'profilePayload': {'secret': 'profile-private-value'},
+          'stderr': 'Authorization: Bearer live-provider-token',
+          'environment': {'HOME': '/Users/vitaliinoha', 'API_KEY': 'env-secret'},
+          'sourceCode': 'class PrivateSource {}',
+          'cookie': 'session=private-cookie',
+          'misleadingNested': {'message': 'raw provider output'},
         },
       }),
       workerTypeId: 'chatgpt',
@@ -70,6 +75,50 @@ void main() {
     expect(report, isNot(contains('secret-key-value')));
     expect(report, isNot(contains('profile-private-value')));
     expect(report, isNot(contains('do something private')));
+    expect(report, isNot(contains('live-provider-token')));
+    expect(report, isNot(contains('env-secret')));
+    expect(report, isNot(contains('PrivateSource')));
+    expect(report, isNot(contains('private-cookie')));
+    expect(report, isNot(contains('raw provider output')));
+  });
+
+  test('records the normalized diagnostic envelope and correlation fields',
+      () async {
+    final store = WorkerDiagnosticStore(
+      directory: Directory('${temporary.path}/logs'),
+    );
+    await store.record(
+      workerTypeId: 'gemini',
+      workerVersion: '2.0.0',
+      protocolStage: 'execute',
+      event: 'assignment.failed',
+      requestId: 'request-1',
+      assignmentId: 'assignment-1',
+      workspaceId: 'workspace-1',
+      component: 'workspace_service',
+      operation: 'assignment',
+      stage: 'provider_session',
+      level: 'error',
+      errorCode: 'session_resume_failed',
+      retryable: true,
+      context: {
+        'providerToolVersion': '1.2.3',
+        'prompt': 'must not be exported',
+      },
+    );
+
+    final decoded = jsonDecode(await store.currentFile.readAsString())
+        as Map<String, dynamic>;
+    expect(decoded['schemaVersion'], 1);
+    expect(decoded['eventId'], startsWith('diag-'));
+    expect(decoded['requestId'], 'request-1');
+    expect(decoded['assignmentId'], 'assignment-1');
+    expect(decoded['workspaceId'], 'workspace-1');
+    expect(decoded['component'], 'workspace_service');
+    expect(decoded['stage'], 'provider_session');
+    expect(decoded['severity'], 'error');
+    expect(decoded['retryable'], isTrue);
+    expect(jsonEncode(decoded), isNot(contains('must not be exported')));
   });
 
   test('rotates Worker logs by both size and retained file count', () async {
@@ -126,5 +175,29 @@ void main() {
     expect(report, contains('process.restarted'));
     expect(report, contains('processExitCode'));
     expect(report, isNot(contains('{truncated')));
+  });
+
+  test('reads bounded safe records for disconnected report assembly', () async {
+    final store = WorkerDiagnosticStore(
+      directory: Directory('${temporary.path}/logs'),
+    );
+    for (var index = 0; index < 3; index++) {
+      await store.record(
+        workerTypeId: 'gemini',
+        workerVersion: '2.0.0',
+        protocolStage: 'execute',
+        event: 'assignment.progress',
+        assignmentId: 'assignment-$index',
+        context: {
+          'status': 'step-$index',
+          'prompt': 'must not be retained',
+        },
+      );
+    }
+
+    final records = await store.readSafeRecords(maxRecords: 2);
+    expect(records, hasLength(2));
+    expect(records.first['assignmentId'], 'assignment-2');
+    expect(jsonEncode(records), isNot(contains('must not be retained')));
   });
 }

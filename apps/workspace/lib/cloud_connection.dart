@@ -6,6 +6,7 @@ import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'assignment_journal.dart';
+import 'worker_diagnostic_store.dart';
 import 'workspace_registration.dart';
 import 'workspace_transport.dart';
 
@@ -194,6 +195,7 @@ class WorkspaceCloudConnection {
     this.assignmentHandler,
     this.assignmentCancellationHandler,
     this.assignmentJournal,
+    this.diagnosticStoreForWorkerType,
     this.workerInventoryProvider,
     this.onSessionReady,
     this.workspaceUpdateAvailableHandler,
@@ -228,6 +230,11 @@ class WorkspaceCloudConnection {
   final WorkspaceAssignmentHandler? assignmentHandler;
   final WorkspaceAssignmentCancellationHandler? assignmentCancellationHandler;
   final AssignmentJournal? assignmentJournal;
+
+  /// Bounded local evidence for assignment lifecycle events. The store is
+  /// optional so connection tests and offline-only runtimes need no logger.
+  final WorkerDiagnosticStore Function(String workerTypeId)?
+      diagnosticStoreForWorkerType;
   final Future<List<Map<String, Object?>>> Function()? workerInventoryProvider;
   final Future<void> Function()? onSessionReady;
   final WorkspaceUpdateAvailableHandler? workspaceUpdateAvailableHandler;
@@ -373,6 +380,95 @@ class WorkspaceCloudConnection {
   final _lastEphemeralWorkerEvent = <String, DateTime>{};
 
   void _notifyStateChanged() => onStateChanged?.call();
+
+  Future<void> recordAssignmentDiagnostic(
+    WorkspaceAssignmentContext context, {
+    required String event,
+    required String stage,
+    String severity = 'info',
+    String? errorCode,
+    bool retryable = false,
+    Map<String, Object?> contextData = const {},
+  }) async {
+    try {
+      final store = diagnosticStoreForWorkerType?.call(_workerTypeId(context));
+      if (store == null) return;
+      await store.record(
+        workerTypeId: _workerTypeId(context),
+        workerVersion: workspaceVersion,
+        protocolStage: 'assignment',
+        event: event,
+        requestId: _requestId(context),
+        assignmentId: context.assignmentId,
+        workspaceId: context.workspaceId,
+        workspaceRuntimeId: context.workspaceRuntimeId,
+        workerId: context.workerId,
+        runId: context.runId,
+        taskId: context.taskId,
+        attemptId: context.attemptId,
+        component: 'workspace_service',
+        operation: 'assignment',
+        stage: stage,
+        level: severity,
+        retryable: retryable,
+        errorCode: errorCode,
+        context: {
+          ..._assignmentMetadata(context),
+          ...contextData,
+        },
+      );
+    } on Object {
+      // Diagnostics must never change assignment behavior.
+    }
+  }
+
+  static String _workerTypeId(WorkspaceAssignmentContext context) {
+    final value = context.payload['workerTypeId'] ??
+        (context.payload['snapshot'] is Map
+            ? (context.payload['snapshot'] as Map)['workerTypeId']
+            : null);
+    return value is String && value.isNotEmpty ? value : context.workerId;
+  }
+
+  static String? _requestId(WorkspaceAssignmentContext context) {
+    final value = context.payload['requestId'] ??
+        context.payload['workRequestId'] ??
+        (context.payload['input'] is Map
+            ? (context.payload['input'] as Map)['workRequestId']
+            : null);
+    return value is String &&
+            value.isNotEmpty &&
+            value.length <= 128 &&
+            RegExp(r'^[A-Za-z0-9._:-]+$').hasMatch(value)
+        ? value
+        : null;
+  }
+
+  static Map<String, Object?> _assignmentMetadata(
+    WorkspaceAssignmentContext context,
+  ) {
+    final snapshot = context.payload['snapshot'];
+    final values = <String, Object?>{
+      if (context.payload['modelId'] != null)
+        'modelId': context.payload['modelId'],
+      if (context.payload['reasoningEffort'] != null)
+        'effort': context.payload['reasoningEffort'],
+      if (snapshot is Map) ...{
+        if (snapshot['modelId'] != null) 'modelId': snapshot['modelId'],
+        if (snapshot['reasoningEffort'] != null)
+          'effort': snapshot['reasoningEffort'],
+        if (snapshot['profileDefinitionId'] != null)
+          'profileDefinitionId': snapshot['profileDefinitionId'],
+        if (snapshot['profileReleaseVersion'] != null)
+          'profileReleaseVersion': snapshot['profileReleaseVersion'],
+        if (snapshot['providerToolVersion'] != null)
+          'providerToolVersion': snapshot['providerToolVersion'],
+        if (snapshot['engineVersion'] != null)
+          'engineVersion': snapshot['engineVersion'],
+      },
+    };
+    return values;
+  }
 
   /// Sends the Workspace-owned inventory projection. Secrets, credential
   /// references, and local paths must not be included by the caller.

@@ -62,6 +62,8 @@ export function sqliteD1() {
     "0027_enable_workflow_workspace_workers.sql",
     "0028_workflow_default_selection.sql",
     "0037_immutable_execution_selection.sql",
+    "0039_issue_reports.sql",
+    "0040_issue_report_investigation.sql",
   ]) {
     sqlite.exec(
       readFileSync(

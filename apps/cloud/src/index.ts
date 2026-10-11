@@ -40,6 +40,18 @@ import {
   withRequestId,
 } from "./observability.js";
 import { pruneExpiredRealtimeEvents } from "./realtime-retention.js";
+import { pruneExpiredIssueReports } from "./issue-report-retention.js";
+import {
+  handleCreateIssueReport,
+  handleGetIssueReport,
+  handleGetIssueReportForRequest,
+  handleListAdminIssueReports,
+  handleGetAdminIssueReport,
+  handlePatchAdminIssueReport,
+  handleListAdminIssueReportGroups,
+  handleCreateAdminIssueReportGroup,
+  handleGetAdminIssueReportGroup,
+} from "./routes/issue-reports.js";
 
 function applyCorsHeaders(
   response: Response,
@@ -58,6 +70,15 @@ function applyCorsHeaders(
 }
 
 export const routeHandlers = {
+  handleCreateIssueReport,
+  handleGetIssueReport,
+  handleGetIssueReportForRequest,
+  handleListAdminIssueReports,
+  handleGetAdminIssueReport,
+  handlePatchAdminIssueReport,
+  handleListAdminIssueReportGroups,
+  handleCreateAdminIssueReportGroup,
+  handleGetAdminIssueReportGroup,
   handleProfileLabAccess: handlers.handleProfileLabAccess,
   handleSession: handlers.handleSession,
   handleSessionLogout: handlers.handleSessionLogout,
@@ -181,10 +202,15 @@ const routeDependencies = {
 export default {
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     const deleted = await pruneExpiredRealtimeEvents(env.CONCLAVE_DB);
+    const deletedIssueReports = await pruneExpiredIssueReports(
+      env.CONCLAVE_DB,
+      env.CONCLAVE_ARTIFACTS,
+    );
     console.log(
       JSON.stringify({
         event: "realtime_event_retention_complete",
         deleted,
+        deletedIssueReports,
       }),
     );
   },

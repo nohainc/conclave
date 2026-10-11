@@ -13,6 +13,7 @@ class ThreadPage extends StatefulWidget {
     this.workflowConfigurations,
     this.currentUserId,
     this.currentUserName,
+    this.viewerEmail,
     required this.onBackToSpace,
     required this.onArchive,
     this.onRename,
@@ -32,6 +33,7 @@ class ThreadPage extends StatefulWidget {
   final AxWorkflowConfigurations? workflowConfigurations;
   final String? currentUserId;
   final String? currentUserName;
+  final String? viewerEmail;
   final VoidCallback onBackToSpace;
   final VoidCallback onArchive;
   final Future<void> Function(String name)? onRename;
@@ -116,6 +118,9 @@ class _ThreadPageState extends State<ThreadPage>
   List<AxBuiltinWorkflow> get _currentWorkflows =>
       _currentWorkflowVersions(_availableWorkflows);
   List<AxBuiltinWorkflow> get _availableWorkflows => _workflowCatalog
+      .where((workflow) =>
+          canPreviewUnimplementedWorkflows(widget.viewerEmail) ||
+          implementedWorkflowIds.contains(workflow.id))
       .where((workflow) => workflow.id == 'chat'
           ? widget.space.effectivePermissions.chat
           : widget.space.effectivePermissions.work)
@@ -142,6 +147,7 @@ class _ThreadPageState extends State<ThreadPage>
       if (!mounted) return;
       _updateWorkHistory(() {});
       _workComposerChanges.value++;
+      _scheduleIssueReportStatusLoads();
     });
   }
 
@@ -153,6 +159,12 @@ class _ThreadPageState extends State<ThreadPage>
   String? get _workTimelineError =>
       _workHistoryCache.error(widget.thread.id)?.toString();
   String? _workSubmitError;
+  final _reportedIssues = <String, AxIssueReport>{};
+  final _reportedIssueKeys = <String, String>{};
+  final _issueReportErrors = <String, String>{};
+  final _reportingIssueIds = <String>{};
+  final _checkedIssueReportKeys = <String>{};
+  final _issueReportLoads = <String, Future<void>>{};
   StreamSubscription<Map<String, dynamic>>? _workEventSubscription;
   void Function()? _cancelWorkRealtime;
   bool get _submittingWork => _workHistoryCache.submitting(widget.thread.id);
@@ -437,7 +449,9 @@ class _ThreadPageState extends State<ThreadPage>
     _catalogs =
         widget.catalogs ?? AxSessionCatalogs.forSource(widget.dataSource);
     final workflows = _catalogs.engine.peek(_catalogs.workflows);
-    _workflowCatalog = workflows.data ?? const [];
+    _workflowCatalog = visibleWorkflowDefinitions(
+        workflows.data ?? const <AxBuiltinWorkflow>[],
+        viewerEmail: widget.viewerEmail);
     _loadingWorkflows = !workflows.hasData;
     if (_workflowCatalog.isNotEmpty) {
       _workflow = _threadDefaultReference(_workflowCatalog,
@@ -448,7 +462,8 @@ class _ThreadPageState extends State<ThreadPage>
       if (!mounted) return;
       _updateComposerState(() {
         if (state.hasData) {
-          _workflowCatalog = state.data!;
+          _workflowCatalog = visibleWorkflowDefinitions(state.data!,
+              viewerEmail: widget.viewerEmail);
           if (!_workflowCatalog.any((item) => item.reference == _workflow)) {
             _workflow = _threadDefaultReference(_workflowCatalog,
                 preferredId: _workflowDefaultId);
@@ -486,14 +501,17 @@ class _ThreadPageState extends State<ThreadPage>
       if (!mounted || catalogs != _catalogs) return;
       final workflows = catalogs.engine.peek(catalogs.workflows).data ??
           const <AxBuiltinWorkflow>[];
+      final visibleWorkflows = visibleWorkflowDefinitions(workflows,
+          viewerEmail: widget.viewerEmail);
       _updateState(() {
-        _workflowCatalog = workflows;
+        _workflowCatalog = visibleWorkflows;
         _loadingWorkflows = false;
-        _workflowCatalogError =
-            workflows.isEmpty ? 'No built-in Workflows are available.' : null;
-        _workflow = workflows.isEmpty
+        _workflowCatalogError = visibleWorkflows.isEmpty
+            ? 'No built-in Workflows are available.'
+            : null;
+        _workflow = visibleWorkflows.isEmpty
             ? ''
-            : _threadDefaultReference(workflows,
+            : _threadDefaultReference(visibleWorkflows,
                 preferredId: _workflowDefaultId);
         _reconcilePendingThreadViewState();
       });
@@ -596,6 +614,12 @@ class _ThreadPageState extends State<ThreadPage>
         oldWidget.dataSource != widget.dataSource ||
         oldWidget.currentUserId != widget.currentUserId) {
       _workExecutionSelection = {};
+      _reportedIssues.clear();
+      _reportedIssueKeys.clear();
+      _issueReportErrors.clear();
+      _reportingIssueIds.clear();
+      _checkedIssueReportKeys.clear();
+      _issueReportLoads.clear();
     }
     if (oldWidget.workflowConfigurations != widget.workflowConfigurations ||
         oldWidget.dataSource != widget.dataSource ||
@@ -604,7 +628,8 @@ class _ThreadPageState extends State<ThreadPage>
       _subscribeWorkflowConfigurations();
     }
     if (oldWidget.catalogs != widget.catalogs ||
-        oldWidget.dataSource != widget.dataSource) {
+        oldWidget.dataSource != widget.dataSource ||
+        oldWidget.viewerEmail != widget.viewerEmail) {
       _subscribeCatalogs();
       unawaited(_loadWorkflowCatalog());
     }
@@ -713,6 +738,12 @@ class _ThreadPageState extends State<ThreadPage>
 
   void _updateComposerState(VoidCallback callback) {
     callback();
+    _workComposerChanges.value++;
+  }
+
+  void _updateIssueState(VoidCallback callback) {
+    callback();
+    _workHistoryChanges.value++;
     _workComposerChanges.value++;
   }
 
@@ -982,13 +1013,6 @@ class _ThreadPageState extends State<ThreadPage>
                               onCopy: () {
                                 Clipboard.setData(
                                     ClipboardData(text: message.text));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content:
-                                        Text('Message copied to clipboard'),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
                               },
                               onEdit: (newText) =>
                                   _editDiscussion(message.id, newText),
@@ -1071,7 +1095,10 @@ class _ThreadPageState extends State<ThreadPage>
         hasOlder: _workHistoryCache.peek(widget.thread.id).olderCursor != null,
         loadingOlder: _workHistoryCache.loadingOlder(widget.thread.id),
         onLoadOlder: _loadOlderWorkHistory,
-        onShowRunDetails: widget.dataSource == null ? null : _showRunDetails,
+        onReportIssue: widget.dataSource == null ? null : _reportIssue,
+        reportedIssues: _reportedIssues,
+        reportingIssueIds: _reportingIssueIds,
+        issueReportErrors: _issueReportErrors,
         onRetryStep: widget.dataSource == null ? null : _retryWorkRequestStep,
         onCancelRun: widget.dataSource == null ? null : _cancelWorkRequest,
         onWorkflowChanged: (value) {

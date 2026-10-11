@@ -198,12 +198,79 @@ class ProfileLabAccessReadModel {
       : profilesAdmin = (json['permissions'] as Map?)?['profilesAdmin'] == true,
         releaseManager =
             (json['permissions'] as Map?)?['releaseManager'] == true,
+        issueSupport =
+            (json['permissions'] as Map?)?['issueSupport'] == true,
         signerReady = (json['signer'] as Map?)?['ready'] == true,
         signerIssues = List<String>.unmodifiable(
             ((json['signer'] as Map?)?['issues'] as List? ?? const [])
                 .whereType<String>());
   final bool profilesAdmin;
   final bool releaseManager;
+  final bool issueSupport;
   final bool signerReady;
   final List<String> signerIssues;
+}
+
+class ProfileLabIssueReportReadModel extends ProfileAdminReadModel {
+  ProfileLabIssueReportReadModel.fromJson(super.json)
+      : id = _string(json, 'id') ?? '',
+        publicReference = _string(json, 'publicReference') ?? '',
+        requestId = _string(json, 'requestId') ?? '',
+        assignmentId = _string(json, 'assignmentId'),
+        component = _string(json, 'component') ?? '',
+        errorCode = _string(json, 'errorCode') ?? '',
+        failureStage = _string(json, 'failureStage') ?? '',
+        fingerprint = _string(json, 'fingerprint') ?? '',
+        status = _string(json, 'status') ?? '',
+        diagnosticState = _string(json, 'diagnosticState') ?? '',
+        workerTypeId = _string(json, 'workerTypeId'),
+        modelId = _string(json, 'modelId'),
+        effort = _string(json, 'effort'),
+        createdAt = _string(json, 'createdAt') ?? '',
+        incidentGroup = _object(json, 'incidentGroup'),
+        versions = _object(json, 'versions');
+
+  final String id;
+  final String publicReference;
+  final String requestId;
+  final String? assignmentId;
+  final String component;
+  final String errorCode;
+  final String failureStage;
+  final String fingerprint;
+  final String status;
+  final String diagnosticState;
+  final String? workerTypeId;
+  final String? modelId;
+  final String? effort;
+  final String createdAt;
+  final Map<String, dynamic>? incidentGroup;
+  final Map<String, dynamic>? versions;
+}
+
+class ProfileLabIssueReportGroupReadModel extends ProfileAdminReadModel {
+  ProfileLabIssueReportGroupReadModel.fromJson(super.json)
+      : id = _string(json, 'id') ?? '',
+        publicReference = _string(json, 'publicReference') ?? '',
+        label = _string(json, 'label') ?? '',
+        fingerprint = _string(json, 'fingerprint'),
+        reportCount = _int(json, 'reportCount') ?? 0,
+        firstOccurrence = _string(json, 'firstOccurrence'),
+        lastOccurrence = _string(json, 'lastOccurrence'),
+        affectedWorkerTypes = _stringList(json, 'affectedWorkerTypes'),
+        affectedProviderVersions = _stringList(json, 'affectedProviderVersions'),
+        affectedEngineVersions = _stringList(json, 'affectedEngineVersions'),
+        affectedProfileVersions = _stringList(json, 'affectedProfileVersions');
+
+  final String id;
+  final String publicReference;
+  final String label;
+  final String? fingerprint;
+  final int reportCount;
+  final String? firstOccurrence;
+  final String? lastOccurrence;
+  final List<String> affectedWorkerTypes;
+  final List<String> affectedProviderVersions;
+  final List<String> affectedEngineVersions;
+  final List<String> affectedProfileVersions;
 }

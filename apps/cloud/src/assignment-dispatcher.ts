@@ -15,6 +15,7 @@ import {
   type ExecutionTarget,
 } from "./scheduler.js";
 import { recordExecutionWorkspaceAudit } from "./workspace-audit.js";
+import { tryLogDiagnosticEvent } from "./observability.js";
 
 /** Conclave scope reference only; does not expose or certify a native CLI thread. */
 export function conversationWorkerSessionReference(
@@ -150,6 +151,19 @@ async function dispatchWorkspaceWorkerAssignment(
     },
   );
   if (!target) {
+    tryLogDiagnosticEvent({
+      requestId: task.workRequestId,
+      workspaceId: params.workspaceId,
+      runId,
+      taskId,
+      component: "cloud",
+      operation: "assignment",
+      stage: "admission",
+      severity: "warning",
+      errorCode: "worker_not_ready",
+      retryable: true,
+      context: { status: "no_eligible_worker" },
+    });
     return {
       assignmentId: "",
       attemptId: "",
@@ -168,6 +182,32 @@ async function dispatchWorkspaceWorkerAssignment(
   const attemptId = `att-${taskId}-${attemptNumber}-${Date.now()}-${randomPart}`;
   const assignmentId = `asg-${taskId}-${attemptNumber}-${Date.now()}-${randomPart}`;
   const idempotencyKey = `idem-${assignmentId}`;
+  tryLogDiagnosticEvent({
+    requestId: task.workRequestId,
+    assignmentId,
+    workspaceId: target.workspaceId,
+    workerId: target.workerId,
+    workerTypeId: target.workerTypeId,
+    runId,
+    taskId,
+    attemptId,
+    workspaceRuntimeId: target.workspaceRuntimeIdentityId,
+    component: "cloud",
+    operation: "assignment",
+    stage: "admission",
+    severity: "info",
+    retryable: false,
+    context: {
+      engineVersion: target.engineVersion,
+      ...(target.model ? { modelId: target.model } : {}),
+      ...(target.reasoningEffort
+        ? { effort: target.reasoningEffort }
+        : {}),
+      ...(typeof target.selectionExplanation.source === "string"
+        ? { selectionSource: target.selectionExplanation.source }
+        : {}),
+    },
+  });
   const timeoutMs = task.timeoutMs || 15 * 60_000;
   const sessionPolicy = task.sessionPolicy as string;
   const sessionKey = task.sessionKey;
@@ -364,6 +404,24 @@ async function dispatchWorkspaceWorkerAssignment(
       },
       failedAt: now,
     });
+    tryLogDiagnosticEvent({
+      requestId: task.workRequestId,
+      assignmentId,
+      workspaceId: target.workspaceId,
+      workerId: target.workerId,
+      workerTypeId: target.workerTypeId,
+      runId,
+      taskId,
+      attemptId,
+      workspaceRuntimeId: target.workspaceRuntimeIdentityId,
+      component: "cloud",
+      operation: "assignment",
+      stage: "transport",
+      severity: "error",
+      errorCode: code,
+      retryable: true,
+      context: { status: "gateway_unavailable" },
+    });
     return {
       assignmentId,
       attemptId,
@@ -411,6 +469,24 @@ async function dispatchWorkspaceWorkerAssignment(
     await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
       error: { code, message, retryable: true },
       failedAt: new Date().toISOString(),
+    });
+    tryLogDiagnosticEvent({
+      requestId: task.workRequestId,
+      assignmentId,
+      workspaceId: target.workspaceId,
+      workerId: target.workerId,
+      workerTypeId: target.workerTypeId,
+      runId,
+      taskId,
+      attemptId,
+      workspaceRuntimeId: target.workspaceRuntimeIdentityId,
+      component: "cloud",
+      operation: "assignment",
+      stage: "transport",
+      severity: "error",
+      errorCode: code,
+      retryable: true,
+      context: { status: "gateway_dispatch_failed" },
     });
     return {
       assignmentId,

@@ -170,6 +170,7 @@ extension _AxAppViews on _AxAppStateMixin {
       mutations: store.collaboration,
       space: space,
       dataSource: widget.dataSource,
+      viewerEmail: store.auth.viewer?.email,
       onOpenThread: (threadId) => _openThread(space.id, threadId),
       onEdit: () => _editSpace(space),
       onArchive: () => _archiveSpace(space),
@@ -218,6 +219,7 @@ extension _AxAppViews on _AxAppStateMixin {
           realtimeEvents: realtimeClient.events,
           currentUserId: store.auth.viewer?.id,
           currentUserName: store.auth.viewer?.displayName,
+          viewerEmail: store.auth.viewer?.email,
           onBackToSpace: () => _navigateTo(AxNavigation.space(space.id)),
           onArchive: () async {
             try {
@@ -334,6 +336,14 @@ extension _AxAppViews on _AxAppStateMixin {
   Widget _profileSecurityBody() {
     final viewer = store.auth.viewer;
     final security = accountSecurity;
+    // Better Auth can expose its internal credentials account alongside
+    // externally linked providers. Credentials are an implementation detail
+    // and are not a user-manageable linked login method.
+    final linkedAccounts =
+        (security?.accounts ?? const <AxAuthAccount>[]).where((account) {
+      final providerId = account.providerId.toLowerCase();
+      return providerId != 'credential' && providerId != 'credentials';
+    }).toList(growable: false);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -401,17 +411,16 @@ extension _AxAppViews on _AxAppStateMixin {
               ? const Center(child: CircularProgressIndicator())
               : Column(
                   children: [
-                    if (security?.accounts.isEmpty ?? true)
+                    if (linkedAccounts.isEmpty)
                       const Align(
                           alignment: Alignment.centerLeft,
                           child: Text('No linked methods loaded.')),
-                    ...?security?.accounts.map((account) => ListTile(
+                    ...linkedAccounts.map((account) => ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: Icon(account.providerId == 'github'
                               ? Icons.code
                               : Icons.account_circle_outlined),
                           title: Text(_providerLabel(account.providerId)),
-                          subtitle: Text('Linked account ${account.accountId}'),
                           trailing: const Icon(Icons.verified_outlined,
                               color: Color(0xff3ca879)),
                         )),
@@ -438,6 +447,21 @@ extension _AxAppViews on _AxAppStateMixin {
         const SizedBox(height: 16),
         _profileSection(
           title: 'Active sessions',
+          trailing: Builder(builder: (context) {
+            final sessions = security?.sessions ?? const <AxAuthSession>[];
+            final hasOtherSessions = sessions.any(
+              (session) => !_isCurrentAccountSession(session),
+            );
+            return TextButton(
+              onPressed: accountSecurityLoading ||
+                      revokingAllAccountSessions ||
+                      !hasOtherSessions
+                  ? null
+                  : _revokeAllAccountSessions,
+              child:
+                  Text(revokingAllAccountSessions ? 'Revoking…' : 'Revoke all'),
+            );
+          }),
           child: accountSecurityLoading
               ? const Center(child: CircularProgressIndicator())
               : Column(
@@ -447,31 +471,52 @@ extension _AxAppViews on _AxAppStateMixin {
                           alignment: Alignment.centerLeft,
                           child: Text('No active sessions loaded.')),
                     ...?security?.sessions.map((session) {
-                      final currentSessionId = store.auth.session?.sessionId;
                       final isRevoking =
                           revokingAccountSessionTokens.contains(session.token);
-                      final isCurrent = currentSessionId != null &&
-                          currentSessionId != '—' &&
-                          (session.id == currentSessionId ||
-                              session.token == currentSessionId);
+                      final isCurrent = _isCurrentAccountSession(session);
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.devices_outlined),
                         title: Text(session.userAgent ?? 'Browser session'),
                         subtitle: Text(
                             'Expires ${_formatAccountDate(session.expiresAt)}'),
-                        trailing: isCurrent
-                            ? const Text('Current',
-                                style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xff3ca879)))
-                            : TextButton(
-                                onPressed: isRevoking
-                                    ? null
-                                    : () => _revokeAccountSession(session),
-                                child:
-                                    Text(isRevoking ? 'Revoking…' : 'Revoke'),
-                              ),
+                        trailing: SizedBox(
+                          width: 96,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: isCurrent
+                                ? TextButton(
+                                    onPressed: null,
+                                    style: TextButton.styleFrom(
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      alignment: Alignment.centerRight,
+                                      disabledForegroundColor:
+                                          const Color(0xff3ca879),
+                                    ),
+                                    child: const Text('Current',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w700)),
+                                  )
+                                : TextButton(
+                                    onPressed: isRevoking ||
+                                            revokingAllAccountSessions
+                                        ? null
+                                        : () => _revokeAccountSession(session),
+                                    style: TextButton.styleFrom(
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      alignment: Alignment.centerRight,
+                                    ),
+                                    child: Text(
+                                        isRevoking ? 'Revoking…' : 'Revoke'),
+                                  ),
+                          ),
+                        ),
                       );
                     }),
                   ],
@@ -484,15 +529,24 @@ extension _AxAppViews on _AxAppStateMixin {
   Widget _profileSection({
     required String title,
     required Widget child,
+    Widget? trailing,
   }) =>
       Padding(
         padding: const EdgeInsets.only(bottom: 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style:
-                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(title,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 16)),
+                ),
+                if (trailing != null) trailing,
+              ],
+            ),
             const SizedBox(height: 10),
             child,
           ],

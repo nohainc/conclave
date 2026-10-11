@@ -291,6 +291,87 @@ class ProfileAdminApiClient {
     return [];
   }
 
+  Future<List<ProfileLabIssueReportReadModel>> fetchIssueReports({
+    String? status,
+    String? component,
+    String? errorCode,
+    String? workerTypeId,
+    DateTime? createdAfter,
+    DateTime? createdBefore,
+  }) async {
+    final query = <String, String>{
+      if (status != null) 'status': status,
+      if (component != null) 'component': component,
+      if (errorCode != null) 'errorCode': errorCode,
+      if (workerTypeId != null) 'workerTypeId': workerTypeId,
+      if (createdAfter != null) 'createdAfter': createdAfter.toUtc().toIso8601String(),
+      if (createdBefore != null) 'createdBefore': createdBefore.toUtc().toIso8601String(),
+    };
+    final result = await _request('GET', _api('/api/admin/issue-reports', query));
+    if (result is Map && result['reports'] is List) {
+      return _readModels(
+        result['reports'] as List,
+        ProfileLabIssueReportReadModel.fromJson,
+        'reports',
+      );
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> fetchIssueReport(String id) async {
+    final result = await _request(
+      'GET',
+      _api('/api/admin/issue-reports/${Uri.encodeComponent(id)}'),
+    );
+    if (result is Map) return Map<String, dynamic>.from(result);
+    throw StateError('Invalid issue report response');
+  }
+
+  Future<List<ProfileLabIssueReportGroupReadModel>> fetchIssueReportGroups() async {
+    final result = await _request('GET', _api('/api/admin/issue-reports/groups'));
+    if (result is Map && result['groups'] is List) {
+      return _readModels(
+        result['groups'] as List,
+        ProfileLabIssueReportGroupReadModel.fromJson,
+        'groups',
+      );
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> createIssueReportGroup({
+    required String label,
+    String? fingerprint,
+  }) async {
+    final result = await _request(
+      'POST',
+      _api('/api/admin/issue-reports/groups'),
+      body: {'label': label, if (fingerprint != null) 'fingerprint': fingerprint},
+    );
+    if (result is Map) return Map<String, dynamic>.from(result);
+    throw StateError('Invalid issue report group response');
+  }
+
+  Future<Map<String, dynamic>> updateIssueReport(
+    String id, {
+    String? status,
+    String? note,
+    String? groupId,
+    bool clearGroup = false,
+  }) async {
+    final result = await _request(
+      'PATCH',
+      _api('/api/admin/issue-reports/${Uri.encodeComponent(id)}'),
+      body: {
+        if (status != null) 'status': status,
+        if (note != null) 'note': note,
+        if (groupId != null || clearGroup) 'groupId': groupId,
+      },
+    );
+    if (result is Map) return Map<String, dynamic>.from(result);
+    throw StateError('Invalid issue report update response');
+  }
+
   /// Updates a draft release payload in Cloud with optimistic concurrency protection.
   Future<Map<String, dynamic>> updateDraft({
     required String profileDefinitionId,

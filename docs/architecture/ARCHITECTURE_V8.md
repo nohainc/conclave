@@ -63,6 +63,12 @@ surface.
 The v8 architecture guard checks that this contract remains present alongside
 the assignment path and schema invariants.
 
+Failure reporting follows the same trusted execution path. The Cloud issue
+reporting contract and D1/R2 storage model are defined in
+[`ISSUE_REPORTING_V1.md`](../specifications/ISSUE_REPORTING_V1.md); clients
+submit only a failed Work request reference and Cloud derives the report from
+authoritative execution records.
+
 ### 1.1 Canonical v8 terminology
 
 Use these terms for v8 architecture, implementation, tests, and operations:

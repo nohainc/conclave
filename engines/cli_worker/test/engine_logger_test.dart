@@ -30,6 +30,11 @@ void main() {
     expect(context['workerSessionId'], 'logical-session');
     expect(context.containsKey('nativeSessionId'), isFalse);
     expect(lines.single.contains('private'), isFalse);
+    final envelope = jsonDecode(lines.single) as Map<String, dynamic>;
+    expect(envelope['schemaVersion'], 1);
+    expect(envelope['component'], 'cli_worker_engine');
+    expect(envelope['operation'], 'engine');
+    expect(envelope['stage'], 'execute');
   });
 
   test('Engine logger redacts secrets and bounds diagnostic values', () {

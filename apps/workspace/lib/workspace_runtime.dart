@@ -27,6 +27,13 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
 }) async {
   final workerTrustPolicy = workspaceReleaseTrustPolicy();
   final workspacePaths = WorkspacePaths(config.dataDirectory);
+  WorkerDiagnosticStore diagnosticStoreForWorkerType(String workerTypeId) =>
+      WorkerDiagnosticStore(
+        directory: Directory(
+          '${workspacePaths.workerStateDirectory(workerTypeId).parent.path}'
+          '${Platform.pathSeparator}logs',
+        ),
+      );
   final secureCredentialStore =
       credentialStore ?? const PlatformSecureCredentialStore();
   final releaseTrustPolicy = workerTrustPolicy;
@@ -374,6 +381,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           assignmentHandler: (context) => workerSubsystem.execute(context),
           assignmentCancellationHandler: (assignmentId, reason) =>
               workerSubsystem.cancel(assignmentId, reason),
+          diagnosticStoreForWorkerType: diagnosticStoreForWorkerType,
           workerInventoryProvider: () async {
             final localWorkers = await localWorkerRegistry.list();
             return workerCatalogCoordinator?.inventoryForWorkers(
@@ -423,12 +431,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     workerCatalogCoordinator: workerCatalogCoordinator,
     cliWorkerEngineSupervisor: cliWorkerEngineSupervisor,
     workerStateDirectory: workspacePaths.workerStateDirectory,
-    profileDiagnosticStoreForWorker: (workerTypeId) => WorkerDiagnosticStore(
-      directory: Directory(
-        '${workspacePaths.workerStateDirectory(workerTypeId).parent.path}'
-        '${Platform.pathSeparator}logs',
-      ),
-    ),
+    profileDiagnosticStoreForWorker: diagnosticStoreForWorkerType,
   );
   workerSubsystem = WorkspaceWorkerSubsystem(
     registry: localWorkerRegistry,

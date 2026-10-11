@@ -10,6 +10,7 @@ import 'utils/profile_lab_messages.dart';
 import 'views/cloud_settings_dialog.dart';
 import 'views/workers_view.dart';
 import 'views/workspaces_view.dart';
+import 'views/issue_reports_view.dart';
 
 class ProfileLabApp extends StatefulWidget {
   const ProfileLabApp({super.key, required this.controller});
@@ -127,6 +128,13 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                         c.selectedArea == LabArea.workspaces,
                                     onTap: () => c.setArea(LabArea.workspaces),
                                   ),
+                                  if (c.labAccess?.issueSupport == true)
+                                    _AreaButton(
+                                      label: 'Issues',
+                                      icon: Icons.bug_report_outlined,
+                                      selected: c.selectedArea == LabArea.issues,
+                                      onTap: () => c.setArea(LabArea.issues),
+                                    ),
                                   _AreaButton(
                                     label: 'Activity',
                                     icon: Icons.history_edu,
@@ -348,6 +356,8 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                               LabArea.workers => WorkersView(controller: c),
                               LabArea.workspaces =>
                                 WorkspacesView(controller: c),
+                              LabArea.issues =>
+                                IssueReportsView(controller: c),
                               LabArea.audit => AuditView(controller: c),
                             },
                     ),

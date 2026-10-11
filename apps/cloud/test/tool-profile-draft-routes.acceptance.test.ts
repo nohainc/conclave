@@ -356,6 +356,7 @@ describe("Tool Profile Cloud draft route acceptance", () => {
       expect(access.permissions).toEqual({
         profilesAdmin: true,
         releaseManager: true,
+        issueSupport: false,
       });
       expect(access).not.toHaveProperty("releaseMode");
       expect(access.signer).toEqual({

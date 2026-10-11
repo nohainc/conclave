@@ -109,6 +109,18 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
   Future<void> cancelWorkRequest({required String workRequestId}) async {}
 
   @override
+  Future<AxIssueReport?> loadIssueReport({
+    required String requestId,
+    String? assignmentId,
+  }) async =>
+      null;
+
+  @override
+  Future<AxIssueReport> reportIssue({required String requestId}) async =>
+      throw UnimplementedError(
+          'Work Request issue reporting fixture is not configured');
+
+  @override
   Future<AxSession> loadSession() async => AxSession(
         authenticated: authenticated,
         sessionId: authenticated ? 'fixture-session' : null,

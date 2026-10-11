@@ -589,6 +589,16 @@ reads retain cached UI. Hydration cannot overwrite a newer value or a pending
 Cloud read. The authenticated user, generation, and query fences reject late
 restoration after logout or an account change.
 
+The Profile security view starts its linked-account and active-session read as
+soon as the authenticated profile route is known and deduplicates overlapping
+loads. Session actions preserve the current session; **Revoke all** only
+revokes other active sessions. Better Auth account linking permits more than
+one trusted provider, so the view keeps the linked-method list while omitting
+provider account identifiers from the UI. Better Auth's internal `credentials`
+account is also omitted from linked methods. The current session is rendered as
+an inert green action-shaped status so it lines up with revoke actions without
+being clickable.
+
 Persistence coalesces writes and saves only the most recently used 20 Thread
 histories, at most 50 confirmed messages and requests per collection. This bounds
 the persisted history independently of the Phase 19 RAM retention policy. Work cursors
@@ -681,6 +691,10 @@ stale cached data after read failure. It is independent of the WebSocket notice,
 so socket events cannot hide an offline/cache-stale warning. Cached content
 remains visible throughout. Browser online status is only a connectivity hint;
 HTTP failures still remain on the affected query and retain its previous value.
+Cloud execution summary notices use the same transient banner and wait three
+seconds before appearing, including completed and failed outcomes. Copying a
+user-authored Chat or Work message writes to the clipboard without a second
+confirmation toast.
 
 
 ## Phase 21: narrow APIs and conditional stable reads
@@ -849,6 +863,12 @@ Workspaces have no dedicated sidebar or collapsed-rail buttons. It has no Space/
 newest version per stable catalog ID; historical definitions remain available to
 execution history. Cards combine definitions with typed user preferences and
 owned Worker presentation metadata, including unavailable selections.
+
+The AX presentation currently exposes only the implemented `chat` and
+`direct`/Work workflows to regular accounts. Definitions for the remaining
+catalog entries stay available to the `vitalii@nohainc.com` preview account so
+they can be exercised before release. This is a presentation filter; Cloud
+continues to own execution authorization and validation.
 
 `AxStore.workflowConfigurations` owns the session query
 `['user-workflow-configurations']`. The page uses cache-first ensures on entry:

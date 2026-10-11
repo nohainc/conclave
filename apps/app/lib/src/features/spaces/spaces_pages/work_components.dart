@@ -104,7 +104,10 @@ class _WorkComposer extends StatelessWidget {
     required this.hasOlder,
     required this.loadingOlder,
     required this.onLoadOlder,
-    required this.onShowRunDetails,
+    required this.onReportIssue,
+    required this.reportedIssues,
+    required this.reportingIssueIds,
+    required this.issueReportErrors,
     required this.onRetryStep,
     required this.onCancelRun,
     required this.onWorkflowChanged,
@@ -139,7 +142,10 @@ class _WorkComposer extends StatelessWidget {
   final bool hasOlder;
   final bool loadingOlder;
   final Future<void> Function() onLoadOlder;
-  final ValueChanged<String>? onShowRunDetails;
+  final Future<void> Function(String)? onReportIssue;
+  final Map<String, AxIssueReport> reportedIssues;
+  final Set<String> reportingIssueIds;
+  final Map<String, String> issueReportErrors;
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
@@ -238,9 +244,12 @@ class _WorkComposer extends StatelessWidget {
                   currentUserId: currentUserId,
                   currentUserName: currentUserName,
                   workflowCatalog: workflowCatalog,
-                  onShowRunDetails: localWorkProgress.containsKey(request.id)
+                  onReportIssue: localWorkProgress.containsKey(request.id)
                       ? null
-                      : onShowRunDetails,
+                      : onReportIssue,
+                  reportedIssue: reportedIssues[request.id],
+                  reportingIssue: reportingIssueIds.contains(request.id),
+                  issueReportError: issueReportErrors[request.id],
                   onRetryStep: localWorkProgress.containsKey(request.id)
                       ? null
                       : onRetryStep,
@@ -558,7 +567,10 @@ class _WorkTimelineCard extends StatelessWidget {
     required this.currentUserId,
     required this.currentUserName,
     required this.workflowCatalog,
-    required this.onShowRunDetails,
+    required this.onReportIssue,
+    required this.reportedIssue,
+    required this.reportingIssue,
+    required this.issueReportError,
     required this.onRetryStep,
     required this.onCancelRun,
   });
@@ -568,7 +580,10 @@ class _WorkTimelineCard extends StatelessWidget {
   final String? currentUserId;
   final String? currentUserName;
   final List<AxBuiltinWorkflow> workflowCatalog;
-  final ValueChanged<String>? onShowRunDetails;
+  final Future<void> Function(String)? onReportIssue;
+  final AxIssueReport? reportedIssue;
+  final bool reportingIssue;
+  final String? issueReportError;
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
   final Future<void> Function(String)? onCancelRun;
 
@@ -830,29 +845,14 @@ class _WorkTimelineCard extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                           ],
-                          Tooltip(
-                            message: 'Copy Markdown',
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(4),
-                              onTap: () {
-                                Clipboard.setData(
-                                    ClipboardData(text: request.prompt));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Prompt copied to clipboard'),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.all(2),
-                                child: Icon(
-                                  Icons.copy_rounded,
-                                  size: 14,
-                                  color: metaColor,
-                                ),
-                              ),
-                            ),
+                          _AnimatedMessageAction(
+                            tooltip: 'Copy Markdown',
+                            icon: Icons.copy_rounded,
+                            color: metaColor,
+                            onTap: () {
+                              Clipboard.setData(
+                                  ClipboardData(text: request.prompt));
+                            },
                           ),
                         ].orderedForMessage(isOwnRequest),
                       ),
@@ -921,9 +921,6 @@ class _WorkTimelineCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
                       Builder(builder: (context) {
-                        final failedStep = request.steps
-                            .where((step) => step.status == 'failed')
-                            .firstOrNull;
                         final message = error?.isNotEmpty == true
                             ? error!
                             : response?.isNotEmpty == true
@@ -944,7 +941,7 @@ class _WorkTimelineCard extends StatelessWidget {
                         Widget compactAction({
                           required String tooltip,
                           required IconData icon,
-                          required VoidCallback onPressed,
+                          required VoidCallback? onPressed,
                         }) =>
                             Tooltip(
                               message: tooltip,
@@ -993,22 +990,6 @@ class _WorkTimelineCard extends StatelessWidget {
                                       ));
                                     },
                                   ),
-                                if (onShowRunDetails != null)
-                                  compactAction(
-                                    tooltip: 'View request details',
-                                    icon: Icons.info_outline,
-                                    onPressed: () =>
-                                        onShowRunDetails!(request.id),
-                                  ),
-                                if (request.status == 'failed' &&
-                                    failedStep != null &&
-                                    onRetryStep != null)
-                                  compactAction(
-                                    tooltip: 'Retry request',
-                                    icon: Icons.refresh,
-                                    onPressed: () =>
-                                        onRetryStep!(request.id, failedStep),
-                                  ),
                                 if ((request.status == 'queued' ||
                                         request.status == 'running') &&
                                     onCancelRun != null)
@@ -1017,6 +998,33 @@ class _WorkTimelineCard extends StatelessWidget {
                                     icon: Icons.cancel_outlined,
                                     onPressed: () => onCancelRun!(request.id),
                                   ),
+                                if (request.status == 'failed' &&
+                                    onReportIssue != null)
+                                  if (reportedIssue != null)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.check_circle_outline,
+                                            size: 15, color: colors.primary),
+                                        const SizedBox(width: 3),
+                                        Text('Reported',
+                                            style: TextStyle(
+                                                fontSize: 11,
+                                                color: colors.primary)),
+                                      ],
+                                    )
+                                  else
+                                    compactAction(
+                                      tooltip: reportingIssue
+                                          ? 'Sending issue report'
+                                          : 'Report issue — sends sanitized technical diagnostics only',
+                                      icon: reportingIssue
+                                          ? Icons.hourglass_top_rounded
+                                          : Icons.flag_outlined,
+                                      onPressed: reportingIssue
+                                          ? null
+                                          : () => onReportIssue!(request.id),
+                                    ),
                                 const SizedBox(width: 8),
                                 if (timeLabel.isNotEmpty)
                                   Text(
@@ -1028,6 +1036,26 @@ class _WorkTimelineCard extends StatelessWidget {
                                   ),
                               ],
                             ),
+                            if (reportedIssue != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Thanks — sanitized technical diagnostics were sent.',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: metaColor,
+                                ),
+                              ),
+                            ],
+                            if (issueReportError != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                "Couldn't send the report. Try again.",
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: colors.error,
+                                ),
+                              ),
+                            ],
                           ],
                         );
                       }),
@@ -1039,210 +1067,6 @@ class _WorkTimelineCard extends StatelessWidget {
           },
         ),
       ],
-    );
-  }
-}
-
-class _WorkRequestDetailsSheet extends StatelessWidget {
-  const _WorkRequestDetailsSheet({
-    required this.details,
-    required this.onRetryStep,
-    required this.onCancelRun,
-  });
-
-  final AxWorkRequestStatus details;
-  final Future<void> Function(AxWorkRequestStep step) onRetryStep;
-  final Future<void> Function() onCancelRun;
-
-  String _workerName(AxWorkRequestStep step) =>
-      step.workerDisplayName ?? 'Worker';
-
-  String _timestamp(String? value) {
-    if (value == null) return '—';
-    final parsed = DateTime.tryParse(value)?.toLocal();
-    if (parsed == null) return '—';
-    return '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')} '
-        '${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}:${parsed.second.toString().padLeft(2, '0')}';
-  }
-
-  String _duration(int? milliseconds) {
-    if (milliseconds == null) return '—';
-    final seconds = milliseconds ~/ 1000;
-    final minutes = seconds ~/ 60;
-    final remainder = seconds % 60;
-    return minutes > 0 ? '${minutes}m ${remainder}s' : '${remainder}s';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.88,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text('Request details',
-                      style: Theme.of(context).textTheme.titleLarge),
-                ),
-                IconButton(
-                  tooltip: 'Close',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-              children: [
-                Text(
-                  'Status · ${details.status}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                Builder(builder: (context) {
-                  final rawDetailName = details.requestedByName?.trim();
-                  final displayDetailName = (rawDetailName == null ||
-                          rawDetailName.isEmpty ||
-                          rawDetailName == details.requestedByUserId ||
-                          rawDetailName.startsWith('usr_'))
-                      ? (details.requestedByUserId?.isNotEmpty == true
-                          ? 'Team member'
-                          : null)
-                      : rawDetailName;
-                  if (displayDetailName == null) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text('Requested by $displayDetailName'),
-                  );
-                }),
-                const SizedBox(height: 16),
-                Text('Original request',
-                    style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 6),
-                ConclaveMarkdownBody(
-                    data: details.originalRequest?.isNotEmpty == true
-                        ? details.originalRequest!
-                        : 'No request text was recorded.'),
-                const SizedBox(height: 20),
-                for (final turn in details.turns.where((turn) => !details.steps
-                    .any(
-                        (step) => step.assignmentId == turn.assignmentId))) ...[
-                  Card(
-                      child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                  'Earlier attempt · ${turn.workerDisplayName}',
-                                  style:
-                                      Theme.of(context).textTheme.titleMedium),
-                              Text(
-                                  '${turn.modelId == null ? 'Default model' : turn.modelName ?? _modelDisplayName(turn.modelId)} · ${turn.effort == null ? 'Default effort' : executionEffortDisplayName(turn.effort)} · ${turn.status}'),
-                              if (turn.resultText?.isNotEmpty == true) ...[
-                                const SizedBox(height: 8),
-                                ConclaveMarkdownBody(data: turn.resultText!),
-                              ],
-                            ],
-                          ))),
-                ],
-                for (final step in details.steps) ...[
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(_workerName(step),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium),
-                              ),
-                              Text(step.status),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            [
-                              if (step.model?.isNotEmpty == true)
-                                step.reasoningEffort?.isNotEmpty == true
-                                    ? '${step.modelName ?? _modelDisplayName(step.model)} (${executionEffortDisplayName(step.reasoningEffort).toLowerCase()})'
-                                    : step.modelName ??
-                                        _modelDisplayName(step.model)
-                              else if (step.reasoningEffort?.isNotEmpty == true)
-                                'Reasoning: ${executionEffortDisplayName(step.reasoningEffort).toLowerCase()}',
-                            ].join(' · '),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 18,
-                            runSpacing: 6,
-                            children: [
-                              Text('Started · ${_timestamp(step.startedAt)}'),
-                              Text('Ended · ${_timestamp(step.completedAt)}'),
-                              Text('Duration · ${_duration(step.elapsedMs)}'),
-                            ],
-                          ),
-                          if (step.resultText?.isNotEmpty == true) ...[
-                            const Divider(height: 24),
-                            Text('Result',
-                                style: Theme.of(context).textTheme.titleSmall),
-                            const SizedBox(height: 6),
-                            ConclaveMarkdownBody(data: step.resultText!),
-                          ] else if (step.status == 'failed') ...[
-                            const Divider(height: 24),
-                            SelectableText(
-                              _executionFailureMessage(
-                                  step.errorCode ?? details.errorCode),
-                              style: ConclaveMessageTypography.fromTheme(
-                                      Theme.of(context))
-                                  .copyWith(color: colors.error),
-                            ),
-                            if (details.status == 'failed') ...[
-                              const SizedBox(height: 12),
-                              FilledButton.icon(
-                                onPressed: () => onRetryStep(step),
-                                icon: const Icon(Icons.refresh),
-                                label: const Text('Retry request'),
-                              ),
-                            ],
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-                if (details.status == 'failed' && details.steps.isEmpty) ...[
-                  const SizedBox(height: 12),
-                  SelectableText(_executionFailureMessage(details.errorCode),
-                      style: TextStyle(color: colors.error)),
-                ],
-                if (details.status == 'failed' ||
-                    details.status == 'queued' ||
-                    details.status == 'running') ...[
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: onCancelRun,
-                    icon: const Icon(Icons.cancel_outlined),
-                    label: const Text('Cancel request'),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1468,58 +1292,31 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                         if (isMe &&
                             widget.onDelete != null &&
                             !widget.item.id.startsWith('temp-')) ...[
-                          Tooltip(
-                            message: 'Delete message',
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(4),
-                              onTap: () => _confirmDelete(context),
-                              child: Padding(
-                                padding: const EdgeInsets.all(2),
-                                child: Icon(
-                                  Icons.delete_outline_rounded,
-                                  size: 14,
-                                  color: metaColor,
-                                ),
-                              ),
-                            ),
+                          _AnimatedMessageAction(
+                            tooltip: 'Delete message',
+                            icon: Icons.delete_outline_rounded,
+                            color: metaColor,
+                            onTap: () => _confirmDelete(context),
                           ),
                           const SizedBox(width: 6),
                         ],
                         if (!widget.item.id.startsWith('temp-')) ...[
-                          Tooltip(
-                            message: 'Edit message',
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(4),
-                              onTap: () => setState(() {
-                                _editController.text = widget.item.text;
-                                _isEditing = true;
-                              }),
-                              child: Padding(
-                                padding: const EdgeInsets.all(2),
-                                child: Icon(
-                                  Icons.edit_outlined,
-                                  size: 14,
-                                  color: metaColor,
-                                ),
-                              ),
-                            ),
+                          _AnimatedMessageAction(
+                            tooltip: 'Edit message',
+                            icon: Icons.edit_outlined,
+                            color: metaColor,
+                            onTap: () => setState(() {
+                              _editController.text = widget.item.text;
+                              _isEditing = true;
+                            }),
                           ),
                           const SizedBox(width: 6),
                         ],
-                        Tooltip(
-                          message: 'Copy Markdown',
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(4),
-                            onTap: widget.onCopy,
-                            child: Padding(
-                              padding: const EdgeInsets.all(2),
-                              child: Icon(
-                                Icons.copy_rounded,
-                                size: 14,
-                                color: metaColor,
-                              ),
-                            ),
-                          ),
+                        _AnimatedMessageAction(
+                          tooltip: 'Copy Markdown',
+                          icon: Icons.copy_rounded,
+                          color: metaColor,
+                          onTap: widget.onCopy,
                         ),
                       ].orderedForMessage(isMe),
                     ),
@@ -1532,6 +1329,64 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
       },
     );
   }
+}
+
+class _AnimatedMessageAction extends StatefulWidget {
+  const _AnimatedMessageAction({
+    required this.tooltip,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  State<_AnimatedMessageAction> createState() => _AnimatedMessageActionState();
+}
+
+class _AnimatedMessageActionState extends State<_AnimatedMessageAction> {
+  Timer? _releaseTimer;
+  bool _pressed = false;
+
+  @override
+  void dispose() {
+    _releaseTimer?.cancel();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    _releaseTimer?.cancel();
+    setState(() => _pressed = true);
+    widget.onTap();
+    _releaseTimer = Timer(const Duration(milliseconds: 160), () {
+      if (mounted) setState(() => _pressed = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: widget.tooltip,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(4),
+            onTap: _handleTap,
+            child: Padding(
+              padding: const EdgeInsets.all(2),
+              child: AnimatedScale(
+                scale: _pressed ? 0.78 : 1,
+                duration: const Duration(milliseconds: 120),
+                curve: Curves.easeOutBack,
+                child: Icon(widget.icon, size: 14, color: widget.color),
+              ),
+            ),
+          ),
+        ),
+      );
 }
 
 // Own-message metadata follows reading order toward the right edge.

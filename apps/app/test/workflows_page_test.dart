@@ -181,6 +181,24 @@ class MemoryAxBrowserNavigation implements AxBrowserNavigation {
 }
 
 void main() {
+  testWidgets('regular users see only implemented workflows', (tester) async {
+    final source = WorkflowSource();
+    final engine = AxSyncEngine();
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: WorkflowsPage(
+                catalogs: AxSessionCatalogs(source, engine: engine),
+                configurations:
+                    AxWorkflowConfigurations(source, engine: engine)))));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('workflow-chat')), findsOneWidget);
+    expect(find.byKey(const ValueKey('workflow-direct')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('workflow-implement_verify')), findsNothing);
+    expect(find.text('Implement & Verify'), findsNothing);
+  });
+
   testWidgets(
       'Workspace switch warns, cancellation preserves preferences, confirmation resets and filters Workers',
       (tester) async {
@@ -330,7 +348,8 @@ void main() {
                 child: WorkflowsPage(
                     catalogs: AxSessionCatalogs(source, engine: engine),
                     configurations:
-                        AxWorkflowConfigurations(source, engine: engine))))));
+                        AxWorkflowConfigurations(source, engine: engine),
+                    viewerEmail: 'vitalii@nohainc.com')))));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('workflow-status-chat')), findsOneWidget);
@@ -366,7 +385,8 @@ void main() {
             body: SingleChildScrollView(
                 child: WorkflowsPage(
                     catalogs: AxSessionCatalogs(source, engine: engine),
-                    configurations: cache)))));
+                    configurations: cache,
+                    viewerEmail: 'vitalii@nohainc.com')))));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('workflow-default-chat')), findsOneWidget);
     final defaultDropdown = tester.widget<DropdownButton<String>>(
@@ -482,8 +502,10 @@ void main() {
         theme: ConclaveBrand.lightTheme(),
         home: Scaffold(
             body: SingleChildScrollView(
-                child:
-                    WorkflowsPage(catalogs: catalogs, configurations: cache))));
+                child: WorkflowsPage(
+                    catalogs: catalogs,
+                    configurations: cache,
+                    viewerEmail: 'vitalii@nohainc.com'))));
     await tester.pumpWidget(page());
     await tester.pumpAndSettle();
     expect(find.text('Direct'), findsNothing);

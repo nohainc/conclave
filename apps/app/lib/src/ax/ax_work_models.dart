@@ -581,6 +581,34 @@ class AxWorkRequest {
   }
 }
 
+/// Safe public state for a user-submitted issue report.
+class AxIssueReport {
+  const AxIssueReport({
+    required this.id,
+    required this.publicReference,
+    required this.status,
+    required this.diagnosticState,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory AxIssueReport.fromJson(Map<String, dynamic> json) => AxIssueReport(
+        id: json['id']?.toString() ?? '',
+        publicReference: json['publicReference']?.toString() ?? '',
+        status: json['status']?.toString() ?? 'open',
+        diagnosticState: json['diagnosticState']?.toString() ?? 'partial',
+        createdAt: json['createdAt']?.toString() ?? '',
+        updatedAt: json['updatedAt']?.toString() ?? '',
+      );
+
+  final String id;
+  final String publicReference;
+  final String status;
+  final String diagnosticState;
+  final String createdAt;
+  final String updatedAt;
+}
+
 /// Public metadata used to show which desktop client requested browser approval.
 class AxDesktopAuthIntentStatus {
   const AxDesktopAuthIntentStatus({
@@ -810,6 +838,13 @@ abstract interface class AxDataSource {
     required String workRequestId,
   }) async =>
       throw UnimplementedError('Work Request cancellation is not available');
+  Future<AxIssueReport?> loadIssueReport({
+    required String requestId,
+    String? assignmentId,
+  }) async =>
+      null;
+  Future<AxIssueReport> reportIssue({required String requestId}) async =>
+      throw UnimplementedError('Issue reporting is not available');
   Future<AxWorkRequestPage> loadThreadWorkRequestPage({
     required String threadId,
     int limit = 50,

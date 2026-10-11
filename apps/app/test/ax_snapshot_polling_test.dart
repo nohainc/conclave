@@ -246,10 +246,43 @@ void main() {
     });
     await tester.pump();
     expect(find.text(running), findsNothing);
-    expect(find.text('Request completed'), findsWidgets);
+    final banner =
+        find.byKey(const ValueKey('floating-realtime-status-banner'));
+    expect(
+        find.descendant(of: banner, matching: find.text('Request completed')),
+        findsNothing);
 
     await tester.pump(const Duration(seconds: 3));
     expect(find.text(running), findsNothing);
+    expect(
+        find.descendant(of: banner, matching: find.text('Request completed')),
+        findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('failed Cloud notices wait before appearing', (tester) async {
+    final source = PollingSource();
+    final realtime = TestRealtime();
+    await mount(tester, source, realtime);
+
+    const failed = 'Request failed';
+    realtime.controller.add({
+      'type': 'assignment.failed',
+      'workspaceId': 'workspace',
+      'payload': {'summary': failed},
+    });
+    await tester.pump();
+    final banner =
+        find.byKey(const ValueKey('floating-realtime-status-banner'));
+    expect(
+        find.descendant(of: banner, matching: find.text(failed)), findsNothing);
+
+    await tester.pump(const Duration(seconds: 2));
+    expect(
+        find.descendant(of: banner, matching: find.text(failed)), findsNothing);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.descendant(of: banner, matching: find.text(failed)),
+        findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });
 }

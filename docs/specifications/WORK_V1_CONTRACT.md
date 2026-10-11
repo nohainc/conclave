@@ -441,6 +441,10 @@ selected failed Step and its remaining downstream Steps execute again. A retry
 creates a new Run record and retains prior assignment records for diagnostics.
 There is no automatic Verify-to-Implement feedback loop.
 
+The Work tab's Worker response bubble does not display an inline retry icon;
+removing that affordance does not change the retry API or the stored execution
+and diagnostic records described above.
+
 An Implement retry requires an explicit session choice. Known pre-execution
 failures such as provider unavailability, authentication, quota, missing CLI,
 unsupported model/version, and permission denial recommend resuming the previous

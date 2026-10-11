@@ -586,6 +586,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
               left: 20,
               right: 20,
               child: _FloatingRealtimeStatusBanner(
+                key: const ValueKey('floating-realtime-status-banner'),
                 realtimeStatus: store.realtimeStatus,
                 lifecycleNotice: store.lifecycleNotice,
                 realtimeNotice: realtimeNotice,
@@ -598,6 +599,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
 
 class _FloatingRealtimeStatusBanner extends StatefulWidget {
   const _FloatingRealtimeStatusBanner({
+    super.key,
     required this.realtimeStatus,
     required this.lifecycleNotice,
     this.realtimeNotice,
@@ -615,10 +617,13 @@ class _FloatingRealtimeStatusBanner extends StatefulWidget {
 class _FloatingRealtimeStatusBannerState
     extends State<_FloatingRealtimeStatusBanner> {
   static const _connectionWarningDelay = Duration(seconds: 3);
+  static const _noticeDelay = Duration(seconds: 3);
   Timer? _dismissTimer;
   Timer? _pendingConnectionWarning;
+  Timer? _pendingNotice;
   bool _visible = false;
   String? _lastNoticeKey;
+  String? _visibleNotice;
 
   @override
   void initState() {
@@ -650,6 +655,7 @@ class _FloatingRealtimeStatusBannerState
     widget.lifecycleNotice.removeListener(_onNoticeChanged);
     _dismissTimer?.cancel();
     _pendingConnectionWarning?.cancel();
+    _pendingNotice?.cancel();
     super.dispose();
   }
 
@@ -662,8 +668,12 @@ class _FloatingRealtimeStatusBannerState
     if (!isActive || noticeText == null || noticeText.isEmpty) {
       _dismissTimer?.cancel();
       _pendingConnectionWarning?.cancel();
+      _pendingNotice?.cancel();
       if (_visible) {
-        setState(() => _visible = false);
+        setState(() {
+          _visible = false;
+          _visibleNotice = null;
+        });
       }
       return;
     }
@@ -676,8 +686,12 @@ class _FloatingRealtimeStatusBannerState
     if (isConnectedNotice) {
       _dismissTimer?.cancel();
       _pendingConnectionWarning?.cancel();
+      _pendingNotice?.cancel();
       if (_visible) {
-        setState(() => _visible = false);
+        setState(() {
+          _visible = false;
+          _visibleNotice = null;
+        });
       }
       _lastNoticeKey = '$isActive:$noticeText';
       return;
@@ -693,8 +707,12 @@ class _FloatingRealtimeStatusBannerState
       _lastNoticeKey = key;
       _dismissTimer?.cancel();
       _pendingConnectionWarning?.cancel();
+      _pendingNotice?.cancel();
       if (_visible) {
-        setState(() => _visible = false);
+        setState(() {
+          _visible = false;
+          _visibleNotice = null;
+        });
       }
       _pendingConnectionWarning = Timer(_connectionWarningDelay, () {
         _pendingConnectionWarning = null;
@@ -703,11 +721,13 @@ class _FloatingRealtimeStatusBannerState
         final currentLifecycle = widget.lifecycleNotice.value;
         final currentNotice =
             currentLifecycle ?? widget.realtimeNotice ?? currentStatus.$2;
-        if (currentStatus.$1 &&
+        final currentKey = '$isActive:${currentNotice ?? ''}';
+        if (currentKey == key &&
+            currentStatus.$1 &&
             currentLifecycle == null &&
             currentNotice != null &&
             currentNotice.isNotEmpty) {
-          _showNotice();
+          _showNotice(currentNotice);
         }
       });
       return;
@@ -716,19 +736,44 @@ class _FloatingRealtimeStatusBannerState
     _pendingConnectionWarning?.cancel();
 
     final key = '$isActive:$noticeText';
-    if (key != _lastNoticeKey || !_visible) {
-      _lastNoticeKey = key;
-      _dismissTimer?.cancel();
-      _showNotice();
+    if (key == _lastNoticeKey &&
+        (_pendingNotice?.isActive == true || _visible)) {
+      return;
     }
+    _lastNoticeKey = key;
+    _dismissTimer?.cancel();
+    _pendingNotice?.cancel();
+    if (_visible) {
+      setState(() {
+        _visible = false;
+        _visibleNotice = null;
+      });
+    }
+    _pendingNotice = Timer(_noticeDelay, () {
+      _pendingNotice = null;
+      if (!mounted) return;
+      final currentStatus = widget.realtimeStatus.value;
+      final currentLifecycle = widget.lifecycleNotice.value;
+      final currentNotice =
+          currentLifecycle ?? widget.realtimeNotice ?? currentStatus.$2;
+      if (currentNotice == noticeText) {
+        _showNotice(noticeText);
+      }
+    });
   }
 
-  void _showNotice() {
+  void _showNotice(String noticeText) {
     if (!mounted) return;
-    setState(() => _visible = true);
+    setState(() {
+      _visible = true;
+      _visibleNotice = noticeText;
+    });
     _dismissTimer = Timer(const Duration(seconds: 1), () {
       if (mounted) {
-        setState(() => _visible = false);
+        setState(() {
+          _visible = false;
+          _visibleNotice = null;
+        });
       }
     });
   }
@@ -737,7 +782,8 @@ class _FloatingRealtimeStatusBannerState
   Widget build(BuildContext context) {
     final status = widget.realtimeStatus.value;
     final lifecycle = widget.lifecycleNotice.value;
-    final noticeText = lifecycle ??
+    final noticeText = _visibleNotice ??
+        lifecycle ??
         widget.realtimeNotice ??
         status.$2 ??
         'Live updates are reconnecting.';

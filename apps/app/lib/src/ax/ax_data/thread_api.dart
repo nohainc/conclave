@@ -446,6 +446,44 @@ mixin _ThreadApi on _AxApiClientCore {
   }
 
   @override
+  Future<AxIssueReport?> loadIssueReport({
+    required String requestId,
+    String? assignmentId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/issue-reports').replace(queryParameters: {
+      'requestId': requestId,
+      if (assignmentId != null && assignmentId.isNotEmpty)
+        'assignmentId': assignmentId,
+    });
+    final body = await _getJson(uri);
+    final report = body['report'];
+    return report is Map
+        ? AxIssueReport.fromJson(Map<String, dynamic>.from(report))
+        : null;
+  }
+
+  @override
+  Future<AxIssueReport> reportIssue({required String requestId}) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/issue-reports'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({'requestId': requestId}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException(
+        "Couldn't send the report. Try again.",
+        statusCode: response.statusCode,
+      );
+    }
+    final decoded = jsonDecode(response.body);
+    final report = decoded is Map ? decoded['report'] : null;
+    if (report is! Map) {
+      throw const AxApiException('Issue report response is malformed');
+    }
+    return AxIssueReport.fromJson(Map<String, dynamic>.from(report));
+  }
+
+  @override
   Future<AxWorkRequestPage> loadThreadWorkRequestPage(
       {required String threadId,
       int limit = 50,

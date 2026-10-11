@@ -197,6 +197,69 @@ export async function routeWorkerRequest(
     if (request.method === "GET" && url.pathname === "/api/session") {
       return await handlers.handleSession!(request, env, ctx);
     }
+    if (request.method === "POST" && url.pathname === "/api/issue-reports") {
+      return await handlers.handleCreateIssueReport!(request, env, ctx);
+    }
+    if (request.method === "GET" && url.pathname === "/api/issue-reports") {
+      return await handlers.handleGetIssueReportForRequest!(request, env, ctx);
+    }
+    const issueReportMatch = url.pathname.match(/^\/api\/issue-reports\/([^/]+)$/);
+    if (request.method === "GET" && issueReportMatch?.[1]) {
+      return await handlers.handleGetIssueReport!(
+        request,
+        env,
+        decodeURIComponent(issueReportMatch[1]),
+        ctx,
+      );
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/issue-reports"
+    ) {
+      return await handlers.handleListAdminIssueReports!(request, env, ctx);
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/issue-reports/groups"
+    ) {
+      return await handlers.handleListAdminIssueReportGroups!(request, env, ctx);
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/admin/issue-reports/groups"
+    ) {
+      return await handlers.handleCreateAdminIssueReportGroup!(request, env, ctx);
+    }
+    const adminIssueReportGroupMatch = url.pathname.match(
+      /^\/api\/admin\/issue-reports\/groups\/([^/]+)$/,
+    );
+    if (adminIssueReportGroupMatch?.[1] && request.method === "GET") {
+      return await handlers.handleGetAdminIssueReportGroup!(
+        request,
+        env,
+        decodeURIComponent(adminIssueReportGroupMatch[1]),
+        ctx,
+      );
+    }
+    const adminIssueReportMatch = url.pathname.match(
+      /^\/api\/admin\/issue-reports\/([^/]+)$/,
+    );
+    if (adminIssueReportMatch?.[1] && request.method === "GET") {
+      return await handlers.handleGetAdminIssueReport!(
+        request,
+        env,
+        decodeURIComponent(adminIssueReportMatch[1]),
+        ctx,
+      );
+    }
+    if (adminIssueReportMatch?.[1] && request.method === "PATCH") {
+      return await handlers.handlePatchAdminIssueReport!(
+        request,
+        env,
+        decodeURIComponent(adminIssueReportMatch[1]),
+        ctx,
+      );
+    }
     if (request.method === "POST" && url.pathname === "/api/session/logout") {
       return await handlers.handleSessionLogout!(request, env, ctx);
     }

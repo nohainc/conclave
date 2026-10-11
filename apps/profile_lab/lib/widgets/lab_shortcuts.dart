@@ -61,6 +61,8 @@ class _LabShortcutsState extends State<LabShortcuts> {
     switch (c.selectedArea) {
       case LabArea.workspaces:
         if (!c.isLoadingWorkspaces) _perform(c.fetchWorkspaceChannels);
+      case LabArea.issues:
+        if (!c.isLoadingIssueReports) _perform(c.fetchIssueReports);
       case LabArea.audit:
         if (!c.isLoadingAudit) _perform(() => c.fetchCloudAudit());
       case LabArea.workers:

@@ -156,14 +156,7 @@ void main() {
       ]) {
         expect(find.textContaining(label), findsNothing);
       }
-      await tester.tap(find.byTooltip('View request details'));
-      await tester.pumpAndSettle();
-      expect(find.text('Request details'), findsOneWidget);
-      expect(find.text('Run details'), findsNothing);
-      expect(find.text('Implement'), findsNothing);
-      expect(find.text('Step 1/1'), findsNothing);
-      expect(find.textContaining('internal-workflow-run'), findsNothing);
-      expect(find.text('ChatGPT'), findsWidgets);
+      expect(find.byTooltip('Report issue'), findsNothing);
     });
   }
 
@@ -227,9 +220,6 @@ void main() {
             : 'Your request could not be completed. Please retry.';
         expect(find.text(friendly), findsOneWidget);
         expect(find.textContaining('C123'), findsNothing);
-        await tester.tap(find.byTooltip('View request details'));
-        await tester.pumpAndSettle();
-        expect(find.text(friendly), findsWidgets);
         for (final hidden in [
           raw,
           code,
@@ -460,10 +450,6 @@ void main() {
     expect(options.map((item) => item.value), [
       'chat:v1',
       'direct:v2',
-      'research:v1',
-      'plan_implement:v1',
-      'implement_verify:v1',
-      'full_cycle:v1',
     ]);
     expect(
         options
@@ -473,10 +459,6 @@ void main() {
         [
           'Chat',
           'Work',
-          'Research',
-          'Plan & Implement',
-          'Implement & Verify',
-          'Full Cycle',
         ]);
     expect(find.text('Direct'), findsNothing);
     await tester.tap(find.byWidgetPredicate((widget) =>
@@ -1033,6 +1015,17 @@ void main() {
         lessThan(tester.getTopLeft(find.byTooltip('Edit message')).dx));
     expect(tester.getTopLeft(find.byTooltip('Edit message')).dx,
         lessThan(tester.getTopLeft(find.byTooltip('Copy Markdown')).dx));
+    for (final tooltip in [
+      'Delete message',
+      'Edit message',
+      'Copy Markdown',
+    ]) {
+      expect(
+          find.descendant(
+              of: find.byTooltip(tooltip),
+              matching: find.byType(AnimatedScale)),
+          findsOneWidget);
+    }
     await tester.tap(find.byTooltip('Edit message'));
     await tester.pumpAndSettle();
     expect(
@@ -1106,10 +1099,14 @@ void main() {
     await tester.pumpAndSettle();
     final copies = find.byTooltip('Copy Markdown');
     expect(copies, findsNWidgets(2));
+    expect(
+        find.descendant(of: copies.first, matching: find.byType(AnimatedScale)),
+        findsOneWidget);
     await tester.ensureVisible(copies.first);
     await tester.tap(copies.first);
     await tester.pump();
     expect(copied, prompt);
+    expect(find.text('Prompt copied to clipboard'), findsNothing);
     await tester.ensureVisible(copies.last);
     await tester.tap(copies.last);
     await tester.pump();
@@ -1117,9 +1114,6 @@ void main() {
     final timestamps = find.byWidgetPredicate((widget) =>
         widget is Text && widget.data?.startsWith('2026-10-01 ·') == true);
     expect(timestamps, findsNWidgets(2));
-    final info = find.byTooltip('View request details');
-    expect(tester.getTopLeft(timestamps.last).dx,
-        closeTo(tester.getTopRight(info).dx + 8, 1));
   });
 
   testWidgets('Run failure copies the complete message', (tester) async {
@@ -1569,7 +1563,6 @@ void main() {
     expect(find.text('The requested change is complete.'), findsOneWidget);
     expect(find.text('Implement'), findsNothing);
     expect(find.text('Conclave'), findsOneWidget);
-    expect(find.byTooltip('View request details'), findsOneWidget);
     expect(
       tester
           .widgetList<ConclaveMarkdownBody>(find.byType(ConclaveMarkdownBody))
@@ -1640,7 +1633,7 @@ void main() {
     expect(find.byTooltip('Copy Markdown'), findsOneWidget);
     await tester.tap(find.byTooltip('Copy Markdown'));
     await tester.pumpAndSettle();
-    expect(find.text('Message copied to clipboard'), findsOneWidget);
+    expect(find.text('Message copied to clipboard'), findsNothing);
 
     // Verify edit message button allows editing in-place
     expect(find.byTooltip('Edit message'), findsOneWidget);
@@ -2368,6 +2361,121 @@ void main() {
 
     await tester.binding.setSurfaceSize(null);
   });
+  testWidgets('failed Work requests can be reported once and show confirmation',
+      (tester) async {
+    final request = AxWorkRequest.fromJson({
+      'id': 'request-report',
+      'requestedByName': 'You',
+      'requestedByUserId': 'user-owner',
+      'prompt': 'Please investigate this failure',
+      'workflowId': 'direct',
+      'workflowVersion': 1,
+      'status': 'failed',
+      'createdAt': '2026-10-11T10:00:00Z',
+      'error': 'Run failed',
+      'steps': [
+        {
+          'kind': 'implement',
+          'status': 'failed',
+          'workerId': 'worker-1',
+          'assignmentId': 'assignment-report',
+          'errorCode': 'provider_authentication_required',
+        }
+      ],
+    });
+    final dataSource = _IssueReportDataSource(request);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ThreadPage(
+          initialTab: 1,
+          space: const AxSpace(
+            id: 'space-1',
+            name: 'Space',
+            branch: '',
+            lastActivity: '',
+            role: 'owner',
+          ),
+          thread: const AxThread(
+            id: 'thread-1',
+            spaceId: 'space-1',
+            name: 'Thread',
+            lead: '',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: '',
+            queueStatus: '',
+          ),
+          dataSource: dataSource,
+          currentUserId: 'user-owner',
+          onBackToSpace: _noop,
+          onArchive: _noop,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final reportTooltip = find
+        .byTooltip('Report issue — sends sanitized technical diagnostics only');
+    expect(reportTooltip, findsOneWidget);
+    await tester.tap(reportTooltip);
+    await tester.pumpAndSettle();
+    expect(dataSource.reportCalls, 1);
+    expect(find.text('Reported'), findsOneWidget);
+    expect(find.textContaining('sanitized technical diagnostics were sent'),
+        findsOneWidget);
+    expect(
+        find.byTooltip(
+            'Report issue — sends sanitized technical diagnostics only'),
+        findsNothing);
+    expect(find.byTooltip('Retry request'), findsNothing);
+  });
+}
+
+class _IssueReportDataSource extends AxFixtureDataSource {
+  _IssueReportDataSource(this.request);
+
+  final AxWorkRequest request;
+  var reportCalls = 0;
+  var reported = false;
+
+  @override
+  Future<AxWorkRequestPage> loadThreadWorkRequestPage({
+    required String threadId,
+    int limit = 50,
+    String? beforeCreatedAt,
+    String? beforeId,
+    bool activeOnly = false,
+  }) async =>
+      AxWorkRequestPage(requests: [request]);
+
+  @override
+  Future<AxIssueReport?> loadIssueReport({
+    required String requestId,
+    String? assignmentId,
+  }) async =>
+      reported
+          ? const AxIssueReport(
+              id: 'issue-1',
+              publicReference: 'ISS-1',
+              status: 'open',
+              diagnosticState: 'partial',
+              createdAt: '2026-10-11T00:00:00Z',
+              updatedAt: '2026-10-11T00:00:00Z',
+            )
+          : null;
+
+  @override
+  Future<AxIssueReport> reportIssue({required String requestId}) async {
+    reportCalls++;
+    reported = true;
+    return const AxIssueReport(
+      id: 'issue-1',
+      publicReference: 'ISS-1',
+      status: 'open',
+      diagnosticState: 'partial',
+      createdAt: '2026-10-11T00:00:00Z',
+      updatedAt: '2026-10-11T00:00:00Z',
+    );
+  }
 }
 
 class _DuplicateTestDataSource extends AxFixtureDataSource {

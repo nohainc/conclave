@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+
 class EngineLogger {
   const EngineLogger({this.writeLine});
 
@@ -10,6 +12,9 @@ class EngineLogger {
     String level,
     String event, {
     Map<String, Object?> context = const {},
+    String? operation,
+    String? stage,
+    bool retryable = false,
   }) {
     final safe = <String, Object?>{};
     for (final key in const {
@@ -23,10 +28,17 @@ class EngineLogger {
       'throughSequence',
       'requestId',
       'assignmentId',
+      'workspaceId',
+      'workspaceRuntimeId',
+      'workerId',
+      'runId',
+      'taskId',
+      'attemptId',
       'workerTypeId',
       'engineVersion',
       'profileDefinitionId',
       'profileReleaseVersion',
+      'profileDigest',
       'profileSchemaVersion',
       'providerToolName',
       'providerToolVersion',
@@ -36,14 +48,48 @@ class EngineLogger {
       'durationMs',
       'errorCode',
       'processExitCode',
+      'connectionState',
+      'transport',
+      'status',
+      'modelId',
+      'effort',
+      'catalogRevision',
+      'selectionSource',
+      'lineBytes',
+      'httpStatusCode',
+      'recovered',
     }) {
       final value = context[key];
       if (value is String || value is num || value is bool) {
         safe[key] = value is String ? _captureDiagnostic(value) : value;
       }
     }
+    final diagnostic = DiagnosticEvent.create(
+      component: 'cli_worker_engine',
+      operation: _token(operation) ?? _token(event.split('.').first) ?? 'event',
+      stage: _token(stage) ?? _token(context['failureLayer']) ?? 'execute',
+      severity: switch (level.toLowerCase()) {
+        'debug' => 'debug',
+        'error' => 'error',
+        'warn' || 'warning' => 'warning',
+        _ => 'info',
+      },
+      requestId: _token(context['requestId']),
+      assignmentId: _token(context['assignmentId']),
+      workspaceId: _token(context['workspaceId']),
+      workspaceRuntimeId: _token(context['workspaceRuntimeId']),
+      workerId: _token(context['workerId']),
+      workerTypeId: _token(context['workerTypeId']),
+      runId: _token(context['runId']),
+      taskId: _token(context['taskId']),
+      attemptId: _token(context['attemptId']),
+      errorCode: _token(context['errorCode']),
+      retryable: retryable || context['retryable'] == true,
+      context: context,
+    );
     final line = jsonEncode({
-      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      ...diagnostic.toJson(),
+      'timestamp': diagnostic.timestamp,
       'level': const {'debug', 'info', 'warning', 'error'}.contains(level)
           ? level
           : 'info',
@@ -56,6 +102,11 @@ class EngineLogger {
     } else {
       writer(line);
     }
+  }
+
+  static String? _token(Object? value) {
+    if (value is! String || value.isEmpty || value.length > 128) return null;
+    return RegExp(r'^[A-Za-z0-9._:-]+$').hasMatch(value) ? value : null;
   }
 }
 

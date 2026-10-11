@@ -12,7 +12,11 @@ import {
   recordAssignmentResult,
 } from "./assignment-dispatcher.js";
 import { extractBearerToken } from "../../../packages/security/src/index.js";
-import { logStructured, requestIdFor } from "./observability.js";
+import {
+  tryLogDiagnosticEvent,
+  logStructured,
+  requestIdFor,
+} from "./observability.js";
 import { recordWorkspaceWorkerInventory } from "./workspace-gateway/inventory.js";
 import { WorkspaceRuntimeAuthenticator } from "./workspace-gateway/runtime-authenticator.js";
 import { WorkspaceRuntimeSessionStore } from "./workspace-gateway/session-store.js";
@@ -851,6 +855,24 @@ export class WorkspaceGateway implements DurableObject {
       case "assignment.ack": {
         const payload = message.payload as Record<string, unknown>;
         const accepted = payload.accepted ?? payload.status === "accepted";
+        tryLogDiagnosticEvent({
+          assignmentId: message.assignmentId,
+          workspaceId: message.executionWorkspaceId,
+          workspaceRuntimeId: message.workspaceRuntimeId,
+          workerId: message.workerId,
+          runId: message.runId,
+          taskId: message.taskId,
+          attemptId: message.attemptId,
+          component: "cloud",
+          operation: "assignment",
+          stage: "admission",
+          severity: accepted ? "info" : "warning",
+          errorCode: accepted ? undefined : "worker_not_ready",
+          retryable: !accepted,
+          context: {
+            status: accepted ? "accepted" : "rejected",
+          },
+        });
         await this.env.CONCLAVE_DB.prepare(
           `UPDATE worker_assignments SET status = ?1, updated_at = ?2
            WHERE id = ?3 AND execution_workspace_id = ?4
@@ -903,6 +925,21 @@ export class WorkspaceGateway implements DurableObject {
         // absolute path or repository clone path.
         return;
       case "assignment.result":
+        tryLogDiagnosticEvent({
+          assignmentId: message.assignmentId,
+          workspaceId: message.executionWorkspaceId,
+          workspaceRuntimeId: message.workspaceRuntimeId,
+          workerId: message.workerId,
+          runId: message.runId,
+          taskId: message.taskId,
+          attemptId: message.attemptId,
+          component: "cloud",
+          operation: "assignment",
+          stage: "result",
+          severity: "info",
+          retryable: false,
+          context: { status: "completed" },
+        });
         await recordAssignmentResult(
           this.env.CONCLAVE_DB,
           message.assignmentId!,
@@ -910,6 +947,30 @@ export class WorkspaceGateway implements DurableObject {
         );
         return;
       case "assignment.error":
+        {
+          const payload = message.payload as Record<string, unknown>;
+          const error =
+            payload.error && typeof payload.error === "object"
+              ? (payload.error as Record<string, unknown>)
+              : {};
+          tryLogDiagnosticEvent({
+            assignmentId: message.assignmentId,
+            workspaceId: message.executionWorkspaceId,
+            workspaceRuntimeId: message.workspaceRuntimeId,
+            workerId: message.workerId,
+            runId: message.runId,
+            taskId: message.taskId,
+            attemptId: message.attemptId,
+            component: "cloud",
+            operation: "assignment",
+            stage: "provider_execution",
+            severity: "error",
+            errorCode:
+              typeof error.code === "string" ? error.code : "execution_failed",
+            retryable: error.retryable === true,
+            context: { status: "failed" },
+          });
+        }
         await recordAssignmentError(
           this.env.CONCLAVE_DB,
           message.assignmentId!,

@@ -8,9 +8,96 @@ import 'platform_runtime.dart';
 import 'workspace_registration.dart';
 import 'cli_worker_engine_supervisor.dart';
 import 'tool_profile_resolver.dart';
+import 'worker_diagnostic_store.dart';
 
 const _diagnosticSecretPattern =
     r'(secret|token|password|api[_-]?key|authorization|cookie|raw[_-]?credential|private[_-]?key)';
+
+const _diagnosticLogFields = {
+  'schemaVersion',
+  'timestamp',
+  'level',
+  'severity',
+  'event',
+  'eventId',
+  'requestId',
+  'assignmentId',
+  'workspaceId',
+  'workspaceRuntimeId',
+  'workerId',
+  'workerTypeId',
+  'runId',
+  'taskId',
+  'attemptId',
+  'component',
+  'operation',
+  'stage',
+  'errorCode',
+  'retryable',
+  'workerVersion',
+  'engineVersion',
+  'providerToolName',
+  'providerToolVersion',
+  'profileDefinitionId',
+  'profileReleaseVersion',
+  'profileResolutionSource',
+  'probeStage',
+  'failureLayer',
+  'durationMs',
+  'processExitCode',
+};
+
+Object? _safeDiagnosticLog(Object? value) {
+  if (value is! Map) {
+    return {'event': 'workspace.log.unstructured'};
+  }
+  final output = <String, Object?>{};
+  for (final entry in value.entries) {
+    final key = entry.key.toString();
+    if (RegExp(_diagnosticSecretPattern, caseSensitive: false).hasMatch(key)) {
+      output[key] = '[redacted]';
+    } else if (_diagnosticLogFields.contains(key) &&
+        (entry.value is String || entry.value is num || entry.value is bool)) {
+      output[key] = sanitizeWorkspaceDiagnostics(entry.value);
+    }
+  }
+  final context = value['context'];
+  if (context is Map) {
+    final safeContext = <String, Object?>{};
+    for (final entry in context.entries) {
+      final key = entry.key.toString();
+      if (RegExp(_diagnosticSecretPattern, caseSensitive: false)
+          .hasMatch(key)) {
+        safeContext[key] = '[redacted]';
+      } else if (entry.value is String ||
+          entry.value is num ||
+          entry.value is bool) {
+        final sanitized = sanitizeWorkspaceDiagnostics({key: entry.value})
+            as Map<String, Object?>;
+        if (sanitized.containsKey(key)) safeContext[key] = sanitized[key];
+      }
+    }
+    if (safeContext.isNotEmpty) output['context'] = safeContext;
+  }
+  final details = value['details'];
+  if (details is Map) {
+    final safeDetails = <String, Object?>{};
+    for (final entry in details.entries) {
+      final key = entry.key.toString();
+      if (RegExp(_diagnosticSecretPattern, caseSensitive: false)
+          .hasMatch(key)) {
+        safeDetails[key] = '[redacted]';
+      } else if (_diagnosticLogFields.contains(key) &&
+          (entry.value is String ||
+              entry.value is num ||
+              entry.value is bool)) {
+        safeDetails[key] = sanitizeWorkspaceDiagnostics(entry.value);
+      }
+    }
+    if (safeDetails.isNotEmpty) output['details'] = safeDetails;
+  }
+  return output;
+}
 
 /// Samples the service process only when diagnostics are requested. CPU is
 /// intentionally nullable on platforms without `ps`; no background sampler
@@ -77,6 +164,7 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
   DateTime? lastUpdateCheckAt,
   String? updateStatus,
   String? workRootPath,
+  WorkerDiagnosticStore Function(String workerTypeId)? workerDiagnosticStore,
   int logLineLimit = 200,
 }) async {
   final logFile = WorkspacePaths(config.dataDirectory).logsFile;
@@ -145,7 +233,6 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
       'providerToolVersion': worker.toolVersion,
       'providerToolName': worker.toolName,
       'engineVersion': cliWorkerEngineVersion,
-      'providerToolPath': worker.toolPath,
       if (toolProfile != null) 'toolProfile': toolProfile,
       'profileDefinitionId': profileDefinitionId,
       'profileReleaseVersion': toolProfile?['profileReleaseVersion'],
@@ -156,6 +243,22 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
         'details': worker.lastLiveTestDetails,
       },
     });
+  }
+  final workerDiagnostics = <Map<String, Object?>>[];
+  var localDiagnosticsAvailable = workerDiagnosticStore != null;
+  if (workerDiagnosticStore != null) {
+    for (final worker in workers) {
+      try {
+        final store = workerDiagnosticStore(worker['workerTypeId'] as String);
+        final records = await store.readSafeRecords(maxRecords: 50);
+        workerDiagnostics.add({
+          'workerTypeId': worker['workerTypeId'],
+          'records': records,
+        });
+      } on Object {
+        localDiagnosticsAvailable = false;
+      }
+    }
   }
   if (journal != null) {
     final records = await journal.reconcile();
@@ -223,7 +326,17 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
       'acceptingNewWork': connection?.acceptingNewWork ?? false,
       'draining': connection?.isDraining ?? false,
     },
-    'workRoot': workRootPath ?? config.workRootResolver.configuredPath,
+    // A diagnostic export reports configuration state, never a user-local
+    // filesystem path. The path remains available to the local UI only.
+    'workRoot': {
+      'configured': workRootPath != null || config.workRootPath != null,
+    },
+    'diagnosticCompleteness': {
+      'cloudEvidence': connection?.isConnected ?? false,
+      'workspaceEvidence': true,
+      'workerEvidence': localDiagnosticsAvailable,
+      'localWorkerStoreConfigured': workerDiagnosticStore != null,
+    },
     'update': {
       'status': updateStatus ?? 'unknown',
       'lastCheckStatus': lastUpdateCheckStatus ?? 'unknown',
@@ -231,11 +344,12 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
     },
     'workers': workers,
     'assignments': assignments,
+    'workerDiagnosticEvents': workerDiagnostics,
     'logs': recentLogs.map((line) {
       try {
-        return sanitizeWorkspaceDiagnostics(jsonDecode(line));
+        return _safeDiagnosticLog(jsonDecode(line));
       } on FormatException {
-        return sanitizeWorkspaceDiagnostics(line);
+        return _safeDiagnosticLog(null);
       }
     }).toList(),
   };
@@ -276,6 +390,7 @@ Future<File> writeWorkspaceDiagnostics({
   DateTime? lastUpdateCheckAt,
   String? updateStatus,
   String? workRootPath,
+  WorkerDiagnosticStore Function(String workerTypeId)? workerDiagnosticStore,
 }) async {
   final diagnostics = await buildWorkspaceDiagnostics(
     config: config,
@@ -288,6 +403,7 @@ Future<File> writeWorkspaceDiagnostics({
     lastUpdateCheckAt: lastUpdateCheckAt,
     updateStatus: updateStatus,
     workRootPath: workRootPath,
+    workerDiagnosticStore: workerDiagnosticStore,
   );
   final file = File(
       '${config.dataDirectory.path}/diagnostics-${DateTime.now().toUtc().millisecondsSinceEpoch}.json');

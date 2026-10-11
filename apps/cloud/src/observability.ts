@@ -1,3 +1,8 @@
+import {
+  createDiagnosticEvent,
+  type DiagnosticEvent,
+} from "@conclave/protocol";
+
 export interface CorrelationContext {
   requestId?: string;
   eventId?: string;
@@ -117,6 +122,44 @@ export function logStructured(
   if (level === "error") console.error(record);
   else if (level === "warn") console.warn(record);
   else console.log(record);
+}
+
+/** Emits a privacy-safe, schema-versioned execution diagnostic event. */
+export function logDiagnosticEvent(
+  input: Omit<DiagnosticEvent, "schemaVersion" | "eventId" | "timestamp"> &
+    Partial<Pick<DiagnosticEvent, "eventId" | "timestamp">>,
+): DiagnosticEvent {
+  const event = createDiagnosticEvent(input);
+  logStructured(
+    event.severity === "warning" ? "warn" : event.severity,
+    "diagnostic.event",
+    {
+      requestId: event.requestId,
+      eventId: event.eventId,
+      workspaceId: event.workspaceId,
+      runId: event.runId,
+      taskId: event.taskId,
+      attemptId: event.attemptId,
+      assignmentId: event.assignmentId,
+      workspaceRuntimeId: event.workspaceRuntimeId,
+      workerId: event.workerId,
+    },
+    { event },
+  );
+  return event;
+}
+
+/** Best-effort boundary for lifecycle instrumentation. Telemetry must never
+ * change assignment admission or execution when an upstream value is malformed. */
+export function tryLogDiagnosticEvent(
+  input: Omit<DiagnosticEvent, "schemaVersion" | "eventId" | "timestamp"> &
+    Partial<Pick<DiagnosticEvent, "eventId" | "timestamp">>,
+): DiagnosticEvent | null {
+  try {
+    return logDiagnosticEvent(input);
+  } catch {
+    return null;
+  }
 }
 
 export function withRequestId(response: Response, requestId: string): Response {

@@ -60,8 +60,24 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       idempotencyKey: message['idempotencyKey'] as String,
       payload: Map<String, Object?>.from(assignmentPayload),
     );
+    await recordAssignmentDiagnostic(
+      context,
+      event: 'assignment.received',
+      stage: 'transport',
+    );
     final correlation = _assignmentCorrelation(message);
     if (!acceptingNewWork) {
+      await recordAssignmentDiagnostic(
+        context,
+        event: 'assignment.rejected',
+        stage: 'admission',
+        severity: 'warning',
+        errorCode: 'worker_not_ready',
+        retryable: true,
+        contextData: {
+          'status': _draining ? 'workspace_draining' : 'workspace_paused',
+        },
+      );
       socket.send(jsonEncode(_assignmentEnvelope(
         'assignment.ack',
         correlation,
@@ -141,6 +157,15 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         context: context);
 
     if (assignmentHandler == null) {
+      await recordAssignmentDiagnostic(
+        context,
+        event: 'assignment.rejected',
+        stage: 'admission',
+        severity: 'error',
+        errorCode: 'worker_not_ready',
+        retryable: false,
+        contextData: const {'status': 'no_assignment_handler'},
+      );
       socket.send(jsonEncode(_assignmentEnvelope(
         'assignment.ack',
         correlation,
@@ -151,6 +176,11 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
 
     _activeAssignments.add(context.assignmentId);
     _notifyStateChanged();
+    await recordAssignmentDiagnostic(
+      context,
+      event: 'assignment.started',
+      stage: 'worker_start',
+    );
     await _recordAssignment(context.assignmentId, AssignmentStatus.running,
         context: context);
     if (_cancelledBeforeStart.remove(context.assignmentId)) {
@@ -204,6 +234,14 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
             'errorCode': errorCode,
           },
         );
+        await recordAssignmentDiagnostic(
+          context,
+          event: 'assignment.failed',
+          stage: 'worker_execution',
+          severity: 'error',
+          errorCode: errorCode,
+          retryable: normalizedError?.retryable ?? true,
+        );
         socket.send(jsonEncode(_assignmentEnvelope(
           'assignment.error',
           correlation,
@@ -232,6 +270,11 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         AssignmentStatus.completed,
         context: context,
         result: resultPayload,
+      );
+      await recordAssignmentDiagnostic(
+        context,
+        event: 'assignment.completed',
+        stage: 'result',
       );
       socket.send(jsonEncode(_assignmentEnvelope(
         'assignment.result',

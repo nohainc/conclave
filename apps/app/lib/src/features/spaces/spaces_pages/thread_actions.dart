@@ -151,8 +151,95 @@ extension _ThreadActions on _ThreadPageState {
     final id = widget.thread.id;
     try {
       await cache.refresh(id, activeOnly: activeOnly);
+      _scheduleIssueReportStatusLoads();
     } catch (_) {
       // Query state retains cached history and exposes the existing retry UI.
+    }
+  }
+
+  String? _issueAttemptId(AxWorkRequest request) => request.steps
+      .where((step) => step.status == 'failed')
+      .map((step) => step.assignmentId)
+      .whereType<String>()
+      .firstOrNull;
+
+  void _scheduleIssueReportStatusLoads() {
+    for (final request
+        in _workTimeline.where((item) => item.status == 'failed')) {
+      final attemptId = _issueAttemptId(request);
+      final key = '${request.id}:${attemptId ?? ''}';
+      if (_checkedIssueReportKeys.contains(key) ||
+          _issueReportLoads.containsKey(key)) {
+        continue;
+      }
+      final future = _loadIssueReportStatus(request, key);
+      _issueReportLoads[key] = future;
+      unawaited(future.whenComplete(() => _issueReportLoads.remove(key)));
+    }
+  }
+
+  Future<void> _loadIssueReportStatus(
+      AxWorkRequest request, String lookupKey) async {
+    final source = widget.dataSource;
+    if (source == null) return;
+    try {
+      final report = await source.loadIssueReport(
+        requestId: request.id,
+        assignmentId: _issueAttemptId(request),
+      );
+      if (!mounted || request.id.isEmpty) return;
+      if (_reportedIssues.containsKey(request.id) &&
+          _checkedIssueReportKeys.contains(lookupKey)) {
+        return;
+      }
+      _updateIssueState(() {
+        _checkedIssueReportKeys.add(lookupKey);
+        if (report == null) {
+          if (_reportedIssueKeys[request.id] == lookupKey) {
+            _reportedIssues.remove(request.id);
+            _reportedIssueKeys.remove(request.id);
+            _issueReportErrors.remove(request.id);
+          }
+        } else {
+          _reportedIssues[request.id] = report;
+          _reportedIssueKeys[request.id] = lookupKey;
+          _issueReportErrors.remove(request.id);
+        }
+      });
+    } catch (_) {
+      // Reporting status is auxiliary; keep the failure action available.
+    }
+  }
+
+  Future<void> _reportIssue(String requestId) async {
+    final source = widget.dataSource;
+    if (source == null || _reportingIssueIds.contains(requestId)) return;
+    _updateIssueState(() {
+      _reportingIssueIds.add(requestId);
+      _issueReportErrors.remove(requestId);
+    });
+    try {
+      final report = await source.reportIssue(requestId: requestId);
+      if (!mounted) return;
+      final request =
+          _workTimeline.where((item) => item.id == requestId).firstOrNull;
+      final key = request == null
+          ? requestId
+          : '$requestId:${_issueAttemptId(request) ?? ''}';
+      _updateIssueState(() {
+        _reportedIssues[requestId] = report;
+        _reportedIssueKeys[requestId] = key;
+        _checkedIssueReportKeys.add(key);
+      });
+    } catch (_) {
+      if (mounted) {
+        _updateIssueState(() => _issueReportErrors[requestId] =
+            "Couldn't send the report. Try again.");
+      }
+    } finally {
+      if (mounted) {
+        _updateIssueState(() => _reportingIssueIds.remove(requestId));
+      }
     }
   }
 
@@ -188,51 +275,8 @@ extension _ThreadActions on _ThreadPageState {
     }
   }
 
-  Future<void> _showRunDetails(String workRequestId) async {
-    final dataSource = widget.dataSource;
-    if (dataSource == null) return;
-    final details = dataSource.loadWorkRequest(workRequestId: workRequestId);
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (context) => FutureBuilder<AxWorkRequestStatus>(
-        future: details,
-        builder: (context, snapshot) {
-          final height = MediaQuery.sizeOf(context).height * 0.88;
-          if (snapshot.hasError) {
-            return SizedBox(
-              height: height,
-              child:
-                  const Center(child: Text('Could not load request details.')),
-            );
-          }
-          if (!snapshot.hasData) {
-            return SizedBox(
-              height: height,
-              child: const Center(child: CircularProgressIndicator()),
-            );
-          }
-          return _WorkRequestDetailsSheet(
-            details: snapshot.data!,
-            onRetryStep: (step) => _retryWorkRequestStep(
-              workRequestId,
-              step,
-              closeDetails: true,
-            ),
-            onCancelRun: () => _cancelWorkRequest(
-              workRequestId,
-              closeDetails: true,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   Future<void> _retryWorkRequestStep(
-      String workRequestId, AxWorkRequestStep step,
-      {bool closeDetails = false}) async {
+      String workRequestId, AxWorkRequestStep step) async {
     final dataSource = widget.dataSource;
     if (dataSource == null) return;
     String? sessionStrategy;
@@ -284,7 +328,6 @@ extension _ThreadActions on _ThreadPageState {
         sessionStrategy: sessionStrategy,
       );
       if (!mounted) return;
-      if (closeDetails) Navigator.of(context).pop();
       unawaited(_workHistoryCache
           .refreshRequest(widget.thread.id, workRequestId, supersede: true)
           .catchError((Object _) {}));
@@ -304,7 +347,6 @@ extension _ThreadActions on _ThreadPageState {
 
   Future<bool> _cancelWorkRequest(
     String workRequestId, {
-    bool closeDetails = false,
     bool showFeedback = true,
   }) async {
     final dataSource = widget.dataSource;
@@ -320,7 +362,6 @@ extension _ThreadActions on _ThreadPageState {
         );
       }
       if (!mounted) return false;
-      if (closeDetails) Navigator.of(context).pop();
       unawaited(_workHistoryCache
           .refreshRequest(widget.thread.id, workRequestId, supersede: true)
           .catchError((Object _) {}));

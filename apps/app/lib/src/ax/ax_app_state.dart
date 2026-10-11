@@ -61,16 +61,12 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   String? authNotice;
   String? authError;
 
-  /// Delays transient execution progress notices so a quick state transition
-  /// does not flash a banner at the top of the app.
-  Timer? _pendingRealtimeNoticeTimer;
-  String? _pendingRealtimeNotice;
+  Future<void>? _accountSecurityLoadFlight;
   final promptResponseController = TextEditingController();
   final TextEditingController _searchQueryController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   String _searchQuery = '';
   AxNavigation? _navigationBeforeSearch;
-  DateTime? _lastRealtimeAnnouncement;
   AxAccountSecurity? get accountSecurity => store.security.value;
   set accountSecurity(AxAccountSecurity? value) => store.security.value = value;
   final Set<String> revokingAccountSessionTokens = <String>{};
@@ -79,6 +75,14 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   bool get accountSecurityLoading => store.securityLoading.value;
   set accountSecurityLoading(bool value) => store.securityLoading.value = value;
   void _updateSecurity(VoidCallback callback) => callback();
+  bool _isCurrentAccountSession(AxAuthSession session) {
+    final currentSessionId = store.auth.session?.sessionId;
+    return currentSessionId != null &&
+        currentSessionId != '—' &&
+        (session.id == currentSessionId || session.token == currentSessionId);
+  }
+
+  bool revokingAllAccountSessions = false;
   ThemeMode _themeMode = ThemeMode.system;
   bool _desktopSidebarCollapsed = false;
   bool get showRunDetails => switch (navigation.kind) {
@@ -286,7 +290,6 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   @override
   void dispose() {
     _desktopAuthStatusTimer?.cancel();
-    _pendingRealtimeNoticeTimer?.cancel();
     _searchQueryController.removeListener(_onSearchQueryChanged);
     _searchQueryController.dispose();
     _searchFocusNode.dispose();

@@ -29,6 +29,7 @@ import '../../ax/sync/persistence/ax_thread_view_state_store.dart';
 import '../../ax/sync/ax_collaboration_mutations.dart';
 import '../../brand.dart';
 import '../workflows/workflows_page.dart';
+import '../workflows/workflow_visibility.dart';
 import '../common/markdown_composer.dart';
 import '../common/conclave_markdown_body.dart';
 import '../../ax/work_request_file_picker_stub.dart'

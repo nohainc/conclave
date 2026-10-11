@@ -7,16 +7,19 @@ import '../../ax/sync/ax_workflow_configurations.dart';
 import '../../ax/sync/ax_query_builder.dart';
 import '../../ax/sync/ax_sync_engine.dart';
 import 'workflow_editor.dart';
+import 'workflow_visibility.dart';
 
 class WorkflowsPage extends StatefulWidget {
   const WorkflowsPage(
       {super.key,
       required this.catalogs,
       required this.configurations,
+      this.viewerEmail,
       this.canEdit = true});
   final bool canEdit;
   final AxSessionCatalogs catalogs;
   final AxWorkflowConfigurations configurations;
+  final String? viewerEmail;
   @override
   State<WorkflowsPage> createState() => _WorkflowsPageState();
 }
@@ -98,8 +101,9 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
               ensure: false,
               builder: (context, inventory) {
                 final workflows = <String, AxBuiltinWorkflow>{};
-                for (final definition
-                    in definitions.data ?? const <AxBuiltinWorkflow>[]) {
+                for (final definition in visibleWorkflowDefinitions(
+                    definitions.data ?? const <AxBuiltinWorkflow>[],
+                    viewerEmail: widget.viewerEmail)) {
                   if ((workflows[definition.id]?.version ?? 0) <
                       definition.version) {
                     workflows[definition.id] = definition;
