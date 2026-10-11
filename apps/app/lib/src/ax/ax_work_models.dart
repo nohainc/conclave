@@ -174,6 +174,8 @@ class AxConversationTurn {
         profileId = json['profileId'] as String,
         profileVersion = json['profileVersion'] as int,
         modelId = json['modelId'] as String?,
+        modelName = json['modelName'] as String?,
+        catalogRevision = json['catalogRevision'] as String?,
         effort = json['effort'] as String?,
         workerSessionId = json['workerSessionId'] as String?,
         baseContextRevision = json['baseContextRevision'] as int,
@@ -200,6 +202,7 @@ class AxConversationTurn {
   final String profileId;
   final int profileVersion;
   final String? modelId;
+  final String? modelName, catalogRevision;
   final String? effort;
   final String? workerSessionId;
   final int baseContextRevision;
@@ -227,6 +230,8 @@ class AxConversationTurn {
         'profileId': profileId,
         'profileVersion': profileVersion,
         'modelId': modelId,
+        if (modelName != null) 'modelName': modelName,
+        if (catalogRevision != null) 'catalogRevision': catalogRevision,
         'effort': effort,
         'workerSessionId': workerSessionId,
         'baseContextRevision': baseContextRevision,
@@ -358,6 +363,8 @@ class AxWorkRequestStep {
     this.providerToolName,
     this.providerToolVersion,
     this.model,
+    this.modelName,
+    this.catalogRevision,
     this.reasoningEffort,
     this.testSummary,
     this.startedAt,
@@ -383,6 +390,7 @@ class AxWorkRequestStep {
   final String? providerToolName;
   final String? providerToolVersion;
   final String? model;
+  final String? modelName, catalogRevision;
   final String? reasoningEffort;
   final String? testSummary;
   final String? startedAt;
@@ -408,6 +416,8 @@ class AxWorkRequestStep {
       providerToolName: providerToolName,
       providerToolVersion: providerToolVersion,
       model: model,
+      modelName: modelName,
+      catalogRevision: catalogRevision,
       reasoningEffort: reasoningEffort,
       testSummary: testSummary,
       startedAt: startedAt,
@@ -434,6 +444,8 @@ class AxWorkRequestStep {
         providerToolName: json['providerToolName']?.toString(),
         providerToolVersion: json['providerToolVersion']?.toString(),
         model: json['model']?.toString(),
+        modelName: json['modelName']?.toString(),
+        catalogRevision: json['catalogRevision']?.toString(),
         reasoningEffort: json['reasoningEffort']?.toString(),
         testSummary: json['testSummary']?.toString(),
         startedAt: json['startedAt']?.toString(),

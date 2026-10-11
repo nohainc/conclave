@@ -25,7 +25,9 @@ void main() {
         ...turnFixture().toJson(),
         'workflowId': workflow.$1,
         'workflowVersion': workflow.$2,
-        'stepKind': workflow.$3
+        'stepKind': workflow.$3,
+        'modelName': 'Original Model Name',
+        'catalogRevision': 'a' * 64
       };
       final request = AxWorkRequest.fromJson({
         'id': 'R',
@@ -130,6 +132,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Hello from the user'), findsOneWidget);
       expect(find.text('ChatGPT'), findsWidgets);
+      expect(find.byTooltip('Original Model Name · Medium'), findsWidgets);
       expect(
           find.byWidgetPredicate((widget) =>
               widget is Image && widget.semanticLabel == 'ChatGPT icon'),
@@ -626,6 +629,46 @@ void main() {
       expect(tester.takeException(), isNull);
     }
   });
+  testWidgets('edited chat messages show the modified marker and time',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ThreadPage(
+          space: const AxSpace(
+            id: 'space-1',
+            name: 'Space One',
+            branch: '',
+            lastActivity: 'today',
+            role: 'collaborator',
+          ),
+          thread: const AxThread(
+            id: 'thread-1',
+            spaceId: 'space-1',
+            name: 'Research',
+            lead: 'Owner',
+            status: 'active',
+            brief: 'Understand the problem.',
+            primaryWorkspace: 'Workspace One',
+            queueStatus: 'Idle',
+          ),
+          dataSource:
+              _DiscussionDataSource(editedAt: '2026-10-06T12:00:00.000Z'),
+          currentUserId: 'user-owner',
+          onBackToSpace: _noop,
+          onArchive: _noop,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Edited 2026-10-06 ·'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((widget) =>
+          widget is Text && widget.data?.startsWith('2026-10-05 ·') == true),
+      findsNothing,
+    );
+  });
+
   testWidgets(
       'Work appears before validation and progress becomes result or error',
       (tester) async {
@@ -2432,17 +2475,22 @@ class _WorkHistoryDataSource extends AxFixtureDataSource {
 }
 
 class _DiscussionDataSource extends AxFixtureDataSource {
+  _DiscussionDataSource({this.editedAt});
+
+  final String? editedAt;
+
   @override
   Future<List<AxDiscussionMessage>> discussionRows({
     required String threadId,
   }) async =>
       [
-        const AxDiscussionMessage(
+        AxDiscussionMessage(
           id: 'message-1',
           threadId: 'thread-1',
           authorUserId: 'user-owner',
           authorName: 'Vitalii',
           body: 'A dated message',
+          editedAt: editedAt,
           createdAt: '2026-10-05T19:18:00.000Z',
           isMe: true,
         ),

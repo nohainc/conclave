@@ -21,9 +21,9 @@ it("accepts Auto only for transient model and effort overrides", () => {
   expect(() => parseWorkflowExecutionSelection({ workerId: "Auto" })).toThrow(
     "Worker must be selected explicitly",
   );
-  expect(() =>
-    parseWorkflowExecutionSelection({ model: "Automatic" }),
-  ).toThrow("Use Auto for model and effort defaults");
+  expect(() => parseWorkflowExecutionSelection({ model: "Automatic" })).toThrow(
+    "Use Auto for model and effort defaults",
+  );
 });
 
 function fixture(
@@ -170,4 +170,16 @@ it("requires an explicit Worker and does not fall back to another Workspace", as
   await expect(
     fixture({ worker: "b" }, {}, undefined, "first").resolve(),
   ).rejects.toMatchObject({ status: 422 });
+});
+
+it("accepts exact reviewed catalog revisions on transient selections", () => {
+  expect(
+    parseWorkflowExecutionSelection({
+      workerId: "worker",
+      catalogRevision: "a".repeat(64),
+    }),
+  ).toEqual({ workerId: "worker", catalogRevision: "a".repeat(64) });
+  expect(() =>
+    parseWorkflowExecutionSelection({ catalogRevision: "Auto" }),
+  ).toThrow("catalogRevision is invalid");
 });

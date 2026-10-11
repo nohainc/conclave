@@ -1,5 +1,9 @@
+import { createHash } from "node:crypto";
 import { WorkspaceWorkerInventoryEntrySchema } from "@conclave/workspace-runtime-protocol";
-import type { ToolProfileV1 } from "@conclave/tool-profile";
+import {
+  modelSelectionVersionMatches,
+  type ToolProfileV1,
+} from "@conclave/tool-profile";
 import type {
   WorkerExecutionOptions,
   WorkerEffortOptions,
@@ -10,6 +14,7 @@ export function spaceModelOptions(
   providerVersion?: unknown,
   discoveredCatalog?: unknown,
   profileDigest?: unknown,
+  includeUnavailable = false,
 ) {
   let profile: Record<string, unknown>;
   try {
@@ -84,23 +89,82 @@ export function spaceModelOptions(
             .filter(
               (entry) =>
                 (spec.idPrefix!.length === 0 ||
-                  entry.id.startsWith(spec.idPrefix!)) &&
-                entry.status !== "unavailable",
+                  entry.id.startsWith(spec.idPrefix!) ||
+                  (
+                    model.selectionMapping as ToolProfileV1["model"]["selectionMapping"]
+                  )?.models.some((f) => f.id === entry.id)) &&
+                (includeUnavailable || entry.status !== "unavailable"),
             )
             .map((entry) => ({
               id: entry.id,
               name: entry.name,
-              badge: entry.status === "verified" ? "Verified" : "Listed",
-              ...(entry.supportedReasoningEfforts
-                ? {
-                    supportedReasoningEfforts: entry.supportedReasoningEfforts,
-                  }
-                : {}),
-              ...(entry.defaultReasoningEffort
-                ? { defaultReasoningEffort: entry.defaultReasoningEffort }
-                : {}),
+              status: entry.status,
+              selectionMode:
+                "selectionMode" in entry
+                  ? entry.selectionMode
+                  : (model.selectionMode ?? "separate"),
+              badge:
+                entry.status === "verified"
+                  ? "Verified"
+                  : entry.status === "unavailable"
+                    ? "Unavailable"
+                    : "Listed",
+              supportedReasoningEfforts:
+                "efforts" in entry
+                  ? entry.efforts
+                  : (entry.supportedReasoningEfforts ?? []),
+              defaultReasoningEffort:
+                "defaultEffort" in entry
+                  ? entry.defaultEffort
+                  : entry.defaultReasoningEffort,
             }))
         : [];
+  }
+  const globalEfforts = efforts(model.supportedReasoningEfforts);
+  if (
+    new Set(globalEfforts).size !== globalEfforts.length ||
+    (model.defaultReasoningEffort != null &&
+      !globalEfforts.includes(String(model.defaultReasoningEffort)))
+  )
+    return null;
+  const ids = new Set<string>();
+  for (const entry of catalog) {
+    if (
+      !entry ||
+      typeof entry.id !== "string" ||
+      ids.has(entry.id) ||
+      (Array.isArray(entry.supportedReasoningEfforts) &&
+        new Set(entry.supportedReasoningEfforts).size !==
+          entry.supportedReasoningEfforts.length) ||
+      (entry.defaultReasoningEffort != null &&
+        !efforts(
+          entry.supportedReasoningEfforts ?? model.supportedReasoningEfforts,
+        ).includes(entry.defaultReasoningEffort))
+    )
+      return null;
+    const mapping =
+      model.selectionMapping as ToolProfileV1["model"]["selectionMapping"];
+    if (mapping) {
+      const family = mapping.models.find((f) => f.id === entry.id);
+      const choices = efforts(entry.supportedReasoningEfforts);
+      const matchesVersion = (
+        range: { min: string; maxExclusive: string } | undefined,
+      ) => modelSelectionVersionMatches(providerVersion, range);
+      if (
+        (!family && choices.length > 0) ||
+        (family &&
+          (choices.some(
+            (e) =>
+              family.variants.filter(
+                (v) => v.effort === e && matchesVersion(v.providerVersion),
+              ).length !== 1,
+          ) ||
+            (entry.defaultReasoningEffort != null &&
+              entry.defaultReasoningEffort !== family.defaultEffort)))
+      )
+        return null;
+    }
+    ids.add(entry.id);
   }
   return {
     supportedReasoningEfforts: model.discovery
@@ -124,6 +188,8 @@ export function spaceModelOptions(
         id: entry.id,
         name: entry.name,
         badge: entry.badge,
+        status: entry.status ?? "listed",
+        selectionMode: entry.selectionMode ?? model.selectionMode ?? "separate",
         description: entry.description,
         minProviderVersion: entry.minProviderVersion,
         maxProviderVersion: entry.maxProviderVersion,
@@ -142,7 +208,7 @@ export function spaceWorkerExecutionOptions(
   providerVersion?: unknown,
   discoveredCatalog?: unknown,
   profileDigest?: unknown,
-): WorkerExecutionOptions | null {
+): Extract<WorkerExecutionOptions, { schemaVersion: 2 }> | null {
   let profile: Partial<ToolProfileV1>;
   try {
     profile = JSON.parse(String(payload));
@@ -151,6 +217,11 @@ export function spaceWorkerExecutionOptions(
   }
   const model = profile?.model;
   if (!model || typeof model.supported !== "boolean") return null;
+  if (
+    model.selectionMode !== undefined &&
+    !["separate", "combined"].includes(model.selectionMode)
+  )
+    return null;
   const declared = model.executionOptions;
   if (
     declared &&
@@ -162,13 +233,23 @@ export function spaceWorkerExecutionOptions(
     providerVersion,
     discoveredCatalog,
     profileDigest,
+    true,
   );
+  if (model.supported && !projection) return null;
+  const hasEffortInvocation = JSON.stringify([
+    profile.execution,
+    model.arguments,
+  ]).includes("{{reasoningEffort}}");
   const normalizeEffort = (
     values: unknown,
     defaultValue: unknown,
   ): WorkerEffortOptions => {
     const choices =
-      (!model.discovery && declared?.effortSupported === false) ||
+      (!runtimeRevision && declared?.effortSupported === false) ||
+      (!runtimeRevision &&
+        model.discovery &&
+        !hasEffortInvocation &&
+        !model.selectionMapping) ||
       !Array.isArray(values)
         ? []
         : [
@@ -187,14 +268,52 @@ export function spaceWorkerExecutionOptions(
           : null,
     };
   };
+  let runtimeRevision: string | undefined;
+  let catalogStale = false;
+  try {
+    const parsed =
+      WorkspaceWorkerInventoryEntrySchema.shape.modelCatalog.safeParse(
+        typeof discoveredCatalog === "string"
+          ? JSON.parse(discoveredCatalog)
+          : discoveredCatalog,
+      );
+    if (
+      model.discovery &&
+      parsed.success &&
+      parsed.data?.schemaVersion === 2 &&
+      parsed.data.profileDigest === profileDigest &&
+      parsed.data.providerToolVersion === providerVersion
+    ) {
+      runtimeRevision = parsed.data.catalogRevision;
+      catalogStale = parsed.data.stale === true;
+    }
+  } catch {
+    /* Invalid inventory cannot supply a catalog identity. */
+  }
   const catalog = projection?.catalog ?? [];
+  const selectable = catalog.filter((entry) => entry.status !== "unavailable");
   const defaultModel =
     typeof declared?.defaultModelId === "string" &&
-    catalog.some((entry) => entry.id === declared.defaultModelId)
+    selectable.some((entry) => entry.id === declared.defaultModelId)
       ? declared.defaultModelId
       : null;
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    ...(catalogStale ? { catalogStale: true } : {}),
+    catalogRevision:
+      runtimeRevision ??
+      createHash("sha256")
+        .update(
+          JSON.stringify({
+            profileDigest:
+              typeof profileDigest === "string" ? profileDigest : null,
+            providerToolVersion:
+              typeof providerVersion === "string" ? providerVersion : null,
+            models: [...catalog].sort((a, b) => a.id.localeCompare(b.id)),
+            declaration: declared ?? null,
+          }),
+        )
+        .digest("hex"),
     models: {
       supported: model.supported,
       discovery: model.discovery ? "provider_catalog" : "profile_catalog",
@@ -204,7 +323,7 @@ export function spaceWorkerExecutionOptions(
         model.unknownModelPolicy === "pass_through",
       allowedModelIds: model.supported
         ? model.discovery
-          ? catalog.map((entry) => entry.id)
+          ? selectable.map((entry) => entry.id)
           : model.unknownModelPolicy === "profile_allowlist"
             ? Array.isArray(model.allowlist)
               ? model.allowlist.filter(
@@ -215,7 +334,7 @@ export function spaceWorkerExecutionOptions(
                       catalog.some((entry) => entry.id === id)),
                 )
               : []
-            : catalog.map((entry) => entry.id)
+            : selectable.map((entry) => entry.id)
         : [],
       defaultModelId: defaultModel,
       options: catalog.map((entry) => ({
@@ -225,10 +344,16 @@ export function spaceWorkerExecutionOptions(
         ...(typeof entry.description === "string"
           ? { description: entry.description }
           : {}),
-        effort: normalizeEffort(
+        status: entry.status as "listed" | "verified" | "unavailable",
+        selectionMode: entry.selectionMode as "separate" | "combined",
+        efforts: normalizeEffort(
           entry.supportedReasoningEfforts,
           entry.defaultReasoningEffort ?? projection?.defaultReasoningEffort,
-        ),
+        ).values,
+        defaultEffort: normalizeEffort(
+          entry.supportedReasoningEfforts,
+          entry.defaultReasoningEffort ?? projection?.defaultReasoningEffort,
+        ).defaultValue,
       })),
     },
     modelSwitch: {

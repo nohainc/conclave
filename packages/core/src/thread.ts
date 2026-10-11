@@ -151,6 +151,7 @@ export interface WorkflowExecutionBinding {
   readonly workerId?: string;
   readonly model?: string;
   readonly reasoningEffort?: string;
+  readonly catalogRevision?: string;
   readonly additionalInstructions?: string;
 }
 

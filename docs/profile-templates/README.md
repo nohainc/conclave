@@ -15,8 +15,9 @@ model-id<TAB>display name<TAB>effort1,effort2<TAB>default effort
 The third and fourth fields are optional. A provider that does not report effort metadata simply produces model choices without effort choices. Do not add provider model names or guessed effort rules to these profiles.
 
 Import each JSON document as a new Tool Profile release in Profile Lab. Retire older static-catalog releases after the new release has been qualified in Workspace.
-Migrations `0034_runtime_model_catalog_starters.sql` and
-`0035_codex_app_server_model_discovery.sql` update the untouched
+Migrations `0034_runtime_model_catalog_starters.sql`,
+`0035_codex_app_server_model_discovery.sql`, and
+`0038_gemini_combined_model_selection.sql` update the untouched
 development starters to these documents while preserving customized starters.
 
 Profile Lab also migrates an existing local ChatGPT Draft that still uses the

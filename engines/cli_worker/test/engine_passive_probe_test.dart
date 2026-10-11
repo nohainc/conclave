@@ -21,6 +21,14 @@ void main() {
                 ).readAsString(),
               )
               as Map<String, Object?>;
+      // This suite exercises bounded passive readiness, not model discovery.
+      // Keep its provider script focused on probe calls.
+      final model = profile['model']! as Map<String, Object?>;
+      model.remove('discovery');
+      model.remove('selectionMapping');
+      model.remove('selectionMode');
+      (profile['engineCompatibility']! as Map<String, Object?>)['min'] =
+          '1.0.0';
       final providerPath = '${root.path}/fake_provider.dart';
       final authFailurePath = '${root.path}/auth-failure';
       await File(providerPath).writeAsString('''
@@ -171,6 +179,11 @@ void main(List<String> args) {
               ).readAsString(),
             )
             as Map<String, Object?>;
+    final geminiModel = profile['model']! as Map<String, Object?>;
+    geminiModel.remove('discovery');
+    geminiModel.remove('selectionMapping');
+    geminiModel.remove('selectionMode');
+    (profile['engineCompatibility']! as Map<String, Object?>)['min'] = '1.0.0';
     final providerPath = '${root.path}/fake_provider.dart';
     await File(providerPath).writeAsString('''
 import 'dart:io';

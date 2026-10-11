@@ -10,6 +10,10 @@ export async function recordWorkspaceWorkerInventory(
   if (!workspaceId || !payload || typeof payload !== "object") return;
   const reports = (payload as Record<string, unknown>).workers;
   if (!Array.isArray(reports) || reports.length > 500) return;
+  const ids = reports.map((item) =>
+    item && typeof item === "object" ? item.workerId : undefined,
+  );
+  if (new Set(ids).size !== ids.length) return;
   const owner = await env.CONCLAVE_DB.prepare(
     "SELECT owner_user_id FROM execution_workspaces WHERE id = ?1 AND status != 'revoked'",
   )
@@ -49,10 +53,14 @@ export async function recordWorkspaceWorkerInventory(
       continue;
     }
     const previous = await env.CONCLAVE_DB.prepare(
-      "SELECT workspace_id, revision FROM workspace_worker_inventory WHERE worker_id = ?1",
+      "SELECT workspace_id, revision, model_catalog_json FROM workspace_worker_inventory WHERE worker_id = ?1",
     )
       .bind(workerId)
-      .first<{ workspace_id: string; revision: number }>();
+      .first<{
+        workspace_id: string;
+        revision: number;
+        model_catalog_json: string | null;
+      }>();
     // A Worker ID is permanently owned by the Workspace that first synced
     // it, and its local revision only moves forward.
     if (previous && previous.workspace_id !== workspaceId) {
@@ -102,6 +110,48 @@ export async function recordWorkspaceWorkerInventory(
       WorkspaceWorkerInventoryEntrySchema.shape.modelCatalog.safeParse(
         item.modelCatalog,
       );
+    // Inventory credentials identify the Workspace; signed release identity
+    // binds capability metadata to this Worker and exact provider version.
+    let acceptedCatalog = validatedCatalog.success
+      ? validatedCatalog.data
+      : null;
+    if (acceptedCatalog) {
+      const release = await env.CONCLAVE_DB.prepare(
+        `SELECT payload_digest AS digest FROM tool_profile_releases WHERE profile_definition_id = ?1
+         AND release_version = ?2 AND worker_type_id = ?3
+         AND published_at IS NOT NULL AND lifecycle_state != 'revoked'`,
+      )
+        .bind(
+          item.profileDefinitionId ?? null,
+          item.profileReleaseVersion ?? null,
+          workerTypeId,
+        )
+        .first<{ digest: string }>();
+      if (
+        !release ||
+        acceptedCatalog.profileDigest !== release.digest ||
+        acceptedCatalog.providerToolVersion !== item.providerToolVersion
+      )
+        acceptedCatalog = null;
+      // Once a Worker publishes v2, legacy data cannot replace it. Clearing
+      // capabilities blocks execution until the service refreshes its catalog.
+      if (
+        acceptedCatalog?.schemaVersion === 1 &&
+        previous?.model_catalog_json
+      ) {
+        try {
+          const old = JSON.parse(previous.model_catalog_json);
+          if (old.schemaVersion === 2)
+            acceptedCatalog =
+              old.profileDigest === acceptedCatalog.profileDigest &&
+              old.providerToolVersion === acceptedCatalog.providerToolVersion
+                ? { ...old, stale: true }
+                : null;
+        } catch {
+          /* Corrupt historical metadata is never reused. */
+        }
+      }
+    }
     await env.CONCLAVE_DB.prepare(
       `INSERT INTO workspace_worker_inventory
           (worker_id, workspace_id, owner_user_id, worker_type_id,
@@ -163,9 +213,7 @@ export async function recordWorkspaceWorkerInventory(
         nullableText(item.createdAt, 40) ?? now,
         now,
         nullableText(item.lastSeenAt, 40) ?? now,
-        validatedCatalog.success && validatedCatalog.data
-          ? JSON.stringify(validatedCatalog.data)
-          : null,
+        acceptedCatalog ? JSON.stringify(acceptedCatalog) : null,
       )
       .run();
     await env.CONCLAVE_DB.prepare(

@@ -89,8 +89,28 @@ void main() {
       profile['profileDefinitionId'] = 'model-runner';
       profile['releaseVersion'] = 3;
       profile['logicalWorkerTypeId'] = 'model-worker';
+      profile['model'] = {
+        'supported': true,
+        'arguments': ['--model', '{{model}}'],
+        'allowlist': ['model'],
+        'unknownModelPolicy': 'profile_allowlist',
+        'catalog': [
+          {
+            'id': 'model',
+            'name': 'Model',
+            'supportedReasoningEfforts': ['careful']
+          }
+        ],
+      };
       profile['execution'] = {
-        'arguments': ['run'],
+        'arguments': [
+          'run',
+          {'modelArguments': true},
+          {
+            'ifPresent': 'reasoningEffort',
+            'values': ['--effort', '{{reasoningEffort}}']
+          }
+        ],
         'stdin': {'mode': 'raw_text', 'value': '{{prompt}}'},
         'output': {'mode': 'plain_text'},
         'events': <Object?>[],
@@ -100,6 +120,8 @@ void main() {
       final proposal = Map<String, Object?>.from(profile)
         ..['description'] = 'proposed by the fixture model';
       await provider.writeAsString('''#!/bin/sh
+if [ "\$1" = '--version' ]; then echo '0.3.0'; exit 0; fi
+for arg in "\$@"; do echo "\$arg"; done > '${temp.path}/proposal-argv.txt'
 cat >/dev/null
 cat <<'CONCLAVE_MODEL_OUTPUT'
 ${jsonEncode(proposal)}
@@ -132,9 +154,13 @@ CONCLAVE_MODEL_OUTPUT
       final output = await sandbox.runTrustedModelProposal(
         modelProfile: admission,
         prompt: 'Propose a safe Draft change.',
+        model: 'model',
+        reasoningEffort: 'careful',
       );
 
       expect(jsonDecode(output), proposal);
+      expect(File('${temp.path}/proposal-argv.txt').readAsLinesSync(),
+          ['run', '--model', 'model', '--effort', 'careful']);
       expect(sandboxRoot.listSync(), isEmpty,
           reason: 'The model request sandbox is removed after execution.');
     });

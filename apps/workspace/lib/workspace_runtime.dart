@@ -144,6 +144,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           .checkNow(
             mode: LocalWorkerProbeMode.passive,
             rerunWhenActive: true,
+            includeDisabled: true,
           )
           .then((_) => connection?.refreshWorkerInventory()),
     );
@@ -282,6 +283,13 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
                   reasoningEffortValue.trim().isNotEmpty
               ? reasoningEffortValue.trim()
               : null,
+          // Static capability identity is bound by the admitted signed Profile;
+          // only Service-owned provider catalogs have an Engine catalog pin.
+          catalogRevision:
+              (release.profile['model'] as Map?)?['discovery'] == null
+                  ? null
+                  : (payload['executionSelection'] as Map?)?['catalogRevision']
+                      as String?,
           executionPolicy: assignmentExecutionPolicy(context.payload),
           onProgress: onProgress,
         );
@@ -298,12 +306,22 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             final catalog = DiscoveredModelCatalog.fromJson(
                 Map<String, Object?>.from(
                     jsonDecode(await file.readAsString()) as Map));
-            if (catalog.profileDigest == release.payloadDigest) {
+            final currentResolution = await coordinator.resolveProfileForWorker(
+                workerTypeId: worker.workerTypeId,
+                engineVersion: cliWorkerEngineVersion,
+                providerCliVersion: catalog.providerToolVersion,
+                synchronizeIfUnavailable: false);
+            if (catalog.profileDigest == release.payloadDigest &&
+                currentResolution.release?.payloadDigest ==
+                    catalog.profileDigest) {
               await localWorkerRegistry.update(
                   worker.id,
-                  (current) => current.copyWith(
-                      modelCatalog: catalog,
-                      toolVersion: catalog.providerToolVersion));
+                  (current) => current.toolVersion != null &&
+                          current.toolVersion != catalog.providerToolVersion
+                      ? current
+                      : current.copyWith(
+                          modelCatalog: catalog.withStale(catalog.stale ||
+                              current.modelCatalog?.stale == true)));
             }
           } on Object {
             // A catalog/cache failure must not replace the assignment outcome.

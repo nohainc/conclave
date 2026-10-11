@@ -24,6 +24,7 @@ import {
   json,
   parseJson,
   resolveWorkflowInstanceId,
+  securityContext,
   summarizeTestCounts,
   validateWorkflowWorkerEligibility,
 } from "./handlers.js";
@@ -352,12 +353,14 @@ export async function handleGetWorkRequest(
             wa.session_policy AS sessionPolicy,
             wa.created_at AS assignmentCreatedAt,
             wa.updated_at AS assignmentUpdatedAt,
+            json_extract(wa.permission_snapshot_json, '$.executionSelection.modelName') AS modelName,
+            json_extract(wa.permission_snapshot_json, '$.executionSelection.catalogRevision') AS catalogRevision,
             wa.permission_snapshot_json AS permissionSnapshotJson,
             wa.error_json AS assignmentErrorJson,
             wi.worker_type_id AS inventoryWorkerTypeId,
             wi.provider_tool_name AS configuredProviderToolName,
             wi.provider_tool_version AS configuredProviderToolVersion,
-            worker_catalog.display_name AS workerDisplayName
+            COALESCE(json_extract(wa.permission_snapshot_json, '$.executionSelection.workerDisplayName'), json_extract(wa.permission_snapshot_json, '$.workerDisplayName'), worker_catalog.display_name) AS workerDisplayName
        FROM workflow_tasks wt
        JOIN work_requests wr ON wr.id = wt.work_request_id
        LEFT JOIN worker_assignments wa ON wa.id = (
@@ -486,6 +489,18 @@ export async function handleGetWorkRequest(
               ? permissionSnapshot.profileReleaseVersion
               : null
             : (executionConfig?.profileReleaseVersion ?? null),
+          reasoningEffort: hasAssignment
+            ? ((
+                permissionSnapshot.executionSelection as
+                  Record<string, unknown> | undefined
+              )?.effort ??
+              permissionSnapshot.reasoningEffort ??
+              null)
+            : (binding.reasoningEffort ?? null),
+          modelName: hasAssignment ? (task?.modelName ?? null) : null,
+          catalogRevision: hasAssignment
+            ? (task?.catalogRevision ?? null)
+            : null,
           model: hasAssignment
             ? (task?.assignedModel ?? null)
             : typeof binding.model === "string"
@@ -573,6 +588,14 @@ export async function handleListWorkRequests(
   threadId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
+  // Older AX clients could retain a retired `workstream-*` scope and keep
+  // polling it after the server-side thread model changed. Authenticate the
+  // request, then return an empty history so stale caches converge without
+  // exposing whether that legacy identifier ever existed.
+  if (threadId.startsWith("workstream-")) {
+    await securityContext(request, env, accessContext);
+    return json({ workRequests: [], nextCursor: null });
+  }
   await authorizeThreadAccess(request, env, threadId, "view", accessContext);
   const url = new URL(request.url);
   const rawLimit = Number(url.searchParams.get("limit") ?? 100);
@@ -668,6 +691,8 @@ export async function handleListWorkRequests(
             wa.worker_type_id AS logicalWorkerTypeId,
             wa.model AS assignedModel,
             wa.engine_version AS engineVersion,
+            json_extract(wa.permission_snapshot_json, '$.executionSelection.modelName') AS modelName,
+            json_extract(wa.permission_snapshot_json, '$.executionSelection.catalogRevision') AS catalogRevision,
             wa.permission_snapshot_json AS permissionSnapshotJson,
             wi.worker_type_id AS inventoryWorkerTypeId,
             wi.provider_tool_name AS configuredProviderToolName,
@@ -793,6 +818,14 @@ export async function handleListWorkRequests(
               : (task?.inventoryWorkerTypeId ??
                 desiredWorker?.workerTypeId ??
                 null),
+            workerDisplayName: hasAssignment
+              ? ((
+                  permissionSnapshot.executionSelection as
+                    Record<string, unknown> | undefined
+                )?.workerDisplayName ??
+                permissionSnapshot.workerDisplayName ??
+                null)
+              : (desiredWorker?.displayName ?? null),
             engineVersion: hasAssignment
               ? typeof permissionSnapshot.profileDefinitionId === "string"
                 ? (task?.engineVersion ?? null)
@@ -808,6 +841,18 @@ export async function handleListWorkRequests(
                 ? permissionSnapshot.profileReleaseVersion
                 : null
               : (executionConfig?.profileReleaseVersion ?? null),
+            reasoningEffort: hasAssignment
+              ? ((
+                  permissionSnapshot.executionSelection as
+                    Record<string, unknown> | undefined
+                )?.effort ??
+                permissionSnapshot.reasoningEffort ??
+                null)
+              : (binding.reasoningEffort ?? null),
+            modelName: hasAssignment ? (task?.modelName ?? null) : null,
+            catalogRevision: hasAssignment
+              ? (task?.catalogRevision ?? null)
+              : null,
             model: hasAssignment
               ? (task?.assignedModel ?? null)
               : typeof binding.model === "string"

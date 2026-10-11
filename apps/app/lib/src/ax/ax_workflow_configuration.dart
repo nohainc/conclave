@@ -1,23 +1,29 @@
 /// A Worker is explicit; null Worker means unresolved or inherited for a step.
 /// Null model/effort values represent Auto and are omitted from the wire payload.
 class AxWorkflowSelection {
-  const AxWorkflowSelection({this.worker, this.model, this.effort});
-  final String? worker, model, effort;
+  const AxWorkflowSelection(
+      {this.worker, this.model, this.effort, this.catalogRevision});
+  final String? worker, model, effort, catalogRevision;
   factory AxWorkflowSelection.fromJson(Map<String, dynamic> json) =>
       AxWorkflowSelection(
           worker: json['worker'] as String?,
           model: json['model'] as String?,
-          effort: json['effort'] as String?);
+          effort: json['effort'] as String?,
+          catalogRevision: json['catalogRevision'] as String?);
   Map<String, dynamic> toJson() => {
         if (worker != null) 'worker': worker,
         if (model != null) 'model': model,
         if (effort != null) 'effort': effort,
+        if (catalogRevision != null) 'catalogRevision': catalogRevision,
       };
   AxWorkflowSelection overlay(AxWorkflowSelection override) =>
       AxWorkflowSelection(
           worker: override.worker ?? worker,
           model: override.model ?? model,
-          effort: override.effort ?? effort);
+          effort: override.effort ?? effort,
+          catalogRevision: override.worker != null && override.worker != worker
+              ? override.catalogRevision
+              : override.catalogRevision ?? catalogRevision);
 }
 
 class AxUserWorkflowConfiguration {

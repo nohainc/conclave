@@ -136,7 +136,6 @@ Future<_Setup> _setup() async {
     thread: thread,
     supervisor: CliWorkerEngineSupervisor(
       engineExecutable: Platform.environment['DART_EXECUTABLE'] ??
-          Platform.environment['DART_EXECUTABLE'] ??
           Platform.resolvedExecutable,
       engineArgumentsPrefix: [script.path],
     ),
@@ -194,7 +193,7 @@ Future<void> main(List<String> args) async {
           'profileDefinitionId': profile['profileDefinitionId'],
           'profileReleaseVersion': '${profile['releaseVersion']}',
           'profileSchemaVersion': profile['schemaVersion'],
-          'capabilities': profile['capabilities'],
+          'capabilities': <String>[],
         }));
       case 'execute.request':
         final activeFile = File('${state.path}/active');

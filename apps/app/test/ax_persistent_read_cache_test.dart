@@ -73,7 +73,11 @@ void main() {
     final backend = MemoryAxReadCacheBackend();
     final first = store(backend);
     await first.hydrateReadCache();
-    final turn = turnFixture();
+    final turn = AxConversationTurn.fromJson({
+      ...turnFixture().toJson(),
+      'modelName': 'Original Family',
+      'catalogRevision': 'a' * 64
+    });
     final row = AxWorkRequest.fromJson({
       'id': 'R',
       'workflowRun': {
@@ -113,6 +117,17 @@ void main() {
         'createdAt': 'now',
         'updatedAt': 'now'
       },
+      'steps': [
+        {
+          'kind': 'direct',
+          'status': 'completed',
+          'workerId': 'worker-a',
+          'model': 'model-x',
+          'modelName': 'Original Family',
+          'reasoningEffort': 'medium',
+          'catalogRevision': 'a' * 64
+        }
+      ],
       'turns': [turn.toJson()]
     });
     first.syncEngine.update(first.workHistory.query('W'),
@@ -127,6 +142,11 @@ void main() {
     expect(second.workHistory.peek('W').requests.single.workflowRun!.toJson(),
         row.workflowRun!.toJson());
     expect(row.copyWith(status: 'completed').workflowRun!.id, 'workflow-run-R');
+    final restoredStep =
+        second.workHistory.peek('W').requests.single.steps.single;
+    expect(restoredStep.modelName, 'Original Family');
+    expect(restoredStep.reasoningEffort, 'medium');
+    expect(restoredStep.catalogRevision, 'a' * 64);
     final restoredRun =
         second.workHistory.peek('W').requests.single.workflowRun!;
     expect(restoredRun.stepRuns.single.result, '**Recorded answer**');

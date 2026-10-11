@@ -8,6 +8,8 @@ environment:
   flutter: ">=3.24.0"
 
 dependencies:
+  conclave_protocol:
+    path: ../dart/protocol
   flutter:
     sdk: flutter
 

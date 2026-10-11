@@ -18,7 +18,6 @@ void main() {
               'displayName': 'ChatGPT',
               'description': 'ChatGPT worker',
               'engineFamily': 'cli',
-              'capabilities': ['text'],
               'profileDefinitionId': 'chatgpt-cli',
               'providerToolName': 'Codex CLI',
               'releaseStage': 'stable',

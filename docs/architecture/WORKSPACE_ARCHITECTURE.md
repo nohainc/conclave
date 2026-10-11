@@ -234,6 +234,51 @@ inventory, and Cloud exposes only a matching Profile digest and CLI version to
 AX. AX therefore reads the catalog through its normal Cloud/cache
 synchronization path; it never talks to a provider CLI directly.
 Discovery-backed Profiles contain no static fallback catalog or guessed effort
-rules. A missing or stale catalog leaves the choices unavailable until the
-Worker is refreshed. The app-server is used only for discovery; generic Profile
+rules. A missing or mismatched catalog leaves choices unavailable. Temporary
+discovery failures retain a matching last-known-good catalog with a stale flag;
+background refresh restores freshness without changing an identical revision. The app-server is used only for discovery; generic Profile
 execution remains the Worker Engine's responsibility.
+
+The additive [Worker execution options v2 contract](../specifications/WORKER_EXECUTION_OPTIONS_V2.md)
+keeps logical selection IDs separate from local native IDs. The Service persists
+the versioned Engine catalog and removes native IDs from Cloud inventory. Cloud
+exposes only selection metadata and an opaque stable catalog revision; Profile
+digests and discovery CLI versions remain internal admission bindings.
+
+
+### Service capability lifecycle
+
+The Service readiness monitor owns startup and one-minute background capability
+refresh, plus setup, enable, Profile-change and explicit-refresh triggers.
+Matching simultaneous requests coalesce; uncovered scopes and Profile changes
+queue a serialized pass. Provider version or Profile digest mismatch invalidates
+current capability entries without rewriting historical selections. Freshness
+is independent of the stable capability revision and reaches Cloud/AX as bounded
+v2 metadata. This continues without a GUI connection or human UI session while
+the authorized Service runs. Details are in the
+[execution options contract](../specifications/WORKER_EXECUTION_OPTIONS_V2.md#phase-4-freshness-and-service-ownership).
+
+### Shared capability presentation
+
+The management client's read-only model/effort view uses
+`conclave_design/ModelEffortSelector` with public capability projections from
+`conclave_protocol`. It displays the Service-owned catalog, actual per-model
+efforts/defaults and freshness without performing discovery or execution.
+AX and Profile Lab use the same selector and pure selection rules; their host
+adapters supply authorized catalogs. See the shared presentation contract in
+[Worker Execution Options v2](../specifications/WORKER_EXECUTION_OPTIONS_V2.md#phase-6-shared-flutter-modeleffort-selection).
+
+
+### Immutable execution selection evidence
+
+Cloud freezes public effective selections and display names in the assignment;
+Workspace Service forwards provider catalog pins using Local Worker Protocol 4.1.
+The separately supervised Engine 1.3.0 validates current signed-profile/catalog
+compatibility and writes immutable private native-resolution evidence in its
+runtime state directory before invoking a CLI. Completion evidence distinguishes
+observed provider exit status from unavailable model/effort attestation. Native
+selection details remain local. Combined effort variants obey native-model session
+compatibility; separate effort remains per turn. Work history uses frozen public
+assignment labels and never the current inventory to relabel an old execution.
+See [execution options](../specifications/WORKER_EXECUTION_OPTIONS_V2.md#phase-8--immutable-execution-resolution-and-history)
+for snapshot fields and rollout order.

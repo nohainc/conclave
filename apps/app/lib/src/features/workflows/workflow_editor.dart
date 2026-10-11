@@ -1,3 +1,5 @@
+import 'package:conclave_design/conclave_design.dart';
+import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:flutter/material.dart';
 import '../../ax/ax_models.dart';
 import '../../ax/ax_workflow_configuration.dart';
@@ -111,6 +113,9 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
                         worker.workspaceId == widget.workspaceId)
                     .toList());
             final issues = _issues(options);
+            final visibleIssues = issues.entries
+                .where((entry) => !_hideValidationMessage(entry.value))
+                .toList();
             return AlertDialog(
               title: Text(widget.definition.name),
               content: SizedBox(
@@ -139,7 +144,8 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
                           const AxWorkflowSelection(),
                           options,
                           (value) => defaults = value),
-                      if (issues['defaults'] != null)
+                      if (issues['defaults'] != null &&
+                          !_hideValidationMessage(issues['defaults']))
                         _notice(issues['defaults']!, error: true),
                       const SizedBox(height: 8),
                       ExpansionTile(
@@ -159,9 +165,9 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
                                 issues[steps[index].kind]),
                         ],
                       ),
-                      if (issues.isNotEmpty)
+                      if (visibleIssues.isNotEmpty)
                         _notice(
-                            'Resolve incompatible choices before saving.\n${issues.entries.where((entry) => entry.key != 'defaults').map((entry) => '${_title(entry.key)}: ${entry.value}').join('\n')}',
+                            'Resolve incompatible choices before saving.\n${visibleIssues.where((entry) => entry.key != 'defaults').map((entry) => '${_title(entry.key)}: ${entry.value}').join('\n')}',
                             error: true),
                       if (state.error != null)
                         _notice(
@@ -205,8 +211,7 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
       subtitle: Text(custom && selection.toJson().isNotEmpty
           ? _summary(selection, options)
           : 'Inherit defaults'),
-      trailing: Icon(issue == null ? Icons.chevron_right : Icons.error_outline,
-          color: issue == null ? null : Theme.of(context).colorScheme.error),
+      trailing: const Icon(Icons.chevron_right),
       children: [
         const Align(
             alignment: Alignment.centerLeft,
@@ -260,7 +265,8 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
                   child: const Text('Reset step to inherited values'))),
         ] else
           _notice('Uses the workflow Worker, model, and effort defaults.'),
-        if (issue != null) _notice(issue, error: true),
+        if (issue != null && !_hideValidationMessage(issue))
+          _notice(issue, error: true),
         const SizedBox(height: 12),
       ],
     );
@@ -272,82 +278,36 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
       AxWorkflowSelection base,
       AxWorkflowSelectionOptions options,
       ValueChanged<AxWorkflowSelection> update) {
-    final effective = base.overlay(value);
-    final selected = options.worker(effective.worker);
-    final models = options.models(effective.worker);
-    final efforts = options.efforts(effective);
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _picker(
-          scope,
-          'Worker',
-          value.worker,
-          {
-            for (final worker in options.workers)
-              worker.id:
-                  '${worker.displayName} · ${worker.workspaceName}${worker.isReady ? '' : ' · ${_availability(worker)}'}',
-          },
-          (id) => update(AxWorkflowSelection(worker: id)),
-          inherited: base.worker),
-      const SizedBox(height: 12),
-      _picker(scope, 'Model', value.model, models,
-          (id) => update(AxWorkflowSelection(worker: value.worker, model: id)),
-          inherited: base.model),
-      const SizedBox(height: 12),
-      _picker(
-          scope,
-          'Effort',
-          value.effort,
-          {for (final id in efforts) id: _title(id)},
-          (id) => update(AxWorkflowSelection(
-              worker: value.worker, model: value.model, effort: id)),
-          inherited: base.effort),
-      const SizedBox(height: 12),
-      if (effective.worker != null && (selected == null || !selected.isReady))
-        _notice(selected == null
-            ? 'Selected Worker is unavailable. Your saved selection is kept; choose another Worker to replace it.'
-            : '${selected.displayName} is ${_availability(selected).toLowerCase()}. You can keep its configuration; execution requires an available Worker.'),
-      if (selected != null && selected.executionOptions == null)
-        _notice(
-            'Model and effort options are unavailable until this Worker’s Profile is ready.'),
-    ]);
-  }
-
-  Widget _picker(String scope, String label, String? value,
-      Map<String, String> choices, ValueChanged<String?> changed,
-      {String? inherited}) {
-    final available = Map<String, String>.from(choices);
-    if (value != null && !available.containsKey(value)) {
-      available[value] = '$value · Unavailable';
-    }
-    return DropdownButtonFormField<String>(
-      key: ValueKey('$scope-$label-$value-${available.keys.join(',')}'),
-      initialValue: value ?? '',
-      isExpanded: true,
-      decoration: InputDecoration(
-          labelText: label,
-          helperText: scope != 'defaults' && value == null
-              ? 'Inherited: ${inherited == null ? (label == 'Worker' ? 'Select Worker...' : 'Auto') : choices[inherited] ?? _title(inherited)}'
-              : null),
-      items: [
-        DropdownMenuItem(
-            value: '',
-            child: Text(label == 'Worker'
-                ? (scope == 'defaults' || inherited == null
-                    ? 'Select Worker...'
-                    : 'Inherit workflow Worker')
-                : 'Auto')),
-        for (final entry in available.entries)
-          DropdownMenuItem(
-              value: entry.key,
-              enabled: choices.containsKey(entry.key),
-              child: Text(entry.value, overflow: TextOverflow.ellipsis)),
-      ],
-      onChanged: busy
-          ? null
-          : (id) => setState(() {
-                error = null;
-                changed(id == '' ? null : id);
-              }),
+    return ModelEffortSelector(
+      scope: scope,
+      catalog: options.sharedCatalog,
+      value: ExecutionSelection(
+          worker: value.worker,
+          model: value.model,
+          effort: value.effort,
+          catalogRevision: value.catalogRevision),
+      inherited: ExecutionSelection(
+          worker: base.worker,
+          model: base.model,
+          effort: base.effort,
+          catalogRevision: base.catalogRevision),
+      readOnly: busy,
+      showCatalog: false,
+      showSelectionStateText: false,
+      showValidationMessage: true,
+      hideExplicitModelRequirement: true,
+      hiddenValidationMessages: const {
+        'Select a Worker.',
+        'Select an effort for this model.',
+      },
+      onChanged: (selection) => setState(() {
+        error = null;
+        update(AxWorkflowSelection(
+            worker: selection.worker,
+            model: selection.model,
+            effort: selection.effort,
+            catalogRevision: selection.catalogRevision));
+      }),
     );
   }
 
@@ -358,6 +318,12 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
               color: error
                   ? Theme.of(context).colorScheme.error
                   : Theme.of(context).colorScheme.onSurfaceVariant)));
+
+  bool _hideValidationMessage(String? message) => const {
+        'Select an explicit model for this Worker.',
+        'Select a Worker.',
+        'Select an effort for this model.',
+      }.contains(message);
   String _summary(
           AxWorkflowSelection value, AxWorkflowSelectionOptions options) =>
       [
@@ -369,9 +335,5 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
       ].join(' · ');
 }
 
-String _availability(AxWorker worker) =>
-    worker.readinessState == 'offline' || worker.status == 'offline'
-        ? 'Offline'
-        : 'Unavailable';
 String _title(String value) =>
     value.isEmpty ? value : '${value[0].toUpperCase()}${value.substring(1)}';

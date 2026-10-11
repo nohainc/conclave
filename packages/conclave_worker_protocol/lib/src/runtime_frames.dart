@@ -583,6 +583,7 @@ final class ExecuteRequest extends WorkerFrame {
     this.executionPolicy = WorkerExecutionPolicy.restricted,
     this.model,
     this.reasoningEffort,
+    this.catalogRevision,
     this.sessionKey,
     this.workerSession,
     this.statelessContext,
@@ -617,6 +618,12 @@ final class ExecuteRequest extends WorkerFrame {
         'reasoningEffort',
         WorkerProtocolLimits.maxModelLength,
       );
+    }
+    if (catalogRevision != null &&
+        (protocolVersion == '4.0' ||
+            !RegExp(r'^[a-f0-9]{64}$').hasMatch(catalogRevision!))) {
+      throw const FormatException(
+          'catalogRevision requires protocol 4.1 and a SHA-256 identity');
     }
     if (statelessContext != null &&
         sessionPolicy != WorkerSessionPolicy.stateless) {
@@ -653,6 +660,7 @@ final class ExecuteRequest extends WorkerFrame {
   final String prompt;
   final String? model;
   final String? reasoningEffort;
+  final String? catalogRevision;
   final int timeoutMs;
   final WorkerSessionPolicy sessionPolicy;
   final WorkerExecutionPolicy executionPolicy;
@@ -672,6 +680,7 @@ final class ExecuteRequest extends WorkerFrame {
         'prompt': prompt,
         'model': model,
         if (reasoningEffort != null) 'reasoningEffort': reasoningEffort,
+        if (catalogRevision != null) 'catalogRevision': catalogRevision,
         'timeoutMs': timeoutMs,
         'sessionPolicy': sessionPolicy == WorkerSessionPolicy.durableSession
             ? 'durable_session'
@@ -692,6 +701,7 @@ final class ExecuteRequest extends WorkerFrame {
       'prompt',
       'model',
       'reasoningEffort',
+      'catalogRevision',
       'timeoutMs',
       'sessionPolicy',
       'executionPolicy',
@@ -744,6 +754,7 @@ final class ExecuteRequest extends WorkerFrame {
       prompt: _requiredString(json, 'prompt'),
       model: model as String?,
       reasoningEffort: reasoningEffort as String?,
+      catalogRevision: _optionalString(json, 'catalogRevision'),
       timeoutMs: timeout,
       sessionPolicy: parsedPolicy,
       executionPolicy: parsedExecutionPolicy,
@@ -1161,7 +1172,7 @@ void _validateToken(String value, String name, int maxLength) =>
     _boundedText(value, name, maxLength);
 
 void _validateProtocol(String version) {
-  if (version != localWorkerProtocolVersion) {
+  if (!supportedLocalWorkerProtocolVersions.contains(version)) {
     throw FormatException('unsupported protocol version: $version');
   }
 }

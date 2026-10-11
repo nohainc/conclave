@@ -16,7 +16,7 @@ void main() {
     try {
       await serviceOwner.start();
       final child = await Process.start(
-        Platform.resolvedExecutable,
+        Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
         [
           'run',
           'test/fixtures/workspace_lock_attempt.dart',
@@ -26,8 +26,11 @@ void main() {
         ],
         workingDirectory: Directory.current.path,
       );
+      final stdoutDrain = child.stdout.drain<void>();
+      final stderrDrain = child.stderr.drain<void>();
       final exitCode =
           await child.exitCode.timeout(const Duration(seconds: 15));
+      await Future.wait([stdoutDrain, stderrDrain]);
       expect(exitCode, 0,
           reason: 'the second process must report the existing owner lock');
       expect(serviceOwner.isRunning, isTrue);

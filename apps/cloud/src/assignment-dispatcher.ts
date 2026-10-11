@@ -321,8 +321,10 @@ async function dispatchWorkspaceWorkerAssignment(
       profileReleaseVersion: target.profileReleaseVersion,
       providerToolName: target.providerToolName,
       providerToolVersion: target.providerToolVersion,
+      executionSelection: target.permissionSnapshot.executionSelection,
       model: target.model,
-      reasoningEffort: target.reasoningEffort ?? task.reasoningEffort ?? null,
+      // Null is the resolved provider default, never permission to reuse a task override.
+      reasoningEffort: target.reasoningEffort ?? null,
       config: assignmentInput,
       permissions: target.effectivePermissions,
       permissionSnapshot: snapshot,

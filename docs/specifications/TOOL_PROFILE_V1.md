@@ -624,6 +624,11 @@ v1 may support:
 
 No silent model substitution is permitted.
 
+Optional `model.selectionMode` declares `separate` (default) or `combined`
+selection metadata. Native resolution stays inside the Profile/Engine boundary;
+it does not authorize inferred effort combinations. See the additive
+[Worker execution options v2 contract](WORKER_EXECUTION_OPTIONS_V2.md).
+
 Optional `model.executionOptions` declares version 1 generic capabilities:
 `discovery: "profile_catalog"`, `modelSwitchSupported`, `effortSupported`, optional
 nullable `defaultModelId`, and optional `effortMapping`. Catalog and global/model
@@ -932,7 +937,11 @@ Optional `model.discovery` declares version 1 provider discovery:
 fields are optional). `format: "codex_app_server"` starts the declared Codex
 app-server command, performs the JSON-RPC `initialize` handshake, then calls
 `model/list`; its `displayName`, `id`, `supportedReasoningEfforts`, and
-`defaultReasoningEffort` fields become the sanitized catalog. Runtime inventory
+`defaultReasoningEffort` fields become the sanitized catalog. Codex `id` is the
+logical selection identity; `model` is retained as nativeId locally for CLI
+invocation (falling back to id when absent). Engine catalog v2 is stripped of
+nativeId before Workspace inventory publication; its public projection follows
+[Worker execution options v2](WORKER_EXECUTION_OPTIONS_V2.md). Runtime inventory
 supplies the matching versioned catalog; it cannot widen a Profile without that
 declaration. For discovery-backed Profiles, the runtime catalog is the only
 source of model and effort choices: the Profile must not contain a fallback
@@ -946,3 +955,7 @@ successful explicit live test for the current Profile digest and CLI version.
 Passive discovery does not authenticate the account. See
 [Gemini/AGY implementation contract](../architecture/GEMINI_AGY_PROFILE.md)
 for cache ownership, wire metadata, availability states, security and release gates.
+
+Optional signed `model.selectionMapping` schema version 1 requires Engine 1.2.0.
+Its exact native rows, effort/default rules and provider version gates are defined
+in [Provider discovery and normalization](MODEL_DISCOVERY_NORMALIZATION.md).

@@ -2,6 +2,21 @@ import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('frozen model labels survive history decoding and status changes', () {
+    final step = AxWorkRequestStep.fromJson({
+      'kind': 'direct',
+      'status': 'completed',
+      'workerId': 'worker',
+      'model': 'family',
+      'modelName': 'Original Family',
+      'catalogRevision': 'a' * 64,
+      'reasoningEffort': 'high',
+    });
+    expect(step.withStatus('failed').modelName, 'Original Family');
+    expect(step.reasoningEffort, 'high');
+    expect(step.withStatus('failed').catalogRevision, 'a' * 64);
+  });
+
   for (final entry in [
     ['direct', 1, 'Direct'],
     ['direct', 2, 'Work'],

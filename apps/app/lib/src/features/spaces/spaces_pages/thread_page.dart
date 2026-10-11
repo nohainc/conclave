@@ -199,6 +199,7 @@ class _ThreadPageState extends State<ThreadPage>
         workerId: _selectionValue('workerId'),
         model: _selectionValue('model'),
         reasoningEffort: _selectionValue('reasoningEffort'),
+        catalogRevision: _selectionValue('catalogRevision'),
         chatDraft: _discussionController.text,
         workDraft: _requestController.text,
       );
@@ -228,22 +229,13 @@ class _ThreadPageState extends State<ThreadPage>
       return;
     }
     _workflow = workflow.reference;
-    final worker = _eligibleWorkers
-        .where((candidate) => candidate.id == saved.workerId)
-        .firstOrNull;
+    // Restoring preferences never silently replaces unavailable saved choices.
     final selection = <String, dynamic>{
-      if (worker != null) 'workerId': worker.id,
+      if (saved.workerId != null) 'workerId': saved.workerId,
+      if (saved.model != null) 'model': saved.model,
+      if (saved.reasoningEffort != null)
+        'reasoningEffort': saved.reasoningEffort,
     };
-    if (worker?.executionOptions != null) {
-      final values = worker!.executionOptions!.reconcileSelection(
-        model: saved.model,
-        effort: saved.reasoningEffort,
-      );
-      if (values.model != null) selection['model'] = values.model;
-      if (values.effort != null) {
-        selection['reasoningEffort'] = values.effort;
-      }
-    }
     _workExecutionSelection = selection;
     _pendingThreadViewState = null;
     _updateComposerState(() {});
@@ -309,6 +301,9 @@ class _ThreadPageState extends State<ThreadPage>
               'model': configuration!.selectionFor(step.kind).model,
             if (configuration?.selectionFor(step.kind).effort != null)
               'reasoningEffort': configuration!.selectionFor(step.kind).effort,
+            if (configuration?.selectionFor(step.kind).catalogRevision != null)
+              'catalogRevision':
+                  configuration!.selectionFor(step.kind).catalogRevision,
           }
       }
     };
@@ -841,6 +836,7 @@ class _ThreadPageState extends State<ThreadPage>
               ? message.authorUserId == widget.currentUserId
               : message.isMe;
       final date = DateTime.tryParse(message.createdAt)?.toLocal();
+      final edited = DateTime.tryParse(message.editedAt ?? '')?.toLocal();
       final rawAuthor = isMe ? 'You' : (message.authorName?.trim() ?? '');
       final displayAuthor = (rawAuthor.isEmpty ||
               rawAuthor == message.authorUserId ||
@@ -852,6 +848,7 @@ class _ThreadPageState extends State<ThreadPage>
           author: displayAuthor,
           text: message.body,
           sentAt: date == null ? null : _chatTimestamp(date),
+          editedAt: edited == null ? null : _chatTimestamp(edited),
           isMe: isMe);
     }).toList();
     _followLatest(_chatHistoryController, _followChat);

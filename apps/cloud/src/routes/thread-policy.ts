@@ -315,7 +315,12 @@ export async function validateWorkflowWorkerEligibility(
   workflow: BuiltinWorkflowDefinition,
   bindings: Record<
     string,
-    { workerId?: string; model?: string; reasoningEffort?: string }
+    {
+      workerId?: string;
+      model?: string;
+      reasoningEffort?: string;
+      catalogRevision?: string;
+    }
   >,
 ): Promise<{
   issues: WorkEligibilityIssue[];
@@ -522,11 +527,20 @@ export async function validateWorkflowWorkerEligibility(
       row.modelCatalogJson,
       row.executionProfileDigest,
     );
+    if (!executionOptions) {
+      issues.push({
+        stepKind: step.kind,
+        workerTypeId,
+        code: "profile_execution_option_unavailable",
+        message: `${step.kind}: Worker capabilities are unavailable; refresh the Workspace catalog.`,
+      });
+    }
     if (executionOptions) {
       const error = validateWorkerExecutionSelection(
         executionOptions,
         binding.model ?? null,
         binding.reasoningEffort ?? null,
+        binding.catalogRevision,
       );
       if (error)
         issues.push({

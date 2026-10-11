@@ -301,3 +301,58 @@ it("next-request defaults do not rewrite completed turn attribution or create ex
     f.sqlite.close();
   }
 });
+
+it("freezes friendly selection labels and catalog identity despite later inventory changes", async () => {
+  const f = await conversationFixture();
+  const snapshot = {
+    schemaVersion: 1,
+    workerTypeId: "chatgpt",
+    workerDisplayName: "Original Worker",
+    modelId: "model-x",
+    modelName: "Original Model",
+    effort: "medium",
+    profileReleaseVersion: 3,
+    catalogRevision: "a".repeat(64),
+  };
+  f.assign(
+    "FROZEN",
+    "model-x",
+    "medium",
+    "durable_session",
+    undefined,
+    undefined,
+    snapshot,
+  );
+  const original = (await f.turns())[0]!;
+  expect(original).toMatchObject({
+    modelName: "Original Model",
+    workerDisplayName: "Original Worker",
+    catalogRevision: snapshot.catalogRevision,
+  });
+  f.sqlite.exec(
+    "UPDATE worker_catalog SET display_name='New Worker' WHERE worker_type_id='chatgpt'",
+  );
+  expect((await f.turns())[0]).toEqual(original);
+  expect(() =>
+    f.sqlite.exec(
+      "UPDATE worker_assignments SET permission_snapshot_json=json_set(permission_snapshot_json,'$.executionSelection.modelName','Changed') WHERE id='FROZEN'",
+    ),
+  ).toThrow("selection is immutable");
+  expect(() =>
+    f.sqlite.exec(
+      "UPDATE worker_assignments SET model='new-model' WHERE id='FROZEN'",
+    ),
+  ).toThrow("selection is immutable");
+  await recordAssignmentResult(f.db as unknown as D1Database, "FROZEN", {
+    assignmentId: "FROZEN",
+    completedAt: "2026-10-11T00:00:00Z",
+    status: "completed",
+    output: { text: "Reply" },
+    artifactIds: [],
+  });
+  expect((await f.turns())[0]).toMatchObject({
+    modelName: "Original Model",
+    status: "completed",
+  });
+  f.sqlite.close();
+});

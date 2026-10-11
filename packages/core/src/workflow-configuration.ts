@@ -10,6 +10,7 @@ export interface WorkflowSelection {
   readonly worker?: string;
   readonly model?: string;
   readonly effort?: string;
+  readonly catalogRevision?: string;
 }
 export interface UserWorkflowConfiguration {
   readonly schemaVersion: 1;
@@ -42,6 +43,12 @@ export function resolveUserWorkflowConfiguration(
         {
           ...configuration?.defaults,
           ...configuration?.stepOverrides[step.kind],
+          ...(configuration?.stepOverrides[step.kind]?.worker !== undefined &&
+          configuration.stepOverrides[step.kind]!.worker !==
+            configuration.defaults.worker &&
+          configuration.stepOverrides[step.kind]!.catalogRevision === undefined
+            ? { catalogRevision: undefined }
+            : {}),
         },
       ]),
     ),
@@ -64,20 +71,29 @@ export function parseUserWorkflowConfiguration(
   };
   const selection = (input: unknown): WorkflowSelection => {
     const value = object(input);
-    keys(value, ["worker", "model", "effort"]);
+    keys(value, ["worker", "model", "effort", "catalogRevision"]);
     const result: Record<string, string> = {};
-    for (const key of ["worker", "model", "effort"] as const) {
+    for (const key of [
+      "worker",
+      "model",
+      "effort",
+      "catalogRevision",
+    ] as const) {
       const choice = value[key];
       if (choice === undefined || choice === null) continue;
       if (choice === "Auto" || choice === "Automatic") {
-        if (key === "worker")
+        if (key === "worker" || key === "catalogRevision")
           throw new DomainInvariantError("Worker must be selected explicitly");
         if (choice === "Automatic")
-          throw new DomainInvariantError("Use Auto for model and effort defaults");
+          throw new DomainInvariantError(
+            "Use Auto for model and effort defaults",
+          );
         continue;
       }
       if (typeof choice !== "string" || !choice.trim() || choice.length > 200)
         throw new DomainInvariantError(`Invalid ${key} selection`);
+      if (key === "catalogRevision" && !/^[a-f0-9]{64}$/.test(choice))
+        throw new DomainInvariantError("Invalid catalog revision");
       result[key] = choice.trim();
     }
     return result;

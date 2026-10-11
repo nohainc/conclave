@@ -73,6 +73,8 @@ class EngineSessionStore {
     WorkerSessionContext? workerSession,
     bool modelSwitchSupported = true,
     String? requestedModelId,
+    String? requestedEffort,
+    bool effortChangesNativeModel = false,
     bool allowModelReconstruction = false,
     bool allowContextSynchronization = false,
     void Function(WorkerSession)? onSessionRead,
@@ -123,8 +125,8 @@ class EngineSessionStore {
           'Worker Session belongs to another Conversation or Worker',
         );
       }
-      // Effort is a per-turn Profile option. It never participates in native
-      // session identity or model-switch compatibility checks.
+      // Separate effort is per turn. Combined effort variants select a native
+      // model and must respect the same model-switch contract.
       if (stored.synchronizedContextRevision >
           workerSession.baseContextRevision) {
         throw const FormatException(
@@ -133,7 +135,10 @@ class EngineSessionStore {
       }
       onSessionRead?.call(stored);
       if (stored.status == 'invalidated') return null;
-      if (!modelSwitchSupported && stored.lastModelId != requestedModelId) {
+      if (!modelSwitchSupported &&
+          (stored.lastModelId != requestedModelId ||
+              (effortChangesNativeModel &&
+                  stored.lastEffort != requestedEffort))) {
         if (allowModelReconstruction) return null;
         throw const FormatException(
           'Profile does not support changing model within this Worker Session',

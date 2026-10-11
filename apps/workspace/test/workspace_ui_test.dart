@@ -1381,8 +1381,8 @@ void main() {
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
     expect(find.text('Setup required'), findsNWidgets(2));
-    expect(find.text('codex · Unknown'), findsOneWidget);
-    expect(find.text('agy · Unknown'), findsOneWidget);
+    expect(find.text('codex Unknown'), findsOneWidget);
+    expect(find.text('agy Unknown'), findsOneWidget);
     expect(find.textContaining('Capabilities:'), findsNothing);
     expect(find.text('Diagnostics'), findsNothing);
     expect(find.text('Set up ChatGPT'), findsNothing);
@@ -1573,8 +1573,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Setup required'), findsOneWidget);
-    expect(find.text('Codex CLI · 1.2.3'), findsOneWidget);
-    expect(find.text('agy · Not detected'), findsOneWidget);
+    expect(find.text('Codex CLI 1.2.3'), findsOneWidget);
+    expect(find.text('agy Not detected'), findsOneWidget);
     expect(find.text('Test'), findsNWidgets(2));
     expect(find.textContaining('Test failed (execution_test_failed)'),
         findsNothing);
@@ -1590,9 +1590,12 @@ void main() {
     expect(find.text('Authentication'), findsNothing);
     expect(
         find.text('Check again').evaluate().length +
-            find.byType(Switch).evaluate().length,
+            find.text('Enable').evaluate().length +
+            find.text('Disable').evaluate().length,
         2);
     expect(find.text('Configure'), findsNothing);
+    expect(find.text('Models and efforts'), findsNothing);
+    expect(find.textContaining('Local Worker ·'), findsNothing);
     expect(find.textContaining('ChatGPT local'), findsNothing);
     expect(find.text('Default Model'), findsNothing);
     expect(find.text('Allowed Models'), findsNothing);
@@ -1601,7 +1604,7 @@ void main() {
     expect(find.text('Engine version'), findsNothing);
     expect(find.text('Provider CLI version'), findsNothing);
     expect(find.text('Tool'), findsNothing);
-    expect(find.text('Codex CLI · 1.2.3'), findsOneWidget);
+    expect(find.text('Codex CLI 1.2.3'), findsOneWidget);
     expect(find.textContaining('Worker version'), findsNothing);
     expect(find.textContaining('Signing key'), findsNothing);
     expect(find.textContaining('Release channel'), findsNothing);
@@ -1675,6 +1678,11 @@ void main() {
     expect(
       find.descendant(of: chatGptCard, matching: find.text('Ready')),
       findsOneWidget,
+    );
+    expect(
+      find.descendant(
+          of: chatGptCard, matching: find.text('Profile · Available')),
+      findsNothing,
     );
     expect(
       find.descendant(of: chatGptCard, matching: find.text('Setup required')),
@@ -1755,7 +1763,7 @@ void main() {
     );
   });
 
-  testWidgets('activation switch delegates without a live Worker test',
+  testWidgets('activation text action delegates without a live Worker test',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -1812,13 +1820,13 @@ void main() {
     );
     await openWorkers(tester);
 
-    await tester.tap(find.byType(Switch).first); // Disable.
+    await tester.tap(find.text('Disable').first); // Disable.
     await tester.pumpAndSettle();
     expect(registry.workers.single.activationState,
         LocalWorkerActivationState.disabled);
     expect(probeModes, isEmpty);
 
-    await tester.tap(find.byType(Switch).first); // Enable.
+    await tester.tap(find.text('Enable').first); // Enable.
     await tester.pumpAndSettle();
     expect(registry.workers.single.activationState,
         LocalWorkerActivationState.enabled);

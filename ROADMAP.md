@@ -29,7 +29,8 @@ Use the v8 implementation plan for architecture and release gates, then update t
 
 ### Gemini AGY discovery candidate
 
-Engine 1.1.0 supports signed generic CLI model discovery, version/Profile-bound
+Engine 1.2.0 supports signed generic CLI model discovery, reviewed model/effort
+normalization, Service background refresh, and version/Profile-bound
 caching, Service inventory projection and explicit live-readiness gating. Gemini
 release 2 is an authoring candidate, not a promoted stable release. Real AGY
 1.3.3 discovery, selected-model execution and durable resume evidence are in

@@ -63,3 +63,41 @@ it("normalizes Model/Effort Auto and rejects Worker Auto plus invalid identities
     ).toThrow();
   }
 });
+
+it("accepts optional reviewed catalog revisions while keeping legacy selections readable", () => {
+  const config = parseUserWorkflowConfiguration(definition, {
+    ...input,
+    defaults: {
+      worker: "worker",
+      model: "model",
+      catalogRevision: "a".repeat(64),
+    },
+  });
+  expect(
+    resolveUserWorkflowConfiguration(definition, config).steps.implement
+      ?.catalogRevision,
+  ).toBe("a".repeat(64));
+  for (const catalogRevision of ["Auto", "unknown", "A".repeat(64)])
+    expect(() =>
+      parseUserWorkflowConfiguration(definition, {
+        ...input,
+        defaults: { worker: "worker", catalogRevision },
+      }),
+    ).toThrow();
+});
+
+it("does not inherit another Worker's reviewed catalog revision", () => {
+  const configured = parseUserWorkflowConfiguration(definition, {
+    ...input,
+    defaults: { worker: "one", catalogRevision: "a".repeat(64) },
+    stepOverrides: { verify: { worker: "two" } },
+  });
+  expect(
+    resolveUserWorkflowConfiguration(definition, configured).steps.verify
+      ?.catalogRevision,
+  ).toBeUndefined();
+  expect(
+    resolveUserWorkflowConfiguration(definition, configured).steps.implement
+      ?.catalogRevision,
+  ).toBe("a".repeat(64));
+});

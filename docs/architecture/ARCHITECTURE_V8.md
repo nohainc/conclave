@@ -21,7 +21,7 @@ Conclave Cloud
     v
 Conclave Workspace
     |
-    | Local Worker Protocol 4.0
+    | Local Worker Protocol 4.1
     v
 Conclave CLI Worker Engine
     |
@@ -73,7 +73,7 @@ Use these terms for v8 architecture, implementation, tests, and operations:
 - **Tool Profile Release** — immutable signed payload for a definition;
 - **Profile lifecycle/channel** — Cloud-managed release state and promotion;
 - **Provider CLI** — locally installed tool such as `codex` or `agy`;
-- **Local Worker Protocol 4.0** — Workspace-to-Engine contract.
+- **Local Worker Protocol 4.1** — Workspace-to-Engine contract.
 
 The `@conclave/core` package organizes current domain contracts by concept
 (`space`, `workspace-grants`, `thread`, `integration`, and
@@ -135,7 +135,7 @@ Normal Workspace UI remains Worker-centric.
                              v
                     CONCLAVE WORKSPACE
                              |
-                   Local Worker Protocol 4.0
+                   Local Worker Protocol 4.1
                              |
                              v
                     CLI WORKER ENGINE
@@ -295,7 +295,7 @@ It has no Cloud credentials and never connects directly to Cloud.
 Workspace verifies official release signatures and performs canonical Tool
 Profile v1 schema admission before launching the Engine. The Engine rechecks
 the loaded payload digest, identity, compatibility, and execution bounds before
-accepting Protocol 4.0 requests.
+accepting Protocol 4.1 requests (and legacy 4.0 frames without catalog pins).
 
 ### 4.5 Tool Profile
 
@@ -338,7 +338,7 @@ Cloud <-> Workspace
 Workspace Runtime Protocol
 
 Workspace <-> CLI Worker Engine
-Local Worker Protocol 4.0
+Local Worker Protocol 4.1
 ~~~
 
 Provider CLI communication exists below the Local Worker Protocol and is private
@@ -346,7 +346,7 @@ to Engine + Tool Profile.
 
 The boundaries share canonical IDs only. They do not share credentials.
 
-## 6. Local Worker Protocol 4.0
+## 6. Local Worker Protocol 4.1
 
 Protocol 4.0 carries the provider-neutral operations required by Workspace and
 the Engine:

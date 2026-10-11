@@ -8,6 +8,20 @@ Future<void> main(List<String> arguments) async {
     stdout.writeln('agy 1.2.3');
     return;
   }
+  if (arguments.length == 1 && arguments.single == 'models') {
+    stdout.write('''gemini-3.8-flash-high\tGemini 3.8 Flash (High)
+gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)
+gemini-3.8-flash-low\tGemini 3.8 Flash (Low)
+gemini-3.7-flash-high\tGemini 3.7 Flash (High)
+gemini-3.7-flash-medium\tGemini 3.7 Flash (Medium)
+gemini-3.7-flash-low\tGemini 3.7 Flash (Low)
+gemini-3.6-flash-high\tGemini 3.6 Flash (High)
+gemini-3.6-flash-medium\tGemini 3.6 Flash (Medium)
+gemini-3.6-flash-low\tGemini 3.6 Flash (Low)
+gemini-3.1-pro-high\tGemini 3.1 Pro (High)
+gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
+    return;
+  }
 
   final input = await stdin.transform(utf8.decoder).join();
   final Object? decodedInput;
@@ -209,7 +223,7 @@ Future<void> main(List<String> arguments) async {
             prompt == 'Continue reconstructed'
       ? _hasPair(arguments, '--model', 'model-B')
       : prompt == 'Say OK'
-      ? _hasPair(arguments, '--model', 'gemini-fixture')
+      ? _hasPair(arguments, '--model', 'gemini-3.8-flash-high')
       : !arguments.contains('--model');
   final argumentsCorrect =
       _hasPair(arguments, '--input-format', 'stream-json') &&

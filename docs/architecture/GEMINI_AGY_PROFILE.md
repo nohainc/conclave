@@ -71,7 +71,7 @@ competing Worker-level default setting.
 
 Workspace Runtime Protocol 5.1 inventory and Local Worker Protocol 4.0 probe
 results carry an optional versioned `modelCatalog` object. Older Profiles remain
-valid. The new Profile requires Engine 1.1.0 so it cannot accidentally run under
+valid. The new Profile requires Engine 1.2.0 so it cannot accidentally run under
 an older implementation. Cloud stores bounded public discovery metadata in
 `workspace_worker_inventory.model_catalog_json`; public options identify the
 source as `provider_catalog`. Cloud requires the same published release digest
@@ -87,12 +87,14 @@ payload digest and provider version in the local registry. Version/Profile
 changes require a fresh explicit Test. Existing Profiles preserve their current
 readiness policy.
 
-AGY 1.2.16 and the subsequently installed 1.3.3 expose `--effort`. The runtime
-catalog may report the effort values that the current CLI/account/model accepts;
-those values are passed through with the profile's `{{reasoningEffort}}` mapping.
-If the CLI does not report effort metadata, the UI offers no effort choices and
-Model Auto continues to use AGY's own default. Select an explicit Gemini ID when
-provider identity must be pinned.
+AGY 1.2.16 and the subsequently installed 1.3.3 expose `--effort`, but
+`agy models` reports the current Gemini effort as part of each native model ID
+(for example, `gemini-3.8-flash-high`). The signed mapping groups those native
+IDs into four logical families and resolves a selected family/effort pair back
+to exactly one native `--model` value. Gemini combined families have no provider
+model or effort Auto value: the UI requires both selections, and the Engine
+does not send a separate `--effort` argument. A missing or unresolved native
+variant stays unavailable rather than being guessed.
 
 AGY documentation explicitly says workspace file writes can be auto-allowed in
 headless mode. `--sandbox` restricts terminal activity and `--mode plan` is not
@@ -110,8 +112,9 @@ Reference: [AGY headless documentation](https://www.agy.dev/docs/cli/headless/).
 
 `docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json` is the
 replacement **unsigned authoring candidate**, not a stable published release.
-It intentionally has no static model catalog or effort rules. Import it as a
-new release in Profile Lab, qualify it against the installed AGY CLI, then sign
+It contains the version-bounded native-to-logical mapping but no guessed
+provider defaults. Import it as a new release in Profile Lab, qualify it against
+the installed AGY CLI, then sign
 and promote it through the normal release flow. Existing static releases should
 be retired after the replacement is qualified; no compatibility fallback is
 required for this development-stage contract.
@@ -180,7 +183,7 @@ Profile Lab now discovers models through passive generic Engine probes after
 verifying a signed Stable Profile, rather than skipping dynamic Profiles with
 no fixed allowlist. It filters unavailable IDs and checks the Profile digest
 and signed prefix. Discovery consumes no model requests. The bundled generic
-Engine was regenerated at 1.1.0. Rebuild Profile Lab to receive these changes.
+Engine was regenerated at 1.3.0. Rebuild Profile Lab to receive these changes.
 The AI selector still requires an approved signed Stable Gemini release; merely
 adding a Worker or installing AGY does not authorize an unsigned model runner.
 
@@ -205,3 +208,25 @@ Production migrations 0029 and 0030 were applied, preserving existing rows and
 release/channel state. API version `5c8ea02d-ce60-4711-93ef-465527b65b93` includes
 the new validator. An authenticated end-user sync was not performed by the
 developer; retry Sync in Profile Lab. Stable promotion remains a separate action.
+
+## Unified capabilities contract (Phase 2)
+
+Cloud now publishes [Worker execution options v2](../specifications/WORKER_EXECUTION_OPTIONS_V2.md)
+for both Codex and Gemini. Engine/Service catalog v2 adds a stable revision and
+local native identity, which inventory strips before Cloud publication. AX
+reads v1/v2, preserves all supported efforts, and excludes unavailable selections.
+The unsigned Gemini runtime-catalog candidate declares combined selection mode;
+AGY's current two-column output still reports no independent efforts/defaults.
+Exact native variant IDs remain unchanged pending explicit signed pair mapping.
+No authoring SQL, signed release or hosted deployment was changed by Phase 2.
+
+## Provider normalization (Phase 3)
+
+The unsigned runtime-catalog authoring candidate now contains an exact signed-data
+mapping candidate for the eleven installed AGY 1.3.3 Gemini identifiers: four
+logical families, separate low/medium/high choices where listed, and no inferred
+default. It requires Engine 1.2.0 and emits only the resolved native `--model` for
+combined selections. Mapping applies only to the evidenced 1.3.3 version interval.
+See [discovery normalization](../specifications/MODEL_DISCOVERY_NORMALIZATION.md)
+for reverse resolution, availability, verification and rollout limits. Existing
+signed fixture releases and active installations were not modified.

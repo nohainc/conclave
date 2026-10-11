@@ -60,6 +60,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   String? desktopAuthError;
   String? authNotice;
   String? authError;
+
   /// Delays transient execution progress notices so a quick state transition
   /// does not flash a banner at the top of the app.
   Timer? _pendingRealtimeNoticeTimer;

@@ -111,15 +111,20 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                                                       fontWeight:
                                                           FontWeight.w700)),
                                             ),
-                                            _StatusPill(
-                                                status:
-                                                    _statusLabel(workspace)),
                                           ],
                                         ),
                                         subtitle: Text(
                                           _workspaceSubtitle(workspace),
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
+                                        ),
+                                        trailing: SizedBox(
+                                          width: 96,
+                                          child: Center(
+                                            child: _StatusPill(
+                                                status:
+                                                    _statusLabel(workspace)),
+                                          ),
                                         ),
                                       ),
                                       Padding(
@@ -174,7 +179,6 @@ class _WorkspaceCardBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Divider(height: 1),
         const SizedBox(height: 14),
         Text('Workers',
             style: theme.textTheme.titleMedium
@@ -192,83 +196,52 @@ class _WorkspaceCardBody extends StatelessWidget {
   }
 }
 
-class _WorkerRow extends StatefulWidget {
+class _WorkerRow extends StatelessWidget {
   const _WorkerRow({required this.worker});
   final AxWorker worker;
 
   @override
-  State<_WorkerRow> createState() => _WorkerRowState();
-}
-
-class _WorkerRowState extends State<_WorkerRow> {
-  bool _showDiagnostics = false;
-
-  @override
   Widget build(BuildContext context) {
-    final worker = widget.worker;
+    final theme = Theme.of(context);
+    final models = worker.executionOptions?.models
+            .where((model) => model.status != 'unavailable')
+            .map((model) => model.name)
+            .toList() ??
+        const <String>[];
+    final providerTool = [
+      worker.providerToolName ?? 'Provider CLI',
+      worker.providerToolVersion ?? 'Not detected',
+    ].join(' ');
     return Column(
       children: [
         ListTile(
           key: Key('workspace-worker-row-${worker.id}'),
           contentPadding: EdgeInsets.zero,
-          onTap: () => setState(() => _showDiagnostics = !_showDiagnostics),
           leading: Icon(worker.isReady
               ? Icons.check_circle_outline
               : Icons.warning_amber),
           title: Text(worker.displayName),
-          trailing:
-              Icon(_showDiagnostics ? Icons.expand_less : Icons.expand_more),
-        ),
-        if (_showDiagnostics)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(48, 0, 8, 12),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Wrap(
-                spacing: 18,
-                runSpacing: 8,
-                children: [
-                  _Diagnostic(label: 'Worker Type', value: worker.displayName),
-                  _Diagnostic(
-                      label: 'Engine', value: worker.engineVersion ?? '—'),
-                  if (worker.profileDefinitionId != null)
-                    _Diagnostic(
-                      label: 'Integration',
-                      value:
-                          '${worker.profileDefinitionId}@${worker.profileReleaseVersion ?? '—'}',
-                    ),
-                  _Diagnostic(
-                    label: 'Provider CLI',
-                    value: worker.providerToolName ?? '—',
-                  ),
-                  _Diagnostic(
-                    label: 'Provider CLI version',
-                    value: worker.providerToolVersion ?? '—',
-                  ),
-                  _Diagnostic(
-                      label: 'Local concurrency',
-                      value: '${worker.localConcurrencyLimit}'),
-                  if (worker.attentionReasonCode != null)
-                    _Diagnostic(
-                        label: 'Local attention',
-                        value:
-                            'Resolve ${worker.attentionReasonCode} in Conclave Workspace.'),
-                ],
-              ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(providerTool, style: theme.textTheme.bodySmall),
+                if (worker.profileReleaseVersion != null)
+                  Text('Profile v${worker.profileReleaseVersion}',
+                      style: theme.textTheme.bodySmall),
+                Text(
+                  'Models: ${models.isEmpty ? 'Unavailable' : models.join(', ')}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
             ),
           ),
+        ),
+        const Divider(height: 1),
       ],
     );
   }
-}
-
-class _Diagnostic extends StatelessWidget {
-  const _Diagnostic({required this.label, required this.value});
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) => Text('$label · $value');
 }
 
 class _StatusPill extends StatelessWidget {

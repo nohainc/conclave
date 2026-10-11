@@ -10,6 +10,7 @@ void main() {
       workerId: 'worker-a',
       model: 'model-a',
       reasoningEffort: 'high',
+      catalogRevision: 'reviewed',
       chatDraft: 'chat draft',
       workDraft: 'work draft',
     );
@@ -23,6 +24,7 @@ void main() {
           'workerId',
           'model',
           'reasoningEffort',
+          'catalogRevision',
           'chatDraft',
           'workDraft',
         ]));

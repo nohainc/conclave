@@ -1,3 +1,4 @@
+import 'package:conclave_protocol/conclave_protocol.dart';
 import 'ax_models.dart';
 import 'ax_workflow_configuration.dart';
 
@@ -13,57 +14,24 @@ class AxWorkflowSelectionOptions {
     return null;
   }
 
-  Iterable<AxWorker> _candidates(String? id) =>
-      workers.where((value) => id == null || value.id == id);
-
-  bool _supportsModel(AxWorkerExecutionOptions options, String? model) =>
-      model == null ||
-      (options.modelSelectionSupported &&
-          (options.allowsCustomModel ||
-              options.allowedModelIds.contains(model)));
+  ExecutionSelectionCatalog get sharedCatalog => ExecutionSelectionCatalog([
+        for (final value in workers) capabilityForWorker(value),
+      ]);
 
   Map<String, String> models(String? workerId) {
-    if (workerId == null) return const {};
-    final result = <String, String>{};
-    for (final candidate in _candidates(workerId)) {
-      final options = candidate.executionOptions;
-      if (options == null || !options.modelSelectionSupported) continue;
-      for (final model in options.models) {
-        if (_supportsModel(options, model.id)) result[model.id] = model.name;
-      }
-      for (final id in options.allowedModelIds) {
-        result.putIfAbsent(id, () => id);
-      }
-    }
-    return result;
+    final selected = sharedCatalog.worker(workerId);
+    if (selected == null || !selected.modelSupported) return const {};
+    return {
+      for (final model in selected.models)
+        if (selected.supportsModel(model.id)) model.id: model.name,
+      for (final id in selected.allowedModelIds ?? const <String>[])
+        if (selected.supportsModel(id)) id: selected.model(id)?.name ?? id
+    };
   }
 
-  List<String> efforts(AxWorkflowSelection effective) {
-    if (effective.worker == null) return const [];
-    final result = <String>{};
-    for (final candidate in _candidates(effective.worker)) {
-      final options = candidate.executionOptions;
-      if (options == null || !_supportsModel(options, effective.model)) {
-        continue;
-      }
-      final effort = options.effortsForModel(effective.model);
-      if (effort.supported) result.addAll(effort.values);
-    }
-    return List.unmodifiable(result);
-  }
-
-  String? _validateProfile(
-      AxWorkerExecutionOptions options, AxWorkflowSelection value) {
-    if (!_supportsModel(options, value.model)) {
-      return 'The selected model is not supported by this Worker.';
-    }
-    final effort = options.effortsForModel(value.model);
-    if (value.effort != null &&
-        (!effort.supported || !effort.values.contains(value.effort))) {
-      return 'The selected effort is not supported for this Worker and model.';
-    }
-    return null;
-  }
+  List<String> efforts(AxWorkflowSelection value) =>
+      sharedCatalog.worker(value.worker)?.effortsForModel(value.model) ??
+      const [];
 
   /// Match Cloud's unchanged-unavailable intent rule without treating offline
   /// readiness as a capability failure. Cloud remains the write authority.
@@ -71,19 +39,68 @@ class AxWorkflowSelectionOptions {
       {required AxWorkflowSelection saved}) {
     final same = value.worker == saved.worker &&
         value.model == saved.model &&
-        value.effort == saved.effort;
+        value.effort == saved.effort &&
+        value.catalogRevision == saved.catalogRevision;
     if (value.worker == null) return 'Select a Worker.';
     final selected = worker(value.worker);
-    if ((selected == null || selected.executionOptions == null) && same) {
+    if ((selected == null ||
+            selected.executionOptions == null ||
+            selected.executionOptions!.catalogStale) &&
+        same) {
       return null;
     }
     if (selected == null) {
       return 'This Worker is unavailable. Restore the saved selection or choose another Worker.';
     }
-    if (value.model == null && value.effort == null) return null;
+    if (value.model == null &&
+        value.effort == null &&
+        value.catalogRevision == null &&
+        selected.executionOptions?.catalogStale != true &&
+        capabilityForWorker(selected).allowsAutoModel) {
+      return null;
+    }
     if (selected.executionOptions == null) {
       return 'Model and effort options are unavailable for this Worker.';
     }
-    return _validateProfile(selected.executionOptions!, value);
+    return capabilityForWorker(selected).validate(ExecutionSelection(
+        worker: value.worker,
+        model: value.model,
+        effort: value.effort,
+        catalogRevision: value.catalogRevision));
   }
+}
+
+WorkerSelectionCapability capabilityForWorker(AxWorker worker) {
+  final options = worker.executionOptions;
+  final name =
+      '${worker.displayName}${worker.isReady ? '' : worker.status == 'offline' ? ' · Offline' : ' · Unavailable'}';
+  if (options == null) {
+    return WorkerSelectionCapability(
+        id: worker.id, name: name, state: CapabilityState.unavailable);
+  }
+  return WorkerSelectionCapability(
+      id: worker.id,
+      name: name,
+      state:
+          options.catalogStale ? CapabilityState.stale : CapabilityState.ready,
+      modelSupported: options.modelSelectionSupported,
+      allowsCustomModel: options.allowsCustomModel,
+      allowedModelIds: options.allowedModelIds,
+      defaultModelId: options.defaultModelId,
+      catalogRevision: options.catalogRevision,
+      globalEfforts:
+          options.effort.supported ? options.effort.values : const [],
+      availabilityMessage: worker.isReady
+          ? null
+          : 'Execution requires an available Worker. Saved selections are retained.',
+      models: [
+        for (final model in options.models)
+          ExecutionModelCapability(
+              id: model.id,
+              name: model.name,
+              efforts: model.effort.supported ? model.effort.values : const [],
+              defaultEffort: model.effort.defaultValue,
+              status: model.status,
+              selectionMode: model.selectionMode)
+      ]);
 }

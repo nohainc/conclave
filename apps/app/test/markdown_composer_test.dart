@@ -168,6 +168,27 @@ void main() {
     expect(sends, 4);
   });
 
+  testWidgets('Enter submits edit and Shift Enter keeps a newline',
+      (tester) async {
+    final controller = TextEditingController(text: 'draft');
+    addTearDown(controller.dispose);
+    var submits = 0;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: MarkdownComposer(
+      controller: controller,
+      onSubmit: () => submits++,
+    ))));
+
+    await tester.tap(find.byType(TextField));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    expect(submits, 1);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    expect(submits, 1);
+  });
+
   test('inline and fenced edits preserve selected content', () {
     for (final (format, expected) in [
       (MarkdownFormat.bold, '**hello**'),

@@ -178,6 +178,15 @@ void main() {
       ..writeAsStringSync('''#!/bin/sh
 if [ "\$1" = "--version" ]; then echo "$executable ${executable == 'codex' ? '0.180.0' : '1.2.3'}"; exit 0; fi
 if [ "\$1" = "login" ]; then echo 'Authenticated fixture'; exit 0; fi
+if [ "\$1" = "app-server" ]; then
+  while IFS= read -r request; do
+    case "\$request" in
+      *model/list*) printf '%s\\n' '{"id":2,"result":{"data":[{"id":"gpt-fixture","displayName":"Fixture","supportedReasoningEfforts":[{"reasoningEffort":"low"},{"reasoningEffort":"high"}],"defaultReasoningEffort":"low"}],"nextCursor":null}}' ;;
+      *initialize*) printf '%s\\n' '{"id":1,"result":{}}' ;;
+    esac
+  done
+  exit 0
+fi
 if [ "$executable" = "agy" ]; then IFS= read -r input; else input=\$(cat); fi
 case "\$input" in *cancellation*|*timeout*) sleep 30 ;; esac
 case "\$input" in *acceptance-write.txt*) printf 'conclave-profile-lab-write-verified' > acceptance-write.txt ;; esac
@@ -313,10 +322,24 @@ fi
                 .widgetList<Text>(find.byType(Text))
                 .map((w) => w.data)
                 .join(' | '));
-        expect(
-            c.currentDraft!.profile,
-            jsonDecode(jsonEncode(
-                (cloud.definition['starterTemplate'] as Map)['profile'])));
+        final expectedProfile = jsonDecode(jsonEncode(
+            (cloud.definition['starterTemplate'] as Map)['profile'])) as Map;
+        if (spec.$1 == 'chatgpt') {
+          // An old static starter must migrate to per-model app-server metadata.
+          expectedProfile['model'] = {
+            'supported': true,
+            'arguments': ['--model', '{{model}}'],
+            'unknownModelPolicy': 'pass_through',
+            'discovery': {
+              'schemaVersion': 1,
+              'arguments': ['app-server', '--listen', 'stdio://'],
+              'timeoutMs': 10000,
+              'format': 'codex_app_server',
+              'idPrefix': '',
+            },
+          };
+        }
+        expect(c.currentDraft!.profile, expectedProfile);
         expect(c.currentDraft!.profileDefinitionId, spec.$3);
         expect(c.currentDraft!.logicalWorkerTypeId, spec.$1);
         expect(c.detectedProviderPaths[spec.$4],

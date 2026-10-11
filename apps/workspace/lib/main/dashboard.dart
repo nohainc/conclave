@@ -97,7 +97,6 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                 ? 'Service running · Cloud connected${transportLabel == null ? '' : ' · $transportLabel'}'
                 : 'Service running · Cloud disconnected')
             : 'Service ${snapshot.serviceStatusDescription.toLowerCase()}';
-
     return Column(
       children: [
         // App Header Bar

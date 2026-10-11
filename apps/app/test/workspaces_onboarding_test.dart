@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:conclave_app/src/ax/worker_execution_options.dart';
 
 void main() {
   testWidgets('empty Workspaces explains desktop-owned registration',
@@ -92,5 +93,64 @@ void main() {
 
     expect(find.text('Paired Mac'), findsOneWidget);
     expect(find.text('Connect Machine'), findsNothing);
+  });
+
+  testWidgets('Workspace worker rows show runtime metadata without expansion',
+      (tester) async {
+    const worker = AxWorker(
+      id: 'worker-1',
+      workspaceId: 'workspace-1',
+      workspaceName: 'Workspace',
+      workerTypeId: 'gemini',
+      displayName: 'Gemini',
+      status: 'ready',
+      readinessState: 'ready',
+      localConcurrencyLimit: 1,
+      providerToolName: 'agy',
+      providerToolVersion: '1.2.3',
+      profileReleaseVersion: 4,
+      executionOptions: AxWorkerExecutionOptions(
+        modelSelectionSupported: true,
+        modelDiscovery: 'provider_catalog',
+        allowsCustomModel: false,
+        allowedModelIds: [],
+        models: [
+          AxWorkerModelOption(
+            id: 'gemini-pro',
+            name: 'Gemini Pro',
+            effort: AxWorkerEffortOptions(
+              supported: true,
+              values: ['high'],
+            ),
+          ),
+        ],
+        modelSwitchSupported: true,
+        effort: AxWorkerEffortOptions(
+          supported: true,
+          values: ['high'],
+        ),
+      ),
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: WorkspacesPage(
+            workspaces: const [
+              AxWorkspace(
+                id: 'workspace-1',
+                name: 'Workspace',
+                status: 'online',
+              ),
+            ],
+            workspaceWorkers: const [worker],
+          ),
+        ),
+      ),
+    ));
+
+    expect(find.text('agy 1.2.3'), findsOneWidget);
+    expect(find.text('Profile v4'), findsOneWidget);
+    expect(find.text('Models: Gemini Pro'), findsOneWidget);
+    expect(find.byIcon(Icons.expand_more), findsNothing);
   });
 }

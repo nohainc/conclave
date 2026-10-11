@@ -134,6 +134,7 @@ class LocalWorker {
     String? toolName,
     bool clearToolName = false,
     DiscoveredModelCatalog? modelCatalog,
+    bool clearModelCatalog = false,
     String? lastLiveTestProfileDigest,
     String? lastLiveTestToolVersion,
     String? toolPath,
@@ -173,7 +174,8 @@ class LocalWorker {
             : lastLiveTestIssueCode ?? this.lastLiveTestIssueCode,
         toolVersion: clearToolVersion ? null : toolVersion ?? this.toolVersion,
         toolName: clearToolName ? null : toolName ?? this.toolName,
-        modelCatalog: modelCatalog ?? this.modelCatalog,
+        modelCatalog:
+            clearModelCatalog ? null : modelCatalog ?? this.modelCatalog,
         lastLiveTestProfileDigest:
             lastLiveTestProfileDigest ?? this.lastLiveTestProfileDigest,
         lastLiveTestToolVersion:

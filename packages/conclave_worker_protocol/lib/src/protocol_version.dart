@@ -1,5 +1,8 @@
-const localWorkerProtocolVersion = '4.0';
-const supportedLocalWorkerProtocolVersions = {localWorkerProtocolVersion};
+const localWorkerProtocolVersion = '4.1';
+const supportedLocalWorkerProtocolVersions = {
+  '4.0',
+  localWorkerProtocolVersion
+};
 
 /// Selects the newest protocol version supported by both sides.
 String? negotiateProtocolVersion({

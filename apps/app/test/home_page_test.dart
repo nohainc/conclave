@@ -1314,8 +1314,8 @@ void main() {
     await tester.tap(find.text('See all').last);
     await tester.pumpAndSettle();
     expect(find.text('AI updates'), findsNWidgets(2));
-    expect(
-        find.text('New worker capabilities and model updates'), findsOneWidget);
+    expect(find.text('New Worker execution options and model updates'),
+        findsOneWidget);
     expect(find.text('GPT-5 is available'), findsNWidgets(2));
     expect(find.text('Use the newest reasoning model for demanding tasks.'),
         findsNWidgets(2));

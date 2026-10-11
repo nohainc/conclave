@@ -5,6 +5,7 @@ import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
 import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/worker_executor.dart';
+import 'package:conclave_workspace/space_directory.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
 import 'package:conclave_workspace/tool_profile_release_store.dart';
 import 'package:conclave_workspace/worker_diagnostic_store.dart';
@@ -64,7 +65,6 @@ void main() {
         'engineFamily': 'cli',
         'visibilityState': 'visible',
         'releaseStage': 'stable',
-        'capabilities': ['text'],
         'sortOrder': 5,
       };
       const newlyApprovedDescriptor = {
@@ -76,7 +76,6 @@ void main() {
         'engineFamily': 'cli',
         'visibilityState': 'visible',
         'releaseStage': 'stable',
-        'capabilities': ['text'],
         'sortOrder': 6,
       };
       var cloudAvailable = true;
@@ -301,6 +300,12 @@ void main() {
         ) as Map,
       );
       final assignmentHandler = WorkerAssignmentHandler(
+        spaceDirectoryLifecycle: SpaceDirectoryLifecycle(
+          SpaceDirectoryResolver(
+            workRoot: Directory('${root.path}/permission-work'),
+            registryDirectory: Directory('${root.path}/permission-registry'),
+          ),
+        ),
         resolveLogicalWorker: (workerId) async {
           final configured = await registry.find(workerId);
           if (configured == null) return null;

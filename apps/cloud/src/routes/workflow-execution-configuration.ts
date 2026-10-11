@@ -12,6 +12,7 @@ export interface WorkflowExecutionSelectionOverride {
   readonly workerId?: string | null;
   readonly model?: string | null;
   readonly reasoningEffort?: string | null;
+  readonly catalogRevision?: string | null;
 }
 
 export function parseWorkflowExecutionSelection(
@@ -23,7 +24,10 @@ export function parseWorkflowExecutionSelection(
   const object = value as Record<string, unknown>;
   if (
     Object.keys(object).some(
-      (key) => !["workerId", "model", "reasoningEffort"].includes(key),
+      (key) =>
+        !["workerId", "model", "reasoningEffort", "catalogRevision"].includes(
+          key,
+        ),
     )
   )
     throw new HttpError(400, "executionSelection contains an unknown field");
@@ -34,6 +38,8 @@ export function parseWorkflowExecutionSelection(
       throw new HttpError(400, `executionSelection.${key} is invalid`);
     if (selected.length > 200)
       throw new HttpError(400, `executionSelection.${key} is too long`);
+    if (key === "catalogRevision" && !/^[a-f0-9]{64}$/.test(selected))
+      throw new HttpError(400, "executionSelection.catalogRevision is invalid");
     if (selected === "Auto" || selected === "Automatic") {
       if (key === "workerId")
         throw new HttpError(400, "Worker must be selected explicitly");
@@ -44,6 +50,9 @@ export function parseWorkflowExecutionSelection(
     return selected.trim();
   };
   return {
+    ...(Object.hasOwn(object, "catalogRevision")
+      ? { catalogRevision: stringOrNull("catalogRevision") }
+      : {}),
     ...(Object.hasOwn(object, "workerId")
       ? { workerId: stringOrNull("workerId") }
       : {}),
@@ -106,6 +115,7 @@ export async function resolveWorkflowExecutionBindings(
       model?: string;
       reasoningEffort?: string;
       additionalInstructions?: string;
+      catalogRevision?: string;
     }
   > = {};
   let pinnedWorkspace: string | null = null;
@@ -114,6 +124,14 @@ export async function resolveWorkflowExecutionBindings(
     const configuredSelection = effective.steps[step.kind] ?? {};
     const selection: WorkflowSelection = {
       ...configuredSelection,
+      ...(override &&
+      Object.hasOwn(override, "workerId") &&
+      override.workerId !== configuredSelection.worker
+        ? { catalogRevision: undefined }
+        : {}),
+      ...(override && Object.hasOwn(override, "catalogRevision")
+        ? { catalogRevision: override.catalogRevision ?? undefined }
+        : {}),
       ...(override && Object.hasOwn(override, "workerId")
         ? { worker: override.workerId ?? undefined }
         : {}),
@@ -143,6 +161,9 @@ export async function resolveWorkflowExecutionBindings(
       ...(selection.worker ? { workerId: selection.worker } : {}),
       ...(selection.model ? { model: selection.model } : {}),
       ...(selection.effort ? { reasoningEffort: selection.effort } : {}),
+      ...(selection.catalogRevision
+        ? { catalogRevision: selection.catalogRevision }
+        : {}),
       ...(instructions ? { additionalInstructions: instructions } : {}),
     };
     requested[id] = value;
@@ -163,7 +184,7 @@ export async function resolveWorkflowExecutionBindings(
         throw new HttpError(
           422,
           "Workflow Workers must execute in the same Workspace",
-      );
+        );
       pinnedWorkspace = admission.primaryWorkspaceId;
     }
   }

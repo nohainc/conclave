@@ -1,3 +1,9 @@
+import {
+  resolveExecutionSelectionSnapshot,
+  supportsExecutionCatalogPin,
+} from "./execution-selection-snapshot.js";
+import { spaceWorkerExecutionOptions } from "./worker-execution-options.js";
+import { validateWorkerExecutionSelection } from "@conclave/core";
 import { spaceMemberPermissions } from "@conclave/security";
 import {
   EXECUTION_PERMISSIONS,
@@ -20,6 +26,7 @@ export interface SpaceExecutionSelectionRequest {
   readonly excludeIndependenceKeys?: readonly string[];
   readonly model?: string;
   readonly reasoningEffort?: string;
+  readonly catalogRevision?: string;
   readonly executionClass?: "stateless_read" | "stateful_thread";
   /** Read-only capability policy independent of Thread lease ownership. */
   readonly readOnly?: boolean;
@@ -264,6 +271,9 @@ export async function selectSpaceExecutionTarget(
             i.profile_definition_id, i.profile_release_version,
             i.provider_tool_name,
             i.provider_tool_version,
+            i.model_catalog_json,
+            release.payload_json AS execution_profile_json,
+            release.payload_digest AS execution_profile_digest,
             i.activation_state AS local_worker_activation_state,
             i.readiness_state AS local_worker_readiness_state,
             vs.state AS cloud_scheduling_state,
@@ -294,6 +304,11 @@ export async function selectSpaceExecutionTarget(
        ON definition.worker_type_id = catalog.worker_type_id
       AND definition.profile_definition_id = i.profile_definition_id
       AND definition.lifecycle_state = 'active'
+     LEFT JOIN tool_profile_releases release
+       ON release.profile_definition_id = i.profile_definition_id
+      AND release.release_version = i.profile_release_version
+      AND release.worker_type_id = i.worker_type_id
+      AND release.published_at IS NOT NULL AND release.lifecycle_state != 'revoked'
      JOIN worker_scheduling vs ON vs.worker_id = i.worker_id
      WHERE g.space_id = ?1 AND g.status = 'active'
        AND (g.expires_at IS NULL OR g.expires_at > ?3)
@@ -390,7 +405,7 @@ export async function selectSpaceExecutionTarget(
     // Worker/Profile capability metadata is legacy and is deliberately not
     // consulted for scheduling. Cloud workflow policy and explicit grant
     // permissions determine the effective execution scope.
-    const selectedModel = turnConfig
+    let selectedModel = turnConfig
       ? typeof turnConfig.modelId === "string"
         ? turnConfig.modelId
         : null
@@ -400,7 +415,7 @@ export async function selectSpaceExecutionTarget(
         ? binding.model
         : (request.model ??
           (typeof binding.model === "string" ? binding.model : undefined));
-    const selectedReasoningEffort = turnConfig
+    let selectedReasoningEffort = turnConfig
       ? typeof turnConfig.effort === "string"
         ? turnConfig.effort
         : null
@@ -516,6 +531,59 @@ export async function selectSpaceExecutionTarget(
       reject("engine_profile_unavailable");
       continue;
     }
+    const executionOptions = spaceWorkerExecutionOptions(
+      row.execution_profile_json,
+      row.provider_tool_version,
+      row.model_catalog_json,
+      row.execution_profile_digest,
+    );
+    const expectedRevision =
+      typeof binding.catalogRevision === "string"
+        ? binding.catalogRevision
+        : request.catalogRevision;
+    const selectionError = executionOptions
+      ? validateWorkerExecutionSelection(
+          executionOptions,
+          selectedModel ?? null,
+          selectedReasoningEffort ?? null,
+          expectedRevision,
+        )
+      : "Worker capabilities are unavailable";
+    if (selectionError) {
+      reject(`profile_execution_option_unavailable: ${selectionError}`);
+      continue;
+    }
+    if (
+      executionOptions?.schemaVersion === 2 &&
+      executionOptions.models.discovery === "provider_catalog" &&
+      !supportsExecutionCatalogPin(row.engine_version)
+    ) {
+      reject(
+        "worker_engine_update_required: catalog-pinned execution requires Engine 1.3.0 or newer",
+      );
+      continue;
+    }
+    let executionSelection;
+    try {
+      executionSelection = resolveExecutionSelectionSnapshot(
+        executionOptions!,
+        {
+          modelId: selectedModel ?? null,
+          effort: selectedReasoningEffort ?? null,
+          catalogRevision: expectedRevision,
+        },
+        {
+          workerTypeId,
+          workerDisplayName: String(row.worker_display_name ?? workerTypeId),
+          profileReleaseVersion: Number(row.profile_release_version),
+        },
+      );
+      selectedModel = executionSelection.modelId;
+      selectedReasoningEffort = executionSelection.effort;
+    } catch (error) {
+      reject(`profile_execution_option_unavailable: ${String(error)}`);
+      continue;
+    }
     if (request.threadId && !hasBinding) {
       reject("thread_step_binding_missing");
       continue;
@@ -605,6 +673,7 @@ export async function selectSpaceExecutionTarget(
     }
     const snapshotAt = now.toISOString();
     const permissionSnapshot = {
+      executionSelection,
       spaceId: request.spaceId,
       workspaceId,
       workerId,

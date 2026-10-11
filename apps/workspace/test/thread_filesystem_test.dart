@@ -11,8 +11,9 @@ void main() {
         ThreadFilesystemInvariants.directoryIdentity, ['spaceId', 'threadId']);
     expect(ThreadFilesystemInvariants.workerCwd, 'runtime_resolved');
     expect(ThreadFilesystemInvariants.repositories, 'worker_managed');
-    expect(ThreadFilesystemInvariants.mutation, 'one_per_thread');
-    expect(ThreadFilesystemInvariants.parallelism, 'different_threads');
+    expect(ThreadFilesystemInvariants.mutation, 'one_per_space');
+    expect(ThreadFilesystemInvariants.parallelism,
+        'threads_share_space_directory');
     expect(
         ThreadFilesystemInvariants.forbiddenPathComponents,
         containsAll(

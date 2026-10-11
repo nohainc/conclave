@@ -1,5 +1,6 @@
 import 'src/worker_execution_options.dart';
 export 'src/worker_execution_options.dart';
+export 'src/model_selection_mapping.dart';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -282,11 +283,21 @@ class EngineProfile {
       'session.resumeArguments',
       max: 32,
     );
+    if (_object(json['model'], 'model')['selectionMapping'] != null &&
+        compareSemanticVersions(
+                _object(json['engineCompatibility'], 'engineCompatibility')[
+                    'min'] as String,
+                '1.2.0') <
+            0) {
+      throw const FormatException(
+          'Model selection mapping requires Engine 1.2.0');
+    }
     ProfileExecutionOptions(_object(json['model'], 'model'))
         .validate(durableSessions: session['supported'] == true);
     final declaredOptions = _object(json['model'], 'model')['executionOptions'];
     if (declaredOptions is Map &&
         declaredOptions['effortSupported'] == true &&
+        _object(json['model'], 'model')['selectionMapping'] == null &&
         [
           execution['arguments'],
           ...(compatibilityOverrides as List)

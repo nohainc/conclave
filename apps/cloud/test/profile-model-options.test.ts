@@ -100,15 +100,12 @@ it("spaces normalized capabilities without provider instructions or fake Default
       },
     }),
   );
-  expect(result?.schemaVersion).toBe(1);
+  expect(result?.schemaVersion).toBe(2);
   expect(result?.modelSwitch.supported).toBe(false);
   expect(result?.models.defaultModelId).toBe("a");
-  expect(result?.models.options[0]?.effort).toEqual({
-    supported: false,
-    values: [],
-    defaultValue: null,
-  });
-  expect(result?.models.options[1]?.effort.defaultValue).toBe("deep");
+  expect(result?.models.options[0]?.efforts).toEqual([]);
+  expect(result?.models.options[0]?.defaultEffort).toBeNull();
+  expect(result?.models.options[1]?.defaultEffort).toBe("deep");
   expect(JSON.stringify(result)).not.toContain("private");
 });
 it("supports fixed-model effort and filters unavailable CLI-version models", async () => {
@@ -202,11 +199,9 @@ it("uses runtime models only for the exact authorized Profile and CLI version", 
   expect(result.models.allowsCustomModel).toBe(false);
   expect(result.models.allowedModelIds).toEqual(["gemini-new-high"]);
   expect(result.models.options[0]?.badge).toBe("Listed");
-  expect(result.models.options[0]?.effort).toEqual({
-    supported: true,
-    values: ["low", "high"],
-    defaultValue: "high",
-  });
+  expect(result.models.options[0]?.efforts).toEqual([]);
+  expect(result.models.options[0]?.defaultEffort).toBeNull();
+  expect(result.models.options[1]?.status).toBe("unavailable");
   expect(result.effort.supported).toBe(false);
   expect(result.effort.values).toEqual([]);
   const fallbackPayload = JSON.parse(payload) as Record<string, any>;
@@ -224,7 +219,7 @@ it("uses runtime models only for the exact authorized Profile and CLI version", 
   ).toContain("not available");
   expect(
     validateWorkerExecutionSelection(result, "gemini-new-high", "high"),
-  ).toBeNull();
+  ).toContain("effort");
   expect(
     validateWorkerExecutionSelection(result, "gemini-new-high", "medium"),
   ).toContain("effort");
@@ -255,4 +250,369 @@ it("uses runtime models only for the exact authorized Profile and CLI version", 
   ).toEqual([]);
   expect(JSON.stringify(result)).not.toContain("arguments");
   expect(JSON.stringify(result)).not.toContain("profileDigest");
+});
+
+it("publishes the same v2 contract for separate and combined Profiles without private fields", async () => {
+  const { spaceWorkerExecutionOptions } =
+    await import("../src/worker-execution-options.js");
+  const { validateWorkerExecutionSelection } = await import("@conclave/core");
+  for (const selectionMode of ["separate", "combined"] as const) {
+    const digest = "c".repeat(64);
+    const payload = JSON.stringify({
+      execution: {
+        arguments: [
+          {
+            ifPresent: "reasoningEffort",
+            values: ["--effort", "{{reasoningEffort}}"],
+          },
+        ],
+      },
+      model: {
+        supported: true,
+        selectionMode,
+        discovery: { idPrefix: "" },
+        arguments: ["--model", "{{model}}"],
+      },
+    });
+    const catalog = {
+      schemaVersion: 2,
+      catalogRevision: "d".repeat(64),
+      profileDigest: digest,
+      providerToolVersion: "1.3.3",
+      discoveredAt: "2026-10-11T00:00:00Z",
+      models: [
+        {
+          id: "logical",
+          name: "Logical",
+          selectionMode,
+          status: "listed",
+          efforts: ["low", "medium", "high", "xhigh", "max", "ultra"],
+          defaultEffort: "low",
+        },
+        {
+          id: "retired",
+          name: "Retired",
+          selectionMode,
+          status: "unavailable",
+          efforts: [],
+          defaultEffort: null,
+        },
+      ],
+    };
+    const result = spaceWorkerExecutionOptions(
+      payload,
+      "1.3.3",
+      catalog,
+      digest,
+    )!;
+    expect(result.schemaVersion).toBe(2);
+    expect(result.catalogRevision).toBe(catalog.catalogRevision);
+    expect(result.models.options[0]?.selectionMode).toBe(selectionMode);
+    expect(result.models.options[0]?.efforts).toHaveLength(6);
+    expect(result.models.options[0]?.defaultEffort).toBe("low");
+    expect(result.models.allowedModelIds).toEqual(["logical"]);
+    expect(result.models.options[1]?.status).toBe("unavailable");
+    expect(validateWorkerExecutionSelection(result, "retired", null)).toContain(
+      "not available",
+    );
+    const serialized = JSON.stringify(result);
+    for (const privateField of [
+      "nativeId",
+      "profileDigest",
+      "providerToolVersion",
+      "arguments",
+    ])
+      expect(serialized).not.toContain(privateField);
+    expect(
+      spaceWorkerExecutionOptions(payload, "1.3.4", catalog, digest)?.models
+        .options,
+    ).toEqual([]);
+  }
+});
+it("keeps legacy catalog revisions stable across refresh time and rejects malformed catalogs", async () => {
+  const { spaceWorkerExecutionOptions } =
+    await import("../src/worker-execution-options.js");
+  const digest = "e".repeat(64);
+  const payload = JSON.stringify({
+    model: { supported: true, discovery: { idPrefix: "" } },
+  });
+  const catalog = {
+    schemaVersion: 1,
+    profileDigest: digest,
+    providerToolVersion: "1.3.3",
+    discoveredAt: "2026-10-11T00:00:00Z",
+    models: [{ id: "model", name: "Model", status: "listed" }],
+  };
+  const first = spaceWorkerExecutionOptions(payload, "1.3.3", catalog, digest)!;
+  expect(
+    spaceWorkerExecutionOptions(
+      payload,
+      "1.3.3",
+      { ...catalog, discoveredAt: "2026-10-11T01:00:00Z" },
+      digest,
+    )?.catalogRevision,
+  ).toBe(first.catalogRevision);
+  expect(
+    spaceWorkerExecutionOptions(
+      payload,
+      "1.3.3",
+      { ...catalog, models: [...catalog.models, ...catalog.models] },
+      digest,
+    )?.models.options,
+  ).toEqual([]);
+});
+
+it("does not expose discovered efforts without a Profile invocation mapping", async () => {
+  const { spaceWorkerExecutionOptions } =
+    await import("../src/worker-execution-options.js");
+  const digest = "a".repeat(64);
+  const payload = JSON.stringify({
+    model: { supported: true, discovery: { idPrefix: "" } },
+  });
+  const catalog = {
+    schemaVersion: 1,
+    profileDigest: digest,
+    providerToolVersion: "1.3.3",
+    discoveredAt: "2026-10-11T00:00:00Z",
+    models: [
+      {
+        id: "model",
+        name: "Model",
+        status: "listed",
+        supportedReasoningEfforts: ["high"],
+        defaultReasoningEffort: "high",
+      },
+    ],
+  };
+  const result = spaceWorkerExecutionOptions(
+    payload,
+    "1.3.3",
+    catalog,
+    digest,
+  )!;
+  expect(result.models.options[0]?.efforts).toEqual([]);
+  expect(result.models.options[0]?.defaultEffort).toBeNull();
+});
+
+it("validates the additive signed selection mode and current authoring candidate", () => {
+  const candidate = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  expect(parseProfile(candidate).profile.model.selectionMode).toBe("combined");
+  candidate.model.selectionMode = "separate";
+  expect(() => parseProfile(candidate)).toThrow();
+  candidate.model.selectionMode = "infer_from_suffix";
+  expect(() => parseProfile(candidate)).toThrow();
+});
+
+it("normalizes retained installed Codex and AGY evidence into the same public contract", async () => {
+  const { spaceWorkerExecutionOptions } =
+    await import("../src/worker-execution-options.js");
+  const evidenceRoot = new URL(
+    "../../../docs/acceptance/real-provider/2026-10-11/",
+    import.meta.url,
+  );
+  const codex = JSON.parse(
+    readFileSync(
+      new URL("model-effort-audit-codex.json", evidenceRoot),
+      "utf8",
+    ),
+  );
+  const agy = readFileSync(
+    new URL("model-effort-audit-agy.tsv", evidenceRoot),
+    "utf8",
+  )
+    .trim()
+    .split("\n")
+    .map((line) => {
+      const [id, name] = line.split("\t");
+      return { id, name, status: "listed" };
+    });
+  const digest = "f".repeat(64);
+  for (const [candidate, version, models, expected] of [
+    [
+      "chatgpt-codex",
+      "0.160.0",
+      codex.models.map((model: any) => ({
+        id: model.id,
+        name: model.displayName,
+        status: "listed",
+        supportedReasoningEfforts: model.supportedReasoningEfforts.map(
+          (entry: any) => entry.reasoningEffort,
+        ),
+        defaultReasoningEffort: model.defaultReasoningEffort,
+      })),
+      7,
+    ],
+    ["gemini-antigravity", "1.3.3", agy, 11],
+  ] as const) {
+    const payload = readFileSync(
+      new URL(
+        `../../../docs/profile-templates/${candidate}-runtime-catalog.v1.json`,
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const result = spaceWorkerExecutionOptions(
+      payload,
+      version,
+      {
+        schemaVersion: 1,
+        profileDigest: digest,
+        providerToolVersion: version,
+        discoveredAt: "2026-10-11T00:00:00Z",
+        models,
+      },
+      digest,
+    )!;
+    expect(result.schemaVersion).toBe(2);
+    expect(result.models.options).toHaveLength(expected);
+    for (const model of result.models.options)
+      expect(Object.keys(model).sort()).toEqual(
+        [
+          "id",
+          "name",
+          "badge",
+          "efforts",
+          "defaultEffort",
+          "selectionMode",
+          "status",
+        ].sort(),
+      );
+    if (candidate === "gemini-antigravity") {
+      expect(
+        result.models.options.every(
+          (model) =>
+            model.selectionMode === "combined" &&
+            model.efforts.length === 0 &&
+            model.defaultEffort === null,
+        ),
+      ).toBe(true);
+    } else {
+      expect(
+        result.models.options.reduce(
+          (total, model) => total + model.efforts.length,
+          0,
+        ),
+      ).toBe(40);
+    }
+  }
+});
+
+it("publishes four signed Gemini families and rejects invented effort combinations", async () => {
+  const { spaceWorkerExecutionOptions } =
+    await import("../src/worker-execution-options.js");
+  const candidate = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  const digest = "c".repeat(64);
+  const models = candidate.model.selectionMapping.models.map((family: any) => ({
+    id: family.id,
+    name: family.name,
+    status: "listed",
+    selectionMode: "combined",
+    efforts: family.variants.map((v: any) => v.effort),
+    defaultEffort: null,
+  }));
+  const catalog = {
+    schemaVersion: 2,
+    catalogRevision: "a".repeat(64),
+    profileDigest: digest,
+    providerToolVersion: "1.3.3",
+    discoveredAt: "2026-10-11T00:00:00Z",
+    models,
+  };
+  const result = spaceWorkerExecutionOptions(
+    JSON.stringify(candidate),
+    "1.3.3",
+    catalog,
+    digest,
+  )!;
+  expect(result.models.options).toHaveLength(4);
+  expect(
+    result.models.options.reduce((sum, m) => sum + m.efforts.length, 0),
+  ).toBe(11);
+  expect(JSON.stringify(result)).not.toContain("nativeId");
+  const stale = spaceWorkerExecutionOptions(
+    JSON.stringify(candidate),
+    "1.3.3",
+    { ...catalog, stale: true },
+    digest,
+  )!;
+  expect(stale.catalogStale).toBe(true);
+  expect(stale.catalogRevision).toBe(result.catalogRevision);
+  models[3].efforts.push("medium");
+  expect(
+    spaceWorkerExecutionOptions(
+      JSON.stringify(candidate),
+      "1.3.3",
+      catalog,
+      digest,
+    ),
+  ).toBeNull();
+  const duplicate = structuredClone(candidate);
+  duplicate.model.selectionMapping.models[0].variants.push(
+    duplicate.model.selectionMapping.models[0].variants[0],
+  );
+  expect(() => parseProfile(duplicate)).toThrow();
+  const outdated = structuredClone(candidate);
+  outdated.engineCompatibility.min = "1.1.0";
+  expect(() => parseProfile(outdated)).toThrow();
+});
+
+it("publishes the v2 catalog effort matrix without reconstructing provider support", async () => {
+  const { spaceWorkerExecutionOptions } =
+    await import("../src/worker-execution-options.js");
+  const digest = "a".repeat(64);
+  const catalog = {
+    schemaVersion: 2,
+    profileDigest: digest,
+    providerToolVersion: "1.0.0",
+    catalogRevision: "b".repeat(64),
+    discoveredAt: "2026-10-11T00:00:00.000Z",
+    models: [
+      {
+        id: "native",
+        name: "Native",
+        efforts: ["provider-specific"],
+        defaultEffort: "provider-specific",
+        status: "verified",
+        selectionMode: "separate",
+      },
+    ],
+  };
+  const profile = JSON.stringify({
+    model: {
+      supported: true,
+      discovery: { idPrefix: "" },
+    },
+  });
+  const result = spaceWorkerExecutionOptions(profile, "1.0.0", catalog, digest);
+  expect(result?.models.options[0]).toMatchObject({
+    efforts: ["provider-specific"],
+    defaultEffort: "provider-specific",
+    selectionMode: "separate",
+    status: "verified",
+  });
+  expect(result).toHaveProperty("catalogRevision", catalog.catalogRevision);
+  expect(
+    spaceWorkerExecutionOptions(profile, "2.0.0", catalog, digest)?.models
+      .options,
+  ).toEqual([]);
+  expect(
+    spaceWorkerExecutionOptions(profile, "1.0.0", catalog, "c".repeat(64))
+      ?.models.options,
+  ).toEqual([]);
 });

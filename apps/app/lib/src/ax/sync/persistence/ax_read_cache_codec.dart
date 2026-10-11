@@ -12,6 +12,12 @@ import '../ax_owned_workspaces.dart';
 class AxReadCacheCodec {
   static bool serverId(String id) =>
       id.isNotEmpty && !id.startsWith('local-') && !id.startsWith('temp-');
+
+  // `workstream-*` was used by a retired client-side work model. It is not a
+  // valid server thread identifier, so persisted records with that prefix
+  // must not be restored into the active sync graph.
+  static bool threadId(String id) =>
+      serverId(id) && !id.startsWith('workstream-');
   Map<String, dynamic> space(AxSpace value) => {
         'id': value.id,
         'name': value.name,
@@ -63,6 +69,8 @@ class AxReadCacheCodec {
         'profileReleaseVersion': value.profileReleaseVersion,
         'providerToolName': value.providerToolName,
         'providerToolVersion': value.providerToolVersion,
+        if (value.executionOptions != null)
+          'executionOptions': value.executionOptions!.toJson(),
       };
   Map<String, dynamic> workspace(AxWorkspace value) => {
         'id': value.id,
@@ -124,6 +132,10 @@ class AxReadCacheCodec {
         'providerToolName': value.providerToolName,
         'providerToolVersion': value.providerToolVersion,
         'model': value.model,
+        'reasoningEffort': value.reasoningEffort,
+        if (value.modelName != null) 'modelName': value.modelName,
+        if (value.catalogRevision != null)
+          'catalogRevision': value.catalogRevision,
         'testSummary': value.testSummary,
         'startedAt': value.startedAt,
         'updatedAt': value.updatedAt,
@@ -189,7 +201,7 @@ class AxReadCacheCodec {
         (key.last == 'threads') &&
         value is List<AxThread>) {
       data = value
-          .where((v) => serverId(v.id) && v.spaceId == key[1])
+          .where((v) => threadId(v.id) && v.spaceId == key[1])
           .map(thread)
           .toList();
     } else if (key.length == 1 &&
@@ -223,6 +235,7 @@ class AxReadCacheCodec {
         (key.first == 'thread') &&
         key.last == 'work-requests' &&
         value is AxWorkHistory) {
+      if (!threadId(key[1])) return null;
       final safe = value.requests.where((r) => serverId(r.id)).toList();
       final recent =
           safe.skip(safe.length > 50 ? safe.length - 50 : 0).toList();
@@ -259,6 +272,9 @@ class AxReadCacheCodec {
     final key = AxQueryKey((record['key'] as List).cast<String>());
     final parts = key.parts;
     if (parts.length > 1 && !serverId(parts[1])) return false;
+    if (parts.length > 1 && parts.first == 'thread' && !threadId(parts[1])) {
+      return true;
+    }
     final fetched = record['fetched'] == null
         ? null
         : DateTime.parse(record['fetched'] as String);
@@ -298,7 +314,7 @@ class AxReadCacheCodec {
         (parts.last == 'threads')) {
       final values = list(data)
           .map(AxThread.fromJson)
-          .where((v) => serverId(v.id) && v.spaceId == parts[1])
+          .where((v) => threadId(v.id) && v.spaceId == parts[1])
           .map((v) => AxThread.fromJson(thread(v)))
           .toList();
       return seed<List<AxThread>>(

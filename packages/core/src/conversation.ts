@@ -172,6 +172,8 @@ export interface ConversationTurn {
   readonly profileId: string;
   readonly profileVersion: number;
   readonly modelId: string | null;
+  readonly modelName?: string | null;
+  readonly catalogRevision?: string | null;
   readonly effort: string | null;
   /** Opaque logical scope reference, never a provider-native session handle. */
   readonly workerSessionId: string | null;

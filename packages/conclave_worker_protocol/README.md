@@ -1,6 +1,6 @@
 # Conclave Worker Protocol
 
-Canonical Dart models and validators for the Local Worker Protocol 4.0 wire
+Canonical Dart models and validators for the Local Worker Protocol 4.1 wire
 contract shared by Workspace and the standalone CLI Worker Engine.
 
 Frames use one JSON object per line. The package validates initialize, probe,
@@ -17,3 +17,7 @@ and `provider_default`. The field defaults to `restricted` for older senders;
 
 This is the sole Dart package for the Local Worker Protocol in the current
 runtime. Older JSON-RPC Worker protocol models have been removed.
+
+Protocol 4.1 adds a catalog revision pin to execution requests. Legacy 4.0 frames
+remain readable without that field; native model identifiers remain local to the
+Engine and are never accepted as client-supplied invocation arguments.

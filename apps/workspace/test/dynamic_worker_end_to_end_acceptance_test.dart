@@ -41,7 +41,6 @@ void main() {
         'displayName': displayName,
         'description': 'Created during the Profile Lab acceptance run.',
         'engineFamily': 'cli',
-        'capabilities': ['text', 'thread_write', 'durable_session'],
         'profileDefinitionId': profileDefinitionId,
         'providerToolName': 'Phase 13 Fixture CLI',
         'releaseStage': 'testing',
@@ -487,7 +486,6 @@ Map<String, Object?> _dynamicProfile({
           },
         ],
       },
-      'capabilities': ['text', 'thread_write', 'durable_session'],
       'compatibilityOverrides': [],
     };
 

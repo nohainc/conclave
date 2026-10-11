@@ -53,6 +53,125 @@ export const WorkspaceProductWorkerTypeIdSchema = nonEmptyString
     message: "legacy package IDs are not Workspace product Worker Types",
   });
 
+const DiscoveredModelCatalogV1Schema = z
+  .object({
+    schemaVersion: z.literal(1),
+    profileDigest: z.string().regex(/^[0-9a-f]{64}$/),
+    providerToolVersion: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$/),
+    discoveredAt: timestamp,
+    models: z
+      .array(
+        z
+          .object({
+            id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
+            name: z
+              .string()
+              .min(1)
+              .max(256)
+              .regex(/^[^\x00-\x1f\x7f]+$/),
+            status: z.enum(["listed", "verified", "unavailable"]),
+            supportedReasoningEfforts: z
+              .array(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/))
+              .max(16)
+              .refine(
+                (efforts) => new Set(efforts).size === efforts.length,
+                "Duplicate reasoning efforts",
+              )
+              .optional(),
+            defaultReasoningEffort: z
+              .string()
+              .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/)
+              .optional(),
+          })
+          .strict()
+          .superRefine((model, ctx) => {
+            if (
+              model.defaultReasoningEffort !== undefined &&
+              !model.supportedReasoningEfforts?.includes(
+                model.defaultReasoningEffort,
+              )
+            ) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["defaultReasoningEffort"],
+                message: "Default reasoning effort must be listed as supported",
+              });
+            }
+          }),
+      )
+      .max(128)
+      .refine(
+        (models) => new Set(models.map((m) => m.id)).size === models.length,
+        "Duplicate model IDs",
+      ),
+  })
+  .strict();
+
+/** Sanitized inventory: native IDs/mappings are forbidden at this boundary. */
+export const DiscoveredModelCatalogV2Schema = z
+  .object({
+    schemaVersion: z.literal(2),
+    stale: z.boolean().optional(),
+    catalogRevision: z.string().regex(/^[0-9a-f]{64}$/),
+    profileDigest: z.string().regex(/^[0-9a-f]{64}$/),
+    providerToolVersion: z
+      .string()
+      .regex(/^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$/),
+    discoveredAt: timestamp,
+    models: z
+      .array(
+        z
+          .object({
+            id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
+            name: z
+              .string()
+              .min(1)
+              .max(256)
+              .regex(/^[^\x00-\x1f\x7f]+$/),
+            status: z.enum(["listed", "verified", "unavailable"]),
+            selectionMode: z.enum(["separate", "combined"]),
+            efforts: z
+              .array(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/))
+              .max(16)
+              .refine(
+                (values) => new Set(values).size === values.length,
+                "Duplicate efforts",
+              )
+              .default([]),
+            defaultEffort: z
+              .string()
+              .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/)
+              .nullable()
+              .default(null),
+          })
+          .strict()
+          .superRefine((model, ctx) => {
+            if (
+              model.defaultEffort !== null &&
+              !model.efforts.includes(model.defaultEffort)
+            ) {
+              ctx.addIssue({
+                code: "custom",
+                path: ["defaultEffort"],
+                message: "Default effort must be supported",
+              });
+            }
+          }),
+      )
+      .max(128)
+      .refine(
+        (models) => new Set(models.map((m) => m.id)).size === models.length,
+        "Duplicate model IDs",
+      ),
+  })
+  .strict();
+export const DiscoveredModelCatalogSchema = z.union([
+  DiscoveredModelCatalogV1Schema,
+  DiscoveredModelCatalogV2Schema,
+]);
+
 export const WorkspaceWorkerInventoryEntrySchema = z
   .object({
     workerId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
@@ -93,67 +212,7 @@ export const WorkspaceWorkerInventoryEntrySchema = z
       .string()
       .regex(/^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$/)
       .nullable(),
-    modelCatalog: z
-      .object({
-        schemaVersion: z.literal(1),
-        profileDigest: z.string().regex(/^[0-9a-f]{64}$/),
-        providerToolVersion: z
-          .string()
-          .regex(/^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$/),
-        discoveredAt: timestamp,
-        models: z
-          .array(
-            z
-              .object({
-                id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/),
-                name: z
-                  .string()
-                  .min(1)
-                  .max(256)
-                  .regex(/^[^\x00-\x1f\x7f]+$/),
-                status: z.enum(["listed", "verified", "unavailable"]),
-                supportedReasoningEfforts: z
-                  .array(
-                    z
-                      .string()
-                      .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/),
-                  )
-                  .max(16)
-                  .refine(
-                    (efforts) => new Set(efforts).size === efforts.length,
-                    "Duplicate reasoning efforts",
-                  )
-                  .optional(),
-                defaultReasoningEffort: z
-                  .string()
-                  .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/)
-                  .optional(),
-              })
-              .strict()
-              .superRefine((model, ctx) => {
-                if (
-                  model.defaultReasoningEffort !== undefined &&
-                  !model.supportedReasoningEfforts?.includes(
-                    model.defaultReasoningEffort,
-                  )
-                ) {
-                  ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
-                    path: ["defaultReasoningEffort"],
-                    message:
-                      "Default reasoning effort must be listed as supported",
-                  });
-                }
-              }),
-          )
-          .max(128)
-          .refine(
-            (models) => new Set(models.map((m) => m.id)).size === models.length,
-            "Duplicate model IDs",
-          ),
-      })
-      .strict()
-      .optional(),
+    modelCatalog: DiscoveredModelCatalogSchema.optional(),
     localConcurrencyLimit: z.number().int().min(1).max(1024),
     revision: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
     createdAt: timestamp,
@@ -215,6 +274,36 @@ export const workspaceRuntimeEnvelopeSchema = z
           snapshot: z
             .object({
               workerTypeId: WorkspaceProductWorkerTypeIdSchema,
+              executionSelection: z
+                .object({
+                  schemaVersion: z.literal(1),
+                  catalogSource: z.enum([
+                    "provider_catalog",
+                    "profile_catalog",
+                  ]),
+                  workerTypeId: WorkspaceProductWorkerTypeIdSchema,
+                  workerDisplayName: nonEmptyString.max(256),
+                  profileReleaseVersion: z.number().int().positive(),
+                  modelId: nonEmptyString.max(128).nullable(),
+                  modelName: nonEmptyString.max(256).nullable(),
+                  effort: nonEmptyString.max(128).nullable(),
+                  catalogRevision: z
+                    .string()
+                    .regex(/^[a-f0-9]{64}$/)
+                    .nullable(),
+                  modelSource: z.enum([
+                    "explicit",
+                    "catalog_default",
+                    "provider_default",
+                  ]),
+                  effortSource: z.enum([
+                    "explicit",
+                    "catalog_default",
+                    "provider_default",
+                  ]),
+                })
+                .strict()
+                .optional(),
               permissions: z.array(executionPermission).optional(),
               permissionSnapshot: z
                 .object({
@@ -222,6 +311,8 @@ export const workspaceRuntimeEnvelopeSchema = z
                 })
                 .passthrough()
                 .optional(),
+              model: nonEmptyString.max(128).nullable().optional(),
+              reasoningEffort: nonEmptyString.max(128).nullable().optional(),
               readOnly: z.boolean().optional(),
               sessionPolicy: z
                 .enum(["stateless", "durable_session"])
@@ -229,6 +320,22 @@ export const workspaceRuntimeEnvelopeSchema = z
               sessionKey: nonEmptyString.max(256).optional(),
             })
             .superRefine((snapshot, ctx) => {
+              if (
+                snapshot.executionSelection &&
+                (snapshot.executionSelection.workerTypeId !==
+                  snapshot.workerTypeId ||
+                  snapshot.executionSelection.modelId !==
+                    (snapshot.model ?? null) ||
+                  snapshot.executionSelection.effort !==
+                    (snapshot.reasoningEffort ?? null))
+              ) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  path: ["executionSelection"],
+                  message: "Frozen selection must match assignment invocation",
+                });
+              }
+
               if (
                 (snapshot.sessionPolicy === "stateless" &&
                   snapshot.sessionKey !== undefined) ||

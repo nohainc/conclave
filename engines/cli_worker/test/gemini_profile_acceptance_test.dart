@@ -19,8 +19,8 @@ void main() {
               )
               as Map<String, Object?>;
       final provider = profile['providerTool']! as Map<String, Object?>;
-      const providerScript =
-          'packages/tool-profile/test/fixtures/provider-cli/antigravity_profile_provider.dart';
+      final providerScript =
+          '$repository/packages/tool-profile/test/fixtures/provider-cli/antigravity_profile_provider.dart';
       provider['executableCandidates'] = ['dart'];
       (provider['discovery']! as Map<String, Object?>)['standardLocations'] =
           <String>[];
@@ -31,6 +31,12 @@ void main() {
       ];
       provider['supportedVersions'] = [
         {'min': '0.0.0', 'maxExclusive': '2.0.0'},
+      ];
+      ((profile['model']! as Map<String, Object?>)['discovery']!
+          as Map<String, Object?>)['arguments'] = [
+        'run',
+        providerScript,
+        'models',
       ];
       final execution = profile['execution']! as Map<String, Object?>;
       execution['arguments'] = [
@@ -76,7 +82,7 @@ void main() {
           '--profile',
           profileFile.path,
           '--engine-version',
-          '1.0.0',
+          '1.2.0',
           '--state-directory',
           stateDirectory.path,
         ],
@@ -128,7 +134,7 @@ void main() {
         InitializeRequest(
           requestId: 'gemini-profile-init',
           workerTypeId: 'gemini',
-          expectedEngineVersion: '1.0.0',
+          expectedEngineVersion: '1.2.0',
           profileDefinitionId: 'gemini-antigravity',
           profileReleaseVersion: '1',
           profileDigest: sha256.convert(profileBytes).toString(),
@@ -215,7 +221,8 @@ void main() {
           requestId: 'gemini-profile-stateless',
           assignmentId: 'gemini-stateless',
           prompt: 'Say OK',
-          model: 'gemini-fixture',
+          model: 'gemini-3.8-flash',
+          reasoningEffort: 'high',
           timeoutMs: 10000,
           sessionPolicy: WorkerSessionPolicy.stateless,
         ),

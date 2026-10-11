@@ -192,7 +192,8 @@ export async function handleWorkflowConfigurations(
           `${stepId === "defaults" ? "Workflow" : stepId}: Select a Worker for every enabled Workflow step`,
         );
       // Disabled Workflows may retain model/effort intent until they are enabled.
-      if (!selection.model && !selection.effort) continue;
+      if (!selection.model && !selection.effort && !selection.catalogRevision)
+        continue;
       if (
         inventory.workers.some(
           (worker) =>
@@ -201,6 +202,7 @@ export async function handleWorkflowConfigurations(
               worker.executionOptions,
               selection.model ?? null,
               selection.effort ?? null,
+              selection.catalogRevision,
             ),
         )
       )
@@ -231,21 +233,27 @@ export async function handleWorkflowConfigurations(
     const prior = inherited ? priorConfiguration?.defaults : old[stepId];
     // Unavailable inventory/Profile must not erase unchanged user intent.
     if (
-      (!worker || !worker.executionOptions) &&
+      (!worker ||
+        !worker.executionOptions ||
+        (worker.executionOptions.schemaVersion === 2 &&
+          worker.executionOptions.catalogStale)) &&
       prior?.worker === selection.worker &&
       prior?.model === selection.model &&
-      prior?.effort === selection.effort
+      prior?.effort === selection.effort &&
+      prior?.catalogRevision === selection.catalogRevision
     )
       continue;
     if (!worker)
       throw new HttpError(400, "Worker is not owned by the current user");
-    if (!selection.model && !selection.effort) continue;
+    if (!selection.model && !selection.effort && !selection.catalogRevision)
+      continue;
     if (!worker.executionOptions)
       throw new HttpError(400, "Worker execution options are unavailable");
     const error = validateWorkerExecutionSelection(
       worker.executionOptions,
       selection.model ?? null,
       selection.effort ?? null,
+      selection.catalogRevision,
     );
     if (error) throw new HttpError(400, error);
   }

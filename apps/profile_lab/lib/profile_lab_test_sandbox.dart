@@ -291,6 +291,7 @@ class ProfileLabTestSandbox {
     required ToolProfileReleaseAdmission modelProfile,
     required String prompt,
     String? model,
+    String? reasoningEffort,
     Duration timeout = const Duration(seconds: 90),
   }) async {
     if (_activeSupervisor != null) {
@@ -343,6 +344,7 @@ class ProfileLabTestSandbox {
         timeout: timeout,
         sessionPolicy: WorkerSessionPolicy.stateless,
         model: model,
+        reasoningEffort: reasoningEffort,
         executionPolicy: WorkerExecutionPolicy.restricted,
       );
       return result.output;

@@ -45,6 +45,7 @@ describe("Tool Profile v1 canonical schema", () => {
   it.each([
     "chatgpt-codex-runtime-catalog.v1",
     "gemini-antigravity-runtime-catalog.v1",
+    "gemini-antigravity-runtime-catalog.v2",
   ])("accepts the runtime catalog template %s", (name) => {
     const parsed = parseToolProfileV1(template(name));
     expect(parsed.model.discovery?.format).toBe(

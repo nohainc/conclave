@@ -18,11 +18,18 @@ void main() {
     final worker = await registry.create(
         catalogEntry: logicalWorkerCatalogFixture('gemini'));
     final catalog = DiscoveredModelCatalog(
+        schemaVersion: 2,
         profileDigest: 'a' * 64,
         providerToolVersion: '1.3.3',
         discoveredAt: '2026-10-11T00:00:00Z',
         models: [
-          DiscoveredModel(id: 'gemini-example-low', name: 'Example (Low)')
+          DiscoveredModel(
+              id: 'gemini-example-low',
+              nativeId: 'private-native-low',
+              variantStatuses: {'low': 'listed'},
+              supportedReasoningEfforts: ['low'],
+              selectionMode: 'combined',
+              name: 'Example (Low)')
         ]);
     await registry.update(
         worker.id,
@@ -94,11 +101,18 @@ void main() {
             worker, profile, probe, LocalWorkerProbeMode.live),
         WorkerReadinessState.ready);
     final catalog = DiscoveredModelCatalog(
+        schemaVersion: 2,
         profileDigest: profile.payloadDigest,
         providerToolVersion: '1.3.3',
         discoveredAt: '2026-10-11T00:00:00Z',
         models: [
-          DiscoveredModel(id: 'gemini-example-low', name: 'Example (Low)')
+          DiscoveredModel(
+              id: 'gemini-example-low',
+              nativeId: 'private-native-low',
+              variantStatuses: {'low': 'listed'},
+              supportedReasoningEfforts: ['low'],
+              selectionMode: 'combined',
+              name: 'Example (Low)')
         ]);
     final inventory = spaceWorkerInventory(
         worker: tested.copyWith(toolVersion: '1.3.3', modelCatalog: catalog),
@@ -106,7 +120,11 @@ void main() {
         eligibleProfile: profile,
         engineVersion: '1.1.0',
         lastSeenAt: '2026-10-11T00:00:00Z');
-    expect(inventory['modelCatalog'], catalog.toJson());
+    expect(inventory['modelCatalog'], catalog.toJson(includeNativeIds: false));
+    expect(jsonEncode(inventory), isNot(contains('private-native-low')));
+    expect(jsonEncode(inventory), isNot(contains('variantStatuses')));
+    expect((inventory['modelCatalog'] as Map)['catalogRevision'],
+        catalog.catalogRevision);
     expect(inventory['capabilities'], isNot(contains('thread_read')));
     final stale = spaceWorkerInventory(
         worker: tested.copyWith(toolVersion: '1.2.16', modelCatalog: catalog),

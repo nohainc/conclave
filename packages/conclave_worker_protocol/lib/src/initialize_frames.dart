@@ -81,7 +81,7 @@ final class InitializeRequest extends WorkerFrame {
     });
     _checkType(json, 'initialize.request');
     final protocol = _requiredString(json, 'protocolVersion');
-    if (protocol != localWorkerProtocolVersion) {
+    if (!supportedLocalWorkerProtocolVersions.contains(protocol)) {
       throw FormatException('unsupported protocol version: $protocol');
     }
     return InitializeRequest(
@@ -182,7 +182,7 @@ final class InitializeResult extends WorkerFrame {
     });
     _checkType(json, 'initialize.result');
     final protocol = _requiredString(json, 'protocolVersion');
-    if (protocol != localWorkerProtocolVersion) {
+    if (!supportedLocalWorkerProtocolVersions.contains(protocol)) {
       throw FormatException('unsupported protocol version: $protocol');
     }
     final rawSchemaVersion = json['profileSchemaVersion'];
@@ -246,6 +246,6 @@ void _validateToken(String value, String name, int maxLength) {
 }
 
 void _validateProtocol(String value) {
-  if (value != localWorkerProtocolVersion)
+  if (!supportedLocalWorkerProtocolVersions.contains(value))
     throw FormatException('unsupported protocol version: $value');
 }

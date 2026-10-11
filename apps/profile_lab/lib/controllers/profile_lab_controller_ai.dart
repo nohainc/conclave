@@ -38,6 +38,7 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
     required String modelOptionId,
     required String userInstruction,
     required bool dataSharingConfirmed,
+    String? reasoningEffort,
   }) async {
     if (isGeneratingAiProposal) {
       throw StateError('A model proposal is already running.');
@@ -102,6 +103,7 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
       final proposal = await _modelProposalService.proposeDraft(
         sandbox: sandbox,
         modelOption: selectedModel,
+        reasoningEffort: reasoningEffort,
         currentDraft: Map<String, dynamic>.from(draftJson),
         userInstruction: userInstruction,
         testDiagnostics: diagnostics,

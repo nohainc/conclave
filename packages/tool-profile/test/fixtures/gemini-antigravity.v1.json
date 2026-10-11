@@ -4,7 +4,7 @@
   "releaseVersion": 1,
   "logicalWorkerTypeId": "gemini",
   "engineFamily": "cli",
-  "engineCompatibility": { "min": "1.0.0", "maxExclusive": "2.0.0" },
+  "engineCompatibility": { "min": "1.2.0", "maxExclusive": "2.0.0" },
   "providerTool": {
     "name": "Antigravity CLI",
     "executableCandidates": ["agy"],
@@ -166,8 +166,56 @@
   },
   "model": {
     "supported": true,
+    "selectionMode": "combined",
     "arguments": ["--model", "{{model}}"],
-    "unknownModelPolicy": "pass_through"
+    "unknownModelPolicy": "pass_through",
+    "discovery": {
+      "schemaVersion": 1,
+      "arguments": ["models"],
+      "timeoutMs": 10000,
+      "format": "tsv",
+      "idPrefix": "gemini-"
+    },
+    "selectionMapping": {
+      "schemaVersion": 1,
+      "models": [
+        {
+          "id": "gemini-3.8-flash",
+          "name": "Gemini 3.8 Flash",
+          "variants": [
+            { "nativeId": "gemini-3.8-flash-low", "effort": "low" },
+            { "nativeId": "gemini-3.8-flash-medium", "effort": "medium" },
+            { "nativeId": "gemini-3.8-flash-high", "effort": "high" }
+          ]
+        },
+        {
+          "id": "gemini-3.7-flash",
+          "name": "Gemini 3.7 Flash",
+          "variants": [
+            { "nativeId": "gemini-3.7-flash-low", "effort": "low" },
+            { "nativeId": "gemini-3.7-flash-medium", "effort": "medium" },
+            { "nativeId": "gemini-3.7-flash-high", "effort": "high" }
+          ]
+        },
+        {
+          "id": "gemini-3.6-flash",
+          "name": "Gemini 3.6 Flash",
+          "variants": [
+            { "nativeId": "gemini-3.6-flash-low", "effort": "low" },
+            { "nativeId": "gemini-3.6-flash-medium", "effort": "medium" },
+            { "nativeId": "gemini-3.6-flash-high", "effort": "high" }
+          ]
+        },
+        {
+          "id": "gemini-3.1-pro",
+          "name": "Gemini 3.1 Pro",
+          "variants": [
+            { "nativeId": "gemini-3.1-pro-low", "effort": "low" },
+            { "nativeId": "gemini-3.1-pro-high", "effort": "high" }
+          ]
+        }
+      ]
+    }
   },
   "timeout": {
     "providerArguments": ["--print-timeout", "{{timeoutSeconds}}s"],

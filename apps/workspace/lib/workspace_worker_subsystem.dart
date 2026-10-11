@@ -66,7 +66,7 @@ class WorkspaceWorkerSubsystem {
 
   Future<void> refresh({bool force = false}) async {
     await catalog?.refresh(force: force);
-    if (force) {
+    if (force && catalog?.refreshReadiness == null) {
       await readiness.checkNow(
           mode: LocalWorkerProbeMode.passive, includeDisabled: true);
     }

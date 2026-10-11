@@ -11,6 +11,7 @@ class AxThreadViewState {
     this.workerId,
     this.model,
     this.reasoningEffort,
+    this.catalogRevision,
     this.chatDraft = '',
     this.workDraft = '',
   });
@@ -20,6 +21,7 @@ class AxThreadViewState {
   final String? workerId;
   final String? model;
   final String? reasoningEffort;
+  final String? catalogRevision;
   final String chatDraft;
   final String workDraft;
 
@@ -30,6 +32,7 @@ class AxThreadViewState {
         if (workerId != null) 'workerId': workerId,
         if (model != null) 'model': model,
         if (reasoningEffort != null) 'reasoningEffort': reasoningEffort,
+        if (catalogRevision != null) 'catalogRevision': catalogRevision,
         if (chatDraft.isNotEmpty) 'chatDraft': _bounded(chatDraft),
         if (workDraft.isNotEmpty) 'workDraft': _bounded(workDraft),
       };
@@ -53,6 +56,7 @@ class AxThreadViewState {
       workerId: string('workerId'),
       model: string('model'),
       reasoningEffort: string('reasoningEffort'),
+      catalogRevision: string('catalogRevision'),
       chatDraft: draft('chatDraft'),
       workDraft: draft('workDraft'),
     );

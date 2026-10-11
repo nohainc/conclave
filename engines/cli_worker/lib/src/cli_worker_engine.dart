@@ -1,3 +1,4 @@
+import 'execution_selection_snapshot.dart';
 import 'worker_session.dart';
 import 'model_discovery.dart';
 import 'dart:async';
@@ -218,6 +219,7 @@ class CliWorkerEngine {
     await _write(
       sink,
       InitializeResult(
+        protocolVersion: request.protocolVersion,
         requestId: request.requestId,
         workerTypeId: _profile.workerTypeId,
         engineVersion: options.engineVersion,
@@ -509,23 +511,15 @@ class CliWorkerEngine {
               timeout ?? Duration(milliseconds: _int(spec['timeoutMs'])),
             );
       final catalog = DiscoveredModelCatalog(
+        schemaVersion: 2,
         profileDigest: _profile.digest,
         providerToolVersion: version,
         discoveredAt: DateTime.now().toUtc().toIso8601String(),
-        models: models.map(
-          (model) => DiscoveredModel(
-            id: model.id,
-            name: model.name,
-            supportedReasoningEfforts: model.supportedReasoningEfforts,
-            defaultReasoningEffort: model.defaultReasoningEffort,
-            status:
-                cached?.models
-                    .where((m) => m.id == model.id)
-                    .firstOrNull
-                    ?.status ??
-                'listed',
-          ),
-        ),
+        models: normalizeCombinedModels(
+          models,
+          _profile.model['selectionMapping'],
+          version,
+        ).map((model) => _restoreModelStatus(model, cached)),
       );
       await cache.save(catalog);
       return catalog;
@@ -533,7 +527,7 @@ class CliWorkerEngine {
       // Retain the last successful list only for this exact Profile and CLI.
       if (cached != null) {
         _discoveryUsedCache = true;
-        return cached;
+        return cached.withStale(true);
       }
       rethrow;
     }
@@ -558,10 +552,97 @@ class CliWorkerEngine {
     return parseDiscoveredModels(result.stdout, _string(spec['idPrefix']));
   }
 
-  Future<void> _recordModelOutcome(String? modelId, String status) async {
+  DiscoveredModel _restoreModelStatus(
+    DiscoveredModel model,
+    DiscoveredModelCatalog? cached,
+  ) {
+    final prior = cached?.models
+        .where((m) => m.id == model.id && m.nativeId == model.nativeId)
+        .firstOrNull;
+    final statuses = {
+      for (final e in model.supportedReasoningEfforts)
+        if (prior?.variantStatuses[e] != null) e: prior!.variantStatuses[e]!,
+    };
+    final efforts = model.supportedReasoningEfforts
+        .where((e) => statuses[e] != 'unavailable')
+        .toList();
+    final mode = _profile.model['selectionMode'] as String? ?? 'separate';
+    final aggregate = statuses.isEmpty
+        ? null
+        : efforts.isEmpty
+        ? 'unavailable'
+        : efforts.every((e) => statuses[e] == 'verified')
+        ? 'verified'
+        : 'listed';
+    return DiscoveredModel(
+      id: model.id,
+      nativeId: model.nativeId,
+      name: model.name,
+      selectionMode: mode,
+      variantStatuses: statuses,
+      supportedReasoningEfforts: efforts,
+      defaultReasoningEffort: efforts.contains(model.defaultReasoningEffort)
+          ? model.defaultReasoningEffort
+          : null,
+      status:
+          aggregate ??
+          (prior != null &&
+                  jsonEncode(prior.supportedReasoningEfforts) ==
+                      jsonEncode(model.supportedReasoningEfforts) &&
+                  prior.defaultReasoningEffort == model.defaultReasoningEffort
+              ? prior.status
+              : 'listed'),
+    );
+  }
+
+  Future<void> _recordModelOutcome(
+    String? modelId,
+    String status, [
+    String? effort,
+  ]) async {
     final catalog = _modelCatalog;
     if (modelId == null || catalog == null) return;
+    final current = catalog.models.where((m) => m.id == modelId).firstOrNull;
+    if (current?.selectionMode == 'combined' &&
+        current!.supportedReasoningEfforts.isNotEmpty) {
+      final selected = effort ?? current.defaultReasoningEffort;
+      if (selected == null) return;
+      final statuses = {...current.variantStatuses, selected: status};
+      final family = parseModelSelectionMapping(
+        _profile.model['selectionMapping'],
+      ).where((m) => m.id == modelId).firstOrNull;
+      final all = {...current.supportedReasoningEfforts, ...statuses.keys};
+      final available = all.where((e) => statuses[e] != 'unavailable').toList();
+      final replacement = DiscoveredModel(
+        id: current.id,
+        name: current.name,
+        nativeId: current.nativeId,
+        selectionMode: 'combined',
+        variantStatuses: statuses,
+        status: available.isEmpty
+            ? 'unavailable'
+            : available.every((e) => statuses[e] == 'verified')
+            ? 'verified'
+            : 'listed',
+        supportedReasoningEfforts: available,
+        defaultReasoningEffort: available.contains(family?.defaultEffort)
+            ? family?.defaultEffort
+            : null,
+      );
+      _modelCatalog = DiscoveredModelCatalog(
+        schemaVersion: 2,
+        stale: catalog.stale,
+        profileDigest: catalog.profileDigest,
+        providerToolVersion: catalog.providerToolVersion,
+        discoveredAt: catalog.discoveredAt,
+        models: catalog.models.map((m) => m.id == modelId ? replacement : m),
+      );
+      await ModelDiscoveryCache(options.statePath).save(_modelCatalog!);
+      return;
+    }
     _modelCatalog = DiscoveredModelCatalog(
+      schemaVersion: catalog.schemaVersion,
+      stale: catalog.stale,
       profileDigest: catalog.profileDigest,
       providerToolVersion: catalog.providerToolVersion,
       discoveredAt: catalog.discoveredAt,
@@ -569,6 +650,8 @@ class CliWorkerEngine {
         (m) => m.id == modelId
             ? DiscoveredModel(
                 id: m.id,
+                nativeId: m.nativeId,
+                selectionMode: m.selectionMode,
                 name: m.name,
                 status: status,
                 supportedReasoningEfforts: m.supportedReasoningEfforts,
@@ -789,6 +872,20 @@ class CliWorkerEngine {
         ),
       );
     }
+    if (_modelCatalog?.stale == true ||
+        (request.catalogRevision != null &&
+            request.catalogRevision != _modelCatalog?.catalogRevision)) {
+      return _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          assignmentId: request.assignmentId,
+          code: WorkerIssueCode.modelNotSupported,
+          message:
+              'Execution catalog changed or is stale; refresh and revalidate the selection',
+        ),
+      );
+    }
     if (request.model != null) {
       final model = _profile.model;
       final allowlist = model['allowlist'];
@@ -820,15 +917,27 @@ class CliWorkerEngine {
               .firstOrNull;
     final effortSupported = dynamicModel
         ? request.reasoningEffort == null ||
-              (discovered?.supportedReasoningEfforts.contains(
-                    request.reasoningEffort!,
-                  ) ??
-                  false)
+              (executionOptions.declaration['effortSupported'] != false &&
+                  (discovered?.selectionMode == 'combined' ||
+                      jsonEncode([
+                        execution['arguments'],
+                        execution['stdin'],
+                        _profile.model['arguments'],
+                      ]).contains('{{reasoningEffort}}')) &&
+                  (discovered?.supportedReasoningEfforts.contains(
+                        request.reasoningEffort!,
+                      ) ??
+                      false))
         : executionOptions.acceptsEffort(
             request.model,
             request.reasoningEffort,
           );
-    if (request.reasoningEffort != null && !effortSupported) {
+    if (!effortSupported ||
+        (request.model != null &&
+            discovered?.selectionMode == 'combined' &&
+            discovered!.supportedReasoningEfforts.isNotEmpty &&
+            request.reasoningEffort == null &&
+            discovered.defaultReasoningEffort == null)) {
       return _write(
         sink,
         WorkerErrorFrame(
@@ -870,6 +979,8 @@ class CliWorkerEngine {
               workerSession: request.workerSession,
               modelSwitchSupported: executionOptions.modelSwitchSupported,
               requestedModelId: request.model,
+              requestedEffort: request.reasoningEffort,
+              effortChangesNativeModel: discovered?.selectionMode == 'combined',
               allowModelReconstruction:
                   request.workerSession?.bootstrap != null,
               allowContextSynchronization:
@@ -910,6 +1021,22 @@ class CliWorkerEngine {
     }
     final context = _context(request, priorSession);
     context['prompt'] = route.prompt;
+    final selectionStore = ExecutionSelectionSnapshotStore(options.statePath);
+    await selectionStore.write(request.requestId, {
+      'schemaVersion': 1,
+      'assignmentId': request.assignmentId,
+      'invocationId': request.requestId,
+      'workerTypeId': _profile.workerTypeId,
+      'modelId': request.model,
+      'modelName': discovered?.name ?? request.model,
+      'effort': request.reasoningEffort,
+      'resolvedNativeModelId': context['model'],
+      'resolvedNativeEffort': context['reasoningEffort'],
+      'profileReleaseVersion': _profile.releaseVersion,
+      'profileDigest': _profile.digest,
+      'providerToolVersion': _providerVersion,
+      'catalogRevision': _modelCatalog?.catalogRevision,
+    });
     final bootstrap = route.bootstrap;
 
     if (request.workerSession != null) {
@@ -1047,9 +1174,22 @@ class CliWorkerEngine {
           }
         }
         if (interpreted.issueCode == WorkerIssueCode.modelNotSupported) {
-          await _recordModelOutcome(request.model, 'unavailable');
+          await _recordModelOutcome(
+            request.model,
+            'unavailable',
+            request.reasoningEffort,
+          );
         }
         if (interpreted.issueCode != null || result.exitCode != 0) {
+          await selectionStore.write(request.requestId, {
+            'schemaVersion': 1,
+            'assignmentId': request.assignmentId,
+            'status': 'failed',
+            'providerExitCode': result.exitCode,
+            'acceptedModelId': null,
+            'acceptedEffort': null,
+            'selectionObservation': 'unavailable',
+          }, completion: true);
           await _write(
             sink,
             WorkerErrorFrame(
@@ -1062,7 +1202,11 @@ class CliWorkerEngine {
           );
           return;
         }
-        await _recordModelOutcome(request.model, 'verified');
+        await _recordModelOutcome(
+          request.model,
+          'verified',
+          request.reasoningEffort,
+        );
         final sessionId = interpreted.sessionId;
         if (request.sessionPolicy == WorkerSessionPolicy.durableSession) {
           if (sessionId == null || sessionId.isEmpty) {
@@ -1128,6 +1272,16 @@ class CliWorkerEngine {
             ),
           );
         }
+        await selectionStore.write(request.requestId, {
+          'schemaVersion': 1,
+          'assignmentId': request.assignmentId,
+          'status': 'completed',
+          'providerExitCode': result.exitCode,
+          // Current signed output contracts do not attest the actual model/effort.
+          'acceptedModelId': null,
+          'acceptedEffort': null,
+          'selectionObservation': 'unavailable',
+        }, completion: true);
         await _write(
           sink,
           WorkerResult(
@@ -1180,8 +1334,13 @@ class CliWorkerEngine {
         '${(request.timeoutMs - _int(_profile.timeout['providerReserveMs'])).clamp(1, request.timeoutMs)}',
     'timeoutSeconds':
         '${((request.timeoutMs - _int(_profile.timeout['providerReserveMs'])).clamp(1, request.timeoutMs) / 1000).ceil()}',
-    if (request.model != null) 'model': request.model!,
-    if (request.reasoningEffort != null)
+    if (request.model != null) 'model': _nativeSelection(request),
+    if (request.reasoningEffort != null &&
+        _modelCatalog?.models
+                .where((m) => m.id == request.model)
+                .firstOrNull
+                ?.selectionMode !=
+            'combined')
       'reasoningEffort': ProfileExecutionOptions(
         _profile.model,
       ).mapEffort(request.reasoningEffort!),
@@ -1191,6 +1350,20 @@ class CliWorkerEngine {
         ? 'durable'
         : 'stateless',
   };
+
+  String _nativeSelection(ExecuteRequest request) {
+    final model = _modelCatalog?.models
+        .where((m) => m.id == request.model)
+        .firstOrNull;
+    return model == null
+        ? request.model!
+        : resolveNativeSelection(
+            model,
+            request.reasoningEffort,
+            _profile.model['selectionMapping'],
+            _modelCatalog!.providerToolVersion,
+          );
+  }
 
   List<String> _expandArguments(
     List<Object?> source,

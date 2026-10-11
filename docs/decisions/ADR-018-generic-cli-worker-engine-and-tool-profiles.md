@@ -594,3 +594,13 @@ builds and remote Cloud connections reject the development path. This exception
 supersedes blanket draft exclusions only for local development; other
 architecture exclusions and browser-based human authentication remain intact.
 See [Profile Lab development access and execution](../specifications/PROFILE_LAB.md#development-access-and-unsigned-execution).
+
+
+### Additive execution selection amendment (2026-10-11)
+
+Local Worker Protocol 4.1 adds the optional provider catalog revision pin used by
+Engine 1.3.0. Legacy 4.0 frames remain readable without a pin. Native selection
+resolution and immutable native audit evidence remain inside the Engine; public
+assignment/history snapshots contain only logical selections and frozen display
+names. Combined effort variants obey the signed native-model session switching
+contract. See the [execution selection contract](../specifications/WORKER_EXECUTION_OPTIONS_V2.md#phase-8--immutable-execution-resolution-and-history).

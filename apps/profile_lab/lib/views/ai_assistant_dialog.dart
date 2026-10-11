@@ -1,3 +1,5 @@
+import 'package:conclave_design/conclave_design.dart';
+import 'package:conclave_protocol/conclave_protocol.dart';
 import '../widgets/lab_components.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -36,6 +38,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
   late AiAssistantContext _context;
   List<ProfileLabAiModelOption> _models = [];
   String? _selectedModelId;
+  ExecutionSelection _selection = const ExecutionSelection();
   String? _generationError;
   bool _loadingModels = true;
   bool _shareContextConfirmed = false;
@@ -65,7 +68,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
       if (!mounted) return;
       setState(() {
         _models = models;
-        _selectedModelId = models.firstOrNull?.id;
+        // Loading or refreshing capabilities never replaces user intent.
         _generationError =
             models.isEmpty ? widget.controller.aiProposalError : null;
         _loadingModels = false;
@@ -91,6 +94,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
     try {
       final proposed = await widget.controller.generateAiDraftProposal(
         modelOptionId: modelId,
+        reasoningEffort: _selection.effort,
         userInstruction: _instructionCtrl.text.trim(),
         dataSharingConfirmed: _shareContextConfirmed,
       );
@@ -106,7 +110,20 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
     } catch (error) {
       if (mounted) setState(() => _generationError = error.toString());
     } finally {
-      if (mounted) setState(() => _isGenerating = false);
+      if (mounted) {
+        setState(() {
+          _isGenerating = false;
+          // The controller re-reads trust and capabilities before execution.
+          // Reflect that snapshot without erasing a now-unavailable selection.
+          _models = List.of(widget.controller.availableAiModels);
+          _selectedModelId = _models
+              .where((option) =>
+                  option.workerId == _selection.worker &&
+                  option.model == _selection.model)
+              .firstOrNull
+              ?.id;
+        });
+      }
     }
   }
 
@@ -201,38 +218,26 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
               ),
               const SizedBox(height: 14),
 
-              const Text('Model Profile:',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 6),
-              if (_loadingModels)
-                const LinearProgressIndicator(minHeight: 2)
-              else if (_models.isEmpty)
-                Text(
-                  _generationError ??
-                      'No trusted Stable Worker Profile is available.',
-                  style: const TextStyle(
-                      fontSize: 11, color: ProfileLabTheme.warnColor),
-                )
-              else
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedModelId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  ),
-                  items: _models
-                      .map((model) => DropdownMenuItem<String>(
-                            value: model.id,
-                            child: Text(model.label,
-                                overflow: TextOverflow.ellipsis),
-                          ))
-                      .toList(),
-                  onChanged: _isGenerating
-                      ? null
-                      : (value) => setState(() => _selectedModelId = value),
-                ),
+              ModelEffortSelector(
+                scope: 'proposal',
+                catalog: profileLabSelectionCatalog(_models),
+                loading: _loadingModels,
+                readOnly: _isGenerating,
+                value: _selection,
+                validationMessage: _models.isEmpty && !_loadingModels
+                    ? _generationError ??
+                        'No trusted Stable Worker Profile is available.'
+                    : null,
+                onChanged: (selection) => setState(() {
+                  _selectedModelId = _models
+                      .where((o) =>
+                          o.workerId == selection.worker &&
+                          o.model == selection.model)
+                      .firstOrNull
+                      ?.id;
+                  _selection = selection;
+                }),
+              ),
               const SizedBox(height: 12),
 
               const Text('Draft change request:',
@@ -275,6 +280,10 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                     onPressed: _isGenerating ||
                             _loadingModels ||
                             _selectedModelId == null ||
+                            profileLabSelectionCatalog(_models)
+                                    .worker(_selection.worker)
+                                    ?.validate(_selection) !=
+                                null ||
                             !_shareContextConfirmed
                         ? null
                         : _generateProposal,

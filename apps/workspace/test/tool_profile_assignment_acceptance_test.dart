@@ -8,6 +8,47 @@ import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
 void main() {
+  for (final worker in ['chatgpt', 'gemini']) {
+    for (final effort in ['low', 'high']) {
+      final profile = _Profile(
+        definitionId:
+            worker == 'chatgpt' ? 'chatgpt-codex' : 'gemini-antigravity',
+        workerTypeId: worker,
+        profilePath:
+            'docs/profile-templates/${worker == 'chatgpt' ? 'chatgpt-codex' : 'gemini-antigravity'}-runtime-catalog.v1.json',
+        optInVariable: worker == 'chatgpt'
+            ? 'CONCLAVE_TEST_REAL_PROFILE_CHATGPT'
+            : 'CONCLAVE_TEST_REAL_PROFILE_GEMINI',
+      );
+      test('live normalized selection $worker $effort',
+          skip: Platform.environment[profile.optInVariable] != '1',
+          timeout: const Timeout(Duration(minutes: 5)), () async {
+        final model = worker == 'chatgpt' ? 'gpt-6.1-sol' : 'gemini-3.8-flash';
+        await _withRuntime(profile, (run, directory) async {
+          final response =
+              await run('selection', 'Reply with exactly SELECTION_OK.');
+          expect(response, contains('SELECTION_OK'));
+          final snapshots = await Directory(
+                  '${directory.parent.path}/state/execution-selections')
+              .list()
+              .where((entry) =>
+                  entry.path.endsWith('.json') &&
+                  !entry.path.endsWith('.completion.json'))
+              .toList();
+          expect(snapshots, hasLength(1));
+          final snapshot =
+              jsonDecode(await File(snapshots.single.path).readAsString())
+                  as Map;
+          expect(snapshot['modelId'], model);
+          expect(snapshot['effort'], effort);
+          expect(snapshot['resolvedNativeModelId'],
+              worker == 'chatgpt' ? model : '$model-$effort');
+          expect(
+              snapshot['catalogRevision'], matches(RegExp(r'^[a-f0-9]{64}$')));
+        }, modelId: model, effort: effort);
+      });
+    }
+  }
   for (final profile in _profiles) {
     final enabled = Platform.environment[profile.optInVariable] == '1';
     group('live ${profile.workerTypeId} assignment acceptance', () {
@@ -124,8 +165,10 @@ typedef _AssignmentScenario = Future<void> Function(
 
 Future<void> _withRuntime(
   _Profile profile,
-  _AssignmentScenario scenario,
-) async {
+  _AssignmentScenario scenario, {
+  String? modelId,
+  String? effort,
+}) async {
   final root = _repositoryRoot();
   final profileFile = File('${root.path}/${profile.profilePath}');
   final bytes = await profileFile.readAsBytes();
@@ -143,16 +186,16 @@ Future<void> _withRuntime(
     channel: 'stable',
   );
   final temp = await Directory.systemTemp.createTemp('assignment-acceptance-');
+  final supervisor = CliWorkerEngineSupervisor(
+    engineExecutable:
+        Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
+    engineArgumentsPrefix: [
+      '${root.path}/engines/cli_worker/bin/conclave_cli_worker.dart',
+    ],
+  );
   try {
     final state = await Directory('${temp.path}/state').create();
     final directory = await Directory('${temp.path}/thread').create();
-    final supervisor = CliWorkerEngineSupervisor(
-      engineExecutable: Platform.environment['DART_EXECUTABLE'] ??
-          Platform.resolvedExecutable,
-      engineArgumentsPrefix: [
-        '${root.path}/engines/cli_worker/bin/conclave_cli_worker.dart',
-      ],
-    );
     var sequence = 0;
     Future<String> run(
       String step,
@@ -170,6 +213,8 @@ Future<void> _withRuntime(
           maxConcurrentAssignments: 1,
           assignmentId: '${profile.workerTypeId}-$step-$sequence',
           prompt: prompt,
+          model: modelId,
+          reasoningEffort: effort,
           timeout: const Duration(minutes: 3),
           executionPolicy: policy,
         );
@@ -191,8 +236,8 @@ Future<void> _withRuntime(
     }
 
     await scenario(run, directory);
-    await supervisor.shutdown();
   } finally {
+    await supervisor.shutdown();
     await temp.delete(recursive: true);
   }
 }

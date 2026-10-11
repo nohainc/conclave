@@ -2203,19 +2203,22 @@ class AxAiUpdatesDialog extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('AI updates',
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('AI updates',
+                            style: TextStyle(
+                                fontSize: 22, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 2),
+                        Text(
+                          'New Worker execution options and model updates',
                           style: TextStyle(
-                              fontSize: 22, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 2),
-                      Text(
-                        'New Worker execution options and model updates',
-                        style: TextStyle(
-                            fontSize: 13, color: colorScheme.onSurfaceVariant),
-                      ),
-                    ],
+                              fontSize: 13,
+                              color: colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),

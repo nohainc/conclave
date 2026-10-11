@@ -1,6 +1,6 @@
 # Conclave CLI Worker Engine
 
-Standalone Dart console process implementing the generic Protocol 4.0 runtime.
+Standalone Dart console process implementing the generic Protocol 4.1 runtime.
 The Engine loads one immutable Tool Profile payload and verifies its runtime
 structure, Engine compatibility, and payload SHA-256 digest during initialize.
 Workspace remains responsible for official release signature verification and
@@ -11,11 +11,11 @@ For local development, launch with absolute paths:
 ~~~sh
 dart run bin/conclave_cli_worker.dart \
   --profile /absolute/path/to/profile.v1.json \
-  --engine-version 1.0.0 \
+  --engine-version 1.3.0 \
   --state-directory /absolute/path/to/worker-state
 ~~~
 
-The Engine reads Protocol 4.0 NDJSON from stdin and writes frames to stdout.
+The Engine reads Protocol 4.1 NDJSON from stdin and writes frames to stdout.
 Structured arguments are passed directly to the resolved provider CLI with
 shell execution disabled. Logs are written to stderr.
 
@@ -52,3 +52,7 @@ provider process if its output consumer fails or the deadline expires.
 The Workspace release supervisor still uses the migration-only v2 Worker
 identity path; wiring Workspace launch to the Engine is a later integration
 step.
+
+Protocol 4.1 adds a catalog revision pin to execution requests. Legacy 4.0 frames
+remain readable without that field; native model identifiers remain local to the
+Engine and are never accepted as client-supplied invocation arguments.

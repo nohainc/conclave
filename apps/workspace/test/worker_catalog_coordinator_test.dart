@@ -41,7 +41,6 @@ void main() {
     'engineFamily': 'cli',
     'visibilityState': 'visible',
     'releaseStage': 'stable',
-    'capabilities': ['text'],
     'sortOrder': 1,
   };
 
@@ -56,7 +55,6 @@ void main() {
       'engineFamily': 'cli',
       'visibilityState': 'visible',
       'releaseStage': 'stable',
-      'capabilities': ['text'],
       'sortOrder': 2,
     };
     final seedCatalog = ToolProfileCatalogClient(
@@ -407,7 +405,6 @@ void main() {
       'engineFamily': 'cli',
       'visibilityState': 'visible',
       'releaseStage': 'testing',
-      'capabilities': ['text'],
       'sortOrder': 2,
     };
     remoteDescriptors = [descriptor, addedDescriptor];
@@ -429,7 +426,6 @@ void main() {
       'description': 'Updated catalog metadata',
       'profileDefinitionId': 'fixture-profile-v2',
       'providerToolName': 'fixture-next',
-      'capabilities': ['text', 'thread_read'],
       'sortOrder': 3,
     };
     remoteDescriptors = [changedOriginal, addedDescriptor];

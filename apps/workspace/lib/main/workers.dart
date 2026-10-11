@@ -90,11 +90,28 @@ class _WorkersTabState extends State<_WorkersTab> {
             builder: (context) {
               final catalog = widget.catalogCoordinator?.snapshot ??
                   const WorkerCatalogSnapshot();
-              final canConfigure = widget.onConfigureWorker != null &&
+              final canConfigure = !catalog.refreshing &&
+                  widget.onConfigureWorker != null &&
                   catalog.localRegistryLoaded &&
                   catalog.localRegistryError == null;
               return Column(
                 children: [
+                  if (catalog.refreshing)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const LinearProgressIndicator(
+                              semanticsLabel: 'Refreshing Worker catalog'),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Refreshing Worker catalog, Profiles, and models…',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
                   for (final worker in catalog.workers)
                     if (worker.descriptor == null)
                       _buildRetiredWorkerCard(worker, theme)
@@ -155,18 +172,30 @@ class _WorkersTabState extends State<_WorkersTab> {
     if (entry == null) return const SizedBox.shrink();
     final worker = view.localWorker;
     final profile = view.profileAvailability.details;
-    final pending = _updatingWorkerTypes.contains(entry.workerTypeId) ||
+    final catalogRefreshing =
+        widget.catalogCoordinator?.snapshot.refreshing == true;
+    final pending = catalogRefreshing ||
+        _updatingWorkerTypes.contains(entry.workerTypeId) ||
         !widget.serviceAvailable;
     final readiness = _updatingWorkerTypes.contains(entry.workerTypeId)
-        ? 'Checking…'
+        ? catalogRefreshing
+            ? 'Refreshing…'
+            : 'Checking…'
         : view.readinessLabel;
-    final badges = <String>{
-      ...view.statusBadges(readinessLabelOverride: pending ? readiness : null),
-      view.state.label,
-      'Profile · ${view.profileState.label}',
-      if (profile?['unsignedDevelopment'] == true)
-        'Unsigned · Local development',
-    };
+    final ready = !pending && readiness == 'Ready';
+    final disabled =
+        worker?.activationState == LocalWorkerActivationState.disabled;
+    final badges = pending
+        ? <String>[readiness]
+        : ready
+            ? <String>['Ready', if (disabled) 'Disabled']
+            : <String>{
+                ...view.statusBadges(),
+                view.state.label,
+                'Profile · ${view.profileState.label}',
+                if (profile?['unsignedDevelopment'] == true)
+                  'Unsigned · Local development',
+              }.toList();
     final providerToolName = worker?.toolName ?? entry.providerToolName;
     final providerToolVersion = switch (view.providerToolState) {
       WorkspaceProviderToolState.unknown =>
@@ -179,6 +208,13 @@ class _WorkersTabState extends State<_WorkersTab> {
       WorkspaceProviderToolState.available =>
         worker?.toolVersion ?? 'Available',
     };
+    final profileVersion =
+        profile?['releaseVersion'] ?? profile?['activeVersion'];
+    final availableModels = worker?.modelCatalog?.models
+            .where((model) => model.status != 'unavailable')
+            .map((model) => model.name)
+            .toList() ??
+        const <String>[];
     return Card(
       key: Key('worker-catalog-${entry.workerTypeId}'),
       margin: const EdgeInsets.only(bottom: 12),
@@ -187,95 +223,82 @@ class _WorkersTabState extends State<_WorkersTab> {
         mainAxisSize: MainAxisSize.min,
         children: [
           ListTile(
-            leading: Icon(Icons.smart_toy_outlined,
-                color: theme.colorScheme.primary),
-            title: Text(entry.displayName,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Wrap(spacing: 6, runSpacing: 4, children: [
-                    for (final badge in badges)
-                      _CatalogStatusBadge(label: badge)
-                  ]),
-                  Padding(
-                      padding: const EdgeInsets.only(top: 3),
-                      child: Text(
-                        '$providerToolName · $providerToolVersion',
-                        style: theme.textTheme.bodySmall,
-                      )),
-                  if (worker != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        'Local Worker · ${worker.id}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                ]),
-            trailing: _updatingWorkerTypes.contains(entry.workerTypeId)
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : worker == null
-                    ? TextButton(
-                        onPressed: canConfigure
-                            ? () => _configureCatalogWorker(entry)
-                            : null,
-                        child: const Text('Configure'))
-                    : Wrap(
-                        spacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                            if (worker.modelCatalog != null)
-                              IconButton(
-                                  tooltip: 'Refresh models',
-                                  icon: const Icon(Icons.refresh),
-                                  onPressed: canConfigure
-                                      ? () => widget.onReadinessCheck?.call(
-                                          mode: LocalWorkerProbeMode.passive,
-                                          workerTypeId: worker.workerTypeId)
-                                      : null),
-                            TextButton(
-                                onPressed: canConfigure
-                                    ? () => _testCatalogWorker(entry, worker)
-                                    : null,
-                                child: const Text('Test')),
-                            Tooltip(
-                                message: worker.activationState ==
-                                        LocalWorkerActivationState.enabled
-                                    ? 'Disable'
-                                    : 'Enable',
-                                child: Switch(
-                                  value: worker.activationState ==
-                                      LocalWorkerActivationState.enabled,
-                                  onChanged: canConfigure
-                                      ? (enabled) =>
-                                          _setActivationState(worker, enabled)
-                                      : null,
-                                )),
-                          ]),
-          ),
-          if (worker?.modelCatalog != null)
-            ExpansionTile(
-              title: const Text('Models'),
-              subtitle:
-                  const Text('Choose a model in workflow or request settings.'),
+            title: Row(
               children: [
-                for (final model in worker!.modelCatalog!.models)
-                  ListTile(
-                      title: Text(model.name),
-                      subtitle: Text(model.id),
-                      trailing: Text(switch (model.status) {
-                        'verified' => 'Verified',
-                        'unavailable' => 'Unavailable',
-                        _ => 'Listed',
-                      })),
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(entry.displayName,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      for (final badge in badges)
+                        _CatalogStatusBadge(label: badge),
+                    ],
+                  ),
+                ),
+                if (_updatingWorkerTypes.contains(entry.workerTypeId))
+                  const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                else if (worker == null)
+                  TextButton(
+                      onPressed: canConfigure
+                          ? () => _configureCatalogWorker(entry)
+                          : null,
+                      child: const Text('Configure'))
+                else ...[
+                  TextButton(
+                      onPressed: canConfigure
+                          ? () => _testCatalogWorker(entry, worker)
+                          : null,
+                      child: const Text('Test')),
+                  TextButton(
+                      onPressed: canConfigure
+                          ? () => _setActivationState(
+                              worker,
+                              worker.activationState !=
+                                  LocalWorkerActivationState.enabled)
+                          : null,
+                      child: Text(worker.activationState ==
+                              LocalWorkerActivationState.enabled
+                          ? 'Disable'
+                          : 'Enable')),
+                ],
               ],
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text('$providerToolName $providerToolVersion',
+                      style: theme.textTheme.bodySmall),
+                ),
+                if (profileVersion != null)
+                  Text('Profile v$profileVersion',
+                      style: theme.textTheme.bodySmall),
+              ],
+            ),
+          ),
+          if (worker != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 8, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Models: ${availableModels.isEmpty ? 'Unavailable' : availableModels.join(', ')}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
             ),
         ],
       ),
@@ -298,8 +321,6 @@ class _WorkersTabState extends State<_WorkersTab> {
       margin: const EdgeInsets.only(bottom: 12),
       color: theme.colorScheme.surfaceContainerLow,
       child: ListTile(
-        leading: Icon(Icons.inventory_2_outlined,
-            color: theme.colorScheme.onSurfaceVariant),
         title: Text(worker.workerTypeId,
             style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Column(
@@ -318,15 +339,6 @@ class _WorkersTabState extends State<_WorkersTab> {
               padding: const EdgeInsets.only(top: 3),
               child: Text('$toolName · $toolVersion',
                   style: theme.textTheme.bodySmall),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                'Local Worker · ${worker.id}',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
             ),
           ],
         ),

@@ -274,6 +274,26 @@ void main() {
         ),
         'native-private-handle',
       );
+      for (final reconstruct in [false, true]) {
+        final selection = store.read(
+          sessionKey: 'scope-A',
+          workerTypeId: 'chatgpt',
+          profileDefinitionId: 'chatgpt-codex',
+          providerToolIdentity: 'Codex CLI',
+          compatibleFormatIds: ['format-v1'],
+          workerSession: context,
+          modelSwitchSupported: false,
+          requestedModelId: 'model-B',
+          requestedEffort: 'low',
+          effortChangesNativeModel: true,
+          allowModelReconstruction: reconstruct,
+        );
+        if (reconstruct) {
+          expect(await selection, isNull);
+        } else {
+          await expectLater(selection, throwsFormatException);
+        }
+      }
       final after = jsonDecode(await file.readAsString()) as Map;
       expect(after['workerSession'], containsPair('id', 'session-A'));
       expect(after['workerSession'], containsPair('profileVersion', 2));

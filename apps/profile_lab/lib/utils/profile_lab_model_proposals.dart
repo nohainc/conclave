@@ -1,3 +1,4 @@
+import 'package:conclave_protocol/conclave_protocol.dart';
 import 'dart:convert';
 
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
@@ -13,12 +14,18 @@ class ProfileLabAiModelOption {
     required this.label,
     required this.release,
     this.model,
+    this.capability,
+    this.stale = false,
   });
 
   final String id;
   final String label;
   final ToolProfileReleaseAdmission release;
   final String? model;
+  final ExecutionModelCapability? capability;
+  final bool stale;
+  String get workerId =>
+      "${release.profileDefinitionId}@${release.releaseVersion}";
 
   String get modelIdentifier =>
       '${release.logicalWorkerTypeId}/${release.profileDefinitionId}@${release.releaseVersion}'
@@ -105,9 +112,11 @@ class ProfileLabModelProposalService {
                 .where((value) => value.isNotEmpty)
                 .toList()
             : const <String>[];
+        DiscoveredModelCatalog? discoveredCatalog;
         if (modelSelectionSupported && modelConfig['discovery'] is Map) {
           if (discoverModels == null) continue;
           final discovered = await discoverModels(release);
+          discoveredCatalog = discovered;
           if (discovered == null ||
               discovered.profileDigest != release.payloadDigest) {
             continue;
@@ -117,13 +126,19 @@ class ProfileLabModelProposalService {
           if (prefix == null) continue;
           supportedModels = discovered.models
               .where((model) =>
-                  model.status != 'unavailable' && model.id.startsWith(prefix))
+                  model.id.startsWith(prefix) ||
+                  (modelConfig['selectionMapping'] is Map &&
+                      ((modelConfig['selectionMapping'] as Map)['models']
+                                  as List? ??
+                              [])
+                          .any((family) =>
+                              family is Map && family['id'] == model.id)))
               .map((model) => model.id)
               .toList();
         }
         if (modelSelectionSupported && supportedModels.isEmpty) continue;
         final selectedModels = modelSelectionSupported
-            ? supportedModels.cast<String?>()
+            ? <String?>[null, ...supportedModels]
             : const <String?>[null];
         for (final model in selectedModels) {
           final workerLabel = worker.displayName.isEmpty
@@ -138,6 +153,11 @@ class ProfileLabModelProposalService {
                 '$workerLabel · ${release.profileDefinitionId} v${release.releaseVersion} · $suffix',
             release: release,
             model: model,
+            stale: discoveredCatalog?.stale ?? false,
+            capability: model == null
+                ? null
+                : _modelCapability(
+                    model, modelConfig as Map, discoveredCatalog),
           ));
         }
       } on Object {
@@ -156,10 +176,20 @@ class ProfileLabModelProposalService {
     required Map<String, dynamic> currentDraft,
     required String userInstruction,
     required List<Map<String, dynamic>> testDiagnostics,
+    String? reasoningEffort,
   }) async {
     if (userInstruction.trim().isEmpty) {
       throw ArgumentError.value(userInstruction, 'userInstruction');
     }
+    final capability = WorkerSelectionCapability(
+        id: modelOption.workerId,
+        name: modelOption.label,
+        state:
+            modelOption.stale ? CapabilityState.stale : CapabilityState.ready,
+        models: [if (modelOption.capability != null) modelOption.capability!]);
+    final error = capability.validate(
+        ExecutionSelection(model: modelOption.model, effort: reasoningEffort));
+    if (error != null) throw StateError(error);
     final prompt = buildPrompt(
       currentDraft: currentDraft,
       userInstruction: userInstruction.trim(),
@@ -168,6 +198,7 @@ class ProfileLabModelProposalService {
     final output = await sandbox.runTrustedModelProposal(
       modelProfile: modelOption.release,
       model: modelOption.model,
+      reasoningEffort: reasoningEffort,
       prompt: prompt,
     );
     return parseProposal(
@@ -272,3 +303,54 @@ ${jsonEncode(payload)}''';
     }
   }
 }
+
+ExecutionModelCapability _modelCapability(
+    String id, Map config, DiscoveredModelCatalog? catalog) {
+  final discovered = catalog?.models.where((m) => m.id == id).firstOrNull;
+  if (discovered != null) {
+    return ExecutionModelCapability(
+        id: id,
+        name: discovered.name,
+        efforts: discovered.supportedReasoningEfforts,
+        defaultEffort: discovered.defaultReasoningEffort,
+        selectionMode: discovered.selectionMode,
+        status: discovered.status);
+  }
+  final entry = (config['catalog'] as List? ?? [])
+      .whereType<Map>()
+      .where((m) => m['id'] == id)
+      .firstOrNull;
+  return ExecutionModelCapability(
+      id: id,
+      name: entry?['name'] as String? ?? id,
+      efforts: List<String>.unmodifiable((entry?['supportedReasoningEfforts'] ??
+          config['supportedReasoningEfforts'] ??
+          const <String>[]) as List),
+      defaultEffort: (entry?['defaultReasoningEffort'] ??
+          config['defaultReasoningEffort']) as String?);
+}
+
+ExecutionSelectionCatalog profileLabSelectionCatalog(
+        List<ProfileLabAiModelOption> options) =>
+    ExecutionSelectionCatalog([
+      for (final id in options.map((o) => o.workerId).toSet())
+        WorkerSelectionCapability(
+          id: id,
+          name: options
+              .firstWhere((o) => o.workerId == id)
+              .label
+              .split(' · ')
+              .take(2)
+              .join(' · '),
+          modelSupported: options
+              .where((o) => o.workerId == id)
+              .any((o) => o.model != null),
+          state: options.where((o) => o.workerId == id).any((o) => o.stale)
+              ? CapabilityState.stale
+              : CapabilityState.ready,
+          models: [
+            for (final option in options.where((o) => o.workerId == id))
+              if (option.capability != null) option.capability!
+          ],
+        ),
+    ]);

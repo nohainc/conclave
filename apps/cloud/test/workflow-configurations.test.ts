@@ -167,6 +167,7 @@ it("persists only user overrides, isolates users, retains offline choices, reset
       workspaceId: "other",
       executionOptions: {
         ...inventory.workers.find((w) => w.id === "capable")!.executionOptions!,
+        schemaVersion: 1,
         models: {
           ...inventory.workers.find((w) => w.id === "capable")!
             .executionOptions!.models,

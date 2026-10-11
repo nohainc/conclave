@@ -88,4 +88,14 @@ void main() {
           throwsFormatException);
     });
   }
+  test('selection mode is additive, bounded signed metadata', () {
+    for (final mode in ['separate', 'combined']) {
+      ProfileExecutionOptions({'selectionMode': mode})
+          .validate(durableSessions: false);
+    }
+    expect(
+        () => ProfileExecutionOptions({'selectionMode': 'infer_from_suffix'})
+            .validate(durableSessions: false),
+        throwsFormatException);
+  });
 }

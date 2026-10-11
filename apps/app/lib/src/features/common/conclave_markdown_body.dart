@@ -76,30 +76,36 @@ class ConclaveMarkdownBody extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => SelectionArea(
-          child: MarkdownBody(
-        data: data,
-        fitContent: fitContent,
-        extensionSet: md.ExtensionSet.gitHubFlavored,
-        // One selection region joins paragraphs, lists and code blocks.
-        selectable: false,
-        softLineBreak: true,
-        builders: {'pre': ConclaveCodeBlockBuilder()},
-        syntaxHighlighter: ConclaveSyntaxHighlighter(Theme.of(context)),
-        styleSheet: ConclaveMarkdownStyleSheet.fromTheme(Theme.of(context)),
-        onTapLink: (_, href, __) => unawaited(_openLink(context, href)),
-        imageBuilder: (_, __, alt) => Wrap(
-          spacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Icon(Icons.image_outlined,
-                size: 16,
-                color: Theme.of(context).colorScheme.onSurfaceVariant),
-            Text(alt?.isNotEmpty == true ? alt! : 'Image',
-                style: Theme.of(context).textTheme.bodyMedium),
-          ],
-        ),
-      ));
+  Widget build(BuildContext context) {
+    final body = MarkdownBody(
+      data: data,
+      fitContent: fitContent,
+      extensionSet: md.ExtensionSet.gitHubFlavored,
+      // One selection region joins paragraphs, lists and code blocks.
+      selectable: false,
+      softLineBreak: true,
+      builders: {'pre': ConclaveCodeBlockBuilder()},
+      syntaxHighlighter: ConclaveSyntaxHighlighter(Theme.of(context)),
+      styleSheet: ConclaveMarkdownStyleSheet.fromTheme(Theme.of(context)),
+      onTapLink: (_, href, __) => unawaited(_openLink(context, href)),
+      imageBuilder: (_, __, alt) => Wrap(
+        spacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Icon(Icons.image_outlined,
+              size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          Text(alt?.isNotEmpty == true ? alt! : 'Image',
+              style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
+    );
+    // The app shell supplies one long-lived selection region. Keeping one
+    // region across route changes avoids Flutter web selection callbacks
+    // retaining a SelectionContainer that has already been deactivated.
+    return SelectionContainer.maybeOf(context) == null
+        ? SelectionArea(child: body)
+        : body;
+  }
 }
 
 /// One light/dark theme-derived style sheet for every AX Markdown surface.

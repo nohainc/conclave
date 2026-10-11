@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
+import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
@@ -76,7 +77,7 @@ Future<List<DiscoveredModel>> discoverCodexAppServerModels({
       'params': {
         'clientInfo': {
           'name': 'conclave-cli-worker-engine',
-          'version': '1.1.0',
+          'version': '1.2.0',
         },
         'capabilities': null,
       },
@@ -197,7 +198,9 @@ List<DiscoveredModel> parseCodexAppServerModels(
           );
         }
         final effort = rawEffort['reasoningEffort'] as String;
-        if (!efforts.contains(effort)) efforts.add(effort);
+        if (efforts.contains(effort))
+          throw const FormatException('Duplicate reasoning effort');
+        efforts.add(effort);
       }
     } else if (rawEfforts != null) {
       throw const FormatException(
@@ -214,6 +217,11 @@ List<DiscoveredModel> parseCodexAppServerModels(
     models.add(
       DiscoveredModel(
         id: id,
+        nativeId: value['model'] == null
+            ? id
+            : value['model'] is String
+            ? value['model'] as String
+            : throw const FormatException('Codex native model ID is invalid'),
         name: name,
         supportedReasoningEfforts: efforts,
         defaultReasoningEffort: defaultEffort as String?,
@@ -253,4 +261,76 @@ class ModelDiscoveryCache {
     await temp.writeAsString(jsonEncode(catalog.toJson()), flush: true);
     await temp.rename(file.path);
   }
+}
+
+/// Intersects signed exact mappings with the current native catalog.
+List<DiscoveredModel> normalizeCombinedModels(
+  List<DiscoveredModel> models,
+  Object? mapping,
+  String version,
+) {
+  final families = parseModelSelectionMapping(mapping);
+  if (families.isEmpty) return models;
+  final native = {for (final model in models) model.nativeId: model};
+  if (native.length != models.length)
+    throw const FormatException('Duplicate native model ID');
+  final consumed = <String>{};
+  final result = <DiscoveredModel>[];
+  for (final family in families) {
+    final variants = family.variants
+        .where((v) => v.supports(version) && native.containsKey(v.nativeId))
+        .toList();
+    if (variants.isEmpty) continue;
+    consumed.addAll(variants.map((v) => v.nativeId));
+    final efforts = variants.map((v) => v.effort).toList();
+    result.add(
+      DiscoveredModel(
+        id: family.id,
+        name: family.name,
+        selectionMode: 'combined',
+        supportedReasoningEfforts: efforts,
+        defaultReasoningEffort: efforts.contains(family.defaultEffort)
+            ? family.defaultEffort
+            : null,
+      ),
+    );
+  }
+  result.addAll(
+    models
+        .where((m) => !consumed.contains(m.nativeId))
+        .map(
+          (m) => DiscoveredModel(
+            id: m.id,
+            name: m.name,
+            nativeId: m.nativeId,
+            status: m.status,
+            selectionMode: 'combined',
+          ),
+        ),
+  );
+  if (result.map((m) => m.id).toSet().length != result.length)
+    throw const FormatException('Logical model ID collision');
+  return result;
+}
+
+/// Resolves only an advertised pair; missing defaults never choose a variant.
+String resolveNativeSelection(
+  DiscoveredModel model,
+  String? effort,
+  Object? mapping,
+  String version,
+) {
+  final family = parseModelSelectionMapping(
+    mapping,
+  ).where((m) => m.id == model.id).firstOrNull;
+  if (family == null) return model.nativeId;
+  final selected = effort ?? model.defaultReasoningEffort;
+  if (selected == null || !model.supportedReasoningEfforts.contains(selected))
+    throw const FormatException('Explicit supported effort required');
+  final matches = family.variants
+      .where((v) => v.supports(version) && v.effort == selected)
+      .toList();
+  if (matches.length != 1)
+    throw const FormatException('Ambiguous native model selection');
+  return matches.single.nativeId;
 }

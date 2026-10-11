@@ -520,6 +520,37 @@ const profileSchema = z
         supported: z.boolean(),
         arguments: z.array(templatedString).max(TOOL_PROFILE_LIMITS.arguments),
         unknownModelPolicy: z.enum(["pass_through", "profile_allowlist"]),
+        selectionMode: z.enum(["separate", "combined"]).optional(),
+        selectionMapping: z
+          .object({
+            schemaVersion: z.literal(1),
+            models: z
+              .array(
+                z
+                  .object({
+                    id: modelId,
+                    name: shortString,
+                    defaultEffort: effortValue.optional(),
+                    variants: z
+                      .array(
+                        z
+                          .object({
+                            nativeId: modelId,
+                            effort: effortValue,
+                            providerVersion: versionRange.optional(),
+                          })
+                          .strict(),
+                      )
+                      .min(1)
+                      .max(128),
+                  })
+                  .strict(),
+              )
+              .min(1)
+              .max(128),
+          })
+          .strict()
+          .optional(),
         allowlist: z.array(modelId).max(128).optional(),
         discovery: z
           .object({
@@ -529,7 +560,10 @@ const profileSchema = z
             format: z.enum(["tsv", "codex_app_server"]),
             // Empty means that the provider command is already scoped to
             // models and every returned ID is accepted.
-            idPrefix: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/).or(z.literal("")),
+            idPrefix: z
+              .string()
+              .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/)
+              .or(z.literal("")),
           })
           .strict()
           .optional(),
@@ -653,6 +687,20 @@ function compareVersion(left: string, right: string): number {
   }
   return 0;
 }
+/** Exact semantic-version gate shared by signed mappings and public projection. */
+export function modelSelectionVersionMatches(
+  version: unknown,
+  range?: { min: string; maxExclusive: string },
+): boolean {
+  if (!semver.safeParse(version).success) return false;
+  return (
+    !range ||
+    (semver.safeParse(range.min).success &&
+      semver.safeParse(range.maxExclusive).success &&
+      compareVersion(version as string, range.min) >= 0 &&
+      compareVersion(version as string, range.maxExclusive) < 0)
+  );
+}
 function validateRange(
   min: string,
   max: string,
@@ -688,6 +736,64 @@ export const toolProfileV1Schema = profileSchema.superRefine((profile, ctx) => {
   const model = profile.model;
   const optionIssue = (message: string) =>
     ctx.addIssue({ code: "custom", path: ["model"], message });
+  if (model.selectionMapping) {
+    if (
+      model.selectionMode !== "combined" ||
+      !model.supported ||
+      !model.discovery ||
+      compareVersion(profile.engineCompatibility.min, "1.2.0") < 0 ||
+      model.executionOptions?.effortSupported === false
+    )
+      optionIssue("Combined mapping requires discovery and Engine 1.2.0");
+    const ids = new Set<string>();
+    const prior: {
+      id: string;
+      nativeId: string;
+      effort: string;
+      providerVersion?: { min: string; maxExclusive: string };
+    }[] = [];
+    for (const family of model.selectionMapping.models) {
+      if (ids.has(family.id)) optionIssue("Duplicate logical model ID");
+      ids.add(family.id);
+      if (
+        new Set(family.variants.map((v) => v.effort)).size > 16 ||
+        (family.defaultEffort &&
+          !family.variants.some((v) => v.effort === family.defaultEffort))
+      )
+        optionIssue("Invalid mapped efforts or default");
+      for (const variant of family.variants) {
+        if (
+          variant.providerVersion &&
+          compareVersion(
+            variant.providerVersion.min,
+            variant.providerVersion.maxExclusive,
+          ) >= 0
+        )
+          optionIssue("Invalid provider version range");
+        for (const entry of prior) {
+          const overlaps =
+            !entry.providerVersion ||
+            !variant.providerVersion ||
+            (compareVersion(
+              entry.providerVersion.maxExclusive,
+              variant.providerVersion.min,
+            ) > 0 &&
+              compareVersion(
+                variant.providerVersion.maxExclusive,
+                entry.providerVersion.min,
+              ) > 0);
+          if (
+            overlaps &&
+            (entry.nativeId === variant.nativeId ||
+              (entry.id === family.id && entry.effort === variant.effort))
+          )
+            optionIssue("Ambiguous native selection mapping");
+        }
+        prior.push({ id: family.id, ...variant });
+      }
+    }
+    if (prior.length > 128) optionIssue("Selection mapping exceeds limit");
+  }
   const entries = model.catalog ?? [];
   if (new Set(entries.map((entry) => entry.id)).size !== entries.length)
     optionIssue("Model catalog IDs must be unique");
@@ -725,6 +831,7 @@ export const toolProfileV1Schema = profileSchema.superRefine((profile, ctx) => {
       optionIssue("Default model must be allowed");
     if (
       declared.effortSupported &&
+      !model.selectionMapping &&
       [
         profile.execution.arguments,
         ...profile.compatibilityOverrides.flatMap((override) =>
@@ -739,6 +846,9 @@ export const toolProfileV1Schema = profileSchema.superRefine((profile, ctx) => {
     )
       optionIssue("Supported effort requires a provider invocation mapping");
     const supported = new Set([
+      ...(model.selectionMapping?.models.flatMap((m) =>
+        m.variants.map((v) => v.effort),
+      ) ?? []),
       ...(model.supportedReasoningEfforts ?? []),
       ...entries.flatMap((entry) => entry.supportedReasoningEfforts ?? []),
     ]);

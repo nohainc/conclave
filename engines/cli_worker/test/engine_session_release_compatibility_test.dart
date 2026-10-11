@@ -45,6 +45,14 @@ void main() {
                   ).readAsString(),
                 )
                 as Map<String, Object?>;
+        // Session compatibility uses synthetic model IDs; discovery is not
+        // part of this test's contract.
+        final modelMetadata = profile['model']! as Map<String, Object?>;
+        modelMetadata.remove('discovery');
+        modelMetadata.remove('selectionMapping');
+        modelMetadata.remove('selectionMode');
+        (profile['engineCompatibility']! as Map<String, Object?>)['min'] =
+            '1.0.0';
         profile['releaseVersion'] = releaseVersion;
         (profile['model'] as Map)['executionOptions'] = {
           'schemaVersion': 1,

@@ -43,7 +43,7 @@ Map<String, Object?> spaceWorkerInventory({
     if (runnable &&
         worker.modelCatalog?.profileDigest == eligibleProfile.payloadDigest &&
         worker.modelCatalog?.providerToolVersion == worker.toolVersion)
-      'modelCatalog': worker.modelCatalog!.toJson(),
+      'modelCatalog': worker.modelCatalog!.toJson(includeNativeIds: false),
     'localConcurrencyLimit': worker.localConcurrencyLimit,
     'revision': worker.revision,
     'createdAt': worker.createdAt,

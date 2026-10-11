@@ -1,3 +1,5 @@
+import 'model_selection_mapping.dart';
+
 /// Generic selection rules; provider argument mapping remains inside the Profile.
 class ProfileExecutionOptions {
   ProfileExecutionOptions(this.model);
@@ -46,6 +48,15 @@ class ProfileExecutionOptions {
       return result;
     }
 
+    if (model['selectionMode'] != null &&
+        !const {'separate', 'combined'}.contains(model['selectionMode']))
+      fail();
+    final selections = parseModelSelectionMapping(model['selectionMapping']);
+    if (selections.isNotEmpty &&
+        (model['selectionMode'] != 'combined' ||
+            model['supported'] != true ||
+            model['discovery'] == null ||
+            declaration['effortSupported'] == false)) fail();
     final discovery = model['discovery'];
     if (discovery != null) {
       if (discovery is! Map ||
@@ -81,7 +92,10 @@ class ProfileExecutionOptions {
                 .any((id) => id is! String || id.isEmpty || id.length > 160)))
       fail();
     final global = values(model['supportedReasoningEfforts']);
-    final supported = <String>{...global};
+    final supported = <String>{
+      ...global,
+      ...selections.expand((m) => m.variants.map((v) => v.effort))
+    };
     final catalog = model['catalog'];
     if (catalog != null && (catalog is! List || catalog.length > 128)) fail();
     final ids = <String>{};

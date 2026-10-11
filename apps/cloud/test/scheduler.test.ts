@@ -51,6 +51,15 @@ function candidate(overrides: Record<string, unknown> = {}) {
     profile_release_version: 3,
     provider_tool_name: "Codex CLI",
     provider_tool_version: "0.44.0",
+    execution_profile_json: JSON.stringify({
+      model: {
+        supported: true,
+        catalog: [
+          { id: "gpt-5.6-codex", name: "Codex" },
+          { id: "gpt-5.5", name: "GPT" },
+        ],
+      },
+    }),
     capabilities_json: JSON.stringify(["repository"]),
     local_permissions_json: JSON.stringify([
       "repository:read",
@@ -864,4 +873,106 @@ it("rechecks granular rights at dispatch and ignores the retired Space-wide swit
       { ...request, workBindingId: "chat" },
     ),
   ).not.toBeNull();
+});
+
+it("revalidates exact model and effort at dispatch without fallback", async () => {
+  const request = {
+    spaceId: "space-a",
+    requesterUserId: "user-a",
+    role: "collaborator",
+    capabilities: [],
+    model: "gpt-5.5",
+  };
+  expect(
+    await selectSpaceExecutionTarget(db([candidate()]), request),
+  ).not.toBeNull();
+  expect(
+    await selectSpaceExecutionTarget(db([candidate()]), {
+      ...request,
+      reasoningEffort: "invented",
+    }),
+  ).toBeNull();
+  expect(
+    await selectSpaceExecutionTarget(db([candidate()]), {
+      ...request,
+      catalogRevision: "f".repeat(64),
+    }),
+  ).toBeNull();
+  expect(
+    await selectSpaceExecutionTarget(
+      db([candidate({ execution_profile_json: null })]),
+      request,
+    ),
+  ).toBeNull();
+  expect(
+    await selectSpaceExecutionTarget(
+      db([candidate({ workspace_status: "offline" })]),
+      request,
+    ),
+  ).toBeNull();
+});
+
+it("requires a pin-capable Engine and freezes the normalized Gemini selection before dispatch", async () => {
+  const profile = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  const catalog = {
+    schemaVersion: 2,
+    profileDigest: "a".repeat(64),
+    providerToolVersion: "1.3.3",
+    catalogRevision: "b".repeat(64),
+    discoveredAt: "2026-10-11T00:00:00Z",
+    models: [
+      {
+        id: "gemini-3.1-pro",
+        name: "Original Pro",
+        efforts: ["low", "high"],
+        defaultEffort: null,
+        selectionMode: "combined",
+        status: "listed",
+      },
+    ],
+  };
+  const row = candidate({
+    worker_type_id: "gemini",
+    profile_definition_id: "gemini-antigravity",
+    provider_tool_version: "1.3.3",
+    execution_profile_json: JSON.stringify(profile),
+    execution_profile_digest: catalog.profileDigest,
+    model_catalog_json: JSON.stringify(catalog),
+  });
+  const request = {
+    spaceId: "space-a",
+    requesterUserId: "user-a",
+    role: "collaborator",
+    capabilities: ["repository"],
+    model: "gemini-3.1-pro",
+    reasoningEffort: "high",
+    catalogRevision: catalog.catalogRevision,
+  };
+  expect(
+    await selectSpaceExecutionTarget(
+      db([{ ...row, engine_version: "1.2.0" }]),
+      request,
+    ),
+  ).toBeNull();
+  const target = await selectSpaceExecutionTarget(
+    db([{ ...row, engine_version: "1.3.0" }]),
+    request,
+  );
+  expect(target?.permissionSnapshot.executionSelection).toMatchObject({
+    modelId: "gemini-3.1-pro",
+    modelName: "Original Pro",
+    effort: "high",
+    catalogRevision: catalog.catalogRevision,
+  });
+  expect(target?.permissionSnapshot.executionSelection).not.toHaveProperty(
+    "resolvedNativeModelId",
+  );
 });

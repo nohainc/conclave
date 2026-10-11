@@ -1,3 +1,9 @@
+import 'dart:async';
+import 'package:conclave_design/conclave_design.dart';
+import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
+import 'package:conclave_profile_lab/profile_lab_paths.dart';
+import 'package:conclave_profile_lab/views/ai_assistant_dialog.dart';
+import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'dart:io';
@@ -25,15 +31,13 @@ void main() {
         .loadAvailableModels(apiClient: api, trustPolicy: trustPolicy);
 
     expect(options.map((option) => option.model).toList(),
-        ['model-fast', 'model-safe']);
+        [null, 'model-fast', 'model-safe']);
     expect(options.every((option) => option.release.isSigned), isTrue);
-    expect(options.first.modelIdentifier,
+    expect(options.firstWhere((o) => o.model == 'model-fast').modelIdentifier,
         'model-worker/model-profile@2#model-fast');
   });
 
-  test(
-      'discovers exact Gemini IDs through a trusted Profile and filters unavailable models',
-      () async {
+  test('retains unavailable provider models for the shared selector', () async {
     final signed = await _createSignedRelease(dynamicModels: true);
     final publicKey = await signed.keyPair.extractPublicKey();
     final policy = WorkerTrustPolicy(trustedPublicKeys: {
@@ -54,7 +58,16 @@ void main() {
         ],
       ),
     );
-    expect(options.map((o) => o.model), ['gemini-new-high']);
+    expect(
+        options.map((o) => o.model), [null, 'gemini-new-high', 'gemini-old']);
+    expect(
+        options
+            .firstWhere((o) => o.model == 'gemini-old')
+            .capability!
+            .available,
+        isFalse);
+    expect(profileLabSelectionCatalog(options).workers.single.models,
+        hasLength(2));
     var invoked = false;
     final revoked =
         await const ProfileLabModelProposalService().loadAvailableModels(
@@ -67,6 +80,77 @@ void main() {
     );
     expect(revoked, isEmpty);
     expect(invoked, isFalse);
+  });
+
+  testWidgets(
+      'proposal dialog uses the shared selector without choosing the first model',
+      (tester) async {
+    final root = Directory.systemTemp.createTempSync('selector-dialog-');
+    final pending = Completer<List<ProfileLabAiModelOption>>();
+    final controller = _SelectorController(
+        paths: ProfileLabPaths(homeDirectory: root.path),
+        options: pending.future);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: AiAssistantDialog(controller: controller))));
+    expect(find.byType(ModelEffortSelector), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    pending.complete([]);
+    await tester.pumpAndSettle();
+    expect(find.text('Select Worker...'), findsOneWidget);
+    expect(find.textContaining('No trusted Stable Worker Profile'),
+        findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+    root.deleteSync(recursive: true);
+  });
+
+  testWidgets(
+      'a revoked proposal Profile remains visibly unavailable after refresh',
+      (tester) async {
+    final options = (await tester.runAsync(() async {
+      final signed = await _createSignedRelease();
+      final publicKey = await signed.keyPair.extractPublicKey();
+      return const ProfileLabModelProposalService().loadAvailableModels(
+          apiClient: _SignedReleaseApi(signed),
+          trustPolicy: WorkerTrustPolicy(trustedPublicKeys: {
+            'conclave': {'test-profile-key': base64.encode(publicKey.bytes)},
+          }));
+    }))!;
+    final root = Directory.systemTemp.createTempSync('selector-revocation-');
+    final controller = _SelectorController(
+        paths: ProfileLabPaths(homeDirectory: root.path),
+        options: Future.value(options));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(body: AiAssistantDialog(controller: controller))));
+    await tester.pumpAndSettle();
+    Future<void> choose(String label, String text) async {
+      final picker = find.byWidgetPredicate((widget) =>
+          widget is DropdownButtonFormField<String> &&
+          (widget.key as ValueKey<String>)
+              .value
+              .startsWith('proposal-$label-'));
+      await tester.ensureVisible(picker);
+      await tester.tap(picker);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(text).last);
+      await tester.pumpAndSettle();
+    }
+
+    await choose('Worker', 'Model Worker · model-profile v2');
+    await choose('Model', 'model-fast');
+    final consent = find.byType(CheckboxListTile);
+    await tester.ensureVisible(consent);
+    await tester.tap(consent);
+    await tester.pumpAndSettle();
+    final generate = find.text('Generate Draft Proposal');
+    await tester.ensureVisible(generate);
+    await tester.tap(generate);
+    await tester.pumpAndSettle();
+    expect(find.text('model-fast · Unavailable'), findsOneWidget);
+    expect(find.text('model-profile@2 · Unavailable'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+    root.deleteSync(recursive: true);
   });
 
   test('current Cloud key revocation removes otherwise valid model Profiles',
@@ -207,4 +291,24 @@ Future<_SignedRelease> _createSignedRelease(
     },
     keyPair,
   );
+}
+
+class _SelectorController extends ProfileLabController {
+  _SelectorController({required super.paths, required this.options});
+  final Future<List<ProfileLabAiModelOption>> options;
+  @override
+  Future<List<ProfileLabAiModelOption>> loadAvailableAiModels() async {
+    availableAiModels = await options;
+    return availableAiModels;
+  }
+
+  @override
+  Future<Map<String, dynamic>> generateAiDraftProposal(
+      {required String modelOptionId,
+      required String userInstruction,
+      required bool dataSharingConfirmed,
+      String? reasoningEffort}) async {
+    availableAiModels = [];
+    throw StateError('The selected Profile was revoked.');
+  }
 }

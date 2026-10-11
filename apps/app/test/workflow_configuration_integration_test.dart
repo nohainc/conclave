@@ -173,38 +173,29 @@ void main() {
                 })));
     await tester.pumpWidget(page('one'));
     await tester.pumpAndSettle();
-    expect(find.text('First'), findsOneWidget);
-    expect(find.text('Analysis model (High)'), findsOneWidget);
+    expect(find.textContaining('First'), findsNothing);
+    expect(find.textContaining('Analysis model'), findsOneWidget);
     expect(find.text('obsolete-model'), findsNothing);
-    expect(
-        tester
-            .widget<InkWell>(find.byKey(const ValueKey('work-composer-worker')))
-            .onTap,
-        isNotNull);
-    await tester.tap(find.byKey(const ValueKey('work-composer-worker')));
+    await requestChoice(tester, 'Worker', 'Second');
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Second').last);
-    await tester.pumpAndSettle();
-    expect(find.text('Second'), findsOneWidget);
+    expect(find.textContaining('Second'), findsNothing);
+    expect(find.textContaining('Auto'), findsOneWidget);
     expect(source.values.single.defaults.worker, 'a');
     await cache.save(AxUserWorkflowConfiguration(
         workflowId: 'direct',
         defaults: const AxWorkflowSelection(
             worker: 'b', model: 'other', effort: 'careful')));
     await tester.pumpAndSettle();
-    expect(find.text('Second'), findsOneWidget);
+    expect(find.textContaining('Second'), findsNothing);
+    expect(find.textContaining('Other model'), findsOneWidget);
     await cache.reset('direct');
     await tester.pumpAndSettle();
-    expect(find.text('Select Worker...'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('work-composer-worker')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Second').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('work-composer-model')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Other model').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('careful').last);
+    expect(find.textContaining('Select model'), findsOneWidget);
+    await requestChoice(tester, 'Worker', 'Second');
+    await requestChoice(tester, 'Model', 'Other model');
+    await requestChoice(tester, 'Effort', 'Careful');
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Run with Auto');
     await tester.tap(find.byTooltip('Send request'));
@@ -216,7 +207,7 @@ void main() {
       'reasoningEffort': 'careful',
     });
     expect(find.textContaining('Other model'), findsOneWidget);
-    expect(find.textContaining('careful'), findsOneWidget);
+    expect(find.textContaining('Careful'), findsOneWidget);
     await tester.pumpWidget(page('two'));
     await tester.pumpAndSettle();
     expect(source.reads, 1);
@@ -286,8 +277,8 @@ void main() {
         tabIndex: 1,
         workflowReference: 'direct:v1',
         workerId: 'b',
-        model: 'other',
-        reasoningEffort: 'careful',
+        model: 'removed-model',
+        reasoningEffort: 'removed-effort',
         chatDraft: 'remember this chat',
         workDraft: 'remember this work',
       ),
@@ -321,9 +312,9 @@ void main() {
                 onBackToSpace: () {},
                 onArchive: () {}))));
     await tester.pumpAndSettle();
-    expect(find.text('Second'), findsOneWidget);
-    expect(find.textContaining('Other model'), findsOneWidget);
-    expect(find.textContaining('careful'), findsOneWidget);
+    expect(find.textContaining('Second'), findsNothing);
+    expect(find.textContaining('removed-model · Unavailable'), findsOneWidget);
+    expect(find.textContaining('Removed-effort · Unavailable'), findsOneWidget);
     expect(find.text('remember this work'), findsOneWidget);
     await tester.tap(find.text('Chat'));
     await tester.pumpAndSettle();
@@ -334,6 +325,23 @@ void main() {
     expect(saved?.tabIndex, 0);
     expect(saved?.chatDraft, 'updated chat draft');
     expect(saved?.workDraft, 'remember this work');
+    expect(saved?.model, 'removed-model');
+    expect(saved?.reasoningEffort, 'removed-effort');
     await tester.pumpWidget(const SizedBox());
   });
+}
+
+Future<void> requestChoice(
+    WidgetTester tester, String label, String text) async {
+  final picker = find.byWidgetPredicate((w) =>
+      w is DropdownButtonFormField<String> &&
+      (w.key as ValueKey<String>).value.startsWith('work-composer-$label-'));
+  if (picker.evaluate().isEmpty) {
+    await tester.tap(find.byKey(const ValueKey('work-composer-open')));
+    await tester.pumpAndSettle();
+  }
+  await tester.tap(picker);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(text).last);
+  await tester.pumpAndSettle();
 }

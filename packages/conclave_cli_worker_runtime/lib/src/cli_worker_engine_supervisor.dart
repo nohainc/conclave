@@ -8,7 +8,7 @@ import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'platform_process_supervisor.dart';
 import 'worker_process_cleanup.dart';
 
-const cliWorkerEngineVersion = '1.1.0';
+const cliWorkerEngineVersion = '1.3.0';
 
 /// Runs one isolated generic Engine process for one passive or live probe,
 /// or for normal / sandbox assignment execution.
@@ -165,7 +165,8 @@ final class CliWorkerEngineSupervisor {
           initialized.profileDefinitionId != release.profileDefinitionId ||
           initialized.profileReleaseVersion !=
               release.releaseVersion.toString() ||
-          initialized.profileSchemaVersion != release.profile['schemaVersion']) {
+          initialized.profileSchemaVersion !=
+              release.profile['schemaVersion']) {
         throw const FormatException('CLI Worker Engine initialize mismatch');
       }
       final result = await channel.exchange(
@@ -232,6 +233,7 @@ final class CliWorkerEngineSupervisor {
     ConversationBootstrap? statelessContext,
     String? model,
     String? reasoningEffort,
+    String? catalogRevision,
     WorkerExecutionPolicy executionPolicy = WorkerExecutionPolicy.restricted,
     Duration? engineExecutionTimeout,
     void Function()? onExecutionStarted,
@@ -325,7 +327,8 @@ final class CliWorkerEngineSupervisor {
           initialized.profileDefinitionId != release.profileDefinitionId ||
           initialized.profileReleaseVersion !=
               release.releaseVersion.toString() ||
-          initialized.profileSchemaVersion != release.profile['schemaVersion']) {
+          initialized.profileSchemaVersion !=
+              release.profile['schemaVersion']) {
         throw const FormatException('CLI Worker Engine initialize mismatch');
       }
       final result = await channel.exchangeUntilTerminal(
@@ -340,6 +343,7 @@ final class CliWorkerEngineSupervisor {
           statelessContext: statelessContext,
           model: model,
           reasoningEffort: reasoningEffort,
+          catalogRevision: catalogRevision,
           executionPolicy: executionPolicy,
         ),
 

@@ -133,7 +133,6 @@ describe("Workspace Runtime protocol", () => {
       profileReleaseVersion: 1,
       providerToolName: "codex",
       providerToolVersion: null,
-      capabilities: ["code"],
       localConcurrencyLimit: 1,
       revision: 1,
       createdAt: "2026-09-24T12:00:00.000Z",
@@ -147,6 +146,16 @@ describe("Workspace Runtime protocol", () => {
         payload: { workers: [worker], fullSnapshot: true },
       }).type,
     ).toBe("worker.inventory");
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "worker.inventory",
+        payload: {
+          workers: [{ ...worker, capabilities: ["code"] }],
+          fullSnapshot: true,
+        },
+      }),
+    ).toThrow();
     expect(() =>
       parseWorkspaceRuntimeMessage({
         ...base,

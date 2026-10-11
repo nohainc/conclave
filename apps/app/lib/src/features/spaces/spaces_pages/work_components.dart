@@ -1,51 +1,12 @@
 part of '../spaces_pages.dart';
 
-class AxModelOption {
-  const AxModelOption({
-    required this.id,
-    required this.name,
-    required this.badge,
-    required this.description,
-    this.minCliVersion,
-    this.defaultReasoningEffort,
-    this.supportedReasoningEfforts = const [],
-  });
-
-  final String id;
-  final String name;
-  final String badge;
-  final String description;
-  final String? minCliVersion;
-  final String? defaultReasoningEffort;
-  final List<String> supportedReasoningEfforts;
-}
-
-List<AxModelOption> _modelsForWorker(AxWorker worker) {
-  final options = worker.executionOptions;
-  if (options != null && options.models.isNotEmpty) {
-    return options.models
-        .map((model) => AxModelOption(
-              id: model.id,
-              name: model.name,
-              badge: '',
-              description: '',
-              defaultReasoningEffort: model.effort.defaultValue,
-              supportedReasoningEfforts:
-                  model.effort.supported ? model.effort.values : const [],
-            ))
-        .toList();
-  }
-
-  return const [];
-}
-
 String _modelDisplayName(String? modelId, {AxWorker? worker}) {
   if (modelId == null || modelId.trim().isEmpty) return '';
-  final list =
-      worker != null ? _modelsForWorker(worker) : const <AxModelOption>[];
-  final found = list.where((m) => m.id == modelId).firstOrNull;
-  if (found != null) return found.name;
-  return modelId;
+  return worker?.executionOptions?.models
+          .where((m) => m.id == modelId)
+          .firstOrNull
+          ?.name ??
+      modelId;
 }
 
 // Execution diagnostics remain in Workspace/Engine logs, not conversation text.
@@ -79,19 +40,6 @@ String _executionFailureMessage(String? code, {String? validationMessage}) =>
           'Your request could not be completed. Please retry.',
       _ => 'Your request could not be completed. Please retry.',
     };
-
-String _reasoningEffortDisplayName(String? effort) {
-  if (effort == null || effort.trim().isEmpty) return '';
-  return switch (effort.trim().toLowerCase()) {
-    'low' => 'Low',
-    'medium' => 'Medium',
-    'high' => 'High',
-    'xhigh' || 'extra-high' => 'Extra High',
-    'max' => 'Max',
-    'ultra' => 'Ultra',
-    _ => effort,
-  };
-}
 
 Future<T?> _showAnchoredMenu<T>({
   required BuildContext buttonContext,
@@ -305,43 +253,12 @@ class _WorkComposer extends StatelessWidget {
         ]));
   }
 
-  AxWorker? get _assignedWorker {
-    final selectedWorkflow = workflowCatalog
-            .where((item) => item.reference == workflow)
-            .firstOrNull ??
-        workflowCatalog
-            .where((item) => item.id == workflow.split(':').first)
-            .firstOrNull;
-    final bindings = workConfig['bindings'] is Map
-        ? Map<String, dynamic>.from(workConfig['bindings'] as Map)
-        : <String, dynamic>{};
-    final stepKind = selectedWorkflow?.composerBindingId;
-    final rawBinding = stepKind == null ? null : bindings[stepKind];
-    final binding = rawBinding is Map
-        ? Map<String, dynamic>.from(rawBinding)
-        : <String, dynamic>{};
-    final workerId = (executionSelection.containsKey('workerId')
-                ? executionSelection['workerId']
-                : binding['workerId'])
-            ?.toString() ??
-        '';
-    if (workerId.isEmpty) return null;
-    return eligibleWorkers.where((w) => w.id == workerId).firstOrNull ??
-        spaceWorkers.where((w) => w.id == workerId).firstOrNull;
-  }
-
-  bool get _isWorkerAssigned {
-    final worker = _assignedWorker;
-    return worker != null && eligibleWorkers.any((w) => w.id == worker.id);
-  }
-
   Widget controls(BuildContext context) => _buildComposerInput(
       context,
       Theme.of(context).brightness == Brightness.dark,
       Theme.of(context).colorScheme);
 
   Widget _additionalControls(BuildContext context, GlobalKey inputKey) {
-    final colors = Theme.of(context).colorScheme;
     final selectedWorkflow = workflowCatalog
             .where((item) => item.reference == workflow)
             .firstOrNull ??
@@ -357,8 +274,6 @@ class _WorkComposer extends StatelessWidget {
     final binding = rawBinding is Map
         ? Map<String, dynamic>.from(rawBinding)
         : <String, dynamic>{};
-    final assignedWorker = _assignedWorker;
-    final isWorkerAssigned = _isWorkerAssigned;
     final policy =
         selectedWorkflow?.executionPolicy ?? const AxWorkflowCapabilities();
     final selectedWorkerId = (executionSelection.containsKey('workerId')
@@ -487,244 +402,49 @@ class _WorkComposer extends StatelessWidget {
               ),
             ),
           ),
-          if (stepKind != null && policy.userSelectsWorker) ...[
+          if (stepKind != null) ...[
             const SizedBox(width: 6),
-            Builder(
-              builder: (workerContext) => Tooltip(
-                message: 'Worker · this request',
-                child: Material(
-                  color: controlBg,
-                  borderRadius: controlBorderRadius,
-                  child: InkWell(
-                    key: const ValueKey('work-composer-worker'),
-                    borderRadius: controlBorderRadius,
-                    onTap:
-                        canExecute && !submitting && eligibleWorkers.isNotEmpty
-                            ? () async {
-                                final value = await _showAnchoredMenu<String>(
-                                  buttonContext: workerContext,
-                                  inputKey: inputKey,
-                                  itemHeight: 48,
-                                  items: [
-                                    for (final worker in eligibleWorkers)
-                                      PopupMenuItem<String>(
-                                          value: worker.id,
-                                          child: Text(worker.displayName)),
-                                  ],
-                                );
-                                if (value == null || !workerContext.mounted) {
-                                  return;
-                                }
-                                onExecutionSelectionChanged({
-                                  'workerId': value,
-                                  'model': null,
-                                  'reasoningEffort': null,
-                                });
-                              }
-                            : null,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 140),
-                            child: Text(
-                              assignedWorker?.displayName ??
-                                  (selectedWorkerId == null ||
-                                          selectedWorkerId.isEmpty
-                                      ? 'Select Worker...'
-                                      : 'Unavailable Worker'),
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: selectedWorkerId == null ||
-                                            selectedWorkerId.isEmpty ||
-                                            isWorkerAssigned
-                                        ? null
-                                        : colors.error,
-                                  ),
-                            ),
-                          ),
-                          const Icon(Icons.keyboard_arrow_down, size: 14),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-          if (stepKind != null &&
-              isWorkerAssigned &&
-              assignedWorker != null &&
-              (policy.userSelectsModel || policy.userSelectsEffort) &&
-              (assignedWorker.executionOptions?.modelSelectionSupported ??
-                  true)) ...[
-            const SizedBox(width: 6),
-            Builder(
-              builder: (modelBtnContext) {
-                final modelOptions = _modelsForWorker(assignedWorker);
-                final modelName =
-                    _modelDisplayName(selectedModel, worker: assignedWorker);
-                final String combinedLabel;
-                if (modelName.isEmpty || selectedModel.isEmpty) {
-                  combinedLabel = 'Auto';
-                } else if (selectedReasoningEffort.isNotEmpty) {
-                  combinedLabel =
-                      '$modelName (${_reasoningEffortDisplayName(selectedReasoningEffort)})';
-                } else {
-                  combinedLabel = modelName;
-                }
-
-                return MenuAnchor(
-                  menuChildren: [
-                    MenuItemButton(
-                      onPressed: canExecute && !submitting
-                          ? () {
-                              onExecutionSelectionChanged({
-                                'model': null,
-                                'reasoningEffort': null,
-                              });
-                            }
-                          : null,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (selectedModel.isEmpty)
-                            const Icon(Icons.check, size: 14)
-                          else
-                            const SizedBox(width: 14),
-                          const SizedBox(width: 6),
-                          const Text('Auto'),
-                        ],
-                      ),
-                    ),
-                    for (final option in modelOptions)
-                      if (policy.userSelectsEffort &&
-                          option.supportedReasoningEfforts.isNotEmpty)
-                        SubmenuButton(
-                          leadingIcon: selectedModel == option.id
-                              ? const Icon(Icons.check, size: 14)
-                              : const SizedBox(width: 14),
-                          menuChildren: [
-                            MenuItemButton(
-                              onPressed: canExecute && !submitting
-                                  ? () {
-                                      onExecutionSelectionChanged({
-                                        'model': option.id,
-                                        'reasoningEffort': null,
-                                      });
-                                    }
-                                  : null,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (selectedModel == option.id &&
-                                      selectedReasoningEffort.isEmpty)
-                                    const Icon(Icons.check, size: 14)
-                                  else
-                                    const SizedBox(width: 14),
-                                  const SizedBox(width: 6),
-                                  const Text('Auto'),
-                                ],
-                              ),
-                            ),
-                            for (final effort
-                                in option.supportedReasoningEfforts)
-                              MenuItemButton(
-                                onPressed: canExecute && !submitting
-                                    ? () {
-                                        onExecutionSelectionChanged({
-                                          'model': option.id,
-                                          'reasoningEffort': effort,
-                                        });
-                                      }
-                                    : null,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (selectedModel == option.id &&
-                                        selectedReasoningEffort.toLowerCase() ==
-                                            effort.toLowerCase())
-                                      const Icon(Icons.check, size: 14)
-                                    else
-                                      const SizedBox(width: 14),
-                                    const SizedBox(width: 6),
-                                    Text(_reasoningEffortDisplayName(effort)),
-                                  ],
-                                ),
-                              ),
-                          ],
-                          child: Text(option.name),
-                        )
-                      else
-                        MenuItemButton(
-                          leadingIcon: selectedModel == option.id
-                              ? const Icon(Icons.check, size: 14)
-                              : const SizedBox(width: 14),
-                          onPressed: canExecute && !submitting
-                              ? () {
-                                  onExecutionSelectionChanged({
-                                    'model': option.id,
-                                    'reasoningEffort': null,
-                                  });
-                                }
-                              : null,
-                          child: Text(option.name),
-                        ),
-                  ],
-                  builder: (context, controller, child) => Tooltip(
-                    message: 'Model & Effort · this request',
-                    child: Material(
-                      color: controlBg,
-                      borderRadius: controlBorderRadius,
-                      child: InkWell(
-                        key: const ValueKey('work-composer-model'),
-                        borderRadius: controlBorderRadius,
-                        onTap: canExecute && !submitting
-                            ? () {
-                                if (controller.isOpen) {
-                                  controller.close();
-                                } else {
-                                  controller.open();
-                                }
-                              }
-                            : null,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 5),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 160),
-                                child: Text(
-                                  combinedLabel,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                ),
-                              ),
-                              const SizedBox(width: 2),
-                              const Icon(Icons.keyboard_arrow_down, size: 14),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
+            ModelEffortSelector(
+              scope: 'work-composer',
+              helperMessage: eligibleWorkers
+                          .where((worker) => worker.id == selectedWorkerId)
+                          .firstOrNull
+                          ?.executionOptions
+                          ?.modelSwitchSupported ==
+                      false
+                  ? 'Changing the model starts a new session with the conversation context. Effort changes that select another model follow the same rule.'
+                  : null,
+              compact: true,
+              showWorkerInCompactSummary: false,
+              showWorker: true,
+              showModel: true,
+              showEffort: true,
+              showCatalog: false,
+              allowWorkerChange: policy.userSelectsWorker,
+              allowModelChange: policy.userSelectsModel,
+              allowEffortChange: policy.userSelectsEffort,
+              catalog:
+                  AxWorkflowSelectionOptions(eligibleWorkers).sharedCatalog,
+              value: ExecutionSelection(
+                  worker: selectedWorkerId,
+                  catalogRevision: (executionSelection['catalogRevision'] ??
+                      binding['catalogRevision']) as String?,
+                  model: selectedModel.isEmpty ? null : selectedModel,
+                  effort: selectedReasoningEffort.isEmpty
+                      ? null
+                      : selectedReasoningEffort),
+              readOnly: !canExecute ||
+                  submitting ||
+                  !(policy.userSelectsWorker ||
+                      policy.userSelectsModel ||
+                      policy.userSelectsEffort),
+              onChanged: (value) => onExecutionSelectionChanged({
+                'workerId': value.worker,
+                'model': value.model,
+                'reasoningEffort': value.effort,
+                if (value.catalogRevision != null)
+                  'catalogRevision': value.catalogRevision,
+              }),
             ),
           ],
         ],
@@ -977,28 +697,29 @@ class _WorkTimelineCard extends StatelessWidget {
     final senderName = isWorkerResponse ? workerName : 'Conclave';
     final workerIcon = presentation.iconAsset;
 
+    final frozenModelName = senderTurn?.modelName ?? senderStep?.modelName;
     String? formattedModelInfo;
     if (selectedModel != null && selectedModel.isNotEmpty) {
-      final modelName = _modelDisplayName(selectedModel);
+      final modelName = frozenModelName ?? _modelDisplayName(selectedModel);
       if (selectedReasoningEffort != null &&
           selectedReasoningEffort.isNotEmpty) {
         formattedModelInfo =
-            '$modelName · ${_reasoningEffortDisplayName(selectedReasoningEffort)}';
+            '$modelName · ${executionEffortDisplayName(selectedReasoningEffort)}';
       } else {
         formattedModelInfo = modelName;
       }
     } else if (selectedReasoningEffort != null &&
         selectedReasoningEffort.isNotEmpty) {
       formattedModelInfo =
-          'Default model · ${_reasoningEffortDisplayName(selectedReasoningEffort)}';
+          'Default model · ${executionEffortDisplayName(selectedReasoningEffort)}';
     }
 
     if (senderTurn != null) {
       final modelLabel = selectedModel?.isNotEmpty == true
-          ? _modelDisplayName(selectedModel)
+          ? frozenModelName ?? _modelDisplayName(selectedModel)
           : 'Default model';
       final effortLabel = selectedReasoningEffort?.isNotEmpty == true
-          ? _reasoningEffortDisplayName(selectedReasoningEffort)
+          ? executionEffortDisplayName(selectedReasoningEffort)
           : 'Default effort';
       formattedModelInfo = '$modelLabel · $effortLabel';
     }
@@ -1423,7 +1144,7 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                                   style:
                                       Theme.of(context).textTheme.titleMedium),
                               Text(
-                                  '${turn.modelId == null ? 'Default model' : _modelDisplayName(turn.modelId)} · ${turn.effort == null ? 'Default effort' : _reasoningEffortDisplayName(turn.effort)} · ${turn.status}'),
+                                  '${turn.modelId == null ? 'Default model' : turn.modelName ?? _modelDisplayName(turn.modelId)} · ${turn.effort == null ? 'Default effort' : executionEffortDisplayName(turn.effort)} · ${turn.status}'),
                               if (turn.resultText?.isNotEmpty == true) ...[
                                 const SizedBox(height: 8),
                                 ConclaveMarkdownBody(data: turn.resultText!),
@@ -1455,10 +1176,11 @@ class _WorkRequestDetailsSheet extends StatelessWidget {
                             [
                               if (step.model?.isNotEmpty == true)
                                 step.reasoningEffort?.isNotEmpty == true
-                                    ? '${_modelDisplayName(step.model)} (${_reasoningEffortDisplayName(step.reasoningEffort).toLowerCase()})'
-                                    : _modelDisplayName(step.model)
+                                    ? '${step.modelName ?? _modelDisplayName(step.model)} (${executionEffortDisplayName(step.reasoningEffort).toLowerCase()})'
+                                    : step.modelName ??
+                                        _modelDisplayName(step.model)
                               else if (step.reasoningEffort?.isNotEmpty == true)
-                                'Reasoning: ${_reasoningEffortDisplayName(step.reasoningEffort).toLowerCase()}',
+                                'Reasoning: ${executionEffortDisplayName(step.reasoningEffort).toLowerCase()}',
                             ].join(' · '),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
@@ -1531,6 +1253,7 @@ class _DiscussionItem {
     required this.author,
     required this.text,
     this.sentAt,
+    this.editedAt,
     this.isMe = true,
   });
 
@@ -1538,6 +1261,7 @@ class _DiscussionItem {
   final String author;
   final String text;
   final String? sentAt;
+  final String? editedAt;
   final bool isMe;
 }
 
@@ -1722,7 +1446,16 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (widget.item.sentAt != null) ...[
+                        if (widget.item.editedAt != null) ...[
+                          Text(
+                            'Edited ${widget.item.editedAt}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: metaColor,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ] else if (widget.item.sentAt != null) ...[
                           Text(
                             widget.item.sentAt!,
                             style: TextStyle(

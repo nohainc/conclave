@@ -177,7 +177,7 @@ store the provider credentials. See the
 Conclave Workspace resolves each Logical Worker to one compatible signed Tool
 Profile Release and starts the generic CLI Worker Engine out of process. The
 Engine invokes the locally installed Provider CLI using structured arguments
-and Local Worker Protocol 4.0. The Engine is the sole production CLI Worker
+and Local Worker Protocol 4.1. The Engine is the sole production CLI Worker
 runtime. Real-provider acceptance and remaining release gates are tracked in
 the current v8 implementation plan.
 

@@ -51,6 +51,7 @@ class WorkerReadinessMonitor {
     this.workerStateDirectory,
     this.profileDiagnosticStoreForWorker,
     this.assessWorker,
+    this.refreshInterval = const Duration(minutes: 1),
   });
 
   final LocalWorkerRegistry registry;
@@ -62,12 +63,22 @@ class WorkerReadinessMonitor {
       profileDiagnosticStoreForWorker;
   final Future<WorkerReadinessAssessment> Function(LocalWorker worker)?
       assessWorker;
+  final Duration refreshInterval;
+  Timer? _refreshTimer;
+  bool _disposed = false;
   bool _started = false;
+  ({LocalWorkerProbeMode mode, String? type, bool disabled})? _activeScope;
+  final Map<String, Future<void>> _queuedChecks = {};
   Future<void>? _activeCheck;
 
   Future<void> start() async {
     if (_started) return;
     _started = true;
+    _disposed = false;
+    if (refreshInterval > Duration.zero) {
+      _refreshTimer =
+          Timer.periodic(refreshInterval, (_) => unawaited(_checkSafely()));
+    }
     for (final worker in await registry.list()) {
       if (worker.activationState != LocalWorkerActivationState.enabled ||
           worker.status != LocalWorkerStatus.ready) {
@@ -90,7 +101,7 @@ class WorkerReadinessMonitor {
     LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
   }) async {
     try {
-      await checkNow(mode: mode);
+      await checkNow(mode: mode, includeDisabled: true);
     } on Object {
       // Preserve the last safe state and retry on the next lifecycle event.
     }
@@ -102,31 +113,44 @@ class WorkerReadinessMonitor {
     bool includeDisabled = false,
     bool rerunWhenActive = false,
   }) {
+    if (_disposed) return Future.value();
     final active = _activeCheck;
     if (active != null) {
-      if (rerunWhenActive) {
-        return active.catchError((_) {}).then((_) => checkNow(
-              mode: mode,
-              workerTypeId: workerTypeId,
-              includeDisabled: includeDisabled,
-            ));
-      }
-      if (mode == LocalWorkerProbeMode.passive && !includeDisabled) {
+      final scope = _activeScope!;
+      if (!rerunWhenActive &&
+          scope.mode == mode &&
+          (scope.type == null || scope.type == workerTypeId) &&
+          (scope.disabled || !includeDisabled)) {
         return active;
       }
-      return active.catchError((_) {}).then((_) => checkNow(
+      final key = '${mode.name}:${workerTypeId ?? '*'}:$includeDisabled';
+      final queued = _queuedChecks[key];
+      if (queued != null) return queued;
+      late final Future<void> pending;
+      pending = active.catchError((_) {}).then((_) {
+        _queuedChecks.remove(key);
+        return checkNow(
             mode: mode,
             workerTypeId: workerTypeId,
-            includeDisabled: includeDisabled,
-          ));
+            includeDisabled: includeDisabled);
+      }).whenComplete(() {
+        if (identical(_queuedChecks[key], pending)) _queuedChecks.remove(key);
+      });
+      _queuedChecks[key] = pending;
+      return pending;
     }
     final check = _checkAll(
       mode: mode,
       workerTypeId: workerTypeId,
       includeDisabled: includeDisabled,
     );
-    _activeCheck = check;
-    return check.whenComplete(() => _activeCheck = null);
+    _activeScope = (mode: mode, type: workerTypeId, disabled: includeDisabled);
+    final tracked = check.whenComplete(() {
+      _activeCheck = null;
+      _activeScope = null;
+    });
+    _activeCheck = tracked;
+    return tracked;
   }
 
   /// Validates and atomically activates the trusted last-known-good Profile.
@@ -247,6 +271,38 @@ class WorkerReadinessMonitor {
     }
   }
 
+  DiscoveredModelCatalog? _catalogForAssessment(
+      LocalWorker worker, WorkerReadinessAssessment assessment) {
+    final incoming = assessment.modelCatalog;
+    final prior = worker.modelCatalog;
+    final digest = assessment.profileDigest;
+    final version = assessment.toolVersion;
+    final invalidBinding =
+        (digest != null && prior != null && prior.profileDigest != digest) ||
+            (version != null &&
+                prior != null &&
+                prior.providerToolVersion != version) ||
+            const {
+              'tool_profile_unavailable',
+              'profile_signature_invalid',
+              'unsupported_provider_tool_version',
+              'engine_incompatible'
+            }.contains(assessment.issueCode);
+    if (incoming != null) {
+      if ((digest != null && incoming.profileDigest != digest) ||
+          (version != null && incoming.providerToolVersion != version)) {
+        return null;
+      }
+      if (prior != null &&
+          prior.catalogRevision == incoming.catalogRevision &&
+          prior.stale == incoming.stale) {
+        return prior;
+      }
+      return incoming;
+    }
+    return invalidBinding ? null : prior?.withStale(true);
+  }
+
   Future<void> _checkAll({
     required LocalWorkerProbeMode mode,
     String? workerTypeId,
@@ -266,9 +322,17 @@ class WorkerReadinessMonitor {
           !includeDisabled) {
         continue;
       }
-      final assessment = assessWorker != null
-          ? await assessWorker!(worker)
-          : await _assess(worker, mode: mode);
+      WorkerReadinessAssessment assessment;
+      try {
+        assessment = assessWorker != null
+            ? await assessWorker!(worker)
+            : await _assess(worker, mode: mode);
+      } on Object {
+        assessment = const WorkerReadinessAssessment(
+            WorkerReadinessState.testFailed,
+            issueCode: 'provider_failure');
+      }
+      final catalog = _catalogForAssessment(worker, assessment);
       final checkedAt = DateTime.now().toUtc().toIso8601String();
       if (mode == LocalWorkerProbeMode.passive) {
         final effectiveReady = assessment.state == WorkerReadinessState.ready ||
@@ -288,10 +352,12 @@ class WorkerReadinessMonitor {
             lastPassiveProbeAt: checkedAt,
             readinessIssueCode: assessment.issueCode,
             clearReadinessIssueCode: assessment.issueCode == null,
-            modelCatalog: assessment.modelCatalog,
+            modelCatalog: catalog,
+            clearModelCatalog: catalog == null,
             toolVersion: assessment.toolVersion,
-            clearToolVersion:
-                assessment.replaceToolVersion && assessment.toolVersion == null,
+            clearToolVersion: assessment.replaceToolVersion &&
+                assessment.toolVersion == null &&
+                catalog == null,
             toolName: assessment.toolName,
             clearToolName:
                 assessment.replaceToolName && assessment.toolName == null,
@@ -324,10 +390,12 @@ class WorkerReadinessMonitor {
           clearLastLiveTestIssueCode: assessment.issueCode == null,
           lastLiveTestDetails: details,
           clearLastLiveTestDetails: passed,
-          modelCatalog: assessment.modelCatalog,
+          modelCatalog: catalog,
+          clearModelCatalog: catalog == null,
           toolVersion: assessment.toolVersion,
-          clearToolVersion:
-              assessment.replaceToolVersion && assessment.toolVersion == null,
+          clearToolVersion: assessment.replaceToolVersion &&
+              assessment.toolVersion == null &&
+              catalog == null,
           toolName: assessment.toolName,
           clearToolName:
               assessment.replaceToolName && assessment.toolName == null,
@@ -754,7 +822,12 @@ class WorkerReadinessMonitor {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
+    _started = false;
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
     await _activeCheck;
+    await Future.wait(_queuedChecks.values.toList());
   }
 }
 

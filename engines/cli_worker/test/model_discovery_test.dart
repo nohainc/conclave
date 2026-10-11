@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_cli_worker_engine/src/model_discovery.dart';
@@ -25,6 +26,72 @@ void main() {
       );
     },
   );
+
+  test('the installed agy catalog groups native model-effort IDs', () {
+    const output = '''
+gemini-3.8-flash-high\tGemini 3.8 Flash (High)
+gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)
+gemini-3.8-flash-low\tGemini 3.8 Flash (Low)
+gemini-3.7-flash-high\tGemini 3.7 Flash (High)
+gemini-3.7-flash-medium\tGemini 3.7 Flash (Medium)
+gemini-3.7-flash-low\tGemini 3.7 Flash (Low)
+gemini-3.6-flash-high\tGemini 3.6 Flash (High)
+gemini-3.6-flash-medium\tGemini 3.6 Flash (Medium)
+gemini-3.6-flash-low\tGemini 3.6 Flash (Low)
+gemini-3.1-pro-high\tGemini 3.1 Pro (High)
+gemini-3.1-pro-low\tGemini 3.1 Pro (Low)
+claude-opus-5-5-low\tClaude Opus 5.5 (Low)
+gpt-oss-120b-medium\tGPT-OSS 120B (Medium)
+''';
+    final native = parseDiscoveredModels(output, 'gemini-');
+    expect(native, hasLength(11));
+    final mapping = {
+      'schemaVersion': 1,
+      'models': [
+        for (final family in const {
+          'gemini-3.8-flash': ['low', 'medium', 'high'],
+          'gemini-3.7-flash': ['low', 'medium', 'high'],
+          'gemini-3.6-flash': ['low', 'medium', 'high'],
+          'gemini-3.1-pro': ['low', 'high'],
+        }.entries)
+          {
+            'id': family.key,
+            'name': family.key,
+            'variants': [
+              for (final effort in family.value)
+                {'nativeId': '${family.key}-$effort', 'effort': effort},
+            ],
+          },
+      ],
+    };
+    final grouped = normalizeCombinedModels(native, mapping, '1.3.3');
+    expect(grouped.map((model) => model.id), [
+      'gemini-3.8-flash',
+      'gemini-3.7-flash',
+      'gemini-3.6-flash',
+      'gemini-3.1-pro',
+    ]);
+    expect(grouped.map((model) => model.supportedReasoningEfforts), [
+      ['low', 'medium', 'high'],
+      ['low', 'medium', 'high'],
+      ['low', 'medium', 'high'],
+      ['low', 'high'],
+    ]);
+    expect(grouped.every((model) => model.selectionMode == 'combined'), isTrue);
+    expect(
+      resolveNativeSelection(grouped.first, 'high', mapping, '1.3.3'),
+      'gemini-3.8-flash-high',
+    );
+    final olderVersion = normalizeCombinedModels(native, mapping, '1.2.16');
+    expect(
+      olderVersion.map((model) => model.id),
+      grouped.map((model) => model.id),
+    );
+    expect(
+      resolveNativeSelection(olderVersion.first, 'high', mapping, '1.2.16'),
+      'gemini-3.8-flash-high',
+    );
+  });
   test('Codex app-server discovery maps models and per-model efforts', () {
     final models = parseCodexAppServerModels({
       'data': [
@@ -47,6 +114,41 @@ void main() {
     expect(models.single.supportedReasoningEfforts, ['low', 'high']);
     expect(models.single.defaultReasoningEffort, 'low');
   });
+
+  test(
+    'Codex discovery preserves logical and native identities independently',
+    () {
+      final models = parseCodexAppServerModels({
+        'data': [
+          {'id': 'logical', 'model': 'native', 'displayName': 'Model'},
+        ],
+      }, '');
+      expect(models.single.id, 'logical');
+      expect(models.single.nativeId, 'native');
+      expect(
+        () => parseCodexAppServerModels({
+          'data': [
+            {'id': 'logical', 'model': 42},
+          ],
+        }, ''),
+        throwsFormatException,
+      );
+      expect(
+        () => parseCodexAppServerModels({
+          'data': [
+            {
+              'id': 'logical',
+              'supportedReasoningEfforts': [
+                {'reasoningEffort': 'high'},
+                {'reasoningEffort': 'high'},
+              ],
+            },
+          ],
+        }, ''),
+        throwsFormatException,
+      );
+    },
+  );
 
   test('Codex app-server discovery rejects invalid effort metadata', () {
     expect(
@@ -88,6 +190,7 @@ Future<void> main() async {
       }}));
     }
   }
+
 }
 ''');
     final models = await discoverCodexAppServerModels(
@@ -144,4 +247,135 @@ Future<void> main() async {
       expect(await cache.load(digest, '1.2.16'), isNull);
     },
   );
+  test(
+    'signed combined mapping intersects native discovery and resolves all AGY pairs',
+    () async {
+      final profile =
+          jsonDecode(
+                await File(
+                  '../../docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json',
+                ).readAsString(),
+              )
+              as Map;
+      final mapping = profile['model']['selectionMapping'];
+      final native = parseDiscoveredModels(
+        await File(
+          '../../docs/acceptance/real-provider/2026-10-11/model-effort-audit-agy.tsv',
+        ).readAsString(),
+        'gemini-',
+      );
+      final families = normalizeCombinedModels(native, mapping, '1.3.3');
+      expect(families.length, 4);
+      var count = 0;
+      for (final model in families) {
+        expect(model.defaultReasoningEffort, isNull);
+        expect(
+          () => resolveNativeSelection(model, null, mapping, '1.3.3'),
+          throwsFormatException,
+        );
+        for (final effort in model.supportedReasoningEfforts) {
+          expect(
+            resolveNativeSelection(model, effort, mapping, '1.3.3'),
+            '${model.id}-$effort',
+          );
+          count++;
+        }
+      }
+      expect(count, 11);
+      expect(normalizeCombinedModels(native, mapping, '1.3.4').length, 4);
+      expect(
+        normalizeCombinedModels(
+          [...native, DiscoveredModel(id: 'gemini-unknown', name: 'Unknown')],
+          mapping,
+          '1.3.3',
+        ).last.id,
+        'gemini-unknown',
+      );
+    },
+  );
+
+  test(
+    'versioned renames preserve logical identity and reject ambiguous mappings',
+    () {
+      Map<String, Object?> mapping(List<Map<String, Object?>> variants) => {
+        'schemaVersion': 1,
+        'models': [
+          {'id': 'family', 'name': 'Family', 'variants': variants},
+        ],
+      };
+      final variants = [
+        {
+          'nativeId': 'old',
+          'effort': 'low',
+          'providerVersion': {'min': '1.0.0', 'maxExclusive': '2.0.0'},
+        },
+        {
+          'nativeId': 'new',
+          'effort': 'low',
+          'providerVersion': {'min': '2.0.0', 'maxExclusive': '3.0.0'},
+        },
+      ];
+      for (final pair in [('1.0.0', 'old'), ('2.0.0', 'new')]) {
+        final model = normalizeCombinedModels(
+          [DiscoveredModel(id: pair.$2, name: 'Native')],
+          mapping(variants),
+          pair.$1,
+        ).single;
+        expect(model.id, 'family');
+        expect(
+          resolveNativeSelection(model, 'low', mapping(variants), pair.$1),
+          pair.$2,
+        );
+      }
+      expect(
+        () => normalizeCombinedModels(
+          [],
+          mapping([variants.first, variants.first]),
+          '1.0.0',
+        ),
+        throwsFormatException,
+      );
+      expect(
+        () => normalizeCombinedModels(
+          [
+            DiscoveredModel(id: 'old', name: 'Native'),
+            DiscoveredModel(id: 'family', name: 'Unclassified'),
+          ],
+          mapping(variants),
+          '1.0.0',
+        ),
+        throwsFormatException,
+      );
+    },
+  );
+  test('missing CLI support does not produce a catalog', () async {
+    await expectLater(
+      discoverCodexAppServerModels(
+        executable: '/definitely/missing/provider',
+        arguments: const [],
+        environment: const {},
+        workingDirectory: Directory.current.path,
+        idPrefix: '',
+      ),
+      throwsA(isA<ProcessException>()),
+    );
+    final root = await Directory.systemTemp.createTemp(
+      'unsupported-model-list-',
+    );
+    addTearDown(() => root.delete(recursive: true));
+    final script = File('${root.path}/provider.dart');
+    await script.writeAsString(
+      "import 'dart:io'; void main() { stderr.writeln('unsupported app-server'); exit(2); }",
+    );
+    await expectLater(
+      discoverCodexAppServerModels(
+        executable: Platform.resolvedExecutable,
+        arguments: ['run', script.path],
+        environment: const {},
+        workingDirectory: root.path,
+        idPrefix: '',
+      ),
+      throwsFormatException,
+    );
+  });
 }

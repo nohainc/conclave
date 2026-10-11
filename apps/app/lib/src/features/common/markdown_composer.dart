@@ -236,7 +236,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
           CallbackShortcuts(
             key: _inputKey,
             bindings: {
-              if (widget.onSend != null && widget.onSubmit == null)
+              if (widget.onSend != null || widget.onSubmit != null)
                 const SingleActivator(LogicalKeyboardKey.enter): _submit,
               for (final modifier in [true, false]) ...{
                 SingleActivator(LogicalKeyboardKey.keyB,

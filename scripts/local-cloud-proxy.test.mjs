@@ -60,6 +60,21 @@ it("preserves errors and WebSocket upgrades", async () => {
   expect(error.status).toBe(401);
   expect(await error.text()).toBe("unauthorized");
 });
+it("does not forward retired workstream history requests", async () => {
+  const response = await proxyCloud(
+    new globalThis.Request(
+      "http://localhost:8787/api/threads/workstream-legacy/work-requests",
+    ),
+    () => {
+      throw new Error("unexpected network");
+    },
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    workRequests: [],
+    nextCursor: null,
+  });
+});
 it("maps cookie names reversibly and rejects non-API paths", async () => {
   expect(upstreamCookie("a=1; conclave-dev-Host-auth=value")).toBe(
     "a=1; __Host-auth=value",

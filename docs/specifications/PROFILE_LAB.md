@@ -151,9 +151,12 @@ The v8 baseline is updated in place; existing development databases must be
 rebuilt/reseeded or explicitly provisioned with the table and seed data.
 
 After the development release reset, use the clean candidate payloads in
-`packages/tool-profile/test/fixtures/chatgpt-codex.v2.json` and
-`packages/tool-profile/test/fixtures/gemini-antigravity.v3.json` to create and
-test the next ChatGPT and Gemini releases. These files are unsigned authoring
+`packages/tool-profile/test/fixtures/chatgpt-codex.v2.json` and the current
+Gemini starter returned by Cloud (or
+`docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json`) to create
+and test the next ChatGPT and Gemini releases. The Gemini candidate must carry
+`model.selectionMode: "combined"` and its signed `selectionMapping` before it
+can publish grouped model/effort choices. These files are unsigned authoring
 inputs; publication still happens through the normal qualification and Cloud
 signing flow.
 

@@ -12,7 +12,8 @@ import 'workflows_page_test.dart' show WorkflowSource, workflow;
 AxWorker worker(String id,
         {bool offline = false,
         bool metadata = true,
-        String workspaceId = 'ws'}) =>
+        String workspaceId = 'ws',
+        bool combined = false}) =>
     AxWorker(
       id: id,
       workspaceId: workspaceId,
@@ -30,13 +31,14 @@ AxWorker worker(String id,
               allowsCustomModel: false,
               allowedModelIds: id == 'a' ? ['analysis', 'review'] : ['other'],
               models: id == 'a'
-                  ? const [
+                  ? [
                       AxWorkerModelOption(
                           id: 'analysis',
+                          selectionMode: combined ? 'combined' : 'separate',
                           name: 'Analysis model',
-                          effort: AxWorkerEffortOptions(
+                          effort: const AxWorkerEffortOptions(
                               supported: true, values: ['low', 'high'])),
-                      AxWorkerModelOption(
+                      const AxWorkerModelOption(
                           id: 'review',
                           name: 'Review model',
                           effort: AxWorkerEffortOptions(
@@ -125,6 +127,20 @@ Future<void> openStep(WidgetTester tester, String id) async {
 }
 
 void main() {
+  test(
+      'combined families without a provider default require an explicit effort',
+      () {
+    final options = AxWorkflowSelectionOptions([worker('a', combined: true)]);
+    const missing = AxWorkflowSelection(worker: 'a', model: 'analysis');
+    expect(
+        options.validate(const AxWorkflowSelection(worker: 'a'),
+            saved: defaultSelection),
+        contains('Select an explicit model'));
+    expect(options.validate(missing, saved: defaultSelection),
+        contains('Select an effort'));
+    expect(options.validate(defaultSelection, saved: missing), isNull);
+  });
+
   testWidgets(
       'a step can return to already-saved defaults while Worker metadata is unavailable',
       (tester) async {
@@ -146,6 +162,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(source.values.single.stepOverrides, isEmpty);
     expect(source.values.single.defaults.toJson(), saved.defaults.toJson());
+  });
+  testWidgets(
+      'workflow hides the explicit-model warning while keeping Save disabled',
+      (tester) async {
+    await mount(
+      tester,
+      configuration(defaults: const AxWorkflowSelection(worker: 'a')),
+      workers: [worker('a', combined: true)],
+    );
+    expect(
+        find.text('Select an explicit model for this Worker.'), findsNothing);
+    expect(
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('save-workflow')))
+            .onPressed,
+        isNull);
+  });
+  testWidgets('workflow hides the worker prompt while keeping Save disabled',
+      (tester) async {
+    await mount(
+      tester,
+      configuration(defaults: const AxWorkflowSelection()),
+    );
+    expect(find.text('Select a Worker.'), findsNothing);
+    expect(
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('save-workflow')))
+            .onPressed,
+        isNull);
+  });
+  testWidgets('workflow hides the effort prompt while keeping Save disabled',
+      (tester) async {
+    await mount(
+      tester,
+      configuration(
+          defaults: const AxWorkflowSelection(worker: 'a', model: 'analysis')),
+      workers: [worker('a', combined: true)],
+    );
+    expect(find.text('Select an effort for this model.'), findsNothing);
+    expect(
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('save-workflow')))
+            .onPressed,
+        isNull);
   });
   testWidgets(
       'inventory refresh revalidates the open draft without erasing saved selections',
@@ -258,7 +318,7 @@ void main() {
                 picker('defaults', 'Effort'))
             .initialValue,
         '');
-    await choose(tester, 'defaults', 'Worker', 'Second · Laptop');
+    await choose(tester, 'defaults', 'Worker', 'Second');
     expect(choices(tester, 'defaults', 'Model'), ['', 'other']);
     expect(
         tester
@@ -313,6 +373,8 @@ void main() {
     expect(source.writes, 0);
     await openStep(tester, 'verify');
     expect(find.textContaining('Verify: The selected model'), findsOneWidget);
+    expect(
+        find.text('Select an explicit model for this Worker.'), findsNothing);
     await choose(tester, 'verify', 'Model', 'Other model');
     expect(
         tester
