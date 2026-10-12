@@ -484,10 +484,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
     final definitionId = entry.profileDefinitionId;
     try {
       final resolver = ToolProfileResolver(releaseStore);
-      final v9Cache =
-          await releaseStore.hasWorkerProfileCache(entry.workerTypeId);
-      final profileState =
-          v9Cache ? null : await releaseStore.releaseState(definitionId);
       final resolution = await resolver.resolveForWorker(
         logicalWorkerTypeId: entry.workerTypeId,
         profileDefinitionId: definitionId,
@@ -512,22 +508,21 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
             message: switch (resolution.reason) {
               ToolProfileUnavailableReason.noEligibleRelease =>
                 trustIssues.isNotEmpty
-                    ? 'The cached Profile release is signed by a key this '
+                    ? 'The cached Worker Profile is signed by a key this '
                         'Workspace does not trust. Rebuild Workspace with '
                         'the Cloud Profile trust root or republish the '
-                        'release with the current signer.'
-                    : 'No eligible signed Profile release is available for '
+                        'Profile with the current signer.'
+                    : 'No eligible signed Worker Profile is available for '
                         'this Worker. Refresh the current published Profile '
                         'or restore connectivity to use the authorized cache.',
               ToolProfileUnavailableReason.unsupportedProviderVersion =>
-                'The installed Provider CLI version is not supported by a Profile release.',
+                'The installed Provider CLI version is not supported by the current Profile.',
               ToolProfileUnavailableReason.incompatibleEngineVersion =>
-                'No downloaded Profile release is compatible with this Engine version.',
-              null => 'No compatible Profile release is available.',
+                'The current Profile is not compatible with this Engine version.',
+              null => 'No compatible Worker Profile is available.',
             },
             details: {
               'definitionId': definitionId,
-              if (profileState != null) 'channel': profileState.selectedChannel,
               if (trustIssues.isNotEmpty)
                 'trustIssues': [
                   for (final issue in trustIssues)
@@ -551,11 +546,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
             'definitionId': definitionId,
             'source': resolution.source.name,
             'unsignedDevelopment': resolution.release?.isSigned == false,
-            if (profileState != null) ...{
-              'activeVersion': profileState.activeVersion,
-              'lastKnownGoodVersion': profileState.lastKnownGoodVersion,
-              'channel': profileState.selectedChannel,
-            },
             if (resolution.release != null)
               'releaseVersion': resolution.release!.releaseVersion,
             if (resolution.release != null)
@@ -569,7 +559,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
         entry.workerTypeId,
         const WorkerProfileResolution(
           state: WorkspaceWorkerProfileState.error,
-          message: 'A local Profile release could not be resolved.',
+          message: 'A local Worker Profile could not be resolved.',
         ),
         generation,
       );

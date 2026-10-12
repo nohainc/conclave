@@ -246,21 +246,9 @@ class TestBenchView extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
-                  c.labAccess?.releaseManager != true
-                      ? 'Release Manager access is required to publish.'
+                  c.labAccess?.profilesAdmin != true
+                      ? 'Profile Lab authorization is required to publish.'
                       : 'Cloud Profile signing is not ready. Configure the signer and refresh access.',
-                ),
-              ),
-            if (qualified &&
-                !v9 &&
-                c.cloudReleaseLifecycleState != null &&
-                c.cloudReleaseLifecycleState != 'draft')
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.arrow_forward, size: 16),
-                  label: const Text('View Releases'),
-                  onPressed: () => c.setWorkerSubView(WorkerSubView.releases),
                 ),
               ),
             if (qualified &&

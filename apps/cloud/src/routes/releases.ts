@@ -513,21 +513,13 @@ export async function handleRevokeWorkspaceRelease(
 export async function handleGetReleaseTrustState(
   env: SecurityEnv,
 ): Promise<Response> {
-  const [keys, workspaceReleases, toolProfiles] = await Promise.all([
+  const [keys, workspaceReleases] = await Promise.all([
     env.CONCLAVE_DB.prepare(
       "SELECT key_id FROM release_signing_key_revocations ORDER BY key_id",
     ).all<{ key_id: string }>(),
     env.CONCLAVE_DB.prepare(
       "SELECT version, package_digest FROM workspace_releases WHERE is_revoked = 1",
     ).all<{ version: string; package_digest: string }>(),
-    env.CONCLAVE_DB.prepare(
-      `SELECT profile_definition_id, release_version, payload_digest
-         FROM tool_profile_releases WHERE lifecycle_state = 'revoked'`,
-    ).all<{
-      profile_definition_id: string;
-      release_version: number;
-      payload_digest: string;
-    }>(),
   ]);
   return json({
     revokedKeyIds: (keys.results ?? []).map((row) => row.key_id),
@@ -536,11 +528,9 @@ export async function handleGetReleaseTrustState(
       version: row.version,
       packageDigest: row.package_digest,
     })),
-    revokedToolProfiles: (toolProfiles.results ?? []).map((row) => ({
-      profileDefinitionId: row.profile_definition_id,
-      releaseVersion: row.release_version,
-      payloadDigest: row.payload_digest,
-    })),
+    // V9 Profiles are verified by their signed current/history snapshot. Key
+    // revocation above remains the global emergency invalidation mechanism.
+    revokedToolProfiles: [],
   });
 }
 

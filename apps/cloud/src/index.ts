@@ -114,31 +114,10 @@ export const routeHandlers = {
   handleWorkspaceRuntimeTransport: handlers.handleWorkspaceRuntimeTransport,
   handleGetReleaseTrustState: handlers.handleGetReleaseTrustState,
   handleRevokeReleaseSigningKey: handlers.handleRevokeReleaseSigningKey,
-  handleResolveToolProfileChannels: handlers.handleResolveToolProfileChannels,
   handleListWorkerCatalog: handlers.handleListWorkerCatalog,
   handleListWorkspaceWorkerCatalog: handlers.handleListWorkspaceWorkerCatalog,
-  handleSetWorkspaceToolProfileChannel:
-    handlers.handleSetWorkspaceToolProfileChannel,
-  handleListAdminWorkspaceChannels: handlers.handleListAdminWorkspaceChannels,
   handleListWorkspaceWorkerInventory:
     handlers.handleListWorkspaceWorkerInventory,
-  handleCreateToolProfileDefinition: handlers.handleCreateToolProfileDefinition,
-  handleCreateApprovedLogicalWorker: handlers.handleCreateApprovedLogicalWorker,
-  handleCreateDraftToolProfileRelease:
-    handlers.handleCreateDraftToolProfileRelease,
-  handleGetToolProfileRelease: handlers.handleGetToolProfileRelease,
-  handleUpdateDraftToolProfileRelease:
-    handlers.handleUpdateDraftToolProfileRelease,
-  handlePublishDraftToolProfileRelease:
-    handlers.handlePublishDraftToolProfileRelease,
-  handleSubmitToolProfileLocalQualification:
-    handlers.handleSubmitToolProfileLocalQualification,
-  handleToolProfileSigningPreflight: handlers.handleToolProfileSigningPreflight,
-  handlePromoteToolProfileRelease: handlers.handlePromoteToolProfileRelease,
-  handleChangeToolProfileReleaseLifecycle:
-    handlers.handleChangeToolProfileReleaseLifecycle,
-  handleListToolProfileReleases: handlers.handleListToolProfileReleases,
-  handleListToolProfileReleaseAudit: handlers.handleListToolProfileReleaseAudit,
   handleGetLatestWorkspaceRelease: handlers.handleGetLatestWorkspaceRelease,
   handlePublishWorkspaceRelease: handlers.handlePublishWorkspaceRelease,
   handleDownloadWorkspaceRelease: handlers.handleDownloadWorkspaceRelease,
@@ -179,8 +158,6 @@ export const routeHandlers = {
   handleListWorkRequests: handlers.handleListWorkRequests,
   handleListConversations: handlers.handleListConversations,
   handleListConversationHistory: handlers.handleListConversationHistory,
-  handleGetToolProfileDefinition: handlers.handleGetToolProfileDefinition,
-  handleListAdminWorkerCatalog: handlers.handleListAdminWorkerCatalog,
   handleListV9WorkerProfiles: handlers.handleListV9WorkerProfiles,
   handleGetV9WorkerProfile: handlers.handleGetV9WorkerProfile,
   handleValidateV9WorkerProfile: handlers.handleValidateV9WorkerProfile,
@@ -188,17 +165,6 @@ export const routeHandlers = {
   handleListV9WorkerProfileHistory: handlers.handleListV9WorkerProfileHistory,
   handleRestoreV9WorkerProfile: handlers.handleRestoreV9WorkerProfile,
   handleGetWorkspaceV9WorkerProfile: handlers.handleGetWorkspaceV9WorkerProfile,
-  handleListAllToolProfileChannels: handlers.handleListAllToolProfileChannels,
-  handleListGlobalToolProfileAudit: handlers.handleListGlobalToolProfileAudit,
-  handleListToolProfileChannels: handlers.handleListToolProfileChannels,
-  handleListToolProfileDefinitionAudit:
-    handlers.handleListToolProfileDefinitionAudit,
-  handleListToolProfileDefinitions: handlers.handleListToolProfileDefinitions,
-  handleListToolProfileReleaseEvidence:
-    handlers.handleListToolProfileReleaseEvidence,
-  handleRollbackToolProfileChannel: handlers.handleRollbackToolProfileChannel,
-  handleSubmitToolProfileReleaseEvidence:
-    handlers.handleSubmitToolProfileReleaseEvidence,
   handleGetHomeReadModel: handlers.handleGetHomeReadModel,
   handleGetAvatar: handlers.handleGetAvatar,
   handleUploadAvatar: handlers.handleUploadAvatar,

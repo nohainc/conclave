@@ -300,9 +300,6 @@ void main() {
       controller.setArea(LabArea.workers);
       expect(controller.selectedArea, LabArea.workers);
 
-      controller.setArea(LabArea.workspaces);
-      expect(controller.selectedArea, LabArea.workspaces);
-
       controller.setArea(LabArea.audit);
       expect(controller.selectedArea, LabArea.audit);
 

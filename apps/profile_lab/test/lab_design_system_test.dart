@@ -20,12 +20,7 @@ class _Controller extends ProfileLabController {
       : super(
             paths: paths,
             sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths));
-  int saves = 0,
-      catalog = 0,
-      releases = 0,
-      workspaces = 0,
-      activity = 0,
-      draftRefresh = 0;
+  int saves = 0, catalog = 0, activity = 0, draftRefresh = 0;
   @override
   Future<void> ensureAreaData(LabArea tab) async {}
   @override
@@ -38,16 +33,6 @@ class _Controller extends ProfileLabController {
   @override
   Future<void> fetchCloudCatalog() async {
     catalog++;
-  }
-
-  @override
-  Future<void> fetchCloudReleases([String? profileDefinitionId]) async {
-    releases++;
-  }
-
-  @override
-  Future<void> fetchWorkspaceChannels() async {
-    workspaces++;
   }
 
   @override
@@ -129,16 +114,6 @@ void main() {
       }
     ];
     c.selectedCloudRelease = c.cloudReleases.first;
-    c.workspaceChannels = [
-      {
-        'id': 'ws-1',
-        'name': 'Test Mac',
-        'hostname': 'test-mac.local',
-        'appVersion': '0.8.2',
-        'status': 'online',
-        'channel': 'testing'
-      }
-    ];
     c.cloudAuditEvents = [
       {
         'id': 'event',
@@ -189,15 +164,12 @@ void main() {
     c.isTesting = false;
     await key(t, LogicalKeyboardKey.keyR);
     expect(c.draftRefresh, 1);
-    c.workerSubView = WorkerSubView.releases;
+    c.workerSubView = WorkerSubView.draftAndTest;
     await key(t, LogicalKeyboardKey.keyR);
-    expect(c.releases, 1);
+    expect(c.draftRefresh, 2);
     c.workerSubView = WorkerSubView.overview;
     await key(t, LogicalKeyboardKey.keyR);
     expect(c.catalog, 1);
-    c.selectedArea = LabArea.workspaces;
-    await key(t, LogicalKeyboardKey.keyR);
-    expect(c.workspaces, 1);
     c.selectedArea = LabArea.audit;
     await key(t, LogicalKeyboardKey.keyR);
     expect(c.activity, 1);
@@ -241,7 +213,7 @@ void main() {
           });
         }
       }
-      for (final tab in [LabArea.workspaces, LabArea.audit]) {
+      for (final tab in [LabArea.audit]) {
         c.selectedArea = tab;
         await t.pumpWidget(ProfileLabApp(key: ValueKey(tab), controller: c));
         await t.pump();

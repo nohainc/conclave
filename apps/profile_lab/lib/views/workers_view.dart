@@ -5,7 +5,6 @@ import '../widgets/lab_components.dart';
 import '../controllers/profile_lab_controller.dart';
 import '../theme/profile_lab_theme.dart';
 import 'draft_test_workbench.dart';
-import 'releases_view.dart';
 
 class WorkersView extends StatefulWidget {
   const WorkersView({super.key, required this.controller});
@@ -49,204 +48,6 @@ class _WorkersViewState extends State<WorkersView> {
     widget.controller.removeListener(_onControllerChanged);
     _searchController.dispose();
     super.dispose();
-  }
-
-  void _showCreateWorkerDialog() {
-    final c = widget.controller;
-    final workerTypeIdCtrl = TextEditingController();
-    final definitionIdCtrl = TextEditingController();
-    final displayNameCtrl = TextEditingController();
-    final descriptionCtrl = TextEditingController();
-    final providerToolCtrl = TextEditingController();
-    final sortOrderCtrl = TextEditingController(text: '10');
-    String releaseStage = 'testing';
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) => AlertDialog(
-          title: const Text('Create Approved Logical Worker'),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: 460,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Registers a new logical Worker identity and initial Profile Definition atomically in Cloud.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: ProfileLabTheme.secondaryText,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: workerTypeIdCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Stable Worker ID (workerTypeId)',
-                      hintText: 'e.g. example-worker',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: definitionIdCtrl,
-                    decoration: const InputDecoration(
-                      labelText:
-                          'Initial Profile Definition ID (profileDefinitionId)',
-                      hintText: 'e.g. example-profile',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: displayNameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Display Name',
-                      hintText: 'e.g. Example Worker',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: descriptionCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Description',
-                      hintText: 'Describe the Worker and its purpose',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: providerToolCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Provider Tool Identity (providerToolName)',
-                      hintText: 'e.g. provider-tool',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Release Stage:',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: ProfileLabTheme.secondaryText,
-                              ),
-                            ),
-                            DropdownButton<String>(
-                              value: releaseStage,
-                              isExpanded: true,
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'testing',
-                                  child: Text('Testing'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'beta',
-                                  child: Text('Beta'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'stable',
-                                  child: Text('Stable'),
-                                ),
-                              ],
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setDlgState(() => releaseStage = val);
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: TextField(
-                          controller: sortOrderCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Sort Order',
-                            hintText: '10',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: ProfileLabTheme.primaryAccent,
-              ),
-              onPressed: () async {
-                final wId = workerTypeIdCtrl.text.trim();
-                final pId = definitionIdCtrl.text.trim();
-                final dName = displayNameCtrl.text.trim();
-                final desc = descriptionCtrl.text.trim();
-                final pTool = providerToolCtrl.text.trim();
-                final sortOrder = int.tryParse(sortOrderCtrl.text.trim()) ?? 10;
-
-                if (wId.isEmpty ||
-                    pId.isEmpty ||
-                    dName.isEmpty ||
-                    pTool.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: CopyableMessage(
-                        'Please fill out all required fields.',
-                      ),
-                    ),
-                  );
-                  return;
-                }
-                Navigator.of(ctx).pop();
-                try {
-                  await c.createWorkerCatalogEntry(
-                    workerTypeId: wId,
-                    profileDefinitionId: pId,
-                    displayName: dName,
-                    description: desc,
-                    providerToolName: pTool,
-                    releaseStage: releaseStage,
-                    sortOrder: sortOrder,
-                  );
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Successfully created Worker $wId ($pId)',
-                        ),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: CopyableMessage('Failed to create Worker: $e'),
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text(
-                'Create Worker',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
@@ -323,13 +124,6 @@ class _WorkersViewState extends State<WorkersView> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.add, size: 18),
-                        tooltip: 'Create Worker + Definition',
-                        onPressed: c.currentSession != null
-                            ? _showCreateWorkerDialog
-                            : null,
-                      ),
                       IconButton(
                         icon: c.isLoadingWorkerCatalog
                             ? const SizedBox(
@@ -451,23 +245,16 @@ class _WorkersViewState extends State<WorkersView> {
                             final isSelected =
                                 c.selectedCloudWorker?['workerTypeId'] ==
                                     workerTypeId;
-                            final stage =
-                                worker['releaseStage'] as String? ?? 'testing';
                             final toolName =
                                 worker['providerToolName'] as String? ?? '';
-                            final workerProfileDefId =
-                                worker['profileDefinitionId'] as String?;
+                            final currentRevision =
+                                (worker['currentRevision'] as num?)?.toInt();
 
-                            final String profileStatus;
-                            if (isSelected) {
-                              profileStatus =
-                                  c.selectedWorkerState.conciseProfileStatus;
-                            } else if (workerProfileDefId == null ||
-                                workerProfileDefId.isEmpty) {
-                              profileStatus = 'No Profile';
-                            } else {
-                              profileStatus = 'Configured';
-                            }
+                            final String profileStatus = isSelected
+                                ? c.selectedWorkerState.conciseProfileStatus
+                                : currentRevision == null
+                                    ? 'No Profile'
+                                    : 'Current r$currentRevision';
 
                             return WorkerSidebarItem(
                               name: worker['displayName'] as String? ??
@@ -476,7 +263,6 @@ class _WorkersViewState extends State<WorkersView> {
                                   ? workerTypeId
                                   : '$workerTypeId · CLI: $toolName',
                               profileStatus: profileStatus,
-                              catalogStage: stage,
                               selected: isSelected,
                               onTap: () => c.selectWorker(worker),
                             );
@@ -510,9 +296,6 @@ class _WorkersViewState extends State<WorkersView> {
                           WorkerSubView.draftAndTest => DraftTestWorkbench(
                               controller: c,
                             ),
-                          WorkerSubView.releases => c.isV9ProfileRegistry
-                              ? DraftTestWorkbench(controller: c)
-                              : ReleasesView(controller: c),
                         },
                       ),
                     ],
@@ -535,10 +318,7 @@ class _WorkerSubViewHeader extends StatelessWidget {
     final workerTypeId = worker?['workerTypeId'] as String? ?? '';
     final displayName = worker?['displayName'] as String? ?? workerTypeId;
     final toolName = worker?['providerToolName'] as String? ?? '';
-    final currentSubView = controller.isV9ProfileRegistry &&
-            controller.workerSubView == WorkerSubView.releases
-        ? WorkerSubView.draftAndTest
-        : controller.workerSubView;
+    final currentSubView = controller.workerSubView;
     final workerState = controller.selectedWorkerState;
     final defId = workerState.profileDefinitionId ?? 'No Profile Def';
     final providerStatus = workerState.isProviderDetected
@@ -572,11 +352,6 @@ class _WorkerSubViewHeader extends StatelessWidget {
                     key: ValueKey('subview-draftAndTest'),
                   ),
                 ),
-                if (!controller.isV9ProfileRegistry)
-                  const ButtonSegment(
-                    value: WorkerSubView.releases,
-                    label: Text('History', key: ValueKey('subview-releases')),
-                  ),
               ],
               selected: {currentSubView},
               onSelectionChanged: (selected) =>
@@ -627,8 +402,6 @@ class _WorkerDetailsPane extends StatelessWidget {
                     );
                   }
                 }
-              } else if (nextAction.area != LabArea.workers) {
-                controller.setArea(nextAction.area);
               } else {
                 controller.setWorkerSubView(nextAction.subView);
               }
@@ -636,76 +409,37 @@ class _WorkerDetailsPane extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           LifecycleStepper(
-            steps: controller.isV9ProfileRegistry
-                ? [
-                    LabLifecycleStep(
-                      'Configure',
-                      isDone: controller.currentDraft != null,
-                      isActive:
-                          workerState.status == WorkerLifecycleStatus.noProfile,
-                    ),
-                    LabLifecycleStep(
-                      'Test',
-                      isDone: workerState.lastTestResult == 'pass',
-                      isActive: workerState.status ==
-                          WorkerLifecycleStatus.testRequired,
-                    ),
-                    LabLifecycleStep(
-                      'Validate',
-                      isDone: controller.candidateIsCloudValidated,
-                      isActive: workerState.status ==
-                          WorkerLifecycleStatus.testsPassed,
-                    ),
-                    LabLifecycleStep(
-                      'Publish',
-                      isDone: controller.currentProfileDigest != null &&
-                          controller.currentProfileDigest ==
-                              controller.currentDraft?.payloadDigest,
-                    ),
-                  ]
-                : [
-                    LabLifecycleStep(
-                      'Configure',
-                      isDone: controller.currentDraft != null,
-                      isActive:
-                          workerState.status == WorkerLifecycleStatus.noProfile,
-                    ),
-                    LabLifecycleStep(
-                      'Test',
-                      isDone: workerState.lastTestResult == 'pass',
-                      isActive: workerState.status ==
-                          WorkerLifecycleStatus.testRequired,
-                    ),
-                    LabLifecycleStep(
-                      'Sync',
-                      isDone: controller.currentDraft != null &&
-                          controller.cloudDigest ==
-                              controller.currentDraft!.payloadDigest &&
-                          controller.cloudDraftVersion ==
-                              controller.currentDraft!.releaseVersion &&
-                          !workerState.isDraftDirty,
-                    ),
-                    LabLifecycleStep(
-                      'Publish',
-                      isDone: controller.cloudReleases.any(
-                        (r) => r['lifecycleState'] != 'draft',
-                      ),
-                      isActive: workerState.status ==
-                          WorkerLifecycleStatus.testsPassed,
-                    ),
-                    LabLifecycleStep(
-                      'Rollout',
-                      isDone: workerState.stableVersion != 'None',
-                    ),
-                  ],
+            steps: [
+              LabLifecycleStep(
+                'Configure',
+                isDone: controller.currentDraft != null,
+                isActive: workerState.status == WorkerLifecycleStatus.noProfile,
+              ),
+              LabLifecycleStep(
+                'Test',
+                isDone: workerState.lastTestResult == 'pass',
+                isActive:
+                    workerState.status == WorkerLifecycleStatus.testRequired,
+              ),
+              LabLifecycleStep(
+                'Validate',
+                isDone: controller.candidateIsCloudValidated,
+                isActive:
+                    workerState.status == WorkerLifecycleStatus.testsPassed,
+              ),
+              LabLifecycleStep(
+                'Publish',
+                isDone: controller.currentProfileDigest != null &&
+                    controller.currentProfileDigest ==
+                        controller.currentDraft?.payloadDigest,
+              ),
+            ],
           ),
           const SizedBox(height: 20),
 
-          // Active Channel Pointers
+          // Current signed Profile snapshot
           Text(
-            controller.isV9ProfileRegistry
-                ? 'Current published Profile'
-                : 'Release channels',
+            'Current published Profile',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
@@ -713,51 +447,19 @@ class _WorkerDetailsPane extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          if (controller.isV9ProfileRegistry)
-            _PropertyRow(
-              label: 'Current revision',
-              value: controller.currentProfileRevision == 0
-                  ? 'No published Profile'
-                  : 'r${controller.currentProfileRevision} · ${controller.currentProfileDigest ?? "digest unavailable"}',
-              isMonospace: true,
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: ReleaseChannelCard(
-                    channel: 'Testing Channel',
-                    version: workerState.testingVersion == 'None'
-                        ? null
-                        : 'v${workerState.testingVersion}',
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ReleaseChannelCard(
-                    channel: 'Beta Channel',
-                    version: workerState.betaVersion == 'None'
-                        ? null
-                        : 'v${workerState.betaVersion}',
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ReleaseChannelCard(
-                    channel: 'Stable Channel',
-                    version: workerState.stableVersion == 'None'
-                        ? null
-                        : 'v${workerState.stableVersion}',
-                  ),
-                ),
-              ],
-            ),
+          _PropertyRow(
+            label: 'Current revision',
+            value: controller.currentProfileRevision == 0
+                ? 'No published Profile'
+                : 'r${controller.currentProfileRevision} · ${controller.currentProfileDigest ?? "digest unavailable"}',
+            isMonospace: true,
+          ),
           const SizedBox(height: 20),
 
           // Collapsible Technical details Panel
           TechnicalInspector(
             subtitle: Text(
-              '${workerState.workerTypeId} · ${workerState.profileDefinitionId ?? "No definition"} · Catalog stage: ${workerState.catalogReleaseStage}',
+              '\${workerState.workerTypeId} · \${workerState.profileDefinitionId ?? "No definition"} · Current revision: \${controller.currentProfileRevision == 0 ? "none" : controller.currentProfileRevision}',
             ),
             children: [
               _PropertyRow(
@@ -784,11 +486,6 @@ class _WorkerDetailsPane extends StatelessWidget {
                 value: workerState.isProviderDetected
                     ? 'Detected (${workerState.providerDetectedPath})'
                     : 'Not detected on PATH',
-              ),
-              const Divider(color: ProfileLabTheme.borderColor),
-              _PropertyRow(
-                label: 'Catalog Release Stage',
-                value: 'Catalog stage: ${workerState.catalogReleaseStage}',
               ),
               const Divider(color: ProfileLabTheme.borderColor),
               _PropertyRow(
@@ -836,22 +533,6 @@ class _WorkerDetailsPane extends StatelessWidget {
                   controller.setWorkerSubView(WorkerSubView.draftAndTest);
                 },
               ),
-              if (!controller.isV9ProfileRegistry)
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.history, size: 16),
-                  label: const Text('Inspect Releases'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: ProfileLabTheme.borderColor),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                  onPressed: () {
-                    controller.setWorkerSubView(WorkerSubView.releases);
-                  },
-                ),
               OutlinedButton.icon(
                 icon: const Icon(Icons.history_edu, size: 16),
                 label: const Text('View Activity Log'),

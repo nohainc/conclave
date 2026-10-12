@@ -9,7 +9,7 @@ import {
   restoreWorkerProfile,
   toolProfileSigningPreflight,
   validateWorkerProfileCandidate,
-} from "../tool-profile-registry.js";
+} from "../worker-profile-registry.js";
 import type { SecurityEnv } from "./http-security.js";
 import { HttpError, json, securityContext } from "./http-security.js";
 import { WorkspaceRuntimeAuthenticator } from "../workspace-gateway/runtime-authenticator.js";
@@ -181,12 +181,7 @@ export async function handlePublishV9WorkerProfile(
   workerTypeId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  const actor = await authorizeToolProfileAdmin(
-    request,
-    env,
-    ctx,
-    "profiles:release:manage",
-  );
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
   const body = await readToolProfileAdminBody(request, [
     "expectedRevision",
     "profile",
@@ -221,12 +216,7 @@ export async function handleRestoreV9WorkerProfile(
   workerTypeId: string,
   ctx?: ExecutionContext,
 ): Promise<Response> {
-  const actor = await authorizeToolProfileAdmin(
-    request,
-    env,
-    ctx,
-    "profiles:release:manage",
-  );
+  const actor = await authorizeToolProfileAdmin(request, env, ctx);
   const body = await readToolProfileAdminBody(request, [
     "expectedRevision",
     "targetRevision",
@@ -287,20 +277,6 @@ export async function handleGetWorkspaceV9WorkerProfile(
   );
 }
 
-export function toolProfileReleaseVersion(value: string): number {
-  if (!/^\d{1,10}$/.test(value))
-    throw new HttpError(400, "releaseVersion is invalid");
-  const version = Number(value);
-  if (
-    !Number.isSafeInteger(version) ||
-    version < 1 ||
-    version > 2_147_483_647
-  ) {
-    throw new HttpError(400, "releaseVersion is invalid");
-  }
-  return version;
-}
-
 export async function handleProfileLabAccess(
   request: Request,
   env: SecurityEnv,
@@ -308,11 +284,6 @@ export async function handleProfileLabAccess(
 ): Promise<Response> {
   const actor = await securityContext(request, env, ctx);
   const profilesAdmin = await hasProfileLabPermission(env, actor);
-  const releaseManager = await hasProfileLabPermission(
-    env,
-    actor,
-    "profiles:release:manage",
-  );
   const signer = profilesAdmin ? await toolProfileSigningPreflight(env) : null;
   const issueSupport = (env.CONCLAVE_ISSUE_SUPPORT_USER_IDS ?? "")
     .split(",")
@@ -324,7 +295,7 @@ export async function handleProfileLabAccess(
       schemaVersion: 1,
       authenticated: true,
       audience: actor.audience ?? null,
-      permissions: { profilesAdmin, releaseManager, issueSupport },
+      permissions: { profilesAdmin, issueSupport },
       signer: {
         ready: signer?.ready ?? false,
         issues: signer?.issues ?? [],

@@ -15,21 +15,8 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     notifyListeners();
 
     try {
-      List<ProfileLabWorkerReadModel> workers;
-      try {
-        workers = await apiClient.fetchV9WorkerProfiles();
-        isV9ProfileRegistry = true;
-      } on ProfileAdminNotFoundException {
-        isV9ProfileRegistry = false;
-        workers = await apiClient.fetchWorkerCatalog();
-      } on ProfileAdminUnauthorizedException {
-        rethrow;
-      } on StateError {
-        // Test doubles and older development clients may not expose the V9
-        // route yet; let the client-provided legacy catalog handle them.
-        isV9ProfileRegistry = false;
-        workers = await apiClient.fetchWorkerCatalog();
-      }
+      isV9ProfileRegistry = true;
+      final workers = await apiClient.fetchV9WorkerProfiles();
       if (generation != _cloudGeneration) {
         return;
       }
@@ -682,28 +669,5 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       }
     }
     return null;
-  }
-
-  /// Atomically registers an approved logical Worker and its initial Profile definition in Cloud.
-  Future<void> createWorkerCatalogEntry({
-    required String workerTypeId,
-    required String profileDefinitionId,
-    required String displayName,
-    required String description,
-    required String providerToolName,
-    required String releaseStage,
-    required int sortOrder,
-  }) async {
-    final client = apiClient;
-    await client.createWorker(
-      workerTypeId: workerTypeId,
-      profileDefinitionId: profileDefinitionId,
-      displayName: displayName,
-      description: description,
-      providerToolName: providerToolName,
-      releaseStage: releaseStage,
-      sortOrder: sortOrder,
-    );
-    await fetchCloudCatalog();
   }
 }

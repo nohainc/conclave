@@ -315,10 +315,10 @@ what Profile Lab reported from its local Engine/CLI test; it is not treated as
 cryptographic proof of local execution.
 
 The V9 endpoints do not accept channel names, promotion actions, release
-statuses, or draft-publication transitions. During the additive migration,
-legacy V8 endpoints may remain available solely for consumers that have not yet
-migrated; they MUST NOT be used by new V9 readers or writers and are removed by
-a later cleanup migration after consumer cutover.
+statuses, or draft-publication transitions. The consumer cutover is complete:
+the production Cloud routes no longer expose the V8 lifecycle endpoints, and
+the later `0044_remove_v8_profile_lifecycle.sql` migration removes their D1
+tables. Migration history remains append-only.
 
 ## 12. Shared validation and interpretation
 
@@ -362,6 +362,21 @@ reference this specification and agree on these facts:
 - publication and restoration are operator-authorized and atomic;
 - Workspace activation and Engine execution use a verified immutable snapshot;
 - no component requires Profile testing, beta, or stable channels.
+
+## 14. V8 lifecycle cleanup
+
+V8 lifecycle documents and retained audit/event records are historical
+references only. They do not describe a supported runtime API. The cleanup
+removes release definitions, release rows, channel pointers, promotion
+evidence, and workspace channel assignments after the V9 readers and writers
+are deployed. It preserves `worker_catalog`, signed current/history snapshots,
+diagnostic event history, security audit records, local test scenarios, and the
+Profile Lab sandbox boundary for unpublished candidates.
+
+Workspace keeps only the verified current snapshot and one verified
+last-known-good snapshot. A last-known-good snapshot is an offline recovery
+cache, never a second release channel; explicit revocation still prevents its
+activation.
 
 Implementation changes to routes, storage, local caches, protocol frames, and
 tests must trace back to this contract and must not introduce a second Profile

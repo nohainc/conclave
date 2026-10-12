@@ -7,7 +7,7 @@ import { generateEd25519ReleaseKeyPair } from "../src/release-trust.js";
 import {
   validateWorkerProfileCandidate,
   type WorkerProfilePublicationEvidence,
-} from "../src/tool-profile-registry.js";
+} from "../src/worker-profile-registry.js";
 import { toolProfileAcceptanceScenarioStatuses } from "../src/tool-profile-validation.js";
 import {
   json,

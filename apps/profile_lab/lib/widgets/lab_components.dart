@@ -226,10 +226,9 @@ class WorkerSidebarItem extends StatelessWidget {
       required this.name,
       required this.identity,
       required this.profileStatus,
-      required this.catalogStage,
       required this.selected,
       required this.onTap});
-  final String name, identity, profileStatus, catalogStage;
+  final String name, identity, profileStatus;
   final bool selected;
   final VoidCallback onTap;
   @override
@@ -256,8 +255,7 @@ class WorkerSidebarItem extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(identity, style: ProfileLabTheme.monoStyle),
-                    Text('Profile: $profileStatus'),
-                    Text('Catalog stage: $catalogStage')
+                    Text('Profile: $profileStatus')
                   ]),
               onTap: onTap)));
 }
@@ -318,34 +316,6 @@ class TechnicalInspector extends StatelessWidget {
           subtitle: subtitle,
           childrenPadding: const EdgeInsets.all(LabSpace.medium),
           children: children));
-}
-
-class ReleaseChannelCard extends StatelessWidget {
-  const ReleaseChannelCard(
-      {super.key, required this.channel, required this.version});
-  final String channel;
-  final String? version;
-  @override
-  Widget build(BuildContext context) => Card(
-      child: Padding(
-          padding: const EdgeInsets.all(LabSpace.medium),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              const Icon(Icons.alt_route,
-                  size: 18, color: ProfileLabTheme.secondaryText),
-              const SizedBox(width: 8),
-              Flexible(child: Text(channel))
-            ]),
-            const SizedBox(height: 12),
-            Text(version ?? 'None',
-                style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: LabSpace.small),
-            StatusBadge(
-                label: version == null ? 'Unassigned' : 'Assigned',
-                icon:
-                    version == null ? Icons.remove_circle_outline : Icons.link)
-          ])));
 }
 
 class OperationProgress extends StatelessWidget {

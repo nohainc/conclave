@@ -5,7 +5,6 @@ import '../widgets/lab_components.dart';
 import '../controllers/profile_lab_controller.dart';
 import '../theme/profile_lab_theme.dart';
 import 'profile_draft_editor.dart';
-import 'ai_assistant_dialog.dart';
 import 'ai_repair_loop_dialog.dart';
 import 'profile_release_diff_view.dart';
 import 'test_bench_view.dart';
@@ -50,14 +49,16 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
     try {
       payload = jsonDecode(c.currentJsonText) as Map<String, dynamic>;
     } catch (_) {}
-    final release = c.cloudReleases.isEmpty ? null : c.cloudReleases.first;
     ProfileReleaseDiffDialog.show(
       context,
       titleA: 'Local Draft',
       payloadA: payload,
-      titleB: c.cloudDraftPayload != null ? 'Cloud Draft' : 'Published Release',
-      payloadB:
-          c.cloudDraftPayload ?? release?['profile'] as Map<String, dynamic>?,
+      titleB: 'Current Profile',
+      payloadB: c.currentCloudProfileSnapshot?['profile'] is Map
+          ? Map<String, dynamic>.from(
+              c.currentCloudProfileSnapshot!['profile'] as Map,
+            )
+          : null,
     );
   }
 
@@ -68,12 +69,8 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
         c.formatCurrentJson();
       case 'compare':
         _compare();
-      case 'duplicate':
-        _perform(c.duplicateCurrentDraftAsNextRelease);
       case 'revert':
         _perform(c.revertCurrentDraft);
-      case 'proposal':
-        AiAssistantDialog.show(context, c);
       case 'repair':
         AiRepairLoopDialog.show(context, c);
     }
@@ -193,46 +190,38 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
       final name = c.selectedWorkerState.displayName;
       return EmptyState(
         title: '$name does not have an implementation Profile yet',
-        description: c.cloudReleases.isNotEmpty
-            ? 'Open Releases to create a draft from an existing Profile.'
-            : c.hasStarterTemplate
-                ? 'Start with the Cloud starter template, then test it locally.'
-                : 'Create a blank Profile using this Worker’s configured identity.',
+        description: c.hasStarterTemplate
+            ? 'Start with the Cloud starter template, then test it locally.'
+            : 'Create a blank Profile using this Worker’s configured identity.',
         action: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (c.definitionsError != null || c.releasesError != null)
               ErrorState(message: c.definitionsError ?? c.releasesError!),
-            if (c.cloudReleases.isNotEmpty)
-              FilledButton(
-                onPressed: () => c.setWorkerSubView(WorkerSubView.releases),
-                child: const Text('Open Releases'),
-              )
-            else
-              FilledButton(
-                onPressed: c.canCreateInitialDraft
-                    ? () async {
-                        try {
-                          await c.createInitialDraft();
-                        } catch (error) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Could not create draft: $error'),
-                              ),
-                            );
-                          }
+            FilledButton(
+              onPressed: c.canCreateInitialDraft
+                  ? () async {
+                      try {
+                        await c.createInitialDraft();
+                      } catch (error) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Could not create draft: $error'),
+                            ),
+                          );
                         }
                       }
-                    : null,
-                child: Text(
-                  c.isCreatingInitialDraft
-                      ? 'Creating…'
-                      : c.hasStarterTemplate
-                          ? 'Create Initial Draft'
-                          : 'Create blank Profile',
-                ),
+                    }
+                  : null,
+              child: Text(
+                c.isCreatingInitialDraft
+                    ? 'Creating…'
+                    : c.hasStarterTemplate
+                        ? 'Create Initial Draft'
+                        : 'Create blank Profile',
               ),
+            ),
           ],
         ),
       );
@@ -352,22 +341,9 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                         child: Text('Compare'),
                       ),
                       PopupMenuItem(
-                        value: 'duplicate',
-                        enabled: !locked &&
-                            !c.isDirty &&
-                            c.jsonValidationError == null,
-                        child: const Text('Duplicate as Next Release'),
-                      ),
-                      PopupMenuItem(
                         value: 'revert',
                         enabled: !locked && c.isDirty,
                         child: const Text('Revert'),
-                      ),
-                      const PopupMenuDivider(),
-                      PopupMenuItem(
-                        value: 'proposal',
-                        enabled: !locked,
-                        child: const Text('AI Proposal'),
                       ),
                       PopupMenuItem(
                         value: 'repair',

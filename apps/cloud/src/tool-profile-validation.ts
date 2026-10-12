@@ -1,13 +1,8 @@
 import {
-  compareSemver,
   validateToolProfileV1,
   type ToolProfileV1,
 } from "@conclave/tool-profile";
 import { canonicalReleaseJson } from "./release-trust.js";
-
-export type ToolProfileChannel = "testing" | "beta" | "stable";
-export type ToolProfileLifecycle =
-  "draft" | "testing" | "beta" | "stable" | "retired" | "revoked";
 
 export class ToolProfileRegistryError extends Error {
   constructor(
@@ -19,7 +14,6 @@ export class ToolProfileRegistryError extends Error {
   }
 }
 
-/** Publication requires an explicitly bounded provider compatibility claim. */
 export function validateProviderCompatibilityForPublication(
   profile: ToolProfileV1,
 ): void {
@@ -46,44 +40,6 @@ export interface ToolProfileRegistryEnvironment {
   readonly CONCLAVE_RELEASE_SIGNING_KEY_ID?: string;
 }
 
-export interface ToolProfileDefinitionInput {
-  readonly profileDefinitionId: string;
-  readonly workerTypeId: string;
-  readonly displayName: string;
-  readonly providerToolName: string;
-  readonly actorUserId: string;
-}
-
-export interface ApprovedLogicalWorkerInput extends ToolProfileDefinitionInput {
-  readonly description: string;
-  readonly releaseStage: ToolProfileChannel;
-  readonly sortOrder: number;
-}
-
-export interface ToolProfileReleaseIdentity {
-  readonly profileDefinitionId: string;
-  readonly releaseVersion: number;
-}
-
-export interface ToolProfileAcceptanceEvidence {
-  readonly formatVersion: 2;
-  readonly profileDefinitionId: string;
-  readonly releaseVersion: number;
-  readonly profileReleaseVersion: string;
-  readonly profileDigest: string;
-  readonly logicalWorkerTypeId: string;
-  readonly engineVersion: string;
-  readonly providerToolName: string;
-  readonly providerToolVersion: string;
-  readonly acceptedAt: string;
-  readonly scenarios: Readonly<Record<string, "passed" | "not_applicable">>;
-}
-
-/**
- * V9 publication evidence identifies the exact candidate and compatibility
- * matrix entry tested by Profile Lab. It is evidence of a client-side test,
- * not cryptographic proof that Cloud executed the test.
- */
 export interface WorkerProfilePublicationEvidence {
   readonly formatVersion: 1;
   readonly workerTypeId: string;
@@ -95,11 +51,6 @@ export interface WorkerProfilePublicationEvidence {
   readonly scenarios: Readonly<Record<string, "passed" | "not_applicable">>;
 }
 
-export const channelNames = new Set<ToolProfileChannel>([
-  "testing",
-  "beta",
-  "stable",
-]);
 const acceptanceScenarios = [
   "passive_probe",
   "live_probe",
@@ -110,48 +61,6 @@ const acceptanceScenarios = [
   "cancellation",
   "timeout",
 ] as const;
-
-export type ToolProfileAcceptanceScenario =
-  (typeof acceptanceScenarios)[number];
-export type ToolProfileAcceptanceScenarioStatus = "passed" | "not_applicable";
-
-/**
- * Returns the exact scenario statuses expected for a Tool Profile. Cloud and
- * Profile Lab retain all eight scenario keys; unsupported execution scenarios
- * are explicitly recorded as not_applicable rather than omitted or passed.
- */
-export function toolProfileAcceptanceScenarioStatuses(
-  profile: ToolProfileV1,
-): Readonly<
-  Record<ToolProfileAcceptanceScenario, ToolProfileAcceptanceScenarioStatus>
-> {
-  // Session support is declared by the session contract itself. The former
-  // Profile capability list is legacy metadata and is not required for
-  // qualification or execution admission.
-  const supportsDurableSession = profile.session.supported;
-  const statuses: Record<
-    ToolProfileAcceptanceScenario,
-    ToolProfileAcceptanceScenarioStatus
-  > = {
-    passive_probe: "passed",
-    live_probe: "passed",
-    model_selection:
-      profile.model.supported && (profile.model.allowlist?.length ?? 0) > 0
-        ? "passed"
-        : "not_applicable",
-    representative_thread_write:
-      profile.sandbox.mappings.restricted.length > 0
-        ? "passed"
-        : "not_applicable",
-    durable_session_start: supportsDurableSession ? "passed" : "not_applicable",
-    durable_session_resume: supportsDurableSession
-      ? "passed"
-      : "not_applicable",
-    cancellation: "passed",
-    timeout: "passed",
-  };
-  return statuses;
-}
 
 function compareReleaseSemver(left: string, right: string): number {
   const parse = (value: string) => {
@@ -168,22 +77,17 @@ function compareReleaseSemver(left: string, right: string): number {
   const a = parse(left);
   const b = parse(right);
   if (!a || !b) return Number.NaN;
-  for (let index = 0; index < 3; index++) {
+  for (let index = 0; index < 3; index++)
     if (a.core[index] !== b.core[index])
       return a.core[index]! < b.core[index]! ? -1 : 1;
-  }
-  if (a.prerelease === null || b.prerelease === null) {
-    if (a.prerelease === b.prerelease) return 0;
-    return a.prerelease === null ? 1 : -1;
-  }
+  if (a.prerelease === null || b.prerelease === null)
+    return a.prerelease === b.prerelease ? 0 : a.prerelease === null ? 1 : -1;
   const length = Math.max(a.prerelease.length, b.prerelease.length);
   for (let index = 0; index < length; index++) {
     const leftPart = a.prerelease[index];
     const rightPart = b.prerelease[index];
-    if (leftPart === undefined || rightPart === undefined) {
-      if (leftPart === rightPart) return 0;
-      return leftPart === undefined ? -1 : 1;
-    }
+    if (leftPart === undefined || rightPart === undefined)
+      return leftPart === rightPart ? 0 : leftPart === undefined ? -1 : 1;
     if (leftPart === rightPart) continue;
     const leftNumeric = /^(0|[1-9]\d*)$/.test(leftPart);
     const rightNumeric = /^(0|[1-9]\d*)$/.test(rightPart);
@@ -195,7 +99,7 @@ function compareReleaseSemver(left: string, right: string): number {
   return 0;
 }
 
-function releaseRangeIncludes(
+function profileRangeIncludes(
   version: string,
   ranges: readonly { min: string; maxExclusive: string }[],
 ): boolean {
@@ -211,21 +115,40 @@ function releaseRangeIncludes(
   });
 }
 
-export function validateToolProfileAcceptanceEvidence(
+export function toolProfileAcceptanceScenarioStatuses(
+  profile: ToolProfileV1,
+): Readonly<Record<string, "passed" | "not_applicable">> {
+  const durable = profile.session.supported;
+  return {
+    passive_probe: "passed",
+    live_probe: "passed",
+    model_selection:
+      profile.model.supported && (profile.model.allowlist?.length ?? 0) > 0
+        ? "passed"
+        : "not_applicable",
+    representative_thread_write:
+      profile.sandbox.mappings.restricted.length > 0
+        ? "passed"
+        : "not_applicable",
+    durable_session_start: durable ? "passed" : "not_applicable",
+    durable_session_resume: durable ? "passed" : "not_applicable",
+    cancellation: "passed",
+    timeout: "passed",
+  };
+}
+
+export function validateWorkerProfilePublicationEvidence(
   input: unknown,
   expected: {
-    identity: ToolProfileReleaseIdentity;
-    payloadDigest: string;
+    workerTypeId: string;
+    candidateDigest: string;
     profile: ToolProfileV1;
   },
-  purpose: "acceptance" | "local qualification" = "acceptance",
-): ToolProfileAcceptanceEvidence {
+): WorkerProfilePublicationEvidence {
   const fail = (): never => {
     throw new ToolProfileRegistryError(
       409,
-      purpose === "acceptance"
-        ? "Stable promotion requires complete real Profile acceptance evidence"
-        : "Draft publication requires a complete local execution qualification",
+      "Publication requires complete, recent evidence for this exact Profile candidate",
     );
   };
   if (!input || typeof input !== "object" || Array.isArray(input))
@@ -243,114 +166,11 @@ export function validateToolProfileAcceptanceEvidence(
     "tokens",
     "credentials",
   ]);
-  if (Object.keys(evidence).some((key) => forbiddenKeys.has(key))) {
+  if (Object.keys(evidence).some((key) => forbiddenKeys.has(key)))
     throw new ToolProfileRegistryError(
       400,
       "Raw provider secrets, environment dumps, or unrestricted stdout/stderr are forbidden in Cloud evidence",
     );
-  }
-  const allowedKeys = new Set([
-    "formatVersion",
-    "profileDefinitionId",
-    "releaseVersion",
-    "profileReleaseVersion",
-    "logicalWorkerTypeId",
-    "profileDigest",
-    "engineVersion",
-    "providerToolName",
-    "providerToolVersion",
-    "acceptedAt",
-    "scenarios",
-  ]);
-  if (Object.keys(evidence).some((key) => !allowedKeys.has(key))) return fail();
-  if (
-    evidence.formatVersion !== 2 ||
-    evidence.profileDefinitionId !== expected.identity.profileDefinitionId ||
-    evidence.releaseVersion !== expected.identity.releaseVersion ||
-    evidence.profileReleaseVersion !==
-      String(expected.identity.releaseVersion) ||
-    evidence.logicalWorkerTypeId !== expected.profile.logicalWorkerTypeId ||
-    evidence.profileDigest !== expected.payloadDigest ||
-    evidence.providerToolName !== expected.profile.providerTool.name ||
-    typeof evidence.engineVersion !== "string" ||
-    !releaseRangeIncludes(evidence.engineVersion, [
-      expected.profile.engineCompatibility,
-    ]) ||
-    typeof evidence.providerToolVersion !== "string" ||
-    !releaseRangeIncludes(
-      evidence.providerToolVersion,
-      expected.profile.providerTool.supportedVersions,
-    ) ||
-    typeof evidence.acceptedAt !== "string" ||
-    !Number.isFinite(Date.parse(evidence.acceptedAt)) ||
-    Date.parse(evidence.acceptedAt) > Date.now() + 5 * 60 * 1000 ||
-    Date.now() - Date.parse(evidence.acceptedAt) > 90 * 24 * 60 * 60 * 1000 ||
-    !evidence.scenarios ||
-    typeof evidence.scenarios !== "object" ||
-    Array.isArray(evidence.scenarios)
-  ) {
-    return fail();
-  }
-  let expectedScenarioStatuses: ReturnType<
-    typeof toolProfileAcceptanceScenarioStatuses
-  >;
-  try {
-    expectedScenarioStatuses = toolProfileAcceptanceScenarioStatuses(
-      expected.profile,
-    );
-  } catch {
-    return fail();
-  }
-  const scenarios = evidence.scenarios as Record<string, unknown>;
-  if (
-    Object.keys(scenarios).length !== acceptanceScenarios.length ||
-    acceptanceScenarios.some(
-      (name) => scenarios[name] !== expectedScenarioStatuses[name],
-    )
-  ) {
-    return fail();
-  }
-  if (new TextEncoder().encode(JSON.stringify(evidence)).byteLength > 32768)
-    return fail();
-  return evidence as unknown as ToolProfileAcceptanceEvidence;
-}
-
-export function validateWorkerProfilePublicationEvidence(
-  input: unknown,
-  expected: {
-    workerTypeId: string;
-    candidateDigest: string;
-    profile: ToolProfileV1;
-  },
-): WorkerProfilePublicationEvidence {
-  const fail = (): never => {
-    throw new ToolProfileRegistryError(
-      409,
-      "Publication requires complete, recent evidence for this exact Profile candidate",
-    );
-  };
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    return fail();
-  }
-  const evidence = input as Record<string, unknown>;
-  const forbiddenKeys = new Set([
-    "secrets",
-    "env",
-    "environment",
-    "stdout",
-    "stderr",
-    "apiKey",
-    "apiKeys",
-    "token",
-    "tokens",
-    "credentials",
-  ]);
-  if (Object.keys(evidence).some((key) => forbiddenKeys.has(key))) {
-    throw new ToolProfileRegistryError(
-      400,
-      "Raw provider secrets, environment dumps, or unrestricted stdout/stderr are forbidden in Cloud evidence",
-    );
-  }
   const allowedKeys = new Set([
     "formatVersion",
     "workerTypeId",
@@ -362,104 +182,73 @@ export function validateWorkerProfilePublicationEvidence(
     "scenarios",
   ]);
   if (Object.keys(evidence).some((key) => !allowedKeys.has(key))) return fail();
+  const testedAt =
+    typeof evidence.testedAt === "string"
+      ? Date.parse(evidence.testedAt)
+      : Number.NaN;
   if (
     evidence.formatVersion !== 1 ||
     evidence.workerTypeId !== expected.workerTypeId ||
     evidence.candidateDigest !== expected.candidateDigest ||
     typeof evidence.engineVersion !== "string" ||
-    !releaseRangeIncludes(evidence.engineVersion, [
+    !profileRangeIncludes(evidence.engineVersion, [
       expected.profile.engineCompatibility,
     ]) ||
     evidence.providerToolName !== expected.profile.providerTool.name ||
     typeof evidence.providerToolVersion !== "string" ||
-    !releaseRangeIncludes(
+    !profileRangeIncludes(
       evidence.providerToolVersion,
       expected.profile.providerTool.supportedVersions,
     ) ||
-    typeof evidence.testedAt !== "string" ||
-    !Number.isFinite(Date.parse(evidence.testedAt)) ||
-    Date.parse(evidence.testedAt) > Date.now() + 5 * 60 * 1000 ||
-    Date.now() - Date.parse(evidence.testedAt) > 90 * 24 * 60 * 60 * 1000 ||
+    !Number.isFinite(testedAt) ||
+    testedAt > Date.now() + 5 * 60 * 1000 ||
+    Date.now() - testedAt > 90 * 24 * 60 * 60 * 1000 ||
     !evidence.scenarios ||
     typeof evidence.scenarios !== "object" ||
     Array.isArray(evidence.scenarios)
-  ) {
+  )
     return fail();
-  }
-  const expectedScenarioStatuses = toolProfileAcceptanceScenarioStatuses(
+  const scenarios = evidence.scenarios as Record<string, unknown>;
+  const expectedStatuses = toolProfileAcceptanceScenarioStatuses(
     expected.profile,
   );
-  const scenarios = evidence.scenarios as Record<string, unknown>;
   if (
     Object.keys(scenarios).length !== acceptanceScenarios.length ||
     acceptanceScenarios.some(
-      (name) => scenarios[name] !== expectedScenarioStatuses[name],
+      (name) => scenarios[name] !== expectedStatuses[name],
     )
-  ) {
+  )
     return fail();
-  }
-  if (new TextEncoder().encode(JSON.stringify(evidence)).byteLength > 32768) {
+  if (new TextEncoder().encode(JSON.stringify(evidence)).byteLength > 32768)
     return fail();
-  }
   return evidence as unknown as WorkerProfilePublicationEvidence;
 }
 
 export function validateId(value: string, label: string): void {
-  if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(value) || value.length > 96) {
-    throw new ToolProfileRegistryError(400, `${label} is invalid`);
-  }
-}
-
-export function validateVersion(value: number): void {
-  if (!Number.isInteger(value) || value < 1 || value > 2_147_483_647) {
-    throw new ToolProfileRegistryError(400, "releaseVersion is invalid");
-  }
+  if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(value) || value.length > 96)
+    throw new ToolProfileRegistryError(400, label + " is invalid");
 }
 
 export function parseProfile(
   input: unknown,
-  identity?: ToolProfileReleaseIdentity,
-): {
-  profile: ToolProfileV1;
-  payload: string;
-} {
+  _compatibilityIdentity?: unknown,
+): { profile: ToolProfileV1; payload: string } {
   let profile: ToolProfileV1;
   try {
     profile = validateToolProfileV1(input);
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.name === "ToolProfileValidationError"
-    ) {
-      throw new ToolProfileRegistryError(400, error.message);
-    }
-    throw new ToolProfileRegistryError(400, "Tool Profile v1 is invalid");
-  }
-  if (
-    identity &&
-    (profile.profileDefinitionId !== identity.profileDefinitionId ||
-      profile.releaseVersion !== identity.releaseVersion)
-  ) {
     throw new ToolProfileRegistryError(
       400,
-      "Tool Profile identity does not match the requested release",
+      error instanceof Error ? error.message : "Tool Profile v1 is invalid",
     );
   }
   const payload = canonicalReleaseJson(profile);
-  if (new TextEncoder().encode(payload).byteLength > 256 * 1024) {
+  if (new TextEncoder().encode(payload).byteLength > 256 * 1024)
     throw new ToolProfileRegistryError(
       400,
-      "Tool Profile payload exceeds the release limit",
+      "Tool Profile payload exceeds the Profile limit",
     );
-  }
   return { profile, payload };
-}
-
-export function validateToolProfileReleasePayload(
-  input: unknown,
-  identity?: ToolProfileReleaseIdentity,
-): ToolProfileV1 {
-  return parseProfile(input, identity).profile;
 }
 
 export async function profileDigest(canonicalPayload: string): Promise<string> {
@@ -472,34 +261,6 @@ export async function profileDigest(canonicalPayload: string): Promise<string> {
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Canonical Ed25519 message for an immutable Tool Profile Release v1.
- * The digest binds every behavior field; the explicit statement binds the
- * database/API identity and compatibility claims to that exact payload.
- */
-export function toolProfileReleaseSigningMessage(args: {
-  publisher: string;
-  signingKeyId: string;
-  payloadDigest: string;
-  profile: ToolProfileV1;
-}): string {
-  const { profile } = args;
-  return `conclave-tool-profile-release-v1\n${canonicalReleaseJson({
-    domain: "conclave-tool-profile-release-v1",
-    publisher: args.publisher,
-    signingKeyId: args.signingKeyId,
-    payloadDigest: args.payloadDigest,
-    profileDefinitionId: profile.profileDefinitionId,
-    releaseVersion: profile.releaseVersion,
-    logicalWorkerTypeId: profile.logicalWorkerTypeId,
-    engineFamily: profile.engineFamily,
-    schemaVersion: profile.schemaVersion,
-    engineCompatibility: profile.engineCompatibility,
-    providerToolName: profile.providerTool.name,
-    providerCompatibility: profile.providerTool.supportedVersions,
-  })}`;
-}
-
-/** Canonical Ed25519 message for the V9 current Worker Profile snapshot. */
 export function workerProfileSigningMessage(args: {
   publisher: string;
   signingKeyId: string;
@@ -508,13 +269,5 @@ export function workerProfileSigningMessage(args: {
   schemaVersion: number;
   payloadDigest: string;
 }): string {
-  return `conclave-worker-profile-v9\n${canonicalReleaseJson({
-    domain: "conclave-worker-profile-v9",
-    publisher: args.publisher,
-    signingKeyId: args.signingKeyId,
-    workerTypeId: args.workerTypeId,
-    revision: args.revision,
-    schemaVersion: args.schemaVersion,
-    payloadDigest: args.payloadDigest,
-  })}`;
+  return `conclave-worker-profile-v9\\n${canonicalReleaseJson({ domain: "conclave-worker-profile-v9", publisher: args.publisher, signingKeyId: args.signingKeyId, workerTypeId: args.workerTypeId, revision: args.revision, schemaVersion: args.schemaVersion, payloadDigest: args.payloadDigest })}`;
 }

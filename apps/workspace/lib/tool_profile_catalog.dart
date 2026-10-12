@@ -133,10 +133,6 @@ class ToolProfileCatalogClient {
       if (decoded is! Map || decoded['workers'] is! List) {
         throw const FormatException('Worker catalog response is invalid');
       }
-      if (!useHumanCatalog &&
-          !const {'testing', 'beta', 'stable'}.contains(decoded['channel'])) {
-        throw const FormatException('Worker catalog response is invalid');
-      }
       raw = List<Object?>.from(decoded['workers'] as List);
     }
     if (raw.length > maxWorkersPerResponse ||
@@ -244,15 +240,11 @@ class ToolProfileCatalogClient {
 
   void close() => _client.close(force: true);
 
-  /// Refreshes revocations before downloading or activating any release.
+  /// Fetches, verifies, validates and activates the one current Profile.
+  /// No channel or multi-release lookup is involved in V9 activation.
   Future<List<ToolProfileCandidate>> syncWorkerProfiles(
-    String workerTypeId, {
-    String channel = 'stable',
-  }) async {
+      String workerTypeId) async {
     _validateWorkerTypeId(workerTypeId);
-    if (!_usesV9ProfileSource) {
-      _validateWorkerQuery(workerTypeId, channel);
-    }
     await store.restoreRevocations();
     await (trustRefresher ?? _refreshTrustState)();
     await store.restoreRevocations(force: true);
@@ -261,79 +253,17 @@ class ToolProfileCatalogClient {
     if (affectedWorkerTypeIds.isNotEmpty) {
       await onRevocationsApplied?.call(affectedWorkerTypeIds);
     }
-    if (_usesV9ProfileSource) {
-      final candidate = currentProfileLoader == null
-          ? await fetchCurrentWorkerProfile(workerTypeId)
-          : await currentProfileLoader!(workerTypeId);
-      final staged = await store.stageWorkerProfile(candidate);
-      final validator = candidateValidator;
-      final validated = validator == null ||
-          await validator(staged, store.stagedWorkerProfileFile(staged));
-      if (!validated) return [staged];
-      final activated = await store.activateWorkerProfile(staged);
-      return [activated];
-    }
-    final catalog = await listReleases(workerTypeId, channel: channel);
-    final selectedChannel = catalog.channel;
-    final releases = catalog.releases;
-    final admissions = <ToolProfileCandidate>[];
-    final selectedVersions = <String, int>{};
-    final candidates = <String, ToolProfileReleaseAdmission>{};
-    final unvalidatedDefinitions = <String>{};
-    for (final release in releases) {
-      final admission = await store.installRelease(
-        releaseInput: release,
-        expectedWorkerTypeId: workerTypeId,
-      );
-      admissions.add(admission);
-      if (admission.channel != selectedChannel) {
-        throw const FormatException(
-          'Cloud returned a Profile outside the selected channel',
-        );
-      }
-      final current = candidates[admission.profileDefinitionId];
-      if (current == null ||
-          admission.releaseVersion > current.releaseVersion) {
-        candidates[admission.profileDefinitionId] = admission;
-      }
-    }
-    for (final candidate in candidates.values) {
-      final validator = candidateValidator;
-      final isValidated = validator != null &&
-          await validator(
-            candidate,
-            store.profileFile(
-              candidate.profileDefinitionId,
-              candidate.releaseVersion,
-            ),
-          );
-      if (isValidated) {
-        await store.activateVersion(
-          candidate.profileDefinitionId,
-          candidate.releaseVersion,
-          selectAsStable: selectedChannel == 'stable',
-        );
-        selectedVersions[candidate.profileDefinitionId] =
-            candidate.releaseVersion;
-      } else {
-        unvalidatedDefinitions.add(candidate.profileDefinitionId);
-      }
-    }
-    await store.applyCatalogSelection(
-      workerTypeId: workerTypeId,
-      selectedVersionsByDefinition: selectedVersions,
-      selectedChannel: selectedChannel,
-      preserveDefinitionIds: unvalidatedDefinitions,
-    );
-    await store.enforceRetention();
-    return List.unmodifiable(admissions);
+    final candidate = currentProfileLoader == null
+        ? await fetchCurrentWorkerProfile(workerTypeId)
+        : await currentProfileLoader!(workerTypeId);
+    final staged = await store.stageWorkerProfile(candidate);
+    final validator = candidateValidator;
+    final validated = validator == null ||
+        await validator(staged, store.stagedWorkerProfileFile(staged));
+    if (!validated) return [staged];
+    final activated = await store.activateWorkerProfile(staged);
+    return [activated];
   }
-
-  bool get _usesV9ProfileSource =>
-      currentProfileLoader != null ||
-      (listLoader == null &&
-          workspaceRuntimeId != null &&
-          workspaceRuntimeId!.isNotEmpty);
 
   Future<ToolProfileCatalogResult> listReleases(
     String workerTypeId, {

@@ -14,6 +14,12 @@ audience separation, credential rotation, and revocation remain enforced.
 **Builds on:** [ADR-012](ADR-012-workspace-owned-local-workers.md), [ADR-013](ADR-013-desktop-auth-and-dual-transport.md), [ADR-015](ADR-015-first-party-worker-v1-contract.md), [ADR-018](ADR-018-generic-cli-worker-engine-and-tool-profiles.md)  
 **Normative for:** Profile Lab (`apps/profile_lab`), Cloud Profile administration routes, and shared Profile/Engine runtime boundaries.
 
+**V9 superseding decision:** Profile Lab now uses one Worker editing workflow:
+edit a candidate, validate it, run the local isolated test ladder, and publish
+the exact tested digest. Testing, beta, stable, promotion, and channel controls
+are not supported V9 concepts. The historical lifecycle rationale below is
+retained for decision history only.
+
 ---
 
 ## 1. Context

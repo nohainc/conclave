@@ -94,27 +94,9 @@ class ProfileAdminApiClient {
     return ProfileLabAccessReadModel.fromJson(result);
   }
 
-  /// Lists all logical workers across all lifecycle states, stages, and visibility.
+  /// Lists logical Workers with their one current V9 Profile summary.
   Future<List<ProfileLabWorkerReadModel>> fetchWorkerCatalog() async {
-    // V9 is the canonical Worker/Profile registry. Keep the legacy catalog
-    // request as a narrow development fallback while older Cloud instances
-    // finish their additive migration.
-    try {
-      return await fetchV9WorkerProfiles();
-    } on ProfileAdminNotFoundException {
-      // Fall through to the pre-V9 catalog endpoint.
-    }
-    final result = await _request('GET', _api('/api/admin/workers/catalog'));
-    if (result is Map && result['workers'] is List) {
-      return _readModels(
-        result['workers'] as List,
-        ProfileLabWorkerReadModel.fromJson,
-        'workers',
-      );
-    }
-    throw const FormatException(
-      'Cloud Worker catalog response must contain a workers array.',
-    );
+    return fetchV9WorkerProfiles();
   }
 
   /// Lists logical Workers with their one current V9 Profile summary.
@@ -186,35 +168,6 @@ class ProfileAdminApiClient {
     );
     if (result is Map) return Map<String, dynamic>.from(result);
     throw StateError('Invalid Worker Profile publication response');
-  }
-
-  /// Atomically registers an approved logical Worker and its initial Profile definition.
-  Future<Map<String, dynamic>> createWorker({
-    required String workerTypeId,
-    required String profileDefinitionId,
-    required String displayName,
-    required String description,
-    required String providerToolName,
-    required String releaseStage,
-    required int sortOrder,
-  }) async {
-    final result = await _request(
-      'POST',
-      _api('/api/admin/workers/catalog'),
-      body: {
-        'workerTypeId': workerTypeId,
-        'profileDefinitionId': profileDefinitionId,
-        'displayName': displayName,
-        'description': description,
-        'providerToolName': providerToolName,
-        'releaseStage': releaseStage,
-        'sortOrder': sortOrder,
-      },
-    );
-    if (result is Map) {
-      return Map<String, dynamic>.from(result);
-    }
-    throw StateError('Invalid create worker response');
   }
 
   /// Lists all Profile definitions with aggregated channel pointers and release counts.
@@ -657,38 +610,6 @@ class ProfileAdminApiClient {
       return Map<String, dynamic>.from(result);
     }
     throw StateError('Invalid lifecycle change response');
-  }
-
-  /// Lists all registered development/test workspaces with their tool profile channel assignments.
-  Future<List<ProfileLabWorkspaceChannelReadModel>>
-      listWorkspaceChannels() async {
-    final result = await _request('GET', _api('/api/admin/workspace-channels'));
-    if (result is Map && result['workspaces'] is List) {
-      return _readModels(
-        result['workspaces'] as List,
-        ProfileLabWorkspaceChannelReadModel.fromJson,
-        'workspaces',
-      );
-    }
-    return [];
-  }
-
-  /// Sets the tool profile rollout channel for a given workspace.
-  Future<Map<String, dynamic>> setWorkspaceChannel({
-    required String workspaceId,
-    required String channel,
-  }) async {
-    final result = await _request(
-      'PATCH',
-      _api(
-        '/api/workspaces/${Uri.encodeComponent(workspaceId)}/tool-profile-channel',
-      ),
-      body: {'channel': channel},
-    );
-    if (result is Map) {
-      return Map<String, dynamic>.from(result);
-    }
-    throw StateError('Invalid set workspace channel response');
   }
 
   void close() => _http.close(force: true);

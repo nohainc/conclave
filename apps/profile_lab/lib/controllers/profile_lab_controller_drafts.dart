@@ -65,7 +65,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       jsonValidationError = null;
       isDirty = false;
       await refreshEvidence();
-      await fetchAndSyncCloudDraft();
+      if (!isV9ProfileRegistry) await fetchAndSyncCloudDraft();
     }
     notifyListeners();
   }
@@ -84,8 +84,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       if (release.profile != null) {
         cloudDraftPayload = Map<String, dynamic>.from(release.profile!);
         if (cloudDraftExists == true) {
-          cloudDigest =
-              release.payloadDigest ??
+          cloudDigest = release.payloadDigest ??
               release['profileDigest'] as String? ??
               sha256
                   .convert(utf8.encode(canonicalJson(cloudDraftPayload!)))
@@ -137,8 +136,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
         payloadDigest: currentDraft!.payloadDigest,
       );
       currentEvidence = storedEvidence.where((evidence) {
-        final legacy =
-            ToolProfileAcceptanceEvidence.hasCloudContractShape(
+        final legacy = ToolProfileAcceptanceEvidence.hasCloudContractShape(
               evidence,
               profile: currentDraft!.profile,
             ) &&
@@ -146,8 +144,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
                 currentDraft!.profileDefinitionId &&
             evidence['releaseVersion'] == currentDraft!.releaseVersion &&
             evidence['profileDigest'] == currentDraft!.payloadDigest;
-        final v9 =
-            evidence['formatVersion'] == 1 &&
+        final v9 = evidence['formatVersion'] == 1 &&
             evidence['workerTypeId'] == currentDraft!.logicalWorkerTypeId &&
             evidence['candidateDigest'] == currentDraft!.payloadDigest &&
             evidence['scenarios'] is Map;
@@ -245,10 +242,11 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
   Future<void> saveCurrentDraft({
     String author = 'developer',
     String notes = '',
-  }) => _refresh(
-    'save-local-draft',
-    () => _saveCurrentDraft(author: author, notes: notes),
-  );
+  }) =>
+      _refresh(
+        'save-local-draft',
+        () => _saveCurrentDraft(author: author, notes: notes),
+      );
 
   Future<void> _saveCurrentDraft({
     String author = 'developer',
@@ -306,10 +304,12 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     bool force = false,
     String author = 'developer',
     String notes = '',
-  }) => _refresh(
-    'save-draft',
-    () => _saveCurrentDraftToCloud(force: force, author: author, notes: notes),
-  );
+  }) =>
+      _refresh(
+        'save-draft',
+        () => _saveCurrentDraftToCloud(
+            force: force, author: author, notes: notes),
+      );
 
   Future<void> _saveCurrentDraftToCloud({
     bool force = false,
@@ -357,8 +357,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
               releaseVersion: currentDraft!.releaseVersion,
               profile: Map<String, dynamic>.from(decoded),
             );
-      final newDigest =
-          (resp['payloadDigest'] as String?) ??
+      final newDigest = (resp['payloadDigest'] as String?) ??
           (resp['digest'] as String?) ??
           currentDraft!.payloadDigest;
       baseCloudDigest = newDigest;
@@ -413,66 +412,68 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
 
   /// Creates an unsigned local candidate from the selected Cloud definition.
   Future<void> createInitialDraft() => _refresh('initial-draft', () async {
-    final worker = selectedCloudWorker;
-    final definition = selectedCloudDefinition;
-    final id = selectedDefinitionId;
-    if (worker == null ||
-        definition == null ||
-        id == null ||
-        currentDraft != null ||
-        cloudReleases.isNotEmpty) {
-      return;
-    }
-    if (await store.loadDraft(id) != null) {
-      await selectDraft(id);
-      return;
-    }
-    final starter = definition['starterTemplate'];
-    if (starter != null) {
-      if (starter is! Map ||
-          starter['schemaVersion'] != 1 ||
-          starter['profile'] is! Map) {
-        throw StateError('Unsupported starter template');
-      }
-      final payload = Map<String, Object?>.from(
-        jsonDecode(jsonEncode(starter['profile'])) as Map,
-      );
-      if (payload['profileDefinitionId'] != id ||
-          payload['logicalWorkerTypeId'] != worker['workerTypeId'] ||
-          payload['releaseVersion'] != 1 ||
-          ((payload['providerTool'] as Map?)?['executableCandidates'] as List?)
-                  ?.contains(definition['providerToolName']) !=
-              true) {
-        throw StateError('Starter template does not match the selected Worker');
-      }
-      final migrated = migrateProfilePayload(payload);
-      await store.saveDraft(
-        profileDefinitionId: id,
-        profileJson: migrated ?? payload,
-        notes: migrated == null
-            ? 'Created from Cloud starter template'
-            : 'Created from Cloud starter template and migrated legacy ChatGPT model discovery.',
-      );
-      draftDefinitionIds = await store.listDraftDefinitionIds();
-      if (selectedDefinitionId == id) {
-        await selectDraft(id);
-      }
-    } else {
-      await createNewDraft(
-        profileDefinitionId: id,
-        workerTypeId: worker['workerTypeId'] as String,
-        providerToolName: definition['providerToolName'] as String,
-        activate: false,
-      );
-      draftDefinitionIds = await store.listDraftDefinitionIds();
-      if (selectedDefinitionId == id) {
-        await selectDraft(id);
-      }
-    }
-    if (selectedDefinitionId == id) {
-      setWorkerSubView(WorkerSubView.draftAndTest);
-    }
-  });
+        final worker = selectedCloudWorker;
+        final definition = selectedCloudDefinition;
+        final id = selectedDefinitionId;
+        if (worker == null ||
+            definition == null ||
+            id == null ||
+            currentDraft != null ||
+            cloudReleases.isNotEmpty) {
+          return;
+        }
+        if (await store.loadDraft(id) != null) {
+          await selectDraft(id);
+          return;
+        }
+        final starter = definition['starterTemplate'];
+        if (starter != null) {
+          if (starter is! Map ||
+              starter['schemaVersion'] != 1 ||
+              starter['profile'] is! Map) {
+            throw StateError('Unsupported starter template');
+          }
+          final payload = Map<String, Object?>.from(
+            jsonDecode(jsonEncode(starter['profile'])) as Map,
+          );
+          if (payload['profileDefinitionId'] != id ||
+              payload['logicalWorkerTypeId'] != worker['workerTypeId'] ||
+              payload['releaseVersion'] != 1 ||
+              ((payload['providerTool'] as Map?)?['executableCandidates']
+                          as List?)
+                      ?.contains(definition['providerToolName']) !=
+                  true) {
+            throw StateError(
+                'Starter template does not match the selected Worker');
+          }
+          final migrated = migrateProfilePayload(payload);
+          await store.saveDraft(
+            profileDefinitionId: id,
+            profileJson: migrated ?? payload,
+            notes: migrated == null
+                ? 'Created from Cloud starter template'
+                : 'Created from Cloud starter template and migrated legacy ChatGPT model discovery.',
+          );
+          draftDefinitionIds = await store.listDraftDefinitionIds();
+          if (selectedDefinitionId == id) {
+            await selectDraft(id);
+          }
+        } else {
+          await createNewDraft(
+            profileDefinitionId: id,
+            workerTypeId: worker['workerTypeId'] as String,
+            providerToolName: definition['providerToolName'] as String,
+            activate: false,
+          );
+          draftDefinitionIds = await store.listDraftDefinitionIds();
+          if (selectedDefinitionId == id) {
+            await selectDraft(id);
+          }
+        }
+        if (selectedDefinitionId == id) {
+          setWorkerSubView(WorkerSubView.draftAndTest);
+        }
+      });
 
   Future<void> createNewDraft({
     required String profileDefinitionId,
@@ -600,11 +601,11 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       if (providerTool is! Map) return;
 
       final discovery = providerTool['discovery'];
-      final standardPaths =
-          discovery is Map && discovery['standardLocations'] is List
+      final standardPaths = discovery is Map &&
+              discovery['standardLocations'] is List
           ? (discovery['standardLocations'] as List).whereType<String>().toList(
-              growable: false,
-            )
+                growable: false,
+              )
           : const <String>[];
       addExecutable(providerTool['name'], standardPaths: standardPaths);
       final candidates = providerTool['executableCandidates'];

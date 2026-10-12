@@ -357,13 +357,11 @@ export async function validateWorkflowWorkerEligibility(
               i.profile_definition_id AS profileDefinitionId,
               i.profile_release_version AS profileReleaseVersion,
               i.provider_tool_version AS providerToolVersion,
-              release.payload_json AS executionProfileJson,
-              release.payload_digest AS executionProfileDigest, i.model_catalog_json AS modelCatalogJson,
+              COALESCE(currentProfile.profile_json, history.profile_json) AS executionProfileJson,
+              COALESCE(currentProfile.digest, history.digest) AS executionProfileDigest,
+              i.model_catalog_json AS modelCatalogJson,
               catalog.lifecycle_state AS workerCatalogLifecycleState,
               catalog.visibility_state AS workerCatalogVisibilityState,
-              catalog.release_stage AS workerCatalogReleaseStage,
-              profileChannel.channel AS workspaceToolProfileChannel,
-              definition.profile_definition_id AS currentProfileDefinitionId,
               catalog.display_name AS workerDisplayName,
               vs.state AS schedulingState,
               g.id AS grantId, g.status AS grantStatus, g.expires_at AS grantExpiresAt,
@@ -377,18 +375,12 @@ export async function validateWorkflowWorkerEligibility(
          FROM workspace_worker_inventory i
          LEFT JOIN worker_catalog catalog
            ON catalog.worker_type_id = i.worker_type_id
-         LEFT JOIN workspace_tool_profile_channels profileChannel
-           ON profileChannel.workspace_id = i.workspace_id
-         LEFT JOIN tool_profile_definitions definition
-           ON definition.worker_type_id = i.worker_type_id
-          AND definition.profile_definition_id = i.profile_definition_id
-          AND definition.lifecycle_state = 'active'
-         LEFT JOIN tool_profile_releases release
-           ON release.profile_definition_id = i.profile_definition_id
-          AND release.release_version = i.profile_release_version
-          AND release.worker_type_id = i.worker_type_id
-          AND release.published_at IS NOT NULL
-          AND release.lifecycle_state <> 'revoked'
+         LEFT JOIN worker_profiles currentProfile
+           ON currentProfile.worker_type_id = i.worker_type_id
+          AND currentProfile.revision = i.profile_release_version
+         LEFT JOIN worker_profile_history history
+           ON history.worker_type_id = i.worker_type_id
+          AND history.revision = i.profile_release_version
          LEFT JOIN worker_scheduling vs ON vs.worker_id = i.worker_id
          LEFT JOIN workspace_space_grants g
            ON g.workspace_id = i.workspace_id AND g.space_id = ?2
@@ -425,29 +417,17 @@ export async function validateWorkflowWorkerEligibility(
           row.workerDisplayName == null ? null : String(row.workerDisplayName),
         ),
       });
-    const catalogReleaseStage = String(row.workerCatalogReleaseStage ?? "");
-    const workspaceToolProfileChannel = String(
-      row.workspaceToolProfileChannel ?? "stable",
-    );
-    const catalogStageEligible =
-      workspaceToolProfileChannel === "testing" ||
-      (workspaceToolProfileChannel === "beta" &&
-        ["beta", "stable"].includes(catalogReleaseStage)) ||
-      (workspaceToolProfileChannel === "stable" &&
-        catalogReleaseStage === "stable");
     if (
       row.workerCatalogLifecycleState !== "active" ||
-      row.workerCatalogVisibilityState !== "visible" ||
-      !catalogStageEligible
+      row.workerCatalogVisibilityState !== "visible"
     ) {
       push("worker_catalog_unavailable");
     }
     if (
-      typeof row.currentProfileDefinitionId !== "string" ||
-      row.currentProfileDefinitionId !== row.profileDefinitionId
-    ) {
+      row.executionProfileJson == null ||
+      typeof row.executionProfileDigest !== "string"
+    )
       push("engine_profile_unavailable");
-    }
     if (
       row.grantId == null ||
       row.grantStatus !== "active" ||

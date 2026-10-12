@@ -9,7 +9,7 @@ import {
   publishWorkerProfile,
   restoreWorkerProfile,
   validateWorkerProfileCandidate,
-} from "../src/tool-profile-registry.js";
+} from "../src/worker-profile-registry.js";
 import { toolProfileAcceptanceScenarioStatuses } from "../src/tool-profile-validation.js";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 

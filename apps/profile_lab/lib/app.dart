@@ -9,7 +9,6 @@ import 'widgets/lab_components.dart';
 import 'utils/profile_lab_messages.dart';
 import 'views/cloud_settings_dialog.dart';
 import 'views/workers_view.dart';
-import 'views/workspaces_view.dart';
 import 'views/issue_reports_view.dart';
 
 class ProfileLabApp extends StatefulWidget {
@@ -109,7 +108,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                           ),
                           const SizedBox(width: 12),
 
-                          // Primary areas (Workers, Workspaces, Activity)
+                          // Primary areas (Workers, Activity)
                           Expanded(
                             child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
@@ -121,18 +120,12 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                     selected: c.selectedArea == LabArea.workers,
                                     onTap: () => c.setArea(LabArea.workers),
                                   ),
-                                  _AreaButton(
-                                    label: 'Workspaces',
-                                    icon: Icons.devices,
-                                    selected:
-                                        c.selectedArea == LabArea.workspaces,
-                                    onTap: () => c.setArea(LabArea.workspaces),
-                                  ),
                                   if (c.labAccess?.issueSupport == true)
                                     _AreaButton(
                                       label: 'Issues',
                                       icon: Icons.bug_report_outlined,
-                                      selected: c.selectedArea == LabArea.issues,
+                                      selected:
+                                          c.selectedArea == LabArea.issues,
                                       onTap: () => c.setArea(LabArea.issues),
                                     ),
                                   _AreaButton(
@@ -255,7 +248,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                     message: c.labAccessError ??
                                         (c.labAccess == null
                                             ? 'Profile Lab permissions have not been verified.'
-                                            : 'Profile administration: ${c.labAccess!.profilesAdmin ? "Authorized" : "Not authorized"} · Release management: ${c.labAccess!.releaseManager ? "Authorized" : "Not authorized"} · ${c.labAccess!.signerReady ? "Cloud signer ready" : "Cloud signer not configured"}'),
+                                            : 'Profile administration: ${c.labAccess!.profilesAdmin ? "Authorized" : "Not authorized"} · ${c.labAccess!.signerReady ? "Cloud signer ready" : "Cloud signer not configured"}'),
                                     child: InkWell(
                                       onTap: c.isCheckingLabAccess
                                           ? null
@@ -354,10 +347,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                   'Check access or sign in with the authorized owner account.')
                           : switch (c.selectedArea) {
                               LabArea.workers => WorkersView(controller: c),
-                              LabArea.workspaces =>
-                                WorkspacesView(controller: c),
-                              LabArea.issues =>
-                                IssueReportsView(controller: c),
+                              LabArea.issues => IssueReportsView(controller: c),
                               LabArea.audit => AuditView(controller: c),
                             },
                     ),

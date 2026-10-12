@@ -110,26 +110,25 @@ export async function recordWorkspaceWorkerInventory(
       WorkspaceWorkerInventoryEntrySchema.shape.modelCatalog.safeParse(
         item.modelCatalog,
       );
-    // Inventory credentials identify the Workspace; signed release identity
-    // binds capability metadata to this Worker and exact provider version.
+    // Inventory credentials identify the Workspace; the signed Profile
+    // snapshot binds capability metadata to this Worker and exact revision.
     let acceptedCatalog = validatedCatalog.success
       ? validatedCatalog.data
       : null;
     if (acceptedCatalog) {
-      const release = await env.CONCLAVE_DB.prepare(
-        `SELECT payload_digest AS digest FROM tool_profile_releases WHERE profile_definition_id = ?1
-         AND release_version = ?2 AND worker_type_id = ?3
-         AND published_at IS NOT NULL AND lifecycle_state != 'revoked'`,
+      const profile = await env.CONCLAVE_DB.prepare(
+        `SELECT digest FROM worker_profiles
+          WHERE worker_type_id = ?1 AND revision = ?2
+         UNION ALL
+        SELECT digest FROM worker_profile_history
+          WHERE worker_type_id = ?1 AND revision = ?2
+         LIMIT 1`,
       )
-        .bind(
-          item.profileDefinitionId ?? null,
-          item.profileReleaseVersion ?? null,
-          workerTypeId,
-        )
+        .bind(workerTypeId, item.profileReleaseVersion ?? null)
         .first<{ digest: string }>();
       if (
-        !release ||
-        acceptedCatalog.profileDigest !== release.digest ||
+        !profile ||
+        acceptedCatalog.profileDigest !== profile.digest ||
         acceptedCatalog.providerToolVersion !== item.providerToolVersion
       )
         acceptedCatalog = null;

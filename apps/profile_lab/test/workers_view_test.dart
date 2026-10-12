@@ -25,10 +25,6 @@ class _ImmediateApi extends ProfileAdminApiClient {
   Future<List<ProfileLabWorkerReadModel>> fetchWorkerCatalog() async => [];
 
   @override
-  Future<List<ProfileLabWorkspaceChannelReadModel>>
-      listWorkspaceChannels() async => [];
-
-  @override
   Future<List<ProfileLabReleaseReadModel>> fetchReleases(
           String profileDefinitionId) async =>
       [];
@@ -75,50 +71,8 @@ void main() {
     expect(find.text('gemini · CLI: agy'), findsOneWidget);
   });
 
-  testWidgets('Create Worker uses catalog stages without capabilities',
-      (tester) async {
-    final tempDir = Directory.systemTemp.createTempSync('workers_view_test_');
-    addTearDown(() => tempDir.deleteSync(recursive: true));
-    final paths = ProfileLabPaths(homeDirectory: tempDir.path);
-    final controller = ProfileLabController(
-      paths: paths,
-      sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths),
-      apiClientOverride: _ImmediateApi(),
-    )
-      ..currentSession = ProfileLabSession(
-        credential: 'test-credential',
-        sessionId: 'test-session',
-        userId: 'test-user',
-        displayName: 'Test User',
-        email: 'test@example.invalid',
-        expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
-      )
-      ..cloudWorkers = [
-        {
-          'workerTypeId': 'existing-worker',
-          'displayName': 'Existing Worker',
-        },
-      ];
-    addTearDown(() async {
-      controller.dispose();
-    });
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: WorkersView(controller: controller)),
-      ),
-    );
-    await tester.tap(find.byTooltip('Create Worker + Definition'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.text('Testing'), findsOneWidget);
-    expect(find.text('Draft'), findsNothing);
-    expect(find.byType(FilterChip), findsNothing);
-  });
-
   testWidgets(
-      'Worker Overview displays header, 5-step lifecycle, next step card, and collapsible Technical details',
+      'Worker Overview displays header, V9 lifecycle, next step card, and collapsible Technical details',
       (tester) async {
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1;
@@ -150,7 +104,7 @@ void main() {
           'displayName': 'ChatGPT',
           'description': 'Codex CLI worker',
           'providerToolName': 'codex',
-          'releaseStage': 'stable',
+          'currentRevision': 4,
         },
       ];
     addTearDown(() async {
@@ -176,9 +130,6 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    // Check sidebar displays Catalog stage: STABLE (not generic STABLE)
-    expect(find.text('Catalog stage: stable'), findsOneWidget);
-
     // Check sidebar displays Profile status
     expect(find.textContaining('Profile:'), findsOneWidget);
 
@@ -188,12 +139,11 @@ void main() {
     expect(find.textContaining('Def: chatgpt-codex'), findsOneWidget);
     expect(find.textContaining('CLI: codex'), findsWidgets);
 
-    // Check 5-step lifecycle indicator
+    // Check the V9 lifecycle indicator
     expect(find.text('Configure'), findsOneWidget);
     expect(find.text('Test'), findsOneWidget);
-    expect(find.text('Sync'), findsOneWidget);
+    expect(find.text('Validate'), findsOneWidget);
     expect(find.text('Publish'), findsOneWidget);
-    expect(find.text('Rollout'), findsOneWidget);
 
     // Check Next step card is present
     expect(find.text('Next step'), findsOneWidget);
@@ -208,16 +158,6 @@ void main() {
     expect(find.text('Worker Type ID'), findsOneWidget);
     expect(find.text('Profile Definition ID'), findsOneWidget);
     expect(find.text('Provider CLI Name'), findsOneWidget);
-    expect(find.text('Catalog Release Stage'), findsOneWidget);
-    expect(find.text('Catalog stage: stable'), findsWidgets);
-    controller.labAccess = ProfileLabAccessReadModel.fromJson({
-      'permissions': {'profilesAdmin': true, 'releaseManager': true},
-      'signer': {'ready': false},
-    });
-    controller.notifyListeners();
-    await tester.pump();
-    expect(find.text('Sync'), findsOneWidget);
-    expect(find.text('Publish'), findsOneWidget);
-    expect(find.text('Rollout'), findsOneWidget);
+    expect(find.text('Worker Lifecycle State'), findsOneWidget);
   });
 }

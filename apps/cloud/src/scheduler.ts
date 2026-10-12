@@ -264,16 +264,15 @@ export async function selectSpaceExecutionTarget(
             catalog.display_name AS worker_display_name,
             catalog.lifecycle_state AS worker_catalog_lifecycle_state,
             catalog.visibility_state AS worker_catalog_visibility_state,
-            catalog.release_stage AS worker_catalog_release_stage,
-            profile_channel.channel AS workspace_tool_profile_channel,
-            definition.profile_definition_id AS current_profile_definition_id,
             i.engine_version AS engine_version,
             i.profile_definition_id, i.profile_release_version,
             i.provider_tool_name,
             i.provider_tool_version,
             i.model_catalog_json,
-            release.payload_json AS execution_profile_json,
-            release.payload_digest AS execution_profile_digest,
+            COALESCE(current_profile.profile_json, history.profile_json)
+              AS execution_profile_json,
+            COALESCE(current_profile.digest, history.digest)
+              AS execution_profile_digest,
             i.activation_state AS local_worker_activation_state,
             i.readiness_state AS local_worker_readiness_state,
             vs.state AS cloud_scheduling_state,
@@ -289,30 +288,22 @@ export async function selectSpaceExecutionTarget(
      LEFT JOIN work_requests wr ON wr.id = ?5 AND wr.thread_id = ?4
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
      JOIN workspace_worker_inventory i ON i.workspace_id = ew.id
-     LEFT JOIN workspace_tool_profile_channels profile_channel
-       ON profile_channel.workspace_id = ew.id
      JOIN worker_catalog catalog
        ON catalog.worker_type_id = i.worker_type_id
       AND catalog.lifecycle_state = 'active'
       AND catalog.visibility_state = 'visible'
-      AND (COALESCE(profile_channel.channel, 'stable') = 'testing'
-           OR (COALESCE(profile_channel.channel, 'stable') = 'beta'
-               AND catalog.release_stage IN ('beta', 'stable'))
-           OR (COALESCE(profile_channel.channel, 'stable') = 'stable'
-               AND catalog.release_stage = 'stable'))
-     JOIN tool_profile_definitions definition
-       ON definition.worker_type_id = catalog.worker_type_id
-      AND definition.profile_definition_id = i.profile_definition_id
-      AND definition.lifecycle_state = 'active'
-     LEFT JOIN tool_profile_releases release
-       ON release.profile_definition_id = i.profile_definition_id
-      AND release.release_version = i.profile_release_version
-      AND release.worker_type_id = i.worker_type_id
-      AND release.published_at IS NOT NULL AND release.lifecycle_state != 'revoked'
+     LEFT JOIN worker_profiles current_profile
+       ON current_profile.worker_type_id = i.worker_type_id
+      AND current_profile.revision = i.profile_release_version
+     LEFT JOIN worker_profile_history history
+       ON history.worker_type_id = i.worker_type_id
+      AND history.revision = i.profile_release_version
      JOIN worker_scheduling vs ON vs.worker_id = i.worker_id
      WHERE g.space_id = ?1 AND g.status = 'active'
        AND (g.expires_at IS NULL OR g.expires_at > ?3)
        AND ew.status <> 'revoked'
+       AND (current_profile.worker_type_id IS NOT NULL
+            OR history.worker_type_id IS NOT NULL)
        ${isWorkspaceLive ? "" : "AND ew.status = 'online'"}
      ORDER BY CASE WHEN i.owner_user_id = ?2 THEN 0 ELSE 1 END,
               active_assignments, ew.id, i.worker_id`,
@@ -463,29 +454,11 @@ export async function selectSpaceExecutionTarget(
 
     const reject = (reason: string) =>
       rejected.push({ workspaceId, workerId, reason });
-    const catalogReleaseStage = String(row.worker_catalog_release_stage);
-    const workspaceProfileChannel = String(
-      row.workspace_tool_profile_channel ?? "stable",
-    );
-    const catalogStageEligible =
-      workspaceProfileChannel === "testing" ||
-      (workspaceProfileChannel === "beta" &&
-        ["beta", "stable"].includes(catalogReleaseStage)) ||
-      (workspaceProfileChannel === "stable" &&
-        catalogReleaseStage === "stable");
     if (
       row.worker_catalog_lifecycle_state !== "active" ||
-      row.worker_catalog_visibility_state !== "visible" ||
-      !catalogStageEligible
+      row.worker_catalog_visibility_state !== "visible"
     ) {
       reject("worker_catalog_unavailable");
-      continue;
-    }
-    if (
-      typeof row.current_profile_definition_id !== "string" ||
-      row.current_profile_definition_id !== row.profile_definition_id
-    ) {
-      reject("worker_profile_definition_unavailable");
       continue;
     }
     if (!grantPolicyValid) {

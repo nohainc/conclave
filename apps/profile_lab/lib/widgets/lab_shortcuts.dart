@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../controllers/profile_lab_controller.dart';
 
-/// Resource-scoped shortcuts; publication and rollout never have keyboard actions.
+/// Resource-scoped shortcuts for Profile editing and testing.
 class LabShortcuts extends StatefulWidget {
   const LabShortcuts(
       {super.key, required this.controller, required this.child});
@@ -59,17 +59,12 @@ class _LabShortcutsState extends State<LabShortcuts> {
       return;
     }
     switch (c.selectedArea) {
-      case LabArea.workspaces:
-        if (!c.isLoadingWorkspaces) _perform(c.fetchWorkspaceChannels);
       case LabArea.issues:
         if (!c.isLoadingIssueReports) _perform(c.fetchIssueReports);
       case LabArea.audit:
         if (!c.isLoadingAudit) _perform(() => c.fetchCloudAudit());
       case LabArea.workers:
-        if (c.workerSubView == WorkerSubView.releases &&
-            c.selectedDefinitionId != null) {
-          if (!c.isLoadingReleases) _perform(() => c.fetchCloudReleases());
-        } else if (c.workerSubView == WorkerSubView.draftAndTest &&
+        if (c.workerSubView == WorkerSubView.draftAndTest &&
             c.currentDraft != null) {
           // refreshEvidence checks Cloud state without replacing the editor text.
           if (!c.isLoadingEvidence) _perform(c.refreshEvidence);

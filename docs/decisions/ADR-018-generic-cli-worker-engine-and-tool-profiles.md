@@ -5,6 +5,12 @@
 **Historical decision:** one generic Engine with signed Tool Profiles for all supported local CLI Workers.
 **Preserves:** ADR-012 Workspace ownership, ADR-015 logical Worker catalog, ADR-016 AX-owned Worker usage
 
+**V9 superseding decision:** [WORKER_PROFILE_V9.md](../specifications/WORKER_PROFILE_V9.md)
+defines one centrally published Profile per logical Worker. The V8 release and
+channel lifecycle described below remains historical; V9 cleanup removes its
+production routes and D1 lifecycle tables while retaining signed snapshots,
+diagnostic history, and security audit records.
+
 ## Context
 
 The runtime requires a clear process and security boundary:
