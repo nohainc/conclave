@@ -264,6 +264,9 @@ Future<WorkerFrame> _nextTerminalFrame(
       onProgress?.call(frame);
       continue;
     }
+    if (frame is WorkerActivity) {
+      continue;
+    }
     return frame;
   }
   throw StateError('CLI Worker Engine closed before a terminal frame');

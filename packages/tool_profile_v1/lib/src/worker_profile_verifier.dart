@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import '../tool_profile_v1.dart';
-import 'worker_trust_policy.dart';
 
 /// Verifies the single current V9 Profile snapshot before a component caches,
 /// activates, or executes it. Cloud's `verified` flag is informational; the

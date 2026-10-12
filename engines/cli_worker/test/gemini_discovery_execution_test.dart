@@ -99,7 +99,9 @@ Future<void> main(List<String> args) async {
         await process.stdin.flush();
         while (await lines.moveNext().timeout(const Duration(seconds: 20))) {
           final frame = decodeWorkerFrame(lines.current);
-          if (frame.requestId == request.requestId && frame is! WorkerProgress)
+          if (frame.requestId == request.requestId &&
+              frame is! WorkerProgress &&
+              frame is! WorkerActivity)
             return frame;
         }
         throw StateError('No response: $errors');

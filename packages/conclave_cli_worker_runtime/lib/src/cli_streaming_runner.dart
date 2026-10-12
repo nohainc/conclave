@@ -66,8 +66,9 @@ class CliStreamingRunner {
             var line = pending.substring(0, newline);
             if (line.endsWith('\r')) line = line.substring(0, line.length - 1);
             await onStdoutLine(line);
-            pendingBytes -=
-                utf8.encode(pending.substring(0, newline + 1)).length;
+            pendingBytes -= utf8
+                .encode(pending.substring(0, newline + 1))
+                .length;
             pending = pending.substring(newline + 1);
             newline = pending.indexOf('\n');
           }

@@ -97,7 +97,8 @@ Future<void> main(List<String> args) async {
         while (await lines.moveNext().timeout(const Duration(seconds: 20))) {
           final response = decodeWorkerFrame(lines.current);
           if (response.requestId == request.requestId &&
-              response is! WorkerProgress)
+              response is! WorkerProgress &&
+              response is! WorkerActivity)
             return response;
         }
         throw StateError('No response');
