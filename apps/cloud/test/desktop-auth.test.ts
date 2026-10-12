@@ -360,6 +360,29 @@ describe("desktop human authentication", () => {
     ).rejects.toThrow(/invalid, expired, or revoked/);
   });
 
+  it("uses the configured browser application origin for desktop approval", async () => {
+    const { env } = await setup();
+    (env as Record<string, unknown>).CONCLAVE_APP_URL =
+      "http://localhost:3000/";
+    const response = await handleCreateDesktopAuthIntent(
+      new Request("http://localhost:8787/api/desktop-auth/intents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          clientName: "Conclave Workspace",
+          contractVersion: "1.1",
+        }),
+      }),
+      env,
+    );
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { verificationUrl: string };
+    expect(body.verificationUrl).toMatch(
+      /^http:\/\/localhost:3000\/desktop-auth\/approve\?intentId=/,
+    );
+  });
+
   it("lets only the intent poll credential cancel and expose terminal browser status", async () => {
     const { env } = await setup();
     const create = await handleCreateDesktopAuthIntent(

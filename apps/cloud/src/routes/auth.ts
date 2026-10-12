@@ -161,6 +161,27 @@ export {
 export const DESKTOP_HUMAN_AUDIENCE = DESKTOP_WORKSPACE_AUDIENCE;
 const DESKTOP_HUMAN_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
+function desktopAuthAppOrigin(request: Request, env: SecurityEnv): string {
+  const configured =
+    env.CONCLAVE_APP_URL?.trim() || env.BETTER_AUTH_URL?.trim();
+  if (!configured) return new URL(request.url).origin;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(configured);
+  } catch {
+    throw new HttpError(500, "Desktop sign-in application URL is invalid");
+  }
+  if (
+    parsed.protocol !== "https:" &&
+    parsed.hostname !== "localhost" &&
+    parsed.hostname !== "127.0.0.1"
+  ) {
+    throw new HttpError(500, "Desktop sign-in application URL must use HTTPS");
+  }
+  return parsed.origin;
+}
+
 export function randomSecret(prefix: string): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   let binary = "";
@@ -222,7 +243,10 @@ export async function handleCreateDesktopAuthIntent(
     )
     .run();
 
-  const verificationUrl = new URL("/desktop-auth/approve", request.url);
+  const verificationUrl = new URL(
+    "/desktop-auth/approve",
+    desktopAuthAppOrigin(request, env),
+  );
   verificationUrl.searchParams.set("intentId", intentId);
   return json(
     {

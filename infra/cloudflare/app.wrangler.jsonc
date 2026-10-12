@@ -26,6 +26,7 @@
     "CONCLAVE_PROFILE_LAB_OWNER_EMAIL": "vitalii@nohainc.com",
     "CONCLAVE_ENVIRONMENT": "production",
     "BETTER_AUTH_URL": "https://app.conclaveax.com",
+    "CONCLAVE_APP_URL": "https://app.conclaveax.com",
     "CONCLAVE_EMAIL_FROM": "conclave@nohainc.com",
     "CONCLAVE_EMAIL_FALLBACK_FROM": "vitalii@nohainc.com",
     "CONCLAVE_EMAIL_FROM_NAME": "Conclave AX",

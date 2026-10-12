@@ -62,6 +62,10 @@ repository access. Repository authorization is a separate future integration.
 Set these values in the Worker environment:
 
 - `BETTER_AUTH_URL` — application origin, such as `https://app.conclaveax.com`;
+- `CONCLAVE_APP_URL` — browser application origin used for desktop Workspace
+  approval pages, such as `https://app.conclaveax.com`. Set this separately
+  when the Cloud API and browser application use different origins or local
+  development ports.
 - `CONCLAVE_AUTH_GITHUB_CLIENT_ID` — GitHub OAuth client ID;
 - `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET` — GitHub OAuth client secret;
 - `CONCLAVE_AUTH_GOOGLE_CLIENT_ID` — Google OAuth client ID;

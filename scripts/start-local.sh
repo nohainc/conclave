@@ -127,6 +127,7 @@ exec pnpm exec wrangler dev \\
   --port "${PORT}" \\
   --ip "${IP}" \\
   --var "BETTER_AUTH_URL:${API_URL}" \\
+  --var "CONCLAVE_APP_URL:${WEB_URL}" \\
   --var "BETTER_AUTH_TRUSTED_ORIGINS:${API_URL},${WEB_URL},http://localhost:${PORT},http://127.0.0.1:${PORT},https://app.conclaveax.com"
 EOF
 chmod +x "${RUNNER_API}"

@@ -52,6 +52,39 @@ void main() {
     expect(intent.verificationUrl.path, '/desktop-auth/approve');
   });
 
+  test('accepts an approval page hosted on a separate browser origin',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final responseSent = Completer<void>();
+    server.listen((request) async {
+      expect(request.uri.path, '/api/desktop-auth/intents');
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'intentId': 'intent-a',
+        'pollToken': 'poll-token',
+        'verificationUrl':
+            'http://127.0.0.1:3000/desktop-auth/approve?intentId=intent-a',
+        'expiresAt': DateTime.now()
+            .toUtc()
+            .add(const Duration(minutes: 5))
+            .toIso8601String(),
+        'pollIntervalMs': 2000,
+      }));
+      await request.response.close();
+      responseSent.complete();
+    });
+
+    final client = DesktopAuthClient(
+      cloudUrl: 'http://127.0.0.1:${server.port}',
+    );
+    addTearDown(client.close);
+
+    final intent = await client.createIntent();
+    expect(intent.verificationUrl.port, 3000);
+    await responseSent.future;
+  });
+
   test('restores the persisted desktop session shape without a wire audience',
       () {
     final issuedAt = DateTime.now().toUtc();
