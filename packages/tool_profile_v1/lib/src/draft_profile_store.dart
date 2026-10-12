@@ -67,6 +67,9 @@ class DraftProfileStore {
   Directory _evidenceDir(String profileDefinitionId) =>
       Directory('${_definitionDir(profileDefinitionId).path}/evidence');
 
+  Directory _recoveryDir(String profileDefinitionId) =>
+      Directory('${_definitionDir(profileDefinitionId).path}/recovery');
+
   File _draftFile(String profileDefinitionId) =>
       File('${_definitionDir(profileDefinitionId).path}/draft.json');
 
@@ -163,6 +166,50 @@ class DraftProfileStore {
     final content = await file.readAsString();
     final json = jsonDecode(content) as Map<String, Object?>;
     return LocalDraftProfileCandidate.fromProfileMap(json);
+  }
+
+  /// Saves an editor recovery buffer without validating or publishing it.
+  ///
+  /// Recovery buffers intentionally live outside [draft.json]. They may contain
+  /// incomplete JSON and are never considered a draft, test result, or Cloud
+  /// publication candidate until a developer explicitly restores and saves
+  /// them.
+  Future<void> saveRecoverySnapshot({
+    required String profileDefinitionId,
+    required String jsonText,
+    int keep = 5,
+  }) async {
+    final dir = _recoveryDir(profileDefinitionId);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+      await _enforcePermissions(dir, isDirectory: true);
+    }
+    final filename = '${DateTime.now().toUtc().microsecondsSinceEpoch}.json';
+    final file = File('${dir.path}/$filename');
+    await _atomicWrite(file, jsonText);
+
+    final snapshots = (await dir.list().toList())
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.json'))
+        .toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    final removeCount = snapshots.length - keep;
+    for (var index = 0; index < removeCount; index++) {
+      await snapshots[index].delete();
+    }
+  }
+
+  /// Returns the newest recovery buffer, if one exists.
+  Future<String?> loadLatestRecoverySnapshot(String profileDefinitionId) async {
+    final dir = _recoveryDir(profileDefinitionId);
+    if (!await dir.exists()) return null;
+    final snapshots = (await dir.list().toList())
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.json'))
+        .toList()
+      ..sort((a, b) => b.path.compareTo(a.path));
+    if (snapshots.isEmpty) return null;
+    return snapshots.first.readAsString();
   }
 
   /// Loads metadata for a draft.

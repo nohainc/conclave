@@ -263,6 +263,29 @@ void main() {
       expect(controller.isDirty, isFalse);
     });
 
+    test('invalid JSON reports a location and keeps a local recovery snapshot',
+        () async {
+      await controller.createNewDraft(
+        profileDefinitionId: 'recovery-test',
+        workerTypeId: 'recovery-worker',
+        providerToolName: 'recovery-cli',
+      );
+      const invalid = '{\n  "schemaVersion": 1,\n';
+      controller.updateJsonText(invalid);
+
+      expect(controller.jsonValidationError, isNotNull);
+      expect(controller.jsonValidationLocation, startsWith('line '));
+      await Future<void>.delayed(const Duration(milliseconds: 850));
+      expect(
+        await controller.store.loadLatestRecoverySnapshot('recovery-test'),
+        invalid,
+      );
+
+      expect(await controller.restoreLatestRecoverySnapshot(), isTrue);
+      expect(controller.currentJsonText, invalid);
+      expect(controller.isDirty, isTrue);
+    });
+
     test('discovers only executable names declared by Worker and Profile data',
         () async {
       await controller.createNewDraft(

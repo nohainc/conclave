@@ -16,9 +16,7 @@ class LabShortcuts extends StatefulWidget {
 class _LabShortcutsState extends State<LabShortcuts> {
   bool _running = false;
   bool get _available =>
-      !_running &&
-      ModalRoute.of(context)?.isCurrent != false &&
-      widget.controller.labAccess?.profilesAdmin == true;
+      !_running && ModalRoute.of(context)?.isCurrent != false;
   Future<void> _perform(Future<void> Function() action) async {
     if (!_available) return;
     setState(() => _running = true);

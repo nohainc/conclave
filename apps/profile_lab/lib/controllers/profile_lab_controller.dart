@@ -102,7 +102,9 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   DraftProfileMetadata? currentMetadata;
   String currentJsonText = '';
   String? jsonValidationError;
+  String? jsonValidationLocation;
   bool isDirty = false;
+  Timer? _recoveryTimer;
 
   // Draft Sync state & optimistic concurrency
   DraftSyncState syncState = DraftSyncState.saved;
@@ -257,6 +259,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _recoveryTimer?.cancel();
     _disposed = true;
     super.dispose();
   }

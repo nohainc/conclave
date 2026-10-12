@@ -99,19 +99,21 @@ void main() {
     await tester.pump();
     expect(tester.getSize(editor).height, greaterThan(before));
     final changed = '${c.currentJsonText}\n';
-    await tester.enterText(find.byType(TextField), changed);
+    await tester.enterText(find.byType(EditableText), changed);
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
     expect(find.text('Save'), findsOneWidget);
-    final run = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Run Full Test'));
+    final run = tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, 'Run tests'));
     expect(run.onPressed, isNull);
     await tester.tap(find.byTooltip('Collapse editor'));
     await tester.pump();
-    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(EditableText), findsNothing);
     expect(find.text('Profile Tests'), findsOneWidget);
     await tester.tap(find.byTooltip('Show editor'));
     await tester.pump();
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+    expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
         changed);
     await tester.tap(find.byTooltip('Show Inspector'));
     await tester.pump();
@@ -127,20 +129,18 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Save then Sync to Cloud is the primary workflow',
+  testWidgets('Save and development actions keep stable purposes',
       (tester) async {
     await mount(tester, const Size(1200, 800));
     c.updateJsonText(c.currentJsonText);
     await tester.pump();
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Save'));
     await tester.pumpAndSettle();
     expect(c.saves, 1);
     expect(c.syncs, 0);
-    await tester.tap(find.widgetWithText(FilledButton, 'Sync to Cloud'));
-    await tester.pumpAndSettle();
-    expect(c.syncs, 1);
-    expect(find.text('Draft v1 · Saved locally · Synced to Cloud'),
-        findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Validate'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Run tests'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Publish'), findsOneWidget);
     c.cloudDraftVersion = 2;
     c.notifyListeners();
     await tester.pump();
@@ -148,10 +148,11 @@ void main() {
         findsOneWidget);
     c.updateJsonText('{ invalid');
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
     expect(find.textContaining('Synced to Cloud'), findsNothing);
     expect(
         tester
-            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save'))
+            .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Save'))
             .onPressed,
         isNull);
   });
@@ -168,7 +169,7 @@ void main() {
         findsOneWidget);
     await tester.ensureVisible(find.text('Overwrite Cloud Draft'));
     await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(EditableText), findsOneWidget);
     expect(find.text('Compare Local vs Cloud'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -177,7 +178,7 @@ void main() {
       'advanced actions stay in overflow and format updates the dirty editor',
       (tester) async {
     await mount(tester, const Size(1200, 800));
-    expect(find.text('Experimental Repair'), findsNothing);
+    expect(find.text('AI Repair'), findsNothing);
     expect(find.text('AI Proposal'), findsNothing);
     c.updateJsonText(jsonEncode(c.currentDraft!.profile));
     await tester.pump();
@@ -185,15 +186,18 @@ void main() {
     await tester.pumpAndSettle();
     for (final action in [
       'Format JSON',
-      'Compare',
-      'Revert',
-      'Experimental Repair'
+      'Compare with current Profile',
+      'Restore saved Profile',
+      'Restore recovery snapshot',
+      'AI Repair'
     ]) {
       expect(find.text(action), findsOneWidget);
     }
     await tester.tap(find.text('Format JSON'));
     await tester.pumpAndSettle();
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(
+        tester.widget<EditableText>(find.byType(EditableText)).controller.text,
         contains('\n  "schemaVersion"'));
     expect(c.isDirty, isTrue);
     expect(tester.takeException(), isNull);
@@ -203,7 +207,7 @@ void main() {
       'failed tests expose contextual repair and narrow panes remain usable',
       (tester) async {
     await mount(tester, const Size(760, 520));
-    expect(find.text('Experimental Repair'), findsNothing);
+    expect(find.text('AI Repair'), findsNothing);
     c.testedDraftDigest = c.currentDraft!.payloadDigest;
     c.testedProfileDefinitionId = c.currentDraft!.profileDefinitionId;
     c.lastTestResult = 'fail';
@@ -218,7 +222,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.tap(find.byTooltip('Collapse tests'));
     await tester.pump();
-    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(EditableText), findsOneWidget);
     expect(find.text('Profile Tests'), findsNothing);
     await tester.tap(find.byTooltip('Show tests'));
     await tester.pump();

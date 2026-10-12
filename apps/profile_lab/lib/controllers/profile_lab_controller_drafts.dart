@@ -30,6 +30,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       currentDraft = null;
       currentMetadata = null;
       currentJsonText = '';
+      jsonValidationLocation = null;
       currentEvidence = [];
     }
     notifyListeners();
@@ -63,6 +64,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       const encoder = JsonEncoder.withIndent('  ');
       currentJsonText = encoder.convert(currentDraft!.profile);
       jsonValidationError = null;
+      jsonValidationLocation = null;
       isDirty = false;
       await refreshEvidence();
       if (!isV9ProfileRegistry) await fetchAndSyncCloudDraft();
@@ -157,6 +159,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
   void updateJsonText(String text) {
     currentJsonText = text;
     isDirty = true;
+    jsonValidationLocation = null;
     // A candidate digest changes with the editor buffer. Invalidate both local
     // test evidence and Cloud validation immediately, before the next save.
     resetDraftTestState();
@@ -171,10 +174,50 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       }
     } on FormatException catch (e) {
       jsonValidationError = e.message;
+      final offset = e.offset;
+      if (offset != null && offset >= 0) {
+        final safeOffset = offset.clamp(0, text.length);
+        final lineStart =
+            safeOffset == 0 ? 0 : text.lastIndexOf('\n', safeOffset - 1) + 1;
+        final line = '\n'.allMatches(text.substring(0, safeOffset)).length + 1;
+        jsonValidationLocation =
+            'line $line, column ${safeOffset - lineStart + 1}';
+      }
     } catch (e) {
       jsonValidationError = e.toString();
     }
+    _scheduleRecoverySnapshot();
     notifyListeners();
+  }
+
+  void _scheduleRecoverySnapshot() {
+    final profileDefinitionId = selectedDefinitionId;
+    if (profileDefinitionId == null) return;
+    _recoveryTimer?.cancel();
+    final text = currentJsonText;
+    _recoveryTimer = Timer(const Duration(milliseconds: 750), () {
+      unawaited(() async {
+        try {
+          await store.saveRecoverySnapshot(
+            profileDefinitionId: profileDefinitionId,
+            jsonText: text,
+          );
+        } catch (_) {
+          // Recovery is best-effort and must never interrupt editing.
+        }
+      }());
+    });
+  }
+
+  /// Restores the newest local recovery buffer into the editor without saving
+  /// it as a draft or sending anything to Cloud.
+  Future<bool> restoreLatestRecoverySnapshot() async {
+    final profileDefinitionId = selectedDefinitionId;
+    if (profileDefinitionId == null) return false;
+    final text = await store.loadLatestRecoverySnapshot(profileDefinitionId);
+    if (text == null) return false;
+    updateJsonText(text);
+    return true;
   }
 
   /// Reverts modified text back to the last saved draft payload on disk.
@@ -264,6 +307,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     currentMetadata = await store.loadDraftMetadata(selectedDefinitionId!);
     pendingAiProvenance = null;
     isDirty = false;
+    jsonValidationLocation = null;
     updateSyncState();
     await refreshEvidence();
     notifyListeners();

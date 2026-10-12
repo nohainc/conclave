@@ -153,6 +153,24 @@ editor retains most of the window. Focus mode may hide those auxiliary panels
 and the sidebar without discarding unsaved text, cursor selection, or scroll
 position for any Worker.
 
+Profile Lab editing MUST keep local development state separate from publication:
+
+- `Save` writes the validated candidate locally; it MUST NOT publish or sync to
+  Cloud implicitly, including through the `⌘S` shortcut.
+- Profile Lab MAY retain bounded, local recovery buffers, including incomplete
+  JSON. Recovery buffers MUST remain outside the saved candidate and MUST NOT
+  count as validation, test evidence, or publication input until explicitly
+  restored and saved.
+- The editor MUST expose independent `Saved/Unsaved`, `Valid/Invalid`, and
+  `Tests Passed/Failed/Not Run` states. A candidate digest change invalidates
+  digest-bound validation and test evidence immediately.
+- Formatting, compare-with-current, restore, and AI repair are secondary
+  actions. AI repair produces an editable candidate and MUST require the same
+  validation, testing, and operator publication flow as manual edits.
+- Syntax diagnostics SHOULD identify a line and column when the parser
+  provides an offset; schema diagnostics without a source offset remain
+  ordinary validation messages.
+
 Cloud owns the authoritative transition:
 
 1. authenticate the Profile Lab audience and required operator permission;

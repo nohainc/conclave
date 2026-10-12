@@ -78,6 +78,16 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
         _compare();
       case 'revert':
         _perform(c.revertCurrentDraft);
+      case 'recovery':
+        _perform(() async {
+          final restored = await c.restoreLatestRecoverySnapshot();
+          if (!restored && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text('No recovery snapshot is available.')),
+            );
+          }
+        });
       case 'repair':
         AiRepairLoopDialog.show(context, c);
     }
@@ -246,7 +256,9 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                _draftStatus(c),
+                c.isV9ProfileRegistry
+                    ? 'Worker Profile · revision ${c.currentProfileRevision}'
+                    : _draftStatus(c),
                 key: const ValueKey('draft-status'),
                 style: const TextStyle(
                   fontSize: 13,
@@ -256,52 +268,88 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
               const SizedBox(height: 6),
               Wrap(
                 spacing: 6,
+                runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Tooltip(
-                    message: c.isDirty
-                        ? 'Save locally (⌘S)'
-                        : c.isV9ProfileRegistry
-                            ? 'Validate candidate with Cloud'
-                            : 'Sync to Cloud',
-                    child: FilledButton.icon(
-                      icon: Icon(
-                        c.isDirty
-                            ? Icons.save_outlined
-                            : c.isV9ProfileRegistry
-                                ? Icons.verified_outlined
-                                : Icons.cloud_upload_outlined,
-                        size: 16,
-                      ),
-                      label: Text(
-                        locked
-                            ? 'Working…'
-                            : c.isDirty
-                                ? 'Save'
-                                : c.isV9ProfileRegistry
-                                    ? (c.isValidatingCandidate
-                                        ? 'Validating…'
-                                        : 'Validate candidate')
-                                    : 'Sync to Cloud',
-                      ),
-                      onPressed: locked ||
-                              c.jsonValidationError != null ||
-                              (!c.isDirty &&
-                                  (!c.isV9ProfileRegistry &&
-                                      (c.currentSession == null ||
-                                          c.syncState ==
-                                              DraftSyncState.conflict ||
-                                          c.syncState ==
-                                              DraftSyncState.cloudChanged)))
-                          ? null
-                          : () => _perform(
-                                c.isDirty
-                                    ? c.saveCurrentDraft
-                                    : c.isV9ProfileRegistry
-                                        ? c.validateCurrentDraft
-                                        : c.saveCurrentDraftToCloud,
-                              ),
-                    ),
+                  StatusBadge(
+                    label: c.isDirty ? 'Unsaved' : 'Saved',
+                    status: c.isDirty ? LabStatus.warning : LabStatus.success,
+                    icon: c.isDirty
+                        ? Icons.edit_outlined
+                        : Icons.check_circle_outline,
+                  ),
+                  StatusBadge(
+                    label: c.jsonValidationError == null ? 'Valid' : 'Invalid',
+                    status: c.jsonValidationError == null
+                        ? LabStatus.success
+                        : LabStatus.error,
+                    icon: c.jsonValidationError == null
+                        ? Icons.data_object
+                        : Icons.error_outline,
+                  ),
+                  StatusBadge(
+                    label: c.isTesting
+                        ? 'Running'
+                        : !c.testResultMatchesDraft || c.lastTestResult == null
+                            ? 'Not Run'
+                            : c.lastTestResult == 'pass'
+                                ? 'Tests Passed'
+                                : 'Tests Failed',
+                    status: c.isTesting
+                        ? LabStatus.neutral
+                        : !c.testResultMatchesDraft || c.lastTestResult == null
+                            ? LabStatus.neutral
+                            : c.lastTestResult == 'pass'
+                                ? LabStatus.success
+                                : LabStatus.error,
+                    icon: c.isTesting
+                        ? Icons.hourglass_top
+                        : c.lastTestResult == 'pass' && c.testResultMatchesDraft
+                            ? Icons.check_circle_outline
+                            : c.lastTestResult == 'fail' &&
+                                    c.testResultMatchesDraft
+                                ? Icons.error_outline
+                                : Icons.science_outlined,
+                  ),
+                  const SizedBox(width: 2),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.save_outlined, size: 16),
+                    label: const Text('Save'),
+                    onPressed:
+                        locked || !c.isDirty || c.jsonValidationError != null
+                            ? null
+                            : () => _perform(c.saveCurrentDraft),
+                  ),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.verified_outlined, size: 16),
+                    label: const Text('Validate'),
+                    onPressed: locked ||
+                            !c.isV9ProfileRegistry ||
+                            c.isDirty ||
+                            c.jsonValidationError != null
+                        ? null
+                        : () => _perform(c.validateCurrentDraft),
+                  ),
+                  OutlinedButton.icon(
+                    icon: const Icon(Icons.science_outlined, size: 16),
+                    label: const Text('Run tests'),
+                    onPressed:
+                        locked || c.isDirty || c.jsonValidationError != null
+                            ? null
+                            : () => _perform(c.runTestLadder),
+                  ),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                    label: const Text('Publish'),
+                    onPressed: locked ||
+                            !c.isV9ProfileRegistry ||
+                            c.isDirty ||
+                            c.jsonValidationError != null ||
+                            !c.candidateIsCloudValidated ||
+                            !c.testResultMatchesDraft ||
+                            c.lastTestResult != 'pass'
+                        ? null
+                        : () => _perform(c.publishCurrentDraft),
                   ),
                   IconButton(
                     tooltip: _showEditor ? 'Collapse editor' : 'Show editor',
@@ -352,17 +400,22 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                       ),
                       const PopupMenuItem(
                         value: 'compare',
-                        child: Text('Compare'),
+                        child: Text('Compare with current Profile'),
                       ),
                       PopupMenuItem(
                         value: 'revert',
                         enabled: !locked && c.isDirty,
-                        child: const Text('Revert'),
+                        child: const Text('Restore saved Profile'),
+                      ),
+                      PopupMenuItem(
+                        value: 'recovery',
+                        enabled: !locked,
+                        child: const Text('Restore recovery snapshot'),
                       ),
                       PopupMenuItem(
                         value: 'repair',
                         enabled: !locked && !c.isDirty,
-                        child: const Text('Experimental Repair'),
+                        child: const Text('AI Repair'),
                       ),
                     ],
                   ),
