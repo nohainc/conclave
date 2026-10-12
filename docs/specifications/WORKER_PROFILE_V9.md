@@ -203,6 +203,13 @@ Legacy release-state files may remain during migration, but they are not
 consulted once a Worker has a V9 cache entry. Explicit revocation of current
 must not fall back to last-known-good.
 
+Workspace's Worker management view is operational rather than publication-
+oriented. It SHOULD show the logical Worker, provider tool and detected CLI
+version, current Profile revision and status, enabled/disabled state,
+readiness, and execution permissions. It MUST NOT expose Profile channels,
+release promotion, or publication workflow details. A small update check and a
+local Worker test remain available as user-facing actions.
+
 ## 7. Execution snapshots and continuity
 
 When Workspace admits an assignment, it binds the execution to a Profile

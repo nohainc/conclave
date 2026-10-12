@@ -212,9 +212,6 @@ class _WorkersTabState extends State<_WorkersTab> {
             : <String>{
                 ...view.statusBadges(),
                 view.state.label,
-                'Profile · ${view.profileState.label}',
-                if (profile?['unsignedDevelopment'] == true)
-                  'Unsigned · Local development',
               }.toList();
     final providerToolName = worker?.toolName ?? entry.providerToolName;
     final providerToolVersion = switch (view.providerToolState) {
@@ -228,8 +225,20 @@ class _WorkersTabState extends State<_WorkersTab> {
       WorkspaceProviderToolState.available =>
         worker?.toolVersion ?? 'Available',
     };
-    final profileVersion =
-        profile?['releaseVersion'] ?? profile?['activeVersion'];
+    final profileRevision = profile?['revision'] ??
+        profile?['releaseVersion'] ??
+        profile?['activeVersion'];
+    final profileStatus = _profileStatusLabel(view, pending: pending);
+    final workerState = worker == null
+        ? 'Not configured'
+        : disabled
+            ? 'Disabled'
+            : 'Enabled';
+    final readinessStatus = pending
+        ? readiness
+        : ready
+            ? 'Ready'
+            : 'Needs attention';
     final availableModels = worker?.modelCatalog?.models
             .where((model) => model.status != 'unavailable')
             .map((model) => model.name)
@@ -308,19 +317,24 @@ class _WorkersTabState extends State<_WorkersTab> {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(top: 3),
-                  child: Text('$providerToolName $providerToolVersion',
+                  child: Text('Provider tool: $providerToolName',
                       style: theme.textTheme.bodySmall),
                 ),
-                if (profileVersion != null)
-                  Text('Profile v$profileVersion',
+                Text('Installed CLI version: $providerToolVersion',
+                    style: theme.textTheme.bodySmall),
+                if (profileRevision != null)
+                  Text('Profile revision: $profileRevision',
                       style: theme.textTheme.bodySmall),
+                Text('Profile status: $profileStatus',
+                    style: theme.textTheme.bodySmall),
+                Text('Worker state: $workerState',
+                    style: theme.textTheme.bodySmall),
+                Text('Readiness: $readinessStatus',
+                    style: theme.textTheme.bodySmall),
                 if (worker != null)
                   Text(
-                    worker.fullLocalAccessAuthorized
-                        ? 'Execution: Full local access'
-                        : 'Execution: Restricted',
-                    style: theme.textTheme.bodySmall,
-                  ),
+                      'Execution permissions: ${worker.fullLocalAccessAuthorized ? 'Full local access' : 'Restricted'}',
+                      style: theme.textTheme.bodySmall),
               ],
             ),
           ),
@@ -342,6 +356,26 @@ class _WorkersTabState extends State<_WorkersTab> {
         ],
       ),
     );
+  }
+
+  String _profileStatusLabel(
+    WorkerCatalogWorkerState view, {
+    required bool pending,
+  }) {
+    if (pending) return 'Checking…';
+    return switch (view.profileState) {
+      WorkspaceWorkerProfileState.ready =>
+        view.profileAvailability.details?['source'] == 'lastKnownGood'
+            ? 'Update available'
+            : 'Current',
+      WorkspaceWorkerProfileState.incompatible => 'Incompatible',
+      WorkspaceWorkerProfileState.resolving ||
+      WorkspaceWorkerProfileState.syncing =>
+        'Checking…',
+      WorkspaceWorkerProfileState.unavailable ||
+      WorkspaceWorkerProfileState.error =>
+        'Update available',
+    };
   }
 
   Widget _buildRetiredWorkerCard(

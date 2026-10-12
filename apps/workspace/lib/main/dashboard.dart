@@ -321,7 +321,7 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                               ),
                             ),
                             IconButton(
-                              tooltip: 'Refresh Worker catalog',
+                              tooltip: 'Check for Worker updates',
                               onPressed: snapshot.serviceHealthy ||
                                       snapshot.serviceRunning
                                   ? () => unawaited(

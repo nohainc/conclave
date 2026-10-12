@@ -1381,8 +1381,9 @@ void main() {
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
     expect(find.text('Setup required'), findsNWidgets(2));
-    expect(find.text('codex Unknown'), findsOneWidget);
-    expect(find.text('agy Unknown'), findsOneWidget);
+    expect(find.text('Provider tool: codex'), findsOneWidget);
+    expect(find.text('Provider tool: agy'), findsOneWidget);
+    expect(find.text('Installed CLI version: Unknown'), findsNWidgets(2));
     expect(find.textContaining('Capabilities:'), findsNothing);
     expect(find.text('Diagnostics'), findsNothing);
     expect(find.text('Set up ChatGPT'), findsNothing);
@@ -1573,8 +1574,15 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Setup required'), findsOneWidget);
-    expect(find.text('Codex CLI 1.2.3'), findsOneWidget);
-    expect(find.text('agy Not detected'), findsOneWidget);
+    expect(find.text('Provider tool: Codex CLI'), findsOneWidget);
+    expect(find.text('Installed CLI version: 1.2.3'), findsOneWidget);
+    expect(find.text('Provider tool: agy'), findsOneWidget);
+    expect(find.text('Installed CLI version: Not detected'), findsOneWidget);
+    expect(find.text('Profile revision: 1'), findsNWidgets(2));
+    expect(find.text('Profile status: Current'), findsNWidgets(2));
+    expect(find.text('Worker state: Disabled'), findsOneWidget);
+    expect(find.text('Readiness: Needs attention'), findsNWidgets(2));
+    expect(find.text('Execution permissions: Restricted'), findsNWidgets(2));
     expect(find.text('Test'), findsNWidgets(2));
     expect(find.textContaining('Test failed (execution_test_failed)'),
         findsNothing);
@@ -1604,7 +1612,8 @@ void main() {
     expect(find.text('Engine version'), findsNothing);
     expect(find.text('Provider CLI version'), findsNothing);
     expect(find.text('Tool'), findsNothing);
-    expect(find.text('Codex CLI 1.2.3'), findsOneWidget);
+    expect(find.text('Provider tool: Codex CLI'), findsOneWidget);
+    expect(find.text('Installed CLI version: 1.2.3'), findsOneWidget);
     expect(find.textContaining('Worker version'), findsNothing);
     expect(find.textContaining('Signing key'), findsNothing);
     expect(find.textContaining('Release channel'), findsNothing);
@@ -1681,7 +1690,7 @@ void main() {
     );
     expect(
       find.descendant(
-          of: chatGptCard, matching: find.text('Profile · Available')),
+          of: chatGptCard, matching: find.textContaining('Profile ·')),
       findsNothing,
     );
     expect(

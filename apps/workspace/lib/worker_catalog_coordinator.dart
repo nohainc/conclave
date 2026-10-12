@@ -558,6 +558,8 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
             },
             if (resolution.release != null)
               'releaseVersion': resolution.release!.releaseVersion,
+            if (resolution.release != null)
+              'revision': resolution.release!.revision,
           },
         ),
         generation,
