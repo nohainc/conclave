@@ -329,6 +329,11 @@ the Dart `conclave_tool_profile_v1` package for Profile Lab, Workspace, and
 Engine runtime validation. Both implementations MUST remain semantically
 aligned with the versioned Profile schema.
 
+The Dart package owns the canonical V9 snapshot admission check used by both
+Profile Lab and Workspace. Each consumer supplies its local trust policy and
+expected Worker identity; neither consumer may substitute Cloud's `verified`
+flag for local digest, schema, or signature verification.
+
 The validation contract MUST include:
 
 - strict JSON schema validation, including rejection of unknown fields unless

@@ -282,7 +282,7 @@ class ProfileLabTestSandbox {
 
   /// Discovers model metadata without invoking a model or bypassing trust admission.
   Future<DiscoveredModelCatalog?> discoverTrustedModels(
-    ToolProfileReleaseAdmission profile,
+    ToolProfileCandidate profile,
   ) async {
     if (!profile.isSigned) {
       throw StateError('Discovery requires a signed Profile.');
@@ -328,7 +328,7 @@ class ProfileLabTestSandbox {
   /// Runs a draft proposal through a trusted, signed Worker Profile. The
   /// unsigned Profile being edited is never used to invoke the model.
   Future<String> runTrustedModelProposal({
-    required ToolProfileReleaseAdmission modelProfile,
+    required ToolProfileCandidate modelProfile,
     required String prompt,
     String? model,
     String? reasoningEffort,

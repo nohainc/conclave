@@ -12,7 +12,7 @@ class ProfileLabAiModelOption {
   const ProfileLabAiModelOption({
     required this.id,
     required this.label,
-    required this.release,
+    required this.profile,
     this.model,
     this.capability,
     this.stale = false,
@@ -20,15 +20,14 @@ class ProfileLabAiModelOption {
 
   final String id;
   final String label;
-  final ToolProfileReleaseAdmission release;
+  final WorkerProfileSnapshotAdmission profile;
   final String? model;
   final ExecutionModelCapability? capability;
   final bool stale;
-  String get workerId =>
-      "${release.profileDefinitionId}@${release.releaseVersion}";
+  String get workerId => '${profile.logicalWorkerTypeId}@${profile.revision}';
 
   String get modelIdentifier =>
-      '${release.logicalWorkerTypeId}/${release.profileDefinitionId}@${release.releaseVersion}'
+      '${profile.logicalWorkerTypeId}/${profile.profileDefinitionId}@${profile.revision}'
       '${model == null ? '' : '#$model'}';
 }
 
@@ -40,69 +39,25 @@ class ProfileLabModelProposalService {
   Future<List<ProfileLabAiModelOption>> loadAvailableModels({
     required ProfileAdminApiClient apiClient,
     required WorkerTrustPolicy trustPolicy,
-    Future<DiscoveredModelCatalog?> Function(ToolProfileReleaseAdmission)?
+    Future<DiscoveredModelCatalog?> Function(WorkerProfileSnapshotAdmission)?
         discoverModels,
   }) async {
-    final trustState = await apiClient.fetchReleaseTrust();
-    trustPolicy.updateRevocations(
-      keyIds: {...trustPolicy.revokedKeyIds, ...trustState.revokedKeyIds},
-      digests: {
-        ...trustPolicy.revokedDigests,
-        ...trustState.revokedToolProfiles.map((item) => item.payloadDigest),
-      },
-      releaseIds: {
-        ...trustPolicy.revokedReleaseIds,
-        ...trustState.revokedToolProfiles.map(
-            (item) => '${item.profileDefinitionId}@${item.releaseVersion}'),
-      },
-    );
-
-    final results = await Future.wait([
-      apiClient.fetchWorkerCatalog(),
-      apiClient.fetchChannelPointers(),
-    ]);
-    final workers = results[0] as List<ProfileLabWorkerReadModel>;
-    final channels = results[1] as List<ProfileLabChannelPointerReadModel>;
-    final workersByDefinition = <String, ProfileLabWorkerReadModel>{
-      for (final worker in workers)
-        if (worker.profileDefinitionId != null)
-          worker.profileDefinitionId!: worker,
-    };
+    final workers = await apiClient.fetchWorkerCatalog();
 
     final options = <ProfileLabAiModelOption>[];
-    final stableChannels = channels
-        .where((channel) => channel.channel.toLowerCase() == 'stable')
-        .take(64);
-    for (final channel in stableChannels) {
-      final worker = workersByDefinition[channel.profileDefinitionId];
-      final version = channel.releaseVersion;
-      if (worker == null || version == null) continue;
+    for (final worker in workers.take(64)) {
       try {
-        final readModel = await apiClient.fetchRelease(
-          channel.profileDefinitionId,
-          version,
+        final snapshot = await apiClient.fetchCurrentWorkerProfile(
+          worker.workerTypeId,
         );
-        if (readModel.lifecycleState.toLowerCase() != 'stable' ||
-            readModel.profile == null ||
-            readModel['revokedAt'] != null) {
-          continue;
-        }
-        final profile = Map<String, Object?>.from(readModel.profile!);
-        final providerTool = profile['providerTool'];
-        if (providerTool is! Map || providerTool['name'] is! String) continue;
-        final releaseEnvelope = <String, Object?>{
-          ...readModel.toJson(),
-          'channel': 'stable',
-          'workerTypeId': worker.workerTypeId,
-          'providerToolName': providerTool['name'],
-        };
-        final release = await ToolProfileReleaseVerifier.verify(
-          input: releaseEnvelope,
+        final profile = await WorkerProfileSnapshotVerifier.verify(
+          input: snapshot,
           trustPolicy: trustPolicy,
           expectedWorkerTypeId: worker.workerTypeId,
         );
+        final profileJson = profile.profile;
+        final modelConfig = profileJson['model'];
 
-        final modelConfig = profile['model'];
         final modelSelectionSupported =
             modelConfig is Map && modelConfig['supported'] == true;
         final allowlist = modelConfig is Map ? modelConfig['allowlist'] : null;
@@ -115,10 +70,10 @@ class ProfileLabModelProposalService {
         DiscoveredModelCatalog? discoveredCatalog;
         if (modelSelectionSupported && modelConfig['discovery'] is Map) {
           if (discoverModels == null) continue;
-          final discovered = await discoverModels(release);
+          final discovered = await discoverModels(profile);
           discoveredCatalog = discovered;
           if (discovered == null ||
-              discovered.profileDigest != release.payloadDigest) {
+              discovered.profileDigest != profile.payloadDigest) {
             continue;
           }
           final prefix =
@@ -146,12 +101,11 @@ class ProfileLabModelProposalService {
               : worker.displayName;
           final suffix = model ?? 'default model';
           final id =
-              '${release.profileDefinitionId}@${release.releaseVersion}#${model ?? ''}';
+              '${profile.logicalWorkerTypeId}@${profile.revision}#${model ?? ''}';
           options.add(ProfileLabAiModelOption(
             id: id,
-            label:
-                '$workerLabel · ${release.profileDefinitionId} v${release.releaseVersion} · $suffix',
-            release: release,
+            label: '$workerLabel · revision ${profile.revision} · $suffix',
+            profile: profile,
             model: model,
             stale: discoveredCatalog?.stale ?? false,
             capability: model == null
@@ -161,8 +115,8 @@ class ProfileLabModelProposalService {
           ));
         }
       } on Object {
-        // An untrusted, revoked, or malformed release is never offered as a
-        // model runner. Other Stable Workers may still be usable.
+        // An untrusted, revoked, or malformed current Profile is never
+        // offered as a model runner. Other Workers may still be usable.
         continue;
       }
     }
@@ -196,7 +150,7 @@ class ProfileLabModelProposalService {
       testDiagnostics: testDiagnostics,
     );
     final output = await sandbox.runTrustedModelProposal(
-      modelProfile: modelOption.release,
+      modelProfile: modelOption.profile,
       model: modelOption.model,
       reasoningEffort: reasoningEffort,
       prompt: prompt,

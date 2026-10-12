@@ -161,7 +161,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
-                        'A signed Stable Worker Profile runs through the local generic Engine. The model proposes a Draft edit only. Review the diff, apply it yourself, and run the real test ladder; model output is never evidence.',
+                        'A signed current Worker Profile runs through the local generic Engine. The model proposes a Draft edit only. Review the diff, apply it yourself, and run the real test ladder; model output is never evidence.',
                         style: TextStyle(
                             fontSize: 11,
                             color: ProfileLabTheme.darkForeground),
@@ -200,7 +200,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                             'Worker: ${_context.workerMetadata['workerTypeId']}',
                             Icons.engineering),
                         _buildContextChip(
-                          'Stable Profile: ${_context.stableProfile != null ? "Ingested" : "None"}',
+                          'Current Profile: ${_context.stableProfile != null ? "Ingested" : "None"}',
                           Icons.verified,
                         ),
                         _buildContextChip(
@@ -226,7 +226,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                 value: _selection,
                 validationMessage: _models.isEmpty && !_loadingModels
                     ? _generationError ??
-                        'No trusted Stable Worker Profile is available.'
+                        'No trusted current Worker Profile is available.'
                     : null,
                 onChanged: (selection) => setState(() {
                   _selectedModelId = _models

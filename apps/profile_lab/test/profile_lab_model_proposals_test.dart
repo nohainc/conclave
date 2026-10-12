@@ -18,7 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('discovers model options only from trusted current Stable Profiles',
+  test('discovers model options only from trusted current Worker Profiles',
       () async {
     final signedRelease = await _createSignedRelease();
     final api = _SignedReleaseApi(signedRelease);
@@ -32,7 +32,7 @@ void main() {
 
     expect(options.map((option) => option.model).toList(),
         [null, 'model-fast', 'model-safe']);
-    expect(options.every((option) => option.release.isSigned), isTrue);
+    expect(options.every((option) => option.profile.isSigned), isTrue);
     expect(options.firstWhere((o) => o.model == 'model-fast').modelIdentifier,
         'model-worker/model-profile@2#model-fast');
   });
@@ -69,10 +69,16 @@ void main() {
     expect(profileLabSelectionCatalog(options).workers.single.models,
         hasLength(2));
     var invoked = false;
+    final revokedPolicy = WorkerTrustPolicy(
+      trustedPublicKeys: {
+        'conclave': {'test-profile-key': base64.encode(publicKey.bytes)},
+      },
+      revokedKeyIds: {'test-profile-key'},
+    );
     final revoked =
         await const ProfileLabModelProposalService().loadAvailableModels(
-      apiClient: _SignedReleaseApi(signed, revokedKeyIds: ['test-profile-key']),
-      trustPolicy: policy,
+      apiClient: _SignedReleaseApi(signed),
+      trustPolicy: revokedPolicy,
       discoverModels: (_) async {
         invoked = true;
         return null;
@@ -97,7 +103,7 @@ void main() {
     pending.complete([]);
     await tester.pumpAndSettle();
     expect(find.text('Select Worker...'), findsOneWidget);
-    expect(find.textContaining('No trusted Stable Worker Profile'),
+    expect(find.textContaining('No trusted current Worker Profile'),
         findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     controller.dispose();
@@ -136,7 +142,7 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    await choose('Worker', 'Model Worker · model-profile v2');
+    await choose('Worker', 'Model Worker · revision 2');
     await choose('Model', 'model-fast');
     final consent = find.byType(CheckboxListTile);
     await tester.ensureVisible(consent);
@@ -147,7 +153,7 @@ void main() {
     await tester.tap(generate);
     await tester.pumpAndSettle();
     expect(find.text('model-fast · Unavailable'), findsOneWidget);
-    expect(find.text('model-profile@2 · Unavailable'), findsOneWidget);
+    expect(find.text('model-worker@2 · Unavailable'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     controller.dispose();
     root.deleteSync(recursive: true);
@@ -156,14 +162,14 @@ void main() {
   test('current Cloud key revocation removes otherwise valid model Profiles',
       () async {
     final signedRelease = await _createSignedRelease();
-    final api = _SignedReleaseApi(
-      signedRelease,
-      revokedKeyIds: const ['test-profile-key'],
-    );
+    final api = _SignedReleaseApi(signedRelease);
     final publicKey = await signedRelease.keyPair.extractPublicKey();
-    final trustPolicy = WorkerTrustPolicy(trustedPublicKeys: {
-      'conclave': {'test-profile-key': base64.encode(publicKey.bytes)},
-    });
+    final trustPolicy = WorkerTrustPolicy(
+      trustedPublicKeys: {
+        'conclave': {'test-profile-key': base64.encode(publicKey.bytes)},
+      },
+      revokedKeyIds: {'test-profile-key'},
+    );
 
     final options = await const ProfileLabModelProposalService()
         .loadAvailableModels(apiClient: api, trustPolicy: trustPolicy);
@@ -173,47 +179,23 @@ void main() {
 }
 
 class _SignedReleaseApi extends ProfileAdminApiClient {
-  _SignedReleaseApi(
-    this.signedRelease, {
-    this.revokedKeyIds = const [],
-  }) : super(baseUrl: 'http://127.0.0.1:1');
+  _SignedReleaseApi(this.signedRelease) : super(baseUrl: 'http://127.0.0.1:1');
 
   final _SignedRelease signedRelease;
-  final List<String> revokedKeyIds;
-
-  @override
-  Future<ProfileLabReleaseTrustReadModel> fetchReleaseTrust() async =>
-      ProfileLabReleaseTrustReadModel.fromJson({
-        'revokedKeyIds': revokedKeyIds,
-        'revokedToolProfiles': <Map<String, Object?>>[],
-      });
-
   @override
   Future<List<ProfileLabWorkerReadModel>> fetchWorkerCatalog() async => [
         ProfileLabWorkerReadModel.fromJson({
           'workerTypeId': 'model-worker',
-          'profileDefinitionId': 'model-profile',
           'displayName': 'Model Worker',
           'providerToolName': 'fixture-provider',
-          'releaseStage': 'stable',
         }),
       ];
 
   @override
-  Future<List<ProfileLabChannelPointerReadModel>> fetchChannelPointers(
-          [String? profileDefinitionId]) async =>
-      [
-        ProfileLabChannelPointerReadModel.fromJson({
-          'profileDefinitionId': 'model-profile',
-          'channel': 'stable',
-          'releaseVersion': 2,
-        }),
-      ];
-
-  @override
-  Future<ProfileLabReleaseReadModel> fetchRelease(
-          String profileDefinitionId, int releaseVersion) async =>
-      ProfileLabReleaseReadModel.fromJson(signedRelease.envelope);
+  Future<Map<String, dynamic>> fetchCurrentWorkerProfile(
+    String workerTypeId,
+  ) async =>
+      Map<String, dynamic>.from(signedRelease.envelope);
 }
 
 class _SignedRelease {
@@ -259,35 +241,30 @@ Future<_SignedRelease> _createSignedRelease(
   const publisher = 'conclave';
   const keyId = 'test-profile-key';
   final keyPair = await Ed25519().newKeyPair();
-  final message = toolProfileReleaseSigningMessage(
+  final message = workerProfileSigningMessage(
     publisher: publisher,
     signingKeyId: keyId,
+    workerTypeId: 'model-worker',
+    revision: 2,
+    schemaVersion: profile['schemaVersion'] as int,
     payloadDigest: digest,
-    profile: profile,
   );
   final signature = await Ed25519().sign(
     utf8.encode(message),
     keyPair: keyPair,
   );
-  final providerToolName =
-      (profile['providerTool'] as Map<String, Object?>)['name'] as String;
   return _SignedRelease(
     {
-      'profileDefinitionId': 'model-profile',
       'workerTypeId': 'model-worker',
-      'releaseVersion': 2,
-      'lifecycleState': 'stable',
-      'channel': 'stable',
-      'providerToolName': providerToolName,
       'schemaVersion': profile['schemaVersion'],
-      'engineFamily': profile['engineFamily'],
-      'engineCompatibility': profile['engineCompatibility'],
+      'revision': 2,
+      'digest': digest,
       'profile': profile,
-      'payloadDigest': digest,
       'signature': base64.encode(signature.bytes),
       'signingKeyId': keyId,
       'publisher': publisher,
-      'publishedAt': DateTime.utc(2026).toIso8601String(),
+      'updatedAt': DateTime.utc(2026).toIso8601String(),
+      'verified': true,
     },
     keyPair,
   );

@@ -7,7 +7,7 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
   Future<List<ProfileLabAiModelOption>> loadAvailableAiModels() async {
     if (currentSession == null || currentSession!.isExpired) {
       throw StateError(
-          'Sign in to Cloud to load trusted Stable model Profiles.');
+          'Sign in to Cloud to load trusted current Worker Profiles.');
     }
     final models = await _modelProposalService.loadAvailableModels(
       apiClient: apiClient,
@@ -27,8 +27,8 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
     );
     availableAiModels = models;
     aiProposalError = models.isEmpty
-        ? 'No trusted Stable Worker Profile is available for model proposals. '
-            'Configure the Profile Lab release trust roots and publish a Stable Worker Profile.'
+        ? 'No trusted current Worker Profile is available for model proposals. '
+            'Configure the Profile Lab trust roots and publish a Worker Profile.'
         : null;
     notifyListeners();
     return models;
@@ -62,15 +62,15 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
     aiProposalError = null;
     notifyListeners();
     try {
-      // Re-read catalog and revocation state immediately before model execution.
-      // A stale menu selection cannot authorize a revoked or moved release.
+      // Re-read the current catalog immediately before model execution. A stale
+      // menu selection cannot authorize a revoked or replaced Profile.
       final modelOptions = await loadAvailableAiModels();
       final selectedModel = modelOptions
           .where((option) => option.id == modelOptionId)
           .firstOrNull;
       if (selectedModel == null) {
         throw StateError(
-          'The selected Stable model Profile is no longer trusted or available.',
+          'The selected current Worker Profile is no longer trusted or available.',
         );
       }
 
