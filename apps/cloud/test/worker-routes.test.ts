@@ -233,17 +233,17 @@ describe("Worker API routes", () => {
       revokedWorkspaceReleases: [],
       revokedToolProfiles: [],
     });
-    expect(prepare).toHaveBeenCalledTimes(3);
+    expect(prepare).toHaveBeenCalledTimes(2);
   });
 
-  it("routes the Profile signing preflight", async () => {
+  it("routes the V9 admin Worker Profile catalog", async () => {
     const handler = vi.fn(async () => new Response("preflight"));
     const response = await routeWorkerRequest(
-      request("/api/admin/tool-profiles/signing-preflight"),
+      request("/api/admin/workers"),
       {} as Parameters<typeof routeWorkerRequest>[1],
       undefined,
       {
-        handleToolProfileSigningPreflight: handler,
+        handleListV9WorkerProfiles: handler,
       } as unknown as WorkerRouteHandlers,
       dependencies,
     );
@@ -251,7 +251,7 @@ describe("Worker API routes", () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 
-  it("routes v8 Tool Profile resolution and admin lifecycle operations", async () => {
+  it("keeps the removed V8 Profile lifecycle routes unavailable", async () => {
     const handlers = {
       handleListWorkerCatalog: vi.fn(async () => new Response("human catalog")),
       handleResolveToolProfileChannels: vi.fn(
@@ -326,10 +326,6 @@ describe("Worker API routes", () => {
         "/api/tool-profiles?workerTypeId=chatgpt&workspaceRuntimeId=runtime-1",
         "GET",
       ],
-      [
-        "/api/workspace-runtime/workers/catalog?workspaceRuntimeId=runtime-1",
-        "GET",
-      ],
       ["/api/workspaces/workspace-1/tool-profile-channel", "PATCH"],
       ["/api/admin/tool-profiles/definitions", "POST"],
       ["/api/admin/tool-profiles/definitions", "GET"],
@@ -365,84 +361,8 @@ describe("Worker API routes", () => {
         handlers,
         dependencies,
       );
-      expect(response.status, `${method} ${path}`).toBe(200);
+      expect(response.status, `${method} ${path}`).toBe(404);
     }
-    expect(handlers.handleResolveToolProfileChannels).toHaveBeenCalledOnce();
-    expect(handlers.handleListWorkerCatalog).not.toHaveBeenCalled();
-    expect(handlers.handleListWorkspaceWorkerCatalog).toHaveBeenCalledOnce();
-    expect(
-      handlers.handleSetWorkspaceToolProfileChannel,
-    ).toHaveBeenCalledOnce();
-    expect(handlers.handleCreateToolProfileDefinition).toHaveBeenCalledOnce();
-    expect(handlers.handleListToolProfileDefinitions).toHaveBeenCalledOnce();
-    expect(handlers.handleGetToolProfileDefinition).toHaveBeenCalledWith(
-      expect.any(Request),
-      expect.anything(),
-      "chatgpt-codex",
-      undefined,
-    );
-    expect(handlers.handleCreateApprovedLogicalWorker).toHaveBeenCalledOnce();
-    expect(handlers.handleListAdminWorkerCatalog).toHaveBeenCalledOnce();
-    expect(handlers.handleListAllToolProfileChannels).toHaveBeenCalledOnce();
-    expect(handlers.handleListToolProfileChannels).toHaveBeenCalledWith(
-      expect.any(Request),
-      expect.anything(),
-      "chatgpt-codex",
-      undefined,
-    );
-    expect(handlers.handleRollbackToolProfileChannel).toHaveBeenCalledWith(
-      expect.any(Request),
-      expect.anything(),
-      "chatgpt-codex",
-      "stable",
-      undefined,
-    );
-    expect(handlers.handleListGlobalToolProfileAudit).toHaveBeenCalledOnce();
-    expect(handlers.handleListToolProfileDefinitionAudit).toHaveBeenCalledWith(
-      expect.any(Request),
-      expect.anything(),
-      "chatgpt-codex",
-      undefined,
-    );
-    expect(handlers.handleCreateDraftToolProfileRelease).toHaveBeenCalledOnce();
-    expect(handlers.handleGetToolProfileRelease).toHaveBeenCalledWith(
-      expect.any(Request),
-      expect.anything(),
-      "chatgpt-codex",
-      "1",
-      undefined,
-    );
-    expect(
-      handlers.handlePublishDraftToolProfileRelease,
-    ).toHaveBeenCalledOnce();
-    expect(handlers.handlePromoteToolProfileRelease).toHaveBeenCalledOnce();
-    expect(
-      handlers.handleChangeToolProfileReleaseLifecycle,
-    ).toHaveBeenCalledWith(
-      expect.any(Request),
-      expect.anything(),
-      "chatgpt-codex",
-      "1",
-      "revoke",
-      undefined,
-    );
-    expect(handlers.handleListToolProfileReleaseAudit).toHaveBeenCalledOnce();
-    expect(handlers.handleListToolProfileReleaseEvidence).toHaveBeenCalledWith(
-      expect.any(Request),
-      expect.anything(),
-      "chatgpt-codex",
-      "1",
-      undefined,
-    );
-    expect(
-      handlers.handleSubmitToolProfileReleaseEvidence,
-    ).toHaveBeenCalledWith(
-      expect.any(Request),
-      expect.anything(),
-      "chatgpt-codex",
-      "1",
-      undefined,
-    );
   });
 
   it("exports every handler invoked by the router in routeHandlers", async () => {

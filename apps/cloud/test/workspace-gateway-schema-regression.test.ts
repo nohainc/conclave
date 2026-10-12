@@ -88,10 +88,8 @@ describe("Workspace Gateway active-schema regression", () => {
       "thread_execution_policies",
       "worker_assignments",
       "worker_catalog",
-      "tool_profile_definitions",
-      "tool_profile_releases",
-      "tool_profile_release_audit",
-      "tool_profile_channel_pointers",
+      "worker_profiles",
+      "worker_profile_history",
     ];
     const actualTables = new Set(
       database
@@ -108,6 +106,10 @@ describe("Workspace Gateway active-schema regression", () => {
     expect(actualTables.has("host_releases")).toBe(false);
     expect(actualTables.has("v7_worker_scheduling")).toBe(false);
     expect(actualTables.has("v7_adapter_releases")).toBe(false);
+    expect(actualTables.has("tool_profile_definitions")).toBe(false);
+    expect(actualTables.has("tool_profile_releases")).toBe(false);
+    expect(actualTables.has("tool_profile_release_audit")).toBe(false);
+    expect(actualTables.has("tool_profile_channel_pointers")).toBe(false);
     const inventoryColumns = new Set(
       database
         .prepare("PRAGMA table_info(workspace_worker_inventory)")

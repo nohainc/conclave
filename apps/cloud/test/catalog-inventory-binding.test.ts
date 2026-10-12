@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import { recordWorkspaceWorkerInventory } from "../src/workspace-gateway/inventory.js";
 
-it("binds catalog ingestion to signed release and tool version, preserving a stale v2 catalog on downgrade", async () => {
+it("binds catalog ingestion to the signed V9 Profile revision and tool version", async () => {
   const { sqlite, db } = sqliteD1();
   try {
     sqlite.exec(
@@ -15,14 +15,22 @@ it("binds catalog ingestion to signed release and tool version, preserving a sta
         "utf8",
       ),
     );
+    sqlite.exec(
+      readFileSync(
+        new URL(
+          "../migrations-v8/0043_worker_profiles_v9.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     sqlite.exec(`INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES ('u','u@test','U','now','now');
       INSERT INTO execution_workspaces(id,owner_user_id,name,status,created_at,updated_at) VALUES ('ws','u','Workspace','online','now','now');
-      INSERT INTO worker_catalog(worker_type_id,display_name,created_at,updated_at) VALUES ('provider','Provider','now','now');
-      INSERT INTO tool_profile_definitions(profile_definition_id,worker_type_id,display_name,provider_tool_name,engine_family,schema_version,created_at,updated_at) VALUES ('profile','provider','Profile','CLI','cli',1,'now','now');`);
+      INSERT INTO worker_catalog(worker_type_id,display_name,created_at,updated_at) VALUES ('provider','Provider','now','now');`);
     const digest = "a".repeat(64);
     sqlite
       .prepare(
-        `INSERT INTO tool_profile_releases(profile_definition_id,release_version,worker_type_id,lifecycle_state,schema_version,engine_family,engine_compatibility_min,engine_compatibility_max_exclusive,payload_json,payload_digest,signature,signing_key_id,publisher,published_at,created_at,updated_at) VALUES ('profile',1,'provider','stable',1,'cli','1.0.0','2.0.0','{}',?,'test-signature','test-key','test-publisher','now','now','now')`,
+        `INSERT INTO worker_profiles(worker_type_id,schema_version,profile_json,revision,digest,signature,signing_key_id,updated_at) VALUES ('provider',1,'{"schemaVersion":1}',1,?,'test-signature','test-key','now')`,
       )
       .run(digest);
     const worker = {
@@ -89,7 +97,7 @@ it("binds catalog ingestion to signed release and tool version, preserving a sta
       ],
     });
     expect(JSON.parse(stored().catalog!)).toEqual(catalog);
-    sqlite.exec("UPDATE tool_profile_releases SET lifecycle_state = 'revoked'");
+    sqlite.exec("DELETE FROM worker_profiles WHERE worker_type_id = 'provider'");
     await publish(9, catalog);
     expect(stored().catalog).toBeNull();
   } finally {

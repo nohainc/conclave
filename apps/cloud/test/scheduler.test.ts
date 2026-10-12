@@ -187,21 +187,8 @@ describe("Space execution scheduler", () => {
   it.each([
     ["retired", { worker_catalog_lifecycle_state: "retired" }],
     ["hidden", { worker_catalog_visibility_state: "hidden" }],
-    [
-      "outside the Workspace release channel",
-      {
-        worker_catalog_release_stage: "testing",
-        workspace_tool_profile_channel: "stable",
-      },
-    ],
-    [
-      "without its current active Profile Definition",
-      { current_profile_definition_id: null },
-    ],
-    [
-      "mapped to a different Profile Definition",
-      { current_profile_definition_id: "chatgpt-codex-next" },
-    ],
+    ["without its current Profile revision", { profile_release_version: null }],
+    ["without its executable Profile payload", { execution_profile_json: null }],
   ])("rejects a stale Ready Worker that is %s", async (_case, override) => {
     await expect(
       selectSpaceExecutionTarget(db([candidate(override)]), {

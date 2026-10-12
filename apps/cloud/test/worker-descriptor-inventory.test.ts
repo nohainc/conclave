@@ -136,39 +136,51 @@ describe("Workspace Worker inventory catalog metadata", () => {
     expect(body.workers[0]?.modelOptions.catalog).toEqual([]);
   });
 
-  it("discovers a newly approved Cloud Worker from the selected catalog channel", async () => {
+  it("discovers a managed Cloud Worker from the current Profile catalog", async () => {
     const queries: string[] = [];
-    let catalogBoundChannel: string | undefined;
     const db = {
       prepare: vi.fn((sql: string) => {
         queries.push(sql);
         return {
           bind: vi.fn((...values: unknown[]) => {
-            if (sql.includes("FROM worker_catalog worker")) {
-              catalogBoundChannel = String(values[0]);
-            }
             return {
               first: async () =>
                 sql.includes("workspace_runtime_identities")
                   ? { workspaceId: "workspace-1" }
-                  : { channel: "beta" },
+                  : null,
               all: async () => ({
                 results: [
                   {
                     worker_type_id: "dynamic-test-worker",
                     display_name: "Dynamic Test Worker",
                     description: "Catalog-created acceptance Worker.",
+                    lifecycle_state: "active",
                     engine_family: "cli",
                     visibility_state: "visible",
-                    release_stage: "beta",
-                    capabilities_json: '["text","thread_read"]',
                     sort_order: 30,
-                    profile_definition_id: "dynamic-test-cli",
-                    provider_tool_name: "Fixture CLI",
+                    current_revision: 4,
+                    current_digest: "a".repeat(64),
+                    current_updated_at: "2026-10-02T00:00:00.000Z",
                   },
                 ],
               }),
             };
+          }),
+          all: async () => ({
+            results: [
+              {
+                worker_type_id: "dynamic-test-worker",
+                display_name: "Dynamic Test Worker",
+                description: "Catalog-created acceptance Worker.",
+                lifecycle_state: "active",
+                engine_family: "cli",
+                visibility_state: "visible",
+                sort_order: 30,
+                current_revision: 4,
+                current_digest: "a".repeat(64),
+                current_updated_at: "2026-10-02T00:00:00.000Z",
+              },
+            ],
           }),
         };
       }),
@@ -187,39 +199,32 @@ describe("Workspace Worker inventory catalog metadata", () => {
       env,
     );
     const body = (await response.json()) as {
-      channel: string;
       workers: Array<Record<string, unknown>>;
     };
 
     expect(response.status).toBe(200);
-    expect(body.channel).toBe("beta");
-    expect(catalogBoundChannel).toBe("beta");
     expect(body.workers).toContainEqual(
       expect.objectContaining({
         workerTypeId: "dynamic-test-worker",
         displayName: "Dynamic Test Worker",
-        profileDefinitionId: "dynamic-test-cli",
-        providerToolName: "Fixture CLI",
+        currentRevision: 4,
+        currentDigest: "a".repeat(64),
       }),
     );
     const catalogQuery = queries.find((sql) =>
       sql.includes("FROM worker_catalog worker"),
     );
-    expect(catalogQuery).toContain("definition.lifecycle_state = 'active'");
-    expect(catalogQuery).toContain("worker.visibility_state = 'visible'");
-    expect(catalogQuery).toContain("worker.release_stage IN ('beta','stable')");
-    expect(body.workers[0]).not.toHaveProperty("profile");
+    expect(catalogQuery).toContain("worker.visibility_state");
+    expect(catalogQuery).toContain("current_profile.revision");
   });
 
-  it("serves the stable Worker catalog through the authenticated human API", async () => {
+  it("serves the current Worker catalog through the authenticated human API", async () => {
     const queries: string[] = [];
-    let catalogBoundChannel: string | undefined;
     const db = {
       prepare: vi.fn((sql: string) => {
         queries.push(sql);
         return {
           bind: vi.fn((...values: unknown[]) => {
-            catalogBoundChannel = String(values[0]);
             return {
               all: async () => ({
                 results: [
@@ -229,15 +234,31 @@ describe("Workspace Worker inventory catalog metadata", () => {
                     description: "Catalog-created acceptance Worker.",
                     engine_family: "cli",
                     visibility_state: "visible",
-                    release_stage: "stable",
-                    capabilities_json: '["text"]',
+                    lifecycle_state: "active",
                     sort_order: 30,
-                    profile_definition_id: "dynamic-test-cli",
-                    provider_tool_name: "Fixture CLI",
+                    current_revision: 4,
+                    current_digest: "a".repeat(64),
+                    current_updated_at: "2026-10-02T00:00:00.000Z",
                   },
                 ],
               }),
             };
+          }),
+          all: async () => ({
+            results: [
+              {
+                worker_type_id: "dynamic-test-worker",
+                display_name: "Dynamic Test Worker",
+                description: "Catalog-created acceptance Worker.",
+                lifecycle_state: "active",
+                engine_family: "cli",
+                visibility_state: "visible",
+                sort_order: 30,
+                current_revision: 4,
+                current_digest: "a".repeat(64),
+                current_updated_at: "2026-10-02T00:00:00.000Z",
+              },
+            ],
           }),
         };
       }),
@@ -257,16 +278,14 @@ describe("Workspace Worker inventory catalog metadata", () => {
     };
 
     expect(response.status).toBe(200);
-    expect(catalogBoundChannel).toBe("stable");
     expect(body.workers).toContainEqual(
       expect.objectContaining({
         workerTypeId: "dynamic-test-worker",
         displayName: "Dynamic Test Worker",
-        profileDefinitionId: "dynamic-test-cli",
-        providerToolName: "Fixture CLI",
+        currentRevision: 4,
+        currentDigest: "a".repeat(64),
       }),
     );
-    expect(body.workers[0]).not.toHaveProperty("profile");
     expect(queries[0]).toContain("FROM worker_catalog worker");
   });
 });
