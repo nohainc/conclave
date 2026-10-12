@@ -193,6 +193,37 @@ class ToolProfileCatalogClient {
     return _workers;
   }
 
+  /// Fetches and locally verifies the one current V9 Profile for a Worker.
+  /// The Cloud `verified` field is not trusted as a substitute for this
+  /// Workspace-side digest and signature admission.
+  Future<WorkerProfileSnapshotAdmission> fetchCurrentWorkerProfile(
+    String workerTypeId,
+  ) async {
+    _validateWorkerTypeId(workerTypeId);
+    final runtimeId = workspaceRuntimeId;
+    if (runtimeId == null || runtimeId.isEmpty) {
+      throw StateError(
+        'Workspace runtime identity is required for Profile synchronization',
+      );
+    }
+    final uri = _baseUri().replace(
+      path: _apiPath('/api/workers/$workerTypeId/profile'),
+      queryParameters: {'workspaceRuntimeId': runtimeId},
+    );
+    final response = await _get(uri);
+    if (response.statusCode != HttpStatus.ok) {
+      throw StateError(
+        'Current Worker Profile returned HTTP ${response.statusCode}',
+      );
+    }
+    final decoded = jsonDecode(utf8.decode(await _readBounded(response)));
+    return WorkerProfileSnapshotVerifier.verify(
+      input: decoded,
+      trustPolicy: trustPolicy,
+      expectedWorkerTypeId: workerTypeId,
+    );
+  }
+
   File get _catalogFile => File(
       '${store.profilesRoot.path}${Platform.pathSeparator}worker-catalog.json');
 
@@ -402,9 +433,15 @@ class ToolProfileCatalogClient {
 }
 
 void _validateWorkerQuery(String workerTypeId, String channel) {
-  if (!RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$').hasMatch(workerTypeId) ||
-      workerTypeId.length > 96 ||
-      !const {'testing', 'beta', 'stable'}.contains(channel)) {
+  _validateWorkerTypeId(workerTypeId);
+  if (!const {'testing', 'beta', 'stable'}.contains(channel)) {
     throw ArgumentError('Tool Profile catalog query is invalid');
+  }
+}
+
+void _validateWorkerTypeId(String workerTypeId) {
+  if (!RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$').hasMatch(workerTypeId) ||
+      workerTypeId.length > 96) {
+    throw ArgumentError('Worker Profile query is invalid');
   }
 }

@@ -1,6 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+    show canonicalJson, workerProfileSigningMessage;
+import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart';
 import 'package:conclave_workspace/tool_profile_release_store.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
 import 'package:conclave_workspace/worker_trust_policy.dart';
@@ -286,6 +290,63 @@ void main() {
       expect(requestUri.path, '/api/workspace-runtime/workers/catalog');
       expect(requestUri.queryParameters, {'workspaceRuntimeId': 'runtime-1'});
       expect(authorization, 'Bearer runtime-token');
+    } finally {
+      catalog.close();
+      await server.close(force: true);
+    }
+  });
+
+  test('fetches only a locally verified V9 current Worker Profile', () async {
+    final currentProfile =
+        jsonDecode(jsonEncode(profile)) as Map<String, Object?>;
+    currentProfile['logicalWorkerTypeId'] = 'fixture-worker';
+    final digest =
+        sha256.convert(utf8.encode(canonicalJson(currentProfile))).toString();
+    const revision = 4;
+    final message = workerProfileSigningMessage(
+      publisher: fixturePublisher,
+      signingKeyId: fixtureKeyId,
+      workerTypeId: 'fixture-worker',
+      revision: revision,
+      schemaVersion: currentProfile['schemaVersion']! as int,
+      payloadDigest: digest,
+    );
+    final signature = base64.encode(
+      (await Ed25519().sign(utf8.encode(message), keyPair: signing.pair)).bytes,
+    );
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    late Uri requestUri;
+    server.listen((request) async {
+      requestUri = request.uri;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'workerTypeId': 'fixture-worker',
+        'schemaVersion': currentProfile['schemaVersion'],
+        'profile': currentProfile,
+        'revision': revision,
+        'digest': digest,
+        'signature': signature,
+        'signingKeyId': fixtureKeyId,
+        'publisher': fixturePublisher,
+        'verified': true,
+      }));
+      await request.response.close();
+    });
+
+    final catalog = ToolProfileCatalogClient(
+      cloudUri: Uri.parse('http://${server.address.address}:${server.port}'),
+      workspaceRuntimeId: 'runtime-1',
+      authToken: 'runtime-token',
+      store: store,
+      trustPolicy: signing.trustPolicy,
+    );
+    try {
+      final admitted =
+          await catalog.fetchCurrentWorkerProfile('fixture-worker');
+      expect(admitted.revision, revision);
+      expect(admitted.payloadDigest, digest);
+      expect(requestUri.path, '/api/workers/fixture-worker/profile');
+      expect(requestUri.queryParameters, {'workspaceRuntimeId': 'runtime-1'});
     } finally {
       catalog.close();
       await server.close(force: true);

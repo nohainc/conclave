@@ -152,8 +152,14 @@ Cloud owns the authoritative transition:
 4. canonicalize the JSON and calculate its digest;
 5. allocate the next Cloud revision;
 6. sign the canonical Profile metadata/payload;
-7. atomically replace the logical Worker's current published Profile and append
-   audit/history metadata.
+7. verify the generated signature against Cloud's configured trust root;
+8. atomically replace the logical Worker's current published Profile and append
+   audit/history metadata in one database transaction.
+
+Cloud MUST NOT persist a newly signed snapshot until verification of that exact
+signature, revision, Worker identity, schema version, and canonical payload
+digest succeeds. The current row and its prior-history append are one atomic
+operation; a failed conditional revision update MUST leave both unchanged.
 
 Publication requests MUST use optimistic concurrency against the current
 revision or digest so that a stale candidate cannot silently overwrite a newer
@@ -178,6 +184,12 @@ For a newly fetched or refreshed Profile, Workspace MUST:
 5. initialize/probe it through the generic Engine as required by the runtime;
 6. atomically mark it current only after all admission checks pass;
 7. retain the prior verified known-good snapshot for recovery and diagnostics.
+
+Workspace MUST repeat the canonical digest and signature verification locally;
+the Cloud `verified` response field is not an attestation and is never a
+substitute for the Workspace trust-root check. A snapshot that fails any
+check MUST remain staged or be discarded and MUST NOT become the active
+Profile.
 
 Activation failure leaves the prior active cache entry unchanged. A revoked,
 invalid, incompatible, or tampered Profile MUST fail closed and MUST NOT be

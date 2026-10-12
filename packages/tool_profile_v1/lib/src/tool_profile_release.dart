@@ -44,6 +44,47 @@ class ToolProfileReleaseAdmission implements ToolProfileCandidate {
   bool get isSigned => true;
 }
 
+/// Cloud's V9 current Profile snapshot. Unlike a legacy release, this
+/// identity has no channel; [revision] is the immutable publication revision.
+class WorkerProfileSnapshotAdmission implements ToolProfileCandidate {
+  const WorkerProfileSnapshotAdmission({
+    required this.profile,
+    required this.workerTypeId,
+    required this.revision,
+    required this.payloadDigest,
+    required this.signature,
+    required this.signingKeyId,
+    required this.publisher,
+  });
+
+  @override
+  final Map<String, Object?> profile;
+  @override
+  final String workerTypeId;
+  final int revision;
+  @override
+  final String payloadDigest;
+  final String signature;
+  final String signingKeyId;
+  final String publisher;
+
+  @override
+  String get profileDefinitionId => profile['profileDefinitionId'] as String;
+
+  @override
+  int get releaseVersion => revision;
+
+  @override
+  String get logicalWorkerTypeId => workerTypeId;
+
+  @override
+  String get providerToolName =>
+      (profile['providerTool'] as Map)['name'] as String;
+
+  @override
+  bool get isSigned => true;
+}
+
 /// Unsigned local Draft Profile candidate used strictly within the
 /// Profile Lab test sandbox. Never admitted to production Workspaces.
 class LocalDraftProfileCandidate implements ToolProfileCandidate {
@@ -135,6 +176,26 @@ String toolProfileReleaseSigningMessage({
         'engineCompatibility': profile['engineCompatibility'],
         'providerToolName': providerTool['name'],
         'providerCompatibility': providerTool['supportedVersions'],
+      })}';
+}
+
+/// Computes the canonical Ed25519 signing message for a V9 current Profile.
+String workerProfileSigningMessage({
+  required String publisher,
+  required String signingKeyId,
+  required String workerTypeId,
+  required int revision,
+  required int schemaVersion,
+  required String payloadDigest,
+}) {
+  return 'conclave-worker-profile-v9\n${canonicalJson({
+        'domain': 'conclave-worker-profile-v9',
+        'publisher': publisher,
+        'signingKeyId': signingKeyId,
+        'workerTypeId': workerTypeId,
+        'revision': revision,
+        'schemaVersion': schemaVersion,
+        'payloadDigest': payloadDigest,
       })}';
 }
 

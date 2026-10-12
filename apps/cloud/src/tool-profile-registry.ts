@@ -2099,6 +2099,7 @@ export interface WorkerProfileSnapshot {
   digest: string;
   signature: string;
   signingKeyId: string;
+  publisher: string;
   updatedByUserId: string | null;
   updatedAt: string;
   verified: boolean;
@@ -2320,6 +2321,7 @@ export async function getCurrentWorkerProfile(
     digest: row.digest,
     signature: row.signature,
     signingKeyId: row.signing_key_id,
+    publisher: env.CONCLAVE_RELEASE_PUBLISHER?.trim() ?? "",
     updatedByUserId: row.updated_by_user_id,
     updatedAt: row.updated_at,
     verified,
@@ -2391,6 +2393,7 @@ export async function listWorkerProfileHistory(
           digest: row.digest,
           signature: row.signature,
           signingKeyId: row.signing_key_id,
+          publisher: env.CONCLAVE_RELEASE_PUBLISHER?.trim() ?? "",
           updatedByUserId: row.actor_user_id,
           updatedAt: row.published_at,
           verified,
@@ -2563,12 +2566,19 @@ export async function publishWorkerProfile(args: {
 }): Promise<WorkerProfileSnapshot> {
   validateId(args.workerTypeId, "workerTypeId");
   await requireWorkerCatalogRow(args.env.CONCLAVE_DB, args.workerTypeId);
+  const candidateDigest = requireDigest(args.candidateDigest);
   const validated = await validateWorkerProfileCandidate(
     args.workerTypeId,
     args.candidate,
-    args.candidateDigest,
+    candidateDigest,
     args.evidence,
   );
+  if (validated.evidence === null) {
+    throw new ToolProfileRegistryError(
+      409,
+      "Publication requires complete evidence for this exact Profile candidate",
+    );
+  }
   requireRevision(args.expectedRevision, "expectedRevision");
   const current = await loadCurrentWorkerProfileRow(
     args.env.CONCLAVE_DB,
@@ -2598,6 +2608,26 @@ export async function publishWorkerProfile(args: {
       payloadDigest: validated.digest,
     }),
   });
+  const signatureValid = await verifyEd25519ReleaseSignature({
+    trustKeysJson: args.env.CONCLAVE_RELEASE_TRUST_KEYS_JSON,
+    publisher,
+    signingKeyId,
+    signature,
+    message: workerProfileSigningMessage({
+      publisher,
+      signingKeyId,
+      workerTypeId: args.workerTypeId,
+      revision,
+      schemaVersion: validated.profile.schemaVersion,
+      payloadDigest: validated.digest,
+    }),
+  });
+  if (!signatureValid) {
+    throw new ToolProfileRegistryError(
+      500,
+      "Cloud signing boundary failed to produce a valid Worker Profile signature",
+    );
+  }
   await persistWorkerProfileSnapshot({
     env: args.env,
     workerTypeId: args.workerTypeId,
@@ -2649,6 +2679,14 @@ export async function restoreWorkerProfile(args: {
   if (!history)
     throw new ToolProfileRegistryError(404, "Profile revision was not found");
   const profile = parseCurrentWorkerProfile(history);
+  if (
+    !(await verifyWorkerProfileSnapshot(args.env, history, profile))
+  ) {
+    throw new ToolProfileRegistryError(
+      409,
+      "The historical Worker Profile failed digest or signature verification",
+    );
+  }
   const validated = await validateWorkerProfileCandidate(
     args.workerTypeId,
     profile,
@@ -2675,6 +2713,26 @@ export async function restoreWorkerProfile(args: {
       payloadDigest: validated.digest,
     }),
   });
+  const signatureValid = await verifyEd25519ReleaseSignature({
+    trustKeysJson: args.env.CONCLAVE_RELEASE_TRUST_KEYS_JSON,
+    publisher,
+    signingKeyId,
+    signature,
+    message: workerProfileSigningMessage({
+      publisher,
+      signingKeyId,
+      workerTypeId: args.workerTypeId,
+      revision: nextRevision,
+      schemaVersion: validated.profile.schemaVersion,
+      payloadDigest: validated.digest,
+    }),
+  });
+  if (!signatureValid) {
+    throw new ToolProfileRegistryError(
+      500,
+      "Cloud signing boundary failed to produce a valid Worker Profile signature",
+    );
+  }
   await persistWorkerProfileSnapshot({
     env: args.env,
     workerTypeId: args.workerTypeId,

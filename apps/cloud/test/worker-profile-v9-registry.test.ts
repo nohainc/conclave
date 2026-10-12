@@ -111,6 +111,29 @@ describe("V9 Worker Profile registry", () => {
       expect(published.revision).toBe(1);
       expect(published.verified).toBe(true);
 
+      await expect(
+        publishWorkerProfile({
+          env,
+          workerTypeId: "fixture-worker",
+          expectedRevision: 1,
+          candidate: first,
+          candidateDigest: undefined,
+          evidence: makeEvidence(first, firstValidation.digest),
+          actorUserId: "profile-lab",
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      await expect(
+        publishWorkerProfile({
+          env,
+          workerTypeId: "fixture-worker",
+          expectedRevision: 1,
+          candidate: first,
+          candidateDigest: firstValidation.digest,
+          evidence: undefined,
+          actorUserId: "profile-lab",
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+
       const second = makeProfile("fixture-worker", 2);
       const secondValidation = await validateWorkerProfileCandidate(
         "fixture-worker",
@@ -125,6 +148,27 @@ describe("V9 Worker Profile registry", () => {
         evidence: makeEvidence(second, secondValidation.digest),
         actorUserId: "profile-lab",
       });
+
+      sqlite
+        .prepare(
+          "UPDATE worker_profile_history SET signature = ? WHERE worker_type_id = ? AND revision = ?",
+        )
+        .run("tampered-signature", "fixture-worker", 1);
+      await expect(
+        restoreWorkerProfile({
+          env,
+          workerTypeId: "fixture-worker",
+          expectedRevision: 2,
+          targetRevision: 1,
+          restorationReason: "Reject tampered history",
+          actorUserId: "profile-lab",
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+      sqlite
+        .prepare(
+          "UPDATE worker_profile_history SET signature = ? WHERE worker_type_id = ? AND revision = ?",
+        )
+        .run(published.signature, "fixture-worker", 1);
 
       await expect(
         publishWorkerProfile({

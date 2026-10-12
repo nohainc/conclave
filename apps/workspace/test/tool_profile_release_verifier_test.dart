@@ -2,6 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart';
+import 'package:crypto/crypto.dart';
+import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+    show canonicalJson;
 import 'package:conclave_workspace/tool_profile_release_verifier.dart';
 import 'package:test/test.dart';
 
@@ -139,5 +143,80 @@ void main() {
       expectedWorkerTypeId: workerTypeId,
     );
     expect(admitted.channel, 'beta');
+  });
+
+  test('admits an intact signed V9 current Worker Profile snapshot', () async {
+    final profile = Map<String, Object?>.from(release['profile']! as Map);
+    final digest =
+        sha256.convert(utf8.encode(canonicalJson(profile))).toString();
+    const revision = 7;
+    final message = workerProfileSigningMessage(
+      publisher: fixturePublisher,
+      signingKeyId: fixtureKeyId,
+      workerTypeId: workerTypeId,
+      revision: revision,
+      schemaVersion: profile['schemaVersion']! as int,
+      payloadDigest: digest,
+    );
+    final signature = base64.encode(
+      (await Ed25519().sign(utf8.encode(message), keyPair: signing.pair)).bytes,
+    );
+    final snapshot = <String, Object?>{
+      'workerTypeId': workerTypeId,
+      'schemaVersion': profile['schemaVersion'],
+      'profile': profile,
+      'revision': revision,
+      'digest': digest,
+      'signature': signature,
+      'signingKeyId': fixtureKeyId,
+      'publisher': fixturePublisher,
+      'verified': true,
+    };
+
+    final admitted = await WorkerProfileSnapshotVerifier.verify(
+      input: snapshot,
+      trustPolicy: signing.trustPolicy,
+      expectedWorkerTypeId: workerTypeId,
+    );
+    expect(admitted.revision, revision);
+    expect(admitted.payloadDigest, digest);
+    expect(admitted.profile, isNotEmpty);
+  });
+
+  test('rejects a V9 snapshot after payload mutation', () async {
+    final profile = Map<String, Object?>.from(release['profile']! as Map);
+    final digest =
+        sha256.convert(utf8.encode(canonicalJson(profile))).toString();
+    final message = workerProfileSigningMessage(
+      publisher: fixturePublisher,
+      signingKeyId: fixtureKeyId,
+      workerTypeId: workerTypeId,
+      revision: 1,
+      schemaVersion: profile['schemaVersion']! as int,
+      payloadDigest: digest,
+    );
+    final snapshot = <String, Object?>{
+      'workerTypeId': workerTypeId,
+      'schemaVersion': profile['schemaVersion'],
+      'profile': profile,
+      'revision': 1,
+      'digest': digest,
+      'signature': base64.encode(
+        (await Ed25519().sign(utf8.encode(message), keyPair: signing.pair))
+            .bytes,
+      ),
+      'signingKeyId': fixtureKeyId,
+      'publisher': fixturePublisher,
+      'verified': true,
+    };
+    (snapshot['profile']! as Map<String, Object?>)['releaseVersion'] = 99;
+    await expectLater(
+      WorkerProfileSnapshotVerifier.verify(
+        input: snapshot,
+        trustPolicy: signing.trustPolicy,
+        expectedWorkerTypeId: workerTypeId,
+      ),
+      throwsA(anything),
+    );
   });
 }

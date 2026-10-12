@@ -118,6 +118,7 @@ function snapshotResponse(
     digest: snapshot.digest,
     signature: snapshot.signature,
     signingKeyId: snapshot.signingKeyId,
+    publisher: snapshot.publisher,
     updatedByUserId: snapshot.updatedByUserId,
     updatedAt: snapshot.updatedAt,
     verified: snapshot.verified,
