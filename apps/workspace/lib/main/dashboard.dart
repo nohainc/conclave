@@ -29,6 +29,7 @@ class WorkspaceDashboard extends StatefulWidget {
     this.workerCatalogCoordinator,
     this.onConfigureWorker,
     this.onSetWorkerEnabled,
+    this.onSetFullLocalAccess,
     this.signedIn = false,
     super.key,
   });
@@ -62,6 +63,8 @@ class WorkspaceDashboard extends StatefulWidget {
   final Future<void> Function(WorkerDescriptor worker)? onConfigureWorker;
   final Future<void> Function(String workerId, bool enabled)?
       onSetWorkerEnabled;
+  final Future<void> Function(String workerId, bool enabled)?
+      onSetFullLocalAccess;
   final bool signedIn;
 
   @override
@@ -340,6 +343,8 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                         onReadinessCheck: widget.onReadinessCheck,
                         onConfigureWorker: widget.onConfigureWorker,
                         onSetWorkerEnabled: widget.onSetWorkerEnabled,
+                        onSetFullLocalAccess: widget.onSetFullLocalAccess,
+                        requireStepUp: widget.requireStepUp,
                       ),
                     ],
                   ],

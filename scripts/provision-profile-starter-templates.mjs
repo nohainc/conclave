@@ -46,6 +46,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
         "0034_runtime_model_catalog_starters.sql",
         "0035_codex_app_server_model_discovery.sql",
         "0038_gemini_combined_model_selection.sql",
+        "0041_full_local_access_profile_mappings.sql",
       ]
         .map((name) =>
           readFileSync(join(root, "apps/cloud/migrations-v8", name), "utf8"),

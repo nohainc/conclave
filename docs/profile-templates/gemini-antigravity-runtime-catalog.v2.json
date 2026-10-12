@@ -365,7 +365,7 @@
   "releaseVersion": 2,
   "sandbox": {
     "mappings": {
-      "full_access": [],
+      "full_access": ["--dangerously-skip-permissions"],
       "provider_default": [
         "--sandbox",
         "--mode",

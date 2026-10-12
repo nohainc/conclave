@@ -59,6 +59,7 @@ void main() {
     expect(record['activationState'], 'enabled');
     expect(record['localConcurrencyLimit'], 2);
     expect(record['localPermissions'], ['repository:read']);
+    expect(record['fullLocalAccessAuthorized'], isFalse);
     expect(record['readinessState'], 'ready');
     expect(record['providerToolName'], 'Codex CLI');
     expect(record['providerToolVersion'], '1.2.3');
@@ -76,6 +77,29 @@ void main() {
     }
     expect((await registry.list()).single.toolPath,
         '/Users/test/.local/bin/codex');
+  });
+
+  test('full local access is owner-controlled and grants network permission',
+      () async {
+    final worker = await registry.create(
+      catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
+      localPermissions: const ['repository:read', 'shell:execute'],
+    );
+
+    final enabled = await registry.setFullLocalAccess(worker.id, true);
+    expect(enabled.fullLocalAccessAuthorized, isTrue);
+    expect(
+        enabled.localPermissions,
+        containsAll([
+          'repository:read',
+          'repository:write',
+          'shell:execute',
+          'network:use'
+        ]));
+
+    final disabled = await registry.setFullLocalAccess(worker.id, false);
+    expect(disabled.fullLocalAccessAuthorized, isFalse);
+    expect(disabled.localPermissions, isNot(contains('network:use')));
   });
 
   test('reset is performed by the runtime owner and shuts down Worker slots',

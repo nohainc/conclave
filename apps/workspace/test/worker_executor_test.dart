@@ -192,6 +192,80 @@ void main() {
         isFalse);
   });
 
+  test('persists a repository checkout across runtime recreation', () async {
+    final root =
+        await Directory.systemTemp.createTemp('space-repository-root-');
+    addTearDown(() => root.delete(recursive: true));
+    SpaceDirectoryLifecycle lifecycle() => SpaceDirectoryLifecycle(
+          SpaceDirectoryResolver(
+            workRoot: Directory('${root.path}/work'),
+            registryDirectory: Directory('${root.path}/state'),
+          ),
+        );
+    WorkspaceAssignmentContext context(String spaceName) =>
+        WorkspaceAssignmentContext(
+          workspaceId: 'workspace-1',
+          workspaceRuntimeId: 'runtime-1',
+          workerId: 'repository-worker',
+          runId: 'run-repository',
+          taskId: 'task-repository',
+          attemptId: 'attempt-repository',
+          assignmentId: 'assignment-repository',
+          idempotencyKey: 'idem-repository',
+          payload: {
+            'workerId': 'repository-worker',
+            'workerTypeId': 'test-worker',
+            'spaceId': 'space-repository',
+            'threadId': 'thread-repository',
+            'spaceName': spaceName,
+            'executionClass': 'stateful_thread',
+          },
+        );
+
+    final firstHandler = WorkerAssignmentHandler(
+      spaceDirectoryLifecycle: lifecycle(),
+      resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
+    );
+    final first =
+        await firstHandler.prepareAssignmentScope(context('Conclave'));
+    final repository = Directory(
+        '${first.workingDirectory.path}${Platform.pathSeparator}checkout');
+    await repository.create();
+    await _runGit(repository, ['init', '-q']);
+    await File('${repository.path}${Platform.pathSeparator}README.md')
+        .writeAsString('persistent checkout\n');
+    await _runGit(repository, ['add', 'README.md']);
+    await _runGit(repository, [
+      '-c',
+      'user.email=test@example.com',
+      '-c',
+      'user.name=Conclave Test',
+      'commit',
+      '-qm',
+      'initial'
+    ]);
+
+    final secondHandler = WorkerAssignmentHandler(
+      spaceDirectoryLifecycle: lifecycle(),
+      resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
+    );
+    final second = await secondHandler.prepareAssignmentScope(
+      context('Renamed Conclave'),
+    );
+    expect(second.workingDirectory.path, first.workingDirectory.path);
+    expect(
+      await File('${repository.path}${Platform.pathSeparator}README.md')
+          .readAsString(),
+      'persistent checkout\n',
+    );
+    final status = await Process.run(
+      'git',
+      ['-C', repository.path, 'rev-parse', '--is-inside-work-tree'],
+    );
+    expect(status.exitCode, 0);
+    expect(status.stdout.toString().trim(), 'true');
+  });
+
   test('requires Thread identity for stateful process CWD', () async {
     final handler = WorkerAssignmentHandler(
       resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
@@ -303,4 +377,15 @@ void main() {
       )),
     );
   });
+}
+
+Future<void> _runGit(Directory workingDirectory, List<String> arguments) async {
+  final result = await Process.run(
+    'git',
+    arguments,
+    workingDirectory: workingDirectory.path,
+  );
+  if (result.exitCode != 0) {
+    throw StateError('git failed: ${result.stderr}');
+  }
 }

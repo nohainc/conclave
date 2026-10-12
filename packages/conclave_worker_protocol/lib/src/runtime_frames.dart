@@ -771,11 +771,15 @@ final class ExecuteRequest extends WorkerFrame {
   }
 }
 
-/// A bounded Workspace-selected sandbox mode. Full access is intentionally
-/// excluded from the Local Worker Protocol so assignments cannot request it.
+/// A bounded Workspace-selected execution mode.
+///
+/// `full_access` is emitted only after the Workspace service has verified its
+/// persisted host-owner authorization. It remains explicit so the Engine and
+/// signed Tool Profile apply the same policy end to end.
 enum WorkerExecutionPolicy {
   restricted('restricted'),
-  providerDefault('provider_default');
+  providerDefault('provider_default'),
+  fullAccess('full_access');
 
   const WorkerExecutionPolicy(this.wireValue);
   final String wireValue;
@@ -783,6 +787,7 @@ enum WorkerExecutionPolicy {
   static WorkerExecutionPolicy fromWireValue(String value) => switch (value) {
         'restricted' => WorkerExecutionPolicy.restricted,
         'provider_default' => WorkerExecutionPolicy.providerDefault,
+        'full_access' => WorkerExecutionPolicy.fullAccess,
         _ => throw const FormatException('invalid executionPolicy'),
       };
 }

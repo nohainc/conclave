@@ -250,7 +250,7 @@
         "--mode",
         "plan"
       ],
-      "full_access": []
+      "full_access": ["--dangerously-skip-permissions"]
     }
   },
   "progress": [

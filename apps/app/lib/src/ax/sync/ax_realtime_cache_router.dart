@@ -7,10 +7,12 @@ class AxRealtimeCacheRouter {
   AxRealtimeCacheRouter(this.engine,
       {this.discussionChanged,
       this.discussionResynchronize,
+      this.discussionFullResynchronize,
       this.discussionObserved});
   final Future<void> Function(String threadId, String type, String entityId)?
       discussionChanged;
   final Future<void> Function(String threadId)? discussionResynchronize;
+  final Future<void> Function(String threadId)? discussionFullResynchronize;
   final bool Function(String threadId)? discussionObserved;
   final AxSyncEngine engine;
   final _eventIds = <String>{};
@@ -47,7 +49,10 @@ class AxRealtimeCacheRouter {
       final pending = _recoveries[key];
       if (pending != null) return pending;
       late final Future<void> recovery;
-      recovery = _recover(scope).whenComplete(() {
+      recovery = _recover(scope,
+              fullDiscussionReconciliation:
+                  type == 'reconnect.required' || type == 'realtime.ready')
+          .whenComplete(() {
         if (identical(_recoveries[key], recovery)) _recoveries.remove(key);
       });
       _recoveries[key] = recovery;
@@ -129,7 +134,8 @@ class AxRealtimeCacheRouter {
     }
   }
 
-  Future<void> _recover(AxSyncScope scope) async {
+  Future<void> _recover(AxSyncScope scope,
+      {required bool fullDiscussionReconciliation}) async {
     engine.invalidateScope(scope);
     final discussions = engine.relevantKeys
         .where((key) =>
@@ -148,7 +154,10 @@ class AxRealtimeCacheRouter {
               _observed(key)) &&
           (discussionResynchronize == null || key.parts[0] != 'thread')),
       if (discussionResynchronize != null)
-        for (final key in discussions) discussionResynchronize!(key.parts[1]),
+        for (final key in discussions)
+          (fullDiscussionReconciliation && discussionFullResynchronize != null
+              ? discussionFullResynchronize!(key.parts[1])
+              : discussionResynchronize!(key.parts[1])),
     ]);
   }
 

@@ -64,6 +64,7 @@ export function sqliteD1() {
     "0037_immutable_execution_selection.sql",
     "0039_issue_reports.sql",
     "0040_issue_report_investigation.sql",
+    "0041_full_local_access_profile_mappings.sql",
   ]) {
     sqlite.exec(
       readFileSync(

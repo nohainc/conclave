@@ -823,6 +823,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       onConfigureWorker: (worker) =>
           lifecycle.workerCatalog.configureWorker(worker.workerTypeId),
       onSetWorkerEnabled: lifecycle.workerCatalog.setEnabled,
+      onSetFullLocalAccess: lifecycle.workerCatalog.setFullLocalAccess,
       workerRevision: _workerRevision,
       credentialStore: lifecycle.credentialStore,
       workerCatalogCoordinator: lifecycle.workerCatalog,

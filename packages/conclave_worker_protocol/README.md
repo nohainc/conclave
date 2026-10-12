@@ -11,9 +11,10 @@ protocol. Provider tool paths may appear in probe results for local diagnostics
 and must be excluded from Cloud inventory. This package has no Flutter
 dependency.
 
-Execute requests may carry the bounded `executionPolicy` values `restricted`
-and `provider_default`. The field defaults to `restricted` for older senders;
-`full_access` is not representable in the protocol.
+Execute requests may carry the bounded `executionPolicy` values `restricted`,
+`provider_default`, and `full_access`. The field defaults to `restricted` for
+older senders. Workspace emits `full_access` only for a locally owner-authorized
+Worker; remote assignments cannot grant it.
 
 This is the sole Dart package for the Local Worker Protocol in the current
 runtime. Older JSON-RPC Worker protocol models have been removed.

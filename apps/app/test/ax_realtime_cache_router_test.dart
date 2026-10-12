@@ -224,6 +224,26 @@ void main() {
     expect(loads.values.single, 1);
     expect(engine.peek(q).data, 1);
   });
+
+  test(
+      'initial realtime recovery uses full reconciliation for observed history',
+      () async {
+    final q = query(['thread', 'W', 'discussion']);
+    await engine.ensure(q);
+    engine.watch(q, (_) {}, fireImmediately: false);
+    var incremental = 0;
+    var full = 0;
+    router = AxRealtimeCacheRouter(engine, discussionResynchronize: (id) async {
+      incremental++;
+    }, discussionFullResynchronize: (id) async {
+      full++;
+    });
+
+    await router.handle({'type': 'realtime.ready'});
+
+    expect(full, 1);
+    expect(incremental, 0);
+  });
   test('reconnect bursts share one recovery without detaching it', () async {
     final delayed = Completer<int>();
     var calls = 0;

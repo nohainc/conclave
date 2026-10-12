@@ -166,12 +166,10 @@ void main() {
       'executionPolicy': 'provider_default',
     })) as ExecuteRequest;
     expect(readOnly.executionPolicy, WorkerExecutionPolicy.providerDefault);
-    expect(
-      () => decodeWorkerFrame(
-        jsonEncode({...request, 'executionPolicy': 'full_access'}),
-      ),
-      throwsFormatException,
-    );
+    final fullAccess = decodeWorkerFrame(
+      jsonEncode({...request, 'executionPolicy': 'full_access'}),
+    ) as ExecuteRequest;
+    expect(fullAccess.executionPolicy, WorkerExecutionPolicy.fullAccess);
   });
 
   test('enforces frame and prompt bounds', () {

@@ -225,7 +225,7 @@
     "mappings": {
       "restricted": ["--sandbox", "--mode", "accept-edits"],
       "provider_default": ["--sandbox", "--mode", "plan"],
-      "full_access": []
+      "full_access": ["--dangerously-skip-permissions"]
     }
   },
   "progress": [

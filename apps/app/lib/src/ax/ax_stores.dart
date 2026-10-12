@@ -275,6 +275,8 @@ class AxStore {
       discussionObserved: discussion.isObserved,
       discussionResynchronize: (id) async {
     await discussion.synchronize(id, reconcileNewest: false);
+  }, discussionFullResynchronize: (id) async {
+    await discussion.synchronize(id, reconcileNewest: true, reconcileAll: true);
   });
 
   /// Existing HTTP APIs expose user-wide lists. Merge only the affected

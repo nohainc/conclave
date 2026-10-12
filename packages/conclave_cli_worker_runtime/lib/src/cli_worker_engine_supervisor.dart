@@ -549,6 +549,20 @@ final class CliWorkerEngineSupervisor {
       'XDG_CONFIG_HOME',
       'USERPROFILE',
       'SystemRoot',
+      'HTTP_PROXY',
+      'HTTPS_PROXY',
+      'ALL_PROXY',
+      'NO_PROXY',
+      'SSH_AUTH_SOCK',
+      'SSH_AGENT_PID',
+      'GIT_CONFIG_GLOBAL',
+      'GIT_CONFIG_SYSTEM',
+      'GIT_SSH_COMMAND',
+      'GIT_ASKPASS',
+      'GIT_TERMINAL_PROMPT',
+      'SSH_ASKPASS',
+      'XDG_DATA_HOME',
+      'XDG_CACHE_HOME',
     };
     return {
       for (final key in inheritedKeys)

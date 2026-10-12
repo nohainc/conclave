@@ -8,6 +8,8 @@ class _WorkersTab extends StatefulWidget {
     this.onReadinessCheck,
     this.onConfigureWorker,
     this.onSetWorkerEnabled,
+    this.onSetFullLocalAccess,
+    this.requireStepUp,
     super.key,
   });
 
@@ -17,6 +19,9 @@ class _WorkersTab extends StatefulWidget {
   final Future<void> Function(WorkerDescriptor worker)? onConfigureWorker;
   final Future<void> Function(String workerId, bool enabled)?
       onSetWorkerEnabled;
+  final Future<void> Function(String workerId, bool enabled)?
+      onSetFullLocalAccess;
+  final Future<bool> Function(String reason)? requireStepUp;
   final Future<void> Function(
       {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
 
@@ -69,6 +74,21 @@ class _WorkersTabState extends State<_WorkersTab> {
     bool enabled,
   ) async {
     await widget.onSetWorkerEnabled?.call(worker.id, enabled);
+    await widget.catalogCoordinator?.refreshLocalWorkers();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _setFullLocalAccess(
+    LocalWorker worker,
+    bool enabled,
+  ) async {
+    if (enabled && widget.requireStepUp != null) {
+      final authenticated = await widget.requireStepUp!(
+        'Authorize Full Local Access for this Worker',
+      );
+      if (!authenticated) return;
+    }
+    await widget.onSetFullLocalAccess?.call(worker.id, enabled);
     await widget.catalogCoordinator?.refreshLocalWorkers();
     if (mounted) setState(() {});
   }
@@ -267,6 +287,18 @@ class _WorkersTabState extends State<_WorkersTab> {
                               LocalWorkerActivationState.enabled
                           ? 'Disable'
                           : 'Enable')),
+                  TextButton(
+                    onPressed:
+                        canConfigure && widget.onSetFullLocalAccess != null
+                            ? () => _setFullLocalAccess(
+                                  worker,
+                                  !worker.fullLocalAccessAuthorized,
+                                )
+                            : null,
+                    child: Text(worker.fullLocalAccessAuthorized
+                        ? 'Disable full access'
+                        : 'Enable full access'),
+                  ),
                 ],
               ],
             ),
@@ -282,6 +314,13 @@ class _WorkersTabState extends State<_WorkersTab> {
                 if (profileVersion != null)
                   Text('Profile v$profileVersion',
                       style: theme.textTheme.bodySmall),
+                if (worker != null)
+                  Text(
+                    worker.fullLocalAccessAuthorized
+                        ? 'Execution: Full local access'
+                        : 'Execution: Restricted',
+                    style: theme.textTheme.bodySmall,
+                  ),
               ],
             ),
           ),

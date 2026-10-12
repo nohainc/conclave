@@ -10,6 +10,37 @@ const migrationText = (name: string): string =>
   );
 
 describe("Gemini combined model starter", () => {
+  it("repairs the full-access mapping for already-migrated databases", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(migrationText("0001_conclave_v8.sql"));
+    db.exec(migrationText("0041_full_local_access_profile_mappings.sql"));
+
+    const row = db
+      .prepare(
+        "SELECT profile_json FROM tool_profile_starter_templates WHERE profile_definition_id = ?",
+      )
+      .get("gemini-antigravity") as { profile_json: string };
+    const profile = JSON.parse(row.profile_json) as any;
+    expect(profile.sandbox.mappings.full_access).toEqual([
+      "--dangerously-skip-permissions",
+    ]);
+
+    db
+      .prepare(
+        "UPDATE tool_profile_starter_templates SET profile_json = json_set(profile_json, '$.sandbox.mappings.full_access', json_array(?)) WHERE profile_definition_id = ?",
+      )
+      .run("--custom-approved-flag", "gemini-antigravity");
+    db.exec(migrationText("0041_full_local_access_profile_mappings.sql"));
+    const customized = db
+      .prepare(
+        "SELECT profile_json FROM tool_profile_starter_templates WHERE profile_definition_id = ?",
+      )
+      .get("gemini-antigravity") as { profile_json: string };
+    expect(
+      JSON.parse(customized.profile_json).sandbox.mappings.full_access,
+    ).toEqual(["--custom-approved-flag"]);
+  });
+
   it("publishes logical families and removes the separate effort argument", () => {
     const db = new DatabaseSync(":memory:");
     db.exec(migrationText("0001_conclave_v8.sql"));
@@ -17,6 +48,7 @@ describe("Gemini combined model starter", () => {
     db.exec(migrationText("0030_gemini_model_discovery_starter.sql"));
     db.exec(migrationText("0034_runtime_model_catalog_starters.sql"));
     db.exec(migrationText("0038_gemini_combined_model_selection.sql"));
+    db.exec(migrationText("0041_full_local_access_profile_mappings.sql"));
 
     const row = db
       .prepare(
@@ -37,6 +69,9 @@ describe("Gemini combined model starter", () => {
       { min: "1.3.3", maxExclusive: "1.3.4" },
     ]);
     expect(profile.model.executionOptions).toBeUndefined();
+    expect(profile.sandbox.mappings.full_access).toEqual([
+      "--dangerously-skip-permissions",
+    ]);
     expect(
       JSON.stringify(profile.execution.arguments),
     ).not.toContain("reasoningEffort");

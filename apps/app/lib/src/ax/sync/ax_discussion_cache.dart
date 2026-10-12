@@ -9,12 +9,18 @@ class AxDiscussionHistory {
       {Iterable<AxDiscussionMessage> messages = const [],
       this.olderCursor,
       this.newestCursor,
-      this.initialLoaded = false})
-      : messages = List.unmodifiable(messages);
+      this.initialLoaded = false,
+      Iterable<String> deletedMessageIds = const []})
+      : messages = List.unmodifiable(messages),
+        deletedMessageIds = Set.unmodifiable(deletedMessageIds);
   final List<AxDiscussionMessage> messages;
   final String? olderCursor;
   final String? newestCursor;
   final bool initialLoaded;
+
+  /// Locally observed server deletions. These tombstones prevent a stale
+  /// in-flight read or persisted snapshot from resurrecting a message.
+  final Set<String> deletedMessageIds;
 }
 
 class AxDiscussionState {
@@ -33,6 +39,7 @@ class AxDiscussionState {
 
 class _DiscussionContext {
   final pending = <String, AxDiscussionMessage>{};
+  final pendingDeletes = <String, int>{};
   final listeners = <void Function()>[];
   Future<void>? olderFlight;
   Object? olderError;
@@ -68,7 +75,8 @@ class AxDiscussionCache {
         (_) => AxDiscussionHistory(
             messages: history.messages
                 .skip(history.messages.length - engine.maxRetainedHistoryItems),
-            newestCursor: history.newestCursor));
+            newestCursor: history.newestCursor,
+            deletedMessageIds: history.deletedMessageIds));
     // Discussion cursors are opaque. Revalidate the head to obtain a safe
     // frontier rather than inventing a cursor for the retained oldest message.
     engine.invalidate(query(id).key);
@@ -109,9 +117,15 @@ class AxDiscussionCache {
       engine.peek(query(id)).data ?? AxDiscussionHistory();
 
   List<AxDiscussionMessage> _merge(
-      Iterable<AxDiscussionMessage> old, Iterable<AxDiscussionMessage> added) {
-    final map = {for (final message in old) message.id: message};
+      Iterable<AxDiscussionMessage> old, Iterable<AxDiscussionMessage> added,
+      {Iterable<String> deletedMessageIds = const []}) {
+    final deleted = deletedMessageIds.toSet();
+    final map = {
+      for (final message in old)
+        if (!deleted.contains(message.id)) message.id: message
+    };
     for (final message in added) {
+      if (deleted.contains(message.id)) continue;
       final previous = map[message.id];
       if (previous == null ||
           ((message.editedAt ?? message.createdAt)
@@ -127,13 +141,21 @@ class AxDiscussionCache {
       });
   }
 
+  bool _isAtOrAfter(AxDiscussionMessage value, AxDiscussionMessage boundary) {
+    final created = value.createdAt.compareTo(boundary.createdAt);
+    return created > 0 ||
+        (created == 0 && value.id.compareTo(boundary.id) >= 0);
+  }
+
   Future<AxDiscussionHistory> _synchronize(String id,
-      {required bool reconcileNewest}) async {
+      {required bool reconcileNewest, bool reconcileAll = false}) async {
     final previous = _history(id);
     final ds = source;
     if (ds == null) {
       return AxDiscussionHistory(
-          messages: previous.messages, initialLoaded: true);
+          messages: previous.messages,
+          initialLoaded: true,
+          deletedMessageIds: previous.deletedMessageIds);
     }
     final additions = <AxDiscussionMessage>[];
     String? newestCursor = previous.newestCursor;
@@ -152,17 +174,54 @@ class AxDiscussionCache {
         cursor = page.nextCursor;
       }
     }
+    final forwardIds = additions.map((message) => message.id).toSet();
     // Reopening reconciles edits; reconnects need only new messages.
     final head = reconcileNewest || previous.newestCursor == null
         ? await ds.loadDiscussionPage(threadId: id)
         : null;
     if (head != null) additions.addAll(head.messages);
+    var olderCursor =
+        previous.initialLoaded ? previous.olderCursor : head?.nextCursor;
+    if (reconcileAll && head != null) {
+      var cursor = head.nextCursor;
+      final seen = <String>{};
+      while (cursor != null) {
+        if (!seen.add(cursor)) {
+          throw const AxApiException('Discussion cursor repeated');
+        }
+        final page = await ds.loadDiscussionPage(threadId: id, before: cursor);
+        additions.addAll(page.messages);
+        cursor = page.nextCursor;
+      }
+      olderCursor = null;
+    }
     final current = _history(id);
+    var messages = _merge(current.messages, additions,
+        deletedMessageIds: current.deletedMessageIds);
+    if (reconcileAll && head != null) {
+      // A full reconciliation is authoritative for the complete history.
+      // Keep only rows returned by the server (while still honoring local
+      // deletion tombstones).
+      final serverIds = additions.map((message) => message.id).toSet();
+      messages =
+          messages.where((message) => serverIds.contains(message.id)).toList();
+    } else if (head != null && head.messages.isNotEmpty) {
+      // The head page is authoritative only for its represented range. Do
+      // not remove older pages merely because they are outside this window.
+      final headIds = head.messages.map((message) => message.id).toSet();
+      final oldest = head.messages.first;
+      messages = messages
+          .where((message) =>
+              headIds.contains(message.id) ||
+              forwardIds.contains(message.id) ||
+              !_isAtOrAfter(message, oldest))
+          .toList();
+    }
     return AxDiscussionHistory(
-        messages: _merge(current.messages, additions),
+        messages: messages,
         initialLoaded: true,
-        olderCursor:
-            current.initialLoaded ? current.olderCursor : head?.nextCursor,
+        deletedMessageIds: current.deletedMessageIds,
+        olderCursor: olderCursor,
         newestCursor:
             head?.newestCursor ?? newestCursor ?? current.newestCursor);
   }
@@ -176,7 +235,8 @@ class AxDiscussionCache {
       ...context.pending
     };
     return AxDiscussionState(
-        messages: List.unmodifiable(_merge(const [], map.values)),
+        messages: List.unmodifiable(_merge(const [], map.values,
+            deletedMessageIds: history.deletedMessageIds)),
         hasData: state.hasData ||
             history.initialLoaded ||
             context.pending.isNotEmpty,
@@ -207,9 +267,14 @@ class AxDiscussionCache {
   }
 
   Future<AxDiscussionHistory> synchronize(String id,
-      {bool reconcileNewest = true}) {
+      {bool reconcileNewest = true, bool reconcileAll = false}) {
     _context(id);
-    return engine.refresh(query(id, reconcileNewest: reconcileNewest));
+    final queryValue = query(id, reconcileNewest: reconcileNewest);
+    if (!reconcileAll) return engine.refresh(queryValue);
+    return engine.refresh(AxQuery<AxDiscussionHistory>(
+        key: queryValue.key,
+        load: () => _synchronize(id,
+            reconcileNewest: reconcileNewest, reconcileAll: true)));
   }
 
   /// Changes to older loaded messages use one detail read; creation follows the
@@ -223,6 +288,26 @@ class AxDiscussionCache {
       await synchronize(id, reconcileNewest: false);
       return;
     }
+    if (type == 'discussion.deleted') {
+      // A delete event is authoritative. Do not issue a detail read for a
+      // record that no longer exists, and fence reads so an older response
+      // cannot put it back into the cache.
+      engine.update(query(id), (state) {
+        final history = state.data ?? AxDiscussionHistory();
+        final deleted = {...history.deletedMessageIds, entityId};
+        context.pendingDeletes.remove(entityId);
+        return AxDiscussionHistory(
+            messages: history.messages.where((m) => m.id != entityId),
+            initialLoaded: history.initialLoaded,
+            olderCursor: history.olderCursor,
+            newestCursor: history.newestCursor,
+            deletedMessageIds: deleted);
+      });
+      context.realtimeError = null;
+      _emit(context);
+      return;
+    }
+    if (type != 'discussion.updated') return;
     if (!_history(id).messages.any((message) => message.id == entityId)) return;
     try {
       final message = await ds.loadDiscussionMessage(messageId: entityId);
@@ -237,8 +322,9 @@ class AxDiscussionCache {
             messages: _merge(history.messages, [message]),
             initialLoaded: history.initialLoaded,
             olderCursor: history.olderCursor,
-            newestCursor: history.newestCursor);
-      }, fenceReads: false);
+            newestCursor: history.newestCursor,
+            deletedMessageIds: history.deletedMessageIds);
+      });
     } catch (error) {
       if (identical(_contexts[id], context)) {
         context.realtimeError = error;
@@ -273,11 +359,13 @@ class AxDiscussionCache {
           engine.update(query(id), (state) {
             final current = state.data ?? AxDiscussionHistory();
             return AxDiscussionHistory(
-                messages: _merge(current.messages, page.messages),
+                messages: _merge(current.messages, page.messages,
+                    deletedMessageIds: current.deletedMessageIds),
                 initialLoaded: current.initialLoaded,
                 olderCursor: page.nextCursor,
-                newestCursor: current.newestCursor);
-          }, fenceReads: false);
+                newestCursor: current.newestCursor,
+                deletedMessageIds: current.deletedMessageIds);
+          });
         }
         completer.complete();
       } catch (error, stack) {
@@ -299,10 +387,12 @@ class AxDiscussionCache {
         message.id: message
       };
       return AxDiscussionHistory(
-          messages: _merge(const [], messages.values),
+          messages: _merge(const [], messages.values,
+              deletedMessageIds: current.deletedMessageIds),
           initialLoaded: current.initialLoaded,
           olderCursor: current.olderCursor,
-          newestCursor: current.newestCursor);
+          newestCursor: current.newestCursor,
+          deletedMessageIds: current.deletedMessageIds);
     });
   }
 
@@ -407,6 +497,12 @@ class AxDiscussionCache {
   Future<void> delete(String id, String messageId) async {
     final context = _context(id);
     context.pending.remove(messageId);
+    final original = _history(id)
+        .messages
+        .where((message) => message.id == messageId)
+        .firstOrNull;
+    final deleteToken = ++_temporaryId;
+    context.pendingDeletes[messageId] = deleteToken;
     final fence = engine.fence(query(id).key);
     return engine.mutations
         .run(AxMutationOperation<void, _DiscussionContext>(
@@ -423,6 +519,7 @@ class AxDiscussionCache {
                 initialLoaded: current.initialLoaded,
                 olderCursor: current.olderCursor,
                 newestCursor: current.newestCursor,
+                deletedMessageIds: {...current.deletedMessageIds, messageId},
               );
             });
             _emit(context);
@@ -431,11 +528,17 @@ class AxDiscussionCache {
           isCurrent: (context) => identical(_contexts[id], context) && fence(),
           execute: (_) async {
             if (source != null && !messageId.startsWith('temp-')) {
-              await source!.deleteDiscussionMessage(messageId: messageId);
+              try {
+                await source!.deleteDiscussionMessage(messageId: messageId);
+              } on AxApiException catch (error) {
+                // DELETE is idempotent for an already-removed message.
+                if (error.statusCode != 404) rethrow;
+              }
             }
           },
           commit: (_, context) {
             context.pending.remove(messageId);
+            context.pendingDeletes.remove(messageId);
             engine.update(query(id), (state) {
               final current = state.data ?? AxDiscussionHistory();
               final updatedMessages =
@@ -445,11 +548,29 @@ class AxDiscussionCache {
                 initialLoaded: current.initialLoaded,
                 olderCursor: current.olderCursor,
                 newestCursor: current.newestCursor,
+                deletedMessageIds: {...current.deletedMessageIds, messageId},
               );
             });
             _emit(context);
           },
           rollback: (_, __, context) {
+            if (context.pendingDeletes[messageId] == deleteToken) {
+              context.pendingDeletes.remove(messageId);
+              engine.update(query(id), (state) {
+                final current = state.data ?? AxDiscussionHistory();
+                final deleted = {...current.deletedMessageIds}
+                  ..remove(messageId);
+                return AxDiscussionHistory(
+                    messages: original == null
+                        ? current.messages
+                        : _merge(current.messages, [original],
+                            deletedMessageIds: deleted),
+                    initialLoaded: current.initialLoaded,
+                    olderCursor: current.olderCursor,
+                    newestCursor: current.newestCursor,
+                    deletedMessageIds: deleted);
+              });
+            }
             _emit(context);
           },
           invalidate: (_, __) async {},
@@ -464,6 +585,7 @@ class AxDiscussionCache {
     for (final context in _contexts.values) {
       context.cancel?.call();
       context.pending.clear();
+      context.pendingDeletes.clear();
     }
     _contexts.clear();
     for (final id in ids) {

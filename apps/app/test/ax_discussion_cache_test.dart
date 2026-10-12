@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/ax_work_models.dart';
+import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
 import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'ax_fixture_data.dart';
@@ -35,6 +35,8 @@ class DiscussionSource extends AxFixtureDataSource {
 
   final sends = <Completer<AxDiscussionMessage>>[];
   final edits = <Completer<AxDiscussionMessage>>[];
+  AxApiException? deleteError;
+  final deletedIds = <String>[];
   List<AxDiscussionMessage> server = [];
   @override
   Future<AxDiscussionPage> loadDiscussionPage(
@@ -67,6 +69,13 @@ class DiscussionSource extends AxFixtureDataSource {
     final request = Completer<AxDiscussionMessage>();
     edits.add(request);
     return request.future;
+  }
+
+  @override
+  Future<void> deleteDiscussionMessage({required String messageId}) async {
+    deletedIds.add(messageId);
+    final error = deleteError;
+    if (error != null) throw error;
   }
 }
 
@@ -163,6 +172,72 @@ void main() {
     await cache.reconcileSignal('w', 'discussion.updated', 'unloaded');
     expect(source.detailLoads, isEmpty);
     expect(source.pages.length, 1);
+  });
+  test('realtime deletion removes the message without a detail read', () async {
+    source.server = [message('one', 'one'), message('two', 'two')];
+    await cache.synchronize('w');
+
+    await cache.reconcileSignal('w', 'discussion.deleted', 'one');
+
+    expect(cache.peek('w').messages.map((row) => row.id), ['two']);
+    expect(source.detailLoads, isEmpty);
+    expect(cache.peek('w').error, isNull);
+  });
+
+  test('a stale refresh cannot resurrect a realtime-deleted message', () async {
+    source.server = [message('one', 'one')];
+    await cache.synchronize('w');
+    await cache.reconcileSignal('w', 'discussion.deleted', 'one');
+
+    // Simulate a delayed/ stale page that still contains the deleted row.
+    source.server = [message('one', 'stale')];
+    await cache.synchronize('w');
+
+    expect(cache.peek('w').messages, isEmpty);
+  });
+
+  test('full reconnect reconciliation removes deletions outside the head page',
+      () async {
+    final initial = Completer<AxDiscussionPage>();
+    source.queuedPages.add(initial);
+    final first = cache.synchronize('w');
+    initial.complete(AxDiscussionPage(
+        messages: [message('old', 'old'), message('deleted', 'gone')],
+        nextCursor: 'initial-older'));
+    await first;
+
+    final head = Completer<AxDiscussionPage>();
+    final older = Completer<AxDiscussionPage>();
+    source.queuedPages.addAll([head, older]);
+    final reconnect = cache.synchronize('w', reconcileAll: true);
+    head.complete(AxDiscussionPage(
+        messages: [message('new', 'new')],
+        nextCursor: 'older-page',
+        newestCursor: 'reconnected'));
+    older.complete(AxDiscussionPage(messages: [message('old', 'old')]));
+    await reconnect;
+
+    expect(cache.peek('w').messages.map((row) => row.id), ['new', 'old']);
+  });
+
+  test('failed deletion restores the original message', () async {
+    source.server = [message('one', 'one')];
+    await cache.synchronize('w');
+    source.deleteError = const AxApiException('offline');
+
+    await expectLater(cache.delete('w', 'one'), throwsA(isA<AxApiException>()));
+
+    expect(cache.peek('w').messages.single.body, 'one');
+  });
+
+  test('deleting an already missing message is idempotent on 404', () async {
+    source.server = [message('one', 'one')];
+    await cache.synchronize('w');
+    source.deleteError = const AxApiException('missing', statusCode: 404);
+
+    await cache.delete('w', 'one');
+
+    expect(cache.peek('w').messages, isEmpty);
   });
   test('late detail responses cannot repopulate a cleared session', () async {
     source.server = [message('one', 'old')];

@@ -272,6 +272,74 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
       });
     }
 
+    if (Platform.environment['CONCLAVE_TEST_REAL_PROFILE_FULL_LOCAL_ACCESS'] !=
+        '1') {
+      await notApplicableScenario('full_local_access_host_operations');
+    } else {
+      await scenario('full_local_access_host_operations', () async {
+        final repositoryUrl =
+            Platform.environment['CONCLAVE_TEST_HOST_REPOSITORY'] ??
+                'https://github.com/nohainc/conclave.git';
+        final script =
+            File('${threadDirectory.path}/phase7-host-access-check.sh');
+        await script.writeAsString(_hostAccessScript(repositoryUrl));
+        final chmod = await Process.run('chmod', ['700', script.path]);
+        if (chmod.exitCode != 0) {
+          throw StateError(
+              'Could not make the host acceptance script executable.');
+        }
+
+        final engine = await _EngineClient.start(
+          official: official,
+          repository: repository,
+          profileFile: profileFile,
+          profile: profile,
+          digest: digest,
+          stateDirectory: stateDirectory,
+          threadDirectory: threadDirectory,
+        );
+        try {
+          final result = await engine.exchange(
+            ExecuteRequest(
+              requestId: 'accept-full-local-access',
+              assignmentId: 'profile-acceptance-full-local-access',
+              prompt:
+                  'Run ./phase7-host-access-check.sh in the current working directory. Reply with exactly HOST_ACCESS_OK after it succeeds.',
+              timeoutMs: 180000,
+              sessionPolicy: WorkerSessionPolicy.stateless,
+              executionPolicy: WorkerExecutionPolicy.fullAccess,
+            ),
+            timeout: const Duration(minutes: 4),
+          );
+          expect(
+            result.terminal,
+            isA<WorkerResult>(),
+            reason: result.terminal is WorkerErrorFrame
+                ? jsonEncode((result.terminal as WorkerErrorFrame).toJson())
+                : null,
+          );
+          expect((result.terminal as WorkerResult).output,
+              contains('HOST_ACCESS_OK'));
+        } finally {
+          await engine.close();
+        }
+
+        final evidenceFile = File(
+          '${threadDirectory.path}/phase7-host-evidence.json',
+        );
+        expect(evidenceFile.existsSync(), isTrue);
+        final evidence = jsonDecode(await evidenceFile.readAsString())
+            as Map<String, Object?>;
+        expect(evidence['dns'], 'passed');
+        expect(evidence['https'], 'passed');
+        expect(evidence['gitLsRemote'], 'passed');
+        expect(evidence['gitClone'], 'passed');
+        expect(evidence['repositoryRead'], 'passed');
+        expect(evidence['repositoryWrite'], 'passed');
+        expect(evidence['gitCommit'], 'passed');
+      });
+    }
+
     final sessionKey = 'accept_${DateTime.now().microsecondsSinceEpoch}';
     final rememberedPhrase = 'PROFILE-${DateTime.now().microsecondsSinceEpoch}';
     if (!durableSessionSupported) {
@@ -427,6 +495,37 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
     await _writeEvidence(evidence, evidenceDirectory);
     await root.delete(recursive: true);
   }
+}
+
+String _hostAccessScript(String repositoryUrl) {
+  final quotedRepository = repositoryUrl.replaceAll("'", "'\\''");
+  return '''#!/bin/sh
+set -eu
+REMOTE='$quotedRepository'
+curl -fsSIL --max-time 20 https://github.com >/dev/null
+git ls-remote --heads "\$REMOTE" >/dev/null
+rm -rf phase7-host-checkout
+git clone --depth=1 "\$REMOTE" phase7-host-checkout >/dev/null
+if [ -s phase7-host-checkout/README.md ]; then
+  cat phase7-host-checkout/README.md >/dev/null
+elif [ -s phase7-host-checkout/README ]; then
+  cat phase7-host-checkout/README >/dev/null
+elif [ -s phase7-host-checkout/AGENTS.md ]; then
+  cat phase7-host-checkout/AGENTS.md >/dev/null
+else
+  echo "No readable repository documentation file" >&2
+  exit 1
+fi
+printf 'full local access\\n' > phase7-host-checkout/.conclave-phase7-marker
+git -C phase7-host-checkout config user.name 'Conclave Host Acceptance'
+git -C phase7-host-checkout config user.email host-acceptance@conclave.invalid
+git -C phase7-host-checkout add .conclave-phase7-marker
+git -C phase7-host-checkout commit -qm 'Phase 7 host access verification'
+cat > phase7-host-evidence.json <<'EOF'
+{"dns":"passed","https":"passed","gitLsRemote":"passed","gitClone":"passed","repositoryRead":"passed","repositoryWrite":"passed","gitCommit":"passed"}
+EOF
+printf 'HOST_ACCESS_OK\\n'
+''';
 }
 
 Directory _repositoryRoot() {

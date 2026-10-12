@@ -1500,7 +1500,30 @@ class CliWorkerEngine {
 
   Map<String, String> _environment([Map<String, String> context = const {}]) {
     final env = _map(_profile.environment);
-    final passthrough = _stringList(env['passthrough']);
+    final passthrough = _stringList(env['passthrough']).toSet();
+    if (context['executionPolicy'] ==
+        WorkerExecutionPolicy.fullAccess.wireValue) {
+      // Full local access still uses an explicit allowlist. These variables
+      // are needed by ordinary host Git/SSH/proxy/tool installations but do
+      // not expose the entire parent environment or arbitrary secrets.
+      passthrough.addAll(const {
+        'HTTP_PROXY',
+        'HTTPS_PROXY',
+        'ALL_PROXY',
+        'NO_PROXY',
+        'SSH_AUTH_SOCK',
+        'SSH_AGENT_PID',
+        'GIT_CONFIG_GLOBAL',
+        'GIT_CONFIG_SYSTEM',
+        'GIT_SSH_COMMAND',
+        'GIT_ASKPASS',
+        'GIT_TERMINAL_PROMPT',
+        'SSH_ASKPASS',
+        'XDG_CONFIG_HOME',
+        'XDG_DATA_HOME',
+        'XDG_CACHE_HOME',
+      });
+    }
     final parent = <String, String>{
       for (final key in passthrough)
         if (Platform.environment[key] case final value?) key: value,
@@ -1524,7 +1547,7 @@ class CliWorkerEngine {
         ),
     };
     final environment = CliEnvironmentBuilder(
-      allowedParentKeys: passthrough.toSet(),
+      allowedParentKeys: passthrough,
     ).build(values: values, parentEnvironment: parent);
     if (environment.length > 64 ||
         environment.entries.any(

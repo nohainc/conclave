@@ -1,5 +1,6 @@
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_workspace/worker_executor.dart';
+import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -56,5 +57,48 @@ void main() {
             WorkerExecutionPolicy.providerDefault);
       }
     }
+  });
+
+  test('full access requires persisted local authorization', () {
+    final payload = <String, Object?>{
+      'executionPolicy': 'full_access',
+      'executionClass': 'stateful_thread',
+      'readOnly': false,
+    };
+    expect(
+      () => assignmentExecutionPolicy(payload),
+      throwsA(isA<AssignmentExecutionFailure>()),
+    );
+    expect(
+      assignmentExecutionPolicy(payload, fullAccessAuthorized: true),
+      WorkerExecutionPolicy.fullAccess,
+    );
+    expect(
+      assignmentExecutionPolicy({
+        'executionClass': 'stateful_thread',
+      }, fullAccessAuthorized: true),
+      WorkerExecutionPolicy.fullAccess,
+    );
+    expect(
+      assignmentExecutionPolicy({
+        'executionClass': 'stateless_read',
+        'readOnly': false,
+      }, fullAccessAuthorized: true),
+      WorkerExecutionPolicy.fullAccess,
+    );
+    expect(
+      assignmentExecutionPolicy({
+        'executionClass': 'stateless_read',
+        'readOnly': true,
+      }, fullAccessAuthorized: true),
+      WorkerExecutionPolicy.providerDefault,
+    );
+  });
+
+  test('unknown explicit policies are rejected', () {
+    expect(
+      () => assignmentExecutionPolicy({'executionPolicy': 'unrestricted'}),
+      throwsA(isA<AssignmentExecutionFailure>()),
+    );
   });
 }

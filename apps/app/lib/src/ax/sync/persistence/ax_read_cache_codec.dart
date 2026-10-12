@@ -221,12 +221,17 @@ class AxReadCacheCodec {
         key.last == 'discussion' &&
         value is AxDiscussionHistory) {
       final safe = value.messages
-          .where((m) => serverId(m.id) && m.threadId == key[1])
+          .where((m) =>
+              serverId(m.id) &&
+              m.threadId == key[1] &&
+              !value.deletedMessageIds.contains(m.id))
           .toList();
       final recent =
           safe.skip(safe.length > 50 ? safe.length - 50 : 0).toList();
       data = {
         'messages': recent.map(message).toList(),
+        'deletedMessageIds':
+            value.deletedMessageIds.where(serverId).toList(growable: false),
         'olderCursor': safe.length > 50 ? null : value.olderCursor,
         'newestCursor': value.newestCursor,
         'initialLoaded': value.initialLoaded && safe.length <= 50
@@ -348,6 +353,10 @@ class AxReadCacheCodec {
               .query(parts[1]),
           AxDiscussionHistory(
               messages: messages,
+              deletedMessageIds:
+                  (value['deletedMessageIds'] as List? ?? const [])
+                      .whereType<String>()
+                      .where(serverId),
               olderCursor: value['olderCursor'] as String?,
               newestCursor: value['newestCursor'] as String?,
               initialLoaded: value['initialLoaded'] == true));

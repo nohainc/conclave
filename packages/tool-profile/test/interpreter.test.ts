@@ -204,6 +204,12 @@ describe("Tool Profile v1 pure interpreter", () => {
         context({ executionPolicy: "provider_default" }),
       ),
     ).toEqual(expect.arrayContaining(["--sandbox", "--mode", "plan"]));
+    const fullAccess = expandExecutionArguments(
+      profile,
+      context({ executionPolicy: "full_access" }),
+    );
+    expect(fullAccess).toContain("--dangerously-skip-permissions");
+    expect(fullAccess).not.toContain("--sandbox");
   });
 
   it("evaluates only the fixed present/absent argument conditions", () => {

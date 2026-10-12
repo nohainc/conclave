@@ -8,6 +8,7 @@ import 'package:crypto/crypto.dart';
 
 import 'tool_profile_catalog.dart';
 import 'platform_runtime.dart';
+import 'local_worker_permissions.dart';
 
 const _registrySchemaVersion = 19;
 
@@ -43,6 +44,7 @@ class LocalWorker {
     required this.workerTypeId,
     required this.localPermissions,
     required this.localConcurrencyLimit,
+    this.fullLocalAccessAuthorized = false,
     required LocalWorkerStatus status,
     LocalWorkerActivationState? activationState,
     WorkerReadinessState? readinessState,
@@ -78,6 +80,11 @@ class LocalWorker {
   final String workerTypeId;
   final List<String> localPermissions;
   final int localConcurrencyLimit;
+
+  /// Host-owner authorization for provider processes to run without an
+  /// additional Conclave/provider sandbox. This is local state and is never
+  /// accepted from Cloud assignment payloads.
+  final bool fullLocalAccessAuthorized;
 
   /// Local activation is independent from the package-reported health state.
   final LocalWorkerActivationState activationState;
@@ -119,6 +126,7 @@ class LocalWorker {
     String? workerTypeId,
     List<String>? localPermissions,
     int? localConcurrencyLimit,
+    bool? fullLocalAccessAuthorized,
     LocalWorkerStatus? status,
     LocalWorkerActivationState? activationState,
     WorkerReadinessState? readinessState,
@@ -151,6 +159,8 @@ class LocalWorker {
         localPermissions: localPermissions ?? this.localPermissions,
         localConcurrencyLimit:
             localConcurrencyLimit ?? this.localConcurrencyLimit,
+        fullLocalAccessAuthorized:
+            fullLocalAccessAuthorized ?? this.fullLocalAccessAuthorized,
         status: status ?? this.status,
         activationState: activationState ??
             (status == null
@@ -192,6 +202,7 @@ class LocalWorker {
         'productWorkerTypeId': workerTypeId,
         'localPermissions': localPermissions,
         'localConcurrencyLimit': localConcurrencyLimit,
+        'fullLocalAccessAuthorized': fullLocalAccessAuthorized,
         'activationState': activationState.name,
         'readinessState': readinessState.wireValue,
         'revision': revision,
@@ -220,6 +231,7 @@ class LocalWorker {
       'productWorkerTypeId',
       'localPermissions',
       'localConcurrencyLimit',
+      'fullLocalAccessAuthorized',
       'activationState',
       'readinessState',
       'revision',
@@ -330,6 +342,8 @@ class LocalWorker {
       throw const FormatException('Worker readiness state is invalid');
     }
     final concurrency = json['localConcurrencyLimit'];
+    final fullLocalAccessAuthorized =
+        json['fullLocalAccessAuthorized'] ?? false;
     final revision = json['revision'];
     if (concurrency is! int ||
         concurrency < 1 ||
@@ -337,6 +351,10 @@ class LocalWorker {
         revision < 1) {
       throw const FormatException(
           'Worker registry state or revision is invalid');
+    }
+    if (fullLocalAccessAuthorized is! bool) {
+      throw const FormatException(
+          'Worker full local access authorization is invalid');
     }
     final activationState = activation.first;
     final readinessState = parsedReadinessState;
@@ -346,6 +364,7 @@ class LocalWorker {
       workerTypeId: required('productWorkerTypeId'),
       localPermissions: strings('localPermissions'),
       localConcurrencyLimit: concurrency,
+      fullLocalAccessAuthorized: fullLocalAccessAuthorized,
       status: activationState == LocalWorkerActivationState.disabled
           ? LocalWorkerStatus.disabled
           : readinessState == WorkerReadinessState.ready
@@ -552,6 +571,26 @@ class LocalWorkerRegistry {
       ),
     );
   }
+
+  /// Grants or revokes host-owner full local execution for one Worker.
+  /// Enabling also grants the existing network permission; revoking removes
+  /// that permission so a later assignment cannot retain the broad mode.
+  Future<LocalWorker> setFullLocalAccess(
+    String workerId,
+    bool enabled,
+  ) async =>
+      update(workerId, (current) {
+        final permissions = current.localPermissions.toSet();
+        if (enabled) {
+          permissions.addAll(executionPermissionIds);
+        } else {
+          permissions.remove('network:use');
+        }
+        return current.copyWith(
+          fullLocalAccessAuthorized: enabled,
+          localPermissions: permissions.toList()..sort(),
+        );
+      });
 
   Future<void> remove(String workerId) => _locked(() async {
         final workers = await _read();

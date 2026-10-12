@@ -188,6 +188,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
         ready: catalogAvailable && worker.status == LocalWorkerStatus.ready,
         permissions: worker.localPermissions.toSet(),
         localConcurrencyLimit: worker.localConcurrencyLimit,
+        fullLocalAccessAuthorized: worker.fullLocalAccessAuthorized,
         providerCliVersion: worker.toolVersion,
       );
     },
@@ -297,7 +298,10 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
                   ? null
                   : (payload['executionSelection'] as Map?)?['catalogRevision']
                       as String?,
-          executionPolicy: assignmentExecutionPolicy(context.payload),
+          executionPolicy: assignmentExecutionPolicy(
+            context.payload,
+            fullAccessAuthorized: worker.fullLocalAccessAuthorized,
+          ),
           onProgress: onProgress,
         );
       } finally {

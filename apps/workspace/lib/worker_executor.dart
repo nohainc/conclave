@@ -10,11 +10,55 @@ import 'runtime_capabilities.dart';
 import 'space_directory.dart';
 import 'thread_directory.dart';
 
-/// Translate Cloud assignment permissions without consulting names or providers.
-WorkerExecutionPolicy assignmentExecutionPolicy(Map<String, Object?> payload) =>
-    payload['readOnly'] == true || payload['executionClass'] == 'stateless_read'
-        ? WorkerExecutionPolicy.providerDefault
-        : WorkerExecutionPolicy.restricted;
+/// Translate assignment policy without consulting names or providers.
+///
+/// Full local access is a local Workspace decision. The assignment may request
+/// it, but it is accepted only when the persisted host-owner authorization for
+/// the selected Worker is present.
+WorkerExecutionPolicy assignmentExecutionPolicy(
+  Map<String, Object?> payload, {
+  bool fullAccessAuthorized = false,
+}) {
+  final requested = payload['executionPolicy'];
+  if (requested == 'full_access') {
+    if (!fullAccessAuthorized) {
+      throw const AssignmentExecutionFailure(
+        code: 'permission_denied',
+        message: 'Full local access is not authorized for this Worker.',
+      );
+    }
+    return WorkerExecutionPolicy.fullAccess;
+  }
+  if (requested != null &&
+      requested != 'restricted' &&
+      requested != 'provider_default') {
+    throw const AssignmentExecutionFailure(
+      code: 'permission_denied',
+      message: 'The requested execution policy is not supported.',
+    );
+  }
+  // A read-only assignment must stay provider-controlled even when the local
+  // Worker is authorized for Full Local Access. `stateless_read` by itself is
+  // not enough to force the read-only policy: some one-shot Work requests are
+  // stateless while still allowing repository and shell operations.
+  if (payload['readOnly'] == true) {
+    return WorkerExecutionPolicy.providerDefault;
+  }
+  if (requested == 'provider_default') {
+    return WorkerExecutionPolicy.providerDefault;
+  }
+  if (requested == 'restricted') {
+    return WorkerExecutionPolicy.restricted;
+  }
+  // Once the owner has enabled Full Local Access for this Worker, ordinary
+  // non-read-only assignments inherit it unless Cloud explicitly asks for a
+  // narrower policy. This keeps old assignment payloads working while making
+  // the local setting effective.
+  if (fullAccessAuthorized) return WorkerExecutionPolicy.fullAccess;
+  return payload['executionClass'] == 'stateless_read'
+      ? WorkerExecutionPolicy.providerDefault
+      : WorkerExecutionPolicy.restricted;
+}
 
 Future<void> _materializeWorkRequestInputs({
   required Directory threadDirectory,
@@ -124,6 +168,7 @@ class AssignmentLogicalWorker {
     required this.ready,
     required this.permissions,
     required this.localConcurrencyLimit,
+    this.fullLocalAccessAuthorized = false,
     this.providerCliVersion,
   });
 
@@ -133,6 +178,7 @@ class AssignmentLogicalWorker {
   final bool ready;
   final Set<String> permissions;
   final int localConcurrencyLimit;
+  final bool fullLocalAccessAuthorized;
   final String? providerCliVersion;
 }
 
@@ -251,6 +297,24 @@ class WorkerAssignmentHandler {
     final scope = await prepareAssignmentScope(context);
     final worker = scope.worker;
     final workerId = worker.id;
+    // Validate the policy before any provider process is started. This keeps
+    // Cloud payloads from elevating a local Worker by themselves.
+    assignmentExecutionPolicy(
+      context.payload,
+      fullAccessAuthorized: worker.fullLocalAccessAuthorized,
+    );
+    if (worker.fullLocalAccessAuthorized &&
+        !worker.permissions.containsAll(const {
+          'repository:read',
+          'repository:write',
+          'shell:execute',
+          'network:use',
+        })) {
+      throw const AssignmentExecutionFailure(
+        code: 'permission_denied',
+        message: 'Full local access permissions are incomplete.',
+      );
+    }
     final allowed = worker.permissions;
     if (context.payload['permissionSnapshot'] != null) {
       validateAssignmentScope(

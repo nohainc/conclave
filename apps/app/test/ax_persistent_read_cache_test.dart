@@ -249,7 +249,8 @@ void main() {
             messages: messages,
             initialLoaded: true,
             olderCursor: 'older-opaque',
-            newestCursor: 'newest-opaque'));
+            newestCursor: 'newest-opaque',
+            deletedMessageIds: const ['D070']));
     first.syncEngine.update(
         first.workHistory.query('W'),
         (_) => AxWorkHistory(
@@ -259,7 +260,9 @@ void main() {
     final second = store(backend);
     await second.hydrateReadCache();
     expect(second.discussion.peek('W').messages, hasLength(50));
-    expect(second.discussion.peek('W').messages.first.id, 'D070');
+    expect(second.discussion.peek('W').messages.first.id, 'D069');
+    expect(second.discussion.peek('W').messages.any((m) => m.id == 'D070'),
+        isFalse);
     expect(second.discussion.peek('W').olderCursor, isNull);
     expect(second.workHistory.peek('W').requests, hasLength(50));
     expect(second.workHistory.peek('W').olderCursor!.id, 'R70');
