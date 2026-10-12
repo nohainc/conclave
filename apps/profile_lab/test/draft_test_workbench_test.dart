@@ -93,6 +93,8 @@ void main() {
     expect(find.text('Profile Tests'), findsNothing);
     await tester.tap(find.byTooltip('Show tests'));
     await tester.pump();
+    expect(find.text('Test Results'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Publish'), findsOneWidget);
     final before = tester.getSize(editor).height;
     await tester.drag(
         find.byKey(const ValueKey('workbench-divider')), const Offset(0, 40));
@@ -189,6 +191,7 @@ void main() {
       'Compare with current Profile',
       'Restore saved Profile',
       'Restore recovery snapshot',
+      'Profile history',
       'AI Repair'
     ]) {
       expect(find.text(action), findsOneWidget);

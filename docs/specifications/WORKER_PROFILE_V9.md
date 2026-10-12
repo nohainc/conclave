@@ -171,6 +171,15 @@ Profile Lab editing MUST keep local development state separate from publication:
   provides an offset; schema diagnostics without a source offset remain
   ordinary validation messages.
 
+The test surface is a collapsible result panel, hidden until a run begins or
+the operator opens it. It MUST summarize `Passed`, `Failed`, `Not Applicable`,
+and `Not Run` checks, while retaining detailed provider logs, execution events,
+error codes, and timing behind expandable results. Every result is bound to the
+candidate digest; changing the candidate invalidates the result set. The main
+editor toolbar owns the single `Publish` action, and the publication review
+shows a compact current-versus-candidate comparison, including provider CLI,
+environment, and security-sensitive changes.
+
 Cloud owns the authoritative transition:
 
 1. authenticate the Profile Lab audience and required operator permission;
@@ -194,7 +203,10 @@ publication.
 
 Restoration uses the same path: the operator selects a retained known-good
 snapshot, Profile Lab revalidates it, and Cloud publishes the same JSON as a
-new revision. The restored historical revision remains history only.
+new revision. The restored historical revision remains history only. Profile
+Lab history is therefore a comparison and recovery view, not a second
+publication channel; restoration always creates a new current revision and
+refreshes the synchronized editor state.
 
 ## 6. Workspace verification, caching, and activation
 

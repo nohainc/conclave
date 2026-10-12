@@ -68,7 +68,8 @@ class TestBenchView extends StatelessWidget {
     final v9 = c.isV9ProfileRegistry;
     final canRun = !busy && !c.isDirty && c.jsonValidationError == null;
     final passed = stages.where((s) => s.status == 'passed').length;
-    final skipped = stages.where((s) => s.status == 'skipped').length;
+    final notApplicable = stages.where((s) => s.status == 'skipped').length;
+    final notRun = stages.isEmpty ? 11 : (11 - stages.length).clamp(0, 11);
     final failed = stages.where((s) => s.status == 'failed').toList();
     Map<String, Object?>? evidence;
     for (final item in c.currentEvidence) {
@@ -168,6 +169,16 @@ class TestBenchView extends StatelessWidget {
                 ),
             ],
           ),
+          const SizedBox(height: 12),
+          _TestResultsSummary(
+            digest: draft.payloadDigest,
+            passed: passed,
+            failed: failed.length,
+            notApplicable: notApplicable,
+            notRun: notRun,
+            running: running,
+            elapsed: elapsed,
+          ),
           if (c.isTesting && !running)
             const Padding(
               padding: EdgeInsets.only(top: 8),
@@ -208,7 +219,7 @@ class TestBenchView extends StatelessWidget {
                   children: [
                     Text(
                       completed
-                          ? '$passed/11 passed${skipped > 0 ? " · $skipped skipped" : ""}'
+                          ? '$passed/11 passed${notApplicable > 0 ? " · $notApplicable not applicable" : ""}'
                           : 'Saved local acceptance evidence',
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
@@ -242,59 +253,6 @@ class TestBenchView extends StatelessWidget {
                 ),
               ),
             ),
-            if (qualified && !c.canPublish)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  c.labAccess?.profilesAdmin != true
-                      ? 'Profile Lab authorization is required to publish.'
-                      : 'Cloud Profile signing is not ready. Configure the signer and refresh access.',
-                ),
-              ),
-            if (qualified &&
-                !v9 &&
-                (c.cloudReleaseLifecycleState == null ||
-                    c.cloudReleaseLifecycleState == 'draft'))
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.verified_outlined, size: 16),
-                  label: Text(
-                    c.isPublishing ? 'Publishing…' : 'Publish to Testing',
-                  ),
-                  onPressed: !c.canPublish ||
-                          busy ||
-                          c.cloudDraftExists != true ||
-                          c.cloudDigest != draft.payloadDigest ||
-                          c.isDirty
-                      ? null
-                      : () => _perform(context, c.publishCurrentDraft),
-                ),
-              ),
-            if (qualified &&
-                !v9 &&
-                c.canPublish &&
-                c.cloudReleaseLifecycleState == null)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text('Sync this Draft to Cloud before publishing.'),
-              ),
-            if (qualified && v9)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.publish_outlined, size: 16),
-                  label: Text(
-                    c.isPublishing ? 'Publishing…' : 'Publish Profile',
-                  ),
-                  onPressed: !c.canPublish ||
-                          !c.candidateIsCloudValidated ||
-                          busy ||
-                          c.isDirty
-                      ? null
-                      : () => _perform(context, c.publishCurrentDraft),
-                ),
-              ),
             if (completed && c.lastTestResult == 'fail') ...[
               for (final item in failed)
                 _StageResult(
@@ -430,6 +388,105 @@ class TestBenchView extends StatelessWidget {
         label: const Text('Repair Profile'),
       ),
     ];
+  }
+}
+
+class _TestResultsSummary extends StatelessWidget {
+  const _TestResultsSummary({
+    required this.digest,
+    required this.passed,
+    required this.failed,
+    required this.notApplicable,
+    required this.notRun,
+    required this.running,
+    required this.elapsed,
+  });
+
+  final String digest;
+  final int passed;
+  final int failed;
+  final int notApplicable;
+  final int notRun;
+  final bool running;
+  final Duration? elapsed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Test Results',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                if (running)
+                  const Text(
+                    'Running…',
+                    style: TextStyle(color: ProfileLabTheme.warnColor),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _ResultChip('Passed', passed, ProfileLabTheme.passColor),
+                _ResultChip('Failed', failed, ProfileLabTheme.failColor),
+                _ResultChip(
+                  'Not Applicable',
+                  notApplicable,
+                  ProfileLabTheme.secondaryText,
+                ),
+                _ResultChip('Not Run', notRun, ProfileLabTheme.warnColor),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Candidate digest · ${_shortDigest(digest)}${elapsed == null ? '' : ' · ${(elapsed!.inMilliseconds / 1000).toStringAsFixed(1)} s'}',
+              style: const TextStyle(
+                color: ProfileLabTheme.secondaryText,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _shortDigest(String digest) =>
+    digest.length <= 12 ? digest : digest.substring(0, 12);
+
+class _ResultChip extends StatelessWidget {
+  const _ResultChip(this.label, this.count, this.color);
+
+  final String label;
+  final int count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        '$label · $count',
+        style: TextStyle(color: color, fontSize: 11),
+      ),
+    );
   }
 }
 

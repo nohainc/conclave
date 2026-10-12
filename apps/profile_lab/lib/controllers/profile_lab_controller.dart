@@ -130,6 +130,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   /// channel pointers. These fields bind local eligibility to that snapshot.
   bool isV9ProfileRegistry = false;
   Map<String, dynamic>? currentCloudProfileSnapshot;
+  List<Map<String, dynamic>> currentProfileHistory = [];
   int currentProfileRevision = 0;
   String? currentProfileDigest;
   String? candidateCloudValidatedDigest;
@@ -192,6 +193,8 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
       !isLoadingReleases &&
       !isCreatingInitialDraft;
   bool get isPublishing => _refreshes.containsKey('publish');
+  bool get isLoadingProfileHistory => _refreshes.containsKey('profile-history');
+  bool get isRestoringProfile => _refreshes.containsKey('restore-profile');
   bool get isValidatingCandidate =>
       _refreshes.containsKey('validate-candidate');
   bool get isSavingLocally => _refreshes.containsKey('save-local-draft');
@@ -469,6 +472,11 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
     selectedCloudRelease = null;
     cloudEvidence = [];
     cloudAuditEvents = [];
+    currentCloudProfileSnapshot = null;
+    currentProfileHistory = [];
+    currentProfileRevision = 0;
+    currentProfileDigest = null;
+    candidateCloudValidatedDigest = null;
     baseCloudDigest = null;
     cloudDigest = null;
     cloudDraftPayload = null;

@@ -170,6 +170,49 @@ class ProfileAdminApiClient {
     throw StateError('Invalid Worker Profile publication response');
   }
 
+  /// Lists prior signed snapshots for one logical Worker.
+  Future<List<Map<String, dynamic>>> fetchWorkerProfileHistory(
+    String workerTypeId,
+  ) async {
+    final result = await _request(
+      'GET',
+      _api(
+        '/api/admin/workers/${Uri.encodeComponent(workerTypeId)}/profile/history',
+      ),
+    );
+    if (result is Map && result['history'] is List) {
+      return (result['history'] as List)
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+    throw const FormatException(
+      'Worker Profile history response must contain a history array.',
+    );
+  }
+
+  /// Restores a history snapshot as a new current signed revision.
+  Future<Map<String, dynamic>> restoreWorkerProfile({
+    required String workerTypeId,
+    required int expectedRevision,
+    required int targetRevision,
+    required String restorationReason,
+  }) async {
+    final result = await _request(
+      'POST',
+      _api(
+        '/api/admin/workers/${Uri.encodeComponent(workerTypeId)}/profile/restore',
+      ),
+      body: {
+        'expectedRevision': expectedRevision,
+        'targetRevision': targetRevision,
+        'restorationReason': restorationReason,
+      },
+    );
+    if (result is Map) return Map<String, dynamic>.from(result);
+    throw StateError('Invalid Worker Profile restore response');
+  }
+
   /// Lists all Profile definitions with aggregated channel pointers and release counts.
   Future<List<ProfileLabDefinitionReadModel>> fetchDefinitions() async {
     final result = await _request(

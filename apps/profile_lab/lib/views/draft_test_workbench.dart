@@ -8,6 +8,8 @@ import '../theme/profile_lab_theme.dart';
 import 'profile_draft_editor.dart';
 import 'ai_repair_loop_dialog.dart';
 import 'profile_release_diff_view.dart';
+import 'profile_publish_confirmation_dialog.dart';
+import 'profile_history_dialog.dart';
 import 'test_bench_view.dart';
 
 /// Worker-scoped Draft authoring and test execution.
@@ -88,8 +90,24 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
             );
           }
         });
+      case 'history':
+        ProfileHistoryDialog.show(context, c);
       case 'repair':
         AiRepairLoopDialog.show(context, c);
+    }
+  }
+
+  Future<void> _runTests() async {
+    setState(() => _showTests = true);
+    await _perform(widget.controller.runTestLadder);
+  }
+
+  Future<void> _publish() async {
+    final c = widget.controller;
+    if (!c.isV9ProfileRegistry) return;
+    final confirmed = await ProfilePublishConfirmationDialog.show(context, c);
+    if (confirmed == true && mounted) {
+      await _perform(c.publishCurrentDraft);
     }
   }
 
@@ -336,7 +354,7 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                     onPressed:
                         locked || c.isDirty || c.jsonValidationError != null
                             ? null
-                            : () => _perform(c.runTestLadder),
+                            : _runTests,
                   ),
                   FilledButton.icon(
                     icon: const Icon(Icons.cloud_upload_outlined, size: 16),
@@ -349,7 +367,7 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                             !c.testResultMatchesDraft ||
                             c.lastTestResult != 'pass'
                         ? null
-                        : () => _perform(c.publishCurrentDraft),
+                        : _publish,
                   ),
                   IconButton(
                     tooltip: _showEditor ? 'Collapse editor' : 'Show editor',
@@ -411,6 +429,11 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                         value: 'recovery',
                         enabled: !locked,
                         child: const Text('Restore recovery snapshot'),
+                      ),
+                      PopupMenuItem(
+                        value: 'history',
+                        enabled: c.isV9ProfileRegistry,
+                        child: const Text('Profile history'),
                       ),
                       PopupMenuItem(
                         value: 'repair',

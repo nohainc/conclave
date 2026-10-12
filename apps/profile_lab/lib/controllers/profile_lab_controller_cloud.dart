@@ -71,6 +71,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     cloudDraftPayload = null;
     resetDraftTestState();
     currentCloudProfileSnapshot = null;
+    currentProfileHistory = [];
     currentProfileRevision = 0;
     currentProfileDigest = null;
     candidateCloudValidatedDigest = null;
@@ -176,6 +177,89 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       cloudReleases = [];
       selectedCloudRelease = null;
     }
+    notifyListeners();
+  }
+
+  /// Loads signed historical snapshots on demand for the selected Worker.
+  Future<void> fetchCurrentProfileHistory() =>
+      _refresh('profile-history', _fetchCurrentProfileHistory);
+
+  Future<void> _fetchCurrentProfileHistory() async {
+    if (!isV9ProfileRegistry) {
+      currentProfileHistory = [];
+      return;
+    }
+    final workerTypeId = selectedCloudWorker?['workerTypeId'] as String?;
+    if (workerTypeId == null || workerTypeId.isEmpty) return;
+    currentProfileHistory =
+        await apiClient.fetchWorkerProfileHistory(workerTypeId);
+    notifyListeners();
+  }
+
+  /// Restores a prior snapshot through Cloud's atomic, signed V9 restore path.
+  Future<void> restoreCurrentProfileRevision({
+    required int targetRevision,
+    required String restorationReason,
+  }) =>
+      _refresh('restore-profile', () async {
+        if (!isV9ProfileRegistry || selectedCloudWorker == null) return;
+        final workerTypeId = selectedCloudWorker!['workerTypeId'] as String?;
+        if (workerTypeId == null || workerTypeId.isEmpty) return;
+        if (!canPublish) {
+          throw StateError(
+            'Profile Lab authorization and trusted signing are required to restore a Profile.',
+          );
+        }
+        final snapshot = await apiClient.restoreWorkerProfile(
+          workerTypeId: workerTypeId,
+          expectedRevision: currentProfileRevision,
+          targetRevision: targetRevision,
+          restorationReason: restorationReason,
+        );
+        await _adoptPublishedSnapshot(
+          snapshot,
+          notes: 'Restored Profile revision $targetRevision',
+        );
+        await _fetchCurrentProfileHistory();
+      });
+
+  Future<void> _adoptPublishedSnapshot(
+    Map<String, dynamic> snapshot, {
+    required String notes,
+  }) async {
+    currentCloudProfileSnapshot = snapshot;
+    currentProfileRevision =
+        (snapshot['revision'] as num?)?.toInt() ?? currentProfileRevision + 1;
+    currentProfileDigest = snapshot['digest'] as String?;
+    cloudDigest = currentProfileDigest;
+    baseCloudDigest = currentProfileDigest;
+    cloudDraftExists = true;
+    cloudReleaseLifecycleState = 'current';
+    if (selectedCloudWorker != null) {
+      selectedCloudWorker = {
+        ...selectedCloudWorker!,
+        'currentRevision': currentProfileRevision,
+        'currentDigest': currentProfileDigest,
+      };
+    }
+    final profile = snapshot['profile'];
+    if (profile is! Map || selectedDefinitionId == null) {
+      notifyListeners();
+      return;
+    }
+    final profileMap = Map<String, Object?>.from(profile);
+    currentDraft = await store.saveDraft(
+      profileDefinitionId: selectedDefinitionId!,
+      profileJson: profileMap,
+      notes: notes,
+    );
+    currentMetadata = await store.loadDraftMetadata(selectedDefinitionId!);
+    currentJsonText = const JsonEncoder.withIndent('  ').convert(profileMap);
+    isDirty = false;
+    jsonValidationError = null;
+    jsonValidationLocation = null;
+    resetDraftTestState();
+    await refreshEvidence();
     notifyListeners();
   }
 

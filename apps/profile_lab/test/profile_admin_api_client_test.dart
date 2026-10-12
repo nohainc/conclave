@@ -65,6 +65,29 @@ void main() {
           'digest': List.filled(64, 'b').join(),
           'verified': true,
         }));
+      } else if (request.uri.path ==
+              '/api/admin/workers/claude/profile/history' &&
+          request.method == 'GET') {
+        request.response.write(jsonEncode({
+          'history': [
+            {
+              'revision': 4,
+              'digest': List.filled(64, 'a').join(),
+              'profile': {'logicalWorkerTypeId': 'claude'},
+              'verified': true,
+            }
+          ],
+        }));
+      } else if (request.uri.path ==
+              '/api/admin/workers/claude/profile/restore' &&
+          request.method == 'POST') {
+        request.response.write(jsonEncode({
+          'workerTypeId': 'claude',
+          'revision': 6,
+          'digest': List.filled(64, 'c').join(),
+          'profile': {'logicalWorkerTypeId': 'claude'},
+          'verified': true,
+        }));
       } else {
         request.response.statusCode = 404;
       }
@@ -109,6 +132,15 @@ void main() {
       candidateDigest: digest,
       evidence: evidence,
     );
+    final history = await client.fetchWorkerProfileHistory('claude');
+    expect(history.single['revision'], 4);
+    final restored = await client.restoreWorkerProfile(
+      workerTypeId: 'claude',
+      expectedRevision: 5,
+      targetRevision: 4,
+      restorationReason: 'Restore known-good revision',
+    );
+    expect(restored['revision'], 6);
 
     expect(requests[2].$1, 'POST');
     expect(requests[2].$2, '/api/admin/workers/claude/profile/validate');
@@ -116,5 +148,12 @@ void main() {
     expect(requests[3].$3['expectedRevision'], 4);
     expect(requests[3].$3.containsKey('channel'), isFalse);
     expect(requests[3].$3.containsKey('releaseVersion'), isFalse);
+    expect(requests[4].$1, 'GET');
+    expect(requests[4].$2, '/api/admin/workers/claude/profile/history');
+    expect(requests[5].$1, 'POST');
+    expect(requests[5].$2, '/api/admin/workers/claude/profile/restore');
+    expect(requests[5].$3['expectedRevision'], 5);
+    expect(requests[5].$3['targetRevision'], 4);
+    expect(requests[5].$3['restorationReason'], 'Restore known-good revision');
   });
 }
