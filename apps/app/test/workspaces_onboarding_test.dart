@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/worker_execution_options.dart';
 
 void main() {
   testWidgets('empty Workspaces explains desktop-owned registration',
@@ -131,18 +130,18 @@ void main() {
         ),
       ),
     );
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(
           child: WorkspacesPage(
-            workspaces: const [
+            workspaces: [
               AxWorkspace(
                 id: 'workspace-1',
                 name: 'Workspace',
                 status: 'online',
               ),
             ],
-            workspaceWorkers: const [worker],
+            workspaceWorkers: [worker],
           ),
         ),
       ),

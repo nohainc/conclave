@@ -583,11 +583,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(source.reads, 1);
     browser.emit(Uri.parse('/spaces/space-auth'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     browser.emit(Uri.parse('/spaces/space-auth/threads/thread-auth'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     browser.emit(Uri.parse('/workflows'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
     expect(source.reads, 1);
     expect(find.byType(WorkflowsPage), findsOneWidget);
     expect(AxNavigation.fromUri(Uri.parse('/workflows')).spaceId, isNull);

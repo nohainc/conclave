@@ -21,61 +21,84 @@ extension _AxAppShellViews on _AxAppStateMixin {
           autofocus: true,
           child: Stack(
             children: [
-              SelectionArea(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (desktopAuthApproved || desktopAuthCancelled) {
-                      return _desktopAuthApprovalView();
-                    }
-                    if (isLoading) return _loadingScaffold();
-                    if (authRequired) return _authScaffold();
-                    if (loadError != null) return _errorScaffold();
-                    if (navigation.kind == AxRouteKind.desktopAuthApproval) {
-                      return _desktopAuthApprovalView();
-                    }
-                    final isDesktop =
-                        ConclaveBrand.isDesktop(constraints.maxWidth);
-                    final shell = _shellContext;
-                    return Scaffold(
-                      drawer: !isDesktop
-                          ? Drawer(
-                              child: AxSidebar(
-                                shellContext: shell,
-                                onNavigateTo: _navigateTo,
-                                onToggleSpaceExpanded: _toggleSpaceExpanded,
-                                onCreateSpace: _createSpace,
-                                onCreateThread: _createThread,
-                                searchController: _searchQueryController,
-                                searchFocusNode: _searchFocusNode,
-                                onClearSearch: _clearSearch,
-                                onOpenCommandPalette: _openCommandPalette,
-                                onOpenNotifications: _showNotifications,
-                                onToggleTheme: _toggleTheme,
-                                onSetThemeMode: _setThemeMode,
-                                onLogout: () => unawaited(_logout()),
-                                onOpenAbout: () =>
-                                    unawaited(_showAboutConclave()),
-                                onOpenExternal: (uri) =>
-                                    browserNavigation.openExternal(uri),
-                                onOpenArchivedSpaces: _openArchivedSpaces,
-                                compact: true,
-                              ),
-                            )
-                          : null,
-                      body: Row(
-                        children: [
-                          if (isDesktop)
-                            _desktopSidebarCollapsed
-                                ? AxIconRail(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  if (desktopAuthApproved || desktopAuthCancelled) {
+                    return _desktopAuthApprovalView();
+                  }
+                  if (isLoading) return _loadingScaffold();
+                  if (authRequired) return _authScaffold();
+                  if (loadError != null) return _errorScaffold();
+                  if (navigation.kind == AxRouteKind.desktopAuthApproval) {
+                    return _desktopAuthApprovalView();
+                  }
+                  final isDesktop =
+                      ConclaveBrand.isDesktop(constraints.maxWidth);
+                  final shell = _shellContext;
+                  return Scaffold(
+                    drawer: !isDesktop
+                        ? Drawer(
+                            child: AxSidebar(
+                              shellContext: shell,
+                              onNavigateTo: _navigateTo,
+                              onToggleSpaceExpanded: _toggleSpaceExpanded,
+                              onCreateSpace: _createSpace,
+                              onCreateThread: _createThread,
+                              searchController: _searchQueryController,
+                              searchFocusNode: _searchFocusNode,
+                              onClearSearch: _clearSearch,
+                              onOpenCommandPalette: _openCommandPalette,
+                              onOpenNotifications: _showNotifications,
+                              onToggleTheme: _toggleTheme,
+                              onSetThemeMode: _setThemeMode,
+                              onLogout: () => unawaited(_logout()),
+                              onOpenAbout: () =>
+                                  unawaited(_showAboutConclave()),
+                              onOpenExternal: (uri) =>
+                                  browserNavigation.openExternal(uri),
+                              onOpenArchivedSpaces: _openArchivedSpaces,
+                              compact: true,
+                            ),
+                          )
+                        : null,
+                    body: Row(
+                      children: [
+                        if (isDesktop)
+                          _desktopSidebarCollapsed
+                              ? AxIconRail(
+                                  shellContext: shell,
+                                  onNavigateTo: _navigateTo,
+                                  onOpenDrawer: () {},
+                                  onCreateSpace: _createSpace,
+                                  onCreateThread: _createThread,
+                                  searchController: _searchQueryController,
+                                  searchFocusNode: _searchFocusNode,
+                                  onSearchChanged: (_) =>
+                                      _onSearchQueryChanged(),
+                                  onClearSearch: _clearSearch,
+                                  onOpenCommandPalette: _openCommandPalette,
+                                  onOpenNotifications: _showNotifications,
+                                  onToggleTheme: _toggleTheme,
+                                  onSetThemeMode: _setThemeMode,
+                                  onLogout: () => unawaited(_logout()),
+                                  onOpenAbout: () =>
+                                      unawaited(_showAboutConclave()),
+                                  onOpenExternal: (uri) =>
+                                      browserNavigation.openExternal(uri),
+                                  onOpenArchivedSpaces: _openArchivedSpaces,
+                                  onToggleCollapse: () => _updateState(
+                                      () => _desktopSidebarCollapsed = false),
+                                )
+                              : SizedBox(
+                                  width: 248,
+                                  child: AxSidebar(
                                     shellContext: shell,
                                     onNavigateTo: _navigateTo,
-                                    onOpenDrawer: () {},
+                                    onToggleSpaceExpanded: _toggleSpaceExpanded,
                                     onCreateSpace: _createSpace,
                                     onCreateThread: _createThread,
                                     searchController: _searchQueryController,
                                     searchFocusNode: _searchFocusNode,
-                                    onSearchChanged: (_) =>
-                                        _onSearchQueryChanged(),
                                     onClearSearch: _clearSearch,
                                     onOpenCommandPalette: _openCommandPalette,
                                     onOpenNotifications: _showNotifications,
@@ -88,45 +111,19 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                         browserNavigation.openExternal(uri),
                                     onOpenArchivedSpaces: _openArchivedSpaces,
                                     onToggleCollapse: () => _updateState(
-                                        () => _desktopSidebarCollapsed = false),
-                                  )
-                                : SizedBox(
-                                    width: 248,
-                                    child: AxSidebar(
-                                      shellContext: shell,
-                                      onNavigateTo: _navigateTo,
-                                      onToggleSpaceExpanded:
-                                          _toggleSpaceExpanded,
-                                      onCreateSpace: _createSpace,
-                                      onCreateThread: _createThread,
-                                      searchController: _searchQueryController,
-                                      searchFocusNode: _searchFocusNode,
-                                      onClearSearch: _clearSearch,
-                                      onOpenCommandPalette: _openCommandPalette,
-                                      onOpenNotifications: _showNotifications,
-                                      onToggleTheme: _toggleTheme,
-                                      onSetThemeMode: _setThemeMode,
-                                      onLogout: () => unawaited(_logout()),
-                                      onOpenAbout: () =>
-                                          unawaited(_showAboutConclave()),
-                                      onOpenExternal: (uri) =>
-                                          browserNavigation.openExternal(uri),
-                                      onOpenArchivedSpaces: _openArchivedSpaces,
-                                      onToggleCollapse: () => _updateState(() =>
-                                          _desktopSidebarCollapsed = true),
-                                    ),
+                                        () => _desktopSidebarCollapsed = true),
                                   ),
-                          Expanded(
-                            child: _content(
-                              compact: !isDesktop,
-                              showTopHud: !isDesktop,
-                            ),
+                                ),
+                        Expanded(
+                          child: _content(
+                            compact: !isDesktop,
+                            showTopHud: !isDesktop,
                           ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
             ],
           ),

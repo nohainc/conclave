@@ -373,7 +373,8 @@ void main() {
       expect(find.byTooltip('Remove binding'), findsNothing);
     });
 
-    testWidgets('Worker rows show safe readiness only', (tester) async {
+    testWidgets('Worker rows show safe readiness and public catalog summary',
+        (tester) async {
       final worker = AxWorker.fromJson({
         'id': 'worker-chatgpt',
         'workspaceId': 'workspace-1',
@@ -411,7 +412,7 @@ void main() {
       expect(find.text('ChatGPT'), findsOneWidget);
       expect(find.text('Ready locally'), findsNothing);
       expect(find.textContaining('Cloud scheduling'), findsNothing);
-      expect(find.textContaining('Model'), findsNothing);
+      expect(find.text('Models: Unavailable'), findsOneWidget);
       expect(find.text('Workers'), findsOneWidget);
       expect(find.text('Authentication · browser_auth'), findsNothing);
 
@@ -424,8 +425,7 @@ void main() {
       expect(find.text('Drain'), findsNothing);
     });
 
-    testWidgets('expanded Worker details use v8 runtime terminology',
-        (tester) async {
+    testWidgets('Worker rows show v8 runtime metadata', (tester) async {
       final worker = AxWorker.fromJson({
         'id': 'worker-chatgpt',
         'workspaceId': 'workspace-1',
@@ -459,16 +459,9 @@ void main() {
         workspaceWorkers: [worker],
       )));
       await tester.pumpAndSettle();
-      final workerRow =
-          find.byKey(const Key('workspace-worker-row-worker-chatgpt'));
-      await tester.ensureVisible(workerRow);
-      await tester.tap(workerRow);
-      await tester.pumpAndSettle();
-
-      expect(find.text('Engine · 1.0.0'), findsOneWidget);
-      expect(find.text('Integration · chatgpt-codex@4'), findsOneWidget);
-      expect(find.text('Provider CLI · Codex CLI'), findsOneWidget);
-      expect(find.text('Provider CLI version · 0.190.0'), findsOneWidget);
+      expect(find.text('Codex CLI 0.190.0'), findsOneWidget);
+      expect(find.text('Profile v4'), findsOneWidget);
+      expect(find.text('Models: Unavailable'), findsOneWidget);
     });
 
     testWidgets('Workers are grouped only under their owning Workspace ID',
@@ -521,7 +514,7 @@ void main() {
           findsOneWidget);
     });
 
-    testWidgets('needs-attention points to Conclave Workspace desktop',
+    testWidgets('needs-attention stays concise and avoids internal details',
         (tester) async {
       final worker = AxWorker.fromJson({
         'id': 'worker-needs-auth',
@@ -557,12 +550,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Provider sign-in required'), findsNothing);
-      await tester.tap(find.text('ChatGPT').first);
-      await tester.pumpAndSettle();
-      expect(
-          find.textContaining(
-              'Resolve authentication_required in Conclave Workspace.'),
-          findsOneWidget);
+      expect(find.byIcon(Icons.warning_amber), findsOneWidget);
+      expect(find.textContaining('authentication_required'), findsNothing);
+      expect(find.textContaining('Conclave Workspace'), findsNothing);
     });
 
     testWidgets('disconnected Workspace stays read-only', (tester) async {
