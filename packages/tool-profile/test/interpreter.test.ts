@@ -5,6 +5,7 @@ import {
   constructProviderStdin,
   expandExecutionArguments,
   interpretProfileExecution,
+  mapProfileActivities,
   parseToolProfileV1,
   selectProfileValue,
   type ProfileExecutionContext,
@@ -34,6 +35,44 @@ function context(
 }
 
 describe("Tool Profile v1 pure interpreter", () => {
+  it("maps Codex and agy events to equivalent repeated tool activities", () => {
+    const codex = loadProfile("chatgpt-codex.v1");
+    const agy = loadProfile("gemini-antigravity.v1");
+    const codexActivities = mapProfileActivities(codex, [
+      { type: "unknown.provider.event" },
+      { type: "item.started", item: { id: "codex-1", type: "command_execution" } },
+      { type: "item.completed", item: { id: "codex-1", type: "command_execution" } },
+      { type: "item.started", item: { id: "codex-2", type: "command_execution" } },
+      { type: "item.completed", item: { id: "codex-2", type: "command_execution" } },
+    ]);
+    const agyActivities = mapProfileActivities(agy, [
+      { event: "unknown.provider.event" },
+      { event: "step_update", step_update: { state: "ACTIVE", step_type: "tool_execution", tool_id: "agy-1", tool_name: "shell" } },
+      { event: "step_update", step_update: { state: "COMPLETED", step_type: "tool_execution", tool_id: "agy-1", tool_name: "shell" } },
+      { event: "step_update", step_update: { state: "ACTIVE", step_type: "tool_execution", tool_id: "agy-2", tool_name: "shell" } },
+      { event: "step_update", step_update: { state: "COMPLETED", step_type: "tool_execution", tool_id: "agy-2", tool_name: "shell" } },
+    ]);
+    expect(codexActivities.map(({ type, status }) => [type, status])).toEqual([
+      ["tool.started", "running"],
+      ["tool.completed", "completed"],
+      ["tool.started", "running"],
+      ["tool.completed", "completed"],
+    ]);
+    expect(agyActivities.map(({ type, status }) => [type, status])).toEqual([
+      ["tool.started", "running"],
+      ["tool.completed", "completed"],
+      ["tool.started", "running"],
+      ["tool.completed", "completed"],
+    ]);
+    expect(codexActivities.map((activity) => activity.activityId)).toEqual([
+      "codex-1",
+      "codex-1",
+      "codex-2",
+      "codex-2",
+    ]);
+    expect(agyActivities.every((activity) => activity.percentage === undefined)).toBe(true);
+  });
+
   it("uses the deterministic provider-version override during interpretation", () => {
     const profile = loadProfile("chatgpt-codex.v1");
     profile.compatibilityOverrides = [

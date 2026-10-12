@@ -53,6 +53,70 @@ export interface NormalizedProfileProgress {
   messageKey: ProfileProgressKey;
 }
 
+type ProfileActivityMapping = NonNullable<
+  ToolProfileV1["activity"]
+>["mappings"][number];
+
+export interface NormalizedProfileActivity {
+  type: ProfileActivityMapping["type"];
+  status: ProfileActivityMapping["status"];
+  title: string;
+  activityId: string | null;
+  message: string | null;
+  details: Record<string, string | number | boolean | null>;
+  percentage?: number;
+}
+
+/** Maps provider JSON events using only declarative Profile selectors. */
+export function mapProfileActivities(
+  profile: ToolProfileV1,
+  events: readonly unknown[],
+): NormalizedProfileActivity[] {
+  const mappings = profile.activity?.mappings ?? [];
+  const activities: NormalizedProfileActivity[] = [];
+  for (const event of events) {
+    for (const mapping of mappings) {
+      if (!matchesConditions(event, mapping.when)) continue;
+      const selectedId = mapping.activityIdSelector
+        ? selectProfileValue(event, mapping.activityIdSelector)
+        : undefined;
+      const selectedMessage = mapping.messageSelector
+        ? selectProfileValue(event, mapping.messageSelector)
+        : undefined;
+      const details: Record<string, string | number | boolean | null> = {};
+      for (const [key, path] of Object.entries(mapping.detailSelectors ?? {})) {
+        const value = selectProfileValue(event, path);
+        if (
+          value === null ||
+          typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean"
+        ) {
+          details[key] = value;
+        }
+      }
+      activities.push({
+        type: mapping.type,
+        status: mapping.status,
+        title: mapping.title,
+        activityId:
+          typeof selectedId === "string" && selectedId.length > 0
+            ? selectedId.slice(0, 128)
+            : null,
+        message:
+          typeof selectedMessage === "string" && selectedMessage.length > 0
+            ? selectedMessage.slice(0, 2048)
+            : null,
+        details,
+        ...(mapping.percentage === undefined
+          ? {}
+          : { percentage: mapping.percentage }),
+      });
+    }
+  }
+  return activities;
+}
+
 export interface NormalizedProfileResult {
   terminal: "success" | "failure";
   finalText: string | null;

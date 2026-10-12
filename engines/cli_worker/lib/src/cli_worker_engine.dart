@@ -107,6 +107,7 @@ class CliWorkerEngine {
   bool _discoveryUsedCache = false;
   bool _initialized = false;
   final _operationStarts = <String, Stopwatch>{};
+  final _activitySequences = <String, int>{};
 
   Future<void> run({Stream<List<int>>? input, IOSink? output}) async {
     final profileFile = File(options.profilePath);
@@ -943,6 +944,14 @@ class CliWorkerEngine {
           stage: 'engine_initialization',
         ),
       );
+    await _emitActivity(
+      sink,
+      requestId: request.requestId,
+      assignmentId: request.assignmentId,
+      eventType: 'execution.started',
+      status: 'running',
+      title: 'Execution started',
+    );
     // Read/write policy is resolved by Cloud and carried in the assignment.
     // Profile capability metadata is legacy and must not gate execution.
     final execution = _profile.execution;
@@ -1257,6 +1266,9 @@ class CliWorkerEngine {
               );
             }
             stdout.writeln(line);
+            for (final activity in _activitiesForLine(line, request)) {
+              await _write(sink, activity);
+            }
             for (final progress in _progressForLine(line, execution)) {
               final key = '${progress.$1}:${progress.$2}';
               if (eventProgress.add(key)) {
@@ -1833,6 +1845,111 @@ class CliWorkerEngine {
     return result;
   }
 
+  List<WorkerActivity> _activitiesForLine(String line, ExecuteRequest request) {
+    final output = _map(_profile.execution['output']);
+    if (output['mode'] != 'jsonl') return const [];
+    Object? decoded;
+    try {
+      decoded = jsonDecode(line);
+    } on Object {
+      return const [];
+    }
+    if (decoded is! Map) return const [];
+    final activity = _profile.json['activity'];
+    if (activity is! Map) return const [];
+    final mappings = activity['mappings'];
+    if (mappings is! List) return const [];
+    final events = <WorkerActivity>[];
+    for (final raw in mappings) {
+      final mapping = _map(raw);
+      if (!_matches(decoded, mapping['when'])) continue;
+      final details = <String, Object?>{};
+      final detailSelectors = mapping['detailSelectors'];
+      if (detailSelectors is Map) {
+        for (final entry in detailSelectors.entries) {
+          final value = _select(decoded, _string(entry.value));
+          if (value == null ||
+              value is String ||
+              value is bool ||
+              value is num) {
+            details[_string(entry.key)] = value;
+          }
+        }
+      }
+      final sequence = (_activitySequences[request.requestId] ?? 0) + 1;
+      _activitySequences[request.requestId] = sequence;
+      final activityIdValue = mapping['activityIdSelector'] == null
+          ? null
+          : _select(decoded, _string(mapping['activityIdSelector']));
+      final messageValue = mapping['messageSelector'] == null
+          ? null
+          : _select(decoded, _string(mapping['messageSelector']));
+      if (messageValue is String && messageValue.isNotEmpty) {
+        details['message'] = messageValue;
+      }
+      events.add(
+        WorkerActivity(
+          requestId: request.requestId,
+          assignmentId: request.assignmentId,
+          executionId: request.requestId,
+          workerId: _profile.workerTypeId,
+          eventId: '${request.requestId}:activity:$sequence',
+          sequence: sequence,
+          timestamp: DateTime.now().toUtc().toIso8601String(),
+          eventType: _string(mapping['type']),
+          status: _string(mapping['status']),
+          title: _string(mapping['title']),
+          activityId: activityIdValue is String && activityIdValue.isNotEmpty
+              ? activityIdValue
+              : null,
+          percentage: mapping['percentage'] == null
+              ? null
+              : _int(mapping['percentage']).toDouble(),
+          details: details.isEmpty ? null : details,
+        ),
+      );
+    }
+    return events;
+  }
+
+  Future<void> _emitActivity(
+    IOSink sink, {
+    required String requestId,
+    required String assignmentId,
+    required String eventType,
+    required String status,
+    required String title,
+    String? activityId,
+    String? message,
+    Map<String, Object?>? details,
+    double? percentage,
+  }) async {
+    final sequence = (_activitySequences[requestId] ?? 0) + 1;
+    _activitySequences[requestId] = sequence;
+    final safeDetails = <String, Object?>{
+      ...?details,
+      if (message != null) 'message': message,
+    };
+    await _write(
+      sink,
+      WorkerActivity(
+        requestId: requestId,
+        assignmentId: assignmentId,
+        executionId: requestId,
+        workerId: _profile.workerTypeId,
+        eventId: '$requestId:activity:$sequence',
+        sequence: sequence,
+        timestamp: DateTime.now().toUtc().toIso8601String(),
+        eventType: eventType,
+        status: status,
+        title: title,
+        activityId: activityId,
+        percentage: percentage,
+        details: safeDetails.isEmpty ? null : safeDetails,
+      ),
+    );
+  }
+
   _InterpretedOutput _interpret(
     String stdout,
     String stderr,
@@ -2158,6 +2275,37 @@ class CliWorkerEngine {
   };
 
   Future<void> _write(IOSink sink, WorkerFrame frame) async {
+    if (frame is WorkerResult || frame is WorkerErrorFrame) {
+      final String? assignmentId = frame is WorkerResult
+          ? frame.assignmentId
+          : (frame as WorkerErrorFrame).assignmentId;
+      if (assignmentId != null) {
+        final error = frame is WorkerErrorFrame ? frame : null;
+        final cancelled = error?.code == WorkerIssueCode.cancelled;
+        await _emitActivity(
+          sink,
+          requestId: frame.requestId,
+          assignmentId: assignmentId,
+          eventType: cancelled
+              ? 'execution.cancelled'
+              : error == null
+              ? 'execution.completed'
+              : 'execution.failed',
+          status: cancelled
+              ? 'cancelled'
+              : error == null
+              ? 'completed'
+              : 'failed',
+          title: cancelled
+              ? 'Execution cancelled'
+              : error == null
+              ? 'Execution completed'
+              : 'Execution failed',
+          details: error == null ? null : {'errorCode': error.code},
+        );
+        _activitySequences.remove(frame.requestId);
+      }
+    }
     if (frame is ProbeResult) {
       final timer = _operationStarts.remove(frame.requestId);
       _logger.log(

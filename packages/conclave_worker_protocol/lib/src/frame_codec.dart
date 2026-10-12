@@ -20,6 +20,7 @@ WorkerFrame decodeWorkerFrame(String line) {
     'probe.result' => ProbeResult.fromJson(json),
     'execute.request' => ExecuteRequest.fromJson(json),
     'progress' => WorkerProgress.fromJson(json),
+    'activity' => WorkerActivity.fromJson(json),
     'result' => WorkerResult.fromJson(json),
     'error' => WorkerErrorFrame.fromJson(json),
     _ => throw FormatException(

@@ -1,7 +1,10 @@
 {"type":"thread.started","thread_id":"fake-session-1"}
+{"type":"unknown.provider.event","ignored":true}
 {"type":"turn.started"}
-{"type":"item.started","item":{"type":"command_execution"}}
-{"type":"item.updated","item":{"type":"command_execution"}}
-{"type":"item.completed","item":{"type":"command_execution"}}
+{"type":"item.started","item":{"id":"tool-call-1","type":"command_execution"}}
+{"type":"item.updated","item":{"id":"tool-call-1","type":"command_execution"}}
+{"type":"item.completed","item":{"id":"tool-call-1","type":"command_execution"}}
+{"type":"item.started","item":{"id":"tool-call-2","type":"command_execution"}}
+{"type":"item.completed","item":{"id":"tool-call-2","type":"command_execution"}}
 {"type":"item.completed","item":{"type":"agent_message","text":"Codex answer"}}
 {"type":"turn.completed"}

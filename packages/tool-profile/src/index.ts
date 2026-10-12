@@ -9,6 +9,8 @@ export const TOOL_PROFILE_LIMITS = Object.freeze({
   arguments: 128,
   eventRules: 128,
   progressRules: 64,
+  activityMappings: 128,
+  activityDetails: 8,
   errorMappings: 64,
   selectorsPerRule: 16,
   selectorDepth: 16,
@@ -269,6 +271,55 @@ const progressRule = z
       "provider_response_received",
       "provider_finalizing",
     ]),
+  })
+  .strict();
+
+const activityEventType = z.enum([
+  "execution.started",
+  "model.started",
+  "message.updated",
+  "tool.started",
+  "tool.completed",
+  "tool.failed",
+  "model.status",
+  "execution.completed",
+  "execution.failed",
+  "execution.cancelled",
+]);
+const activityStatus = z.enum([
+  "running",
+  "updated",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+const activityDetailSelectors = z
+  .record(
+    z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
+    selector,
+  )
+  .superRefine((record, ctx) => {
+    if (Object.keys(record).length > TOOL_PROFILE_LIMITS.activityDetails)
+      ctx.addIssue({
+        code: "custom",
+        message: `Activity details exceed ${TOOL_PROFILE_LIMITS.activityDetails} fields`,
+      });
+  });
+const activityMapping = z
+  .object({
+    when: conditions.min(1),
+    type: activityEventType,
+    status: activityStatus,
+    title: shortString,
+    activityIdSelector: selector.optional(),
+    messageSelector: selector.optional(),
+    detailSelectors: activityDetailSelectors.optional(),
+    percentage: z.number().int().min(0).max(100).optional(),
+  })
+  .strict();
+const activity = z
+  .object({
+    mappings: z.array(activityMapping).max(TOOL_PROFILE_LIMITS.activityMappings),
   })
   .strict();
 
@@ -615,6 +666,7 @@ const profileSchema = z
       })
       .strict(),
     progress: z.array(progressRule).max(TOOL_PROFILE_LIMITS.progressRules),
+    activity: activity.optional(),
     errors: z
       .object({
         mappings: z.array(errorMapping).max(TOOL_PROFILE_LIMITS.errorMappings),
@@ -641,6 +693,7 @@ const profileSchema = z
               .array(errorMapping)
               .max(TOOL_PROFILE_LIMITS.errorMappings)
               .optional(),
+            activity: activity.optional(),
           })
           .strict(),
       )

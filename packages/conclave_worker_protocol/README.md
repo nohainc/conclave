@@ -22,3 +22,9 @@ runtime. Older JSON-RPC Worker protocol models have been removed.
 Protocol 4.1 adds a catalog revision pin to execution requests. Legacy 4.0 frames
 remain readable without that field; native model identifiers remain local to the
 Engine and are never accepted as client-supplied invocation arguments.
+
+Protocol 4.1 also supports `activity` frames for provider-neutral live
+execution events. Activity frames carry an ordered execution sequence and are
+not deduplicated by percentage, so repeated tool calls remain visible. See
+`docs/specifications/WORKER_ACTIVITY_V1.md` for field limits, terminal
+guarantees, and declarative Tool Profile mappings.

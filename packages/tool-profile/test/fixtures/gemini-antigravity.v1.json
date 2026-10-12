@@ -264,6 +264,45 @@
       "messageKey": "provider_working"
     }
   ],
+  "activity": {
+    "mappings": [
+      {
+        "when": [
+          { "kind": "equals", "selector": "$.event", "value": "step_update" },
+          { "kind": "equals", "selector": "$.step_update.state", "value": "ACTIVE" },
+          { "kind": "equals", "selector": "$.step_update.step_type", "value": "agent_response" }
+        ],
+        "type": "model.status",
+        "status": "running",
+        "title": "Model responding",
+        "detailSelectors": { "stepType": "$.step_update.step_type" }
+      },
+      {
+        "when": [
+          { "kind": "equals", "selector": "$.event", "value": "step_update" },
+          { "kind": "equals", "selector": "$.step_update.step_type", "value": "tool_execution" },
+          { "kind": "equals", "selector": "$.step_update.state", "value": "ACTIVE" }
+        ],
+        "type": "tool.started",
+        "status": "running",
+        "title": "Running tool",
+        "activityIdSelector": "$.step_update.tool_id",
+        "detailSelectors": { "toolName": "$.step_update.tool_name" }
+      },
+      {
+        "when": [
+          { "kind": "equals", "selector": "$.event", "value": "step_update" },
+          { "kind": "equals", "selector": "$.step_update.step_type", "value": "tool_execution" },
+          { "kind": "equals", "selector": "$.step_update.state", "value": "COMPLETED" }
+        ],
+        "type": "tool.completed",
+        "status": "completed",
+        "title": "Tool completed",
+        "activityIdSelector": "$.step_update.tool_id",
+        "detailSelectors": { "toolName": "$.step_update.tool_name" }
+      }
+    ]
+  },
   "errors": {
     "mappings": [
       {

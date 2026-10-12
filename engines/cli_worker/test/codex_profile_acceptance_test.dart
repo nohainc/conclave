@@ -92,12 +92,18 @@ void main() {
       await root.delete(recursive: true);
     });
 
-    Future<({WorkerFrame terminal, List<WorkerProgress> progress})> exchange(
-      WorkerFrame request,
-    ) async {
+    Future<
+      ({
+        WorkerFrame terminal,
+        List<WorkerProgress> progress,
+        List<WorkerActivity> activities,
+      })
+    >
+    exchange(WorkerFrame request) async {
       process.stdin.writeln(request.encode());
       await process.stdin.flush();
       final observedProgress = <WorkerProgress>[];
+      final observedActivities = <WorkerActivity>[];
       while (await lines.moveNext().timeout(const Duration(seconds: 35))) {
         final frame = decodeWorkerFrame(lines.current);
         if (frame is WorkerProgress && frame.requestId == request.requestId) {
@@ -105,12 +111,20 @@ void main() {
           progress.add(frame);
           continue;
         }
+        if (frame is WorkerActivity && frame.requestId == request.requestId) {
+          observedActivities.add(frame);
+          continue;
+        }
         if (frame.requestId != request.requestId) continue;
         if (frame is WorkerResult ||
             frame is WorkerErrorFrame ||
             frame is ProbeResult ||
             frame is InitializeResult) {
-          return (terminal: frame, progress: observedProgress);
+          return (
+            terminal: frame,
+            progress: observedProgress,
+            activities: observedActivities,
+          );
         }
       }
       throw TimeoutException('Engine did not return ${request.requestId}');
@@ -171,6 +185,22 @@ void main() {
     expect((stateless.terminal as WorkerResult).output, 'Codex answer');
     expect(stateless.progress.map((item) => item.percentage), contains(10));
     expect(stateless.progress.map((item) => item.percentage), contains(45));
+    expect(
+      stateless.activities.map((item) => [item.eventType, item.status]),
+      containsAll([
+        ['execution.started', 'running'],
+        ['model.started', 'running'],
+        ['tool.started', 'running'],
+        ['tool.completed', 'completed'],
+        ['execution.completed', 'completed'],
+      ]),
+    );
+    expect(
+      stateless.activities
+          .where((item) => item.eventType == 'tool.started')
+          .map((item) => item.activityId),
+      containsAll(['tool-call-1', 'tool-call-2']),
+    );
 
     final durableStart = await exchange(
       ExecuteRequest(

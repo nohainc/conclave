@@ -25,6 +25,15 @@ abstract final class WorkerProtocolLimits {
   static const maxProviderToolVersionLength = 64;
   static const maxDiagnosticLength = 8192;
   static const maxProgressMessageLength = 2048;
+  static const maxActivityEventIdLength = 128;
+  static const maxActivityExecutionIdLength = 128;
+  static const maxActivityIdLength = 128;
+  static const maxActivityTypeLength = 64;
+  static const maxActivityTitleLength = 256;
+  static const maxActivityDetailsBytes = 16 * 1024;
+  static const maxActivityDetailEntries = 32;
+  static const maxActivityDetailDepth = 4;
+  static const maxActivitySequence = 0x7fffffff;
   static const maxErrorMessageLength = 2048;
   static const maxArtifacts = 64;
   static const maxArtifactIdLength = 256;

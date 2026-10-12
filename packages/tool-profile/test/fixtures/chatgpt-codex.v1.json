@@ -364,6 +364,48 @@
       "messageKey": "provider_tool_started"
     }
   ],
+  "activity": {
+    "mappings": [
+      {
+        "when": [{ "kind": "equals", "selector": "$.type", "value": "turn.started" }],
+        "type": "model.started",
+        "status": "running",
+        "title": "Model processing"
+      },
+      {
+        "when": [
+          { "kind": "equals", "selector": "$.type", "value": "item.started" },
+          { "kind": "one_of", "selector": "$.item.type", "values": ["command_execution", "mcp_tool_call", "web_search_call"] }
+        ],
+        "type": "tool.started",
+        "status": "running",
+        "title": "Running tool",
+        "activityIdSelector": "$.item.id",
+        "detailSelectors": { "toolName": "$.item.type" }
+      },
+      {
+        "when": [
+          { "kind": "equals", "selector": "$.type", "value": "item.completed" },
+          { "kind": "one_of", "selector": "$.item.type", "values": ["command_execution", "mcp_tool_call", "web_search_call"] }
+        ],
+        "type": "tool.completed",
+        "status": "completed",
+        "title": "Tool completed",
+        "activityIdSelector": "$.item.id",
+        "detailSelectors": { "toolName": "$.item.type" }
+      },
+      {
+        "when": [
+          { "kind": "equals", "selector": "$.type", "value": "item.completed" },
+          { "kind": "equals", "selector": "$.item.type", "value": "agent_message" }
+        ],
+        "type": "message.updated",
+        "status": "updated",
+        "title": "Response updated",
+        "messageSelector": "$.item.text"
+      }
+    ]
+  },
   "errors": {
     "mappings": [
       {

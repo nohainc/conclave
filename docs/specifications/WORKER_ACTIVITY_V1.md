@@ -1,0 +1,53 @@
+# Worker Activity Protocol V1
+
+Worker Activity is the provider-neutral live execution event contract carried
+by the Local Worker Protocol. It supplements, rather than replaces, the
+existing `progress` frame while consumers migrate. A Worker Engine may emit
+both frames for the same provider output.
+
+## Frame
+
+An activity frame is one JSON object per protocol line with `type: "activity"`.
+It contains `requestId`, `assignmentId`, `executionId`, `workerId`, `eventId`,
+positive `sequence`, an ISO-8601 `timestamp`, normalized `eventType`,
+`status`, and a safe bounded `title`. It may contain `activityId`,
+`percentage`, and bounded `details`.
+
+Normalized event types are `execution.started`, `model.started`,
+`message.updated`, `tool.started`, `tool.completed`, `tool.failed`,
+`model.status`, `execution.completed`, `execution.failed` and
+`execution.cancelled`. Status values are `running`, `updated`, `completed`,
+`failed` and `cancelled`.
+
+The protocol enforces a 1 MiB frame limit. Activity details are limited to
+16 KiB, four nested levels and 32 fields/items per object or array. Detail
+keys are safe ASCII names and values are JSON scalars, arrays or objects only.
+Executable values, provider credentials and arbitrary transformation code are
+not permitted.
+
+## Ordering and terminal behavior
+
+The Engine assigns a new sequence to every emitted activity, including
+repeated tool calls that have the same type or percentage. Consumers should
+deduplicate by `eventId`, ignore duplicate or late events, and buffer or mark
+out-of-order events using `sequence`; they must not manufacture a new activity
+from an old sequence. Every admitted execution emits `execution.started` and
+exactly one terminal activity before its result/error frame. A terminal event
+is not inferred from percentage.
+
+## Profile mapping
+
+Profiles may contain an optional `activity.mappings` array. Each mapping has a
+bounded declarative `when` condition list, normalized `type`, `status`, static
+`title`, and optional selectors for `activityId`, message and safe detail
+fields. A mapping may include an optional percentage. Selectors use the same
+bounded JSON selector grammar as existing Profile mappings. Unknown provider
+events simply match no rule and are ignored; no provider-specific Engine branch
+or executable Profile script is allowed.
+
+The Codex and agy fixtures use the same mapping shape and produce equivalent
+`tool.started`/`tool.completed` activity pairs even though their native event
+names and nesting differ.
+
+Existing `progress` frames remain available for milestone consumers. Activity
+frames are the authoritative repeated-event stream for live timelines.

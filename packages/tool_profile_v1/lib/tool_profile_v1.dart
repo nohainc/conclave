@@ -32,6 +32,7 @@ const _topLevelKeys = {
   'errors',
   'compatibilityOverrides',
 };
+const _optionalTopLevelKeys = {'activity'};
 
 class EngineProfile {
   EngineProfile._({
@@ -119,6 +120,9 @@ class EngineProfile {
     if (override.containsKey('progress')) {
       resolved['progress'] = _cloneJsonValue(override['progress']);
     }
+    if (override.containsKey('activity')) {
+      resolved['activity'] = _cloneJsonValue(override['activity']);
+    }
     final errors = _object(resolved['errors'], 'errors');
     if (override.containsKey('errorMappings')) {
       errors['mappings'] = _cloneJsonValue(override['errorMappings']);
@@ -137,7 +141,10 @@ class EngineProfile {
       throw const FormatException('Tool Profile must be a JSON object');
     _validateJsonBounds(decoded);
     final json = Map<String, Object?>.from(decoded);
-    final unknown = json.keys.where((key) => !_topLevelKeys.contains(key));
+    final unknown = json.keys.where(
+      (key) =>
+          !_topLevelKeys.contains(key) && !_optionalTopLevelKeys.contains(key),
+    );
     if (unknown.isNotEmpty)
       throw FormatException('unsupported Tool Profile field: ${unknown.first}');
     if (!json.keys.toSet().containsAll(_topLevelKeys)) {
@@ -320,6 +327,7 @@ class EngineProfile {
       requireActions: true,
     );
     _validateRules(progress, 'progress', 64, requireActions: false);
+    _validateActivityMappings(json['activity']);
     _validateErrorRules(errors['mappings']);
     _validateConfigChecks(passive['configChecks']);
     final session = _object(json['session'], 'session');
@@ -607,6 +615,7 @@ void _validateCompatibilityOverrides(Object? value) {
             'versionProbeArguments',
             'progress',
             'errorMappings',
+            'activity',
           }.contains(key),
         ) ||
         raw['providerVersion'] is! Map) {
@@ -678,6 +687,76 @@ void _validateCompatibilityOverrides(Object? value) {
     }
     if (raw['errorMappings'] != null) {
       _validateErrorRules(raw['errorMappings']);
+    }
+    _validateActivityMappings(raw['activity']);
+  }
+}
+
+void _validateActivityMappings(Object? value) {
+  if (value == null) return;
+  if (value is! Map || value.length != 1 || value['mappings'] is! List) {
+    throw const FormatException('activity mapping container is invalid');
+  }
+  final mappings = value['mappings'] as List;
+  if (mappings.length > 128) {
+    throw const FormatException('activity mappings exceed rule count limit');
+  }
+  const types = {
+    'execution.started',
+    'model.started',
+    'message.updated',
+    'tool.started',
+    'tool.completed',
+    'tool.failed',
+    'model.status',
+    'execution.completed',
+    'execution.failed',
+    'execution.cancelled',
+  };
+  const statuses = {'running', 'updated', 'completed', 'failed', 'cancelled'};
+  for (final raw in mappings) {
+    if (raw is! Map || raw.length > 8 || raw['when'] is! List) {
+      throw const FormatException('activity mapping is invalid');
+    }
+    final when = raw['when'] as List;
+    if (when.isEmpty || when.length > 16) {
+      throw const FormatException('activity mapping conditions exceed limit');
+    }
+    for (final condition in when) {
+      if (condition is! Map || condition.length > 5) {
+        throw const FormatException('activity mapping condition is invalid');
+      }
+      _validateSelector(condition['selector']);
+    }
+    if (!types.contains(raw['type']) ||
+        !statuses.contains(raw['status']) ||
+        raw['title'] is! String ||
+        (raw['title'] as String).isEmpty ||
+        (raw['title'] as String).length > 256) {
+      throw const FormatException(
+          'activity mapping type, status or title is invalid');
+    }
+    _validateSelector(raw['activityIdSelector']);
+    _validateSelector(raw['messageSelector']);
+    final details = raw['detailSelectors'];
+    if (details != null) {
+      if (details is! Map || details.length > 8) {
+        throw const FormatException('activity detail selectors exceed limit');
+      }
+      for (final entry in details.entries) {
+        if (entry.key is! String ||
+            !RegExp(r'^[A-Za-z][A-Za-z0-9_-]{0,63}$')
+                .hasMatch(entry.key as String)) {
+          throw const FormatException(
+              'activity detail selector name is invalid');
+        }
+        _validateSelector(entry.value);
+      }
+    }
+    final percentage = raw['percentage'];
+    if (percentage != null &&
+        (percentage is! int || percentage < 0 || percentage > 100)) {
+      throw const FormatException('activity percentage is invalid');
     }
   }
 }

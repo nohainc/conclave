@@ -867,6 +867,225 @@ final class WorkerProgress extends WorkerFrame {
   }
 }
 
+/// A provider-neutral activity emitted for every meaningful provider event.
+///
+/// Unlike [WorkerProgress], activities are not deduplicated by percentage or
+/// message. Repeated tool calls therefore remain visible to downstream
+/// consumers. `sequence` is strictly increasing for one execution in the
+/// Engine output stream; consumers use it to discard duplicate or stale
+/// frames without changing the event identity.
+final class WorkerActivity extends WorkerFrame {
+  WorkerActivity({
+    required super.requestId,
+    required this.assignmentId,
+    required this.executionId,
+    required this.workerId,
+    required this.eventId,
+    required this.sequence,
+    required this.timestamp,
+    required this.eventType,
+    required this.status,
+    required this.title,
+    this.activityId,
+    this.percentage,
+    Map<String, Object?>? details,
+  }) : details = details == null ? null : _validatedActivityDetails(details) {
+    _validateToken(
+        requestId, 'requestId', WorkerProtocolLimits.maxRequestIdLength);
+    _validateToken(
+        assignmentId, 'assignmentId', WorkerProtocolLimits.maxRequestIdLength);
+    _validateToken(executionId, 'executionId',
+        WorkerProtocolLimits.maxActivityExecutionIdLength);
+    _validateToken(
+        workerId, 'workerId', WorkerProtocolLimits.maxWorkerTypeIdLength);
+    _validateToken(
+        eventId, 'eventId', WorkerProtocolLimits.maxActivityEventIdLength);
+    if (activityId != null) {
+      _validateToken(
+          activityId!, 'activityId', WorkerProtocolLimits.maxActivityIdLength);
+    }
+    if (sequence < 1 || sequence > WorkerProtocolLimits.maxActivitySequence) {
+      throw const FormatException(
+          'activity sequence is outside the allowed range');
+    }
+    if (timestamp.length > 64 || DateTime.tryParse(timestamp) == null) {
+      throw const FormatException(
+          'activity timestamp must be an ISO-8601 timestamp');
+    }
+    if (!_activityTypes.contains(eventType)) {
+      throw const FormatException('unsupported activity event type');
+    }
+    if (!_activityStatuses.contains(status)) {
+      throw const FormatException('unsupported activity status');
+    }
+    _boundedText(eventType, 'activity event type',
+        WorkerProtocolLimits.maxActivityTypeLength);
+    _safeBoundedText(
+        title, 'activity title', WorkerProtocolLimits.maxActivityTitleLength);
+    if (percentage != null &&
+        (!percentage!.isFinite || percentage! < 0 || percentage! > 100)) {
+      throw const FormatException(
+          'activity percentage must be between 0 and 100');
+    }
+  }
+
+  static const _activityTypes = <String>{
+    'execution.started',
+    'model.started',
+    'message.updated',
+    'tool.started',
+    'tool.completed',
+    'tool.failed',
+    'model.status',
+    'execution.completed',
+    'execution.failed',
+    'execution.cancelled',
+  };
+  static const _activityStatuses = <String>{
+    'running',
+    'updated',
+    'completed',
+    'failed',
+    'cancelled',
+  };
+
+  final String assignmentId;
+  final String executionId;
+  final String workerId;
+  final String eventId;
+  final int sequence;
+  final String timestamp;
+  final String eventType;
+  final String status;
+  final String title;
+  final String? activityId;
+  final double? percentage;
+  final Map<String, Object?>? details;
+
+  bool get isTerminal => const {
+        'execution.completed',
+        'execution.failed',
+        'execution.cancelled',
+      }.contains(eventType);
+
+  @override
+  String get type => 'activity';
+
+  @override
+  Map<String, Object?> toJson() => {
+        'type': type,
+        'requestId': requestId,
+        'assignmentId': assignmentId,
+        'executionId': executionId,
+        'workerId': workerId,
+        'eventId': eventId,
+        'sequence': sequence,
+        'timestamp': timestamp,
+        'eventType': eventType,
+        'status': status,
+        'title': title,
+        if (activityId != null) 'activityId': activityId,
+        if (percentage != null) 'percentage': percentage,
+        if (details != null) 'details': details,
+      };
+
+  factory WorkerActivity.fromJson(Map<String, Object?> json) {
+    _expectKeys(json, const {
+      'type',
+      'requestId',
+      'assignmentId',
+      'executionId',
+      'workerId',
+      'eventId',
+      'sequence',
+      'timestamp',
+      'eventType',
+      'status',
+      'title',
+      'activityId',
+      'percentage',
+      'details',
+    });
+    _expectType(json, 'activity');
+    final sequence = json['sequence'];
+    if (sequence is! int) {
+      throw const FormatException('activity sequence must be an integer');
+    }
+    final percentage = json['percentage'];
+    if (percentage != null && percentage is! num) {
+      throw const FormatException('activity percentage must be numeric');
+    }
+    final details = json['details'];
+    if (details != null && details is! Map) {
+      throw const FormatException('activity details must be an object');
+    }
+    return WorkerActivity(
+      requestId: _boundedString(
+          json, 'requestId', WorkerProtocolLimits.maxRequestIdLength),
+      assignmentId: _boundedString(
+          json, 'assignmentId', WorkerProtocolLimits.maxRequestIdLength),
+      executionId: _boundedString(json, 'executionId',
+          WorkerProtocolLimits.maxActivityExecutionIdLength),
+      workerId: _boundedString(
+          json, 'workerId', WorkerProtocolLimits.maxWorkerTypeIdLength),
+      eventId: _boundedString(
+          json, 'eventId', WorkerProtocolLimits.maxActivityEventIdLength),
+      sequence: sequence,
+      timestamp: _boundedString(json, 'timestamp', 64),
+      eventType: _boundedString(
+          json, 'eventType', WorkerProtocolLimits.maxActivityTypeLength),
+      status: _boundedString(json, 'status', 32),
+      title: _boundedString(
+          json, 'title', WorkerProtocolLimits.maxActivityTitleLength),
+      activityId: _optionalString(json, 'activityId'),
+      percentage: (percentage as num?)?.toDouble(),
+      details:
+          details == null ? null : Map<String, Object?>.from(details as Map),
+    );
+  }
+}
+
+Map<String, Object?> _validatedActivityDetails(Map<String, Object?> details) {
+  _validateActivityValue(details, 0);
+  final encoded = utf8.encode(jsonEncode(details));
+  if (encoded.length > WorkerProtocolLimits.maxActivityDetailsBytes) {
+    throw const FormatException('activity details exceed the byte limit');
+  }
+  return Map.unmodifiable(details);
+}
+
+void _validateActivityValue(Object? value, int depth) {
+  if (depth > WorkerProtocolLimits.maxActivityDetailDepth) {
+    throw const FormatException('activity details are too deeply nested');
+  }
+  if (value == null || value is String || value is bool || value is num) return;
+  if (value is List) {
+    if (value.length > WorkerProtocolLimits.maxActivityDetailEntries) {
+      throw const FormatException('too many activity detail items');
+    }
+    for (final item in value) {
+      _validateActivityValue(item, depth + 1);
+    }
+    return;
+  }
+  if (value is Map) {
+    if (value.length > WorkerProtocolLimits.maxActivityDetailEntries) {
+      throw const FormatException('too many activity detail fields');
+    }
+    for (final entry in value.entries) {
+      if (entry.key is! String ||
+          !RegExp(r'^[A-Za-z][A-Za-z0-9_-]{0,63}$')
+              .hasMatch(entry.key as String)) {
+        throw const FormatException('invalid activity detail field name');
+      }
+      _validateActivityValue(entry.value, depth + 1);
+    }
+    return;
+  }
+  throw const FormatException(
+      'activity details contain an unsupported value type');
+}
+
 final class WorkerResult extends WorkerFrame {
   WorkerResult({
     required super.requestId,

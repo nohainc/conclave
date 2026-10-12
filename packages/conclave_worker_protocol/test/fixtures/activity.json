@@ -1,0 +1,15 @@
+{
+  "type": "activity",
+  "requestId": "execute-1",
+  "assignmentId": "assignment-1",
+  "executionId": "execute-1",
+  "workerId": "chatgpt",
+  "eventId": "execute-1:activity:1",
+  "sequence": 1,
+  "timestamp": "2026-10-12T18:00:00.000Z",
+  "eventType": "tool.started",
+  "status": "running",
+  "title": "Running command",
+  "activityId": "tool-call-1",
+  "details": { "toolName": "shell", "retry": false }
+}

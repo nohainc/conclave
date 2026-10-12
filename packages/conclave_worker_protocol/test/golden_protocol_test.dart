@@ -13,6 +13,7 @@ void main() {
     'probe.result.json': 'probe.result',
     'execute.request.json': 'execute.request',
     'progress.json': 'progress',
+    'activity.json': 'activity',
     'result.json': 'result',
     'error.json': 'error',
   };
