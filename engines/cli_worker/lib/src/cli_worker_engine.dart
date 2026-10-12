@@ -97,7 +97,8 @@ class CliWorkerEngine {
   final CliCommandRunner _commandRunner;
   final CliStreamingRunner _streamingRunner;
   final EngineLogger _logger;
-  late final EngineProfile _profile;
+  late EngineProfile _profile;
+  late EngineProfile _admittedProfile;
   late final EngineSessionStore _sessions;
   String? _resolvedExecutable;
   String? _providerVersion;
@@ -113,6 +114,7 @@ class CliWorkerEngine {
       throw const FormatException('Tool Profile payload is empty or oversized');
     final bytes = await profileFile.readAsBytes();
     _profile = EngineProfile.parse(bytes);
+    _admittedProfile = _profile;
     if (!engineVersionCompatible(_profile, options.engineVersion)) {
       throw const FormatException(
         'Engine version is outside Profile compatibility',
@@ -172,7 +174,7 @@ class CliWorkerEngine {
   }
 
   Future<void> _initialize(InitializeRequest request, IOSink sink) async {
-    if (request.workerTypeId != _profile.workerTypeId) {
+    if (request.workerTypeId != _admittedProfile.workerTypeId) {
       await _write(
         sink,
         WorkerErrorFrame(
@@ -194,9 +196,10 @@ class CliWorkerEngine {
       );
       return;
     }
-    if (request.profileDefinitionId != _profile.definitionId ||
-        request.profileReleaseVersion != _profile.releaseVersion.toString() ||
-        request.profileDigest != _profile.digest) {
+    if (request.profileDefinitionId != _admittedProfile.definitionId ||
+        request.profileReleaseVersion !=
+            _admittedProfile.releaseVersion.toString() ||
+        request.profileDigest != _admittedProfile.digest) {
       await _write(
         sink,
         WorkerErrorFrame(
@@ -221,11 +224,11 @@ class CliWorkerEngine {
       InitializeResult(
         protocolVersion: request.protocolVersion,
         requestId: request.requestId,
-        workerTypeId: _profile.workerTypeId,
+        workerTypeId: _admittedProfile.workerTypeId,
         engineVersion: options.engineVersion,
-        profileDefinitionId: _profile.definitionId,
-        profileReleaseVersion: _profile.releaseVersion.toString(),
-        profileSchemaVersion: _profile.schemaVersion,
+        profileDefinitionId: _admittedProfile.definitionId,
+        profileReleaseVersion: _admittedProfile.releaseVersion.toString(),
+        profileSchemaVersion: _admittedProfile.schemaVersion,
         // Kept on the wire for protocol compatibility; capability metadata is
         // no longer sourced from or enforced by Tool Profiles.
         capabilities: const [],
@@ -293,6 +296,7 @@ class CliWorkerEngine {
           ),
         );
       } else {
+        _profile = _admittedProfile.resolveForProviderVersion(version);
         checks.add(
           ProbeCheck(
             code: 'provider_tool_version',
@@ -489,7 +493,7 @@ class CliWorkerEngine {
   }) async {
     final cache = ModelDiscoveryCache(options.statePath);
     _discoveryUsedCache = false;
-    final cached = await cache.load(_profile.digest, version);
+    final cached = await cache.load(_admittedProfile.digest, version);
     if (!refresh && cached != null) return cached;
     final spec = _map(_profile.model['discovery']);
     try {
@@ -512,7 +516,7 @@ class CliWorkerEngine {
             );
       final catalog = DiscoveredModelCatalog(
         schemaVersion: 2,
-        profileDigest: _profile.digest,
+        profileDigest: _admittedProfile.digest,
         providerToolVersion: version,
         discoveredAt: DateTime.now().toUtc().toIso8601String(),
         models: normalizeCombinedModels(
@@ -1153,14 +1157,14 @@ class CliWorkerEngine {
         'schemaVersion': 1,
         'assignmentId': request.assignmentId,
         'invocationId': request.requestId,
-        'workerTypeId': _profile.workerTypeId,
+        'workerTypeId': _admittedProfile.workerTypeId,
         'modelId': request.model,
         'modelName': discovered?.name ?? request.model,
         'effort': request.reasoningEffort,
         'resolvedNativeModelId': context['model'],
         'resolvedNativeEffort': context['reasoningEffort'],
-        'profileReleaseVersion': _profile.releaseVersion,
-        'profileDigest': _profile.digest,
+        'profileReleaseVersion': _admittedProfile.releaseVersion,
+        'profileDigest': _admittedProfile.digest,
         'providerToolVersion': _providerVersion,
         'catalogRevision': _modelCatalog?.catalogRevision,
       });
@@ -2122,12 +2126,12 @@ class CliWorkerEngine {
   }) => {
     if (requestId != null) 'requestId': requestId,
     if (assignmentId != null) 'assignmentId': assignmentId,
-    'workerTypeId': _profile.workerTypeId,
+    'workerTypeId': _admittedProfile.workerTypeId,
     'engineVersion': options.engineVersion,
-    'profileDefinitionId': _profile.definitionId,
-    'profileReleaseVersion': _profile.releaseVersion,
-    'profileSchemaVersion': _profile.schemaVersion,
-    'providerToolName': _string(_profile.providerTool['name']),
+    'profileDefinitionId': _admittedProfile.definitionId,
+    'profileReleaseVersion': _admittedProfile.releaseVersion,
+    'profileSchemaVersion': _admittedProfile.schemaVersion,
+    'providerToolName': _string(_admittedProfile.providerTool['name']),
     if (providerToolVersion != null) 'providerToolVersion': providerToolVersion,
     if (durationMs != null) 'durationMs': durationMs,
     if (errorCode != null) 'errorCode': errorCode,

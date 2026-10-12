@@ -687,6 +687,19 @@ function compareVersion(left: string, right: string): number {
   }
   return 0;
 }
+
+/** Deterministic SemVer precedence used by Profile compatibility rules. */
+export const compareSemver = compareVersion;
+
+export function isSemverInRange(
+  version: string,
+  range: { min: string; maxExclusive: string },
+): boolean {
+  return (
+    compareVersion(version, range.min) >= 0 &&
+    compareVersion(version, range.maxExclusive) < 0
+  );
+}
 /** Exact semantic-version gate shared by signed mappings and public projection. */
 export function modelSelectionVersionMatches(
   version: unknown,
@@ -1038,6 +1051,159 @@ export function parseToolProfileV1(input: unknown): ToolProfileV1 {
       `Tool Profile payload exceeds ${TOOL_PROFILE_LIMITS.payloadBytes} bytes`,
     );
   return profile;
+}
+
+export interface ToolProfileValidationOptions {
+  /** Require at least one bounded provider CLI compatibility range. */
+  requireProviderCompatibility?: boolean;
+  /** Reject the historical near-universal placeholder compatibility range. */
+  rejectPlaceholderProviderRange?: boolean;
+}
+
+export class ToolProfileValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ToolProfileValidationError";
+  }
+}
+
+/**
+ * Shared static/security validation used before a Profile is interpreted or
+ * published. The structural schema remains strict, so unknown fields are
+ * rejected at every schema level rather than silently discarded.
+ */
+export function validateToolProfileV1(
+  input: unknown,
+  options: ToolProfileValidationOptions = {},
+): ToolProfileV1 {
+  const profile = parseToolProfileV1(input);
+  rejectPlaintextCredentialMaterial(profile);
+  const ranges = profile.providerTool.supportedVersions;
+  if (options.requireProviderCompatibility && ranges.length === 0) {
+    throw new ToolProfileValidationError(
+      "Provider compatibility must be configured before publication",
+    );
+  }
+  if (
+    options.rejectPlaceholderProviderRange &&
+    ranges.some(
+      (range) =>
+        compareVersion(range.min, "1.0.0") <= 0 &&
+        compareVersion(range.maxExclusive, "50.0.0") >= 0,
+    )
+  ) {
+    throw new ToolProfileValidationError(
+      "Provider compatibility contains an unsupported placeholder range",
+    );
+  }
+  return profile;
+}
+
+function rejectPlaintextCredentialMaterial(profile: ToolProfileV1): void {
+  const reservedEnvironmentName =
+    /^(?:CONCLAVE_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)/i;
+  if (
+    profile.environment.passthrough.some((name) =>
+      reservedEnvironmentName.test(name),
+    ) ||
+    Object.keys(profile.environment.set).some((name) =>
+      reservedEnvironmentName.test(name),
+    )
+  ) {
+    throw new ToolProfileValidationError(
+      "Tool Profile releases cannot request reserved environment variable names",
+    );
+  }
+  const secretName =
+    /(?:API[_-]?KEY|ACCESS[_-]?TOKEN|PASSWORD|CLIENT[_-]?SECRET|PRIVATE[_-]?KEY|CREDENTIAL)/i;
+  if (
+    Object.keys(profile.environment.set).some((name) => secretName.test(name))
+  ) {
+    throw new ToolProfileValidationError(
+      "Tool Profile releases cannot store credentials in environment values",
+    );
+  }
+  const credentialMaterial =
+    /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bsk-[A-Za-z0-9_-]{20,}\b|\bgh[pousr]_[A-Za-z0-9]{20,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b|\bAIza[0-9A-Za-z_-]{35}\b|\b(?:api[_-]?key|access[_-]?token|password|client[_-]?secret)\s*[:=]\s*[^\s,;]{8,}/i;
+  const visit = (value: unknown): boolean => {
+    if (typeof value === "string") return credentialMaterial.test(value);
+    if (Array.isArray(value)) return value.some(visit);
+    if (value && typeof value === "object") return Object.values(value).some(visit);
+    return false;
+  };
+  if (visit(profile)) {
+    throw new ToolProfileValidationError(
+      "Tool Profile releases cannot contain plaintext credential material",
+    );
+  }
+}
+
+export interface ResolvedToolProfile {
+  profile: ToolProfileV1;
+  providerVersion: string;
+  overrideIndex: number | null;
+}
+
+/**
+ * Selects exactly one provider-version override and materializes its bounded
+ * behavior fields. The schema rejects overlapping ranges; the runtime check
+ * below fails closed if malformed data bypasses schema validation.
+ */
+export function resolveToolProfileCompatibility(
+  input: unknown,
+  providerVersion: string,
+): ResolvedToolProfile {
+  const profile = validateToolProfileV1(input);
+  if (!semver.safeParse(providerVersion).success) {
+    throw new ToolProfileValidationError("Provider CLI version is invalid");
+  }
+  if (
+    !profile.providerTool.supportedVersions.some((range) =>
+      isSemverInRange(providerVersion, range),
+    )
+  ) {
+    throw new ToolProfileValidationError(
+      "Provider CLI version is not supported by this Profile",
+    );
+  }
+  const matches = profile.compatibilityOverrides
+    .map((override, index) => ({ override, index }))
+    .filter(({ override }) =>
+      isSemverInRange(providerVersion, override.providerVersion),
+    );
+  if (matches.length > 1) {
+    throw new ToolProfileValidationError(
+      "Provider CLI version matches multiple Profile compatibility overrides",
+    );
+  }
+  const match = matches[0];
+  if (!match) return { profile, providerVersion, overrideIndex: null };
+  const override = match.override;
+  const resolved = {
+    ...profile,
+    providerTool: {
+      ...profile.providerTool,
+      versionProbe: override.versionProbeArguments
+        ? {
+            ...profile.providerTool.versionProbe,
+            arguments: override.versionProbeArguments,
+          }
+        : profile.providerTool.versionProbe,
+    },
+    execution: override.executionArguments
+      ? { ...profile.execution, arguments: override.executionArguments }
+      : profile.execution,
+    progress: override.progress ?? profile.progress,
+    errors: override.errorMappings
+      ? { ...profile.errors, mappings: override.errorMappings }
+      : profile.errors,
+    compatibilityOverrides: [],
+  } satisfies ToolProfileV1;
+  return {
+    profile: toolProfileV1Schema.parse(resolved),
+    providerVersion,
+    overrideIndex: match.index,
+  };
 }
 
 export * from "./interpreter.js";

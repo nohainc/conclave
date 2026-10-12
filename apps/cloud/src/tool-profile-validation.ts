@@ -1,6 +1,6 @@
 import {
   compareSemver,
-  parseToolProfileV1,
+  validateToolProfileV1,
   type ToolProfileV1,
 } from "@conclave/tool-profile";
 import { canonicalReleaseJson } from "./release-trust.js";
@@ -23,23 +23,17 @@ export class ToolProfileRegistryError extends Error {
 export function validateProviderCompatibilityForPublication(
   profile: ToolProfileV1,
 ): void {
-  const ranges = profile.providerTool.supportedVersions;
-  if (ranges.length === 0) {
+  try {
+    validateToolProfileV1(profile, {
+      requireProviderCompatibility: true,
+      rejectPlaceholderProviderRange: true,
+    });
+  } catch (error) {
     throw new ToolProfileRegistryError(
       409,
-      "Provider compatibility must be configured before publication",
-    );
-  }
-  if (
-    ranges.some(
-      (range) =>
-        compareSemver(range.min, "1.0.0") <= 0 &&
-        compareSemver(range.maxExclusive, "50.0.0") >= 0,
-    )
-  ) {
-    throw new ToolProfileRegistryError(
-      409,
-      "Provider compatibility contains an unsupported placeholder range",
+      error instanceof Error
+        ? error.message
+        : "Provider compatibility is invalid",
     );
   }
 }
@@ -431,11 +425,16 @@ export function parseProfile(
 } {
   let profile: ToolProfileV1;
   try {
-    profile = parseToolProfileV1(input);
-  } catch {
+    profile = validateToolProfileV1(input);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name === "ToolProfileValidationError"
+    ) {
+      throw new ToolProfileRegistryError(400, error.message);
+    }
     throw new ToolProfileRegistryError(400, "Tool Profile v1 is invalid");
   }
-  rejectPlaintextCredentialMaterial(profile);
   if (
     identity &&
     (profile.profileDefinitionId !== identity.profileDefinitionId ||
@@ -454,52 +453,6 @@ export function parseProfile(
     );
   }
   return { profile, payload };
-}
-
-export function rejectPlaintextCredentialMaterial(
-  profile: ToolProfileV1,
-): void {
-  const reservedEnvironmentName =
-    /^(?:CONCLAVE_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)/i;
-  if (
-    profile.environment.passthrough.some((name) =>
-      reservedEnvironmentName.test(name),
-    ) ||
-    Object.keys(profile.environment.set).some((name) =>
-      reservedEnvironmentName.test(name),
-    )
-  ) {
-    throw new ToolProfileRegistryError(
-      400,
-      "Tool Profile releases cannot request reserved environment variable names",
-    );
-  }
-  const secretName =
-    /(?:API[_-]?KEY|ACCESS[_-]?TOKEN|PASSWORD|CLIENT[_-]?SECRET|PRIVATE[_-]?KEY|CREDENTIAL)/i;
-  if (
-    Object.keys(profile.environment.set).some((name) => secretName.test(name))
-  ) {
-    throw new ToolProfileRegistryError(
-      400,
-      "Tool Profile releases cannot store credentials in environment values",
-    );
-  }
-  const credentialMaterial =
-    /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bsk-[A-Za-z0-9_-]{20,}\b|\bgh[pousr]_[A-Za-z0-9]{20,}\b|\bgithub_pat_[A-Za-z0-9_]{20,}\b|\bAIza[0-9A-Za-z_-]{35}\b|\b(?:api[_-]?key|access[_-]?token|password|client[_-]?secret)\s*[:=]\s*[^\s,;]{8,}/i;
-  const visit = (value: unknown): boolean => {
-    if (typeof value === "string") return credentialMaterial.test(value);
-    if (Array.isArray(value)) return value.some(visit);
-    if (value && typeof value === "object") {
-      return Object.values(value).some(visit);
-    }
-    return false;
-  };
-  if (visit(profile)) {
-    throw new ToolProfileRegistryError(
-      400,
-      "Tool Profile releases cannot contain plaintext credential material",
-    );
-  }
 }
 
 export function validateToolProfileReleasePayload(

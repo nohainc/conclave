@@ -185,6 +185,43 @@ void main() {
           ToolProfileCompatibility.isProviderCompatible(profile, null), isTrue);
     });
 
+    test('provider compatibility overrides resolve deterministically', () {
+      final sampleProfile = validProfileMap();
+      sampleProfile['compatibilityOverrides'] = [
+        {
+          'providerVersion': {'min': '0.4.0', 'maxExclusive': '0.6.0'},
+          'executionArguments': ['override', '{{prompt}}'],
+          'versionProbeArguments': ['--version', '--machine'],
+          'progress': [],
+          'errorMappings': (sampleProfile['errors'] as Map)['mappings'],
+        }
+      ];
+      final profile = EngineProfile.parse(
+        utf8.encode(canonicalJson(sampleProfile)),
+      );
+      final resolved = profile.resolveForProviderVersion('0.5.0');
+      expect(resolved.execution['arguments'], ['override', '{{prompt}}']);
+      expect(resolved.providerTool['versionProbe'],
+          containsPair('arguments', ['--version', '--machine']));
+      expect(resolved.json['compatibilityOverrides'], isEmpty);
+      expect(() => profile.resolveForProviderVersion('1.0.0'),
+          throwsA(isA<FormatException>()));
+    });
+
+    test('compatibility override unknown fields are rejected', () {
+      final sampleProfile = validProfileMap();
+      sampleProfile['compatibilityOverrides'] = [
+        {
+          'providerVersion': {'min': '0.4.0', 'maxExclusive': '0.6.0'},
+          'unknown': true,
+        }
+      ];
+      expect(
+        () => EngineProfile.parse(utf8.encode(canonicalJson(sampleProfile))),
+        throwsA(isA<FormatException>()),
+      );
+    });
+
     test(
         'WorkerTrustPolicy verifies valid Ed25519 signature and honors revocations',
         () async {

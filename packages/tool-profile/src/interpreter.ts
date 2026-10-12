@@ -1,6 +1,7 @@
 import {
   TOOL_PROFILE_LIMITS,
-  toolProfileV1Schema,
+  resolveToolProfileCompatibility,
+  validateToolProfileV1,
   type ToolProfileV1,
 } from "./index.js";
 
@@ -34,6 +35,8 @@ export interface ProfileExecutionContext {
   sessionId?: string;
   /** Last successful model for resume capability checks; null means Default. */
   sessionModel?: string | null;
+  /** Detected provider CLI version used to select one compatibility override. */
+  providerVersion?: string;
 }
 
 export interface ProfileExecutionInput {
@@ -233,7 +236,7 @@ function timeoutValues(
   };
 }
 
-export function compareSemver(left: string, right: string): number {
+function compareSemver(left: string, right: string): number {
   const parse = (value: string) => {
     const match =
       /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
@@ -279,7 +282,7 @@ export function extractProfileProviderVersion(
   profileInput: ToolProfileV1,
   input: ProviderVersionProbeInput,
 ): NormalizedProviderVersion {
-  const profile = toolProfileV1Schema.parse(profileInput);
+  const profile = validateToolProfileV1(profileInput);
   if (input.exitCode !== 0) {
     return {
       version: null,
@@ -320,8 +323,8 @@ export function interpretProfileReadiness(
   profileInput: ToolProfileV1,
   input: ProfileReadinessInput,
 ): NormalizedProfileReadiness {
-  const profile = toolProfileV1Schema.parse(profileInput);
-  const version = extractProfileProviderVersion(profile, input.versionProbe);
+  const parsedProfile = validateToolProfileV1(profileInput);
+  const version = extractProfileProviderVersion(parsedProfile, input.versionProbe);
   const checks: NormalizedReadinessCheck[] = [
     {
       code: "provider_tool_version",
@@ -337,6 +340,10 @@ export function interpretProfileReadiness(
       issueCode,
     };
   }
+  const profile = resolveToolProfileCompatibility(
+    parsedProfile,
+    version.version!,
+  ).profile;
 
   for (const command of profile.probe.passive.checks) {
     const exitCode = input.commandExitCodes?.[command.id];
@@ -460,14 +467,23 @@ export function expandExecutionArguments(
   context: ProfileExecutionContext,
   argumentsOverride?: ArgumentList,
 ): string[] {
-  const parsedProfile = toolProfileV1Schema.parse(profileInput);
+  const parsedProfile = validateToolProfileV1(profileInput);
+  const compatibleProfile = context.providerVersion
+    ? resolveToolProfileCompatibility(
+        parsedProfile,
+        context.providerVersion,
+      ).profile
+    : parsedProfile;
   const profile = argumentsOverride
-    ? toolProfileV1Schema.parse({
-        ...parsedProfile,
-        execution: { ...parsedProfile.execution, arguments: argumentsOverride },
+    ? validateToolProfileV1({
+        ...compatibleProfile,
+        execution: {
+          ...compatibleProfile.execution,
+          arguments: argumentsOverride,
+        },
         compatibilityOverrides: [],
       })
-    : parsedProfile;
+    : compatibleProfile;
   validateContext(profile, context);
   const sourceArguments = profile.execution.arguments;
   const output: string[] = [];
@@ -606,7 +622,13 @@ export function constructProviderStdin(
   profileInput: ToolProfileV1,
   context: ProfileExecutionContext,
 ): string {
-  const profile = toolProfileV1Schema.parse(profileInput);
+  const parsedProfile = validateToolProfileV1(profileInput);
+  const profile = context.providerVersion
+    ? resolveToolProfileCompatibility(
+        parsedProfile,
+        context.providerVersion,
+      ).profile
+    : parsedProfile;
   validateContext(profile, context);
   let value: string;
   if (profile.execution.stdin.mode === "raw_text") {
@@ -810,7 +832,13 @@ export function interpretProfileExecution(
   profileInput: ToolProfileV1,
   input: ProfileExecutionInput,
 ): NormalizedProfileResult {
-  const profile = toolProfileV1Schema.parse(profileInput);
+  const parsedProfile = validateToolProfileV1(profileInput);
+  const profile = input.context.providerVersion
+    ? resolveToolProfileCompatibility(
+        parsedProfile,
+        input.context.providerVersion,
+      ).profile
+    : parsedProfile;
   if (input.cancelled) return failedResult("cancelled");
   if (input.timedOut) return failedResult("deadline_exceeded");
   if (

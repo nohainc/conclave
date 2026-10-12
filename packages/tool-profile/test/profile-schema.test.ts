@@ -4,9 +4,11 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   parseToolProfileV1,
+  resolveToolProfileCompatibility,
   TOOL_PROFILE_LIMITS,
   toolProfileV1JsonSchema,
   toolProfileV1Schema,
+  validateToolProfileV1,
 } from "../src/index.js";
 
 const fixture = (name: string): Record<string, any> =>
@@ -82,6 +84,35 @@ describe("Tool Profile v1 canonical schema", () => {
     expect(parseToolProfileV1(draft).providerTool.supportedVersions).toEqual(
       [],
     );
+  });
+
+  it("materializes exactly one provider compatibility override", () => {
+    const profile = fixture("fixture-cli.v1");
+    profile.compatibilityOverrides = [
+      {
+        providerVersion: { min: "0.3.0", maxExclusive: "0.4.0" },
+        executionArguments: profile.execution.arguments,
+        versionProbeArguments: ["--version", "--machine"],
+        progress: [],
+        errorMappings: profile.errors.mappings,
+      },
+    ];
+    const resolved = resolveToolProfileCompatibility(profile, "0.3.1");
+    expect(resolved.overrideIndex).toBe(0);
+    expect(resolved.profile.compatibilityOverrides).toEqual([]);
+    expect(resolved.profile.providerTool.versionProbe.arguments).toEqual([
+      "--version",
+      "--machine",
+    ]);
+    expect(() => resolveToolProfileCompatibility(profile, "0.4.0")).toThrow(
+      /not supported/,
+    );
+  });
+
+  it("rejects plaintext credentials through the shared validator", () => {
+    const profile = fixture("fixture-cli.v1");
+    profile.execution.stdin.value = "api_key=sk-12345678901234567890";
+    expect(() => validateToolProfileV1(profile)).toThrow(/credential/i);
   });
 
   const invalidCases: Array<[string, (profile: Record<string, any>) => void]> =

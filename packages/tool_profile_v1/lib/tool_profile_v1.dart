@@ -59,6 +59,76 @@ class EngineProfile {
   Map<String, Object?> get sandbox => _object(json['sandbox'], 'sandbox');
   Map<String, Object?> get probe => _object(json['probe'], 'probe');
 
+  /// Materializes the one provider-version override selected by the detected
+  /// CLI version. Overlapping overrides are rejected during parsing, so this
+  /// operation is deterministic and never depends on declaration order.
+  EngineProfile resolveForProviderVersion(String providerVersion) {
+    final supportedVersions = providerTool['supportedVersions'];
+    final supported =
+        isSemanticVersion(providerVersion) &&
+        supportedVersions is List &&
+        supportedVersions.whereType<Map>().any(
+          (range) =>
+              range['min'] is String &&
+              range['maxExclusive'] is String &&
+              semanticVersionInRange(
+                providerVersion,
+                range['min'] as String,
+                range['maxExclusive'] as String,
+              ),
+        );
+    if (!isSemanticVersion(providerVersion) || !supported) {
+      throw const FormatException(
+        'Provider CLI version is not supported by this Profile',
+      );
+    }
+    final overrides = (json['compatibilityOverrides'] as List)
+        .whereType<Map>()
+        .where((override) {
+          final range = Map<String, Object?>.from(
+            override['providerVersion'] as Map,
+          );
+          return semanticVersionInRange(
+            providerVersion,
+            range['min'] as String,
+            range['maxExclusive'] as String,
+          );
+        })
+        .toList(growable: false);
+    if (overrides.length > 1) {
+      throw const FormatException(
+        'Provider CLI version matches multiple Profile compatibility overrides',
+      );
+    }
+    if (overrides.isEmpty) return this;
+    final override = overrides.single;
+    final resolved = _cloneJson(json);
+    final provider = _object(resolved['providerTool'], 'providerTool');
+    final versionProbe = _object(provider['versionProbe'], 'versionProbe');
+    if (override.containsKey('versionProbeArguments')) {
+      versionProbe['arguments'] = _cloneJsonValue(
+        override['versionProbeArguments'],
+      );
+      provider['versionProbe'] = versionProbe;
+      resolved['providerTool'] = provider;
+    }
+    final execution = _object(resolved['execution'], 'execution');
+    if (override.containsKey('executionArguments')) {
+      execution['arguments'] = _cloneJsonValue(override['executionArguments']);
+      resolved['execution'] = execution;
+    }
+    if (override.containsKey('progress')) {
+      resolved['progress'] = _cloneJsonValue(override['progress']);
+    }
+    final errors = _object(resolved['errors'], 'errors');
+    if (override.containsKey('errorMappings')) {
+      errors['mappings'] = _cloneJsonValue(override['errorMappings']);
+      resolved['errors'] = errors;
+    }
+    resolved['compatibilityOverrides'] = <Object?>[];
+    return EngineProfile.parse(utf8.encode(_canonicalJson(resolved)));
+  }
+
   static EngineProfile parse(List<int> bytes) {
     if (bytes.isEmpty || bytes.length > maxProfileBytes) {
       throw const FormatException('Tool Profile payload is empty or oversized');
@@ -112,11 +182,12 @@ class EngineProfile {
       tool['versionProbe'],
       'providerTool.versionProbe',
     );
-    _expectOnly(
-      versionProbe,
-      const {'arguments', 'timeoutMs', 'source', 'extract'},
-      'providerTool.versionProbe',
-    );
+    _expectOnly(versionProbe, const {
+      'arguments',
+      'timeoutMs',
+      'source',
+      'extract',
+    }, 'providerTool.versionProbe');
     _validateArgumentStrings(
       versionProbe['arguments'],
       'providerTool.versionProbe.arguments',
@@ -132,11 +203,10 @@ class EngineProfile {
       versionProbe['extract'],
       'providerTool.versionProbe.extract',
     );
-    _expectOnly(
-      versionExtract,
-      const {'kind', 'patternId'},
-      'providerTool.versionProbe.extract',
-    );
+    _expectOnly(versionExtract, const {
+      'kind',
+      'patternId',
+    }, 'providerTool.versionProbe.extract');
     if (versionExtract['kind'] != 'regex_capture' ||
         versionExtract['patternId'] != 'semver') {
       throw const FormatException('provider version extraction is invalid');
@@ -147,9 +217,10 @@ class EngineProfile {
     }
     for (final value in supportedVersions) {
       if (value is! Map ||
-          value.keys
-              .toSet()
-              .difference(const {'min', 'maxExclusive'}).isNotEmpty ||
+          value.keys.toSet().difference(const {
+            'min',
+            'maxExclusive',
+          }).isNotEmpty ||
           value['min'] is! String ||
           value['maxExclusive'] is! String) {
         throw const FormatException('provider compatibility range is invalid');
@@ -195,7 +266,7 @@ class EngineProfile {
     _boundedArray(progress, 'progress', 64);
     _boundedArray(execution['events'], 'execution.events', 128);
     final compatibilityOverrides = json['compatibilityOverrides'];
-    _boundedArray(compatibilityOverrides, 'compatibilityOverrides', 16);
+    _validateCompatibilityOverrides(compatibilityOverrides);
     final probe = _object(json['probe'], 'probe');
     _expectOnly(probe, const {'passive', 'live'}, 'probe');
     final passive = _object(probe['passive'], 'probe.passive');
@@ -211,14 +282,11 @@ class EngineProfile {
         throw const FormatException('probe.live is invalid');
       }
       final liveMap = Map<String, Object?>.from(live);
-      _expectOnly(
-          liveMap,
-          const {
-            'timeoutMs',
-            'expectedFinalText',
-            'requiredForReadiness',
-          },
-          'probe.live');
+      _expectOnly(liveMap, const {
+        'timeoutMs',
+        'expectedFinalText',
+        'requiredForReadiness',
+      }, 'probe.live');
       if (liveMap['requiredForReadiness'] != null &&
           liveMap['requiredForReadiness'] is! bool)
         throw const FormatException('Invalid live readiness policy');
@@ -228,13 +296,10 @@ class EngineProfile {
           expected['value'] != 'OK') {
         throw const FormatException('probe live expectation is Engine-owned');
       }
-      _expectOnly(
-          Map<String, Object?>.from(expected),
-          const {
-            'kind',
-            'value',
-          },
-          'probe.live.expectedFinalText');
+      _expectOnly(Map<String, Object?>.from(expected), const {
+        'kind',
+        'value',
+      }, 'probe.live.expectedFinalText');
     }
     _validateEnvironmentNames(env);
     _validateRules(
@@ -247,17 +312,14 @@ class EngineProfile {
     _validateErrorRules(errors['mappings']);
     _validateConfigChecks(passive['configChecks']);
     final session = _object(json['session'], 'session');
-    _expectOnly(
-        session,
-        const {
-          'supported',
-          'formatId',
-          'compatibleFormatIds',
-          'extract',
-          'resumeArguments',
-          'requireObservedIdMatch',
-        },
-        'session');
+    _expectOnly(session, const {
+      'supported',
+      'formatId',
+      'compatibleFormatIds',
+      'extract',
+      'resumeArguments',
+      'requireObservedIdMatch',
+    }, 'session');
     if (session['supported'] is! bool ||
         session['requireObservedIdMatch'] is! bool) {
       throw const FormatException('session policy is invalid');
@@ -285,15 +347,18 @@ class EngineProfile {
     );
     if (_object(json['model'], 'model')['selectionMapping'] != null &&
         compareSemanticVersions(
-                _object(json['engineCompatibility'], 'engineCompatibility')[
-                    'min'] as String,
-                '1.2.0') <
+              _object(json['engineCompatibility'], 'engineCompatibility')['min']
+                  as String,
+              '1.2.0',
+            ) <
             0) {
       throw const FormatException(
-          'Model selection mapping requires Engine 1.2.0');
+        'Model selection mapping requires Engine 1.2.0',
+      );
     }
-    ProfileExecutionOptions(_object(json['model'], 'model'))
-        .validate(durableSessions: session['supported'] == true);
+    ProfileExecutionOptions(
+      _object(json['model'], 'model'),
+    ).validate(durableSessions: session['supported'] == true);
     final declaredOptions = _object(json['model'], 'model')['executionOptions'];
     if (declaredOptions is Map &&
         declaredOptions['effortSupported'] == true &&
@@ -303,11 +368,16 @@ class EngineProfile {
           ...(compatibilityOverrides as List)
               .whereType<Map>()
               .where((override) => override['executionArguments'] != null)
-              .map((override) => override['executionArguments'])
-        ].any((arguments) => !jsonEncode([arguments, execution['stdin']])
-            .contains('{{reasoningEffort}}'))) {
+              .map((override) => override['executionArguments']),
+        ].any(
+          (arguments) => !jsonEncode([
+            arguments,
+            execution['stdin'],
+          ]).contains('{{reasoningEffort}}'),
+        )) {
       throw const FormatException(
-          'Supported effort requires a provider invocation mapping');
+        'Supported effort requires a provider invocation mapping',
+      );
     }
 
     _validateArgumentStrings(
@@ -396,7 +466,9 @@ void _validateSelector(Object? value) {
       value.length > 256 ||
       !RegExp(r'^\$(?:\.[A-Za-z_][A-Za-z0-9_]*)+$').hasMatch(value) ||
       value.split('.').length - 1 > 16 ||
-      value.split('.').any(
+      value
+          .split('.')
+          .any(
             (part) =>
                 const {'__proto__', 'prototype', 'constructor'}.contains(part),
           )) {
@@ -507,6 +579,95 @@ void _validateConfigChecks(Object? value) {
   }
 }
 
+void _validateCompatibilityOverrides(Object? value) {
+  if (value is! List || value.length > 16) {
+    throw const FormatException(
+      'compatibilityOverrides must be a bounded array',
+    );
+  }
+  final ranges = <Map<String, String>>[];
+  for (final raw in value) {
+    if (raw is! Map ||
+        raw.keys.any(
+          (key) => !const {
+            'providerVersion',
+            'executionArguments',
+            'versionProbeArguments',
+            'progress',
+            'errorMappings',
+          }.contains(key),
+        ) ||
+        raw['providerVersion'] is! Map) {
+      throw const FormatException('compatibility override is invalid');
+    }
+    final range = Map<String, Object?>.from(raw['providerVersion'] as Map);
+    _expectOnly(range, const {
+      'min',
+      'maxExclusive',
+    }, 'override.providerVersion');
+    if (range['min'] is! String ||
+        range['maxExclusive'] is! String ||
+        !isSemanticVersion(range['min'] as String) ||
+        !isSemanticVersion(range['maxExclusive'] as String) ||
+        compareSemanticVersions(
+              range['min'] as String,
+              range['maxExclusive'] as String,
+            ) >=
+            0) {
+      throw const FormatException('compatibility override range is invalid');
+    }
+    final normalizedRange = {
+      'min': range['min'] as String,
+      'maxExclusive': range['maxExclusive'] as String,
+    };
+    for (final prior in ranges) {
+      final overlaps =
+          compareSemanticVersions(
+                prior['maxExclusive']!,
+                normalizedRange['min']!,
+              ) >
+              0 &&
+          compareSemanticVersions(
+                normalizedRange['maxExclusive']!,
+                prior['min']!,
+              ) >
+              0;
+      if (overlaps) {
+        throw const FormatException(
+          'compatibility override ranges must not overlap',
+        );
+      }
+    }
+    ranges.add(normalizedRange);
+    if (raw['executionArguments'] != null) {
+      final args = raw['executionArguments'];
+      if (args is! List ||
+          args.length > 128 ||
+          args.any((item) => !_validArgument(item))) {
+        throw const FormatException('override execution arguments are invalid');
+      }
+    }
+    if (raw['versionProbeArguments'] != null) {
+      _validateArgumentStrings(
+        raw['versionProbeArguments'],
+        'override.versionProbeArguments',
+        max: 128,
+      );
+    }
+    if (raw['progress'] != null) {
+      _validateRules(
+        raw['progress'],
+        'override.progress',
+        64,
+        requireActions: false,
+      );
+    }
+    if (raw['errorMappings'] != null) {
+      _validateErrorRules(raw['errorMappings']);
+    }
+  }
+}
+
 void _expectOnly(Map<String, Object?> value, Set<String> allowed, String path) {
   final unknown = value.keys.where((key) => !allowed.contains(key));
   if (unknown.isNotEmpty) {
@@ -561,9 +722,9 @@ void _validateEnvironmentNames(Map<String, Object?> environment) {
 /// when an official Profile explicitly declares them. Machine and Conclave
 /// credentials are never available to provider processes.
 bool isReservedEnvironmentName(String name) => RegExp(
-      r'^(?:CONCLAVE_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)|^(?:CONCLAVE_API_KEY|CONCLAVE_CLOUD_TOKEN|CLOUD_API_KEY|CLOUD_TOKEN|WORKER_TOKEN|WORKSPACE_TOKEN)$',
-      caseSensitive: false,
-    ).hasMatch(name);
+  r'^(?:CONCLAVE_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)|^(?:CONCLAVE_API_KEY|CONCLAVE_CLOUD_TOKEN|CLOUD_API_KEY|CLOUD_TOKEN|WORKER_TOKEN|WORKSPACE_TOKEN)$',
+  caseSensitive: false,
+).hasMatch(name);
 
 bool engineVersionCompatible(EngineProfile profile, String version) {
   final range = _object(
@@ -642,6 +803,23 @@ bool _validSessionFormatId(String value) =>
     value.length <= 96 &&
     RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$').hasMatch(value);
 
+Map<String, Object?> _cloneJson(Map<String, Object?> value) =>
+    Map<String, Object?>.from(jsonDecode(jsonEncode(value)) as Map);
+
+Object? _cloneJsonValue(Object? value) => jsonDecode(jsonEncode(value));
+
+String _canonicalJson(Object? value) {
+  if (value is Map) {
+    final entries = value.entries.toList()
+      ..sort(
+        (left, right) => left.key.toString().compareTo(right.key.toString()),
+      );
+    return '{${entries.map((entry) => '${jsonEncode(entry.key.toString())}:${_canonicalJson(entry.value)}').join(',')}}';
+  }
+  if (value is List) return '[${value.map(_canonicalJson).join(',')}]';
+  return jsonEncode(value);
+}
+
 class _SemanticVersion implements Comparable<_SemanticVersion> {
   const _SemanticVersion(this.core, this.prerelease);
 
@@ -683,9 +861,11 @@ class _SemanticVersion implements Comparable<_SemanticVersion> {
       if (prerelease.isEmpty && other.prerelease.isEmpty) return 0;
       return prerelease.isEmpty ? 1 : -1;
     }
-    for (var index = 0;
-        index < prerelease.length && index < other.prerelease.length;
-        index++) {
+    for (
+      var index = 0;
+      index < prerelease.length && index < other.prerelease.length;
+      index++
+    ) {
       final left = prerelease[index];
       final right = other.prerelease[index];
       final leftNumeric = RegExp(r'^[0-9]+$').hasMatch(left);
@@ -693,10 +873,10 @@ class _SemanticVersion implements Comparable<_SemanticVersion> {
       final order = leftNumeric && rightNumeric
           ? _compareNumericIdentifiers(left, right)
           : leftNumeric
-              ? -1
-              : rightNumeric
-                  ? 1
-                  : left.compareTo(right);
+          ? -1
+          : rightNumeric
+          ? 1
+          : left.compareTo(right);
       if (order != 0) return order;
     }
     return prerelease.length.compareTo(other.prerelease.length);

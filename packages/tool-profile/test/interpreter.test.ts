@@ -34,6 +34,30 @@ function context(
 }
 
 describe("Tool Profile v1 pure interpreter", () => {
+  it("uses the deterministic provider-version override during interpretation", () => {
+    const profile = loadProfile("chatgpt-codex.v1");
+    profile.compatibilityOverrides = [
+      {
+        providerVersion: { min: "0.180.0", maxExclusive: "0.181.0" },
+        executionArguments: [
+          "override",
+          ...profile.compatibilityOverrides[0]!.executionArguments!.slice(1),
+        ],
+      },
+    ];
+    const args = expandExecutionArguments(
+      profile,
+      context({ providerVersion: "0.180.5" }),
+    );
+    expect(args[0]).toBe("override");
+    expect(() =>
+      expandExecutionArguments(
+        profile,
+        context({ providerVersion: "0.190.0" }),
+      ),
+    ).toThrow(/not supported/);
+  });
+
   it("preserves sandbox policy in every Codex compatibility argument layout", () => {
     const profile = loadProfile("chatgpt-codex.v1");
     const layouts = [

@@ -286,7 +286,36 @@ legacy V8 endpoints may remain available solely for consumers that have not yet
 migrated; they MUST NOT be used by new V9 readers or writers and are removed by
 a later cleanup migration after consumer cutover.
 
-## 12. Acceptance contract
+## 12. Shared validation and interpretation
+
+Cloud, Profile Lab, Workspace, and the CLI Worker Engine MUST use the same
+provider-neutral V9 validation contract. The shared contract is implemented by
+the TypeScript `@conclave/tool-profile` package for Cloud-side validation and
+the Dart `conclave_tool_profile_v1` package for Profile Lab, Workspace, and
+Engine runtime validation. Both implementations MUST remain semantically
+aligned with the versioned Profile schema.
+
+The validation contract MUST include:
+
+- strict JSON schema validation, including rejection of unknown fields unless
+  a versioned compatibility rule explicitly defines them;
+- Engine version compatibility, provider executable discovery, provider CLI
+  version ranges, argument expansion, standard-input configuration, model
+  discovery/selection, session continuation/reconstruction, sandbox mappings,
+  output event parsing, error classification, environment restrictions, and
+  timeout/size limits;
+- deterministic SemVer precedence and non-overlapping compatibility ranges;
+- at most one matching compatibility override for an installed provider CLI;
+- fail-closed behavior for unknown, unsupported, or ambiguously matched
+  provider versions.
+
+Compatibility resolution produces an effective interpretation of the same
+Profile snapshot. It MUST NOT create a second Profile identity, revision, or
+digest. Identity metadata continues to refer to the admitted canonical
+snapshot while version-specific behavior is selected only after provider
+version discovery.
+
+## 13. Acceptance contract
 
 The V9 contract is accepted when all four runtime/control-plane components
 reference this specification and agree on these facts:
