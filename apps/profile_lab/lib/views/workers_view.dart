@@ -18,6 +18,7 @@ class WorkersView extends StatefulWidget {
 class _WorkersViewState extends State<WorkersView> {
   final TextEditingController _searchController = TextEditingController();
   String _filter = '';
+  bool _sidebarCollapsed = false;
 
   @override
   void initState() {
@@ -64,247 +65,319 @@ class _WorkersViewState extends State<WorkersView> {
     }).toList();
 
     return LayoutBuilder(
-      builder: (context, constraints) => Flex(
-        direction:
-            constraints.maxWidth < 1000 ? Axis.vertical : Axis.horizontal,
-        children: [
-          // Left pane: Workers List
-          Container(
-            width: constraints.maxWidth < 1000 ? constraints.maxWidth : 280,
-            height: constraints.maxWidth < 1000 ? 240 : null,
-            decoration: const BoxDecoration(
-              color: ProfileLabTheme.darkSurface,
-              border: Border(
-                right: BorderSide(color: ProfileLabTheme.borderColor),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Search & refresh header
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _searchController,
-                          style: const TextStyle(fontSize: 12),
-                          decoration: InputDecoration(
-                            hintText: 'Filter workers...',
-                            hintStyle: const TextStyle(
-                              fontSize: 12,
-                              color: ProfileLabTheme.secondaryText,
-                            ),
-                            prefixIcon: const Icon(
-                              Icons.search,
-                              size: 16,
-                              color: ProfileLabTheme.secondaryText,
-                            ),
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
-                            ),
-                            filled: true,
-                            fillColor: ProfileLabTheme.darkBackground,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              borderSide: const BorderSide(
-                                color: ProfileLabTheme.borderColor,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              borderSide: const BorderSide(
-                                color: ProfileLabTheme.borderColor,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: c.isLoadingWorkerCatalog
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: ProfileLabTheme.primaryAccent,
-                                ),
-                              )
-                            : const Icon(Icons.refresh, size: 18),
-                        tooltip: 'Refresh Cloud Catalog (⌘R)',
-                        onPressed: c.isLoadingWorkerCatalog
-                            ? null
-                            : () => c.fetchCloudCatalog(),
-                      ),
-                    ],
-                  ),
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < 760;
+        return Flex(
+          direction: narrow ? Axis.vertical : Axis.horizontal,
+          children: [
+            // Left pane: Workers List
+            Container(
+              width: narrow
+                  ? constraints.maxWidth
+                  : _sidebarCollapsed
+                      ? 56
+                      : 220,
+              height: narrow ? 220 : null,
+              decoration: const BoxDecoration(
+                color: ProfileLabTheme.darkSurface,
+                border: Border(
+                  right: BorderSide(color: ProfileLabTheme.borderColor),
                 ),
-
-                if (c.currentSession == null)
-                  Container(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: ProfileLabTheme.darkSurface,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: ProfileLabTheme.borderColor),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+              child: _sidebarCollapsed && !narrow
+                  ? _CollapsedWorkerRail(
+                      workers: workers,
+                      selectedWorkerTypeId:
+                          c.selectedCloudWorker?['workerTypeId'] as String?,
+                      onExpand: () => setState(() => _sidebarCollapsed = false),
+                      onSelect: c.selectWorker,
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text(
-                          'Cloud Catalog Unauthenticated',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            color: ProfileLabTheme.warnColor,
+                        // Search & refresh header
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              if (!narrow)
+                                IconButton(
+                                  tooltip: 'Collapse Worker sidebar',
+                                  icon:
+                                      const Icon(Icons.chevron_left, size: 18),
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () =>
+                                      setState(() => _sidebarCollapsed = true),
+                                ),
+                              Expanded(
+                                child: TextField(
+                                  controller: _searchController,
+                                  style: const TextStyle(fontSize: 12),
+                                  decoration: InputDecoration(
+                                    hintText: 'Filter workers...',
+                                    hintStyle: const TextStyle(
+                                      fontSize: 12,
+                                      color: ProfileLabTheme.secondaryText,
+                                    ),
+                                    prefixIcon: const Icon(
+                                      Icons.search,
+                                      size: 16,
+                                      color: ProfileLabTheme.secondaryText,
+                                    ),
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
+                                    filled: true,
+                                    fillColor: ProfileLabTheme.darkBackground,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                      borderSide: const BorderSide(
+                                        color: ProfileLabTheme.borderColor,
+                                      ),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                      borderSide: const BorderSide(
+                                        color: ProfileLabTheme.borderColor,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                icon: c.isLoadingWorkerCatalog
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: ProfileLabTheme.primaryAccent,
+                                        ),
+                                      )
+                                    : const Icon(Icons.refresh, size: 18),
+                                tooltip: 'Refresh Cloud Catalog (⌘R)',
+                                onPressed: c.isLoadingWorkerCatalog
+                                    ? null
+                                    : () => c.fetchCloudCatalog(),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Sign in with Profile Lab credentials to query the dynamic Cloud catalog.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: ProfileLabTheme.secondaryText,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.login, size: 14),
-                          label: const Text(
-                            'Sign In to Cloud',
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: ProfileLabTheme.primaryAccent,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
+
+                        if (c.currentSession == null)
+                          Container(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 12,
                               vertical: 4,
                             ),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: ProfileLabTheme.darkSurface,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                  color: ProfileLabTheme.borderColor),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Cloud Catalog Unauthenticated',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                    color: ProfileLabTheme.warnColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Sign in with Profile Lab credentials to query the dynamic Cloud catalog.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: ProfileLabTheme.secondaryText,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ElevatedButton.icon(
+                                  icon: const Icon(Icons.login, size: 14),
+                                  label: const Text(
+                                    'Sign In to Cloud',
+                                    style: TextStyle(fontSize: 11),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor:
+                                        ProfileLabTheme.primaryAccent,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  onPressed: () => c.signInWithBrowser(),
+                                ),
+                              ],
+                            ),
                           ),
-                          onPressed: () => c.signInWithBrowser(),
+
+                        if (c.workerCatalogError != null)
+                          Column(
+                            children: [
+                              Text(
+                                c.workerCatalogUnauthorized
+                                    ? 'Catalog access unauthorized'
+                                    : 'Catalog refresh failed',
+                              ),
+                              Text(c.workerCatalogError!),
+                              TextButton(
+                                onPressed: c.isLoadingWorkerCatalog
+                                    ? null
+                                    : c.fetchCloudCatalog,
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        // Workers list
+                        Expanded(
+                          child: workers.isEmpty
+                              ? Center(
+                                  child: Text(
+                                    c.currentSession == null
+                                        ? 'Sign in to fetch catalog.'
+                                        : c.isLoadingWorkerCatalog
+                                            ? 'Fetching catalog...'
+                                            : c.workerCatalogError ??
+                                                (c.hasLoadedWorkerCatalog
+                                                    ? (_filter.isEmpty
+                                                        ? 'No logical workers found.'
+                                                        : 'No matching workers.')
+                                                    : 'Catalog has not been loaded.'),
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: ProfileLabTheme.secondaryText,
+                                    ),
+                                  ),
+                                )
+                              : ListView.builder(
+                                  itemCount: workers.length,
+                                  itemBuilder: (context, index) {
+                                    final worker = workers[index];
+                                    final workerTypeId =
+                                        worker['workerTypeId'] as String? ?? '';
+                                    final isSelected = c.selectedCloudWorker?[
+                                            'workerTypeId'] ==
+                                        workerTypeId;
+                                    final toolName =
+                                        worker['providerToolName'] as String? ??
+                                            '';
+                                    final currentRevision =
+                                        (worker['currentRevision'] as num?)
+                                            ?.toInt();
+
+                                    final String profileStatus = isSelected
+                                        ? c.selectedWorkerState
+                                            .conciseProfileStatus
+                                        : currentRevision == null
+                                            ? 'No Profile'
+                                            : 'Current r$currentRevision';
+
+                                    return WorkerSidebarItem(
+                                      name: worker['displayName'] as String? ??
+                                          workerTypeId,
+                                      identity: toolName.isEmpty
+                                          ? workerTypeId
+                                          : '$workerTypeId · CLI: $toolName',
+                                      profileStatus: profileStatus,
+                                      selected: isSelected,
+                                      onTap: () => c.selectWorker(worker),
+                                    );
+                                  },
+                                ),
                         ),
                       ],
                     ),
-                  ),
-
-                if (c.workerCatalogError != null)
-                  Column(
-                    children: [
-                      Text(
-                        c.workerCatalogUnauthorized
-                            ? 'Catalog access unauthorized'
-                            : 'Catalog refresh failed',
-                      ),
-                      Text(c.workerCatalogError!),
-                      TextButton(
-                        onPressed: c.isLoadingWorkerCatalog
-                            ? null
-                            : c.fetchCloudCatalog,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                // Workers list
-                Expanded(
-                  child: workers.isEmpty
-                      ? Center(
-                          child: Text(
-                            c.currentSession == null
-                                ? 'Sign in to fetch catalog.'
-                                : c.isLoadingWorkerCatalog
-                                    ? 'Fetching catalog...'
-                                    : c.workerCatalogError ??
-                                        (c.hasLoadedWorkerCatalog
-                                            ? (_filter.isEmpty
-                                                ? 'No logical workers found.'
-                                                : 'No matching workers.')
-                                            : 'Catalog has not been loaded.'),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: ProfileLabTheme.secondaryText,
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          itemCount: workers.length,
-                          itemBuilder: (context, index) {
-                            final worker = workers[index];
-                            final workerTypeId =
-                                worker['workerTypeId'] as String? ?? '';
-                            final isSelected =
-                                c.selectedCloudWorker?['workerTypeId'] ==
-                                    workerTypeId;
-                            final toolName =
-                                worker['providerToolName'] as String? ?? '';
-                            final currentRevision =
-                                (worker['currentRevision'] as num?)?.toInt();
-
-                            final String profileStatus = isSelected
-                                ? c.selectedWorkerState.conciseProfileStatus
-                                : currentRevision == null
-                                    ? 'No Profile'
-                                    : 'Current r$currentRevision';
-
-                            return WorkerSidebarItem(
-                              name: worker['displayName'] as String? ??
-                                  workerTypeId,
-                              identity: toolName.isEmpty
-                                  ? workerTypeId
-                                  : '$workerTypeId · CLI: $toolName',
-                              profileStatus: profileStatus,
-                              selected: isSelected,
-                              onTap: () => c.selectWorker(worker),
-                            );
-                          },
-                        ),
-                ),
-              ],
             ),
-          ),
 
-          // Right pane: Selected Worker Details and Subviews
-          Expanded(
-            child: c.selectedCloudWorker == null
-                ? const EmptyState(
-                    title: 'Select a Worker',
-                    description:
-                        'Choose a logical Worker from the Cloud catalog.',
-                  )
-                : Column(
-                    children: [
-                      if (c.isLoadingDefinitions)
-                        const OperationProgress(label: 'Loading Worker…'),
-                      if (c.definitionsError != null) Text(c.definitionsError!),
-                      _WorkerSubViewHeader(controller: c),
-                      Expanded(
-                        child: switch (c.workerSubView) {
-                          WorkerSubView.overview => _WorkerDetailsPane(
-                              controller: c,
-                              workerState: c.selectedWorkerState,
-                            ),
-                          WorkerSubView.draftAndTest => DraftTestWorkbench(
-                              controller: c,
-                            ),
-                        },
-                      ),
-                    ],
-                  ),
-          ),
-        ],
-      ),
+            // Right pane: Selected Worker Details and Subviews
+            Expanded(
+              child: c.selectedCloudWorker == null
+                  ? const EmptyState(
+                      title: 'Select a Worker',
+                      description:
+                          'Choose a logical Worker from the Cloud catalog.',
+                    )
+                  : Column(
+                      children: [
+                        if (c.isLoadingDefinitions)
+                          const OperationProgress(label: 'Loading Worker…'),
+                        if (c.definitionsError != null)
+                          Text(c.definitionsError!),
+                        _WorkerSubViewHeader(controller: c),
+                        Expanded(
+                          child: DraftTestWorkbench(
+                            controller: c,
+                            onFocusChanged: (focused) {
+                              if (!narrow &&
+                                  mounted &&
+                                  focused != _sidebarCollapsed) {
+                                setState(() => _sidebarCollapsed = focused);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
+}
+
+class _CollapsedWorkerRail extends StatelessWidget {
+  const _CollapsedWorkerRail({
+    required this.workers,
+    required this.selectedWorkerTypeId,
+    required this.onExpand,
+    required this.onSelect,
+  });
+
+  final List<Map<String, dynamic>> workers;
+  final String? selectedWorkerTypeId;
+  final VoidCallback onExpand;
+  final Future<void> Function(Map<String, dynamic>) onSelect;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        children: [
+          IconButton(
+            tooltip: 'Show Worker sidebar',
+            icon: const Icon(Icons.chevron_right, size: 18),
+            onPressed: onExpand,
+          ),
+          const Divider(height: 1, color: ProfileLabTheme.borderColor),
+          for (final worker in workers)
+            IconButton(
+              tooltip: worker['displayName'] as String? ??
+                  worker['workerTypeId'] as String? ??
+                  'Worker',
+              icon: Icon(
+                worker['workerTypeId'] == selectedWorkerTypeId
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                color: worker['workerTypeId'] == selectedWorkerTypeId
+                    ? ProfileLabTheme.primaryAccent
+                    : ProfileLabTheme.secondaryText,
+              ),
+              onPressed: () => onSelect(worker),
+            ),
+        ],
+      );
 }
 
 class _WorkerSubViewHeader extends StatelessWidget {
@@ -318,52 +391,67 @@ class _WorkerSubViewHeader extends StatelessWidget {
     final workerTypeId = worker?['workerTypeId'] as String? ?? '';
     final displayName = worker?['displayName'] as String? ?? workerTypeId;
     final toolName = worker?['providerToolName'] as String? ?? '';
-    final currentSubView = controller.workerSubView;
     final workerState = controller.selectedWorkerState;
-    final defId = workerState.profileDefinitionId ?? 'No Profile Def';
-    final providerStatus = workerState.isProviderDetected
-        ? 'Detected on PATH'
-        : 'Not found on PATH';
 
-    return Padding(
-      padding: const EdgeInsets.all(LabSpace.medium),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: const BoxDecoration(
+        color: ProfileLabTheme.darkSurface,
+        border: Border(
+          bottom: BorderSide(color: ProfileLabTheme.borderColor),
+        ),
+      ),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          LabPageHeader(
-            title: displayName,
-            description:
-                '($workerTypeId) · Def: $defId · CLI: ${toolName.isEmpty ? "none" : toolName} · $providerStatus',
-            actions: [StatusBadge(label: workerState.status.label)],
+          Text(displayName,
+              style:
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          _HeaderChip(label: workerTypeId, monospace: true),
+          _HeaderChip(
+              label: 'CLI · ${toolName.isEmpty ? "unknown" : toolName}'),
+          _HeaderChip(
+            label: controller.currentProfileRevision > 0
+                ? 'Profile r${controller.currentProfileRevision}'
+                : 'Profile not published',
           ),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SegmentedButton<WorkerSubView>(
-              segments: [
-                ButtonSegment(
-                  value: WorkerSubView.overview,
-                  label: Text('Overview', key: ValueKey('subview-overview')),
-                ),
-                ButtonSegment(
-                  value: WorkerSubView.draftAndTest,
-                  label: Text(
-                    'Draft & Test',
-                    key: ValueKey('subview-draftAndTest'),
-                  ),
-                ),
-              ],
-              selected: {currentSubView},
-              onSelectionChanged: (selected) =>
-                  controller.setWorkerSubView(selected.first),
-            ),
-          ),
+          StatusBadge(label: workerState.conciseProfileStatus),
         ],
       ),
     );
   }
 }
 
+class _HeaderChip extends StatelessWidget {
+  const _HeaderChip({required this.label, this.monospace = false});
+
+  final String label;
+  final bool monospace;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: ProfileLabTheme.darkBackground,
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(color: ProfileLabTheme.borderColor),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontFamily: monospace ? ConclaveTypography.fontFamilyMono : null,
+            color: ProfileLabTheme.secondaryText,
+          ),
+        ),
+      );
+}
+
+// Retained as a compact secondary details view for the Phase 1 inspector
+// follow-up; the default Worker route now opens the editor directly.
+// ignore: unused_element
 class _WorkerDetailsPane extends StatelessWidget {
   const _WorkerDetailsPane({
     required this.controller,

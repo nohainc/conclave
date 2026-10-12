@@ -1,4 +1,3 @@
-import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'controllers/profile_lab_controller.dart';
@@ -150,40 +149,6 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                             tooltip: 'Copy all messages',
                             message: profileLabMessageReport(c),
                           ),
-                          // Active Draft status chip
-                          if (c.selectedDefinitionId != null &&
-                              MediaQuery.sizeOf(context).width >= 1100) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: ProfileLabTheme.darkBackground,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                    color: ProfileLabTheme.borderColor),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.description,
-                                      size: 14,
-                                      color: ProfileLabTheme.secondaryText),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    c.selectedDefinitionId!,
-                                    style: const TextStyle(
-                                        fontFamily:
-                                            ConclaveTypography.fontFamilyMono,
-                                        fontFamilyFallback: ConclaveTypography
-                                            .fontFamilyMonoFallback,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                          ],
-
                           // Profile Lab Human Authentication Boundary
                           if (c.isSigningIn)
                             Container(

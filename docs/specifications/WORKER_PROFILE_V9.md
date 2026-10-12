@@ -144,6 +144,15 @@ edit candidate -> schema validation -> Engine/provider test -> operator review
        -> authorized Cloud publication request
 ```
 
+The V9 Profile Lab authoring surface is editor-first. Selecting a Worker opens
+its JSON candidate directly; Worker navigation remains a narrow collapsible
+sidebar, while the Worker header is limited to identity, provider CLI, current
+revision, and editing status. Testing and structured inspection are secondary
+collapsible panels, with testing defaulting to a bottom panel so the JSON
+editor retains most of the window. Focus mode may hide those auxiliary panels
+and the sidebar without discarding unsaved text, cursor selection, or scroll
+position for any Worker.
+
 Cloud owns the authoritative transition:
 
 1. authenticate the Profile Lab audience and required operator permission;

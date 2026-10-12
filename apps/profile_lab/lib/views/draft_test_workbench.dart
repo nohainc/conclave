@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../widgets/lab_components.dart';
 
@@ -11,9 +12,14 @@ import 'test_bench_view.dart';
 
 /// Worker-scoped Draft authoring and test execution.
 class DraftTestWorkbench extends StatefulWidget {
-  const DraftTestWorkbench({super.key, required this.controller});
+  const DraftTestWorkbench({
+    super.key,
+    required this.controller,
+    this.onFocusChanged,
+  });
 
   final ProfileLabController controller;
+  final ValueChanged<bool>? onFocusChanged;
 
   @override
   State<DraftTestWorkbench> createState() => _DraftTestWorkbenchState();
@@ -21,9 +27,10 @@ class DraftTestWorkbench extends StatefulWidget {
 
 class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
   bool _showEditor = true;
-  bool _showTests = true;
+  bool _showTests = false;
   bool _showInspector = false;
-  double _editorFraction = 0.5;
+  double _editorFraction = 0.68;
+  bool _focusMode = false;
   bool _saving = false;
 
   Future<void> _perform(Future<void> Function() action) async {
@@ -76,6 +83,18 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
     }
   }
 
+  void _toggleFocusMode() {
+    setState(() {
+      _focusMode = !_focusMode;
+      if (_focusMode) {
+        _showEditor = true;
+        _showTests = false;
+        _showInspector = false;
+      }
+    });
+    widget.onFocusChanged?.call(_focusMode);
+  }
+
   String _draftStatus(ProfileLabController c) {
     final local = c.isDirty ? 'Unsaved changes' : 'Saved locally';
     if (c.isV9ProfileRegistry) {
@@ -103,80 +122,65 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
 
   Widget _panes(ProfileLabController c) => LayoutBuilder(
         builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 1000;
           final both = _showEditor && _showTests;
-          final extent = wide ? constraints.maxWidth : constraints.maxHeight;
-          final available = extent - (both ? 12 : 0);
-          final editorExtent = both ? available * _editorFraction : extent;
-          final testsExtent = both ? available - editorExtent : extent;
-          return Stack(
+          final available = constraints.maxHeight - (both ? 12 : 0);
+          final minimumEditor = available < 500 ? available * 0.5 : 220.0;
+          final minimumTests = available < 500 ? available * 0.25 : 180.0;
+          final maximumEditor = math.max(
+            minimumEditor,
+            available - minimumTests,
+          );
+          final editorExtent = both
+              ? (available * _editorFraction)
+                  .clamp(minimumEditor, maximumEditor)
+              : constraints.maxHeight;
+          final testsExtent = available - editorExtent;
+          return Column(
             children: [
-              Positioned(
-                left: 0,
-                top: 0,
-                width: wide ? editorExtent : constraints.maxWidth,
-                height: wide ? constraints.maxHeight : editorExtent,
-                child: Offstage(
-                  offstage: !_showEditor,
+              if (_showEditor)
+                SizedBox(
+                  height: editorExtent,
+                  width: double.infinity,
                   child: ProfileDraftEditor(
                     controller: c,
                     showInspector: _showInspector,
                   ),
                 ),
-              ),
-              Positioned(
-                left: wide && both ? editorExtent + 12 : 0,
-                top: !wide && both ? editorExtent + 12 : 0,
-                width: wide ? testsExtent : constraints.maxWidth,
-                height: wide ? constraints.maxHeight : testsExtent,
-                child: Offstage(
-                  offstage: !_showTests,
-                  child: TestBenchView(controller: c),
-                ),
-              ),
               if (both)
-                Positioned(
-                  left: wide ? editorExtent : 0,
-                  top: wide ? 0 : editorExtent,
-                  width: wide ? 12 : constraints.maxWidth,
-                  height: wide ? constraints.maxHeight : 12,
+                SizedBox(
+                  height: 12,
+                  width: double.infinity,
                   child: Semantics(
                     label: 'Resize editor and tests',
                     child: MouseRegion(
-                      cursor: wide
-                          ? SystemMouseCursors.resizeColumn
-                          : SystemMouseCursors.resizeRow,
+                      cursor: SystemMouseCursors.resizeRow,
                       child: GestureDetector(
                         key: const ValueKey('workbench-divider'),
                         behavior: HitTestBehavior.opaque,
-                        onHorizontalDragUpdate: wide
-                            ? (details) => setState(() {
-                                  _editorFraction = (_editorFraction +
-                                          details.delta.dx / available)
-                                      .clamp(0.3, 0.7);
-                                })
-                            : null,
-                        onVerticalDragUpdate: !wide
-                            ? (details) => setState(() {
-                                  _editorFraction = (_editorFraction +
-                                          details.delta.dy / available)
-                                      .clamp(0.3, 0.7);
-                                })
-                            : null,
-                        child: ColoredBox(
+                        onPanUpdate: (details) => setState(() {
+                          _editorFraction =
+                              (_editorFraction + details.delta.dy / available)
+                                  .clamp(0.35, 0.85);
+                        }),
+                        child: const ColoredBox(
                           color: ProfileLabTheme.darkSurface,
                           child: Center(
-                            child: Icon(
-                              wide ? Icons.drag_indicator : Icons.drag_handle,
-                              size: 12,
-                              color: ProfileLabTheme.secondaryText,
-                            ),
+                            child: Icon(Icons.drag_handle,
+                                size: 12, color: ProfileLabTheme.secondaryText),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
+              if (_showTests)
+                SizedBox(
+                  height: both ? testsExtent : constraints.maxHeight,
+                  width: double.infinity,
+                  child: TestBenchView(controller: c),
+                ),
+              if (!_showEditor && !_showTests)
+                const Expanded(child: SizedBox()),
             ],
           );
         },
@@ -326,6 +330,16 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                       _showInspector = !_showInspector;
                       if (_showInspector) _showEditor = true;
                     }),
+                  ),
+                  IconButton(
+                    tooltip:
+                        _focusMode ? 'Exit focused editor' : 'Focus editor',
+                    icon: Icon(
+                      _focusMode ? Icons.fullscreen_exit : Icons.fullscreen,
+                      size: 18,
+                    ),
+                    isSelected: _focusMode,
+                    onPressed: _toggleFocusMode,
                   ),
                   PopupMenuButton<String>(
                     tooltip: 'More draft actions',

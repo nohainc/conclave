@@ -22,25 +22,74 @@ class ProfileDraftEditor extends StatefulWidget {
 
 class _ProfileDraftEditorState extends State<ProfileDraftEditor> {
   late TextEditingController _textController;
+  final ScrollController _scrollController = ScrollController();
+  final Map<String, TextEditingValue> _workerEditorValues = {};
+  final Map<String, double> _workerScrollOffsets = {};
+  late String _activeWorkerKey;
+  String _lastControllerText = '';
+  bool _restorePending = false;
+
+  String _workerKey(ProfileLabController controller) =>
+      controller.selectedCloudWorker?['workerTypeId'] as String? ??
+      controller.selectedDefinitionId ??
+      'unselected';
 
   @override
   void initState() {
     super.initState();
+    _activeWorkerKey = _workerKey(widget.controller);
     _textController =
         TextEditingController(text: widget.controller.currentJsonText);
+    _lastControllerText = widget.controller.currentJsonText;
   }
 
   @override
   void didUpdateWidget(ProfileDraftEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_textController.text != widget.controller.currentJsonText) {
+    final nextWorkerKey = _workerKey(widget.controller);
+    if (nextWorkerKey != _activeWorkerKey) {
+      _workerEditorValues[_activeWorkerKey] = _textController.value;
+      _workerScrollOffsets[_activeWorkerKey] =
+          _scrollController.hasClients ? _scrollController.offset : 0;
+      _activeWorkerKey = nextWorkerKey;
+      final saved = _workerEditorValues[nextWorkerKey];
+      if (saved != null) {
+        _textController.value = saved;
+        _restorePending = true;
+      } else {
+        _textController.text = widget.controller.currentJsonText;
+        _lastControllerText = widget.controller.currentJsonText;
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients) return;
+        final offset = _workerScrollOffsets[nextWorkerKey] ?? 0;
+        _scrollController.jumpTo(
+          offset
+              .clamp(0.0, _scrollController.position.maxScrollExtent)
+              .toDouble(),
+        );
+      });
+      return;
+    }
+    if (_restorePending) {
+      if (widget.controller.currentJsonText != _textController.text) {
+        widget.controller.updateJsonText(_textController.text);
+      }
+      _restorePending = false;
+      _lastControllerText = _textController.text;
+      return;
+    }
+    if (widget.controller.currentJsonText != _lastControllerText &&
+        _textController.text != widget.controller.currentJsonText) {
       _textController.text = widget.controller.currentJsonText;
+      _lastControllerText = widget.controller.currentJsonText;
     }
   }
 
   @override
   void dispose() {
     _textController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -248,6 +297,7 @@ class _ProfileDraftEditorState extends State<ProfileDraftEditor> {
                                 padding: const EdgeInsets.all(12),
                                 child: TextField(
                                   controller: _textController,
+                                  scrollController: _scrollController,
                                   maxLines: null,
                                   expands: true,
                                   style: ProfileLabTheme.monoStyle
@@ -257,7 +307,10 @@ class _ProfileDraftEditorState extends State<ProfileDraftEditor> {
                                     isDense: true,
                                     hintText: 'Tool Profile JSON',
                                   ),
-                                  onChanged: c.updateJsonText,
+                                  onChanged: (value) {
+                                    _lastControllerText = value;
+                                    c.updateJsonText(value);
+                                  },
                                 ),
                               );
                               if (!widget.showInspector) return editor;

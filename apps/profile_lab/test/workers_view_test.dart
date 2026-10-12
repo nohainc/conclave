@@ -72,7 +72,7 @@ void main() {
   });
 
   testWidgets(
-      'Worker Overview displays header, V9 lifecycle, next step card, and collapsible Technical details',
+      'Worker selection opens the compact header and editor workbench directly',
       (tester) async {
     tester.view.physicalSize = const Size(1440, 900);
     tester.view.devicePixelRatio = 1;
@@ -133,31 +133,12 @@ void main() {
     // Check sidebar displays Profile status
     expect(find.textContaining('Profile:'), findsOneWidget);
 
-    // Check header displays display name, Worker ID, Profile Definition, provider CLI, and provider status
+    // Check the compact header displays the Worker identity and provider CLI.
     expect(find.text('ChatGPT'), findsWidgets);
-    expect(find.textContaining('(chatgpt)'), findsOneWidget);
-    expect(find.textContaining('Def: chatgpt-codex'), findsOneWidget);
-    expect(find.textContaining('CLI: codex'), findsWidgets);
-
-    // Check the V9 lifecycle indicator
-    expect(find.text('Configure'), findsOneWidget);
-    expect(find.text('Test'), findsOneWidget);
-    expect(find.text('Validate'), findsOneWidget);
-    expect(find.text('Publish'), findsOneWidget);
-
-    // Check Next step card is present
-    expect(find.text('Next step'), findsOneWidget);
-
-    // Check collapsible Technical details panel
-    expect(find.text('Technical details'), findsOneWidget);
-    await tester.ensureVisible(find.text('Technical details'));
-    await tester.tap(find.text('Technical details'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.text('Worker Type ID'), findsOneWidget);
-    expect(find.text('Profile Definition ID'), findsOneWidget);
-    expect(find.text('Provider CLI Name'), findsOneWidget);
-    expect(find.text('Worker Lifecycle State'), findsOneWidget);
+    expect(find.text('chatgpt'), findsWidgets);
+    expect(find.text('CLI · codex'), findsOneWidget);
+    expect(find.text('Profile not published'), findsOneWidget);
+    expect(find.text('Overview'), findsNothing);
+    expect(find.text('Draft & Test'), findsNothing);
   });
 }

@@ -80,7 +80,7 @@ void main() {
   }
 
   testWidgets(
-      'wide workbench resizes and preserves edits through pane collapse and Inspector',
+      'editor-first workbench keeps tests collapsed and preserves edits',
       (tester) async {
     await mount(tester, const Size(1400, 850));
     expect(find.text('LOCAL DRAFTS'), findsNothing);
@@ -90,11 +90,14 @@ void main() {
     expect(find.text('Draft v1 · Saved locally · Not synced to Cloud'),
         findsOneWidget);
     final editor = find.byKey(const ValueKey('profile-json-editor'));
-    final before = tester.getSize(editor).width;
-    await tester.drag(
-        find.byKey(const ValueKey('workbench-divider')), const Offset(100, 0));
+    expect(find.text('Profile Tests'), findsNothing);
+    await tester.tap(find.byTooltip('Show tests'));
     await tester.pump();
-    expect(tester.getSize(editor).width, greaterThan(before));
+    final before = tester.getSize(editor).height;
+    await tester.drag(
+        find.byKey(const ValueKey('workbench-divider')), const Offset(0, 40));
+    await tester.pump();
+    expect(tester.getSize(editor).height, greaterThan(before));
     final changed = '${c.currentJsonText}\n';
     await tester.enterText(find.byType(TextField), changed);
     await tester.pump();
@@ -116,6 +119,11 @@ void main() {
     await tester.tap(find.byTooltip('Hide Inspector'));
     await tester.pump();
     expect(find.text('Inspector'), findsNothing);
+    await tester.tap(find.byTooltip('Focus editor'));
+    await tester.pump();
+    expect(find.text('Profile Tests'), findsNothing);
+    await tester.tap(find.byTooltip('Exit focused editor'));
+    await tester.pump();
     expect(tester.takeException(), isNull);
   });
 
@@ -178,9 +186,7 @@ void main() {
     for (final action in [
       'Format JSON',
       'Compare',
-      'Duplicate as Next Release',
       'Revert',
-      'AI Proposal',
       'Experimental Repair'
     ]) {
       expect(find.text(action), findsOneWidget);
@@ -218,9 +224,9 @@ void main() {
     await tester.pump();
     final divider = find.byKey(const ValueKey('workbench-divider'));
     final before = tester.getTopLeft(divider).dy;
-    await tester.drag(divider, const Offset(0, 35));
+    await tester.drag(divider, const Offset(0, -35));
     await tester.pump();
-    expect(tester.getTopLeft(divider).dy, greaterThan(before));
+    expect(tester.getTopLeft(divider).dy, lessThan(before));
     expect(tester.takeException(), isNull);
   });
 }
