@@ -1,15 +1,15 @@
 # Conclave Profile Lab
 
-Conclave Profile Lab is an internal macOS desktop application for creating and maintaining Logical Workers and their Tool Profiles. Operators use it to edit Drafts, run the generic CLI Worker Engine against locally installed provider CLIs, qualify a Draft with Cloud, and manage the signed release lifecycle.
+Conclave Profile Lab is an internal macOS desktop application for creating and maintaining Logical Workers and their Tool Profiles. Operators open a Worker, edit one local JSON candidate, run the generic CLI Worker Engine against locally installed provider CLIs, validate the exact candidate with Cloud, and publish it as the Worker’s next current Profile revision.
 
 This README is for developers and authorized operators. The normative product and API contracts are in the [Profile Lab specification](../../docs/specifications/PROFILE_LAB.md), [Tool Profile lifecycle specification](../../docs/specifications/TOOL_PROFILE_LIFECYCLE.md), [Tool Profile v1 contract](../../docs/specifications/TOOL_PROFILE_V1.md), [Architecture v8](../../docs/architecture/ARCHITECTURE_V8.md), and [ADR-019](../../docs/decisions/ADR-019-conclave-profile-lab.md).
 
 ## Product boundaries
 
-- **Profile Lab** authors local Drafts, runs sandbox tests, and provides the administrative interface for Cloud qualification and release management.
+- **Profile Lab** authors one local candidate per Worker, runs the complete local test ladder, and requests Cloud validation/publication for that exact candidate digest.
 - **The CLI Worker Engine** executes Profile-defined behavior using provider CLI programs installed on the operator's Mac. Provider behavior belongs in Worker and Tool Profile data, not provider-specific app branches.
-- **Conclave Cloud** owns the Worker catalog, release records, qualification and acceptance evidence, channel pointers, authorization, audit records, and release signing. Profile Lab uses Cloud APIs and has no direct database access.
-- **Conclave Workspace** runs admitted, signed releases and owns local Work Roots and execution sessions. Profile Lab is not a Workspace: it does not accept Work assignments or own Work Roots.
+- **Conclave Cloud** owns the Worker catalog, one current Profile, bounded history, digest/signature metadata, authorization, audit records, and atomic publication. Profile Lab uses Cloud APIs and has no direct database access.
+- **Conclave Workspace** runs admitted, signed Profile snapshots and owns local Work Roots and execution sessions. Profile Lab is not a Workspace: it does not accept Work assignments or own Work Roots.
 - Provider CLI login and credentials stay with the locally installed provider CLI. Profile Lab does not collect or store provider API keys.
 
 ## Local development
@@ -42,7 +42,7 @@ You can also change the origin in **Cloud connection** settings while the app is
 
 The build default is `https://app.conclaveax.com`. For a development build, set `CONCLAVE_CLOUD_URL` with a Dart define; operators can save a local origin override or reset it to the build default in Cloud connection settings. The override is non-secret app configuration. Changing the Cloud origin clears the current sign-in because sessions are bound to their origin.
 
-Sign-in opens a browser approval flow for **Conclave Profile Lab**, using the dedicated `conclave.profile-lab.management` audience. It is separate from Conclave Workspace authentication. The resulting session is stored in the macOS login Keychain under the Profile Lab service and is scoped to the selected Cloud origin. Cloud must authorize the account for the operation: catalog and Draft administration use `profiles:admin`; release management uses `profiles:release:manage`. Stable channel changes and rollback require a recent passkey step-up. Release revocation requires release-manager authorization, a mandatory reason, and explicit confirmation in Profile Lab.
+Sign-in opens a browser approval flow for **Conclave Profile Lab**, using the dedicated `conclave.profile-lab.management` audience. It is separate from Conclave Workspace authentication. The resulting session is stored in the macOS login Keychain under the Profile Lab service and is scoped to the selected Cloud origin. Cloud must authorize the account for the operation: Worker/Profile administration uses `profiles:admin`; publication requires `profiles:release:manage`. Cloud remains the signing authority; Profile Lab never holds signing keys.
 
 For local Cloud development, configure an authorized test account in the local Cloud environment. Do not copy a Workspace session or put a bearer token in app configuration or source control.
 
@@ -76,15 +76,15 @@ bash scripts/build-profile-lab-macos.sh --version 1.2.3
 
 The app archive is written under `dist/conclave-profile-lab/macos/`. An unsigned build is a development artifact. Set `CONCLAVE_MACOS_SIGN_IDENTITY` (or pass `--sign`) for Apple Developer ID signing; set `CONCLAVE_MACOS_NOTARY_PROFILE` to notarize a signed archive. Apple app signing is separate from Tool Profile release signing.
 
-## Draft, evidence, and release lifecycle
+## Candidate authoring, testing, and publication
 
-1. Create or edit a local Draft. New Worker catalog entries begin in the `testing` stage; Draft is a Profile release state, not a Worker catalog stage.
-2. Run Profile Lab's test ladder. It performs preflight checks and actual assignments through the generic CLI Worker Engine in an isolated sandbox. Applicable scenarios must execute and pass; scenarios unsupported by the Profile are reported as `not_applicable`, not passed.
-3. Save the Draft to Cloud and submit its scenario evidence as local qualification for that exact payload digest. Cloud validates and stores qualification immutably. Editing the payload changes its digest, so earlier evidence no longer qualifies it.
-4. Publish using the stored qualification ID. Cloud validates the qualification and signs an immutable release into Testing. A publication request does not supply UI-generated signing material or invent test outcomes.
-5. Submit separate acceptance evidence for a published release before Stable promotion. Promotion references the Cloud evidence ID; Cloud reloads and checks the stored record against the release. Beta and Stable promotion, Workspace channel assignment, rollback, and revocation are Cloud-controlled lifecycle operations.
+1. Open a Worker. Profile Lab loads its one current published Profile, or starts the initial candidate from the Worker template.
+2. Edit the JSON candidate locally. JSON schema validation, required fields, strict unknown-field handling, and size limits run immediately. Any edit invalidates prior test and Cloud-validation eligibility.
+3. Run the local test ladder: schema validation, Engine compatibility, CLI discovery, CLI version support, authentication/readiness, deterministic execution and stdin transport, model discovery/selection, session continuation, error interpretation, cancellation/timeout enforcement, and authorized local-access checks where the Profile declares them.
+4. Save the ladder evidence against the exact canonical candidate digest. Evidence contains only bounded identity, version, timestamp, and scenario results; it is not remote attestation of the local Mac or provider process.
+5. Ask Cloud to validate the candidate, then publish it with the expected current revision. Cloud revalidates the JSON and evidence and atomically signs the next current Profile revision. Tests never change the current production Profile.
 
-Cloud evidence is an authenticated, digest-bound assertion submitted by Profile Lab; it is not remote attestation of the local Mac or provider process. Keep test results tied to the actual Engine execution and use the fixture acceptance path for deterministic generic process tests.
+There are no Profile Lab testing, beta, or stable Profile channels in V9. Prior snapshots are inspected or restored through Cloud history, not promoted between channels.
 
 ## Signing assumptions
 
@@ -116,8 +116,8 @@ Run `bash scripts/run-profile-lab-development.sh` from the repository root for
 hot-reload development against loopback Cloud (default `http://localhost:8787`).
 Browser sign-in remains required; the active `vitalii@nohainc.com` account is
 the explicitly configured internal Lab owner. Development supports the full
-Draft → Test → Sync → Testing → Beta → Stable lifecycle. Start
-`bash scripts/run-workspace-development.sh` to consume signed Cloud releases in
+Candidate → Test → Validate → Publish lifecycle. Start
+`bash scripts/run-workspace-development.sh` to consume signed Cloud Profiles in
 a separate non-release Workspace. Both launchers use public roots generated by
 `node scripts/setup-development-profile-signing.mjs`; its private key stays in
 ignored local Wrangler configuration.
@@ -128,7 +128,7 @@ They read the public `.development/hosted-profile-trust.json` file. Hosted signi
 setup uses `node scripts/setup-development-profile-signing.mjs --hosted` and a
 separate ignored secret file for Wrangler upload. Customer builds must use
 independent production roots. Explicit `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`
-still enables unsigned local Draft execution only against loopback Cloud.
+still enables unsigned local candidate execution only against loopback Cloud.
 
 The macOS build script defaults to skipping Developer ID signing and notarization;
 use `--unsigned` explicitly when packaging development builds. See the
@@ -136,6 +136,6 @@ use `--unsigned` explicitly when packaging development builds. See the
 
 ## Operator workflow and acceptance
 
-Use **Workers → Overview / Draft & Test / Releases**, **Workspaces**, and **Activity**. Initial Draft creation uses a Cloud starter template or the selected Worker’s blank fallback. After qualifying and syncing, choose **Publish to Testing**, then assign a Testing Workspace and run a real task. Promotion retains the existing evidence and authorization gates. See the current [creation runbook](../../docs/runbooks/OPERATOR_RUNBOOK_CREATE_NEW_WORKER.md) and [update runbook](../../docs/runbooks/OPERATOR_RUNBOOK_UPDATE_PROFILE.md).
+Use **Workers → Overview / Draft & Test**, **Workspaces**, and **Activity**. Open a Worker, edit its candidate, run the local ladder, choose **Validate candidate**, then **Publish Profile**. Publication uses the current revision as an optimistic-concurrency guard; an edit after testing requires the ladder and validation to run again. See the V9 [canonical specification](../../docs/specifications/WORKER_PROFILE_V9.md) and the current [update runbook](../../docs/runbooks/OPERATOR_RUNBOOK_UPDATE_PROFILE.md).
 
-Run `flutter test test/worker_first_run_acceptance_test.dart` for the complete ChatGPT/Gemini first-run flows in both release modes and the no-template fallback. These widget tests use the real local store, controller, and bundled generic Engine with isolated temporary provider executables and controlled browser/Cloud boundaries. No vendor credentials or live-provider calls are required; live signing and Workspace rollout must still satisfy the v8 release gates. Existing local Draft/evidence formats are preserved.
+Run `flutter test test/worker_first_run_acceptance_test.dart` for the complete ChatGPT/Gemini first-run flows and the no-template fallback. These widget tests use the real local store, controller, and bundled generic Engine with isolated temporary provider executables and controlled browser/Cloud boundaries. No vendor credentials or live-provider calls are required; live signing and Workspace admission must still satisfy the V9 contract. Existing local candidate/evidence data remains digest-bound.

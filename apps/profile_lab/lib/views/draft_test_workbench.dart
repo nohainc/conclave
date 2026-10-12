@@ -33,8 +33,11 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
       await action();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: CopyableMessage('Could not complete action: $error')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: CopyableMessage('Could not complete action: $error'),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -48,13 +51,14 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
       payload = jsonDecode(c.currentJsonText) as Map<String, dynamic>;
     } catch (_) {}
     final release = c.cloudReleases.isEmpty ? null : c.cloudReleases.first;
-    ProfileReleaseDiffDialog.show(context,
-        titleA: 'Local Draft',
-        payloadA: payload,
-        titleB:
-            c.cloudDraftPayload != null ? 'Cloud Draft' : 'Published Release',
-        payloadB: c.cloudDraftPayload ??
-            release?['profile'] as Map<String, dynamic>?);
+    ProfileReleaseDiffDialog.show(
+      context,
+      titleA: 'Local Draft',
+      payloadA: payload,
+      titleB: c.cloudDraftPayload != null ? 'Cloud Draft' : 'Published Release',
+      payloadB:
+          c.cloudDraftPayload ?? release?['profile'] as Map<String, dynamic>?,
+    );
   }
 
   void _advanced(String action) {
@@ -77,6 +81,14 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
 
   String _draftStatus(ProfileLabController c) {
     final local = c.isDirty ? 'Unsaved changes' : 'Saved locally';
+    if (c.isV9ProfileRegistry) {
+      final cloud = c.candidateIsCloudValidated
+          ? 'Candidate validated by Cloud'
+          : c.currentProfileDigest == c.currentDraft?.payloadDigest
+              ? 'Current published Profile'
+              : 'Not validated by Cloud';
+      return 'Candidate · $local · $cloud';
+    }
     final cloud = switch (c.syncState) {
       DraftSyncState.conflict => 'Cloud conflict',
       DraftSyncState.cloudChanged => 'Cloud draft changed',
@@ -103,22 +115,28 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
           return Stack(
             children: [
               Positioned(
-                  left: 0,
-                  top: 0,
-                  width: wide ? editorExtent : constraints.maxWidth,
-                  height: wide ? constraints.maxHeight : editorExtent,
-                  child: Offstage(
-                      offstage: !_showEditor,
-                      child: ProfileDraftEditor(
-                          controller: c, showInspector: _showInspector))),
+                left: 0,
+                top: 0,
+                width: wide ? editorExtent : constraints.maxWidth,
+                height: wide ? constraints.maxHeight : editorExtent,
+                child: Offstage(
+                  offstage: !_showEditor,
+                  child: ProfileDraftEditor(
+                    controller: c,
+                    showInspector: _showInspector,
+                  ),
+                ),
+              ),
               Positioned(
-                  left: wide && both ? editorExtent + 12 : 0,
-                  top: !wide && both ? editorExtent + 12 : 0,
-                  width: wide ? testsExtent : constraints.maxWidth,
-                  height: wide ? constraints.maxHeight : testsExtent,
-                  child: Offstage(
-                      offstage: !_showTests,
-                      child: TestBenchView(controller: c))),
+                left: wide && both ? editorExtent + 12 : 0,
+                top: !wide && both ? editorExtent + 12 : 0,
+                width: wide ? testsExtent : constraints.maxWidth,
+                height: wide ? constraints.maxHeight : testsExtent,
+                child: Offstage(
+                  offstage: !_showTests,
+                  child: TestBenchView(controller: c),
+                ),
+              ),
               if (both)
                 Positioned(
                   left: wide ? editorExtent : 0,
@@ -132,31 +150,33 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                           ? SystemMouseCursors.resizeColumn
                           : SystemMouseCursors.resizeRow,
                       child: GestureDetector(
-                          key: const ValueKey('workbench-divider'),
-                          behavior: HitTestBehavior.opaque,
-                          onHorizontalDragUpdate: wide
-                              ? (details) => setState(() {
-                                    _editorFraction = (_editorFraction +
-                                            details.delta.dx / available)
-                                        .clamp(0.3, 0.7);
-                                  })
-                              : null,
-                          onVerticalDragUpdate: !wide
-                              ? (details) => setState(() {
-                                    _editorFraction = (_editorFraction +
-                                            details.delta.dy / available)
-                                        .clamp(0.3, 0.7);
-                                  })
-                              : null,
-                          child: ColoredBox(
-                              color: ProfileLabTheme.darkSurface,
-                              child: Center(
-                                  child: Icon(
-                                      wide
-                                          ? Icons.drag_indicator
-                                          : Icons.drag_handle,
-                                      size: 12,
-                                      color: ProfileLabTheme.secondaryText)))),
+                        key: const ValueKey('workbench-divider'),
+                        behavior: HitTestBehavior.opaque,
+                        onHorizontalDragUpdate: wide
+                            ? (details) => setState(() {
+                                  _editorFraction = (_editorFraction +
+                                          details.delta.dx / available)
+                                      .clamp(0.3, 0.7);
+                                })
+                            : null,
+                        onVerticalDragUpdate: !wide
+                            ? (details) => setState(() {
+                                  _editorFraction = (_editorFraction +
+                                          details.delta.dy / available)
+                                      .clamp(0.3, 0.7);
+                                })
+                            : null,
+                        child: ColoredBox(
+                          color: ProfileLabTheme.darkSurface,
+                          child: Center(
+                            child: Icon(
+                              wide ? Icons.drag_indicator : Icons.drag_handle,
+                              size: 12,
+                              color: ProfileLabTheme.secondaryText,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -172,19 +192,22 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
     if (c.currentDraft == null) {
       final name = c.selectedWorkerState.displayName;
       return EmptyState(
-          title: '$name does not have an implementation Profile yet',
-          description: c.cloudReleases.isNotEmpty
-              ? 'Open Releases to create a draft from an existing Profile.'
-              : c.hasStarterTemplate
-                  ? 'Start with the Cloud starter template, then test it locally.'
-                  : 'Create a blank Profile using this Worker’s configured identity.',
-          action: Column(mainAxisSize: MainAxisSize.min, children: [
+        title: '$name does not have an implementation Profile yet',
+        description: c.cloudReleases.isNotEmpty
+            ? 'Open Releases to create a draft from an existing Profile.'
+            : c.hasStarterTemplate
+                ? 'Start with the Cloud starter template, then test it locally.'
+                : 'Create a blank Profile using this Worker’s configured identity.',
+        action: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
             if (c.definitionsError != null || c.releasesError != null)
               ErrorState(message: c.definitionsError ?? c.releasesError!),
             if (c.cloudReleases.isNotEmpty)
               FilledButton(
-                  onPressed: () => c.setWorkerSubView(WorkerSubView.releases),
-                  child: const Text('Open Releases'))
+                onPressed: () => c.setWorkerSubView(WorkerSubView.releases),
+                child: const Text('Open Releases'),
+              )
             else
               FilledButton(
                 onPressed: c.canCreateInitialDraft
@@ -193,126 +216,173 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                           await c.createInitialDraft();
                         } catch (error) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                content:
-                                    Text('Could not create draft: $error')));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Could not create draft: $error'),
+                              ),
+                            );
                           }
                         }
                       }
                     : null,
-                child: Text(c.isCreatingInitialDraft
-                    ? 'Creating…'
-                    : c.hasStarterTemplate
-                        ? 'Create Initial Draft'
-                        : 'Create blank Profile'),
+                child: Text(
+                  c.isCreatingInitialDraft
+                      ? 'Creating…'
+                      : c.hasStarterTemplate
+                          ? 'Create Initial Draft'
+                          : 'Create blank Profile',
+                ),
               ),
-          ]));
+          ],
+        ),
+      );
     }
 
     final locked = _saving ||
         c.isSavingLocally ||
         c.isSavingToCloud ||
         c.isTesting ||
+        c.isValidatingCandidate ||
         c.isPublishing;
-    return Column(children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        color: ProfileLabTheme.darkSurface,
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(_draftStatus(c),
-              key: const ValueKey('draft-status'),
-              style:
-                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          Wrap(
-              spacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Tooltip(
-                    message: c.isDirty ? 'Save locally (⌘S)' : 'Sync to Cloud',
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          color: ProfileLabTheme.darkSurface,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                _draftStatus(c),
+                key: const ValueKey('draft-status'),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Tooltip(
+                    message: c.isDirty
+                        ? 'Save locally (⌘S)'
+                        : c.isV9ProfileRegistry
+                            ? 'Validate candidate with Cloud'
+                            : 'Sync to Cloud',
                     child: FilledButton.icon(
-                        icon: Icon(
-                            c.isDirty
-                                ? Icons.save_outlined
+                      icon: Icon(
+                        c.isDirty
+                            ? Icons.save_outlined
+                            : c.isV9ProfileRegistry
+                                ? Icons.verified_outlined
                                 : Icons.cloud_upload_outlined,
-                            size: 16),
-                        label: Text(locked
+                        size: 16,
+                      ),
+                      label: Text(
+                        locked
                             ? 'Working…'
                             : c.isDirty
                                 ? 'Save'
-                                : 'Sync to Cloud'),
-                        onPressed: locked ||
-                                c.jsonValidationError != null ||
-                                (!c.isDirty &&
-                                    (c.currentSession == null ||
-                                        c.syncState ==
-                                            DraftSyncState.conflict ||
-                                        c.syncState ==
-                                            DraftSyncState.cloudChanged))
-                            ? null
-                            : () => _perform(c.isDirty
-                                ? c.saveCurrentDraft
-                                : c.saveCurrentDraftToCloud))),
-                IconButton(
+                                : c.isV9ProfileRegistry
+                                    ? (c.isValidatingCandidate
+                                        ? 'Validating…'
+                                        : 'Validate candidate')
+                                    : 'Sync to Cloud',
+                      ),
+                      onPressed: locked ||
+                              c.jsonValidationError != null ||
+                              (!c.isDirty &&
+                                  (!c.isV9ProfileRegistry &&
+                                      (c.currentSession == null ||
+                                          c.syncState ==
+                                              DraftSyncState.conflict ||
+                                          c.syncState ==
+                                              DraftSyncState.cloudChanged)))
+                          ? null
+                          : () => _perform(
+                                c.isDirty
+                                    ? c.saveCurrentDraft
+                                    : c.isV9ProfileRegistry
+                                        ? c.validateCurrentDraft
+                                        : c.saveCurrentDraftToCloud,
+                              ),
+                    ),
+                  ),
+                  IconButton(
                     tooltip: _showEditor ? 'Collapse editor' : 'Show editor',
                     icon: const Icon(Icons.code, size: 18),
                     isSelected: _showEditor,
                     onPressed: () => setState(() {
-                          _showEditor = !_showEditor;
-                          if (!_showEditor) _showTests = true;
-                        })),
-                IconButton(
+                      _showEditor = !_showEditor;
+                      if (!_showEditor) _showTests = true;
+                    }),
+                  ),
+                  IconButton(
                     tooltip: _showTests ? 'Collapse tests' : 'Show tests',
                     icon: const Icon(Icons.science_outlined, size: 18),
                     isSelected: _showTests,
                     onPressed: () => setState(() {
-                          _showTests = !_showTests;
-                          if (!_showTests) _showEditor = true;
-                        })),
-                IconButton(
+                      _showTests = !_showTests;
+                      if (!_showTests) _showEditor = true;
+                    }),
+                  ),
+                  IconButton(
                     tooltip:
                         _showInspector ? 'Hide Inspector' : 'Show Inspector',
                     icon: const Icon(Icons.view_sidebar_outlined, size: 18),
                     isSelected: _showInspector,
                     onPressed: () => setState(() {
-                          _showInspector = !_showInspector;
-                          if (_showInspector) _showEditor = true;
-                        })),
-                PopupMenuButton<String>(
+                      _showInspector = !_showInspector;
+                      if (_showInspector) _showEditor = true;
+                    }),
+                  ),
+                  PopupMenuButton<String>(
                     tooltip: 'More draft actions',
                     onSelected: _advanced,
                     itemBuilder: (_) => [
-                          PopupMenuItem(
-                              value: 'format',
-                              enabled: !locked,
-                              child: const Text('Format JSON')),
-                          const PopupMenuItem(
-                              value: 'compare', child: Text('Compare')),
-                          PopupMenuItem(
-                              value: 'duplicate',
-                              enabled: !locked &&
-                                  !c.isDirty &&
-                                  c.jsonValidationError == null,
-                              child: const Text('Duplicate as Next Release')),
-                          PopupMenuItem(
-                              value: 'revert',
-                              enabled: !locked && c.isDirty,
-                              child: const Text('Revert')),
-                          const PopupMenuDivider(),
-                          PopupMenuItem(
-                              value: 'proposal',
-                              enabled: !locked,
-                              child: const Text('AI Proposal')),
-                          PopupMenuItem(
-                              value: 'repair',
-                              enabled: !locked && !c.isDirty,
-                              child: const Text('Experimental Repair')),
-                        ]),
-              ]),
-        ]),
-      ),
-      Expanded(child: _panes(c)),
-    ]);
+                      PopupMenuItem(
+                        value: 'format',
+                        enabled: !locked,
+                        child: const Text('Format JSON'),
+                      ),
+                      const PopupMenuItem(
+                        value: 'compare',
+                        child: Text('Compare'),
+                      ),
+                      PopupMenuItem(
+                        value: 'duplicate',
+                        enabled: !locked &&
+                            !c.isDirty &&
+                            c.jsonValidationError == null,
+                        child: const Text('Duplicate as Next Release'),
+                      ),
+                      PopupMenuItem(
+                        value: 'revert',
+                        enabled: !locked && c.isDirty,
+                        child: const Text('Revert'),
+                      ),
+                      const PopupMenuDivider(),
+                      PopupMenuItem(
+                        value: 'proposal',
+                        enabled: !locked,
+                        child: const Text('AI Proposal'),
+                      ),
+                      PopupMenuItem(
+                        value: 'repair',
+                        enabled: !locked && !c.isDirty,
+                        child: const Text('Experimental Repair'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: _panes(c)),
+      ],
+    );
   }
 }

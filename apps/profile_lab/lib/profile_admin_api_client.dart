@@ -45,7 +45,9 @@ class ProfileAdminApiClient {
         await _http.openUrl(method, uri).timeout(const Duration(seconds: 15));
     if (session != null && !session!.isExpired) {
       request.headers.set(
-          HttpHeaders.authorizationHeader, 'Bearer ${session!.credential}');
+        HttpHeaders.authorizationHeader,
+        'Bearer ${session!.credential}',
+      );
     }
     headers?.forEach(request.headers.set);
     if (body != null) {
@@ -94,6 +96,14 @@ class ProfileAdminApiClient {
 
   /// Lists all logical workers across all lifecycle states, stages, and visibility.
   Future<List<ProfileLabWorkerReadModel>> fetchWorkerCatalog() async {
+    // V9 is the canonical Worker/Profile registry. Keep the legacy catalog
+    // request as a narrow development fallback while older Cloud instances
+    // finish their additive migration.
+    try {
+      return await fetchV9WorkerProfiles();
+    } on ProfileAdminNotFoundException {
+      // Fall through to the pre-V9 catalog endpoint.
+    }
     final result = await _request('GET', _api('/api/admin/workers/catalog'));
     if (result is Map && result['workers'] is List) {
       return _readModels(
@@ -103,7 +113,79 @@ class ProfileAdminApiClient {
       );
     }
     throw const FormatException(
-        'Cloud Worker catalog response must contain a workers array.');
+      'Cloud Worker catalog response must contain a workers array.',
+    );
+  }
+
+  /// Lists logical Workers with their one current V9 Profile summary.
+  Future<List<ProfileLabWorkerReadModel>> fetchV9WorkerProfiles() async {
+    final result = await _request('GET', _api('/api/admin/workers'));
+    if (result is Map && result['workers'] is List) {
+      return _readModels(
+        result['workers'] as List,
+        ProfileLabWorkerReadModel.fromJson,
+        'workers',
+      );
+    }
+    throw const FormatException(
+      'V9 Worker Profile response must contain a workers array.',
+    );
+  }
+
+  /// Reads the one current published Profile for a logical Worker.
+  Future<Map<String, dynamic>> fetchCurrentWorkerProfile(
+    String workerTypeId,
+  ) async {
+    final result = await _request(
+      'GET',
+      _api('/api/admin/workers/${Uri.encodeComponent(workerTypeId)}/profile'),
+    );
+    if (result is Map) return Map<String, dynamic>.from(result);
+    throw StateError('Invalid current Worker Profile response');
+  }
+
+  /// Validates a candidate without publishing or changing the current Profile.
+  Future<Map<String, dynamic>> validateWorkerProfileCandidate({
+    required String workerTypeId,
+    required Map<String, dynamic> profile,
+    required String candidateDigest,
+    Map<String, Object?>? evidence,
+  }) async {
+    final result = await _request(
+      'POST',
+      _api(
+        '/api/admin/workers/${Uri.encodeComponent(workerTypeId)}/profile/validate',
+      ),
+      body: {
+        'profile': profile,
+        'candidateDigest': candidateDigest,
+        if (evidence != null) 'evidence': evidence,
+      },
+    );
+    if (result is Map) return Map<String, dynamic>.from(result);
+    throw StateError('Invalid Worker Profile validation response');
+  }
+
+  /// Atomically publishes the validated candidate as the next V9 revision.
+  Future<Map<String, dynamic>> publishWorkerProfile({
+    required String workerTypeId,
+    required int expectedRevision,
+    required Map<String, dynamic> profile,
+    required String candidateDigest,
+    required Map<String, Object?> evidence,
+  }) async {
+    final result = await _request(
+      'PUT',
+      _api('/api/admin/workers/${Uri.encodeComponent(workerTypeId)}/profile'),
+      body: {
+        'expectedRevision': expectedRevision,
+        'profile': profile,
+        'candidateDigest': candidateDigest,
+        'evidence': evidence,
+      },
+    );
+    if (result is Map) return Map<String, dynamic>.from(result);
+    throw StateError('Invalid Worker Profile publication response');
   }
 
   /// Atomically registers an approved logical Worker and its initial Profile definition.
@@ -137,8 +219,10 @@ class ProfileAdminApiClient {
 
   /// Lists all Profile definitions with aggregated channel pointers and release counts.
   Future<List<ProfileLabDefinitionReadModel>> fetchDefinitions() async {
-    final result =
-        await _request('GET', _api('/api/admin/tool-profiles/definitions'));
+    final result = await _request(
+      'GET',
+      _api('/api/admin/tool-profiles/definitions'),
+    );
     if (result is Map && result['definitions'] is List) {
       return _readModels(
         result['definitions'] as List,
@@ -151,26 +235,31 @@ class ProfileAdminApiClient {
 
   /// Retrieves a single Profile definition by ID.
   Future<ProfileLabDefinitionReadModel> fetchDefinition(
-      String profileDefinitionId) async {
+    String profileDefinitionId,
+  ) async {
     final result = await _request(
       'GET',
       _api(
-          '/api/admin/tool-profiles/definitions/${Uri.encodeComponent(profileDefinitionId)}'),
+        '/api/admin/tool-profiles/definitions/${Uri.encodeComponent(profileDefinitionId)}',
+      ),
     );
     if (result is Map) {
       return ProfileLabDefinitionReadModel.fromJson(
-          Map<String, dynamic>.from(result));
+        Map<String, dynamic>.from(result),
+      );
     }
     throw StateError('Invalid definition response');
   }
 
   /// Lists all releases for a specific Profile definition.
   Future<List<ProfileLabReleaseReadModel>> fetchReleases(
-      String profileDefinitionId) async {
+    String profileDefinitionId,
+  ) async {
     final result = await _request(
       'GET',
       _api(
-          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases'),
+        '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases',
+      ),
     );
     if (result is Map && result['releases'] is List) {
       return _readModels(
@@ -184,22 +273,27 @@ class ProfileAdminApiClient {
 
   /// Retrieves a single release by version with parsed payload.
   Future<ProfileLabReleaseReadModel> fetchRelease(
-      String profileDefinitionId, int releaseVersion) async {
+    String profileDefinitionId,
+    int releaseVersion,
+  ) async {
     final result = await _request(
       'GET',
       _api(
-          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion'),
+        '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion',
+      ),
     );
     if (result is Map) {
       return ProfileLabReleaseReadModel.fromJson(
-          Map<String, dynamic>.from(result));
+        Map<String, dynamic>.from(result),
+      );
     }
     throw StateError('Invalid release response');
   }
 
   /// Lists channel pointers globally or scoped to a definition.
-  Future<List<ProfileLabChannelPointerReadModel>> fetchChannelPointers(
-      [String? profileDefinitionId]) async {
+  Future<List<ProfileLabChannelPointerReadModel>> fetchChannelPointers([
+    String? profileDefinitionId,
+  ]) async {
     final path = profileDefinitionId != null
         ? '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/channels'
         : '/api/admin/tool-profiles/channels';
@@ -224,7 +318,8 @@ class ProfileAdminApiClient {
     final result = await _request(
       'POST',
       _api(
-          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/channels/${Uri.encodeComponent(channel)}/rollback'),
+        '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/channels/${Uri.encodeComponent(channel)}/rollback',
+      ),
       body: {
         'targetReleaseVersion': targetReleaseVersion,
         if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
@@ -244,7 +339,8 @@ class ProfileAdminApiClient {
     final result = await _request(
       'GET',
       _api(
-          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/evidence'),
+        '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/evidence',
+      ),
     );
     if (result is Map && result['evidence'] is List) {
       return _readModels(
@@ -265,7 +361,8 @@ class ProfileAdminApiClient {
     final result = await _request(
       'POST',
       _api(
-          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/evidence'),
+        '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/evidence',
+      ),
       body: {'evidence': evidence},
     );
     if (result is Map) {
@@ -275,8 +372,9 @@ class ProfileAdminApiClient {
   }
 
   /// Lists audit events globally or scoped to a definition.
-  Future<List<ProfileLabAuditEventReadModel>> fetchAudit(
-      [String? profileDefinitionId]) async {
+  Future<List<ProfileLabAuditEventReadModel>> fetchAudit([
+    String? profileDefinitionId,
+  ]) async {
     final path = profileDefinitionId != null
         ? '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/audit'
         : '/api/admin/tool-profiles/audit';
@@ -304,10 +402,15 @@ class ProfileAdminApiClient {
       if (component != null) 'component': component,
       if (errorCode != null) 'errorCode': errorCode,
       if (workerTypeId != null) 'workerTypeId': workerTypeId,
-      if (createdAfter != null) 'createdAfter': createdAfter.toUtc().toIso8601String(),
-      if (createdBefore != null) 'createdBefore': createdBefore.toUtc().toIso8601String(),
+      if (createdAfter != null)
+        'createdAfter': createdAfter.toUtc().toIso8601String(),
+      if (createdBefore != null)
+        'createdBefore': createdBefore.toUtc().toIso8601String(),
     };
-    final result = await _request('GET', _api('/api/admin/issue-reports', query));
+    final result = await _request(
+      'GET',
+      _api('/api/admin/issue-reports', query),
+    );
     if (result is Map && result['reports'] is List) {
       return _readModels(
         result['reports'] as List,
@@ -327,8 +430,12 @@ class ProfileAdminApiClient {
     throw StateError('Invalid issue report response');
   }
 
-  Future<List<ProfileLabIssueReportGroupReadModel>> fetchIssueReportGroups() async {
-    final result = await _request('GET', _api('/api/admin/issue-reports/groups'));
+  Future<List<ProfileLabIssueReportGroupReadModel>>
+      fetchIssueReportGroups() async {
+    final result = await _request(
+      'GET',
+      _api('/api/admin/issue-reports/groups'),
+    );
     if (result is Map && result['groups'] is List) {
       return _readModels(
         result['groups'] as List,
@@ -346,7 +453,10 @@ class ProfileAdminApiClient {
     final result = await _request(
       'POST',
       _api('/api/admin/issue-reports/groups'),
-      body: {'label': label, if (fingerprint != null) 'fingerprint': fingerprint},
+      body: {
+        'label': label,
+        if (fingerprint != null) 'fingerprint': fingerprint,
+      },
     );
     if (result is Map) return Map<String, dynamic>.from(result);
     throw StateError('Invalid issue report group response');
@@ -382,7 +492,8 @@ class ProfileAdminApiClient {
     final result = await _request(
       'PUT',
       _api(
-          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/draft'),
+        '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/draft',
+      ),
       headers: expectedBaseDigest == null
           ? null
           : {HttpHeaders.ifMatchHeader: '"$expectedBaseDigest"'},
@@ -403,7 +514,8 @@ class ProfileAdminApiClient {
     final result = await _request(
       'POST',
       _api(
-          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases'),
+        '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases',
+      ),
       body: {'releaseVersion': releaseVersion, 'profile': profile},
     );
     if (result is Map) {
@@ -423,7 +535,8 @@ class ProfileAdminApiClient {
     final result = await _request(
       'POST',
       _api(
-          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/publish'),
+        '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/publish',
+      ),
       body: {'qualificationEvidenceId': qualificationEvidenceId},
     );
     if (result is Map) {
@@ -457,7 +570,8 @@ class ProfileAdminApiClient {
     );
     if (result is Map) {
       return ProfileLabSigningPreflightReadModel.fromJson(
-          Map<String, dynamic>.from(result));
+        Map<String, dynamic>.from(result),
+      );
     }
     throw StateError('Invalid signing preflight response');
   }
@@ -467,7 +581,8 @@ class ProfileAdminApiClient {
     final result = await _request('GET', _api('/api/release-trust'));
     if (result is Map) {
       return ProfileLabReleaseTrustReadModel.fromJson(
-          Map<String, dynamic>.from(result));
+        Map<String, dynamic>.from(result),
+      );
     }
     throw StateError('Invalid release trust response');
   }
@@ -492,12 +607,14 @@ class ProfileAdminApiClient {
     }
     if (normalizedChannel != 'stable' && acceptanceEvidenceId != null) {
       throw StateError(
-          'Only stable promotion may reference acceptance evidence.');
+        'Only stable promotion may reference acceptance evidence.',
+      );
     }
     final result = await _request(
       'POST',
       _api(
-          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/promote'),
+        '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/promote',
+      ),
       body: {
         'channel': normalizedChannel,
         if (acceptanceEvidenceId != null)
@@ -532,7 +649,8 @@ class ProfileAdminApiClient {
     final result = await _request(
       'POST',
       _api(
-          '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/$action'),
+        '/api/admin/tool-profiles/${Uri.encodeComponent(profileDefinitionId)}/releases/$releaseVersion/$action',
+      ),
       body: {'reason': reason},
     );
     if (result is Map) {
@@ -563,7 +681,8 @@ class ProfileAdminApiClient {
     final result = await _request(
       'PATCH',
       _api(
-          '/api/workspaces/${Uri.encodeComponent(workspaceId)}/tool-profile-channel'),
+        '/api/workspaces/${Uri.encodeComponent(workspaceId)}/tool-profile-channel',
+      ),
       body: {'channel': channel},
     );
     if (result is Map) {
@@ -584,12 +703,14 @@ List<T> _readModels<T extends ProfileAdminReadModel>(
   T Function(Map<String, dynamic>) parse,
   String field,
 ) {
-  return List<T>.unmodifiable(values.map((value) {
-    if (value is! Map) {
-      throw StateError('Invalid $field response item');
-    }
-    return parse(Map<String, dynamic>.from(value));
-  }));
+  return List<T>.unmodifiable(
+    values.map((value) {
+      if (value is! Map) {
+        throw StateError('Invalid $field response item');
+      }
+      return parse(Map<String, dynamic>.from(value));
+    }),
+  );
 }
 
 class ProfileAdminUnauthorizedException extends StateError {

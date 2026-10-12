@@ -30,7 +30,8 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
 
     try {
       engineExecutable ??= await loadBundledCliWorkerEngine(
-          enginesDirectory: paths.enginesDirectory);
+        enginesDirectory: paths.enginesDirectory,
+      );
       if (engineExecutable == null) {
         throw StateError('Generic CLI Worker Engine binary is not available.');
       }
@@ -54,11 +55,13 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
         },
         onLog: (level, message) {
           if (!isCurrent()) return;
-          testLogs.add(TestExecutionLog(
-            timestamp: DateTime.now(),
-            level: level,
-            message: message,
-          ));
+          testLogs.add(
+            TestExecutionLog(
+              timestamp: DateTime.now(),
+              level: level,
+              message: message,
+            ),
+          );
           notifyListeners();
         },
       );
@@ -72,8 +75,15 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
         testStatusMessage = '$passedCount/${result.stages.length} passed';
       }
 
+      final publicationEvidence = result.publicationEvidence;
       final acceptanceEvidence = result.acceptanceEvidence;
-      if (acceptanceEvidence != null) {
+      if (isV9ProfileRegistry && publicationEvidence != null) {
+        await store.saveEvidence(
+          profileDefinitionId: candidate.profileDefinitionId,
+          payloadDigest: candidate.payloadDigest,
+          evidenceRecord: publicationEvidence.toJson(),
+        );
+      } else if (acceptanceEvidence != null) {
         await store.saveEvidence(
           profileDefinitionId: candidate.profileDefinitionId,
           payloadDigest: candidate.payloadDigest,
@@ -85,11 +95,13 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
       if (!isCurrent()) return;
       lastTestResult = 'fail';
       testStatusMessage = 'Full test failed: $e';
-      testLogs.add(TestExecutionLog(
-        timestamp: DateTime.now(),
-        level: 'error',
-        message: 'Ladder exception: $e',
-      ));
+      testLogs.add(
+        TestExecutionLog(
+          timestamp: DateTime.now(),
+          level: 'error',
+          message: 'Ladder exception: $e',
+        ),
+      );
     } finally {
       _activeTestSandbox = null;
       if (isCurrent()) testCompletedAt = DateTime.now().toUtc();

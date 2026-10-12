@@ -178,6 +178,10 @@ void main() {
       ..writeAsStringSync('''#!/bin/sh
 if [ "\$1" = "--version" ]; then echo "$executable ${executable == 'codex' ? '0.180.0' : '1.2.3'}"; exit 0; fi
 if [ "\$1" = "login" ]; then echo 'Authenticated fixture'; exit 0; fi
+if [ "\$1" = "models" ]; then
+  printf '%s\\n' 'gemini-fixture\tFixture'
+  exit 0
+fi
 if [ "\$1" = "app-server" ]; then
   while IFS= read -r request; do
     case "\$request" in

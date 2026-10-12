@@ -51,6 +51,7 @@ class ProfileLabLadderResult {
     required this.stages,
     required this.acceptanceEvidence,
     required this.logs,
+    this.publicationEvidence,
   });
 
   final String overallResult; // 'pass' or 'fail'
@@ -61,7 +62,41 @@ class ProfileLabLadderResult {
   /// Exact Cloud acceptance contract, present only when every required
   /// applicable acceptance scenario was observed to pass against this candidate.
   final ToolProfileAcceptanceEvidence? acceptanceEvidence;
+  final ToolProfilePublicationEvidence? publicationEvidence;
   final List<String> logs;
+}
+
+/// Digest-bound V9 publication evidence. This is deliberately smaller than
+/// the local test log and contains no provider output, environment, or secret.
+class ToolProfilePublicationEvidence {
+  const ToolProfilePublicationEvidence({
+    required this.workerTypeId,
+    required this.candidateDigest,
+    required this.engineVersion,
+    required this.providerToolName,
+    required this.providerToolVersion,
+    required this.testedAt,
+    required this.scenarios,
+  });
+
+  final String workerTypeId;
+  final String candidateDigest;
+  final String engineVersion;
+  final String providerToolName;
+  final String providerToolVersion;
+  final String testedAt;
+  final Map<String, String> scenarios;
+
+  Map<String, Object?> toJson() => {
+        'formatVersion': 1,
+        'workerTypeId': workerTypeId,
+        'candidateDigest': candidateDigest,
+        'engineVersion': engineVersion,
+        'providerToolName': providerToolName,
+        'providerToolVersion': providerToolVersion,
+        'testedAt': testedAt,
+        'scenarios': scenarios,
+      };
 }
 
 /// Profile Lab's direct representation of Cloud's qualification and acceptance
@@ -158,7 +193,8 @@ class ToolProfileAcceptanceEvidence {
 }
 
 Future<void> _deleteSandboxTreeWithoutFollowingLinks(
-    Directory directory) async {
+  Directory directory,
+) async {
   await for (final entity in directory.list(followLinks: false)) {
     final type = await FileSystemEntity.type(entity.path, followLinks: false);
     if (type == FileSystemEntityType.link) {
@@ -246,7 +282,8 @@ class ProfileLabTestSandbox {
 
   /// Discovers model metadata without invoking a model or bypassing trust admission.
   Future<DiscoveredModelCatalog?> discoverTrustedModels(
-      ToolProfileReleaseAdmission profile) async {
+    ToolProfileReleaseAdmission profile,
+  ) async {
     if (!profile.isSigned) {
       throw StateError('Discovery requires a signed Profile.');
     }
@@ -257,10 +294,13 @@ class ProfileLabTestSandbox {
     if (await FileSystemEntity.type(root.path, followLinks: false) !=
         FileSystemEntityType.directory) {
       throw FileSystemException(
-          'Sandbox root is not a real directory', root.path);
+        'Sandbox root is not a real directory',
+        root.path,
+      );
     }
-    final scratch = await Directory(await root.resolveSymbolicLinks())
-        .createTemp('model_discovery_');
+    final scratch = await Directory(
+      await root.resolveSymbolicLinks(),
+    ).createTemp('model_discovery_');
     final supervisor = CliWorkerEngineSupervisor(
       engineExecutable: engineExecutable.path,
       platformRuntime: _processSupervisor,
@@ -308,7 +348,9 @@ class ProfileLabTestSandbox {
     );
     if (rootType != FileSystemEntityType.directory) {
       throw FileSystemException(
-          'Sandbox root is not a real directory', configuredRoot.path);
+        'Sandbox root is not a real directory',
+        configuredRoot.path,
+      );
     }
     final canonicalRoot = await configuredRoot.resolveSymbolicLinks();
     final scratchDir = await Directory(canonicalRoot).createTemp('ai_draft_');
@@ -328,8 +370,9 @@ class ProfileLabTestSandbox {
         final chmod = await Process.run('chmod', ['600', profileTempFile.path]);
         if (chmod.exitCode != 0) {
           throw FileSystemException(
-              'Could not restrict model Profile file permissions',
-              profileTempFile.path);
+            'Could not restrict model Profile file permissions',
+            profileTempFile.path,
+          );
         }
       }
       final result = await supervisor.execute(
@@ -431,8 +474,9 @@ class ProfileLabTestSandbox {
       parsedProfile = EngineProfile.parse(
         utf8.encode(canonicalJson(candidate.profile)),
       );
-      expectedAcceptanceScenarios =
-          cloudAcceptanceScenarioStatuses(candidate.profile);
+      expectedAcceptanceScenarios = cloudAcceptanceScenarioStatuses(
+        candidate.profile,
+      );
       s1Timer.stop();
       addStage(
         stageId: 'schema',
@@ -476,8 +520,11 @@ class ProfileLabTestSandbox {
       final minVer = engineCompat['min'] as String? ?? '0.0.0';
       final maxVer = engineCompat['maxExclusive'] as String? ?? '99.0.0';
 
-      final isCompatible =
-          _isEngineVersionCompatible(cliWorkerEngineVersion, minVer, maxVer);
+      final isCompatible = _isEngineVersionCompatible(
+        cliWorkerEngineVersion,
+        minVer,
+        maxVer,
+      );
       s2Timer.stop();
       if (isCompatible) {
         addStage(
@@ -717,7 +764,9 @@ class ProfileLabTestSandbox {
     );
     if (rootType != FileSystemEntityType.directory) {
       throw FileSystemException(
-          'Sandbox root is not a real directory', configuredRoot.path);
+        'Sandbox root is not a real directory',
+        configuredRoot.path,
+      );
     }
     final canonicalRoot = await configuredRoot.resolveSymbolicLinks();
     final canonicalRootDirectory = Directory(canonicalRoot);
@@ -742,6 +791,8 @@ class ProfileLabTestSandbox {
         String? sessionKey,
         String? model,
         Duration? engineExecutionTimeout,
+        WorkerExecutionPolicy executionPolicy =
+            WorkerExecutionPolicy.restricted,
         void Function()? onExecutionStarted,
       }) {
         final assignmentId = 'lab-${label.replaceAll('_', '-')}-'
@@ -763,9 +814,12 @@ class ProfileLabTestSandbox {
           sessionPolicy: sessionPolicy,
           sessionKey: sessionKey,
           model: model,
+          executionPolicy: executionPolicy,
         )
             .whenComplete(() {
-          if (_activeAssignmentId == assignmentId) _activeAssignmentId = null;
+          if (_activeAssignmentId == assignmentId) {
+            _activeAssignmentId = null;
+          }
         });
       }
 
@@ -788,7 +842,7 @@ class ProfileLabTestSandbox {
             profileFile: profileTempFile,
             stateDirectory: scratchDir,
             mode: WorkerProbeMode.passive,
-            timeout: const Duration(seconds: 15),
+            timeout: const Duration(seconds: 30),
           );
           s5Timer.stop();
           if (probeRes.ready) {
@@ -941,18 +995,50 @@ class ProfileLabTestSandbox {
                 await writeTarget.readAsString(),
                 writeSentinel,
               );
+          final sandbox = candidate.profile['sandbox'];
+          final mappings = sandbox is Map ? sandbox['mappings'] : null;
+          final fullAccessMapping =
+              mappings is Map ? mappings['full_access'] : null;
+          var fullAccessStatus = 'not_applicable';
+          var fullAccessPassed = true;
+          if (fullAccessMapping is List && fullAccessMapping.isNotEmpty) {
+            try {
+              if (await writeTarget.exists()) await writeTarget.delete();
+              await executeAssignment(
+                label: 'full-local-access',
+                prompt: 'Create the file "acceptance-write.txt" in the '
+                    'current working directory and write exactly this UTF-8 '
+                    'text into it: $writeSentinel.',
+                executionPolicy: WorkerExecutionPolicy.fullAccess,
+              );
+              fullAccessPassed = await writeTarget.exists() &&
+                  _matchesExpectedTextFile(
+                    await writeTarget.readAsString(),
+                    writeSentinel,
+                  );
+              fullAccessStatus = fullAccessPassed ? 'passed' : 'failed';
+            } on Object catch (error) {
+              fullAccessPassed = false;
+              fullAccessStatus = 'failed: $error';
+            }
+          }
           s7Timer.stop();
           observedAcceptanceScenarios['representative_thread_write'] =
               wroteExpectedContent ? 'passed' : 'failed';
-          if (wroteExpectedContent) {
+          if (wroteExpectedContent && fullAccessPassed) {
             addStage(
               stageId: 'representative_thread_write',
               displayName: 'Representative Thread Write',
               status: 'passed',
               durationMs: s7Timer.elapsedMilliseconds,
               diagnostics:
-                  'Engine assignment wrote and verified the expected file in the isolated sandbox (allowing one conventional trailing line ending).',
+                  'Engine assignment wrote and verified the expected file in the isolated sandbox; stdin transport and error handling were exercised. Full local access: $fullAccessStatus.',
               consumesQuota: true,
+              details: {
+                'stdinTransport': 'passed',
+                'errorInterpretation': 'engine_classified',
+                'fullLocalAccess': fullAccessStatus,
+              },
             );
           } else {
             haltExecution = true;
@@ -961,10 +1047,16 @@ class ProfileLabTestSandbox {
               displayName: 'Representative Thread Write',
               status: 'failed',
               durationMs: s7Timer.elapsedMilliseconds,
-              diagnostics:
-                  'Engine assignment completed without writing the expected file contents.',
+              diagnostics: wroteExpectedContent
+                  ? 'Full local access verification failed: $fullAccessStatus.'
+                  : 'Engine assignment completed without writing the expected file contents.',
               consumesQuota: true,
               issueCode: 'thread_write_not_observed',
+              details: {
+                'stdinTransport': wroteExpectedContent ? 'passed' : 'failed',
+                'errorInterpretation': 'engine_classified',
+                'fullLocalAccess': fullAccessStatus,
+              },
             );
           }
         } on Object catch (error) {
@@ -1141,12 +1233,13 @@ class ProfileLabTestSandbox {
       final s10Timer = Stopwatch()..start();
       if (haltExecution) {
         addStage(
-            stageId: 'cancellation_test',
-            displayName: 'Cancellation',
-            status: 'skipped',
-            durationMs: 0,
-            diagnostics: 'Skipped because a prior Engine execution failed.',
-            consumesQuota: false);
+          stageId: 'cancellation_test',
+          displayName: 'Cancellation',
+          status: 'skipped',
+          durationMs: 0,
+          diagnostics: 'Skipped because a prior Engine execution failed.',
+          consumesQuota: false,
+        );
       } else {
         final providerStarted = Completer<void>();
         final assignment = executeAssignment(
@@ -1164,38 +1257,41 @@ class ProfileLabTestSandbox {
           await assignment;
           s10Timer.stop();
           addStage(
-              stageId: 'cancellation_test',
-              displayName: 'Engine Cancellation',
-              status: 'failed',
-              durationMs: s10Timer.elapsedMilliseconds,
-              diagnostics:
-                  'The Engine assignment completed before cancellation was observed.',
-              consumesQuota: true,
-              issueCode: 'cancellation_not_observed');
+            stageId: 'cancellation_test',
+            displayName: 'Engine Cancellation',
+            status: 'failed',
+            durationMs: s10Timer.elapsedMilliseconds,
+            diagnostics:
+                'The Engine assignment completed before cancellation was observed.',
+            consumesQuota: true,
+            issueCode: 'cancellation_not_observed',
+          );
           haltExecution = true;
         } on WorkerAssignmentCancelledException {
           s10Timer.stop();
           observedAcceptanceScenarios['cancellation'] = 'passed';
           addStage(
-              stageId: 'cancellation_test',
-              displayName: 'Engine Cancellation',
-              status: 'passed',
-              durationMs: s10Timer.elapsedMilliseconds,
-              diagnostics:
-                  'The active Engine assignment and provider process tree were cancelled.',
-              consumesQuota: true);
+            stageId: 'cancellation_test',
+            displayName: 'Engine Cancellation',
+            status: 'passed',
+            durationMs: s10Timer.elapsedMilliseconds,
+            diagnostics:
+                'The active Engine assignment and provider process tree were cancelled.',
+            consumesQuota: true,
+          );
         } on Object catch (error) {
           await cancelCurrentTest();
           s10Timer.stop();
           observedAcceptanceScenarios['cancellation'] = 'failed';
           addStage(
-              stageId: 'cancellation_test',
-              displayName: 'Engine Cancellation',
-              status: 'failed',
-              durationMs: s10Timer.elapsedMilliseconds,
-              diagnostics: 'Cancellation outcome was not confirmed: $error',
-              consumesQuota: true,
-              issueCode: 'cancellation_test_failed');
+            stageId: 'cancellation_test',
+            displayName: 'Engine Cancellation',
+            status: 'failed',
+            durationMs: s10Timer.elapsedMilliseconds,
+            diagnostics: 'Cancellation outcome was not confirmed: $error',
+            consumesQuota: true,
+            issueCode: 'cancellation_test_failed',
+          );
           haltExecution = true;
         }
       }
@@ -1204,12 +1300,13 @@ class ProfileLabTestSandbox {
       final s11Timer = Stopwatch()..start();
       if (haltExecution) {
         addStage(
-            stageId: 'timeout_test',
-            displayName: 'Execution Timeout',
-            status: 'skipped',
-            durationMs: 0,
-            diagnostics: 'Skipped because a prior Engine execution failed.',
-            consumesQuota: false);
+          stageId: 'timeout_test',
+          displayName: 'Execution Timeout',
+          status: 'skipped',
+          durationMs: 0,
+          diagnostics: 'Skipped because a prior Engine execution failed.',
+          consumesQuota: false,
+        );
       } else {
         final providerStarted = Completer<void>();
         final assignment = executeAssignment(
@@ -1226,28 +1323,30 @@ class ProfileLabTestSandbox {
           await assignment;
           s11Timer.stop();
           addStage(
-              stageId: 'timeout_test',
-              displayName: 'Execution Timeout',
-              status: 'failed',
-              durationMs: s11Timer.elapsedMilliseconds,
-              diagnostics:
-                  'The provider completed before the short post-start Engine deadline; timeout behavior was not observed.',
-              consumesQuota: true,
-              issueCode: 'timeout_not_observed');
+            stageId: 'timeout_test',
+            displayName: 'Execution Timeout',
+            status: 'failed',
+            durationMs: s11Timer.elapsedMilliseconds,
+            diagnostics:
+                'The provider completed before the short post-start Engine deadline; timeout behavior was not observed.',
+            consumesQuota: true,
+            issueCode: 'timeout_not_observed',
+          );
         } on CliWorkerEngineProbeException catch (error) {
           s11Timer.stop();
           final passed = error.issueCode == WorkerIssueCode.deadlineExceeded;
           observedAcceptanceScenarios['timeout'] = passed ? 'passed' : 'failed';
           addStage(
-              stageId: 'timeout_test',
-              displayName: 'Execution Timeout',
-              status: passed ? 'passed' : 'failed',
-              durationMs: s11Timer.elapsedMilliseconds,
-              diagnostics: passed
-                  ? 'The Engine enforced the assignment deadline and terminated the process tree.'
-                  : 'Engine execution ended before timeout: ${error.safeMessage}',
-              consumesQuota: true,
-              issueCode: passed ? null : error.issueCode);
+            stageId: 'timeout_test',
+            displayName: 'Execution Timeout',
+            status: passed ? 'passed' : 'failed',
+            durationMs: s11Timer.elapsedMilliseconds,
+            diagnostics: passed
+                ? 'The Engine enforced the assignment deadline and terminated the process tree.'
+                : 'Engine execution ended before timeout: ${error.safeMessage}',
+            consumesQuota: true,
+            issueCode: passed ? null : error.issueCode,
+          );
           if (!passed) haltExecution = true;
         } on Object catch (error) {
           s11Timer.stop();
@@ -1348,6 +1447,19 @@ class ProfileLabTestSandbox {
             scenarios: observedAcceptanceScenarios,
           )
         : null;
+    final publicationEvidence = overallResult == 'pass' &&
+            allAcceptanceScenariosObserved &&
+            detectedProviderToolVersion != null
+        ? ToolProfilePublicationEvidence(
+            workerTypeId: candidate.logicalWorkerTypeId,
+            candidateDigest: candidate.payloadDigest,
+            engineVersion: cliWorkerEngineVersion,
+            providerToolName: candidate.providerToolName,
+            providerToolVersion: detectedProviderToolVersion,
+            testedAt: endedAt.toIso8601String(),
+            scenarios: Map<String, String>.from(observedAcceptanceScenarios),
+          )
+        : null;
 
     return ProfileLabLadderResult(
       overallResult: overallResult,
@@ -1355,12 +1467,16 @@ class ProfileLabTestSandbox {
       endedAt: endedAt,
       stages: stages,
       acceptanceEvidence: acceptanceEvidence,
+      publicationEvidence: publicationEvidence,
       logs: logs,
     );
   }
 
   static bool _isEngineVersionCompatible(
-      String version, String min, String maxExclusive) {
+    String version,
+    String min,
+    String maxExclusive,
+  ) {
     final lower = _compareReleaseSemver(version, min);
     final upper = _compareReleaseSemver(version, maxExclusive);
     return lower != null && upper != null && lower >= 0 && upper < 0;

@@ -16,6 +16,7 @@ void main() {
     var requestCount = 0;
     int catalogStatus = 200;
     Object? catalogOverride;
+    var v9Mode = false;
 
     test('requires secure non-loopback Cloud API origins', () {
       expect(
@@ -32,6 +33,7 @@ void main() {
       requestCount = 0;
       catalogStatus = 200;
       catalogOverride = null;
+      v9Mode = false;
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((HttpRequest req) async {
         requestCount++;
@@ -43,7 +45,58 @@ void main() {
           lastBody = jsonDecode(bodyStr) as Map<String, dynamic>;
         }
 
-        if (req.uri.path == '/api/admin/profile-lab/access') {
+        if (v9Mode &&
+            req.uri.path == '/api/admin/workers' &&
+            req.method == 'GET') {
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'workers': [
+              {
+                'workerTypeId': 'claude',
+                'displayName': 'Claude',
+                'description': 'Claude Worker',
+                'lifecycleState': 'active',
+                'engineFamily': 'cli',
+                'visibilityState': 'visible',
+                'sortOrder': 10,
+                'currentRevision': 4,
+                'currentDigest': List.filled(64, 'a').join(),
+              }
+            ],
+          }));
+        } else if (v9Mode &&
+            req.uri.path == '/api/admin/workers/claude/profile' &&
+            req.method == 'GET') {
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'workerTypeId': 'claude',
+            'schemaVersion': 1,
+            'profile': {'logicalWorkerTypeId': 'claude'},
+            'revision': 4,
+            'digest': List.filled(64, 'a').join(),
+            'signature': 'signature',
+            'signingKeyId': 'key',
+            'verified': true,
+          }));
+        } else if (v9Mode &&
+            req.uri.path == '/api/admin/workers/claude/profile/validate' &&
+            req.method == 'POST') {
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'valid': true,
+            'digest': lastBody['candidateDigest'],
+          }));
+        } else if (v9Mode &&
+            req.uri.path == '/api/admin/workers/claude/profile' &&
+            req.method == 'PUT') {
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'workerTypeId': 'claude',
+            'revision': 5,
+            'digest': lastBody['candidateDigest'],
+            'verified': true,
+          }));
+        } else if (req.uri.path == '/api/admin/profile-lab/access') {
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
             'schemaVersion': 1,
@@ -231,6 +284,47 @@ void main() {
       expect(lastBody.containsKey('capabilities'), isFalse);
       expect(lastBody['sortOrder'], 10);
       expect(res['status'], 'created');
+    });
+
+    test('V9 candidate validation and publication use one Worker Profile',
+        () async {
+      v9Mode = true;
+      final workers = await client.fetchV9WorkerProfiles();
+      expect(workers.single.workerTypeId, 'claude');
+
+      final current = await client.fetchCurrentWorkerProfile('claude');
+      expect(lastPath, '/api/admin/workers/claude/profile');
+      expect(current['revision'], 4);
+
+      final profile = <String, dynamic>{'candidate': true};
+      final digest = List.filled(64, 'b').join();
+      final evidence = <String, Object?>{
+        'formatVersion': 1,
+        'workerTypeId': 'claude',
+        'candidateDigest': digest,
+      };
+      await client.validateWorkerProfileCandidate(
+        workerTypeId: 'claude',
+        profile: profile,
+        candidateDigest: digest,
+        evidence: evidence,
+      );
+      expect(lastMethod, 'POST');
+      expect(lastPath, '/api/admin/workers/claude/profile/validate');
+      expect(lastBody['candidateDigest'], digest);
+
+      await client.publishWorkerProfile(
+        workerTypeId: 'claude',
+        expectedRevision: 4,
+        profile: profile,
+        candidateDigest: digest,
+        evidence: evidence,
+      );
+      expect(lastMethod, 'PUT');
+      expect(lastPath, '/api/admin/workers/claude/profile');
+      expect(lastBody['expectedRevision'], 4);
+      expect(lastBody.containsKey('channel'), isFalse);
+      expect(lastBody.containsKey('releaseVersion'), isFalse);
     });
 
     test('Stable promotion requires a stored Cloud evidence ID', () async {

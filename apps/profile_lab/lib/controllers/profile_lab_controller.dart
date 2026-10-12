@@ -28,12 +28,7 @@ part 'profile_lab_controller_session.dart';
 part 'profile_lab_controller_cloud.dart';
 part 'profile_lab_controller_ai.dart';
 
-enum LabArea {
-  workers,
-  workspaces,
-  issues,
-  audit;
-}
+enum LabArea { workers, workspaces, issues, audit }
 
 enum WorkerSubView {
   overview,
@@ -41,10 +36,10 @@ enum WorkerSubView {
   releases;
 
   String get label => switch (this) {
-        WorkerSubView.overview => 'Overview',
-        WorkerSubView.draftAndTest => 'Draft & Test',
-        WorkerSubView.releases => 'Releases',
-      };
+    WorkerSubView.overview => 'Overview',
+    WorkerSubView.draftAndTest => 'Draft & Test',
+    WorkerSubView.releases => 'Releases',
+  };
 }
 
 enum DraftSyncState {
@@ -54,11 +49,11 @@ enum DraftSyncState {
   conflict;
 
   String get label => switch (this) {
-        DraftSyncState.saved => 'Saved',
-        DraftSyncState.modifiedLocally => 'Modified locally',
-        DraftSyncState.cloudChanged => 'Cloud changed',
-        DraftSyncState.conflict => 'Conflict',
-      };
+    DraftSyncState.saved => 'Saved',
+    DraftSyncState.modifiedLocally => 'Modified locally',
+    DraftSyncState.cloudChanged => 'Cloud changed',
+    DraftSyncState.conflict => 'Conflict',
+  };
 }
 
 class TestExecutionLog {
@@ -82,13 +77,14 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
     ProfileAdminApiClient? apiClientOverride,
     ProfileLabSessionStore? sessionStore,
     this.sandboxEnvironmentOverrides = const {},
-  })  : store = DraftProfileStore(draftsRoot: paths.draftsDirectory),
-        _processSupervisor =
-            processSupervisor ?? const StandardProcessSupervisor(),
-        _apiClientOverride = apiClientOverride,
-        _sessionStore = sessionStore ?? ProfileLabSessionStore(paths),
-        _cloudSettingsStore =
-            ProfileLabCloudSettingsStore(paths.cloudSettingsFile);
+  }) : store = DraftProfileStore(draftsRoot: paths.draftsDirectory),
+       _processSupervisor =
+           processSupervisor ?? const StandardProcessSupervisor(),
+       _apiClientOverride = apiClientOverride,
+       _sessionStore = sessionStore ?? ProfileLabSessionStore(paths),
+       _cloudSettingsStore = ProfileLabCloudSettingsStore(
+         paths.cloudSettingsFile,
+       );
 
   final ProfileLabPaths paths;
   final DraftProfileStore store;
@@ -130,6 +126,14 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   String? testedDraftDigest;
   String? testedProfileDefinitionId;
 
+  /// V9 uses one current Worker Profile instead of Cloud draft releases and
+  /// channel pointers. These fields bind local eligibility to that snapshot.
+  bool isV9ProfileRegistry = false;
+  Map<String, dynamic>? currentCloudProfileSnapshot;
+  int currentProfileRevision = 0;
+  String? currentProfileDigest;
+  String? candidateCloudValidatedDigest;
+
   bool get testResultMatchesDraft =>
       currentDraft != null &&
       testedDraftDigest == currentDraft!.payloadDigest &&
@@ -140,6 +144,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
     testCompletedAt = null;
     testedDraftDigest = null;
     testedProfileDefinitionId = null;
+    candidateCloudValidatedDigest = null;
     lastTestResult = null;
     lastLadderResult = null;
     testStatusMessage = null;
@@ -188,6 +193,8 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
       !isLoadingReleases &&
       !isCreatingInitialDraft;
   bool get isPublishing => _refreshes.containsKey('publish');
+  bool get isValidatingCandidate =>
+      _refreshes.containsKey('validate-candidate');
   bool get isSavingLocally => _refreshes.containsKey('save-local-draft');
   bool get isSavingToCloud => _refreshes.containsKey('save-draft');
   bool get isRollingBack => _refreshes.containsKey('rollback');
@@ -264,19 +271,23 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   bool get canPublish =>
       labAccess?.releaseManager == true && labAccess?.signerReady == true;
 
+  bool get candidateIsCloudValidated =>
+      currentDraft != null &&
+      candidateCloudValidatedDigest == currentDraft!.payloadDigest;
+
   Future<void> refreshLabAccess() => _refresh('access', () async {
-        final generation = _cloudGeneration;
-        labAccessError = null;
-        try {
-          final result = await apiClient.fetchLabAccess();
-          if (generation != _cloudGeneration) return;
-          labAccess = result;
-        } catch (e) {
-          if (generation != _cloudGeneration) return;
-          labAccess = null;
-          labAccessError = 'Failed to verify Profile Lab access: $e';
-        }
-      });
+    final generation = _cloudGeneration;
+    labAccessError = null;
+    try {
+      final result = await apiClient.fetchLabAccess();
+      if (generation != _cloudGeneration) return;
+      labAccess = result;
+    } catch (e) {
+      if (generation != _cloudGeneration) return;
+      labAccess = null;
+      labAccessError = 'Failed to verify Profile Lab access: $e';
+    }
+  });
 
   String? cloudError;
   bool auditFilterCurrentDefinition = false;
@@ -287,10 +298,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
 
   ProfileAdminApiClient get apiClient =>
       _apiClientOverride ??
-      ProfileAdminApiClient(
-        baseUrl: cloudUrl,
-        session: currentSession,
-      );
+      ProfileAdminApiClient(baseUrl: cloudUrl, session: currentSession);
 
   // Authentication state
   ProfileLabSession? currentSession;
@@ -340,8 +348,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   Future<void> fetchWorkspaceChannels() =>
       _refresh('workspaces', _fetchWorkspaceChannels);
 
-  Future<void> fetchIssueReports() =>
-      _refresh('issues', _fetchIssueReports);
+  Future<void> fetchIssueReports() => _refresh('issues', _fetchIssueReports);
 
   Future<void> _fetchIssueReports() async {
     isLoadingIssueReports = true;
@@ -405,8 +412,9 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
     try {
       final result = await apiClient.listWorkspaceChannels();
       if (generation != _cloudGeneration) return;
-      workspaceChannels =
-          result.map((workspace) => workspace.toJson()).toList();
+      workspaceChannels = result
+          .map((workspace) => workspace.toJson())
+          .toList();
     } catch (e) {
       if (generation == _cloudGeneration) workspaceError = e.toString();
     } finally {
@@ -416,13 +424,17 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   }
 
   Future<void> updateWorkspaceChannel(
-      String workspaceId, String channel) async {
+    String workspaceId,
+    String channel,
+  ) async {
     if (!updatingWorkspaceIds.add(workspaceId)) return;
     workspaceError = null;
     notifyListeners();
     try {
       await apiClient.setWorkspaceChannel(
-          workspaceId: workspaceId, channel: channel);
+        workspaceId: workspaceId,
+        channel: channel,
+      );
       await fetchWorkspaceChannels();
     } catch (e) {
       workspaceError = e.toString();

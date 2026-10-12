@@ -425,6 +425,20 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
       expect(scenarios.keys.toSet(), cloudAcceptanceScenarioNames.toSet());
       expect(scenarios.values.toSet(), {'passed'});
 
+      final publicationEvidence = ladderResult.publicationEvidence;
+      expect(publicationEvidence, isNotNull);
+      final publicationJson = publicationEvidence!.toJson();
+      expect(publicationJson, {
+        'formatVersion': 1,
+        'workerTypeId': validCandidate.logicalWorkerTypeId,
+        'candidateDigest': validCandidate.payloadDigest,
+        'engineVersion': '1.3.0',
+        'providerToolName': validCandidate.providerToolName,
+        'providerToolVersion': '1.2.3',
+        'testedAt': publicationJson['testedAt'],
+        'scenarios': scenarios,
+      });
+
       // Verify transient directories inside sandboxRoot are cleaned up
       final subEntries = sandboxRoot.listSync();
       expect(subEntries, isEmpty);

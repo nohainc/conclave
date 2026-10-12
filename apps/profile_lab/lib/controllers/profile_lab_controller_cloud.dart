@@ -15,7 +15,21 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     notifyListeners();
 
     try {
-      final workers = await apiClient.fetchWorkerCatalog();
+      List<ProfileLabWorkerReadModel> workers;
+      try {
+        workers = await apiClient.fetchV9WorkerProfiles();
+        isV9ProfileRegistry = true;
+      } on ProfileAdminNotFoundException {
+        isV9ProfileRegistry = false;
+        workers = await apiClient.fetchWorkerCatalog();
+      } on ProfileAdminUnauthorizedException {
+        rethrow;
+      } on StateError {
+        // Test doubles and older development clients may not expose the V9
+        // route yet; let the client-provided legacy catalog handle them.
+        isV9ProfileRegistry = false;
+        workers = await apiClient.fetchWorkerCatalog();
+      }
       if (generation != _cloudGeneration) {
         return;
       }
@@ -69,6 +83,10 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     baseCloudDigest = null;
     cloudDraftPayload = null;
     resetDraftTestState();
+    currentCloudProfileSnapshot = null;
+    currentProfileRevision = 0;
+    currentProfileDigest = null;
+    candidateCloudValidatedDigest = null;
     selectedCloudWorker = worker;
     selectedDefinitionId = worker['profileDefinitionId'] as String?;
     cloudReleases = [];
@@ -78,6 +96,66 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     definitionsError = null;
     notifyListeners();
     final defId = worker['profileDefinitionId'] as String?;
+
+    if (isV9ProfileRegistry) {
+      final workerTypeId = worker['workerTypeId'] as String?;
+      if (workerTypeId == null || workerTypeId.isEmpty) return;
+      try {
+        final snapshot = await apiClient.fetchCurrentWorkerProfile(
+          workerTypeId,
+        );
+        if (generation != _cloudGeneration ||
+            selectedCloudWorker?['workerTypeId'] != workerTypeId) {
+          return;
+        }
+        currentCloudProfileSnapshot = snapshot;
+        currentProfileRevision = (snapshot['revision'] as num?)?.toInt() ?? 0;
+        currentProfileDigest = snapshot['digest'] as String?;
+        final profile = snapshot['profile'];
+        if (profile is Map) {
+          final profileMap = Map<String, dynamic>.from(profile);
+          selectedDefinitionId = profileMap['profileDefinitionId'] as String?;
+          final provider = profileMap['providerTool'];
+          selectedCloudDefinition = {
+            'profileDefinitionId': selectedDefinitionId,
+            'displayName': worker['displayName'],
+            'providerToolName': provider is Map ? provider['name'] : null,
+            'status': 'current',
+          };
+          if (selectedDefinitionId != null &&
+              draftDefinitionIds.contains(selectedDefinitionId)) {
+            await selectDraft(selectedDefinitionId!);
+          } else if (selectedDefinitionId != null) {
+            await store.saveDraft(
+              profileDefinitionId: selectedDefinitionId!,
+              profileJson: profileMap,
+              notes: 'Created from current V9 Worker Profile',
+            );
+            draftDefinitionIds = await store.listDraftDefinitionIds();
+            await selectDraft(selectedDefinitionId!);
+          }
+          cloudDigest = currentProfileDigest;
+          baseCloudDigest = currentProfileDigest;
+          cloudDraftExists = true;
+          cloudReleaseLifecycleState = 'current';
+        }
+        await discoverInstalledProviders();
+        setWorkerSubView(WorkerSubView.draftAndTest);
+        notifyListeners();
+        return;
+      } on ProfileAdminNotFoundException {
+        // A V9 Worker may exist before its first Profile is published.
+        selectedCloudDefinition = null;
+        definitionsError = null;
+        notifyListeners();
+        return;
+      } catch (e) {
+        definitionsError = 'Failed to fetch current Worker Profile: $e';
+        notifyListeners();
+        return;
+      }
+    }
+
     if (defId != null && defId.isNotEmpty) {
       selectedDefinitionId = defId;
       try {
@@ -117,10 +195,17 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   /// Fetches releases for a profile definition.
   @override
   Future<void> fetchCloudReleases([String? profileDefinitionId]) => _refresh(
-      'releases:${profileDefinitionId ?? selectedDefinitionId}',
-      () => _fetchCloudReleases(profileDefinitionId));
+        'releases:${profileDefinitionId ?? selectedDefinitionId}',
+        () => _fetchCloudReleases(profileDefinitionId),
+      );
 
   Future<void> _fetchCloudReleases(String? profileDefinitionId) async {
+    if (isV9ProfileRegistry) {
+      cloudReleases = [];
+      selectedCloudRelease = null;
+      cloudEvidence = [];
+      return;
+    }
     final generation = _cloudGeneration;
     final defId = profileDefinitionId ?? selectedDefinitionId;
     if (defId == null) {
@@ -153,9 +238,11 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       if (cloudReleases.isNotEmpty) {
         final previousVersion = selectedCloudRelease?['releaseVersion'];
         selectedCloudRelease = cloudReleases
-                .where((r) =>
-                    r['releaseVersion'] == previousVersion &&
-                    r['lifecycleState'] != 'draft')
+                .where(
+                  (r) =>
+                      r['releaseVersion'] == previousVersion &&
+                      r['lifecycleState'] != 'draft',
+                )
                 .firstOrNull ??
             cloudReleases
                 .where((r) => r['lifecycleState'] != 'draft')
@@ -164,7 +251,9 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
         final version = selectedCloudRelease!['releaseVersion'] as int?;
         if (version != null) {
           await fetchCloudEvidence(
-              profileDefinitionId: defId, version: version);
+            profileDefinitionId: defId,
+            version: version,
+          );
         }
       } else {
         selectedCloudRelease = null;
@@ -195,15 +284,22 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
 
   /// Fetches Cloud acceptance evidence for a release.
   @override
-  Future<void> fetchCloudEvidence(
-          {String? profileDefinitionId, int? version}) =>
+  Future<void> fetchCloudEvidence({
+    String? profileDefinitionId,
+    int? version,
+  }) =>
       _refresh(
-          'evidence:${profileDefinitionId ?? selectedDefinitionId}:${version ?? selectedCloudRelease?['releaseVersion']}',
-          () => _fetchCloudEvidence(
-              profileDefinitionId: profileDefinitionId, version: version));
+        'evidence:${profileDefinitionId ?? selectedDefinitionId}:${version ?? selectedCloudRelease?['releaseVersion']}',
+        () => _fetchCloudEvidence(
+          profileDefinitionId: profileDefinitionId,
+          version: version,
+        ),
+      );
 
-  Future<void> _fetchCloudEvidence(
-      {String? profileDefinitionId, int? version}) async {
+  Future<void> _fetchCloudEvidence({
+    String? profileDefinitionId,
+    int? version,
+  }) async {
     final generation = _cloudGeneration;
     final defId = profileDefinitionId ?? selectedDefinitionId;
     final ver = version ?? selectedCloudRelease?['releaseVersion'] as int?;
@@ -248,7 +344,8 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       profile: draft.profile,
     )) {
       throw StateError(
-          'Only complete sandbox acceptance evidence can be submitted.');
+        'Only complete sandbox acceptance evidence can be submitted.',
+      );
     }
     if (evidence['profileDefinitionId'] != draft.profileDefinitionId ||
         evidence['releaseVersion'] != draft.releaseVersion ||
@@ -296,8 +393,9 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   /// Fetches audit events globally or scoped to the current definition.
   @override
   Future<void> fetchCloudAudit({bool? definitionOnly}) => _refresh(
-      'audit:${(definitionOnly ?? auditFilterCurrentDefinition) ? selectedDefinitionId : null}',
-      () => _fetchCloudAudit(definitionOnly: definitionOnly));
+        'audit:${(definitionOnly ?? auditFilterCurrentDefinition) ? selectedDefinitionId : null}',
+        () => _fetchCloudAudit(definitionOnly: definitionOnly),
+      );
 
   Future<void> _fetchCloudAudit({bool? definitionOnly}) async {
     if (definitionOnly != null) {
@@ -328,16 +426,19 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   }
 
   /// Executes channel pointer rollback.
-  Future<void> rollbackChannelPointer(
-          {required String channel,
-          required int targetReleaseVersion,
-          String? reason}) =>
+  Future<void> rollbackChannelPointer({
+    required String channel,
+    required int targetReleaseVersion,
+    String? reason,
+  }) =>
       _refresh(
-          'rollback',
-          () => _rollbackChannelPointer(
-              channel: channel,
-              targetReleaseVersion: targetReleaseVersion,
-              reason: reason));
+        'rollback',
+        () => _rollbackChannelPointer(
+          channel: channel,
+          targetReleaseVersion: targetReleaseVersion,
+          reason: reason,
+        ),
+      );
 
   Future<void> _rollbackChannelPointer({
     required String channel,
@@ -362,16 +463,19 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
 
   /// Promotes a release. Stable promotion requires a separately stored Cloud
   /// evidence record and sends only its immutable identifier.
-  Future<void> promoteCloudRelease(
-          {required int releaseVersion,
-          required String channel,
-          String? acceptanceEvidenceId}) =>
+  Future<void> promoteCloudRelease({
+    required int releaseVersion,
+    required String channel,
+    String? acceptanceEvidenceId,
+  }) =>
       _refresh(
-          'promote',
-          () => _promoteCloudRelease(
-              releaseVersion: releaseVersion,
-              channel: channel,
-              acceptanceEvidenceId: acceptanceEvidenceId));
+        'promote',
+        () => _promoteCloudRelease(
+          releaseVersion: releaseVersion,
+          channel: channel,
+          acceptanceEvidenceId: acceptanceEvidenceId,
+        ),
+      );
 
   Future<void> _promoteCloudRelease({
     required int releaseVersion,
@@ -402,12 +506,15 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   }
 
   /// Revokes a release version permanently for security/safety reasons.
-  Future<void> revokeCloudRelease(
-          {required int releaseVersion, required String reason}) =>
+  Future<void> revokeCloudRelease({
+    required int releaseVersion,
+    required String reason,
+  }) =>
       _refresh(
-          'revoke',
-          () => _revokeCloudRelease(
-              releaseVersion: releaseVersion, reason: reason));
+        'revoke',
+        () =>
+            _revokeCloudRelease(releaseVersion: releaseVersion, reason: reason),
+      );
 
   Future<void> _revokeCloudRelease({
     required int releaseVersion,
@@ -441,14 +548,51 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       final draft = currentDraft!;
       if (!canPublish) {
         throw StateError(
-            'Release Manager access and a ready Cloud signer are required.');
+          'Release Manager access and a ready Cloud signer are required.',
+        );
+      }
+      if (isV9ProfileRegistry) {
+        final evidence = _publicationEvidenceFor(draft);
+        if (evidence == null) {
+          throw StateError(
+            'Run the complete local Test Ladder for this exact candidate before publishing.',
+          );
+        }
+        final profile = Map<String, dynamic>.from(draft.profile);
+        final validation = await apiClient.validateWorkerProfileCandidate(
+          workerTypeId: selectedCloudWorker!['workerTypeId'] as String,
+          profile: profile,
+          candidateDigest: draft.payloadDigest,
+          evidence: evidence,
+        );
+        candidateCloudValidatedDigest =
+            validation['digest'] as String? ?? draft.payloadDigest;
+        final snapshot = await apiClient.publishWorkerProfile(
+          workerTypeId: selectedCloudWorker!['workerTypeId'] as String,
+          expectedRevision: currentProfileRevision,
+          profile: profile,
+          candidateDigest: draft.payloadDigest,
+          evidence: evidence,
+        );
+        currentCloudProfileSnapshot = snapshot;
+        currentProfileRevision = (snapshot['revision'] as num?)?.toInt() ??
+            currentProfileRevision + 1;
+        currentProfileDigest =
+            snapshot['digest'] as String? ?? draft.payloadDigest;
+        cloudDigest = currentProfileDigest;
+        baseCloudDigest = currentProfileDigest;
+        cloudDraftExists = true;
+        cloudReleaseLifecycleState = 'current';
+        await fetchCloudCatalog();
+        return;
       }
       if (isDirty ||
           cloudDraftExists != true ||
           cloudDraftVersion != draft.releaseVersion ||
           cloudDigest != draft.payloadDigest) {
         throw StateError(
-            'Save and sync this exact Draft to Cloud before publishing.');
+          'Save and sync this exact Draft to Cloud before publishing.',
+        );
       }
       Map<String, Object?>? localQualification;
       for (final item in currentEvidence) {
@@ -499,6 +643,45 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       cloudError = 'Publish failed: $e';
       rethrow;
     }
+  }
+
+  /// Performs Cloud's candidate revalidation without changing the current
+  /// Worker Profile. The digest is cleared whenever the editor changes.
+  Future<void> validateCurrentDraft() =>
+      _refresh('validate-candidate', _validateCurrentDraft);
+
+  Future<void> _validateCurrentDraft() async {
+    final draft = currentDraft;
+    final workerTypeId = selectedCloudWorker?['workerTypeId'] as String?;
+    if (!isV9ProfileRegistry || draft == null || workerTypeId == null) return;
+    if (isDirty || jsonValidationError != null) {
+      throw StateError('Save a valid local candidate before Cloud validation.');
+    }
+    final evidence = _publicationEvidenceFor(draft);
+    final response = await apiClient.validateWorkerProfileCandidate(
+      workerTypeId: workerTypeId,
+      profile: Map<String, dynamic>.from(draft.profile),
+      candidateDigest: draft.payloadDigest,
+      evidence: evidence,
+    );
+    candidateCloudValidatedDigest =
+        response['digest'] as String? ?? draft.payloadDigest;
+    cloudError = null;
+    notifyListeners();
+  }
+
+  Map<String, Object?>? _publicationEvidenceFor(
+    LocalDraftProfileCandidate draft,
+  ) {
+    for (final item in currentEvidence) {
+      if (item['formatVersion'] == 1 &&
+          item['workerTypeId'] == draft.logicalWorkerTypeId &&
+          item['candidateDigest'] == draft.payloadDigest &&
+          item['scenarios'] is Map) {
+        return Map<String, Object?>.from(item);
+      }
+    }
+    return null;
   }
 
   /// Atomically registers an approved logical Worker and its initial Profile definition in Cloud.

@@ -84,7 +84,8 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       if (release.profile != null) {
         cloudDraftPayload = Map<String, dynamic>.from(release.profile!);
         if (cloudDraftExists == true) {
-          cloudDigest = release.payloadDigest ??
+          cloudDigest =
+              release.payloadDigest ??
               release['profileDigest'] as String? ??
               sha256
                   .convert(utf8.encode(canonicalJson(cloudDraftPayload!)))
@@ -136,7 +137,8 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
         payloadDigest: currentDraft!.payloadDigest,
       );
       currentEvidence = storedEvidence.where((evidence) {
-        return ToolProfileAcceptanceEvidence.hasCloudContractShape(
+        final legacy =
+            ToolProfileAcceptanceEvidence.hasCloudContractShape(
               evidence,
               profile: currentDraft!.profile,
             ) &&
@@ -144,6 +146,12 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
                 currentDraft!.profileDefinitionId &&
             evidence['releaseVersion'] == currentDraft!.releaseVersion &&
             evidence['profileDigest'] == currentDraft!.payloadDigest;
+        final v9 =
+            evidence['formatVersion'] == 1 &&
+            evidence['workerTypeId'] == currentDraft!.logicalWorkerTypeId &&
+            evidence['candidateDigest'] == currentDraft!.payloadDigest &&
+            evidence['scenarios'] is Map;
+        return legacy || v9;
       }).toList();
     }
     notifyListeners();
@@ -152,6 +160,9 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
   void updateJsonText(String text) {
     currentJsonText = text;
     isDirty = true;
+    // A candidate digest changes with the editor buffer. Invalidate both local
+    // test evidence and Cloud validation immediately, before the next save.
+    resetDraftTestState();
     updateSyncState();
     try {
       final decoded = jsonDecode(text);
@@ -192,15 +203,17 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
   Future<void> duplicateCurrentDraftAsNextRelease() async {
     if (selectedDefinitionId == null || currentDraft == null) return;
     try {
-      final decoded =
-          Map<String, Object?>.from(jsonDecode(currentJsonText) as Map);
+      final decoded = Map<String, Object?>.from(
+        jsonDecode(currentJsonText) as Map,
+      );
       final currentVer = (decoded['releaseVersion'] as int?) ?? 1;
       final nextVer = currentVer + 1;
       decoded['releaseVersion'] = nextVer;
       const encoder = JsonEncoder.withIndent('  ');
       currentJsonText = encoder.convert(decoded);
       await saveCurrentDraft(
-          notes: 'Duplicated from v$currentVer as v$nextVer');
+        notes: 'Duplicated from v$currentVer as v$nextVer',
+      );
     } catch (e) {
       jsonValidationError = 'Failed to duplicate draft: $e';
       notifyListeners();
@@ -229,13 +242,18 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     setArea(LabArea.workers);
   }
 
-  Future<void> saveCurrentDraft(
-          {String author = 'developer', String notes = ''}) =>
-      _refresh('save-local-draft',
-          () => _saveCurrentDraft(author: author, notes: notes));
+  Future<void> saveCurrentDraft({
+    String author = 'developer',
+    String notes = '',
+  }) => _refresh(
+    'save-local-draft',
+    () => _saveCurrentDraft(author: author, notes: notes),
+  );
 
-  Future<void> _saveCurrentDraft(
-      {String author = 'developer', String notes = ''}) async {
+  Future<void> _saveCurrentDraft({
+    String author = 'developer',
+    String notes = '',
+  }) async {
     if (selectedDefinitionId == null || jsonValidationError != null) return;
     final decoded = jsonDecode(currentJsonText) as Map<String, Object?>;
     currentDraft = await store.saveDraft(
@@ -259,8 +277,9 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
   }) async {
     if (selectedDefinitionId == null || currentDraft == null) return;
     try {
-      final decoded =
-          Map<String, Object?>.from(jsonDecode(currentJsonText) as Map);
+      final decoded = Map<String, Object?>.from(
+        jsonDecode(currentJsonText) as Map,
+      );
       final tool = Map<String, Object?>.from(decoded['providerTool'] as Map);
       final ranges = tool['supportedVersions'];
       final parsed = EngineProfile.parse(utf8.encode(canonicalJson(decoded)));
@@ -283,14 +302,14 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     }
   }
 
-  Future<void> saveCurrentDraftToCloud(
-          {bool force = false,
-          String author = 'developer',
-          String notes = ''}) =>
-      _refresh(
-          'save-draft',
-          () => _saveCurrentDraftToCloud(
-              force: force, author: author, notes: notes));
+  Future<void> saveCurrentDraftToCloud({
+    bool force = false,
+    String author = 'developer',
+    String notes = '',
+  }) => _refresh(
+    'save-draft',
+    () => _saveCurrentDraftToCloud(force: force, author: author, notes: notes),
+  );
 
   Future<void> _saveCurrentDraftToCloud({
     bool force = false,
@@ -338,7 +357,8 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
               releaseVersion: currentDraft!.releaseVersion,
               profile: Map<String, dynamic>.from(decoded),
             );
-      final newDigest = (resp['payloadDigest'] as String?) ??
+      final newDigest =
+          (resp['payloadDigest'] as String?) ??
           (resp['digest'] as String?) ??
           currentDraft!.payloadDigest;
       baseCloudDigest = newDigest;
@@ -393,65 +413,66 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
 
   /// Creates an unsigned local candidate from the selected Cloud definition.
   Future<void> createInitialDraft() => _refresh('initial-draft', () async {
-        final worker = selectedCloudWorker;
-        final definition = selectedCloudDefinition;
-        final id = selectedDefinitionId;
-        if (worker == null ||
-            definition == null ||
-            id == null ||
-            currentDraft != null ||
-            cloudReleases.isNotEmpty) {
-          return;
-        }
-        if (await store.loadDraft(id) != null) {
-          await selectDraft(id);
-          return;
-        }
-        final starter = definition['starterTemplate'];
-        if (starter != null) {
-          if (starter is! Map ||
-              starter['schemaVersion'] != 1 ||
-              starter['profile'] is! Map) {
-            throw StateError('Unsupported starter template');
-          }
-          final payload = Map<String, Object?>.from(
-              jsonDecode(jsonEncode(starter['profile'])) as Map);
-          if (payload['profileDefinitionId'] != id ||
-              payload['logicalWorkerTypeId'] != worker['workerTypeId'] ||
-              payload['releaseVersion'] != 1 ||
-              ((payload['providerTool'] as Map?)?['executableCandidates']
-                          as List?)
-                      ?.contains(definition['providerToolName']) !=
-                  true) {
-            throw StateError(
-                'Starter template does not match the selected Worker');
-          }
-          final migrated = migrateProfilePayload(payload);
-          await store.saveDraft(
-              profileDefinitionId: id,
-              profileJson: migrated ?? payload,
-              notes: migrated == null
-                  ? 'Created from Cloud starter template'
-                  : 'Created from Cloud starter template and migrated legacy ChatGPT model discovery.');
-          draftDefinitionIds = await store.listDraftDefinitionIds();
-          if (selectedDefinitionId == id) {
-            await selectDraft(id);
-          }
-        } else {
-          await createNewDraft(
-              profileDefinitionId: id,
-              workerTypeId: worker['workerTypeId'] as String,
-              providerToolName: definition['providerToolName'] as String,
-              activate: false);
-          draftDefinitionIds = await store.listDraftDefinitionIds();
-          if (selectedDefinitionId == id) {
-            await selectDraft(id);
-          }
-        }
-        if (selectedDefinitionId == id) {
-          setWorkerSubView(WorkerSubView.draftAndTest);
-        }
-      });
+    final worker = selectedCloudWorker;
+    final definition = selectedCloudDefinition;
+    final id = selectedDefinitionId;
+    if (worker == null ||
+        definition == null ||
+        id == null ||
+        currentDraft != null ||
+        cloudReleases.isNotEmpty) {
+      return;
+    }
+    if (await store.loadDraft(id) != null) {
+      await selectDraft(id);
+      return;
+    }
+    final starter = definition['starterTemplate'];
+    if (starter != null) {
+      if (starter is! Map ||
+          starter['schemaVersion'] != 1 ||
+          starter['profile'] is! Map) {
+        throw StateError('Unsupported starter template');
+      }
+      final payload = Map<String, Object?>.from(
+        jsonDecode(jsonEncode(starter['profile'])) as Map,
+      );
+      if (payload['profileDefinitionId'] != id ||
+          payload['logicalWorkerTypeId'] != worker['workerTypeId'] ||
+          payload['releaseVersion'] != 1 ||
+          ((payload['providerTool'] as Map?)?['executableCandidates'] as List?)
+                  ?.contains(definition['providerToolName']) !=
+              true) {
+        throw StateError('Starter template does not match the selected Worker');
+      }
+      final migrated = migrateProfilePayload(payload);
+      await store.saveDraft(
+        profileDefinitionId: id,
+        profileJson: migrated ?? payload,
+        notes: migrated == null
+            ? 'Created from Cloud starter template'
+            : 'Created from Cloud starter template and migrated legacy ChatGPT model discovery.',
+      );
+      draftDefinitionIds = await store.listDraftDefinitionIds();
+      if (selectedDefinitionId == id) {
+        await selectDraft(id);
+      }
+    } else {
+      await createNewDraft(
+        profileDefinitionId: id,
+        workerTypeId: worker['workerTypeId'] as String,
+        providerToolName: definition['providerToolName'] as String,
+        activate: false,
+      );
+      draftDefinitionIds = await store.listDraftDefinitionIds();
+      if (selectedDefinitionId == id) {
+        await selectDraft(id);
+      }
+    }
+    if (selectedDefinitionId == id) {
+      setWorkerSubView(WorkerSubView.draftAndTest);
+    }
+  });
 
   Future<void> createNewDraft({
     required String profileDefinitionId,
@@ -474,13 +495,13 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
           'arguments': ['--version'],
           'timeoutMs': 10000,
           'source': 'stdout',
-          'extract': {'kind': 'regex_capture', 'patternId': 'semver'}
+          'extract': {'kind': 'regex_capture', 'patternId': 'semver'},
         },
         'supportedVersions': <Map<String, String>>[],
       },
       'environment': {
         'passthrough': ['PATH', 'HOME'],
-        'set': {}
+        'set': {},
       },
       'probe': {
         'passive': {
@@ -490,48 +511,48 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
               'arguments': ['--version'],
               'timeoutMs': 5000,
               'successExitCodes': [0],
-              'failureIssueCode': 'provider_authentication_required'
-            }
+              'failureIssueCode': 'provider_authentication_required',
+            },
           ],
-          'configChecks': []
-        }
+          'configChecks': [],
+        },
       },
       'execution': {
         'arguments': ['run', '{{prompt}}'],
         'stdin': {'mode': 'raw_text', 'value': '{{prompt}}'},
         'output': {'mode': 'plain_text'},
-        'events': []
+        'events': [],
       },
       'session': {
         'supported': false,
         'formatId': 'session-v1',
         'compatibleFormatIds': ['session-v1'],
         'resumeArguments': [],
-        'requireObservedIdMatch': false
+        'requireObservedIdMatch': false,
       },
       'model': {
         'supported': false,
         'arguments': [],
-        'unknownModelPolicy': 'pass_through'
+        'unknownModelPolicy': 'pass_through',
       },
       'timeout': {'providerArguments': [], 'providerReserveMs': 0},
       'sandbox': {
         'mappings': {
           'restricted': [],
           'provider_default': [],
-          'full_access': []
-        }
+          'full_access': [],
+        },
       },
       'progress': [],
       'errors': {
         'mappings': [
           {
             'evidence': {'kind': 'exit_code', 'value': 2},
-            'issueCode': 'provider_failure'
-          }
-        ]
+            'issueCode': 'provider_failure',
+          },
+        ],
       },
-      'compatibilityOverrides': []
+      'compatibilityOverrides': [],
     };
 
     await store.saveDraft(
@@ -559,8 +580,10 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     const locator = CliExecutableLocator();
     final standardPathsByExecutable = <String, Set<String>>{};
 
-    void addExecutable(Object? value,
-        {Iterable<String> standardPaths = const []}) {
+    void addExecutable(
+      Object? value, {
+      Iterable<String> standardPaths = const [],
+    }) {
       if (value is! String || value.trim().isEmpty) return;
       final executable = value.trim();
       final paths = standardPathsByExecutable.putIfAbsent(
@@ -579,10 +602,10 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       final discovery = providerTool['discovery'];
       final standardPaths =
           discovery is Map && discovery['standardLocations'] is List
-              ? (discovery['standardLocations'] as List)
-                  .whereType<String>()
-                  .toList(growable: false)
-              : const <String>[];
+          ? (discovery['standardLocations'] as List).whereType<String>().toList(
+              growable: false,
+            )
+          : const <String>[];
       addExecutable(providerTool['name'], standardPaths: standardPaths);
       final candidates = providerTool['executableCandidates'];
       if (candidates is List) {
