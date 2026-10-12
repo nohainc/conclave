@@ -15,7 +15,7 @@ describe("profile selection projection", () => {
     );
     const parsed = parseProfile(candidate);
     expect(parsed.profile.probe.live?.requiredForReadiness).toBe(true);
-    expect(parsed.profile.model.discovery?.idPrefix).toBe("gemini-");
+    expect(parsed.profile.model.discovery?.idPrefix).toBe("");
   });
   it("keeps per-model efforts and filters out non-allowlisted entries", () => {
     const result = spaceModelOptions(

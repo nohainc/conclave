@@ -14,7 +14,7 @@ store as ChatGPT. There is no Gemini executable or provider branch in Cloud.
 | Version | `--version` | `--version` |
 | Passive authentication | `login status` | No reliable passive authentication assertion; explicit live test required |
 | Live readiness | Exact `OK`, bounded, user initiated | Same Engine-owned check |
-| Models | Workspace CLI discovery, published through Cloud inventory | CLI `models`, signed prefix filter, exact IDs |
+| Models | Workspace CLI discovery, published through Cloud inventory | CLI `models`, all sanitized IDs, with exact Gemini family mappings where declared |
 | Effort | Workspace CLI discovery, per-model metadata | CLI-reported effort values are passed through; missing metadata means no effort picker |
 | Input / output | Codex JSONL events | NDJSON `user` input; `init`, `step_update`, `result` events |
 | Sessions | Codex thread ID | AGY `conversation_id`, resumed with `--conversation` |
@@ -34,15 +34,18 @@ progress/result/error frames. Native session identifiers remain local.
 `model.discovery` is an optional version 1 generic declaration:
 
 ```json
-{"schemaVersion":1,"arguments":["models"],"timeoutMs":10000,"format":"tsv","idPrefix":"gemini-"}
+{"schemaVersion":1,"arguments":["models"],"timeoutMs":10000,"format":"tsv","idPrefix":""}
 ```
 
 The Engine runs this command on the resolved provider executable without a shell
 or model request. It accepts bounded tab-separated ID/name rows with optional
 comma-separated effort IDs and a default effort, preserves IDs, rejects
-malformed/duplicate IDs and filters by the signed prefix. Both the catalog and
-execution request use a 128-character ID limit, with at most 128 models and 64
-KiB CLI output. The Engine never invents model or effort values.
+malformed/duplicate IDs and includes every returned model when the Profile's
+prefix is empty. The Profile's exact Gemini family mapping still groups native
+effort variants into one logical family; other provider models remain separate
+native selections. Both the catalog and execution request use the 128-character
+ID limit, with at most 128 models and 64 KiB CLI output. The Engine never
+invents model or effort values.
 
 The last successful catalog is stored in `model-catalog.json` under the Worker's
 internal Engine state directory. It is bound to the exact Profile payload digest
@@ -75,7 +78,7 @@ valid. The new Profile requires Engine 1.2.0 so it cannot accidentally run under
 an older implementation. Cloud stores bounded public discovery metadata in
 `workspace_worker_inventory.model_catalog_json`; public options identify the
 source as `provider_catalog`. Cloud requires the same published release digest
-and CLI version and applies the signed prefix again. Private CLI arguments,
+and CLI version and applies the Profile's discovery prefix again. Private CLI arguments,
 credential settings, local paths, and profile digests are not exposed in model
 picker options.
 
@@ -180,9 +183,9 @@ The Gemini starter template was initially updated remotely using the authoring-o
 hosted rollout applied both pending migrations through the migration ledger.
 
 Profile Lab now discovers models through passive generic Engine probes after
-verifying a signed Stable Profile, rather than skipping dynamic Profiles with
+admitting the current Worker Profile, rather than skipping dynamic Profiles with
 no fixed allowlist. It filters unavailable IDs and checks the Profile digest
-and signed prefix. Discovery consumes no model requests. The bundled generic
+and Profile discovery prefix. Discovery consumes no model requests. The bundled generic
 Engine was regenerated at 1.3.0. Rebuild Profile Lab to receive these changes.
 The AI selector still requires an approved signed Stable Gemini release; merely
 adding a Worker or installing AGY does not authorize an unsigned model runner.

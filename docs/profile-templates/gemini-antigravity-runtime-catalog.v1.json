@@ -223,7 +223,7 @@
       ],
       "timeoutMs": 10000,
       "format": "tsv",
-      "idPrefix": "gemini-"
+      "idPrefix": ""
     },
     "selectionMapping": {
       "schemaVersion": 1,

@@ -115,6 +115,43 @@ gpt-oss-120b-medium\tGPT-OSS 120B (Medium)
     expect(models.single.defaultReasoningEffort, 'low');
   });
 
+  test('an unrestricted AGY profile exposes every CLI model', () {
+    const output = '''
+gemini-3.8-flash-high\tGemini 3.8 Flash (High)
+gemini-3.8-flash-medium\tGemini 3.8 Flash (Medium)
+gemini-3.8-flash-low\tGemini 3.8 Flash (Low)
+claude-opus-5-5-low\tClaude Opus 5.5 (Low)
+claude-opus-5-5-medium\tClaude Opus 5.5 (Medium)
+claude-opus-5-5-high\tClaude Opus 5.5 (High)
+gpt-oss-120b-medium\tGPT-OSS 120B (Medium)
+''';
+    final native = parseDiscoveredModels(output, '');
+    final mapping = {
+      'schemaVersion': 1,
+      'models': [
+        {
+          'id': 'gemini-3.8-flash',
+          'name': 'Gemini 3.8 Flash',
+          'variants': [
+            {'nativeId': 'gemini-3.8-flash-low', 'effort': 'low'},
+            {'nativeId': 'gemini-3.8-flash-medium', 'effort': 'medium'},
+            {'nativeId': 'gemini-3.8-flash-high', 'effort': 'high'},
+          ],
+        },
+      ],
+    };
+    final models = normalizeCombinedModels(native, mapping, '1.3.3');
+    expect(models.map((model) => model.id), [
+      'gemini-3.8-flash',
+      'claude-opus-5-5-low',
+      'claude-opus-5-5-medium',
+      'claude-opus-5-5-high',
+      'gpt-oss-120b-medium',
+    ]);
+    expect(models.first.supportedReasoningEfforts, ['low', 'medium', 'high']);
+    expect(models.skip(1).every((model) => model.nativeId == model.id), isTrue);
+  });
+
   test(
     'Codex discovery preserves logical and native identities independently',
     () {

@@ -221,7 +221,7 @@
         "models"
       ],
       "format": "tsv",
-      "idPrefix": "gemini-",
+    "idPrefix": "",
       "schemaVersion": 1,
       "timeoutMs": 10000
     },
