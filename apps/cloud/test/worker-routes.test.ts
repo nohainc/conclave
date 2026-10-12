@@ -231,7 +231,6 @@ describe("Worker API routes", () => {
     expect(await response.json()).toEqual({
       revokedKeyIds: [],
       revokedWorkspaceReleases: [],
-      revokedToolProfiles: [],
     });
     expect(prepare).toHaveBeenCalledTimes(2);
   });

@@ -1,14 +1,9 @@
-import {
-  canonicalReleaseJson,
-  signEd25519ReleaseMessage,
-  verifyEd25519ReleaseSignature,
-} from "./release-trust.js";
+import { canonicalJson } from "./canonical-json.js";
 import type { ToolProfileV1 } from "@conclave/tool-profile";
 import {
   ToolProfileRegistryError,
   parseProfile,
   profileDigest,
-  workerProfileSigningMessage,
   validateId,
   validateWorkerProfilePublicationEvidence,
   validateProviderCompatibilityForPublication,
@@ -25,72 +20,6 @@ export type {
   ToolProfileRegistryEnvironment,
   WorkerProfilePublicationEvidence,
 } from "./tool-profile-validation.js";
-
-export interface ToolProfileSigningPreflight {
-  readonly ready: boolean;
-  readonly publisher?: string;
-  readonly signingKeyId?: string;
-  readonly issues: readonly (
-    | "publisher_missing"
-    | "signing_key_id_missing"
-    | "private_key_missing"
-    | "trust_roots_missing"
-    | "signer_trust_mismatch"
-    | "signing_key_revoked"
-    | "revocation_check_failed"
-  )[];
-}
-
-const signingPreflightMessage =
-  "conclave-tool-profile-signing-preflight-v1\\nconclave";
-
-export async function toolProfileSigningPreflight(
-  env: ToolProfileRegistryEnvironment,
-): Promise<ToolProfileSigningPreflight> {
-  const publisher = env.CONCLAVE_RELEASE_PUBLISHER?.trim();
-  const signingKeyId = env.CONCLAVE_RELEASE_SIGNING_KEY_ID?.trim();
-  const privateKey = env.CONCLAVE_RELEASE_PRIVATE_KEY?.trim();
-  const trustKeysJson = env.CONCLAVE_RELEASE_TRUST_KEYS_JSON?.trim();
-  const issues: ToolProfileSigningPreflight["issues"][number][] = [];
-  if (!publisher) issues.push("publisher_missing");
-  if (!signingKeyId) issues.push("signing_key_id_missing");
-  if (!privateKey) issues.push("private_key_missing");
-  if (!trustKeysJson) issues.push("trust_roots_missing");
-  if (publisher && signingKeyId && privateKey && trustKeysJson) {
-    try {
-      const signature = signEd25519ReleaseMessage({
-        privateKeyBase64OrPem: privateKey,
-        message: signingPreflightMessage,
-      });
-      const trusted = await verifyEd25519ReleaseSignature({
-        trustKeysJson,
-        publisher,
-        signingKeyId,
-        signature,
-        message: signingPreflightMessage,
-      });
-      if (!trusted) issues.push("signer_trust_mismatch");
-    } catch {
-      issues.push("signer_trust_mismatch");
-    }
-    try {
-      const revoked = await env.CONCLAVE_DB.prepare(
-        "SELECT key_id FROM release_signing_key_revocations WHERE key_id = ?1",
-      )
-        .bind(signingKeyId)
-        .first<{ key_id: string }>();
-      if (revoked) issues.push("signing_key_revoked");
-    } catch {
-      issues.push("revocation_check_failed");
-    }
-  }
-  return {
-    ready: issues.length === 0,
-    ...(publisher ? { publisher } : {}),
-    ...(signingKeyId ? { signingKeyId } : {}),
-    issues,
-  };
-}
 
 // V9 Worker Profile registry
 // ---------------------------------------------------------------------------
@@ -116,12 +45,8 @@ export interface WorkerProfileSnapshot {
   profile: ToolProfileV1;
   revision: number;
   digest: string;
-  signature: string;
-  signingKeyId: string;
-  publisher: string;
   updatedByUserId: string | null;
   updatedAt: string;
-  verified: boolean;
 }
 
 export interface WorkerProfileHistorySnapshot extends WorkerProfileSnapshot {
@@ -136,8 +61,6 @@ interface CurrentWorkerProfileRow {
   profile_json: string;
   revision: number;
   digest: string;
-  signature: string;
-  signing_key_id: string;
   updated_by_user_id: string | null;
   updated_at: string;
 }
@@ -186,34 +109,21 @@ function parseCurrentWorkerProfile(
   return parsed.profile;
 }
 
-async function verifyWorkerProfileSnapshot(
-  env: ToolProfileRegistryEnvironment,
+async function assertWorkerProfileDigest(
   row: CurrentWorkerProfileRow,
   profile: ToolProfileV1,
-): Promise<boolean> {
+): Promise<void> {
   const actualDigest = await profileDigest(canonicalProfilePayload(profile));
-  if (actualDigest !== row.digest) return false;
-  const publisher = env.CONCLAVE_RELEASE_PUBLISHER?.trim();
-  if (!publisher) return false;
-  const v9Verified = await verifyEd25519ReleaseSignature({
-    trustKeysJson: env.CONCLAVE_RELEASE_TRUST_KEYS_JSON,
-    publisher,
-    signingKeyId: row.signing_key_id,
-    signature: row.signature,
-    message: workerProfileSigningMessage({
-      publisher,
-      signingKeyId: row.signing_key_id,
-      workerTypeId: row.worker_type_id,
-      revision: row.revision,
-      schemaVersion: row.schema_version,
-      payloadDigest: row.digest,
-    }),
-  });
-  return v9Verified;
+  if (actualDigest !== row.digest) {
+    throw new ToolProfileRegistryError(
+      409,
+      "The current Worker Profile digest does not match its canonical JSON",
+    );
+  }
 }
 
 function canonicalProfilePayload(profile: ToolProfileV1): string {
-  return canonicalReleaseJson(profile);
+  return canonicalJson(profile);
 }
 
 export async function listWorkerProfiles(
@@ -282,7 +192,7 @@ async function loadCurrentWorkerProfileRow(
   return db
     .prepare(
       `SELECT worker_type_id, schema_version, profile_json, revision,
-              digest, signature, signing_key_id, updated_by_user_id, updated_at
+              digest, updated_by_user_id, updated_at
          FROM worker_profiles
         WHERE worker_type_id = ?1`,
     )
@@ -317,25 +227,15 @@ export async function getCurrentWorkerProfile(
     );
   }
   const profile = parseCurrentWorkerProfile(row);
-  const verified = await verifyWorkerProfileSnapshot(env, row, profile);
-  if (!verified) {
-    throw new ToolProfileRegistryError(
-      409,
-      "The current Worker Profile failed digest or signature verification",
-    );
-  }
+  await assertWorkerProfileDigest(row, profile);
   return {
     workerTypeId: row.worker_type_id,
     schemaVersion: row.schema_version,
     profile,
     revision: row.revision,
     digest: row.digest,
-    signature: row.signature,
-    signingKeyId: row.signing_key_id,
-    publisher: env.CONCLAVE_RELEASE_PUBLISHER?.trim() ?? "",
     updatedByUserId: row.updated_by_user_id,
     updatedAt: row.updated_at,
-    verified,
   };
 }
 
@@ -347,7 +247,7 @@ export async function listWorkerProfileHistory(
   await requireWorkerCatalogRow(env.CONCLAVE_DB, workerTypeId);
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT worker_type_id, schema_version, profile_json, revision,
-              digest, signature, signing_key_id, actor_user_id,
+              digest, actor_user_id,
               published_at, restoration_reason
          FROM worker_profile_history
         WHERE worker_type_id = ?1
@@ -361,8 +261,6 @@ export async function listWorkerProfileHistory(
       profile_json: string;
       revision: number;
       digest: string;
-      signature: string;
-      signing_key_id: string;
       actor_user_id: string | null;
       published_at: string;
       restoration_reason: string | null;
@@ -376,21 +274,16 @@ export async function listWorkerProfileHistory(
           profile_json: row.profile_json,
           revision: row.revision,
           digest: row.digest,
-          signature: row.signature,
-          signing_key_id: row.signing_key_id,
           updated_by_user_id: row.actor_user_id,
           updated_at: row.published_at,
         });
-        const verified = await verifyWorkerProfileSnapshot(
-          env,
+        await assertWorkerProfileDigest(
           {
             worker_type_id: row.worker_type_id,
             schema_version: row.schema_version,
             profile_json: row.profile_json,
             revision: row.revision,
             digest: row.digest,
-            signature: row.signature,
-            signing_key_id: row.signing_key_id,
             updated_by_user_id: row.actor_user_id,
             updated_at: row.published_at,
           },
@@ -402,12 +295,8 @@ export async function listWorkerProfileHistory(
           profile,
           revision: row.revision,
           digest: row.digest,
-          signature: row.signature,
-          signingKeyId: row.signing_key_id,
-          publisher: env.CONCLAVE_RELEASE_PUBLISHER?.trim() ?? "",
           updatedByUserId: row.actor_user_id,
           updatedAt: row.published_at,
-          verified,
           actorUserId: row.actor_user_id,
           publishedAt: row.published_at,
           restorationReason: row.restoration_reason,
@@ -471,8 +360,6 @@ async function persistWorkerProfileSnapshot(args: {
   profile: ToolProfileV1;
   canonicalJson: string;
   digest: string;
-  signature: string;
-  signingKeyId: string;
   actorUserId: string;
   updatedAt: string;
   restorationReason: string | null;
@@ -496,8 +383,8 @@ async function persistWorkerProfileSnapshot(args: {
       .prepare(
         `INSERT INTO worker_profiles
            (worker_type_id, schema_version, profile_json, revision, digest,
-            signature, signing_key_id, updated_by_user_id, updated_at)
-         VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6, ?7, ?8)
+            updated_by_user_id, updated_at)
+         VALUES (?1, ?2, ?3, 1, ?4, ?5, ?6)
          ON CONFLICT(worker_type_id) DO NOTHING`,
       )
       .bind(
@@ -505,8 +392,6 @@ async function persistWorkerProfileSnapshot(args: {
         args.profile.schemaVersion,
         args.canonicalJson,
         args.digest,
-        args.signature,
-        args.signingKeyId,
         args.actorUserId,
         args.updatedAt,
       )
@@ -525,10 +410,9 @@ async function persistWorkerProfileSnapshot(args: {
       .prepare(
         `INSERT INTO worker_profile_history
            (worker_type_id, revision, schema_version, profile_json, digest,
-            signature, signing_key_id, actor_user_id, published_at,
-            restoration_reason)
+            actor_user_id, published_at, restoration_reason)
          SELECT worker_type_id, revision, schema_version, profile_json, digest,
-                signature, signing_key_id, updated_by_user_id, updated_at, ?4
+                updated_by_user_id, updated_at, ?4
            FROM worker_profiles
           WHERE worker_type_id = ?1 AND revision = ?2 AND digest = ?3`,
       )
@@ -542,17 +426,14 @@ async function persistWorkerProfileSnapshot(args: {
       .prepare(
         `UPDATE worker_profiles
             SET schema_version = ?1, profile_json = ?2, revision = ?3,
-                digest = ?4, signature = ?5, signing_key_id = ?6,
-                updated_by_user_id = ?7, updated_at = ?8
-          WHERE worker_type_id = ?9 AND revision = ?10 AND digest = ?11`,
+                digest = ?4, updated_by_user_id = ?5, updated_at = ?6
+          WHERE worker_type_id = ?7 AND revision = ?8 AND digest = ?9`,
       )
       .bind(
         args.profile.schemaVersion,
         args.canonicalJson,
         nextRevision,
         args.digest,
-        args.signature,
-        args.signingKeyId,
         args.actorUserId,
         args.updatedAt,
         args.workerTypeId,
@@ -598,47 +479,6 @@ export async function publishWorkerProfile(args: {
   if ((current?.revision ?? 0) !== args.expectedRevision) {
     throw new ToolProfileRegistryError(409, "Worker Profile revision is stale");
   }
-  const preflight = await toolProfileSigningPreflight(args.env);
-  if (!preflight.ready) {
-    throw new ToolProfileRegistryError(
-      503,
-      `Worker Profile signing is not ready (${preflight.issues.join(", ")})`,
-    );
-  }
-  const publisher = preflight.publisher!;
-  const signingKeyId = preflight.signingKeyId!;
-  const revision = (current?.revision ?? 0) + 1;
-  const signature = signEd25519ReleaseMessage({
-    privateKeyBase64OrPem: args.env.CONCLAVE_RELEASE_PRIVATE_KEY!,
-    message: workerProfileSigningMessage({
-      publisher,
-      signingKeyId,
-      workerTypeId: args.workerTypeId,
-      revision,
-      schemaVersion: validated.profile.schemaVersion,
-      payloadDigest: validated.digest,
-    }),
-  });
-  const signatureValid = await verifyEd25519ReleaseSignature({
-    trustKeysJson: args.env.CONCLAVE_RELEASE_TRUST_KEYS_JSON,
-    publisher,
-    signingKeyId,
-    signature,
-    message: workerProfileSigningMessage({
-      publisher,
-      signingKeyId,
-      workerTypeId: args.workerTypeId,
-      revision,
-      schemaVersion: validated.profile.schemaVersion,
-      payloadDigest: validated.digest,
-    }),
-  });
-  if (!signatureValid) {
-    throw new ToolProfileRegistryError(
-      500,
-      "Cloud signing boundary failed to produce a valid Worker Profile signature",
-    );
-  }
   await persistWorkerProfileSnapshot({
     env: args.env,
     workerTypeId: args.workerTypeId,
@@ -647,8 +487,6 @@ export async function publishWorkerProfile(args: {
     profile: validated.profile,
     canonicalJson: validated.canonicalJson,
     digest: validated.digest,
-    signature,
-    signingKeyId,
     actorUserId: args.actorUserId,
     updatedAt: new Date().toISOString(),
     restorationReason: null,
@@ -680,7 +518,7 @@ export async function restoreWorkerProfile(args: {
   }
   const history = await args.env.CONCLAVE_DB.prepare(
     `SELECT worker_type_id, schema_version, profile_json, revision,
-              digest, signature, signing_key_id, actor_user_id,
+              digest, actor_user_id,
               published_at AS updated_at
          FROM worker_profile_history
         WHERE worker_type_id = ?1 AND revision = ?2`,
@@ -690,58 +528,12 @@ export async function restoreWorkerProfile(args: {
   if (!history)
     throw new ToolProfileRegistryError(404, "Profile revision was not found");
   const profile = parseCurrentWorkerProfile(history);
-  if (!(await verifyWorkerProfileSnapshot(args.env, history, profile))) {
-    throw new ToolProfileRegistryError(
-      409,
-      "The historical Worker Profile failed digest or signature verification",
-    );
-  }
+  await assertWorkerProfileDigest(history, profile);
   const validated = await validateWorkerProfileCandidate(
     args.workerTypeId,
     profile,
     history.digest,
   );
-  const preflight = await toolProfileSigningPreflight(args.env);
-  if (!preflight.ready) {
-    throw new ToolProfileRegistryError(
-      503,
-      `Worker Profile signing is not ready (${preflight.issues.join(", ")})`,
-    );
-  }
-  const publisher = preflight.publisher!;
-  const signingKeyId = preflight.signingKeyId!;
-  const nextRevision = current.revision + 1;
-  const signature = signEd25519ReleaseMessage({
-    privateKeyBase64OrPem: args.env.CONCLAVE_RELEASE_PRIVATE_KEY!,
-    message: workerProfileSigningMessage({
-      publisher,
-      signingKeyId,
-      workerTypeId: args.workerTypeId,
-      revision: nextRevision,
-      schemaVersion: validated.profile.schemaVersion,
-      payloadDigest: validated.digest,
-    }),
-  });
-  const signatureValid = await verifyEd25519ReleaseSignature({
-    trustKeysJson: args.env.CONCLAVE_RELEASE_TRUST_KEYS_JSON,
-    publisher,
-    signingKeyId,
-    signature,
-    message: workerProfileSigningMessage({
-      publisher,
-      signingKeyId,
-      workerTypeId: args.workerTypeId,
-      revision: nextRevision,
-      schemaVersion: validated.profile.schemaVersion,
-      payloadDigest: validated.digest,
-    }),
-  });
-  if (!signatureValid) {
-    throw new ToolProfileRegistryError(
-      500,
-      "Cloud signing boundary failed to produce a valid Worker Profile signature",
-    );
-  }
   await persistWorkerProfileSnapshot({
     env: args.env,
     workerTypeId: args.workerTypeId,
@@ -750,8 +542,6 @@ export async function restoreWorkerProfile(args: {
     profile: validated.profile,
     canonicalJson: validated.canonicalJson,
     digest: validated.digest,
-    signature,
-    signingKeyId,
     actorUserId: args.actorUserId,
     updatedAt: new Date().toISOString(),
     restorationReason: args.restorationReason,

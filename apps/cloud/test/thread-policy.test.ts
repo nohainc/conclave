@@ -86,7 +86,7 @@ describe("Thread authored context", () => {
   );
 });
 
-it("validates selected effort and models against the selected signed Profile", async () => {
+it("validates selected effort and models against the selected Worker Profile", async () => {
   const { validateWorkflowWorkerEligibility } =
     await import("../src/routes/thread-policy.js");
   const { BUILTIN_WORKFLOWS } = await import("@conclave/core");

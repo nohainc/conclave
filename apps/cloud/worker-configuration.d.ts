@@ -7,9 +7,7 @@ interface __BaseEnv_Env {
 	CONCLAVE_EMAIL: SendEmail;
 	CONCLAVE_PROFILE_LAB_OWNER_EMAIL: "vitalii@nohainc.com";
 	CONCLAVE_ENVIRONMENT: "development";
-	CONCLAVE_RELEASE_PRIVATE_KEY: string;
 	CONCLAVE_RELEASE_PUBLISHER: string;
-	CONCLAVE_RELEASE_SIGNING_KEY_ID: string;
 	CONCLAVE_RELEASE_TRUST_KEYS_JSON: string;
 	BETTER_AUTH_SECRET: string;
 	CONCLAVE_WORKSPACE_GATEWAY: DurableObjectNamespace<import("./src/index").WorkspaceGateway>;
@@ -29,7 +27,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "CONCLAVE_PROFILE_LAB_OWNER_EMAIL" | "CONCLAVE_ENVIRONMENT" | "CONCLAVE_RELEASE_PRIVATE_KEY" | "CONCLAVE_RELEASE_PUBLISHER" | "CONCLAVE_RELEASE_SIGNING_KEY_ID" | "CONCLAVE_RELEASE_TRUST_KEYS_JSON" | "BETTER_AUTH_SECRET">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "CONCLAVE_PROFILE_LAB_OWNER_EMAIL" | "CONCLAVE_ENVIRONMENT" | "CONCLAVE_RELEASE_PUBLISHER" | "CONCLAVE_RELEASE_TRUST_KEYS_JSON" | "BETTER_AUTH_SECRET">> {}
 }
 declare module "*.txt" {
 	const value: string;

@@ -19,6 +19,7 @@ describe("Worker Profile V9 cleanup migration", () => {
             "0043_worker_profiles_v9.sql",
             "0044_remove_v8_profile_lifecycle.sql",
             "0046_worker_catalog_profile_identity.sql",
+            "0047_remove_worker_profile_signatures.sql",
           ]
             .map(migration)
             .join("\n") +
@@ -40,14 +41,18 @@ describe("Worker Profile V9 cleanup migration", () => {
             "0043_worker_profiles_v9.sql",
             "0044_remove_v8_profile_lifecycle.sql",
             "0046_worker_catalog_profile_identity.sql",
+            "0047_remove_worker_profile_signatures.sql",
           ]
             .map(migration)
-            .join("\n") + "\nPRAGMA table_info(worker_catalog);",
+            .join("\n") + "\nPRAGMA table_info(worker_profiles);",
         encoding: "utf8",
       }),
     ) as Array<{ name: string }>;
     expect(columns.map((column) => column.name)).toEqual(
-      expect.arrayContaining(["profile_definition_id", "provider_tool_name"]),
+      expect.arrayContaining(["worker_type_id", "profile_json", "digest"]),
+    );
+    expect(columns.map((column) => column.name)).not.toEqual(
+      expect.arrayContaining(["signature", "signing_key_id"]),
     );
   });
 });

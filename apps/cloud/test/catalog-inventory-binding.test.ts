@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import { recordWorkspaceWorkerInventory } from "../src/workspace-gateway/inventory.js";
 
-it("binds catalog ingestion to the signed V9 Profile revision and tool version", async () => {
+it("binds catalog ingestion to the current V9 Profile revision and tool version", async () => {
   const { sqlite, db } = sqliteD1();
   try {
     sqlite.exec(
@@ -24,13 +24,22 @@ it("binds catalog ingestion to the signed V9 Profile revision and tool version",
         "utf8",
       ),
     );
+    sqlite.exec(
+      readFileSync(
+        new URL(
+          "../migrations-v8/0047_remove_worker_profile_signatures.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     sqlite.exec(`INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES ('u','u@test','U','now','now');
       INSERT INTO execution_workspaces(id,owner_user_id,name,status,created_at,updated_at) VALUES ('ws','u','Workspace','online','now','now');
       INSERT INTO worker_catalog(worker_type_id,display_name,created_at,updated_at) VALUES ('provider','Provider','now','now');`);
     const digest = "a".repeat(64);
     sqlite
       .prepare(
-        `INSERT INTO worker_profiles(worker_type_id,schema_version,profile_json,revision,digest,signature,signing_key_id,updated_at) VALUES ('provider',1,'{"schemaVersion":1}',1,?,'test-signature','test-key','now')`,
+        `INSERT INTO worker_profiles(worker_type_id,schema_version,profile_json,revision,digest,updated_at) VALUES ('provider',1,'{"schemaVersion":1}',1,?,'now')`,
       )
       .run(digest);
     const worker = {

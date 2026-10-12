@@ -110,7 +110,7 @@ export async function recordWorkspaceWorkerInventory(
       WorkspaceWorkerInventoryEntrySchema.shape.modelCatalog.safeParse(
         item.modelCatalog,
       );
-    // Inventory credentials identify the Workspace; the signed Profile
+    // Inventory credentials identify the Workspace; the current Profile
     // snapshot binds capability metadata to this Worker and exact revision.
     let acceptedCatalog = validatedCatalog.success
       ? validatedCatalog.data

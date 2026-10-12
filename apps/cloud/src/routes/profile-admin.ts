@@ -7,7 +7,6 @@ import {
   listWorkerProfiles,
   publishWorkerProfile,
   restoreWorkerProfile,
-  toolProfileSigningPreflight,
   validateWorkerProfileCandidate,
 } from "../worker-profile-registry.js";
 import type { SecurityEnv } from "./http-security.js";
@@ -116,12 +115,8 @@ function snapshotResponse(
     profile: snapshot.profile,
     revision: snapshot.revision,
     digest: snapshot.digest,
-    signature: snapshot.signature,
-    signingKeyId: snapshot.signingKeyId,
-    publisher: snapshot.publisher,
     updatedByUserId: snapshot.updatedByUserId,
     updatedAt: snapshot.updatedAt,
-    verified: snapshot.verified,
   };
 }
 
@@ -284,7 +279,6 @@ export async function handleProfileLabAccess(
 ): Promise<Response> {
   const actor = await securityContext(request, env, ctx);
   const profilesAdmin = await hasProfileLabPermission(env, actor);
-  const signer = profilesAdmin ? await toolProfileSigningPreflight(env) : null;
   const issueSupport = (env.CONCLAVE_ISSUE_SUPPORT_USER_IDS ?? "")
     .split(",")
     .map((id) => id.trim())
@@ -296,10 +290,6 @@ export async function handleProfileLabAccess(
       authenticated: true,
       audience: actor.audience ?? null,
       permissions: { profilesAdmin, issueSupport },
-      signer: {
-        ready: signer?.ready ?? false,
-        issues: signer?.issues ?? [],
-      },
     }),
     {
       headers: {

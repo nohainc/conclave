@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { generateEd25519ReleaseKeyPair } from "../src/release-trust.js";
 import {
   getCurrentWorkerProfile,
   listWorkerProfileHistory,
@@ -63,6 +62,15 @@ function setup() {
       "utf8",
     ),
   );
+  sqlite.exec(
+    readFileSync(
+      new URL(
+        "../migrations-v8/0047_remove_worker_profile_signatures.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   const now = new Date().toISOString();
   sqlite
     .prepare(
@@ -88,15 +96,8 @@ function setup() {
       "fixture",
       1,
     );
-  const keyPair = generateEd25519ReleaseKeyPair();
   const env = {
     CONCLAVE_DB: db,
-    CONCLAVE_RELEASE_PUBLISHER: "conclave",
-    CONCLAVE_RELEASE_SIGNING_KEY_ID: "test-key",
-    CONCLAVE_RELEASE_PRIVATE_KEY: keyPair.privateKeyBase64,
-    CONCLAVE_RELEASE_TRUST_KEYS_JSON: JSON.stringify({
-      conclave: { "test-key": keyPair.publicKeyBase64 },
-    }),
   } as unknown as Env;
   return { db, sqlite, env };
 }
@@ -120,7 +121,6 @@ describe("V9 Worker Profile registry", () => {
         actorUserId: "profile-lab",
       });
       expect(published.revision).toBe(1);
-      expect(published.verified).toBe(true);
 
       await expect(
         publishWorkerProfile({
@@ -162,9 +162,9 @@ describe("V9 Worker Profile registry", () => {
 
       sqlite
         .prepare(
-          "UPDATE worker_profile_history SET signature = ? WHERE worker_type_id = ? AND revision = ?",
+          "UPDATE worker_profile_history SET digest = ? WHERE worker_type_id = ? AND revision = ?",
         )
-        .run("tampered-signature", "fixture-worker", 1);
+        .run("tampered-digest", "fixture-worker", 1);
       await expect(
         restoreWorkerProfile({
           env,
@@ -177,9 +177,9 @@ describe("V9 Worker Profile registry", () => {
       ).rejects.toMatchObject({ status: 409 });
       sqlite
         .prepare(
-          "UPDATE worker_profile_history SET signature = ? WHERE worker_type_id = ? AND revision = ?",
+          "UPDATE worker_profile_history SET digest = ? WHERE worker_type_id = ? AND revision = ?",
         )
-        .run(published.signature, "fixture-worker", 1);
+        .run(firstValidation.digest, "fixture-worker", 1);
 
       await expect(
         publishWorkerProfile({
@@ -211,7 +211,6 @@ describe("V9 Worker Profile registry", () => {
       });
       expect(restored.revision).toBe(3);
       expect(restored.profile.releaseVersion).toBe(1);
-      expect(restored.verified).toBe(true);
 
       const historyAfterRestore = await listWorkerProfileHistory(
         env,

@@ -1,7 +1,5 @@
-import {
-  canonicalReleaseJson,
-  verifyEd25519ReleaseSignature,
-} from "../release-trust.js";
+import { canonicalJson } from "../canonical-json.js";
+import { verifyEd25519ReleaseSignature } from "../release-trust.js";
 import { computePackageDigest } from "@conclave/security";
 import { compareSemver } from "@conclave/tool-profile";
 import {
@@ -384,7 +382,7 @@ export async function handlePublishWorkspaceRelease(
       publisher,
       signingKeyId,
       signature: providedSignature,
-      message: `conclave-workspace-release-metadata-v1\n${canonicalReleaseJson(signedMetadata)}`,
+      message: `conclave-workspace-release-metadata-v1\n${canonicalJson(signedMetadata)}`,
     }))
   ) {
     return json(
@@ -528,9 +526,6 @@ export async function handleGetReleaseTrustState(
       version: row.version,
       packageDigest: row.package_digest,
     })),
-    // V9 Profiles are verified by their signed current/history snapshot. Key
-    // revocation above remains the global emergency invalidation mechanism.
-    revokedToolProfiles: [],
   });
 }
 

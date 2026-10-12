@@ -134,16 +134,13 @@ class WorkspaceReleaseClient {
       final decoded = jsonDecode(await _readBody(owned, 1024 * 1024));
       if (decoded is! Map ||
           decoded['revokedKeyIds'] is! List ||
-          decoded['revokedWorkspaceReleases'] is! List ||
-          decoded['revokedToolProfiles'] is! List) {
+          decoded['revokedWorkspaceReleases'] is! List) {
         throw const FormatException('release trust response is invalid');
       }
       final digests = <String>{};
       final releases = <String>{};
-      for (final row in [
-        ...decoded['revokedWorkspaceReleases'] as List,
-        ...decoded['revokedToolProfiles'] as List,
-      ].whereType<Map>()) {
+      for (final row in (decoded['revokedWorkspaceReleases'] as List)
+          .whereType<Map>()) {
         if (row['packageDigest'] is String) {
           digests.add(row['packageDigest'] as String);
         } else if (row['payloadDigest'] is String) {
@@ -151,11 +148,6 @@ class WorkspaceReleaseClient {
         }
         if (row['version'] is String) {
           releases.add('workspace@${row['version']}');
-        } else if (row['profileDefinitionId'] is String &&
-            row['releaseVersion'] is int) {
-          releases.add(
-            '${row['profileDefinitionId']}@${row['releaseVersion']}',
-          );
         }
       }
       policy.updateRevocations(

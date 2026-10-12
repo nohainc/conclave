@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { DESKTOP_PROFILE_LAB_AUDIENCE } from "@conclave/security";
 import { routeHandlers } from "../src/index.js";
-import { generateEd25519ReleaseKeyPair } from "../src/release-trust.js";
 import {
   validateWorkerProfileCandidate,
   type WorkerProfilePublicationEvidence,
@@ -84,18 +83,11 @@ function setup() {
       1,
     );
 
-  const keyPair = generateEd25519ReleaseKeyPair();
   const env = {
     CONCLAVE_ENVIRONMENT: "development",
     CONCLAVE_DB: db,
     CONCLAVE_PROFILE_ADMIN_USER_IDS: "profile-lab",
     CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS: "profile-lab",
-    CONCLAVE_RELEASE_PUBLISHER: "conclave",
-    CONCLAVE_RELEASE_SIGNING_KEY_ID: "route-key",
-    CONCLAVE_RELEASE_PRIVATE_KEY: keyPair.privateKeyBase64,
-    CONCLAVE_RELEASE_TRUST_KEYS_JSON: JSON.stringify({
-      conclave: { "route-key": keyPair.publicKeyBase64 },
-    }),
     TEST_AUTHENTICATION: async () => ({
       userId: "profile-lab",
       user: {
@@ -197,7 +189,7 @@ describe("V9 Worker Profile routes", () => {
       );
       expect(published.response.status).toBe(200);
       expect(published.body).toEqual(
-        expect.objectContaining({ revision: 1, verified: true }),
+        expect.objectContaining({ revision: 1 }),
       );
 
       const current = await send(

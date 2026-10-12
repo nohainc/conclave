@@ -2,7 +2,7 @@ import {
   validateToolProfileV1,
   type ToolProfileV1,
 } from "@conclave/tool-profile";
-import { canonicalReleaseJson } from "./release-trust.js";
+import { canonicalJson } from "./canonical-json.js";
 
 export class ToolProfileRegistryError extends Error {
   constructor(
@@ -13,7 +13,6 @@ export class ToolProfileRegistryError extends Error {
     this.name = "ToolProfileRegistryError";
   }
 }
-
 export function validateProviderCompatibilityForPublication(
   profile: ToolProfileV1,
 ): void {
@@ -34,10 +33,6 @@ export function validateProviderCompatibilityForPublication(
 
 export interface ToolProfileRegistryEnvironment {
   readonly CONCLAVE_DB: D1Database;
-  readonly CONCLAVE_RELEASE_TRUST_KEYS_JSON?: string;
-  readonly CONCLAVE_RELEASE_PUBLISHER?: string;
-  readonly CONCLAVE_RELEASE_PRIVATE_KEY?: string;
-  readonly CONCLAVE_RELEASE_SIGNING_KEY_ID?: string;
 }
 
 export interface WorkerProfilePublicationEvidence {
@@ -247,7 +242,7 @@ export function parseProfile(
       error instanceof Error ? error.message : "Tool Profile v1 is invalid",
     );
   }
-  const payload = canonicalReleaseJson(profile);
+  const payload = canonicalJson(profile);
   if (new TextEncoder().encode(payload).byteLength > 256 * 1024)
     throw new ToolProfileRegistryError(
       400,
@@ -264,15 +259,4 @@ export async function profileDigest(canonicalPayload: string): Promise<string> {
     ),
   );
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-export function workerProfileSigningMessage(args: {
-  publisher: string;
-  signingKeyId: string;
-  workerTypeId: string;
-  revision: number;
-  schemaVersion: number;
-  payloadDigest: string;
-}): string {
-  return `conclave-worker-profile-v9\\n${canonicalReleaseJson({ domain: "conclave-worker-profile-v9", publisher: args.publisher, signingKeyId: args.signingKeyId, workerTypeId: args.workerTypeId, revision: args.revision, schemaVersion: args.schemaVersion, payloadDigest: args.payloadDigest })}`;
 }

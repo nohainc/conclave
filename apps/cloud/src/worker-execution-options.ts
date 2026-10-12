@@ -54,7 +54,7 @@ export function spaceModelOptions(
     return true;
   };
   const allowlist = efforts(model.allowlist);
-  // A discovery-backed profile has no signed fallback catalog. The local
+  // A discovery-backed profile has no fallback catalog. The local
   // Workspace is the authority for the models and effort values available on
   // that installation; until it publishes a matching catalog, no choices are
   // exposed to AX.

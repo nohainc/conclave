@@ -266,7 +266,7 @@ export async function handleGetHomeReadModel(
       slug: "conclave-v8-architecture",
       title: "Conclave v8 Architecture",
       summary:
-        "Provider-independent CLI Worker Engine with signed Tool Profiles.",
+        "Provider-independent CLI Worker Engine with centrally published Worker Profiles.",
       category: "workflow",
       publishedAt: "2026-10-07T00:00:00Z",
       status: "published",

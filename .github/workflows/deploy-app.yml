@@ -57,24 +57,6 @@ jobs:
         run: node scripts/assert-no-browser-secrets.mjs apps/app/build/web
       - name: Verify production security configuration
         run: node scripts/verify-production-security.mjs
-      - name: Preflight production Tool Profile signer and trust root
-        env:
-          CONCLAVE_RELEASE_PRIVATE_KEY: ${{ secrets.CONCLAVE_RELEASE_PRIVATE_KEY }}
-          CONCLAVE_RELEASE_PUBLISHER: ${{ vars.CONCLAVE_RELEASE_PUBLISHER }}
-          CONCLAVE_RELEASE_SIGNING_KEY_ID: ${{ vars.CONCLAVE_RELEASE_SIGNING_KEY_ID }}
-          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
-        run: |
-          for name in \
-            CONCLAVE_RELEASE_PRIVATE_KEY \
-            CONCLAVE_RELEASE_PUBLISHER \
-            CONCLAVE_RELEASE_SIGNING_KEY_ID \
-            CONCLAVE_RELEASE_TRUST_KEYS_JSON; do
-            if [ -z "${!name:-}" ]; then
-              echo "Missing production Profile signer configuration: $name"
-              exit 1
-            fi
-          done
-          node scripts/verify-tool-profile-signer.mjs
       - name: Sync Better Auth provider secrets to Cloudflare Worker
         working-directory: apps/cloud
         env:
@@ -99,36 +81,11 @@ jobs:
                 --config ../../infra/cloudflare/app.wrangler.jsonc
             fi
           done
-      - name: Sync production Tool Profile signing configuration
-        working-directory: apps/cloud
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CONCLAVE_RELEASE_PRIVATE_KEY: ${{ secrets.CONCLAVE_RELEASE_PRIVATE_KEY }}
-          CONCLAVE_RELEASE_PUBLISHER: ${{ vars.CONCLAVE_RELEASE_PUBLISHER }}
-          CONCLAVE_RELEASE_SIGNING_KEY_ID: ${{ vars.CONCLAVE_RELEASE_SIGNING_KEY_ID }}
-          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
-        run: |
-          set -euo pipefail
-          for name in \
-            CONCLAVE_RELEASE_PRIVATE_KEY \
-            CONCLAVE_RELEASE_PUBLISHER \
-            CONCLAVE_RELEASE_SIGNING_KEY_ID \
-            CONCLAVE_RELEASE_TRUST_KEYS_JSON; do
-            value="${!name:-}"
-            if [ -z "$value" ]; then
-              echo "Missing production Profile signer configuration: $name"
-              exit 1
-            fi
-            printf '%s' "$value" | pnpm exec wrangler secret put "$name" \
-              --config ../../infra/cloudflare/app.wrangler.jsonc
-          done
       - name: Verify Better Auth production secrets
         working-directory: apps/cloud
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CONCLAVE_RELEASE_PRIVATE_KEY: ${{ secrets.CONCLAVE_RELEASE_PRIVATE_KEY }}
         run: |
           pnpm exec wrangler secret list --config ../../infra/cloudflare/app.wrangler.jsonc \
             | node -e '
@@ -146,12 +103,6 @@ jobs:
                 const required = [
                   "BETTER_AUTH_SECRET",
                 ];
-                required.push(
-                  "CONCLAVE_RELEASE_PRIVATE_KEY",
-                  "CONCLAVE_RELEASE_PUBLISHER",
-                  "CONCLAVE_RELEASE_SIGNING_KEY_ID",
-                  "CONCLAVE_RELEASE_TRUST_KEYS_JSON",
-                );
                 const missing = required.filter((name) => !configured.has(name));
                 if (missing.length > 0) {
                   console.error(`Missing production Worker secrets: ${missing.join(", ")}`);
