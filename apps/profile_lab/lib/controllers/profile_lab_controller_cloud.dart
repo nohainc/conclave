@@ -133,7 +133,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     notifyListeners();
   }
 
-  /// Restores a prior snapshot through Cloud's atomic, signed V9 restore path.
+  /// Restores a prior snapshot through Cloud's atomic V9 restore path.
   Future<void> restoreCurrentProfileRevision({
     required int targetRevision,
     required String restorationReason,
@@ -144,7 +144,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
         if (workerTypeId == null || workerTypeId.isEmpty) return;
         if (!canPublish) {
           throw StateError(
-            'Profile Lab authorization and trusted signing are required to restore a Profile.',
+            'Profile Lab authorization is required to restore a Profile.',
           );
         }
         final snapshot = await apiClient.restoreWorkerProfile(
@@ -232,8 +232,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   }
 
   /// Requests Cloud publication of the current local candidate.
-  /// Signing occurs in the controlled Cloud signing service; Profile Lab does
-  /// not hold or manage private keys.
+  /// Cloud performs the authoritative validation and atomic publication.
   Future<void> publishCurrentDraft() =>
       _refresh('publish', _publishCurrentDraft);
 
@@ -243,7 +242,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       final draft = currentDraft!;
       if (!canPublish) {
         throw StateError(
-          'Profile Lab authorization and a ready Cloud signer are required.',
+          'Profile Lab authorization is required to publish.',
         );
       }
       final evidence = _publicationEvidenceFor(draft);

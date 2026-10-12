@@ -342,7 +342,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
                   reasoningEffortValue.trim().isNotEmpty
               ? reasoningEffortValue.trim()
               : null,
-          // Static capability identity is bound by the admitted signed Profile;
+          // Static capability identity is bound by the admitted Worker Profile;
           // only Service-owned provider catalogs have an Engine catalog pin.
           catalogRevision:
               (release.profile['model'] as Map?)?['discovery'] == null

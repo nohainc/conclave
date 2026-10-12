@@ -104,8 +104,6 @@ class SelectedWorkerState {
     if (!canPublish) {
       if (controller.labAccess?.profilesAdmin != true) {
         blockReason = 'Profile Lab authorization is required to publish.';
-      } else if (controller.labAccess?.signerReady != true) {
-        blockReason = 'Cloud Profile signing is not ready.';
       } else {
         blockReason = 'Publication is not available for this session.';
       }

@@ -124,7 +124,7 @@ void main() {
     expect(jsonEncode(decoded), isNot(contains('must not be exported')));
   });
 
-  test('preserves safe Profile trust diagnostics in reports', () async {
+  test('preserves safe Profile diagnostics in reports', () async {
     final store = WorkerDiagnosticStore(
       directory: Directory('${temporary.path}/logs'),
     );
@@ -133,20 +133,16 @@ void main() {
       workerVersion: '8.2.0',
       protocolStage: 'profile_probe',
       event: 'profile.probe.failed',
-      errorCode: 'profile_trust_key_unavailable',
+      errorCode: 'profile_invalid',
       context: {
-        'profileTrustIssue': 'untrusted_signing_key',
-        'profilePublisher': 'conclave-development',
-        'profileSigningKeyId': 'local-profile-51724',
+        'profileDigest': 'a' * 64,
         'privateDetail': 'must not be exported',
       },
     );
 
     final report = await store.createCopyableReport();
-    expect(report, contains('profile_trust_key_unavailable'));
-    expect(report, contains('untrusted_signing_key'));
-    expect(report, contains('conclave-development'));
-    expect(report, contains('local-profile-51724'));
+    expect(report, contains('profile_invalid'));
+    expect(report, contains('a' * 64));
     expect(report, isNot(contains('must not be exported')));
   });
 

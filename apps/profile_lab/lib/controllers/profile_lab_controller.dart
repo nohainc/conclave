@@ -13,7 +13,6 @@ import '../profile_lab_cloud_config.dart';
 import '../profile_lab_paths.dart';
 import '../profile_lab_session_store.dart';
 import '../profile_lab_test_sandbox.dart';
-import '../profile_lab_release_trust.dart';
 import '../utils/profile_lab_model_proposals.dart';
 import '../utils/profile_payload_migrations.dart';
 import '../utils/profile_activity_mapping_fixtures.dart';
@@ -225,7 +224,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   String? labAccessError;
   bool get isCheckingLabAccess => _refreshes.containsKey('access');
   bool get canPublish =>
-      labAccess?.profilesAdmin == true && labAccess?.signerReady == true;
+      labAccess?.profilesAdmin == true;
 
   bool get candidateIsCloudValidated =>
       currentDraft != null &&

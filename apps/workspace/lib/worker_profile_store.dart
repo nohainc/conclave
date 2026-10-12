@@ -116,10 +116,10 @@ class WorkerProfileStore implements WorkerProfileStorePort {
 
   @override
   Future<File> executionProfileFile(ToolProfileCandidate candidate) async {
-    if (!candidate.isSigned) {
+    if (!candidate.isPublished) {
       final development = developmentProfiles;
       if (development == null) {
-        throw StateError('Unsigned Profile execution is disabled');
+        throw StateError('Unpublished Profile execution is disabled');
       }
       return development.snapshot(candidate);
     }
@@ -381,14 +381,9 @@ class WorkerProfileStore implements WorkerProfileStorePort {
       'profile': candidate.profile,
       'revision': candidate.revision,
       'digest': candidate.payloadDigest,
-      'signature': candidate.signature,
-      'signingKeyId': candidate.signingKeyId,
-      'publisher': candidate.publisher,
-      'verified': true,
     };
     await WorkerProfileSnapshotVerifier.verify(
       input: snapshot,
-      trustPolicy: trustPolicy,
       expectedWorkerTypeId: candidate.workerTypeId,
     );
     return snapshot;
@@ -419,19 +414,9 @@ class WorkerProfileStore implements WorkerProfileStorePort {
     }
     final snapshot = Map<String, Object?>.from(decoded);
     final revision = snapshot['revision'];
-    final publisher = snapshot['publisher'];
-    final signingKeyId = snapshot['signingKeyId'];
     final digest = snapshot['digest'];
-    if (revision is int &&
-        publisher is String &&
-        signingKeyId is String &&
-        digest is String &&
-        trustPolicy.isToolProfileReleaseRevoked(
-          publisher: publisher,
-          signingKeyId: signingKeyId,
-          digest: digest,
-          releaseId: 'worker:$workerTypeId@$revision',
-        )) {
+    if (revision is int && digest is String &&
+        trustPolicy.revokedDigests.contains(digest)) {
       if (!lastKnownGood && !staging && !allowRevokedCurrent) {
         throw WorkerProfileRevokedException(workerTypeId);
       }
@@ -439,7 +424,6 @@ class WorkerProfileStore implements WorkerProfileStorePort {
     }
     final verified = await WorkerProfileSnapshotVerifier.verify(
       input: snapshot,
-      trustPolicy: trustPolicy,
       expectedWorkerTypeId: workerTypeId,
     );
     if (await payload.exists()) {
@@ -448,7 +432,7 @@ class WorkerProfileStore implements WorkerProfileStorePort {
         throw const FormatException('V9 Worker Profile payload has changed');
       }
     } else if (!staging) {
-      // The signed snapshot is authoritative; repair the derived payload.
+      // The verified snapshot is authoritative; repair the derived payload.
       await _writeImmutablePayload(payload, verified.profile);
     }
     return verified;
@@ -494,7 +478,6 @@ class WorkerProfileStore implements WorkerProfileStorePort {
       final workerTypeId = release['workerTypeId'] as String;
       final admission = await ToolProfileReleaseVerifier.verify(
         input: release,
-        trustPolicy: trustPolicy,
         expectedWorkerTypeId: workerTypeId,
       );
       final snapshot = <String, Object?>{
@@ -503,17 +486,9 @@ class WorkerProfileStore implements WorkerProfileStorePort {
         'profile': admission.profile,
         'revision': admission.revision,
         'digest': admission.payloadDigest,
-        'signature': release['signature'],
-        'signingKeyId': release['signingKeyId'],
-        'publisher': release['publisher'],
-        'signatureDomain': 'conclave-tool-profile-release-v1',
-        'signatureReleaseId':
-            '${admission.profileDefinitionId}@${admission.revision}',
-        'verified': true,
       };
       await WorkerProfileSnapshotVerifier.verify(
         input: snapshot,
-        trustPolicy: trustPolicy,
         expectedWorkerTypeId: workerTypeId,
       );
       final directory = workerProfileDirectory(workerTypeId);

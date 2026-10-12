@@ -261,8 +261,7 @@ class WorkerReadinessMonitor {
                 prior.providerToolVersion != version) ||
             const {
               'tool_profile_unavailable',
-              'profile_signature_invalid',
-              'profile_trust_key_unavailable',
+              'profile_invalid',
               'unsupported_provider_tool_version',
               'engine_incompatible'
             }.contains(assessment.issueCode);
@@ -476,7 +475,7 @@ class WorkerReadinessMonitor {
       );
     } on Object catch (error) {
       final issueCode = error is FormatException
-          ? 'profile_signature_invalid'
+          ? 'profile_invalid'
           : 'tool_profile_unavailable';
       await _recordToolProfileDiagnostic(
         worker,
@@ -491,11 +490,11 @@ class WorkerReadinessMonitor {
       return WorkerReadinessAssessment(
         WorkerReadinessState.runtimeUnavailable,
         issueCode: issueCode,
-        diagnosticDetails: 'The signed Tool Profile could not be resolved.',
+        diagnosticDetails: 'The current Tool Profile could not be resolved.',
       );
     }
     final candidate = resolution.release;
-    if (candidate != null && !candidate.isSigned) {
+    if (candidate != null && !candidate.isPublished) {
       final probe = await engine.probe(
         candidate,
         profileFile: await store.executionProfileFile(candidate),
@@ -684,8 +683,7 @@ class WorkerReadinessMonitor {
         'engine',
       'unsupported_provider_tool_version' ||
       'tool_profile_unavailable' ||
-      'profile_signature_invalid' ||
-      'profile_trust_key_unavailable' =>
+      'profile_invalid' =>
         'profile',
       _ => 'provider_tool',
     };

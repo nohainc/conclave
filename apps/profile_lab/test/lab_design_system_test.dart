@@ -74,7 +74,6 @@ void main() {
     c = _Controller(ProfileLabPaths(homeDirectory: temp.path));
     c.labAccess = ProfileLabAccessReadModel.fromJson({
       'permissions': {'profilesAdmin': true},
-      'signer': {'ready': false},
     });
     c.currentSession = ProfileLabSession(
         credential: 'test',

@@ -84,7 +84,8 @@ class ToolProfileCatalogClient {
       entryForWorker(workerTypeId)?.profileDefinitionId;
 
   /// Fetches the approved, Cloud-selected catalog; a bounded local snapshot is
-  /// retained for offline rendering. Execution still requires signed releases.
+  /// retained for offline rendering. Profile execution requires a verified
+  /// current V9 snapshot.
   Future<List<WorkerDescriptor>> syncCatalog() async {
     final loader = workerCatalogLoader;
     List<Object?> raw;
@@ -177,8 +178,8 @@ class ToolProfileCatalogClient {
   }
 
   /// Fetches and locally verifies the one current V9 Profile for a Worker.
-  /// The Cloud `verified` field is not trusted as a substitute for this
-  /// Workspace-side digest and signature admission.
+  /// The Cloud response is not trusted as a substitute for this Workspace-side
+  /// schema, identity, and digest admission.
   Future<WorkerProfileSnapshotAdmission> fetchCurrentWorkerProfile(
     String workerTypeId,
   ) async {
@@ -202,7 +203,6 @@ class ToolProfileCatalogClient {
     final decoded = jsonDecode(utf8.decode(await _readBounded(response)));
     return WorkerProfileSnapshotVerifier.verify(
       input: decoded,
-      trustPolicy: trustPolicy,
       expectedWorkerTypeId: workerTypeId,
     );
   }

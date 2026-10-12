@@ -17,7 +17,7 @@ import 'support/worker_profile_snapshot_fixture.dart';
 
 void main() {
   test(
-      'live readiness runs the signed Profile through the generic Engine and keeps a disabled Worker disabled',
+      'live readiness runs the Worker Profile through the generic Engine and keeps a disabled Worker disabled',
       () async {
     final repository = Directory.current.parent.parent.path;
     final root = await Directory.systemTemp.createTemp('profile-live-test-');

@@ -14,7 +14,6 @@ import 'package:conclave_workspace/tool_profile_resolver.dart';
 import 'package:conclave_workspace/worker_catalog_coordinator.dart';
 import 'package:conclave_workspace/workspace_worker_view.dart';
 import 'package:crypto/crypto.dart';
-import 'package:cryptography/cryptography.dart';
 import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
@@ -316,25 +315,11 @@ Future<WorkerProfileSnapshotAdmission> _snapshot({
     };
   }
   final digest = sha256.convert(utf8.encode(canonicalJson(profile))).toString();
-  final message = workerProfileSigningMessage(
-    publisher: fixturePublisher,
-    signingKeyId: fixtureKeyId,
-    workerTypeId: workerTypeId,
-    revision: revision,
-    schemaVersion: profile['schemaVersion']! as int,
-    payloadDigest: digest,
-  );
-  final signature = base64.encode(
-    (await Ed25519().sign(utf8.encode(message), keyPair: signing.pair)).bytes,
-  );
   return WorkerProfileSnapshotAdmission(
     profile: profile,
     workerTypeId: workerTypeId,
     revision: revision,
     payloadDigest: digest,
-    signature: signature,
-    signingKeyId: fixtureKeyId,
-    publisher: fixturePublisher,
   );
 }
 

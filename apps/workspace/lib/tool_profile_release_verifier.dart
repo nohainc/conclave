@@ -5,6 +5,4 @@ export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
         ToolProfileReleaseIdentity,
         ToolProfileReleaseVerifier,
         WorkerProfileSnapshotAdmission,
-        WorkerProfileSnapshotVerifier,
-        toolProfileReleaseSigningMessage,
-        workerProfileSigningMessage;
+        WorkerProfileSnapshotVerifier;

@@ -2128,9 +2128,9 @@ const defaultProductUpdates = [
     slug: 'tool-profiles',
     title: 'Tool Profiles',
     summary:
-        'Workers now load provider execution options dynamically from signed Tool Profiles with strict credential isolation.',
+        'Workers now load provider execution options dynamically from centrally published Worker Profiles with strict credential isolation.',
     details:
-        'Signed cryptographic Tool Profiles define provider execution constraints and isolate local model credentials from Cloud telemetry.',
+        'Worker Profiles define provider execution constraints and isolate local model credentials from Cloud telemetry.',
     category: AxProductUpdateCategory.security,
     publishedAt: '2026-10-04T00:00:00Z',
     dateDisplay: 'Oct 4',

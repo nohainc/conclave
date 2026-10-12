@@ -58,7 +58,7 @@ void main() {
     );
 
     final initialDigest = controller.currentDraft!.payloadDigest;
-    expect(controller.currentDraft!.isSigned, isFalse);
+    expect(controller.currentDraft!.isPublished, isFalse);
     expect(controller.isDirty, isFalse);
 
     final payload =

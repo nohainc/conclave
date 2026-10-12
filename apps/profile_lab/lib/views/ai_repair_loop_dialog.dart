@@ -384,7 +384,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Human Authority Safeguard: AI operates strictly inside the local repair loop sandbox. AI cannot publish or sign Profiles. Material candidate changes require human confirmation.',
+                        'Human Authority Safeguard: AI operates strictly inside the local repair loop sandbox. AI cannot publish Profiles. Material candidate changes require human confirmation.',
                         style: TextStyle(
                             fontSize: 11,
                             color: ProfileLabTheme.secondaryText,

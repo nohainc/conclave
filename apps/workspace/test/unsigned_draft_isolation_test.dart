@@ -91,7 +91,7 @@ void main() {
 
       // Profile Lab candidate (unsigned)
       final candidate = LocalDraftProfileCandidate.fromProfileMap(draftPayload);
-      expect(candidate.isSigned, isFalse);
+      expect(candidate.isPublished, isFalse);
 
       // Workspace execution storage must reject the unsigned candidate.
       expect(

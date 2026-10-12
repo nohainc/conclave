@@ -1,4 +1,4 @@
-/** Product-safe options projected from a signed Profile, never CLI instructions. */
+/** Product-safe options projected from a Worker Profile, never CLI instructions. */
 export interface WorkerEffortOptions {
   readonly supported: boolean;
   readonly values: readonly string[];

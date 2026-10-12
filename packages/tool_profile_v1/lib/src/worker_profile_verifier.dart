@@ -4,15 +4,14 @@ import 'package:crypto/crypto.dart';
 
 import '../tool_profile_v1.dart';
 
-/// Verifies the single current V9 Profile snapshot before a component caches,
-/// activates, or executes it. Cloud's `verified` flag is informational; the
-/// digest, schema, identity, and signature are checked locally again.
+/// Validates the current V9 Profile snapshot before it is cached, activated,
+/// or executed. V9 uses authenticated Cloud publication and canonical digest
+/// validation; Profile snapshots carry only canonical publication metadata.
 abstract final class WorkerProfileSnapshotVerifier {
   static const maxSnapshotBytes = 512 * 1024;
 
   static Future<WorkerProfileSnapshotAdmission> verify({
     required Object? input,
-    required WorkerTrustPolicy trustPolicy,
     required String expectedWorkerTypeId,
   }) async {
     if (input is! Map) {
@@ -25,21 +24,11 @@ abstract final class WorkerProfileSnapshotVerifier {
       'profile',
       'revision',
       'digest',
-      'signature',
-      'signingKeyId',
-      'publisher',
-      // Transitional metadata used only while a signed V8 stable snapshot is
-      // migrated into the V9 current-profile cache. New Cloud snapshots do
-      // not include these fields.
-      'signatureDomain',
-      'signatureReleaseId',
       'updatedByUserId',
       'updatedAt',
-      'verified',
     };
     if (snapshot.keys.any((key) => !allowedKeys.contains(key))) {
-      throw const FormatException(
-          'Worker Profile snapshot metadata is invalid');
+      throw const FormatException('Worker Profile snapshot metadata is invalid');
     }
     final workerTypeId = _string(snapshot, 'workerTypeId');
     final schemaVersion = _integer(snapshot, 'schemaVersion');
@@ -49,19 +38,13 @@ abstract final class WorkerProfileSnapshotVerifier {
     }
     final profile = Map<String, Object?>.from(profileValue);
     final revision = _integer(snapshot, 'revision');
-    if (revision < 1 ||
-        schemaVersion < 1 ||
-        workerTypeId != expectedWorkerTypeId) {
-      throw const FormatException(
-          'Worker Profile snapshot identity is invalid');
+    if (revision < 1 || schemaVersion < 1 || workerTypeId != expectedWorkerTypeId) {
+      throw const FormatException('Worker Profile snapshot identity is invalid');
     }
     final digest = _string(snapshot, 'digest');
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(digest)) {
       throw const FormatException('Worker Profile snapshot digest is invalid');
     }
-    final signature = _string(snapshot, 'signature');
-    final signingKeyId = _string(snapshot, 'signingKeyId');
-    final publisher = _string(snapshot, 'publisher');
     final canonical = canonicalJson(profile);
     if (utf8.encode(canonical).length > maxSnapshotBytes) {
       throw const FormatException('Worker Profile snapshot is oversized');
@@ -70,54 +53,13 @@ abstract final class WorkerProfileSnapshotVerifier {
     if (engineProfile.workerTypeId != workerTypeId ||
         engineProfile.schemaVersion != schemaVersion ||
         sha256.convert(utf8.encode(canonical)).toString() != digest) {
-      throw const FormatException(
-          'Worker Profile snapshot digest or identity mismatch');
-    }
-    final signatureDomain = snapshot['signatureDomain'];
-    final signatureReleaseId = snapshot['signatureReleaseId'];
-    final legacySignature =
-        signatureDomain == 'conclave-tool-profile-release-v1' &&
-            signatureReleaseId is String &&
-            signatureReleaseId.isNotEmpty;
-    if (signatureDomain != null && !legacySignature) {
-      throw const FormatException('Worker Profile signature domain is invalid');
-    }
-    final message = legacySignature
-        ? toolProfileReleaseSigningMessage(
-            publisher: publisher,
-            signingKeyId: signingKeyId,
-            payloadDigest: digest,
-            profile: profile,
-          )
-        : workerProfileSigningMessage(
-            publisher: publisher,
-            signingKeyId: signingKeyId,
-            workerTypeId: workerTypeId,
-            revision: revision,
-            schemaVersion: schemaVersion,
-            payloadDigest: digest,
-          );
-    final valid = await trustPolicy.verifyToolProfileRelease(
-      publisher: publisher,
-      signingKeyId: signingKeyId,
-      digest: digest,
-      releaseId: legacySignature
-          ? signatureReleaseId
-          : 'worker:$workerTypeId@$revision',
-      signature: signature,
-      message: message,
-    );
-    if (!valid) {
-      throw StateError('Worker Profile snapshot signature is not trusted');
+      throw const FormatException('Worker Profile snapshot digest or identity mismatch');
     }
     return WorkerProfileSnapshotAdmission(
       profile: freezeJson(profile) as Map<String, Object?>,
       workerTypeId: workerTypeId,
       revision: revision,
       payloadDigest: digest,
-      signature: signature,
-      signingKeyId: signingKeyId,
-      publisher: publisher,
     );
   }
 }

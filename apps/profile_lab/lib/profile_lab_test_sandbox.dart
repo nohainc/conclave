@@ -299,8 +299,8 @@ class ProfileLabTestSandbox {
   Future<DiscoveredModelCatalog?> discoverTrustedModels(
     ToolProfileCandidate profile,
   ) async {
-    if (!profile.isSigned) {
-      throw StateError('Discovery requires a signed Profile.');
+    if (!profile.isPublished) {
+      throw StateError('Discovery requires a published Profile.');
     }
     if (_activeSupervisor != null) {
       throw StateError('An Engine operation is active.');
@@ -340,8 +340,8 @@ class ProfileLabTestSandbox {
     }
   }
 
-  /// Runs a draft proposal through a trusted, signed Worker Profile. The
-  /// unsigned Profile being edited is never used to invoke the model.
+  /// Runs a draft proposal through a published Worker Profile. The unpublished
+  /// Profile being edited is never used to invoke the model.
   Future<String> runTrustedModelProposal({
     required ToolProfileCandidate modelProfile,
     required String prompt,
@@ -352,8 +352,8 @@ class ProfileLabTestSandbox {
     if (_activeSupervisor != null) {
       throw StateError('Another Profile Lab Engine operation is active.');
     }
-    if (!modelProfile.isSigned) {
-      throw StateError('AI proposal requires a signed Worker Profile.');
+    if (!modelProfile.isPublished) {
+      throw StateError('AI proposal requires a published Worker Profile.');
     }
 
     final configuredRoot = sandboxRoot.absolute;

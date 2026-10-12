@@ -4,10 +4,11 @@ import 'dart:io';
 import 'package:conclave_protocol/worker_descriptor.dart';
 import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/tool_profile_release_verifier.dart';
+import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+    show canonicalJson;
 import 'package:conclave_workspace/worker_inventory_projection.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'support/ed25519_release_fixture.dart';
 
 void main() {
   late Directory directory;
@@ -65,7 +66,6 @@ void main() {
 
   test('reports Ready only with a signed eligible Profile and Engine',
       () async {
-    final signing = await Ed25519ReleaseFixture.create();
     final profile = jsonDecode(
       File('../../packages/tool-profile/test/fixtures/fixture-cli.v1.json')
           .readAsStringSync(),
@@ -82,11 +82,12 @@ void main() {
       'schemaVersion': profile['schemaVersion'],
       'engineFamily': profile['engineFamily'],
       'engineCompatibility': profile['engineCompatibility'],
+      'payloadDigest': sha256
+          .convert(utf8.encode(canonicalJson(profile)))
+          .toString(),
     };
-    await signing.signToolProfileRelease(release);
     final eligibleProfile = await ToolProfileReleaseVerifier.verify(
       input: release,
-      trustPolicy: signing.trustPolicy,
       expectedWorkerTypeId: 'fixture-worker',
     );
     final worker = await registry.create(catalogEntry: descriptor);

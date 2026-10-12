@@ -503,7 +503,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
                 : WorkspaceWorkerProfileState.unavailable,
             message: switch (resolution.reason) {
               ToolProfileUnavailableReason.noEligibleRelease =>
-                'No eligible signed Worker Profile is available for this '
+                'No eligible current Worker Profile is available for this '
                     'Worker. Refresh the current published Profile or '
                     'restore connectivity to use the authorized cache.',
               ToolProfileUnavailableReason.unsupportedProviderVersion =>
@@ -527,7 +527,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
           details: {
             'definitionId': definitionId,
             'source': resolution.source.name,
-            'unsignedDevelopment': resolution.release?.isSigned == false,
+            'unpublishedDevelopment': resolution.release?.isPublished == false,
             if (resolution.release != null)
               'releaseVersion': resolution.release!.releaseVersion,
             if (resolution.release != null)

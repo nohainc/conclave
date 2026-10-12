@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:crypto/crypto.dart';
-import 'package:cryptography/cryptography.dart';
 
 import 'package:conclave_workspace/tool_profile_catalog.dart';
 import 'package:conclave_workspace/worker_profile_store.dart';
@@ -168,7 +167,7 @@ void main() {
     }
   });
 
-  test('keeps verified cached catalog and signed Profile when Cloud is offline',
+  test('keeps verified cached catalog and Worker Profile when Cloud is offline',
       () async {
     final profile = jsonDecode(
       File('../../packages/tool-profile/test/fixtures/fixture-cli.v1.json')
@@ -405,24 +404,10 @@ Future<WorkerProfileSnapshotAdmission> _snapshot(
   required int revision,
 }) async {
   final digest = sha256.convert(utf8.encode(canonicalJson(profile))).toString();
-  final message = workerProfileSigningMessage(
-    publisher: fixturePublisher,
-    signingKeyId: fixtureKeyId,
-    workerTypeId: 'fixture-cli',
-    revision: revision,
-    schemaVersion: profile['schemaVersion']! as int,
-    payloadDigest: digest,
-  );
-  final signature = base64.encode(
-    (await Ed25519().sign(utf8.encode(message), keyPair: signing.pair)).bytes,
-  );
   return WorkerProfileSnapshotAdmission(
     profile: profile,
     workerTypeId: 'fixture-cli',
     revision: revision,
     payloadDigest: digest,
-    signature: signature,
-    signingKeyId: fixtureKeyId,
-    publisher: fixturePublisher,
   );
 }

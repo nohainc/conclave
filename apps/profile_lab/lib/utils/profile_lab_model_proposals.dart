@@ -38,7 +38,6 @@ class ProfileLabModelProposalService {
 
   Future<List<ProfileLabAiModelOption>> loadAvailableModels({
     required ProfileAdminApiClient apiClient,
-    required WorkerTrustPolicy trustPolicy,
     Future<DiscoveredModelCatalog?> Function(WorkerProfileSnapshotAdmission)?
         discoverModels,
   }) async {
@@ -52,7 +51,6 @@ class ProfileLabModelProposalService {
         );
         final profile = await WorkerProfileSnapshotVerifier.verify(
           input: snapshot,
-          trustPolicy: trustPolicy,
           expectedWorkerTypeId: worker.workerTypeId,
         );
         final profileJson = profile.profile;

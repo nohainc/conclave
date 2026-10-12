@@ -12,41 +12,31 @@ import 'package:conclave_profile_lab/profile_admin_api_client.dart';
 import 'package:conclave_profile_lab/utils/profile_lab_model_proposals.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:crypto/crypto.dart';
-import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('discovers model options only from trusted current Worker Profiles',
+  test('discovers model options only from current Worker Profiles',
       () async {
-    final signedRelease = await _createSignedRelease();
-    final api = _SignedReleaseApi(signedRelease);
-    final publicKey = await signedRelease.keyPair.extractPublicKey();
-    final trustPolicy = WorkerTrustPolicy(trustedPublicKeys: {
-      'conclave': {'test-profile-key': base64.encode(publicKey.bytes)},
-    });
+    final currentProfile = await _createCurrentProfile();
+    final api = _CurrentProfileApi(currentProfile);
 
     final options = await const ProfileLabModelProposalService()
-        .loadAvailableModels(apiClient: api, trustPolicy: trustPolicy);
+        .loadAvailableModels(apiClient: api);
 
     expect(options.map((option) => option.model).toList(),
         [null, 'model-fast', 'model-safe']);
-    expect(options.every((option) => option.profile.isSigned), isTrue);
+    expect(options.every((option) => option.profile.isPublished), isTrue);
     expect(options.firstWhere((o) => o.model == 'model-fast').modelIdentifier,
         'model-worker/model-profile@2#model-fast');
   });
 
   test('retains unavailable provider models for the shared selector', () async {
-    final signed = await _createSignedRelease(dynamicModels: true);
-    final publicKey = await signed.keyPair.extractPublicKey();
-    final policy = WorkerTrustPolicy(trustedPublicKeys: {
-      'conclave': {'test-profile-key': base64.encode(publicKey.bytes)},
-    });
+    final current = await _createCurrentProfile(dynamicModels: true);
     final options =
         await const ProfileLabModelProposalService().loadAvailableModels(
-      apiClient: _SignedReleaseApi(signed),
-      trustPolicy: policy,
+      apiClient: _CurrentProfileApi(current),
       discoverModels: (release) async => DiscoveredModelCatalog(
         profileDigest: release.payloadDigest,
         providerToolVersion: '1.3.3',
@@ -68,24 +58,6 @@ void main() {
         isFalse);
     expect(profileLabSelectionCatalog(options).workers.single.models,
         hasLength(2));
-    var invoked = false;
-    final revokedPolicy = WorkerTrustPolicy(
-      trustedPublicKeys: {
-        'conclave': {'test-profile-key': base64.encode(publicKey.bytes)},
-      },
-      revokedKeyIds: {'test-profile-key'},
-    );
-    final revoked =
-        await const ProfileLabModelProposalService().loadAvailableModels(
-      apiClient: _SignedReleaseApi(signed),
-      trustPolicy: revokedPolicy,
-      discoverModels: (_) async {
-        invoked = true;
-        return null;
-      },
-    );
-    expect(revoked, isEmpty);
-    expect(invoked, isFalse);
   });
 
   testWidgets(
@@ -103,7 +75,7 @@ void main() {
     pending.complete([]);
     await tester.pumpAndSettle();
     expect(find.text('Select Worker...'), findsOneWidget);
-    expect(find.textContaining('No trusted current Worker Profile'),
+    expect(find.textContaining('No current Worker Profile'),
         findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     controller.dispose();
@@ -111,16 +83,12 @@ void main() {
   });
 
   testWidgets(
-      'a revoked proposal Profile remains visibly unavailable after refresh',
+      'an unavailable proposal Profile remains visibly unavailable after refresh',
       (tester) async {
     final options = (await tester.runAsync(() async {
-      final signed = await _createSignedRelease();
-      final publicKey = await signed.keyPair.extractPublicKey();
+      final current = await _createCurrentProfile();
       return const ProfileLabModelProposalService().loadAvailableModels(
-          apiClient: _SignedReleaseApi(signed),
-          trustPolicy: WorkerTrustPolicy(trustedPublicKeys: {
-            'conclave': {'test-profile-key': base64.encode(publicKey.bytes)},
-          }));
+          apiClient: _CurrentProfileApi(current));
     }))!;
     final root = Directory.systemTemp.createTempSync('selector-revocation-');
     final controller = _SelectorController(
@@ -159,29 +127,12 @@ void main() {
     root.deleteSync(recursive: true);
   });
 
-  test('current Cloud key revocation removes otherwise valid model Profiles',
-      () async {
-    final signedRelease = await _createSignedRelease();
-    final api = _SignedReleaseApi(signedRelease);
-    final publicKey = await signedRelease.keyPair.extractPublicKey();
-    final trustPolicy = WorkerTrustPolicy(
-      trustedPublicKeys: {
-        'conclave': {'test-profile-key': base64.encode(publicKey.bytes)},
-      },
-      revokedKeyIds: {'test-profile-key'},
-    );
-
-    final options = await const ProfileLabModelProposalService()
-        .loadAvailableModels(apiClient: api, trustPolicy: trustPolicy);
-
-    expect(options, isEmpty);
-  });
 }
 
-class _SignedReleaseApi extends ProfileAdminApiClient {
-  _SignedReleaseApi(this.signedRelease) : super(baseUrl: 'http://127.0.0.1:1');
+class _CurrentProfileApi extends ProfileAdminApiClient {
+  _CurrentProfileApi(this.currentProfile) : super(baseUrl: 'http://127.0.0.1:1');
 
-  final _SignedRelease signedRelease;
+  final _CurrentProfile currentProfile;
   @override
   Future<List<ProfileLabWorkerReadModel>> fetchWorkerCatalog() async => [
         ProfileLabWorkerReadModel.fromJson({
@@ -195,17 +146,16 @@ class _SignedReleaseApi extends ProfileAdminApiClient {
   Future<Map<String, dynamic>> fetchCurrentWorkerProfile(
     String workerTypeId,
   ) async =>
-      Map<String, dynamic>.from(signedRelease.envelope);
+      Map<String, dynamic>.from(currentProfile.envelope);
 }
 
-class _SignedRelease {
-  const _SignedRelease(this.envelope, this.keyPair);
+class _CurrentProfile {
+  const _CurrentProfile(this.envelope);
 
   final Map<String, Object?> envelope;
-  final SimpleKeyPair keyPair;
 }
 
-Future<_SignedRelease> _createSignedRelease(
+Future<_CurrentProfile> _createCurrentProfile(
     {bool dynamicModels = false}) async {
   final repositoryRoot = Directory.current.parent.parent;
   final fixtureFile = File(
@@ -238,35 +188,15 @@ Future<_SignedRelease> _createSignedRelease(
     };
   }
   final digest = sha256.convert(utf8.encode(canonicalJson(profile))).toString();
-  const publisher = 'conclave';
-  const keyId = 'test-profile-key';
-  final keyPair = await Ed25519().newKeyPair();
-  final message = workerProfileSigningMessage(
-    publisher: publisher,
-    signingKeyId: keyId,
-    workerTypeId: 'model-worker',
-    revision: 2,
-    schemaVersion: profile['schemaVersion'] as int,
-    payloadDigest: digest,
-  );
-  final signature = await Ed25519().sign(
-    utf8.encode(message),
-    keyPair: keyPair,
-  );
-  return _SignedRelease(
+  return _CurrentProfile(
     {
       'workerTypeId': 'model-worker',
       'schemaVersion': profile['schemaVersion'],
       'revision': 2,
       'digest': digest,
       'profile': profile,
-      'signature': base64.encode(signature.bytes),
-      'signingKeyId': keyId,
-      'publisher': publisher,
       'updatedAt': DateTime.utc(2026).toIso8601String(),
-      'verified': true,
     },
-    keyPair,
   );
 }
 

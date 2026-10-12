@@ -102,7 +102,7 @@ void main() {
     });
 
     test(
-        'Workspace verifies signed Tool Profile admissions against Ed25519 trust boundary',
+        'Workspace validates Worker Profile admissions before execution',
         () {
       final admission = const ToolProfileReleaseAdmission(
         profile: {
@@ -124,7 +124,7 @@ void main() {
         channel: 'stable',
       );
 
-      expect(admission.isSigned, isTrue);
+      expect(admission.isPublished, isTrue);
       expect(admission.channel, equals('stable'));
     });
   });

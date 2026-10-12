@@ -69,7 +69,7 @@ void main() {
         engineVersion: '1.0.0',
         providerCliVersion: '0.3.0');
     expect(resolution.source, ToolProfileResolutionSource.draft);
-    expect(resolution.release!.isSigned, isFalse);
+    expect(resolution.release!.isPublished, isFalse);
     expect(resolution.release, isA<LocalDraftProfileCandidate>());
     expect(await store.currentWorkerProfile('fixture-worker'), isNull);
     final productionStore = WorkerProfileStore(

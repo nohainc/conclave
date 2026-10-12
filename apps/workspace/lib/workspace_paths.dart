@@ -90,7 +90,7 @@ class WorkspacePaths {
   Directory get workersDirectory =>
       Directory('${applicationSupportDirectory.path}/Workers');
 
-  /// Immutable signed Tool Profile material managed independently of Engines.
+  /// Immutable Worker Profile material managed independently of Engines.
   Directory get profilesDirectory =>
       Directory('${applicationSupportDirectory.path}/Profiles');
 

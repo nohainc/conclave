@@ -3,18 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('Profile Admin read models', () {
-    test('access diagnostics separate permission from signer readiness', () {
+    test('access diagnostics expose only operator permissions', () {
       final access = ProfileLabAccessReadModel.fromJson({
         'permissions': {'profilesAdmin': true, 'issueSupport': true},
-        'signer': {
-          'ready': false,
-          'issues': ['private_key_missing']
-        }
       });
       expect(access.profilesAdmin, isTrue);
       expect(access.issueSupport, isTrue);
-      expect(access.signerReady, isFalse);
-      expect(access.signerIssues, ['private_key_missing']);
       expect(ProfileLabAccessReadModel.fromJson({}).profilesAdmin, isFalse);
     });
     test('worker catalog fields are typed without capability metadata', () {

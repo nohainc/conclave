@@ -182,7 +182,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('AI Profile Candidate Proposal'), findsOneWidget);
-      expect(find.textContaining('trusted current Worker Profile'),
+      expect(find.textContaining('current Worker Profile'),
           findsOneWidget);
       expect(find.textContaining('Sign in to Cloud'), findsOneWidget);
     });

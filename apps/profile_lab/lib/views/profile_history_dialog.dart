@@ -6,7 +6,7 @@ import '../controllers/profile_lab_controller.dart';
 import '../theme/profile_lab_theme.dart';
 import 'profile_release_diff_view.dart';
 
-/// On-demand history view for the one current Profile and its signed snapshots.
+/// On-demand history view for the one current Profile and its published snapshots.
 class ProfileHistoryDialog extends StatefulWidget {
   const ProfileHistoryDialog({super.key, required this.controller});
 
@@ -131,7 +131,6 @@ class _ProfileHistoryDialogState extends State<ProfileHistoryDialog> {
                     'Unknown time';
                 final digestPreview =
                     digest.length <= 12 ? digest : digest.substring(0, 12);
-                final verified = snapshot['verified'] == true;
                 final profile = snapshot['profile'] is Map
                     ? Map<String, dynamic>.from(snapshot['profile'] as Map)
                     : null;
@@ -142,7 +141,7 @@ class _ProfileHistoryDialogState extends State<ProfileHistoryDialog> {
                   ),
                   title: Text('Revision $revision'),
                   subtitle: Text(
-                    '$digestPreview · $updatedAt${verified ? ' · Verified' : ' · Verification unavailable'}',
+                    '$digestPreview · $updatedAt · Published',
                   ),
                   trailing: Wrap(
                     spacing: 4,

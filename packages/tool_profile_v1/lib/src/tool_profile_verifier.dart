@@ -1,16 +1,17 @@
 import 'dart:convert';
+
 import 'package:crypto/crypto.dart';
 
 import '../tool_profile_v1.dart';
 
-/// Verifies Profile integrity and signed release identity before Workspace
-/// or Profile Lab admits a Profile to the generic CLI Worker Engine.
+/// Validates a legacy V8 Profile envelope while installations migrate to the
+/// single current V9 Profile snapshot. Legacy lifecycle metadata is accepted
+/// only to read an existing local cache; no signature is required or emitted.
 abstract final class ToolProfileReleaseVerifier {
   static const maxPayloadBytes = maxProfileBytes;
 
   static Future<ToolProfileReleaseAdmission> verify({
     required Object? input,
-    required WorkerTrustPolicy trustPolicy,
     required String expectedWorkerTypeId,
   }) async {
     if (input is! Map) {
@@ -27,17 +28,14 @@ abstract final class ToolProfileReleaseVerifier {
       throw const FormatException('Profile payload exceeds the size limit');
     }
     EngineProfile.parse(utf8.encode(profileJson));
-    final digest = sha256.convert(utf8.encode(profileJson)).toString();
     final profileDefinitionId = _string(release, 'profileDefinitionId');
     final logicalWorkerTypeId = _string(release, 'workerTypeId');
     final releaseVersion = release['releaseVersion'];
     final channel = _string(release, 'channel');
     final providerToolName = _string(release, 'providerToolName');
-    final publisher = _string(release, 'publisher');
-    final signingKeyId = _string(release, 'signingKeyId');
-    final signature = _string(release, 'signature');
     final declaredDigest = _string(release, 'payloadDigest');
     final engineCompatibility = release['engineCompatibility'];
+    final digest = sha256.convert(utf8.encode(profileJson)).toString();
 
     if (!_identifier.hasMatch(profileDefinitionId) ||
         !_identifier.hasMatch(logicalWorkerTypeId) ||
@@ -56,30 +54,12 @@ abstract final class ToolProfileReleaseVerifier {
         profile['providerTool'] is! Map ||
         (profile['providerTool'] as Map)['name'] != providerToolName ||
         !_sameJson(profile['engineCompatibility'], engineCompatibility)) {
-      throw const FormatException(
-          'Profile release identity or metadata mismatch');
+      throw const FormatException('Profile release identity or metadata mismatch');
     }
     final providerCompatibility =
         (profile['providerTool'] as Map)['supportedVersions'];
     if (providerCompatibility is! List || providerCompatibility.isEmpty) {
       throw const FormatException('Profile provider compatibility is invalid');
-    }
-    final message = toolProfileReleaseSigningMessage(
-      publisher: publisher,
-      signingKeyId: signingKeyId,
-      payloadDigest: digest,
-      profile: profile,
-    );
-    final valid = await trustPolicy.verifyToolProfileRelease(
-      publisher: publisher,
-      signingKeyId: signingKeyId,
-      digest: digest,
-      releaseId: '$profileDefinitionId@$releaseVersion',
-      signature: signature,
-      message: message,
-    );
-    if (!valid) {
-      throw StateError('Tool Profile release signature is not trusted');
     }
     return ToolProfileReleaseAdmission(
       profile: freezeJson(profile) as Map<String, Object?>,

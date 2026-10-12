@@ -64,15 +64,9 @@ List<String> _stringList(Map<String, dynamic> json, String key) {
 class ProfileLabAccessReadModel {
   ProfileLabAccessReadModel.fromJson(Map<String, dynamic> json)
       : profilesAdmin = (json['permissions'] as Map?)?['profilesAdmin'] == true,
-        issueSupport = (json['permissions'] as Map?)?['issueSupport'] == true,
-        signerReady = (json['signer'] as Map?)?['ready'] == true,
-        signerIssues = List<String>.unmodifiable(
-            ((json['signer'] as Map?)?['issues'] as List? ?? const [])
-                .whereType<String>());
+        issueSupport = (json['permissions'] as Map?)?['issueSupport'] == true;
   final bool profilesAdmin;
   final bool issueSupport;
-  final bool signerReady;
-  final List<String> signerIssues;
 }
 
 class ProfileLabIssueReportReadModel extends ProfileAdminReadModel {

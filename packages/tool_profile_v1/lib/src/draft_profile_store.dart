@@ -52,7 +52,7 @@ class DraftProfileMetadata {
 ///
 /// Restrictive filesystem permissions (0700 for directories, 0600 for files) are
 /// enforced on POSIX platforms. Drafts stored here are completely isolated from
-/// Workspace's verified signed release storage and can never satisfy
+/// Workspace's verified published Profile storage and can never satisfy
 /// [ToolProfileReleaseAdmission].
 class DraftProfileStore {
   DraftProfileStore({required Directory draftsRoot}) : _draftsRoot = draftsRoot;
@@ -109,7 +109,7 @@ class DraftProfileStore {
   ///
   /// The [profileJson] is strictly validated against [EngineProfile.parse].
   /// Returns the corresponding [LocalDraftProfileCandidate], which is guaranteed
-  /// to have `isSigned == false`.
+  /// to have `isPublished == false`.
   Future<LocalDraftProfileCandidate> saveDraft({
     required String profileDefinitionId,
     required Map<String, Object?> profileJson,

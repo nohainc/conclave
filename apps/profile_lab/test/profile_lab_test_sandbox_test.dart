@@ -337,7 +337,7 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
         profileJson: validProfile,
         author: 'macOS acceptance fixture',
       );
-      expect(savedDraft.isSigned, isFalse);
+      expect(savedDraft.isPublished, isFalse);
       final loadedDraft = await draftStore.loadDraft('sandbox-test-worker');
       expect(loadedDraft, isNotNull);
       final validCandidate = loadedDraft!;

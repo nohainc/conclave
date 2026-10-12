@@ -1,4 +1,4 @@
-/// Product branding only. Execution options come from signed Tool Profiles.
+/// Product branding only. Execution options come from Worker Profiles.
 class WorkerPresentation {
   const WorkerPresentation({required this.name, this.iconAsset});
 

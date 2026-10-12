@@ -386,7 +386,7 @@ void main() {
       expect(postRestartProfileRequests, 2);
 
       // Cloud retires the Worker while offline. The cached active catalog and
-      // signed Profile remain authoritative until the next successful sync.
+      // current Profile remains authoritative until the next successful sync.
       catalogActive = false;
       cloudAvailable = false;
       await coordinator.refresh(force: true);

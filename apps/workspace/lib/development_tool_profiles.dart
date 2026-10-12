@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 
-/// Explicit local-only draft execution. It never creates a signed admission.
+/// Explicit local-only draft execution. It never creates a published admission.
 class DevelopmentToolProfiles {
   DevelopmentToolProfiles({
     required this.draftsRoot,
@@ -53,8 +53,8 @@ class DevelopmentToolProfiles {
 
   /// Pins the schema-validated payload by digest so edits cannot change a run.
   Future<File> snapshot(ToolProfileCandidate candidate) async {
-    if (candidate.isSigned) {
-      throw ArgumentError('Expected an unsigned candidate');
+    if (candidate.isPublished) {
+      throw ArgumentError('Expected an unpublished candidate');
     }
     await snapshotsRoot.create(recursive: true);
     final file = File('${snapshotsRoot.path}/${candidate.payloadDigest}.json');

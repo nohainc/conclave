@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:cryptography/cryptography.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:test/test.dart';
 
@@ -129,13 +128,13 @@ void main() {
     });
 
     test(
-        'LocalDraftProfileCandidate computes canonical digest and identifies as unsigned',
+        'LocalDraftProfileCandidate computes canonical digest and identifies as unpublished',
         () {
       final sampleProfile = validProfileMap();
 
       final candidate =
           LocalDraftProfileCandidate.fromProfileMap(sampleProfile);
-      expect(candidate.isSigned, isFalse);
+      expect(candidate.isPublished, isFalse);
       expect(candidate.profileDefinitionId, 'chatgpt-codex');
       expect(candidate.releaseVersion, 10);
       expect(candidate.logicalWorkerTypeId, 'chatgpt');
@@ -222,48 +221,5 @@ void main() {
       );
     });
 
-    test(
-        'WorkerTrustPolicy verifies valid Ed25519 signature and honors revocations',
-        () async {
-      final algorithm = Ed25519();
-      final keyPair = await algorithm.newKeyPair();
-      final publicKey = await keyPair.extractPublicKey();
-      final pubKeyBase64 = base64.encode(publicKey.bytes);
-
-      const publisher = 'conclave';
-      const keyId = 'key-1';
-      final policy = WorkerTrustPolicy(
-        trustedPublicKeys: {
-          publisher: {keyId: pubKeyBase64}
-        },
-      );
-
-      const message = 'conclave-tool-profile-release-v1\ntest-signing-message';
-      final signature =
-          await algorithm.sign(utf8.encode(message), keyPair: keyPair);
-      final sigBase64 = base64.encode(signature.bytes);
-
-      final valid = await policy.verifyToolProfileRelease(
-        publisher: publisher,
-        signingKeyId: keyId,
-        digest: 'sha256:abc',
-        releaseId: 'chatgpt-codex@1',
-        signature: sigBase64,
-        message: message,
-      );
-      expect(valid, isTrue);
-
-      // Test revocation of digest
-      policy.updateRevocations(digests: {'sha256:abc'});
-      final revoked = await policy.verifyToolProfileRelease(
-        publisher: publisher,
-        signingKeyId: keyId,
-        digest: 'sha256:abc',
-        releaseId: 'chatgpt-codex@1',
-        signature: sigBase64,
-        message: message,
-      );
-      expect(revoked, isFalse);
-    });
   });
 }

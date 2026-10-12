@@ -87,8 +87,7 @@ class ProfileAdminApiClient {
     final result = await _request('GET', _api('/api/admin/profile-lab/access'));
     if (result is! Map<String, dynamic> ||
         result['schemaVersion'] != 1 ||
-        result['permissions'] is! Map ||
-        result['signer'] is! Map) {
+        result['permissions'] is! Map) {
       throw const FormatException('Invalid Profile Lab access response');
     }
     return ProfileLabAccessReadModel.fromJson(result);

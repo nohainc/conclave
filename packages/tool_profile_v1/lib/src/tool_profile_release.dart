@@ -15,11 +15,10 @@ abstract interface class ToolProfileCandidate {
   String get logicalWorkerTypeId;
   String get providerToolName;
   String get payloadDigest;
-  bool get isSigned;
+  bool get isPublished;
 }
 
-/// Cloud response for one immutable Profile release, with database lifecycle
-/// metadata kept alongside (but outside) the signed behavior envelope.
+/// Legacy Cloud response for one immutable Profile release.
 class ToolProfileReleaseAdmission implements ToolProfileCandidate {
   const ToolProfileReleaseAdmission({
     required this.profile,
@@ -48,7 +47,7 @@ class ToolProfileReleaseAdmission implements ToolProfileCandidate {
   final String channel;
 
   @override
-  bool get isSigned => true;
+  bool get isPublished => true;
 }
 
 /// Cloud's V9 current Profile snapshot. Unlike a legacy release, this
@@ -59,9 +58,6 @@ class WorkerProfileSnapshotAdmission implements ToolProfileCandidate {
     required this.workerTypeId,
     required this.revision,
     required this.payloadDigest,
-    required this.signature,
-    required this.signingKeyId,
-    required this.publisher,
   });
 
   @override
@@ -71,9 +67,6 @@ class WorkerProfileSnapshotAdmission implements ToolProfileCandidate {
   final int revision;
   @override
   final String payloadDigest;
-  final String signature;
-  final String signingKeyId;
-  final String publisher;
 
   @override
   String get profileDefinitionId => profile['profileDefinitionId'] as String;
@@ -89,11 +82,10 @@ class WorkerProfileSnapshotAdmission implements ToolProfileCandidate {
       (profile['providerTool'] as Map)['name'] as String;
 
   @override
-  bool get isSigned => true;
+  bool get isPublished => true;
 }
 
-/// Unsigned local Draft Profile candidate used strictly within the
-/// Profile Lab test sandbox. Never admitted to production Workspaces.
+/// Local unpublished Profile candidate used by Profile Lab.
 class LocalDraftProfileCandidate implements ToolProfileCandidate {
   const LocalDraftProfileCandidate({
     required this.profile,
@@ -120,7 +112,7 @@ class LocalDraftProfileCandidate implements ToolProfileCandidate {
   final String payloadDigest;
 
   @override
-  bool get isSigned => false;
+  bool get isPublished => false;
 
   /// Creates a draft candidate from raw JSON map after computing its canonical digest.
   factory LocalDraftProfileCandidate.fromProfileMap(Map<String, Object?> json) {
@@ -162,50 +154,6 @@ class ToolProfileReleaseIdentity {
 
   @override
   String toString() => '$profileDefinitionId@$releaseVersion';
-}
-
-/// Computes the canonical Ed25519 signing message for a Tool Profile Release v1.
-String toolProfileReleaseSigningMessage({
-  required String publisher,
-  required String signingKeyId,
-  required String payloadDigest,
-  required Map<String, Object?> profile,
-}) {
-  final providerTool = profile['providerTool'] as Map;
-  return 'conclave-tool-profile-release-v1\n${canonicalJson({
-        'domain': 'conclave-tool-profile-release-v1',
-        'publisher': publisher,
-        'signingKeyId': signingKeyId,
-        'payloadDigest': payloadDigest,
-        'profileDefinitionId': profile['profileDefinitionId'],
-        'releaseVersion': profile['releaseVersion'],
-        'logicalWorkerTypeId': profile['logicalWorkerTypeId'],
-        'engineFamily': profile['engineFamily'],
-        'schemaVersion': profile['schemaVersion'],
-        'engineCompatibility': profile['engineCompatibility'],
-        'providerToolName': providerTool['name'],
-        'providerCompatibility': providerTool['supportedVersions'],
-      })}';
-}
-
-/// Computes the canonical Ed25519 signing message for a V9 current Profile.
-String workerProfileSigningMessage({
-  required String publisher,
-  required String signingKeyId,
-  required String workerTypeId,
-  required int revision,
-  required int schemaVersion,
-  required String payloadDigest,
-}) {
-  return 'conclave-worker-profile-v9\n${canonicalJson({
-        'domain': 'conclave-worker-profile-v9',
-        'publisher': publisher,
-        'signingKeyId': signingKeyId,
-        'workerTypeId': workerTypeId,
-        'revision': revision,
-        'schemaVersion': schemaVersion,
-        'payloadDigest': payloadDigest,
-      })}';
 }
 
 /// Recursively freezes a JSON object or array into unmodifiable structures.

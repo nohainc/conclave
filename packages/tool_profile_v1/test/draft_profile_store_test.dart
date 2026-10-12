@@ -39,7 +39,7 @@ void main() {
         },
       );
 
-      expect(candidate.isSigned, isFalse);
+      expect(candidate.isPublished, isFalse);
       expect(candidate.profileDefinitionId, 'chatgpt-codex');
       expect(candidate.releaseVersion, 1);
       expect(candidate.payloadDigest.isNotEmpty, isTrue);
@@ -71,7 +71,7 @@ void main() {
 
       final loaded = await store.loadDraft('gemini-antigravity');
       expect(loaded, isNotNull);
-      expect(loaded!.isSigned, isFalse);
+      expect(loaded!.isPublished, isFalse);
       expect(loaded.profileDefinitionId, 'gemini-antigravity');
       expect(loaded.releaseVersion, 3);
       expect(loaded.payloadDigest, saved.payloadDigest);
@@ -202,7 +202,7 @@ void main() {
       );
 
       // Draft candidate implements ToolProfileCandidate, but is not signed
-      expect(draft.isSigned, isFalse);
+      expect(draft.isPublished, isFalse);
       expect(draft is ToolProfileReleaseAdmission, isFalse);
     });
   });

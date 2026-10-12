@@ -775,7 +775,7 @@ final class ExecuteRequest extends WorkerFrame {
 ///
 /// `full_access` is emitted only after the Workspace service has verified its
 /// persisted host-owner authorization. It remains explicit so the Engine and
-/// signed Tool Profile apply the same policy end to end.
+/// Worker Profile applies the same policy end to end.
 enum WorkerExecutionPolicy {
   restricted('restricted'),
   providerDefault('provider_default'),

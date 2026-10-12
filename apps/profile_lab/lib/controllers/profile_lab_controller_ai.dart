@@ -7,11 +7,10 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
   Future<List<ProfileLabAiModelOption>> loadAvailableAiModels() async {
     if (currentSession == null || currentSession!.isExpired) {
       throw StateError(
-          'Sign in to Cloud to load trusted current Worker Profiles.');
+          'Sign in to Cloud to load current Worker Profiles.');
     }
     final models = await _modelProposalService.loadAvailableModels(
       apiClient: apiClient,
-      trustPolicy: profileLabReleaseTrustPolicy(),
       discoverModels: (profile) async {
         final engine = engineExecutable;
         if (engine == null) {
@@ -27,8 +26,8 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
     );
     availableAiModels = models;
     aiProposalError = models.isEmpty
-        ? 'No trusted current Worker Profile is available for model proposals. '
-            'Configure the Profile Lab trust roots and publish a Worker Profile.'
+        ? 'No current Worker Profile is available for model proposals. '
+            'Publish a Worker Profile with model selection enabled.'
         : null;
     notifyListeners();
     return models;
@@ -71,7 +70,7 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
           .firstOrNull;
       if (selectedModel == null) {
         throw StateError(
-          'The selected current Worker Profile is no longer trusted or available.',
+          'The selected current Worker Profile is no longer available.',
         );
       }
 

@@ -213,7 +213,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                     message: c.labAccessError ??
                                         (c.labAccess == null
                                             ? 'Profile Lab permissions have not been verified.'
-                                            : 'Profile administration: ${c.labAccess!.profilesAdmin ? "Authorized" : "Not authorized"} · ${c.labAccess!.signerReady ? "Cloud signer ready" : "Cloud signer not configured"}'),
+                                            : 'Profile administration: ${c.labAccess!.profilesAdmin ? "Authorized" : "Not authorized"}'),
                                     child: InkWell(
                                       onTap: c.isCheckingLabAccess
                                           ? null
