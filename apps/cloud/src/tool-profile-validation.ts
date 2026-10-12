@@ -85,6 +85,22 @@ export interface ToolProfileAcceptanceEvidence {
   readonly scenarios: Readonly<Record<string, "passed" | "not_applicable">>;
 }
 
+/**
+ * V9 publication evidence identifies the exact candidate and compatibility
+ * matrix entry tested by Profile Lab. It is evidence of a client-side test,
+ * not cryptographic proof that Cloud executed the test.
+ */
+export interface WorkerProfilePublicationEvidence {
+  readonly formatVersion: 1;
+  readonly workerTypeId: string;
+  readonly candidateDigest: string;
+  readonly engineVersion: string;
+  readonly providerToolName: string;
+  readonly providerToolVersion: string;
+  readonly testedAt: string;
+  readonly scenarios: Readonly<Record<string, "passed" | "not_applicable">>;
+}
+
 export const channelNames = new Set<ToolProfileChannel>([
   "testing",
   "beta",
@@ -305,6 +321,95 @@ export function validateToolProfileAcceptanceEvidence(
   return evidence as unknown as ToolProfileAcceptanceEvidence;
 }
 
+export function validateWorkerProfilePublicationEvidence(
+  input: unknown,
+  expected: {
+    workerTypeId: string;
+    candidateDigest: string;
+    profile: ToolProfileV1;
+  },
+): WorkerProfilePublicationEvidence {
+  const fail = (): never => {
+    throw new ToolProfileRegistryError(
+      409,
+      "Publication requires complete, recent evidence for this exact Profile candidate",
+    );
+  };
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return fail();
+  }
+  const evidence = input as Record<string, unknown>;
+  const forbiddenKeys = new Set([
+    "secrets",
+    "env",
+    "environment",
+    "stdout",
+    "stderr",
+    "apiKey",
+    "apiKeys",
+    "token",
+    "tokens",
+    "credentials",
+  ]);
+  if (Object.keys(evidence).some((key) => forbiddenKeys.has(key))) {
+    throw new ToolProfileRegistryError(
+      400,
+      "Raw provider secrets, environment dumps, or unrestricted stdout/stderr are forbidden in Cloud evidence",
+    );
+  }
+  const allowedKeys = new Set([
+    "formatVersion",
+    "workerTypeId",
+    "candidateDigest",
+    "engineVersion",
+    "providerToolName",
+    "providerToolVersion",
+    "testedAt",
+    "scenarios",
+  ]);
+  if (Object.keys(evidence).some((key) => !allowedKeys.has(key))) return fail();
+  if (
+    evidence.formatVersion !== 1 ||
+    evidence.workerTypeId !== expected.workerTypeId ||
+    evidence.candidateDigest !== expected.candidateDigest ||
+    typeof evidence.engineVersion !== "string" ||
+    !releaseRangeIncludes(evidence.engineVersion, [
+      expected.profile.engineCompatibility,
+    ]) ||
+    evidence.providerToolName !== expected.profile.providerTool.name ||
+    typeof evidence.providerToolVersion !== "string" ||
+    !releaseRangeIncludes(
+      evidence.providerToolVersion,
+      expected.profile.providerTool.supportedVersions,
+    ) ||
+    typeof evidence.testedAt !== "string" ||
+    !Number.isFinite(Date.parse(evidence.testedAt)) ||
+    Date.parse(evidence.testedAt) > Date.now() + 5 * 60 * 1000 ||
+    Date.now() - Date.parse(evidence.testedAt) > 90 * 24 * 60 * 60 * 1000 ||
+    !evidence.scenarios ||
+    typeof evidence.scenarios !== "object" ||
+    Array.isArray(evidence.scenarios)
+  ) {
+    return fail();
+  }
+  const expectedScenarioStatuses = toolProfileAcceptanceScenarioStatuses(
+    expected.profile,
+  );
+  const scenarios = evidence.scenarios as Record<string, unknown>;
+  if (
+    Object.keys(scenarios).length !== acceptanceScenarios.length ||
+    acceptanceScenarios.some(
+      (name) => scenarios[name] !== expectedScenarioStatuses[name],
+    )
+  ) {
+    return fail();
+  }
+  if (new TextEncoder().encode(JSON.stringify(evidence)).byteLength > 32768) {
+    return fail();
+  }
+  return evidence as unknown as WorkerProfilePublicationEvidence;
+}
+
 export function validateId(value: string, label: string): void {
   if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(value) || value.length > 96) {
     throw new ToolProfileRegistryError(400, `${label} is invalid`);
@@ -438,5 +543,25 @@ export function toolProfileReleaseSigningMessage(args: {
     engineCompatibility: profile.engineCompatibility,
     providerToolName: profile.providerTool.name,
     providerCompatibility: profile.providerTool.supportedVersions,
+  })}`;
+}
+
+/** Canonical Ed25519 message for the V9 current Worker Profile snapshot. */
+export function workerProfileSigningMessage(args: {
+  publisher: string;
+  signingKeyId: string;
+  workerTypeId: string;
+  revision: number;
+  schemaVersion: number;
+  payloadDigest: string;
+}): string {
+  return `conclave-worker-profile-v9\n${canonicalReleaseJson({
+    domain: "conclave-worker-profile-v9",
+    publisher: args.publisher,
+    signingKeyId: args.signingKeyId,
+    workerTypeId: args.workerTypeId,
+    revision: args.revision,
+    schemaVersion: args.schemaVersion,
+    payloadDigest: args.payloadDigest,
   })}`;
 }

@@ -258,10 +258,38 @@ Existing migrations MUST remain in order and production migration history MUST
 NOT be deleted or renumbered. The first replacement migration MUST NOT delete
 or rewrite the V8 Profile tables it reads.
 
-## 11. Acceptance contract
+## 11. Cloud API contract
 
-Phase 1 is accepted when all four runtime/control-plane components reference
-this specification and agree on these facts:
+The V9 Cloud API exposes one current Profile identity per logical Worker:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/admin/workers` | List managed Workers and current Profile summaries. |
+| `GET` | `/api/admin/workers/:id/profile` | Read the current published Profile. |
+| `POST` | `/api/admin/workers/:id/profile/validate` | Validate candidate JSON and optional test evidence without publishing. |
+| `PUT` | `/api/admin/workers/:id/profile` | Publish a tested candidate as the next revision. |
+| `GET` | `/api/admin/workers/:id/profile/history` | Inspect retained previous snapshots. |
+| `POST` | `/api/admin/workers/:id/profile/restore` | Republish a retained snapshot as a new revision. |
+| `GET` | `/api/workers/:id/profile` | Return the verified current Profile to an authorized Workspace runtime. |
+
+The publish request MUST contain `expectedRevision`, `candidateDigest`, the
+candidate `profile`, and recent `evidence`. `expectedRevision` is `0` only
+for a Worker with no current Profile. Cloud recalculates the canonical digest,
+validates the Profile schema and compatibility ranges, checks evidence identity
+and freshness, and signs the resulting revision. Client evidence demonstrates
+what Profile Lab reported from its local Engine/CLI test; it is not treated as
+cryptographic proof of local execution.
+
+The V9 endpoints do not accept channel names, promotion actions, release
+statuses, or draft-publication transitions. During the additive migration,
+legacy V8 endpoints may remain available solely for consumers that have not yet
+migrated; they MUST NOT be used by new V9 readers or writers and are removed by
+a later cleanup migration after consumer cutover.
+
+## 12. Acceptance contract
+
+The V9 contract is accepted when all four runtime/control-plane components
+reference this specification and agree on these facts:
 
 - the same stable logical Worker identity names the Profile in Cloud, Profile
   Lab, Workspace, and Engine admission data;

@@ -380,6 +380,66 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    if (request.method === "GET" && url.pathname === "/api/admin/workers") {
+      return await handlers.handleListV9WorkerProfiles!(request, env, ctx);
+    }
+    const v9AdminWorkerProfileMatch = url.pathname.match(
+      /^\/api\/admin\/workers\/([^/]+)\/profile(?:\/(validate|history|restore))?$/,
+    );
+    if (v9AdminWorkerProfileMatch?.[1]) {
+      const workerTypeId = decodeURIComponent(v9AdminWorkerProfileMatch[1]);
+      const action = v9AdminWorkerProfileMatch[2];
+      if (request.method === "GET" && !action) {
+        return await handlers.handleGetV9WorkerProfile!(
+          request,
+          env,
+          workerTypeId,
+          ctx,
+        );
+      }
+      if (request.method === "POST" && action === "validate") {
+        return await handlers.handleValidateV9WorkerProfile!(
+          request,
+          env,
+          workerTypeId,
+          ctx,
+        );
+      }
+      if (request.method === "PUT" && !action) {
+        return await handlers.handlePublishV9WorkerProfile!(
+          request,
+          env,
+          workerTypeId,
+          ctx,
+        );
+      }
+      if (request.method === "GET" && action === "history") {
+        return await handlers.handleListV9WorkerProfileHistory!(
+          request,
+          env,
+          workerTypeId,
+          ctx,
+        );
+      }
+      if (request.method === "POST" && action === "restore") {
+        return await handlers.handleRestoreV9WorkerProfile!(
+          request,
+          env,
+          workerTypeId,
+          ctx,
+        );
+      }
+    }
+    const v9WorkspaceWorkerProfileMatch = url.pathname.match(
+      /^\/api\/workers\/([^/]+)\/profile$/,
+    );
+    if (request.method === "GET" && v9WorkspaceWorkerProfileMatch?.[1]) {
+      return await handlers.handleGetWorkspaceV9WorkerProfile!(
+        request,
+        env,
+        decodeURIComponent(v9WorkspaceWorkerProfileMatch[1]),
+      );
+    }
     if (
       request.method === "POST" &&
       url.pathname === "/api/admin/tool-profiles/definitions"
