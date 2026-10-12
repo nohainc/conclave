@@ -488,8 +488,12 @@ class WorkerReadinessMonitor {
       );
     }
     final resolver = ToolProfileResolver(store);
-    var profileChannel =
-        (await store.releaseState(profileDefinitionId)).selectedChannel;
+    final v9Cache = await store.hasWorkerProfileCache(worker.workerTypeId);
+    var profileChannel = 'stable';
+    if (!v9Cache) {
+      profileChannel =
+          (await store.releaseState(profileDefinitionId)).selectedChannel;
+    }
     late ToolProfileResolution<ToolProfileCandidate> resolution;
     try {
       resolution = await workerCatalogCoordinator!.resolveProfileForWorker(
@@ -500,8 +504,10 @@ class WorkerReadinessMonitor {
         // wait on that refresh from a readiness check: it may be waiting on us.
         synchronizeIfUnavailable: false,
       );
-      profileChannel =
-          (await store.releaseState(profileDefinitionId)).selectedChannel;
+      if (!v9Cache) {
+        profileChannel =
+            (await store.releaseState(profileDefinitionId)).selectedChannel;
+      }
     } on Object catch (error) {
       final issueCode = error is FormatException
           ? 'profile_signature_invalid'
@@ -564,6 +570,60 @@ class WorkerReadinessMonitor {
         replaceToolVersion: true,
         diagnosticDetails:
             'Unsigned development Profile; local loopback execution only.',
+      );
+    }
+    if (candidate is WorkerProfileSnapshotAdmission) {
+      final probe = await engine.probe(
+        candidate,
+        profileFile: await store.executionProfileFile(candidate),
+        stateDirectory: stateDirectory,
+        mode: mode == LocalWorkerProbeMode.live
+            ? WorkerProbeMode.live
+            : WorkerProbeMode.passive,
+        timeout: mode == LocalWorkerProbeMode.live
+            ? const Duration(
+                milliseconds: WorkerProtocolLimits.maxProbeTimeoutMs)
+            : const Duration(seconds: 20),
+      );
+      final actualVersion = probe.providerToolVersion;
+      final providerCompatible = actualVersion == null ||
+          ToolProfileCompatibility.isCandidateCompatible(
+            candidate: candidate,
+            logicalWorkerTypeId: worker.workerTypeId,
+            profileDefinitionId: profileDefinitionId,
+            engineVersion: cliWorkerEngineVersion,
+            providerCliVersion: actualVersion,
+          );
+      final issueCode = !providerCompatible
+          ? 'unsupported_provider_tool_version'
+          : probe.issueCode;
+      await _recordToolProfileDiagnostic(
+        worker,
+        runId: runId,
+        mode: mode,
+        durationMs: timer.elapsedMilliseconds,
+        profileDefinitionId: profileDefinitionId,
+        profileReleaseVersion: candidate.releaseVersion,
+        profileResolutionSource: resolution.source.name,
+        providerToolName: probe.providerToolName,
+        providerToolVersion: actualVersion,
+        issueCode: issueCode,
+        failureLayer:
+            issueCode == null ? null : _profileProbeFailureLayer(issueCode),
+      );
+      return WorkerReadinessAssessment(
+        issueCode == null && probe.ready
+            ? profileProbeReadiness(worker, candidate, probe, mode)
+            : issueCode == 'provider_authentication_required'
+                ? WorkerReadinessState.signInRequired
+                : WorkerReadinessState.testFailed,
+        issueCode: issueCode,
+        toolName: probe.providerToolName,
+        modelCatalog: probe.modelCatalog,
+        profileDigest: candidate.payloadDigest,
+        toolVersion: actualVersion,
+        replaceToolName: true,
+        replaceToolVersion: true,
       );
     }
     var release = candidate as ToolProfileReleaseAdmission?;

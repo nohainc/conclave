@@ -195,6 +195,14 @@ Activation failure leaves the prior active cache entry unchanged. A revoked,
 invalid, incompatible, or tampered Profile MUST fail closed and MUST NOT be
 used for a new execution.
 
+The on-disk V9 cache is keyed by logical Worker and contains only current and
+last-known-good snapshot/payload pairs. Refresh is periodic or event-triggered,
+not part of every assignment. A fetched snapshot is verified, staged, and
+then activated for new executions; the resolver never searches a release list.
+Legacy release-state files may remain during migration, but they are not
+consulted once a Worker has a V9 cache entry. Explicit revocation of current
+must not fall back to last-known-good.
+
 ## 7. Execution snapshots and continuity
 
 When Workspace admits an assignment, it binds the execution to a Profile

@@ -15,6 +15,8 @@ typedef ToolProfileListLoader = Future<ToolProfileCatalogResult> Function(
   String workerTypeId,
   String defaultChannel,
 );
+typedef ToolProfileCurrentLoader = Future<WorkerProfileSnapshotAdmission>
+    Function(String workerTypeId);
 typedef WorkerDescriptorLoader = Future<List<Object?>> Function();
 
 class ToolProfileCatalogResult {
@@ -29,7 +31,7 @@ class ToolProfileCatalogResult {
 
 typedef ToolProfileTrustRefresher = Future<void> Function();
 typedef ToolProfileCandidateValidator = Future<bool> Function(
-  ToolProfileReleaseAdmission candidate,
+  ToolProfileCandidate candidate,
   File profileFile,
 );
 typedef ToolProfileRevocationHandler = Future<void> Function(
@@ -49,6 +51,7 @@ class ToolProfileCatalogClient {
     HttpClient? client,
     this.timeout = const Duration(seconds: 30),
     this.listLoader,
+    this.currentProfileLoader,
     this.workerCatalogLoader,
     this.trustRefresher,
     this.candidateValidator,
@@ -70,6 +73,7 @@ class ToolProfileCatalogClient {
   final String? humanAuthToken;
   final Duration timeout;
   final ToolProfileListLoader? listLoader;
+  final ToolProfileCurrentLoader? currentProfileLoader;
   final WorkerDescriptorLoader? workerCatalogLoader;
   final ToolProfileTrustRefresher? trustRefresher;
   final ToolProfileCandidateValidator? candidateValidator;
@@ -241,11 +245,14 @@ class ToolProfileCatalogClient {
   void close() => _client.close(force: true);
 
   /// Refreshes revocations before downloading or activating any release.
-  Future<List<ToolProfileReleaseAdmission>> syncWorkerProfiles(
+  Future<List<ToolProfileCandidate>> syncWorkerProfiles(
     String workerTypeId, {
     String channel = 'stable',
   }) async {
-    _validateWorkerQuery(workerTypeId, channel);
+    _validateWorkerTypeId(workerTypeId);
+    if (!_usesV9ProfileSource) {
+      _validateWorkerQuery(workerTypeId, channel);
+    }
     await store.restoreRevocations();
     await (trustRefresher ?? _refreshTrustState)();
     await store.restoreRevocations(force: true);
@@ -254,10 +261,22 @@ class ToolProfileCatalogClient {
     if (affectedWorkerTypeIds.isNotEmpty) {
       await onRevocationsApplied?.call(affectedWorkerTypeIds);
     }
+    if (_usesV9ProfileSource) {
+      final candidate = currentProfileLoader == null
+          ? await fetchCurrentWorkerProfile(workerTypeId)
+          : await currentProfileLoader!(workerTypeId);
+      final staged = await store.stageWorkerProfile(candidate);
+      final validator = candidateValidator;
+      final validated = validator == null ||
+          await validator(staged, store.stagedWorkerProfileFile(staged));
+      if (!validated) return [staged];
+      final activated = await store.activateWorkerProfile(staged);
+      return [activated];
+    }
     final catalog = await listReleases(workerTypeId, channel: channel);
     final selectedChannel = catalog.channel;
     final releases = catalog.releases;
-    final admissions = <ToolProfileReleaseAdmission>[];
+    final admissions = <ToolProfileCandidate>[];
     final selectedVersions = <String, int>{};
     final candidates = <String, ToolProfileReleaseAdmission>{};
     final unvalidatedDefinitions = <String>{};
@@ -309,6 +328,12 @@ class ToolProfileCatalogClient {
     await store.enforceRetention();
     return List.unmodifiable(admissions);
   }
+
+  bool get _usesV9ProfileSource =>
+      currentProfileLoader != null ||
+      (listLoader == null &&
+          workspaceRuntimeId != null &&
+          workspaceRuntimeId!.isNotEmpty);
 
   Future<ToolProfileCatalogResult> listReleases(
     String workerTypeId, {

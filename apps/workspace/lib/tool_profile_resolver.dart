@@ -11,8 +11,10 @@ export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
         ToolProfileResolution,
         ToolProfileCompatibility;
 
-/// Resolves signed cached releases, or explicit loopback development drafts.
-/// Candidate order is active, Cloud-selected stable, then last-known-good.
+/// Resolves signed cached Profiles, or explicit loopback development drafts.
+/// V9 uses one current snapshot and, only when the current snapshot is
+/// unavailable, one last-known-good snapshot. Legacy channel resolution stays
+/// available only for pre-V9 cached installations during migration.
 class ToolProfileResolver {
   const ToolProfileResolver(this.store);
 
@@ -43,6 +45,25 @@ class ToolProfileResolver {
       }
       return ToolProfileResolution<ToolProfileCandidate>.selected(
           source: ToolProfileResolutionSource.draft, release: draft);
+    }
+
+    if (await store.hasWorkerProfileCache(logicalWorkerTypeId)) {
+      var v9Result = await _resolveV9(
+        logicalWorkerTypeId: logicalWorkerTypeId,
+        profileDefinitionId: profileDefinitionId,
+        engineVersion: engineVersion,
+        providerCliVersion: providerCliVersion,
+      );
+      if (!v9Result.isAvailable && ensureAvailable != null) {
+        await ensureAvailable();
+        v9Result = await _resolveV9(
+          logicalWorkerTypeId: logicalWorkerTypeId,
+          profileDefinitionId: profileDefinitionId,
+          engineVersion: engineVersion,
+          providerCliVersion: providerCliVersion,
+        );
+      }
+      return v9Result;
     }
     Future<ToolProfileResolution<ToolProfileReleaseAdmission>>
         resolveCurrent() async {
@@ -79,6 +100,93 @@ class ToolProfileResolver {
       result = await resolveCurrent();
     }
     return result;
+  }
+
+  Future<ToolProfileResolution<ToolProfileCandidate>> _resolveV9({
+    required String logicalWorkerTypeId,
+    required String profileDefinitionId,
+    required String engineVersion,
+    required String? providerCliVersion,
+  }) async {
+    WorkerProfileSnapshotAdmission? current;
+    try {
+      current = await store.currentWorkerProfile(logicalWorkerTypeId);
+    } on WorkerProfileRevokedException {
+      return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
+        ToolProfileUnavailableReason.noEligibleRelease,
+      );
+    } on Object {
+      // A corrupt or incomplete current cache entry is unavailable. The
+      // separately verified LKG may still be used under offline policy;
+      // explicit revocation is handled above and never reaches this path.
+      current = null;
+    }
+    if (current != null) {
+      return _checkV9Candidate(
+        current,
+        source: ToolProfileResolutionSource.active,
+        logicalWorkerTypeId: logicalWorkerTypeId,
+        profileDefinitionId: profileDefinitionId,
+        engineVersion: engineVersion,
+        providerCliVersion: providerCliVersion,
+      );
+    }
+    final lastKnownGood = await store.lastKnownGoodWorkerProfile(
+      logicalWorkerTypeId,
+    );
+    if (lastKnownGood == null) {
+      return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
+        ToolProfileUnavailableReason.noEligibleRelease,
+      );
+    }
+    return _checkV9Candidate(
+      lastKnownGood,
+      source: ToolProfileResolutionSource.lastKnownGood,
+      logicalWorkerTypeId: logicalWorkerTypeId,
+      profileDefinitionId: profileDefinitionId,
+      engineVersion: engineVersion,
+      providerCliVersion: providerCliVersion,
+    );
+  }
+
+  ToolProfileResolution<ToolProfileCandidate> _checkV9Candidate(
+    WorkerProfileSnapshotAdmission candidate, {
+    required ToolProfileResolutionSource source,
+    required String logicalWorkerTypeId,
+    required String profileDefinitionId,
+    required String engineVersion,
+    required String? providerCliVersion,
+  }) {
+    if (candidate.logicalWorkerTypeId != logicalWorkerTypeId ||
+        candidate.profileDefinitionId != profileDefinitionId) {
+      return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
+        ToolProfileUnavailableReason.noEligibleRelease,
+      );
+    }
+    try {
+      final profile = EngineProfile.parse(
+        utf8.encode(canonicalJson(candidate.profile)),
+      );
+      if (!_engineCompatible(profile, engineVersion)) {
+        return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
+          ToolProfileUnavailableReason.incompatibleEngineVersion,
+        );
+      }
+      if (providerCliVersion != null &&
+          !_providerCompatible(profile, providerCliVersion)) {
+        return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
+          ToolProfileUnavailableReason.unsupportedProviderVersion,
+        );
+      }
+      return ToolProfileResolution<ToolProfileCandidate>.selected(
+        source: source,
+        release: candidate,
+      );
+    } on Object {
+      return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
+        ToolProfileUnavailableReason.noEligibleRelease,
+      );
+    }
   }
 
   /// Selects a verified, Engine-compatible Profile to run only its bounded

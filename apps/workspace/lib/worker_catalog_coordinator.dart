@@ -484,7 +484,10 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
     final definitionId = entry.profileDefinitionId;
     try {
       final resolver = ToolProfileResolver(releaseStore);
-      final profileState = await releaseStore.releaseState(definitionId);
+      final v9Cache =
+          await releaseStore.hasWorkerProfileCache(entry.workerTypeId);
+      final profileState =
+          v9Cache ? null : await releaseStore.releaseState(definitionId);
       final resolution = await resolver.resolveForWorker(
         logicalWorkerTypeId: entry.workerTypeId,
         profileDefinitionId: definitionId,
@@ -514,9 +517,8 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
                         'the Cloud Profile trust root or republish the '
                         'release with the current signer.'
                     : 'No eligible signed Profile release is available for '
-                        'the selected channel. Publish and promote a '
-                        'qualified release to the channel selected for this '
-                        'Workspace.',
+                        'this Worker. Refresh the current published Profile '
+                        'or restore connectivity to use the authorized cache.',
               ToolProfileUnavailableReason.unsupportedProviderVersion =>
                 'The installed Provider CLI version is not supported by a Profile release.',
               ToolProfileUnavailableReason.incompatibleEngineVersion =>
@@ -525,7 +527,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
             },
             details: {
               'definitionId': definitionId,
-              'channel': profileState.selectedChannel,
+              if (profileState != null) 'channel': profileState.selectedChannel,
               if (trustIssues.isNotEmpty)
                 'trustIssues': [
                   for (final issue in trustIssues)
@@ -549,9 +551,11 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
             'definitionId': definitionId,
             'source': resolution.source.name,
             'unsignedDevelopment': resolution.release?.isSigned == false,
-            'activeVersion': profileState.activeVersion,
-            'lastKnownGoodVersion': profileState.lastKnownGoodVersion,
-            'channel': profileState.selectedChannel,
+            if (profileState != null) ...{
+              'activeVersion': profileState.activeVersion,
+              'lastKnownGoodVersion': profileState.lastKnownGoodVersion,
+              'channel': profileState.selectedChannel,
+            },
             if (resolution.release != null)
               'releaseVersion': resolution.release!.releaseVersion,
           },

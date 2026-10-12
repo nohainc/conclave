@@ -188,25 +188,12 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
     if (profileDefinitionId != null && toolProfileReleaseStore != null) {
       try {
         final resolver = ToolProfileResolver(toolProfileReleaseStore);
-        var resolution = worker.toolVersion == null
-            ? await resolver.resolveBootstrapProfile(
-                logicalWorkerTypeId: worker.workerTypeId,
-                profileDefinitionId: profileDefinitionId,
-                engineVersion: cliWorkerEngineVersion,
-              )
-            : await resolver.resolve(
-                logicalWorkerTypeId: worker.workerTypeId,
-                profileDefinitionId: profileDefinitionId,
-                engineVersion: cliWorkerEngineVersion,
-                providerCliVersion: worker.toolVersion!,
-              );
-        if (!resolution.isAvailable && worker.toolVersion != null) {
-          resolution = await resolver.resolveBootstrapProfile(
-            logicalWorkerTypeId: worker.workerTypeId,
-            profileDefinitionId: profileDefinitionId,
-            engineVersion: cliWorkerEngineVersion,
-          );
-        }
+        final resolution = await resolver.resolveForWorker(
+          logicalWorkerTypeId: worker.workerTypeId,
+          profileDefinitionId: profileDefinitionId,
+          engineVersion: cliWorkerEngineVersion,
+          providerCliVersion: worker.toolVersion,
+        );
         toolProfile = {
           'profileDefinitionId': profileDefinitionId,
           'profileResolutionSource': resolution.source.name,

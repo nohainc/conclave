@@ -5,6 +5,7 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 
 import 'platform_runtime.dart';
 import 'development_tool_profiles.dart';
+import 'tool_profile_release_verifier.dart';
 
 export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
     show canonicalJson;
@@ -38,6 +39,17 @@ class ToolProfileTrustIssue {
   final List<int> releaseVersions;
 }
 
+/// Raised when the current V9 snapshot was explicitly revoked. Resolvers must
+/// fail closed instead of treating the last-known-good snapshot as a bypass.
+class WorkerProfileRevokedException implements Exception {
+  const WorkerProfileRevokedException(this.workerTypeId);
+
+  final String workerTypeId;
+
+  @override
+  String toString() => 'Worker Profile is revoked: $workerTypeId';
+}
+
 /// Owns verified, immutable Profile material independently of Engine binaries.
 class ToolProfileReleaseStore {
   ToolProfileReleaseStore({
@@ -65,6 +77,9 @@ class ToolProfileReleaseStore {
 
   Future<File> executionProfileFile(ToolProfileCandidate candidate) async {
     if (candidate.isSigned) {
+      if (candidate is WorkerProfileSnapshotAdmission) {
+        return workerProfileFile(candidate);
+      }
       return profileFile(
           candidate.profileDefinitionId, candidate.releaseVersion);
     }
@@ -74,6 +89,19 @@ class ToolProfileReleaseStore {
     }
     return development.snapshot(candidate);
   }
+
+  /// Returns the cache file for a verified V9 snapshot. The candidate carries
+  /// its digest and revision, so an execution retains the snapshot identity
+  /// selected by the resolver even if a later refresh publishes a new one.
+  File workerProfileFile(WorkerProfileSnapshotAdmission candidate) => File(
+        '${workerProfileDirectory(candidate.workerTypeId).path}'
+        '${Platform.pathSeparator}current-profile.json',
+      );
+
+  /// Returns the staged payload for catalog-side Engine validation before the
+  /// snapshot becomes current.
+  File stagedWorkerProfileFile(WorkerProfileSnapshotAdmission candidate) =>
+      _workerProfileStagingPayloadFile(candidate.workerTypeId);
 
   final Directory profilesRoot;
   final WorkerTrustPolicy trustPolicy;
@@ -110,6 +138,155 @@ class ToolProfileReleaseStore {
 
   File _trustStateFile() =>
       File('${profilesRoot.path}${Platform.pathSeparator}trust-state.json');
+
+  Directory workerProfileDirectory(String workerTypeId) => Directory(
+        '${profilesRoot.path}${Platform.pathSeparator}v9-workers'
+        '${Platform.pathSeparator}${_safeDefinitionId(workerTypeId)}',
+      );
+
+  File _workerProfileSnapshotFile(String workerTypeId,
+          {bool lastKnownGood = false}) =>
+      File(
+        '${workerProfileDirectory(workerTypeId).path}${Platform.pathSeparator}'
+        '${lastKnownGood ? 'last-known-good' : 'current'}.json',
+      );
+
+  File _workerProfilePayloadFile(String workerTypeId,
+          {bool lastKnownGood = false}) =>
+      File(
+        '${workerProfileDirectory(workerTypeId).path}${Platform.pathSeparator}'
+        '${lastKnownGood ? 'last-known-good' : 'current'}-profile.json',
+      );
+
+  File _workerProfileStagingFile(String workerTypeId) => File(
+        '${workerProfileDirectory(workerTypeId).path}${Platform.pathSeparator}'
+        'staging.json',
+      );
+
+  File _workerProfileStagingPayloadFile(String workerTypeId) => File(
+        '${workerProfileDirectory(workerTypeId).path}${Platform.pathSeparator}'
+        'staging-profile.json',
+      );
+
+  /// Whether this Worker has entered the V9 cache model. This lets a fresh
+  /// installation retain a bounded migration fallback for legacy fixtures
+  /// until its first V9 snapshot arrives.
+  Future<bool> hasWorkerProfileCache(String workerTypeId) async {
+    return await _workerProfileSnapshotFile(workerTypeId).exists() ||
+        await _workerProfileSnapshotFile(workerTypeId, lastKnownGood: true)
+            .exists() ||
+        await _workerProfileStagingFile(workerTypeId).exists();
+  }
+
+  /// Stages a locally verified current V9 snapshot without making it active.
+  /// The admission was already verified by the catalog client; it is
+  /// re-encoded and verified again before it is materialized on disk.
+  Future<WorkerProfileSnapshotAdmission> stageWorkerProfile(
+    WorkerProfileSnapshotAdmission candidate,
+  ) async {
+    await restoreRevocations();
+    final schemaVersion = candidate.profile['schemaVersion'];
+    if (schemaVersion is! int) {
+      throw const FormatException('Worker Profile schema version is invalid');
+    }
+    final snapshot = <String, Object?>{
+      'workerTypeId': candidate.workerTypeId,
+      'schemaVersion': schemaVersion,
+      'profile': candidate.profile,
+      'revision': candidate.revision,
+      'digest': candidate.payloadDigest,
+      'signature': candidate.signature,
+      'signingKeyId': candidate.signingKeyId,
+      'publisher': candidate.publisher,
+      'verified': true,
+    };
+    final verified = await WorkerProfileSnapshotVerifier.verify(
+      input: snapshot,
+      trustPolicy: trustPolicy,
+      expectedWorkerTypeId: candidate.workerTypeId,
+    );
+    await _withLock(() async {
+      final directory = workerProfileDirectory(candidate.workerTypeId);
+      await directory.create(recursive: true);
+      await fileSystemPlatform.restrictPermissions(directory.path,
+          directory: true);
+      await _atomicWrite(_workerProfileStagingFile(candidate.workerTypeId),
+          canonicalJson(snapshot));
+      await _atomicWrite(
+        _workerProfileStagingPayloadFile(candidate.workerTypeId),
+        canonicalJson(verified.profile),
+      );
+    });
+    return verified;
+  }
+
+  /// Atomically promotes the staged V9 snapshot for new executions and
+  /// retains only the immediately preceding valid snapshot as LKG.
+  Future<WorkerProfileSnapshotAdmission> activateWorkerProfile(
+    WorkerProfileSnapshotAdmission candidate,
+  ) async {
+    await restoreRevocations();
+    WorkerProfileSnapshotAdmission? activated;
+    await _withLock(() async {
+      final staged = await _readWorkerProfileSnapshot(
+        candidate.workerTypeId,
+        staging: true,
+      );
+      if (staged == null ||
+          staged.revision != candidate.revision ||
+          staged.payloadDigest != candidate.payloadDigest) {
+        throw StateError('V9 Worker Profile staging identity changed');
+      }
+      final directory = workerProfileDirectory(candidate.workerTypeId);
+      final current = await _readWorkerProfileSnapshot(
+        candidate.workerTypeId,
+        allowMissing: true,
+      );
+      if (current != null && current.revision != staged.revision) {
+        await _copyFile(
+          _workerProfileSnapshotFile(candidate.workerTypeId),
+          _workerProfileSnapshotFile(candidate.workerTypeId,
+              lastKnownGood: true),
+        );
+        await _copyFile(
+          _workerProfilePayloadFile(candidate.workerTypeId),
+          _workerProfilePayloadFile(candidate.workerTypeId,
+              lastKnownGood: true),
+        );
+      }
+      await _copyFile(
+        _workerProfileStagingFile(candidate.workerTypeId),
+        _workerProfileSnapshotFile(candidate.workerTypeId),
+      );
+      await _copyFile(
+        _workerProfileStagingPayloadFile(candidate.workerTypeId),
+        _workerProfilePayloadFile(candidate.workerTypeId),
+      );
+      for (final file in [
+        _workerProfileStagingFile(candidate.workerTypeId),
+        _workerProfileStagingPayloadFile(candidate.workerTypeId),
+      ]) {
+        if (await file.exists()) await file.delete();
+      }
+      activated = await _readWorkerProfileSnapshot(candidate.workerTypeId);
+      if (activated == null) {
+        throw StateError('V9 Worker Profile activation did not persist');
+      }
+      await fileSystemPlatform.restrictPermissions(directory.path,
+          directory: true);
+    });
+    return activated!;
+  }
+
+  Future<WorkerProfileSnapshotAdmission?> currentWorkerProfile(
+    String workerTypeId,
+  ) =>
+      _readWorkerProfileSnapshot(workerTypeId);
+
+  Future<WorkerProfileSnapshotAdmission?> lastKnownGoodWorkerProfile(
+    String workerTypeId,
+  ) =>
+      _readWorkerProfileSnapshot(workerTypeId, lastKnownGood: true);
 
   /// Verifies the Cloud release before materializing immutable local files.
   /// Releases are staged by default; activation must follow candidate checks.
@@ -606,6 +783,82 @@ class ToolProfileReleaseStore {
       }
     });
     return Set.unmodifiable(affectedWorkerTypeIds);
+  }
+
+  Future<WorkerProfileSnapshotAdmission?> _readWorkerProfileSnapshot(
+    String workerTypeId, {
+    bool lastKnownGood = false,
+    bool staging = false,
+    bool allowMissing = false,
+  }) async {
+    await restoreRevocations();
+    final file = staging
+        ? _workerProfileStagingFile(workerTypeId)
+        : _workerProfileSnapshotFile(workerTypeId,
+            lastKnownGood: lastKnownGood);
+    final payloadFile = staging
+        ? _workerProfileStagingPayloadFile(workerTypeId)
+        : _workerProfilePayloadFile(workerTypeId, lastKnownGood: lastKnownGood);
+    final fileType = FileSystemEntity.typeSync(file.path, followLinks: false);
+    final payloadType =
+        FileSystemEntity.typeSync(payloadFile.path, followLinks: false);
+    if (fileType == FileSystemEntityType.notFound &&
+        payloadType == FileSystemEntityType.notFound) {
+      return null;
+    }
+    if (fileType != FileSystemEntityType.file ||
+        payloadType != FileSystemEntityType.file) {
+      if (allowMissing) return null;
+      throw const FormatException('V9 Worker Profile cache is incomplete');
+    }
+    if (file.lengthSync() > WorkerProfileSnapshotVerifier.maxSnapshotBytes ||
+        payloadFile.lengthSync() >
+            WorkerProfileSnapshotVerifier.maxSnapshotBytes) {
+      throw const FormatException('V9 Worker Profile cache is oversized');
+    }
+    final decoded = jsonDecode(file.readAsStringSync());
+    if (decoded is! Map) {
+      throw const FormatException('V9 Worker Profile cache is invalid');
+    }
+    final snapshot = Map<String, Object?>.from(decoded);
+    final revision = snapshot['revision'];
+    final publisher = snapshot['publisher'];
+    final signingKeyId = snapshot['signingKeyId'];
+    final digest = snapshot['digest'];
+    if (revision is int &&
+        publisher is String &&
+        signingKeyId is String &&
+        digest is String &&
+        trustPolicy.isToolProfileReleaseRevoked(
+          publisher: publisher,
+          signingKeyId: signingKeyId,
+          digest: digest,
+          releaseId: 'worker:$workerTypeId@$revision',
+        )) {
+      if (!lastKnownGood && !staging) {
+        throw WorkerProfileRevokedException(workerTypeId);
+      }
+      return null;
+    }
+    final payload = jsonDecode(payloadFile.readAsStringSync());
+    if (payload is! Map ||
+        canonicalJson(payload) != canonicalJson(snapshot['profile'])) {
+      throw const FormatException('V9 Worker Profile payload has changed');
+    }
+    return WorkerProfileSnapshotVerifier.verify(
+      input: snapshot,
+      trustPolicy: trustPolicy,
+      expectedWorkerTypeId: workerTypeId,
+    );
+  }
+
+  Future<void> _copyFile(File source, File target) async {
+    final sourceType =
+        await FileSystemEntity.type(source.path, followLinks: false);
+    if (sourceType != FileSystemEntityType.file) {
+      throw StateError('V9 Worker Profile source file is missing');
+    }
+    await _atomicWrite(target, await source.readAsString());
   }
 
   Future<String?> _releaseWorkerTypeId(String definitionId, int version) async {
