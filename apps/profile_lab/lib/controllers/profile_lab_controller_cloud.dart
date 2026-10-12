@@ -304,11 +304,17 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   Map<String, Object?>? _publicationEvidenceFor(
     LocalDraftProfileCandidate draft,
   ) {
+    final expectedScenarios = cloudAcceptanceScenarioStatuses(draft.profile);
     for (final item in currentEvidence) {
       if (item['formatVersion'] == 1 &&
           item['workerTypeId'] == draft.logicalWorkerTypeId &&
           item['candidateDigest'] == draft.payloadDigest &&
-          item['scenarios'] is Map) {
+          item['scenarios'] is Map &&
+          Map<String, Object?>.from(item['scenarios'] as Map).length ==
+              expectedScenarios.length &&
+          expectedScenarios.entries.every(
+            (entry) => (item['scenarios'] as Map)[entry.key] == entry.value,
+          )) {
         return Map<String, Object?>.from(item);
       }
     }

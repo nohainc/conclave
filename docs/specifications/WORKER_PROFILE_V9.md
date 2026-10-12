@@ -180,6 +180,14 @@ editor toolbar owns the single `Publish` action, and the publication review
 shows a compact current-versus-candidate comparison, including provider CLI,
 environment, and security-sensitive changes.
 
+For JSONL Workers, the panel also includes Event Mapping Replay. It applies the
+candidate's declarative `activity.mappings` to sanitized Codex or agy fixtures,
+including repeated tool calls and unknown events, and binds the result to the
+candidate digest. Invalid selectors, unsupported mapping fields, and unsafe
+detail extractors are rejected before publication. The legacy percentage
+mapping remains only as a temporary compatibility path for older Workspace
+clients.
+
 The V9 cleanup invariant is that no production Profile Lab route can reach a
 draft-release, promotion, testing/beta/stable channel, or channel-browsing
 screen. Diagnostic audit history, local recovery snapshots, test scenarios,

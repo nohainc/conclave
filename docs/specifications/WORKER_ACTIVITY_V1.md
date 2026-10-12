@@ -51,6 +51,20 @@ The Codex and agy fixtures use the same mapping shape and produce equivalent
 `tool.started`/`tool.completed` activity pairs even though their native event
 names and nesting differ.
 
+Profile Lab replays a bounded, sanitized Codex or agy JSONL fixture against the
+candidate mapping before publication evidence is eligible for Cloud. The replay
+is bound to the candidate digest and verifies normalized event types, statuses,
+activity identifiers, safe scalar details, and repeated tool lifecycle pairs.
+Unknown provider events are ignored. JSONL Profiles with declared activity
+mappings and no passing fixture replay cannot publish; plain-text Profiles are
+explicitly not applicable. Arbitrary transforms, scripts, prompts, model
+content, terminal output, environment values, and credentials are rejected by
+Profile validation.
+
+Existing percentage progress mappings remain temporarily for older Workspace
+binaries. They are compatibility output only and are not the V9 activity
+qualification signal.
+
 Existing `progress` frames remain available for milestone consumers. Activity
 frames are the authoritative repeated-event stream for live timelines. The
 Workspace relay forwards activity as `assignment.activity` over the existing

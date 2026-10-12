@@ -16,6 +16,7 @@ import '../profile_lab_test_sandbox.dart';
 import '../profile_lab_release_trust.dart';
 import '../utils/profile_lab_model_proposals.dart';
 import '../utils/profile_payload_migrations.dart';
+import '../utils/profile_activity_mapping_fixtures.dart';
 
 import '../models/selected_worker_state.dart';
 
@@ -91,6 +92,8 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   DateTime? testCompletedAt;
   String? testedDraftDigest;
   String? testedProfileDefinitionId;
+  String? testedActivityMappingDigest;
+  ProfileActivityMappingReplayResult? lastActivityMappingReplay;
 
   /// These fields bind local eligibility to the one current Worker Profile.
   Map<String, dynamic>? currentCloudProfileSnapshot;
@@ -104,11 +107,18 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
       testedDraftDigest == currentDraft!.payloadDigest &&
       testedProfileDefinitionId == currentDraft!.profileDefinitionId;
 
+  bool get activityMappingTestMatchesDraft =>
+      currentDraft != null &&
+      testedActivityMappingDigest == currentDraft!.payloadDigest &&
+      lastActivityMappingReplay != null;
+
   void resetDraftTestState() {
     testStartedAt = null;
     testCompletedAt = null;
     testedDraftDigest = null;
     testedProfileDefinitionId = null;
+    testedActivityMappingDigest = null;
+    lastActivityMappingReplay = null;
     candidateCloudValidatedDigest = null;
     lastTestResult = null;
     lastLadderResult = null;

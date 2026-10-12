@@ -1,6 +1,34 @@
 part of 'profile_lab_controller.dart';
 
 mixin _ProfileLabTestOperations on _ProfileLabControllerState {
+  Future<void> runActivityMappingTest() async {
+    final candidate = currentDraft;
+    if (candidate == null ||
+        isTesting ||
+        isDirty ||
+        jsonValidationError != null ||
+        isPublishing) {
+      return;
+    }
+    try {
+      EngineProfile.parse(utf8.encode(canonicalJson(candidate.profile)));
+      lastActivityMappingReplay =
+          replayProfileActivityMappings(candidate.profile);
+      testedActivityMappingDigest = candidate.payloadDigest;
+    } catch (error) {
+      testedActivityMappingDigest = candidate.payloadDigest;
+      lastActivityMappingReplay = ProfileActivityMappingReplayResult(
+        status: 'failed',
+        provider: candidate.providerToolName,
+        fixtureName: null,
+        events: const [],
+        activities: const [],
+        message: 'Profile mapping validation failed: $error',
+      );
+    }
+    notifyListeners();
+  }
+
   Future<void> runTestLadder() async {
     if (currentDraft == null ||
         isTesting ||
@@ -10,6 +38,9 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
       return;
     }
     final candidate = currentDraft!;
+    lastActivityMappingReplay =
+        replayProfileActivityMappings(candidate.profile);
+    testedActivityMappingDigest = candidate.payloadDigest;
     bool isCurrent() =>
         testResultMatchesDraft &&
         testedDraftDigest == candidate.payloadDigest &&
@@ -49,7 +80,7 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
           if (!isCurrent()) return;
           activeLadderStages = [...activeLadderStages, stage];
           testStatusMessage =
-              '${activeLadderStages.length}/11 stages completed';
+              '${activeLadderStages.length}/12 stages completed';
           notifyListeners();
         },
         onLog: (level, message) {

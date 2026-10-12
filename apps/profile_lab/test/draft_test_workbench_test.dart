@@ -80,6 +80,12 @@ void main() {
     await tester.tap(find.byTooltip('Show tests'));
     await tester.pump();
     expect(find.text('Test Results'), findsOneWidget);
+    expect(find.text('Event Mapping'), findsOneWidget);
+    final replayButton = find.widgetWithText(OutlinedButton, 'Replay fixtures');
+    await tester.ensureVisible(replayButton);
+    await tester.tap(replayButton);
+    await tester.pump();
+    expect(find.textContaining('passed'), findsWidgets);
     expect(find.widgetWithText(FilledButton, 'Publish'), findsOneWidget);
     final before = tester.getSize(editor).height;
     await tester.drag(

@@ -562,6 +562,17 @@ Conceptual:
 Profiles select Engine-owned safe message keys. Raw provider event content is
 not forwarded as user-visible progress.
 
+### Structured activity mapping
+
+JSONL Profiles may also declare an `activity.mappings` array. Each mapping uses
+only bounded declarative predicates and selectors to produce a normalized
+activity type, status, title, optional activity identifier, and safe scalar
+details. Conditions are strict (`equals`, `not_equals`, `one_of`, `type_is`, or
+`exists`); unknown mapping fields, unsupported selectors, unsafe content or
+execution extractors, and executable transforms are invalid. The optional
+percentage is compatibility metadata only. Profile Lab replays a sanitized
+provider fixture for this mapping and binds the result to the candidate digest.
+
 ## 18. Session rules
 
 Conceptual:

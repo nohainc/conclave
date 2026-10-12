@@ -103,7 +103,7 @@ void main() {
     controller.testedProfileDefinitionId =
         controller.currentDraft!.profileDefinitionId;
     controller.lastTestResult = 'pass';
-    controller.testStatusMessage = '11/11 passed';
+    controller.testStatusMessage = '12/12 passed';
 
     final payload =
         jsonDecode(controller.currentJsonText) as Map<String, dynamic>;

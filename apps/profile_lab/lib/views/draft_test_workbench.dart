@@ -334,7 +334,9 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                             c.jsonValidationError != null ||
                             !c.candidateIsCloudValidated ||
                             !c.testResultMatchesDraft ||
-                            c.lastTestResult != 'pass'
+                            c.lastTestResult != 'pass' ||
+                            !c.activityMappingTestMatchesDraft ||
+                            c.lastActivityMappingReplay?.status == 'failed'
                         ? null
                         : _publish,
                   ),

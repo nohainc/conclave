@@ -1862,34 +1862,12 @@ class CliWorkerEngine {
       return const [];
     }
     if (decoded is! Map) return const [];
-    final activity = _profile.json['activity'];
-    if (activity is! Map) return const [];
-    final mappings = activity['mappings'];
-    if (mappings is! List) return const [];
+    final mapped = mapProfileActivityEvents(_profile.json, [decoded]);
+    if (mapped.isEmpty) return const [];
     final events = <WorkerActivity>[];
-    for (final raw in mappings) {
-      final mapping = _map(raw);
-      if (!_matches(decoded, mapping['when'])) continue;
-      final details = <String, Object?>{};
-      final detailSelectors = mapping['detailSelectors'];
-      if (detailSelectors is Map) {
-        for (final entry in detailSelectors.entries) {
-          final selector = _string(entry.value);
-          if (!_isSafeActivitySelector(selector)) continue;
-          final value = _select(decoded, selector);
-          if (value == null ||
-              value is String ||
-              value is bool ||
-              value is num) {
-            details[_string(entry.key)] = value;
-          }
-        }
-      }
+    for (final mapping in mapped) {
       final sequence = (_activitySequences[request.requestId] ?? 0) + 1;
       _activitySequences[request.requestId] = sequence;
-      final activityIdValue = mapping['activityIdSelector'] == null
-          ? null
-          : _select(decoded, _string(mapping['activityIdSelector']));
       events.add(
         WorkerActivity(
           requestId: request.requestId,
@@ -1899,16 +1877,12 @@ class CliWorkerEngine {
           eventId: '${request.requestId}:activity:$sequence',
           sequence: sequence,
           timestamp: DateTime.now().toUtc().toIso8601String(),
-          eventType: _string(mapping['type']),
-          status: _string(mapping['status']),
-          title: _string(mapping['title']),
-          activityId: activityIdValue is String && activityIdValue.isNotEmpty
-              ? activityIdValue
-              : null,
-          percentage: mapping['percentage'] == null
-              ? null
-              : _int(mapping['percentage']).toDouble(),
-          details: details.isEmpty ? null : details,
+          eventType: mapping.type,
+          status: mapping.status,
+          title: mapping.title,
+          activityId: mapping.activityId,
+          percentage: mapping.percentage?.toDouble(),
+          details: mapping.details.isEmpty ? null : mapping.details,
         ),
       );
     }
@@ -1951,29 +1925,6 @@ class CliWorkerEngine {
         details: safeDetails.isEmpty ? null : safeDetails,
       ),
     );
-  }
-
-  bool _isSafeActivitySelector(String selector) {
-    const unsafe = {
-      'prompt',
-      'content',
-      'text',
-      'output',
-      'stdout',
-      'stderr',
-      'arguments',
-      'command',
-      'environment',
-      'env',
-      'token',
-      'secret',
-      'password',
-      'api_key',
-    };
-    return !selector
-        .substring(2)
-        .split('.')
-        .any((part) => unsafe.contains(part.toLowerCase()));
   }
 
   _InterpretedOutput _interpret(

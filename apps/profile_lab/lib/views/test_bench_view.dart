@@ -6,6 +6,7 @@ import '../controllers/profile_lab_controller.dart';
 import '../profile_lab_test_sandbox.dart';
 import '../theme/profile_lab_theme.dart';
 import 'ai_repair_loop_dialog.dart';
+import 'event_mapping_test_view.dart';
 
 /// Testing and local evidence belong to the active local candidate.
 class TestBenchView extends StatelessWidget {
@@ -68,7 +69,10 @@ class TestBenchView extends StatelessWidget {
     final canRun = !busy && !c.isDirty && c.jsonValidationError == null;
     final passed = stages.where((s) => s.status == 'passed').length;
     final notApplicable = stages.where((s) => s.status == 'skipped').length;
-    final notRun = stages.isEmpty ? 11 : (11 - stages.length).clamp(0, 11);
+    const totalStages = 12;
+    final notRun = stages.isEmpty
+        ? totalStages
+        : (totalStages - stages.length).clamp(0, totalStages);
     final failed = stages.where((s) => s.status == 'failed').toList();
     Map<String, Object?>? evidence;
     for (final item in c.currentEvidence) {
@@ -171,6 +175,7 @@ class TestBenchView extends StatelessWidget {
             running: running,
             elapsed: elapsed,
           ),
+          EventMappingTestView(controller: c),
           if (c.isTesting && !running)
             const Padding(
               padding: EdgeInsets.only(top: 8),
@@ -194,7 +199,7 @@ class TestBenchView extends StatelessWidget {
             const SizedBox(height: 16),
             OperationProgress(
               label: 'Running Profile tests…',
-              value: stages.length / 11,
+              value: stages.length / totalStages,
             ),
             const SizedBox(height: 8),
             Text(c.testStatusMessage ?? 'Running full test…'),
@@ -211,7 +216,7 @@ class TestBenchView extends StatelessWidget {
                   children: [
                     Text(
                       completed
-                          ? '$passed/11 passed${notApplicable > 0 ? " · $notApplicable not applicable" : ""}'
+                          ? '$passed/12 passed${notApplicable > 0 ? " · $notApplicable not applicable" : ""}'
                           : 'Saved local acceptance evidence',
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,

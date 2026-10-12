@@ -52,6 +52,7 @@ export interface WorkerProfilePublicationEvidence {
 }
 
 const acceptanceScenarios = [
+  "activity_mapping",
   "passive_probe",
   "live_probe",
   "model_selection",
@@ -119,7 +120,11 @@ export function toolProfileAcceptanceScenarioStatuses(
   profile: ToolProfileV1,
 ): Readonly<Record<string, "passed" | "not_applicable">> {
   const durable = profile.session.supported;
+  const activityMappingApplicable =
+    profile.execution.output.mode === "jsonl" &&
+    (profile.activity?.mappings.length ?? 0) > 0;
   return {
+    activity_mapping: activityMappingApplicable ? "passed" : "not_applicable",
     passive_probe: "passed",
     live_probe: "passed",
     model_selection:

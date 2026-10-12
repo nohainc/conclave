@@ -351,14 +351,16 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
             stageUpdates.add('$stageId:$status'),
       );
 
-      expect(ladderResult.stages.length, 11);
+      expect(ladderResult.stages.length, 12);
       expect(streamedStages, orderedEquals(ladderResult.stages));
       expect(ladderResult.stages[0].stageId, 'schema');
       expect(ladderResult.stages[0].status, 'passed');
       expect(ladderResult.stages[0].consumesQuota, isFalse);
 
-      expect(ladderResult.stages[1].stageId, 'engine_compatibility');
-      expect(ladderResult.stages[1].status, 'passed');
+      expect(ladderResult.stages[1].stageId, 'activity_mapping');
+      expect(ladderResult.stages[1].status, 'not_applicable');
+      expect(ladderResult.stages[2].stageId, 'engine_compatibility');
+      expect(ladderResult.stages[2].status, 'passed');
       expect(
         ladderResult.overallResult,
         'pass',
@@ -384,11 +386,11 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
         );
       }
 
-      expect(ladderResult.stages[7].stageId, 'session_test');
-      expect(ladderResult.stages[7].status, 'passed');
-
-      expect(ladderResult.stages[8].stageId, 'model_selection_test');
+      expect(ladderResult.stages[8].stageId, 'session_test');
       expect(ladderResult.stages[8].status, 'passed');
+
+      expect(ladderResult.stages[9].stageId, 'model_selection_test');
+      expect(ladderResult.stages[9].status, 'passed');
 
       expect(stageUpdates, isNotEmpty);
 
@@ -423,7 +425,10 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
       );
       final scenarios = evidenceJson['scenarios'] as Map<String, String>;
       expect(scenarios.keys.toSet(), cloudAcceptanceScenarioNames.toSet());
-      expect(scenarios.values.toSet(), {'passed'});
+      expect(
+        scenarios,
+        cloudAcceptanceScenarioStatuses(validCandidate.profile),
+      );
 
       final publicationEvidence = ladderResult.publicationEvidence;
       expect(publicationEvidence, isNotNull);

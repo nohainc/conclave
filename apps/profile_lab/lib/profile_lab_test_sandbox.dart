@@ -7,6 +7,7 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'utils/profile_lab_security.dart';
+import 'utils/profile_activity_mapping_fixtures.dart';
 
 /// A single stage result in the progressive test ladder.
 class ProfileLabLadderStageResult {
@@ -42,7 +43,7 @@ class ProfileLabLadderStageResult {
       };
 }
 
-/// The complete progressive test ladder result across all 11 ordered stages.
+/// The complete progressive test ladder result across all 12 ordered stages.
 class ProfileLabLadderResult {
   const ProfileLabLadderResult({
     required this.overallResult,
@@ -212,6 +213,7 @@ bool _matchesExpectedTextFile(String actual, String expected) =>
     actual == expected || actual == '$expected\n' || actual == '$expected\r\n';
 
 const cloudAcceptanceScenarioNames = <String>[
+  'activity_mapping',
   'passive_probe',
   'live_probe',
   'model_selection',
@@ -238,6 +240,7 @@ Map<String, String> cloudAcceptanceScenarioStatuses(
   final restricted = mappings['restricted'];
 
   return {
+    'activity_mapping': _activityMappingScenarioStatus(profile),
     'passive_probe': 'passed',
     'live_probe': 'passed',
     'model_selection': model['supported'] == true &&
@@ -252,6 +255,18 @@ Map<String, String> cloudAcceptanceScenarioStatuses(
     'cancellation': 'passed',
     'timeout': 'passed',
   };
+}
+
+String _activityMappingScenarioStatus(Map<String, Object?> profile) {
+  final activity = profile['activity'];
+  final execution = profile['execution'];
+  final output = execution is Map ? execution['output'] : null;
+  final mode = output is Map ? output['mode'] : null;
+  final mappings = activity is Map ? activity['mappings'] : null;
+  if (mappings is! List || mappings.isEmpty || mode != 'jsonl') {
+    return 'not_applicable';
+  }
+  return 'passed';
 }
 
 /// Dedicated isolated test harness for running unsigned Tool Profile candidates
@@ -402,16 +417,17 @@ class ProfileLabTestSandbox {
 
   /// Executes the progressive local test ladder:
   /// 1. Schema Validation (Zero Quota)
-  /// 2. Engine Compatibility (Zero Quota)
-  /// 3. Executable Discovery (Zero Quota)
-  /// 4. CLI Version Probe (Zero Model Quota)
-  /// 5. Passive Probe (Zero Model Quota)
-  /// 6. Live Probe (Engine-controlled OK probe)
-  /// 7. Representative thread write (real assignment and file verification)
-  /// 8. Session Test (real create/resume assignments if supported)
-  /// 9. Model Selection Test (real model-selected assignment if supported)
-  /// 10. Cancellation Test (real assignment canceled through the Engine)
-  /// 11. Timeout Test (real assignment with a bounded Engine deadline)
+  /// 2. Profile Activity Mapping Replay (Zero Quota)
+  /// 3. Engine Compatibility (Zero Quota)
+  /// 4. Executable Discovery (Zero Quota)
+  /// 5. CLI Version Probe (Zero Model Quota)
+  /// 6. Passive Probe (Zero Model Quota)
+  /// 7. Live Probe (Engine-controlled OK probe)
+  /// 8. Representative thread write (real assignment and file verification)
+  /// 9. Session Test (real create/resume assignments if supported)
+  /// 10. Model Selection Test (real model-selected assignment if supported)
+  /// 11. Cancellation Test (real assignment canceled through the Engine)
+  /// 12. Timeout Test (real assignment with a bounded Engine deadline)
   Future<ProfileLabLadderResult> executeTestLadder({
     required LocalDraftProfileCandidate candidate,
     void Function(String stageId, String status, String diagnostics)?
@@ -501,10 +517,43 @@ class ProfileLabTestSandbox {
       );
     }
 
-    // --- STAGE 2: Engine Compatibility ---
+    // --- STAGE 2: Profile Activity Mapping ---
     final s2Timer = Stopwatch()..start();
     if (haltExecution) {
       s2Timer.stop();
+      addStage(
+        stageId: 'activity_mapping',
+        displayName: 'Event Mapping Replay',
+        status: 'skipped',
+        durationMs: 0,
+        diagnostics: 'Skipped because schema validation failed.',
+        consumesQuota: false,
+      );
+    } else {
+      final replay = replayProfileActivityMappings(parsedProfile!.json);
+      s2Timer.stop();
+      if (replay.status == 'failed') haltExecution = true;
+      observedAcceptanceScenarios['activity_mapping'] = replay.status;
+      addStage(
+        stageId: 'activity_mapping',
+        displayName: 'Event Mapping Replay',
+        status: replay.status,
+        durationMs: s2Timer.elapsedMilliseconds,
+        diagnostics: replay.message,
+        consumesQuota: false,
+        issueCode: replay.status == 'failed' ? 'activity_mapping_failed' : null,
+        details: {
+          'provider': replay.provider,
+          if (replay.fixtureName != null) 'fixture': replay.fixtureName,
+          'eventCount': replay.events.length,
+          'activityCount': replay.activities.length,
+        },
+      );
+    }
+
+    // --- STAGE 3: Engine Compatibility ---
+    if (haltExecution) {
+      // The mapping stage has already stopped its timer.
       addStage(
         stageId: 'engine_compatibility',
         displayName: 'Engine Compatibility',
@@ -525,7 +574,6 @@ class ProfileLabTestSandbox {
         minVer,
         maxVer,
       );
-      s2Timer.stop();
       if (isCompatible) {
         addStage(
           stageId: 'engine_compatibility',
@@ -551,7 +599,7 @@ class ProfileLabTestSandbox {
       }
     }
 
-    // --- STAGE 3: Executable Discovery ---
+    // --- STAGE 4: Executable Discovery ---
     final s3Timer = Stopwatch()..start();
     String? discoveredExecPath;
     if (haltExecution) {
@@ -636,7 +684,7 @@ class ProfileLabTestSandbox {
       }
     }
 
-    // --- STAGE 4: CLI Version ---
+    // --- STAGE 5: CLI Version ---
     final s4Timer = Stopwatch()..start();
     if (haltExecution) {
       s4Timer.stop();
@@ -823,7 +871,7 @@ class ProfileLabTestSandbox {
         });
       }
 
-      // --- STAGE 5: Passive Probe ---
+      // --- STAGE 6: Passive Probe ---
       final s5Timer = Stopwatch()..start();
       if (haltExecution) {
         s5Timer.stop();
@@ -886,7 +934,7 @@ class ProfileLabTestSandbox {
         }
       }
 
-      // --- STAGE 6: Live Probe ---
+      // --- STAGE 7: Live Probe ---
       final s6Timer = Stopwatch()..start();
       if (haltExecution) {
         s6Timer.stop();
@@ -949,7 +997,7 @@ class ProfileLabTestSandbox {
         }
       }
 
-      // --- STAGE 7: Representative Thread Write ---
+      // --- STAGE 8: Representative Thread Write ---
       final s7Timer = Stopwatch()..start();
       const writeSentinel = 'conclave-profile-lab-write-verified';
       final writeTarget = File('${scratchDir.path}/acceptance-write.txt');
@@ -1077,7 +1125,7 @@ class ProfileLabTestSandbox {
         }
       }
 
-      // --- STAGE 8: Session Test ---
+      // --- STAGE 9: Session Test ---
       final s8Timer = Stopwatch()..start();
       final durableSessionApplicable =
           expectedAcceptanceScenarios['durable_session_start'] == 'passed';
@@ -1161,7 +1209,7 @@ class ProfileLabTestSandbox {
         }
       }
 
-      // --- STAGE 9: Model Selection Test ---
+      // --- STAGE 10: Model Selection Test ---
       final s9Timer = Stopwatch()..start();
       final modelMap =
           candidate.profile['model'] as Map<String, Object?>? ?? {};
@@ -1229,7 +1277,7 @@ class ProfileLabTestSandbox {
         }
       }
 
-      // --- STAGE 10: Cancellation ---
+      // --- STAGE 11: Cancellation ---
       final s10Timer = Stopwatch()..start();
       if (haltExecution) {
         addStage(
@@ -1296,7 +1344,7 @@ class ProfileLabTestSandbox {
         }
       }
 
-      // --- STAGE 11: Timeout ---
+      // --- STAGE 12: Timeout ---
       final s11Timer = Stopwatch()..start();
       if (haltExecution) {
         addStage(

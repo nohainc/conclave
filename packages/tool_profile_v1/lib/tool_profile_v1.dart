@@ -11,6 +11,7 @@ export 'src/tool_profile_verifier.dart';
 export 'src/worker_profile_verifier.dart';
 export 'src/tool_profile_resolution.dart';
 export 'src/draft_profile_store.dart';
+export 'src/activity_mapping.dart';
 
 const maxProfileBytes = 256 * 1024;
 const _topLevelKeys = {
@@ -715,7 +716,19 @@ void _validateActivityMappings(Object? value) {
   };
   const statuses = {'running', 'updated', 'completed', 'failed', 'cancelled'};
   for (final raw in mappings) {
-    if (raw is! Map || raw.length > 8 || raw['when'] is! List) {
+    if (raw is! Map ||
+        raw.length > 8 ||
+        raw.keys.any((key) => !const {
+              'when',
+              'type',
+              'status',
+              'title',
+              'activityIdSelector',
+              'messageSelector',
+              'detailSelectors',
+              'percentage',
+            }.contains(key)) ||
+        raw['when'] is! List) {
       throw const FormatException('activity mapping is invalid');
     }
     final when = raw['when'] as List;
@@ -723,10 +736,68 @@ void _validateActivityMappings(Object? value) {
       throw const FormatException('activity mapping conditions exceed limit');
     }
     for (final condition in when) {
-      if (condition is! Map || condition.length > 5) {
+      if (condition is! Map ||
+          condition.length > 5 ||
+          condition.keys.any((key) => !const {
+                'kind',
+                'selector',
+                'value',
+                'values',
+                'exists',
+              }.contains(key)) ||
+          condition['kind'] is! String ||
+          !const {'equals', 'not_equals', 'one_of', 'exists', 'type_is'}
+              .contains(condition['kind'])) {
         throw const FormatException('activity mapping condition is invalid');
       }
+      if (condition['selector'] is! String) {
+        throw const FormatException('activity mapping selector is missing');
+      }
       _validateSelector(condition['selector']);
+      switch (condition['kind']) {
+        case 'equals':
+        case 'not_equals':
+          if (condition.length != 3 ||
+              condition.keys.toSet().difference(
+                const {'kind', 'selector', 'value'},
+              ).isNotEmpty ||
+              !condition.containsKey('value') ||
+              !_validActivityConditionValue(condition['value'])) {
+            throw const FormatException(
+                'activity mapping condition value is missing');
+          }
+        case 'type_is':
+          if (condition.length != 3 ||
+              condition.keys.toSet().difference(
+                const {'kind', 'selector', 'value'},
+              ).isNotEmpty ||
+              condition['value'] is! String ||
+              !const {'string', 'number', 'boolean', 'object', 'array', 'null'}
+                  .contains(condition['value'])) {
+            throw const FormatException('activity mapping type is invalid');
+          }
+        case 'one_of':
+          if (condition.length != 3 ||
+              condition.keys.toSet().difference(
+                const {'kind', 'selector', 'values'},
+              ).isNotEmpty ||
+              condition['values'] is! List ||
+              (condition['values'] as List).isEmpty ||
+              (condition['values'] as List).length > 16 ||
+              (condition['values'] as List)
+                  .any((value) => !_validActivityConditionValue(value))) {
+            throw const FormatException('activity mapping values are invalid');
+          }
+        case 'exists':
+          if (condition.length != 3 ||
+              condition.keys.toSet().difference(
+                const {'kind', 'selector', 'exists'},
+              ).isNotEmpty ||
+              condition['exists'] is! bool) {
+            throw const FormatException(
+                'activity mapping exists value is invalid');
+          }
+      }
     }
     if (!types.contains(raw['type']) ||
         !statuses.contains(raw['status']) ||
@@ -737,6 +808,7 @@ void _validateActivityMappings(Object? value) {
           'activity mapping type, status or title is invalid');
     }
     _validateSelector(raw['activityIdSelector']);
+    _validateSafeActivitySelector(raw['activityIdSelector']);
     _validateSelector(raw['messageSelector']);
     _validateSafeActivitySelector(raw['messageSelector']);
     final details = raw['detailSelectors'];
@@ -762,6 +834,9 @@ void _validateActivityMappings(Object? value) {
     }
   }
 }
+
+bool _validActivityConditionValue(Object? value) =>
+    value == null || value is String || value is num || value is bool;
 
 void _validateSafeActivitySelector(Object? value) {
   if (value is! String) return;
