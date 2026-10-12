@@ -64,19 +64,18 @@ class EngineProfile {
   /// operation is deterministic and never depends on declaration order.
   EngineProfile resolveForProviderVersion(String providerVersion) {
     final supportedVersions = providerTool['supportedVersions'];
-    final supported =
-        isSemanticVersion(providerVersion) &&
+    final supported = isSemanticVersion(providerVersion) &&
         supportedVersions is List &&
         supportedVersions.whereType<Map>().any(
-          (range) =>
-              range['min'] is String &&
-              range['maxExclusive'] is String &&
-              semanticVersionInRange(
-                providerVersion,
-                range['min'] as String,
-                range['maxExclusive'] as String,
-              ),
-        );
+              (range) =>
+                  range['min'] is String &&
+                  range['maxExclusive'] is String &&
+                  semanticVersionInRange(
+                    providerVersion,
+                    range['min'] as String,
+                    range['maxExclusive'] as String,
+                  ),
+            );
     if (!isSemanticVersion(providerVersion) || !supported) {
       throw const FormatException(
         'Provider CLI version is not supported by this Profile',
@@ -85,16 +84,15 @@ class EngineProfile {
     final overrides = (json['compatibilityOverrides'] as List)
         .whereType<Map>()
         .where((override) {
-          final range = Map<String, Object?>.from(
-            override['providerVersion'] as Map,
-          );
-          return semanticVersionInRange(
-            providerVersion,
-            range['min'] as String,
-            range['maxExclusive'] as String,
-          );
-        })
-        .toList(growable: false);
+      final range = Map<String, Object?>.from(
+        override['providerVersion'] as Map,
+      );
+      return semanticVersionInRange(
+        providerVersion,
+        range['min'] as String,
+        range['maxExclusive'] as String,
+      );
+    }).toList(growable: false);
     if (overrides.length > 1) {
       throw const FormatException(
         'Provider CLI version matches multiple Profile compatibility overrides',
@@ -182,12 +180,15 @@ class EngineProfile {
       tool['versionProbe'],
       'providerTool.versionProbe',
     );
-    _expectOnly(versionProbe, const {
-      'arguments',
-      'timeoutMs',
-      'source',
-      'extract',
-    }, 'providerTool.versionProbe');
+    _expectOnly(
+        versionProbe,
+        const {
+          'arguments',
+          'timeoutMs',
+          'source',
+          'extract',
+        },
+        'providerTool.versionProbe');
     _validateArgumentStrings(
       versionProbe['arguments'],
       'providerTool.versionProbe.arguments',
@@ -203,10 +204,13 @@ class EngineProfile {
       versionProbe['extract'],
       'providerTool.versionProbe.extract',
     );
-    _expectOnly(versionExtract, const {
-      'kind',
-      'patternId',
-    }, 'providerTool.versionProbe.extract');
+    _expectOnly(
+        versionExtract,
+        const {
+          'kind',
+          'patternId',
+        },
+        'providerTool.versionProbe.extract');
     if (versionExtract['kind'] != 'regex_capture' ||
         versionExtract['patternId'] != 'semver') {
       throw const FormatException('provider version extraction is invalid');
@@ -282,11 +286,14 @@ class EngineProfile {
         throw const FormatException('probe.live is invalid');
       }
       final liveMap = Map<String, Object?>.from(live);
-      _expectOnly(liveMap, const {
-        'timeoutMs',
-        'expectedFinalText',
-        'requiredForReadiness',
-      }, 'probe.live');
+      _expectOnly(
+          liveMap,
+          const {
+            'timeoutMs',
+            'expectedFinalText',
+            'requiredForReadiness',
+          },
+          'probe.live');
       if (liveMap['requiredForReadiness'] != null &&
           liveMap['requiredForReadiness'] is! bool)
         throw const FormatException('Invalid live readiness policy');
@@ -296,10 +303,13 @@ class EngineProfile {
           expected['value'] != 'OK') {
         throw const FormatException('probe live expectation is Engine-owned');
       }
-      _expectOnly(Map<String, Object?>.from(expected), const {
-        'kind',
-        'value',
-      }, 'probe.live.expectedFinalText');
+      _expectOnly(
+          Map<String, Object?>.from(expected),
+          const {
+            'kind',
+            'value',
+          },
+          'probe.live.expectedFinalText');
     }
     _validateEnvironmentNames(env);
     _validateRules(
@@ -312,14 +322,17 @@ class EngineProfile {
     _validateErrorRules(errors['mappings']);
     _validateConfigChecks(passive['configChecks']);
     final session = _object(json['session'], 'session');
-    _expectOnly(session, const {
-      'supported',
-      'formatId',
-      'compatibleFormatIds',
-      'extract',
-      'resumeArguments',
-      'requireObservedIdMatch',
-    }, 'session');
+    _expectOnly(
+        session,
+        const {
+          'supported',
+          'formatId',
+          'compatibleFormatIds',
+          'extract',
+          'resumeArguments',
+          'requireObservedIdMatch',
+        },
+        'session');
     if (session['supported'] is! bool ||
         session['requireObservedIdMatch'] is! bool) {
       throw const FormatException('session policy is invalid');
@@ -466,9 +479,7 @@ void _validateSelector(Object? value) {
       value.length > 256 ||
       !RegExp(r'^\$(?:\.[A-Za-z_][A-Za-z0-9_]*)+$').hasMatch(value) ||
       value.split('.').length - 1 > 16 ||
-      value
-          .split('.')
-          .any(
+      value.split('.').any(
             (part) =>
                 const {'__proto__', 'prototype', 'constructor'}.contains(part),
           )) {
@@ -601,10 +612,13 @@ void _validateCompatibilityOverrides(Object? value) {
       throw const FormatException('compatibility override is invalid');
     }
     final range = Map<String, Object?>.from(raw['providerVersion'] as Map);
-    _expectOnly(range, const {
-      'min',
-      'maxExclusive',
-    }, 'override.providerVersion');
+    _expectOnly(
+        range,
+        const {
+          'min',
+          'maxExclusive',
+        },
+        'override.providerVersion');
     if (range['min'] is! String ||
         range['maxExclusive'] is! String ||
         !isSemanticVersion(range['min'] as String) ||
@@ -621,8 +635,7 @@ void _validateCompatibilityOverrides(Object? value) {
       'maxExclusive': range['maxExclusive'] as String,
     };
     for (final prior in ranges) {
-      final overlaps =
-          compareSemanticVersions(
+      final overlaps = compareSemanticVersions(
                 prior['maxExclusive']!,
                 normalizedRange['min']!,
               ) >
@@ -722,9 +735,9 @@ void _validateEnvironmentNames(Map<String, Object?> environment) {
 /// when an official Profile explicitly declares them. Machine and Conclave
 /// credentials are never available to provider processes.
 bool isReservedEnvironmentName(String name) => RegExp(
-  r'^(?:CONCLAVE_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)|^(?:CONCLAVE_API_KEY|CONCLAVE_CLOUD_TOKEN|CLOUD_API_KEY|CLOUD_TOKEN|WORKER_TOKEN|WORKSPACE_TOKEN)$',
-  caseSensitive: false,
-).hasMatch(name);
+      r'^(?:CONCLAVE_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)|^(?:CONCLAVE_API_KEY|CONCLAVE_CLOUD_TOKEN|CLOUD_API_KEY|CLOUD_TOKEN|WORKER_TOKEN|WORKSPACE_TOKEN)$',
+      caseSensitive: false,
+    ).hasMatch(name);
 
 bool engineVersionCompatible(EngineProfile profile, String version) {
   final range = _object(
@@ -861,11 +874,9 @@ class _SemanticVersion implements Comparable<_SemanticVersion> {
       if (prerelease.isEmpty && other.prerelease.isEmpty) return 0;
       return prerelease.isEmpty ? 1 : -1;
     }
-    for (
-      var index = 0;
-      index < prerelease.length && index < other.prerelease.length;
-      index++
-    ) {
+    for (var index = 0;
+        index < prerelease.length && index < other.prerelease.length;
+        index++) {
       final left = prerelease[index];
       final right = other.prerelease[index];
       final leftNumeric = RegExp(r'^[0-9]+$').hasMatch(left);
@@ -873,10 +884,10 @@ class _SemanticVersion implements Comparable<_SemanticVersion> {
       final order = leftNumeric && rightNumeric
           ? _compareNumericIdentifiers(left, right)
           : leftNumeric
-          ? -1
-          : rightNumeric
-          ? 1
-          : left.compareTo(right);
+              ? -1
+              : rightNumeric
+                  ? 1
+                  : left.compareTo(right);
       if (order != 0) return order;
     }
     return prerelease.length.compareTo(other.prerelease.length);

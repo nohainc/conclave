@@ -224,6 +224,13 @@ may use a later revision only after Workspace has verified and activated it.
 Existing executions finish under their original snapshot, including retries
 that are part of the same execution lifecycle.
 
+The generic Engine input is limited to the resolved Profile JSON, its digest
+and revision, the execution request, and the effective authorization policy.
+The Engine does not interpret publication history, channels, qualification
+evidence, or Profile Lab state. Provider CLI compatibility and argument
+selection remain data-driven by the one admitted Profile, so ChatGPT, Gemini,
+and fixture providers use the same execution pipeline.
+
 ## 8. Component ownership
 
 | Component | V9 responsibility | V9 prohibition |

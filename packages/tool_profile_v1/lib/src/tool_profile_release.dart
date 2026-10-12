@@ -2,11 +2,16 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import '../tool_profile_v1.dart';
 
-/// Common contract for any Profile candidate (signed release or draft).
+/// Common contract for any resolved Profile candidate.
+///
+/// [revision] is the immutable execution identity supplied by Workspace. The
+/// legacy [releaseVersion] getter remains part of the Profile format adapter,
+/// but the Engine must use [revision] for admission and session attribution.
 abstract interface class ToolProfileCandidate {
   Map<String, Object?> get profile;
   String get profileDefinitionId;
   int get releaseVersion;
+  int get revision;
   String get logicalWorkerTypeId;
   String get providerToolName;
   String get payloadDigest;
@@ -32,6 +37,8 @@ class ToolProfileReleaseAdmission implements ToolProfileCandidate {
   final String profileDefinitionId;
   @override
   final int releaseVersion;
+  @override
+  int get revision => releaseVersion;
   @override
   final String logicalWorkerTypeId;
   @override
@@ -59,8 +66,8 @@ class WorkerProfileSnapshotAdmission implements ToolProfileCandidate {
 
   @override
   final Map<String, Object?> profile;
-  @override
   final String workerTypeId;
+  @override
   final int revision;
   @override
   final String payloadDigest;
@@ -103,6 +110,8 @@ class LocalDraftProfileCandidate implements ToolProfileCandidate {
   final String profileDefinitionId;
   @override
   final int releaseVersion;
+  @override
+  int get revision => releaseVersion;
   @override
   final String logicalWorkerTypeId;
   @override

@@ -154,7 +154,7 @@ final class CliWorkerEngineSupervisor {
           workerTypeId: release.logicalWorkerTypeId,
           expectedEngineVersion: cliWorkerEngineVersion,
           profileDefinitionId: release.profileDefinitionId,
-          profileReleaseVersion: release.releaseVersion.toString(),
+          profileReleaseVersion: release.revision.toString(),
           profileDigest: release.payloadDigest,
         ),
         _remaining(boundedTimeout, timer),
@@ -163,8 +163,7 @@ final class CliWorkerEngineSupervisor {
           initialized.workerTypeId != release.logicalWorkerTypeId ||
           initialized.engineVersion != cliWorkerEngineVersion ||
           initialized.profileDefinitionId != release.profileDefinitionId ||
-          initialized.profileReleaseVersion !=
-              release.releaseVersion.toString() ||
+          initialized.profileReleaseVersion != release.revision.toString() ||
           initialized.profileSchemaVersion !=
               release.profile['schemaVersion']) {
         throw const FormatException('CLI Worker Engine initialize mismatch');
@@ -316,7 +315,7 @@ final class CliWorkerEngineSupervisor {
           workerTypeId: release.logicalWorkerTypeId,
           expectedEngineVersion: cliWorkerEngineVersion,
           profileDefinitionId: release.profileDefinitionId,
-          profileReleaseVersion: release.releaseVersion.toString(),
+          profileReleaseVersion: release.revision.toString(),
           profileDigest: release.payloadDigest,
         ),
         _remaining(boundedTimeout, timer),
@@ -325,8 +324,7 @@ final class CliWorkerEngineSupervisor {
           initialized.workerTypeId != release.logicalWorkerTypeId ||
           initialized.engineVersion != cliWorkerEngineVersion ||
           initialized.profileDefinitionId != release.profileDefinitionId ||
-          initialized.profileReleaseVersion !=
-              release.releaseVersion.toString() ||
+          initialized.profileReleaseVersion != release.revision.toString() ||
           initialized.profileSchemaVersion !=
               release.profile['schemaVersion']) {
         throw const FormatException('CLI Worker Engine initialize mismatch');

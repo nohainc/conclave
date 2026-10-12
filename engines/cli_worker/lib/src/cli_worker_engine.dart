@@ -99,6 +99,7 @@ class CliWorkerEngine {
   final EngineLogger _logger;
   late EngineProfile _profile;
   late EngineProfile _admittedProfile;
+  late int _profileRevision;
   late final EngineSessionStore _sessions;
   String? _resolvedExecutable;
   String? _providerVersion;
@@ -197,8 +198,6 @@ class CliWorkerEngine {
       return;
     }
     if (request.profileDefinitionId != _admittedProfile.definitionId ||
-        request.profileReleaseVersion !=
-            _admittedProfile.releaseVersion.toString() ||
         request.profileDigest != _admittedProfile.digest) {
       await _write(
         sink,
@@ -210,6 +209,13 @@ class CliWorkerEngine {
       );
       return;
     }
+    // Workspace supplies the immutable resolved revision. Older direct
+    // Engine callers may still send an opaque Profile release token; retain
+    // that input for protocol compatibility while using the Profile's
+    // declared integer only as a local fallback.
+    _profileRevision =
+        int.tryParse(request.profileReleaseVersion) ??
+        _admittedProfile.releaseVersion;
     _initialized = true;
     _logger.log(
       'info',
@@ -227,7 +233,7 @@ class CliWorkerEngine {
         workerTypeId: _admittedProfile.workerTypeId,
         engineVersion: options.engineVersion,
         profileDefinitionId: _admittedProfile.definitionId,
-        profileReleaseVersion: _admittedProfile.releaseVersion.toString(),
+        profileReleaseVersion: _profileRevision.toString(),
         profileSchemaVersion: _admittedProfile.schemaVersion,
         // Kept on the wire for protocol compatibility; capability metadata is
         // no longer sourced from or enforced by Tool Profiles.
@@ -1163,7 +1169,7 @@ class CliWorkerEngine {
         'effort': request.reasoningEffort,
         'resolvedNativeModelId': context['model'],
         'resolvedNativeEffort': context['reasoningEffort'],
-        'profileReleaseVersion': _admittedProfile.releaseVersion,
+        'profileReleaseVersion': _profileRevision,
         'profileDigest': _admittedProfile.digest,
         'providerToolVersion': _providerVersion,
         'catalogRevision': _modelCatalog?.catalogRevision,
@@ -1379,7 +1385,7 @@ class CliWorkerEngine {
               workerTypeId: _profile.workerTypeId,
               profileDefinitionId: _profile.definitionId,
               providerToolIdentity: providerToolIdentity,
-              profileReleaseVersion: _profile.releaseVersion,
+              profileReleaseVersion: _profileRevision,
               sessionFormatId: _string(sessionProfile['formatId']),
               sessionId: sessionId,
               workerSession: request.workerSession,
@@ -2129,7 +2135,7 @@ class CliWorkerEngine {
     'workerTypeId': _admittedProfile.workerTypeId,
     'engineVersion': options.engineVersion,
     'profileDefinitionId': _admittedProfile.definitionId,
-    'profileReleaseVersion': _admittedProfile.releaseVersion,
+    'profileReleaseVersion': _profileRevision,
     'profileSchemaVersion': _admittedProfile.schemaVersion,
     'providerToolName': _string(_admittedProfile.providerTool['name']),
     if (providerToolVersion != null) 'providerToolVersion': providerToolVersion,

@@ -151,7 +151,9 @@ void main() {
         workerTypeId: profileJson['logicalWorkerTypeId']! as String,
         expectedEngineVersion: '1.0.0',
         profileDefinitionId: profileJson['profileDefinitionId']! as String,
-        profileReleaseVersion: '${profileJson['releaseVersion']}',
+        // The resolved publication revision is independent of the legacy
+        // releaseVersion field inside the behavior JSON.
+        profileReleaseVersion: '7',
         profileDigest: _sha256(profileBytes),
       );
       process.stdin.writeln(initialize.encode());
@@ -167,6 +169,7 @@ void main() {
         'fixture-cli',
       );
       expect(initialized.workerTypeId, 'fixture-worker');
+      expect(initialized.profileRevision, '7');
 
       process.stdin.writeln(
         ProbeRequest(

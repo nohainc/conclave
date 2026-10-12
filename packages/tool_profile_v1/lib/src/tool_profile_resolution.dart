@@ -29,7 +29,7 @@ class ToolProfileResolution<T extends ToolProfileCandidate> {
   }) : this._(source: source, release: release);
 
   const ToolProfileResolution.unavailable(ToolProfileUnavailableReason reason)
-    : this._(source: ToolProfileResolutionSource.unavailable, reason: reason);
+      : this._(source: ToolProfileResolutionSource.unavailable, reason: reason);
 
   final ToolProfileResolutionSource source;
   final T? release;
@@ -45,7 +45,8 @@ abstract final class ToolProfileCompatibility {
   static EngineProfile resolveForProviderVersion(
     EngineProfile profile,
     String providerCliVersion,
-  ) => profile.resolveForProviderVersion(providerCliVersion);
+  ) =>
+      profile.resolveForProviderVersion(providerCliVersion);
 
   /// Recommends a narrow minor-line range starting at the version actually
   /// discovered and tested. Older versions are never inferred as compatible.
