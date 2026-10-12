@@ -17,6 +17,57 @@ import {
 import { recordExecutionWorkspaceAudit } from "./workspace-audit.js";
 import { tryLogDiagnosticEvent } from "./observability.js";
 
+const MAX_FAILURE_DIAGNOSTIC_LENGTH = 2048;
+
+function safeFailureDiagnostic(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value
+    .replace(/(bearer\s+)[a-z0-9._~+/-]+=*/gi, "$1[REDACTED]")
+    .replace(
+      /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|cookie|authorization|secret)\s*[:=]\s*)[^\s,;]+/gi,
+      "$1[REDACTED]",
+    )
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(
+      /(?<![A-Za-z0-9])(?:\/Users|\/home|\/private\/var|\/tmp)\/[^\s,;]+/g,
+      "[PATH]",
+    )
+    .replace(/(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s,;]+/g, "[PATH]")
+    .trim();
+  if (!normalized) return null;
+  return normalized.length > MAX_FAILURE_DIAGNOSTIC_LENGTH
+    ? `${normalized.slice(0, MAX_FAILURE_DIAGNOSTIC_LENGTH)}…`
+    : normalized;
+}
+
+function safeFailureDetails(
+  value: unknown,
+): { diagnostic: string } | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
+  const diagnostic = safeFailureDiagnostic(
+    (value as Record<string, unknown>).diagnostic,
+  );
+  return diagnostic ? { diagnostic } : undefined;
+}
+
+function cloudFailureDiagnostic(
+  stage: string,
+  code: string,
+  detail: string,
+): { diagnostic: string } {
+  return {
+    diagnostic: JSON.stringify({
+      schemaVersion: 1,
+      component: "cloud",
+      stage,
+      errorCode: code,
+      providerStarted: false,
+      detail,
+    }),
+  };
+}
+
 /** Conclave scope reference only; does not expose or certify a native CLI thread. */
 export function conversationWorkerSessionReference(
   target: Pick<
@@ -200,9 +251,7 @@ async function dispatchWorkspaceWorkerAssignment(
     context: {
       engineVersion: target.engineVersion,
       ...(target.model ? { modelId: target.model } : {}),
-      ...(target.reasoningEffort
-        ? { effort: target.reasoningEffort }
-        : {}),
+      ...(target.reasoningEffort ? { effort: target.reasoningEffort } : {}),
       ...(typeof target.selectionExplanation.source === "string"
         ? { selectionSource: target.selectionExplanation.source }
         : {}),
@@ -401,6 +450,11 @@ async function dispatchWorkspaceWorkerAssignment(
         code,
         message: error,
         retryable: true,
+        details: cloudFailureDiagnostic(
+          "gateway_dispatch",
+          code,
+          "Workspace Gateway is not configured for this assignment",
+        ),
       },
       failedAt: now,
     });
@@ -467,7 +521,16 @@ async function dispatchWorkspaceWorkerAssignment(
     const code = "provider_unavailable";
     const message = executionErrorMessage(code);
     await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
-      error: { code, message, retryable: true },
+      error: {
+        code,
+        message,
+        retryable: true,
+        details: cloudFailureDiagnostic(
+          "gateway_dispatch",
+          code,
+          "Workspace Gateway dispatch did not accept the assignment",
+        ),
+      },
       failedAt: new Date().toISOString(),
     });
     tryLogDiagnosticEvent({
@@ -610,12 +673,14 @@ export async function recordAssignmentError(
   failure: AssignmentFailurePayload,
 ): Promise<void> {
   const now = new Date().toISOString();
+  const details = safeFailureDetails(failure.error?.details);
   const code = canonicalExecutionErrorCode(failure.error?.code);
   const normalizedFailure: AssignmentFailurePayload = {
     error: {
       code,
       message: executionErrorMessage(code),
       retryable: failure.error?.retryable === true,
+      ...(details ? { details } : {}),
     },
     failedAt: now,
   };

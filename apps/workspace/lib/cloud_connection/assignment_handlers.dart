@@ -27,6 +27,10 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         message,
         'worker_not_ready',
         retryable: false,
+        diagnostic: _assignmentDiagnostic(
+          stage: 'assignment_admission',
+          detail: 'Assignment targeted a Workspace that is not authorized',
+        ),
       );
       return;
     }
@@ -45,6 +49,10 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         message,
         'execution_failed',
         retryable: false,
+        diagnostic: _assignmentDiagnostic(
+          stage: 'assignment_payload_validation',
+          detail: payloadError,
+        ),
       );
       return;
     }
@@ -117,6 +125,11 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
           message,
           'execution_failed',
           retryable: true,
+          diagnostic: _assignmentDiagnostic(
+            stage: 'assignment_replay',
+            detail:
+                'A previous local journal entry marked this assignment failed',
+          ),
         );
       } else if (previous.status == AssignmentStatus.cancelled) {
         socket.send(jsonEncode(_assignmentEnvelope(
@@ -215,12 +228,19 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         final normalizedError = normalizeAssignmentExecutionFailure(error);
         final errorCode = canonicalExecutionErrorCode(normalizedError.code);
         final errorMessage = executionErrorMessage(errorCode);
+        final diagnostic = SafeProviderDiagnostics.safeFailureDetail(
+          normalizedError.localDiagnostic,
+        );
         final errorPayload = <String, Object?>{
           'status': 'failed',
           'error': {
             'code': errorCode,
             'message': errorMessage,
             'retryable': normalizedError.retryable,
+            if (diagnostic != null)
+              'details': {
+                'diagnostic': diagnostic,
+              },
           },
         };
         await _recordAssignment(
@@ -236,10 +256,14 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         await recordAssignmentDiagnostic(
           context,
           event: 'assignment.failed',
-          stage: 'worker_execution',
+          stage: assignmentDiagnosticStage(normalizedError.localDiagnostic) ??
+              'worker_execution',
           severity: 'error',
           errorCode: errorCode,
           retryable: normalizedError.retryable,
+          contextData: {
+            'transport': 'assignment_error',
+          },
         );
         socket.send(jsonEncode(_assignmentEnvelope(
           'assignment.error',
@@ -465,8 +489,12 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
     Map<String, dynamic> message,
     String code, {
     required bool retryable,
+    String? diagnostic,
   }) {
     final canonicalCode = canonicalExecutionErrorCode(code);
+    final safeDiagnostic = diagnostic == null
+        ? null
+        : SafeProviderDiagnostics.safeFailureDetail(diagnostic);
     socket.send(jsonEncode(_assignmentEnvelope(
       'assignment.error',
       _assignmentCorrelation(message),
@@ -476,10 +504,27 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
           'code': canonicalCode,
           'message': executionErrorMessage(canonicalCode),
           'retryable': retryable,
+          if (safeDiagnostic != null)
+            'details': {
+              'diagnostic': safeDiagnostic,
+            },
         },
       },
     )));
   }
+
+  String _assignmentDiagnostic({
+    required String stage,
+    required String detail,
+  }) =>
+      jsonEncode({
+        'schemaVersion': 1,
+        'component': 'workspace_service',
+        'stage': stage,
+        'errorCode': 'execution_failed',
+        'providerStarted': false,
+        'detail': detail,
+      });
 
   Future<void> _recordAssignment(
     String assignmentId,

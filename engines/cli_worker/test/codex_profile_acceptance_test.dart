@@ -259,6 +259,30 @@ void main() {
       expect(metadata['workerSession'], containsPair('lastEffort', effort));
     }
 
+    final missingBootstrap = await exchange(
+      ExecuteRequest(
+        requestId: 'codex-profile-missing-bootstrap',
+        assignmentId: 'codex-missing-bootstrap',
+        prompt: 'Continue without canonical context',
+        timeoutMs: 10000,
+        sessionPolicy: WorkerSessionPolicy.durableSession,
+        sessionKey: 'missing-bootstrap-session',
+        workerSession: WorkerSessionContext(
+          id: 'missing-bootstrap-worker-session',
+          conversationId: 'missing-bootstrap-conversation',
+          workerId: 'effort-worker',
+          baseContextRevision: 1,
+        ),
+      ),
+    );
+    final missingBootstrapError = missingBootstrap.terminal as WorkerErrorFrame;
+    expect(missingBootstrapError.code, WorkerIssueCode.sessionResumeFailed);
+    expect(
+      jsonDecode(missingBootstrapError.diagnostics!) as Map,
+      containsPair('stage', 'conversation_routing'),
+    );
+    expect(missingBootstrap.progress, isEmpty);
+
     final rejectedResume = await exchange(
       ExecuteRequest(
         requestId: 'codex-profile-durable-mismatch',

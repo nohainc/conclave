@@ -39,6 +39,13 @@ Support responses may include sanitized diagnostics and the audit event list.
 They never expose prompts, response content, credentials, arbitrary provider
 stderr, environment variables, or local filesystem paths.
 
+The Workspace assignment error has two channels. Its `error.message` is the
+stable, user-facing execution message. An optional
+`error.details.diagnostic` is a bounded, redacted technical detail used only
+when Cloud assembles private issue-report evidence; it is not copied into the
+Work result, public report response, or AX UI. Cloud sanitizes this field again
+before persistence.
+
 The Profile Lab's Issues area is the internal investigation console. It is
 shown only to users with the issue-support permission and provides report
 filtering, worker/model/effort and version evidence, a chronological
@@ -84,17 +91,25 @@ include report count, first/last occurrence, and affected worker, Engine,
 Profile, and provider versions.
 
 Cloud assembles a report from the failed `work_requests` row, its latest run and
-assignment, the assignment permission/profile snapshot, and the latest
+assignment, the assignment permission/profile snapshot, the latest
 Workspace inventory provider version. The fingerprint contains only technical
 attributes: component, normalized error code, failure stage, engine/profile
 versions, and provider version. It never contains prompts or user IDs.
 
+When available, the report's private diagnostic document also includes the
+sanitized Workspace failure detail under `execution.failureDetail`. It is
+bounded evidence for triage, not a promise that the full provider or process
+log is available.
+
 D1 metadata and the sanitized diagnostic document are written in one batch
 before the optional R2 upload. If R2 is unavailable, the report remains
 durable and is marked `partial`; a later enrichment process may add the bundle.
-Workspace-local diagnostics are currently represented as unavailable when the
-Workspace is disconnected, so Cloud can confirm the report without waiting for
-local retrieval.
+Workspace evidence distinguishes a disconnected or never-observed Workspace
+(`state: disconnected`, `reason: assignment_not_observed`) from a Workspace
+that returned a bounded assignment error but whose local diagnostic store was
+not attached (`state: diagnostics_unavailable`). A connected Workspace may
+therefore contribute the exact early Engine failure detail without implying
+that a complete local log export was available.
 
 The admin detail response exposes a normalized `investigation` summary and a
 timeline made from sanitized diagnostic events and report audit events. It

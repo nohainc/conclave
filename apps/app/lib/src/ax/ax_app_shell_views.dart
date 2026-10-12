@@ -543,11 +543,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
             Column(children: [
               if (showTopHud)
                 _threadContextBuilder(() => ListenableBuilder(
-                    listenable: Listenable.merge([
-                      store.workspaces,
-                      store.executionChanges,
-                      store.realtimeStatus
-                    ]),
+                    listenable: store.topBarChanges,
                     builder: (context, _) => AxTopBar(
                           shellContext: _shellContext,
                           onNavigateTo: _navigateTo,

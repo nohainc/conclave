@@ -1185,7 +1185,23 @@ void main() {
     expect(error['code'], 'cli_not_found');
     expect(error['retryable'], isFalse);
     expect(error['message'], contains('CLI'));
+    expect(
+      (error['details'] as Map<String, dynamic>)['diagnostic'],
+      'provider launch failed',
+    );
     await connection.close();
+  });
+
+  test('retains unexpected runtime exception detail for private reports', () {
+    final normalized = normalizeAssignmentExecutionFailure(
+      const FormatException(
+          'Engine response was malformed at /Users/tester/run'),
+    );
+    expect(normalized.code, 'execution_failed');
+    expect(normalized.message, 'The assignment could not be completed.');
+    expect(normalized.retryable, isTrue);
+    expect(normalized.localDiagnostic, contains('FormatException'));
+    expect(normalized.localDiagnostic, contains('[PATH]'));
   });
 
   test('paused or draining Workspace rejects new assignments', () async {
@@ -1448,8 +1464,15 @@ void main() {
     final error = socket.sent
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
         .firstWhere((message) => message['type'] == 'assignment.error');
-    expect((error['payload'] as Map<String, dynamic>)['error']['code'],
-        'execution_failed');
+    final payload = error['payload'] as Map<String, dynamic>;
+    expect(payload['error']['code'], 'execution_failed');
+    expect(
+      jsonDecode(
+        (payload['error']['details'] as Map<String, dynamic>)['diagnostic']
+            as String,
+      ),
+      containsPair('stage', 'assignment_payload_validation'),
+    );
     await connection.close();
   });
 

@@ -73,6 +73,18 @@ void main() {
       expect(redacted, 'Bearer [REDACTED] and api_key: [REDACTED]');
     });
 
+    test('safeFailureDetail redacts secrets and local paths and is bounded', () {
+      final detail = SafeProviderDiagnostics.safeFailureDetail(
+        'Authorization: Bearer eyJsecret; token=abc123 at /Users/tester/private.log',
+        maxLength: 200,
+      );
+      expect(detail, isNotNull);
+      expect(detail, contains('[REDACTED]'));
+      expect(detail, contains('[PATH]'));
+      expect(detail, isNot(contains('eyJsecret')));
+      expect(detail!.length, lessThanOrEqualTo(201));
+    });
+
     test(
       'normalizeIssueCode maps error strings to stable WorkerIssueCodes',
       () {

@@ -23,7 +23,10 @@ export interface AssignmentFailurePayload {
     readonly code: ExecutionErrorCode;
     readonly message: string;
     readonly retryable: boolean;
-    readonly details?: Record<string, unknown>;
+    /** Private, bounded diagnostics for issue reports; never user-facing. */
+    readonly details?: {
+      readonly diagnostic?: string;
+    };
   };
   readonly failedAt: string;
 }

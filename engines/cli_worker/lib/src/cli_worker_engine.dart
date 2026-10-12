@@ -11,7 +11,7 @@ import 'package:conclave_cli_worker_runtime/src/cli_executable_locator.dart';
 import 'package:conclave_cli_worker_runtime/src/cli_streaming_runner.dart';
 import 'package:conclave_cli_worker_runtime/src/worker_process_cleanup.dart';
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
-    show ProfileVersionProbe;
+    show ProfileVersionProbe, SafeProviderDiagnostics;
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 
@@ -813,6 +813,82 @@ class CliWorkerEngine {
     );
   }
 
+  WorkerErrorFrame _executionError(
+    ExecuteRequest request, {
+    required String code,
+    required String message,
+    required String stage,
+    Object? detail,
+    bool providerStarted = false,
+    bool recovered = false,
+  }) {
+    _logger.log(
+      'error',
+      'engine.execution.failed',
+      operation: 'execute',
+      stage: stage,
+      context: _diagnosticContext(
+        requestId: request.requestId,
+        assignmentId: request.assignmentId,
+        errorCode: code,
+        failureLayer: _failureLayer(code),
+      ),
+    );
+    return WorkerErrorFrame(
+      requestId: request.requestId,
+      assignmentId: request.assignmentId,
+      code: code,
+      message: message,
+      diagnostics: _executionDiagnostic(
+        stage: stage,
+        code: code,
+        detail: detail,
+        providerStarted: providerStarted,
+        recovered: recovered,
+      ),
+    );
+  }
+
+  String? _executionDiagnostic({
+    required String stage,
+    required String code,
+    Object? detail,
+    required bool providerStarted,
+    required bool recovered,
+  }) {
+    final safeDetail = detail == null
+        ? null
+        : SafeProviderDiagnostics.safeFailureDetail(detail, maxLength: 768);
+    return SafeProviderDiagnostics.safeFailureDetail(
+      jsonEncode({
+        'schemaVersion': 1,
+        'component': 'cli_worker_engine',
+        'stage': stage,
+        'errorCode': code,
+        'providerStarted': providerStarted,
+        'recovered': recovered,
+        if (safeDetail != null) 'detail': safeDetail,
+      }),
+      maxLength: WorkerProtocolLimits.maxDiagnosticLength,
+    );
+  }
+
+  String? _safeProviderStderr(String stderr) {
+    if (stderr.trim().isEmpty) return null;
+    final lines = stderr
+        .split(RegExp(r'\r?\n'))
+        .where((line) => line.trim().isNotEmpty)
+        .take(16)
+        .map(SafeProviderDiagnostics.parseStderrLine)
+        .toList(growable: false);
+    return lines.isEmpty ? null : jsonEncode(lines);
+  }
+
+  bool _canReconstructCorruptSession(String message) =>
+      message == 'Engine session state is invalid' ||
+      message == 'Missing local Worker Session' ||
+      message == 'Engine session state exceeds its limit';
+
   Future<void> _execute(ExecuteRequest request, IOSink sink) async {
     if (!_initialized ||
         request.sessionPolicy != WorkerSessionPolicy.durableSession) {
@@ -829,11 +905,12 @@ class CliWorkerEngine {
     } on EngineSessionBusy {
       return _write(
         sink,
-        WorkerErrorFrame(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
+        _executionError(
+          request,
           code: WorkerIssueCode.providerUnavailable,
           message: 'This Worker session is already executing a request',
+          stage: 'session_lock_acquisition',
+          detail: 'The durable Worker Session is already locked',
         ),
       );
     }
@@ -849,7 +926,12 @@ class CliWorkerEngine {
     if (!_initialized)
       return _write(
         sink,
-        _notInitialized(request.requestId, assignmentId: request.assignmentId),
+        _executionError(
+          request,
+          code: WorkerIssueCode.workerInternalFailure,
+          message: 'Engine must complete initialize before this request',
+          stage: 'engine_initialization',
+        ),
       );
     // Read/write policy is resolved by Cloud and carried in the assignment.
     // Profile capability metadata is legacy and must not gate execution.
@@ -861,14 +943,15 @@ class CliWorkerEngine {
     final sessionProfile = _profile.session;
     try {
       await _ensureModelCatalog();
-    } on Object {
+    } on Object catch (error) {
       return _write(
         sink,
-        WorkerErrorFrame(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
+        _executionError(
+          request,
           code: WorkerIssueCode.providerFailure,
           message: 'Provider model catalog could not be loaded',
+          stage: 'model_catalog_validation',
+          detail: error,
         ),
       );
     }
@@ -877,12 +960,13 @@ class CliWorkerEngine {
             request.catalogRevision != _modelCatalog?.catalogRevision)) {
       return _write(
         sink,
-        WorkerErrorFrame(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
+        _executionError(
+          request,
           code: WorkerIssueCode.modelNotSupported,
           message:
               'Execution catalog changed or is stale; refresh and revalidate the selection',
+          stage: 'model_catalog_validation',
+          detail: 'The selected model catalog revision is stale or mismatched',
         ),
       );
     }
@@ -899,11 +983,12 @@ class CliWorkerEngine {
               (allowlist is! List || !allowlist.contains(request.model)))) {
         return _write(
           sink,
-          WorkerErrorFrame(
-            requestId: request.requestId,
-            assignmentId: request.assignmentId,
+          _executionError(
+            request,
             code: WorkerIssueCode.modelNotSupported,
             message: 'Requested model is not supported by this Tool Profile',
+            stage: 'model_validation',
+            detail: 'Requested model was rejected by the admitted Profile',
           ),
         );
       }
@@ -940,23 +1025,26 @@ class CliWorkerEngine {
             discovered.defaultReasoningEffort == null)) {
       return _write(
         sink,
-        WorkerErrorFrame(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
+        _executionError(
+          request,
           code: WorkerIssueCode.modelNotSupported,
           message:
               'Requested effort is not supported by this model and Tool Profile',
+          stage: 'model_validation',
+          detail:
+              'Requested reasoning effort was rejected by the admitted Profile',
         ),
       );
     }
     if (sessionPolicy == 'durable' && sessionProfile['supported'] != true) {
       return _write(
         sink,
-        WorkerErrorFrame(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
+        _executionError(
+          request,
           code: WorkerIssueCode.sessionResumeFailed,
           message: 'This Tool Profile does not support durable sessions',
+          stage: 'session_capability_validation',
+          detail: 'The admitted Tool Profile does not support durable sessions',
         ),
       );
     }
@@ -988,16 +1076,54 @@ class CliWorkerEngine {
               onSessionRead: (value) => storedSession = value,
             );
     } on FormatException catch (error) {
-      await _write(
-        sink,
-        WorkerErrorFrame(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
-          code: WorkerIssueCode.sessionResumeFailed,
-          message: error.message,
-        ),
-      );
-      return;
+      final bootstrap = request.workerSession?.bootstrap;
+      if (bootstrap != null && _canReconstructCorruptSession(error.message)) {
+        final quarantined = await _sessions.quarantine(
+          sessionKey: request.sessionKey!,
+          workerTypeId: _profile.workerTypeId,
+          profileDefinitionId: _profile.definitionId,
+          providerToolIdentity: providerToolIdentity,
+        );
+        _logger.log(
+          'warning',
+          'engine.session.recovery_required',
+          operation: 'execute',
+          stage: 'session_lookup',
+          context: {
+            ..._diagnosticContext(
+              requestId: request.requestId,
+              assignmentId: request.assignmentId,
+              errorCode: WorkerIssueCode.sessionResumeFailed,
+            ),
+            'recovered': quarantined,
+          },
+        );
+        priorSession = null;
+        storedSession = null;
+        if (!quarantined) {
+          return _write(
+            sink,
+            _executionError(
+              request,
+              code: WorkerIssueCode.sessionResumeFailed,
+              message: error.message,
+              stage: 'session_recovery',
+              detail: 'Corrupt local session state could not be quarantined',
+            ),
+          );
+        }
+      } else {
+        return _write(
+          sink,
+          _executionError(
+            request,
+            code: WorkerIssueCode.sessionResumeFailed,
+            message: error.message,
+            stage: 'session_lookup',
+            detail: error.message,
+          ),
+        );
+      }
     }
     const router = ConversationExecutionRouter();
     late final ConversationExecutionPlan route;
@@ -1008,35 +1134,48 @@ class CliWorkerEngine {
         storedSession: storedSession,
       );
     } on FormatException catch (error) {
-      await _write(
+      return _write(
         sink,
-        WorkerErrorFrame(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
+        _executionError(
+          request,
           code: WorkerIssueCode.sessionResumeFailed,
           message: error.message,
+          stage: 'conversation_routing',
+          detail: error.message,
         ),
       );
-      return;
     }
     final context = _context(request, priorSession);
     context['prompt'] = route.prompt;
     final selectionStore = ExecutionSelectionSnapshotStore(options.statePath);
-    await selectionStore.write(request.requestId, {
-      'schemaVersion': 1,
-      'assignmentId': request.assignmentId,
-      'invocationId': request.requestId,
-      'workerTypeId': _profile.workerTypeId,
-      'modelId': request.model,
-      'modelName': discovered?.name ?? request.model,
-      'effort': request.reasoningEffort,
-      'resolvedNativeModelId': context['model'],
-      'resolvedNativeEffort': context['reasoningEffort'],
-      'profileReleaseVersion': _profile.releaseVersion,
-      'profileDigest': _profile.digest,
-      'providerToolVersion': _providerVersion,
-      'catalogRevision': _modelCatalog?.catalogRevision,
-    });
+    try {
+      await selectionStore.write(request.requestId, {
+        'schemaVersion': 1,
+        'assignmentId': request.assignmentId,
+        'invocationId': request.requestId,
+        'workerTypeId': _profile.workerTypeId,
+        'modelId': request.model,
+        'modelName': discovered?.name ?? request.model,
+        'effort': request.reasoningEffort,
+        'resolvedNativeModelId': context['model'],
+        'resolvedNativeEffort': context['reasoningEffort'],
+        'profileReleaseVersion': _profile.releaseVersion,
+        'profileDigest': _profile.digest,
+        'providerToolVersion': _providerVersion,
+        'catalogRevision': _modelCatalog?.catalogRevision,
+      });
+    } on Object catch (error) {
+      return _write(
+        sink,
+        _executionError(
+          request,
+          code: WorkerIssueCode.workerInternalFailure,
+          message: 'Engine could not persist the execution selection',
+          stage: 'execution_selection_snapshot',
+          detail: error,
+        ),
+      );
+    }
     final bootstrap = route.bootstrap;
 
     if (request.workerSession != null) {
@@ -1068,6 +1207,7 @@ class CliWorkerEngine {
 
     final executionClock = Stopwatch()..start();
     var reconstructed = false;
+    var providerStarted = false;
     try {
       final executable = await _resolveTool();
       while (true) {
@@ -1087,15 +1227,18 @@ class CliWorkerEngine {
           workingDirectory: context['workingDirectory']!,
           stdinText: stdinText,
           timeout: Duration(milliseconds: remainingMs),
-          onStarted: () => _write(
-            sink,
-            WorkerProgress(
-              requestId: request.requestId,
-              assignmentId: request.assignmentId,
-              percentage: 0,
-              message: workerProviderExecutionStartedMessage,
-            ),
-          ),
+          onStarted: () {
+            providerStarted = true;
+            return _write(
+              sink,
+              WorkerProgress(
+                requestId: request.requestId,
+                assignmentId: request.assignmentId,
+                percentage: 0,
+                message: workerProviderExecutionStartedMessage,
+              ),
+            );
+          },
           onStdoutLine: (line) async {
             stdoutBytes += utf8.encode(line).length + 1;
             if (stdoutBytes > 4 * 1024 * 1024) {
@@ -1192,12 +1335,13 @@ class CliWorkerEngine {
           }, completion: true);
           await _write(
             sink,
-            WorkerErrorFrame(
-              requestId: request.requestId,
-              assignmentId: request.assignmentId,
+            _executionError(
+              request,
               code: interpreted.issueCode ?? WorkerIssueCode.providerFailure,
               message: 'Provider CLI execution failed',
-              diagnostics: result.stderr.isEmpty ? null : result.stderr,
+              stage: 'provider_execution',
+              detail: _safeProviderStderr(result.stderr),
+              providerStarted: providerStarted,
             ),
           );
           return;
@@ -1212,31 +1356,49 @@ class CliWorkerEngine {
           if (sessionId == null || sessionId.isEmpty) {
             await _write(
               sink,
-              WorkerErrorFrame(
-                requestId: request.requestId,
-                assignmentId: request.assignmentId,
+              _executionError(
+                request,
                 code: WorkerIssueCode.providerFailure,
                 message:
                     'Provider did not return the required durable session identity',
+                stage: 'session_persistence',
+                detail:
+                    'Provider output did not contain a durable session identity',
+                providerStarted: providerStarted,
               ),
             );
             return;
           }
-          await _sessions.write(
-            sessionKey: request.sessionKey!,
-            workerTypeId: _profile.workerTypeId,
-            profileDefinitionId: _profile.definitionId,
-            providerToolIdentity: providerToolIdentity,
-            profileReleaseVersion: _profile.releaseVersion,
-            sessionFormatId: _string(sessionProfile['formatId']),
-            sessionId: sessionId,
-            workerSession: request.workerSession,
-            modelId: request.model,
-            effort: request.reasoningEffort,
-            synchronizedContextRevision:
-                bootstrap?.turnRevision ?? bootstrap?.contextRevision,
-            synchronizedHistorySequence: bootstrap?.throughSequence,
-          );
+          try {
+            await _sessions.write(
+              sessionKey: request.sessionKey!,
+              workerTypeId: _profile.workerTypeId,
+              profileDefinitionId: _profile.definitionId,
+              providerToolIdentity: providerToolIdentity,
+              profileReleaseVersion: _profile.releaseVersion,
+              sessionFormatId: _string(sessionProfile['formatId']),
+              sessionId: sessionId,
+              workerSession: request.workerSession,
+              modelId: request.model,
+              effort: request.reasoningEffort,
+              synchronizedContextRevision:
+                  bootstrap?.turnRevision ?? bootstrap?.contextRevision,
+              synchronizedHistorySequence: bootstrap?.throughSequence,
+            );
+          } on Object catch (error) {
+            await _write(
+              sink,
+              _executionError(
+                request,
+                code: WorkerIssueCode.workerInternalFailure,
+                message: 'Engine could not persist the Worker Session',
+                stage: 'session_persistence',
+                detail: error,
+                providerStarted: providerStarted,
+              ),
+            );
+            return;
+          }
         }
         if (request.workerSession != null) {
           _logger.log(
@@ -1292,34 +1454,44 @@ class CliWorkerEngine {
         );
         return;
       }
-    } on TimeoutException {
+    } on TimeoutException catch (error) {
       await _write(
         sink,
-        WorkerErrorFrame(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
+        _executionError(
+          request,
           code: WorkerIssueCode.deadlineExceeded,
           message: 'Provider CLI execution exceeded its deadline',
+          stage: providerStarted
+              ? 'provider_execution'
+              : 'provider_process_launch',
+          detail: error,
+          providerStarted: providerStarted,
         ),
       );
-    } on ProcessException {
+    } on ProcessException catch (error) {
       await _write(
         sink,
-        WorkerErrorFrame(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
+        _executionError(
+          request,
           code: WorkerIssueCode.providerToolUnavailable,
           message: 'Provider CLI could not be started',
+          stage: 'provider_process_launch',
+          detail: error,
+          providerStarted: providerStarted,
         ),
       );
-    } on Object {
+    } on Object catch (error) {
       await _write(
         sink,
-        WorkerErrorFrame(
-          requestId: request.requestId,
-          assignmentId: request.assignmentId,
+        _executionError(
+          request,
           code: WorkerIssueCode.providerFailure,
           message: 'Provider CLI execution failed',
+          stage: providerStarted
+              ? 'provider_execution'
+              : 'provider_process_launch',
+          detail: error,
+          providerStarted: providerStarted,
         ),
       );
     }

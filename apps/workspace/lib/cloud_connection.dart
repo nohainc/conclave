@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
-    show CliWorkerEngineProbeException;
+    show CliWorkerEngineProbeException, SafeProviderDiagnostics;
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'assignment_journal.dart';
@@ -98,7 +98,7 @@ class WorkspaceConnectionPreflightException implements Exception {
   String toString() => message;
 }
 
-/// A normalized local assignment failure safe to report across the runtime link.
+/// A normalized assignment failure safe to report across the runtime link.
 class AssignmentExecutionFailure implements Exception {
   const AssignmentExecutionFailure({
     required this.code,
@@ -111,9 +111,8 @@ class AssignmentExecutionFailure implements Exception {
   final String message;
   final bool retryable;
 
-  /// Redacted, bounded local details for Workspace diagnostics only. Runtime
-  /// Cloud reporting deliberately serializes only [code], [message] and
-  /// [retryable].
+  /// Redacted, bounded detail for private issue-report evidence. It is never
+  /// displayed as the Work result or included in the public report response.
   final String? localDiagnostic;
 
   @override
@@ -156,14 +155,34 @@ AssignmentExecutionFailure normalizeAssignmentExecutionFailure(Object error) {
       code: code,
       message: executionErrorMessage(code),
       retryable: isWorkerExecutionErrorRetryable(code),
-      localDiagnostic: error.localDiagnostics ?? error.safeMessage,
+      localDiagnostic: SafeProviderDiagnostics.safeFailureDetail(
+        error.localDiagnostics ?? error.safeMessage,
+      ),
     );
   }
-  return const AssignmentExecutionFailure(
+  final detail = SafeProviderDiagnostics.safeFailureDetail(error);
+  return AssignmentExecutionFailure(
     code: 'execution_failed',
     message: 'The assignment could not be completed.',
     retryable: true,
+    localDiagnostic: detail,
   );
+}
+
+String? assignmentDiagnosticStage(String? diagnostic) {
+  if (diagnostic == null) return null;
+  try {
+    final decoded = jsonDecode(diagnostic);
+    final stage = decoded is Map ? decoded['stage'] : null;
+    return stage is String &&
+            stage.isNotEmpty &&
+            stage.length <= 64 &&
+            RegExp(r'^[A-Za-z][A-Za-z0-9_-]*$').hasMatch(stage)
+        ? stage
+        : null;
+  } on Object {
+    return null;
+  }
 }
 
 class WebSocketWorkspaceTransport implements WorkspaceTransport {

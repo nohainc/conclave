@@ -21,6 +21,41 @@ import 'sync/ax_owned_workspaces.dart';
 import 'sync/ax_collaboration_mutations.dart';
 import 'sync/ax_lifecycle_sync.dart';
 
+/// Coalesces synchronous store changes until the current build stack has
+/// unwound. This prevents a nested cache/query notification from marking a
+/// ListenableBuilder dirty while Flutter is still rebuilding it.
+class AxCoalescedListenable extends ChangeNotifier {
+  AxCoalescedListenable(Iterable<Listenable> sources)
+      : _sources = List<Listenable>.unmodifiable(sources) {
+    for (final source in _sources) {
+      source.addListener(_sourceChanged);
+    }
+  }
+
+  final List<Listenable> _sources;
+  bool _notificationScheduled = false;
+  bool _disposed = false;
+
+  void _sourceChanged() {
+    if (_disposed || _notificationScheduled) return;
+    _notificationScheduled = true;
+    scheduleMicrotask(() {
+      _notificationScheduled = false;
+      if (!_disposed) notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    for (final source in _sources) {
+      source.removeListener(_sourceChanged);
+    }
+    super.dispose();
+  }
+}
+
 /// Focused Cloud-backed stores. The API remains the source of truth.
 class AxStore {
   AxStore(this.dataSource,
@@ -86,6 +121,25 @@ class AxStore {
   bool _disposed = false;
   AxSnapshot _execution = AxSnapshot.empty();
   final executionChanges = AxViewSignal();
+  late final homeChanges = AxCoalescedListenable([
+    spaces,
+    workspaces,
+    executionChanges,
+    invitations,
+    unreadNotifications,
+    productUpdateReadStates,
+    productUpdatesNotifier,
+  ]);
+  late final topBarChanges = AxCoalescedListenable([
+    workspaces,
+    executionChanges,
+    realtimeStatus,
+  ]);
+  late final profileSecurityChanges = AxCoalescedListenable([
+    security,
+    securityLoading,
+    securityError,
+  ]);
   final lifecycleNotice = ValueNotifier<String?>(null);
   late final lifecycle = AxLifecycleSync(syncEngine,
       onNotice: (notice) => lifecycleNotice.value = notice);
@@ -221,6 +275,9 @@ class AxStore {
       collaboration.declineInvitation(invite);
 
   void dispose() {
+    homeChanges.dispose();
+    topBarChanges.dispose();
+    profileSecurityChanges.dispose();
     invitations.removeListener(_updateUnreadNotifications);
     invitations.dispose();
     lifecycle.dispose();

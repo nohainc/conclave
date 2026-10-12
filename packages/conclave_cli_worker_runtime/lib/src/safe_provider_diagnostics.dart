@@ -109,6 +109,27 @@ abstract final class SafeProviderDiagnostics {
         (match) => '${match[1]}[REDACTED]',
       );
 
+  /// Converts an exception or bounded provider diagnostic into a safe detail
+  /// string for private issue-report evidence. This is never user-facing and
+  /// must not carry prompts, responses, credentials, or local paths.
+  static String? safeFailureDetail(Object? value, {int maxLength = 2048}) {
+    if (value == null) return null;
+    var detail = redact(value is String ? value : value.toString())
+        .replaceAll(RegExp(r'[\u0000-\u001f\u007f]+'), ' ')
+        .replaceAll(
+          RegExp(
+            r'(?<![A-Za-z0-9])(?:/Users|/home|/private/var|/tmp)/[^\s,;]+',
+          ),
+          '[PATH]',
+        )
+        .replaceAll(RegExp(r'(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s,;]+'), '[PATH]')
+        .trim();
+    if (detail.isEmpty) return null;
+    return detail.length > maxLength
+        ? '${detail.substring(0, maxLength)}…'
+        : detail;
+  }
+
   /// Normalizes an exception or error into a stable WorkerIssueCode.
   static String normalizeIssueCode(Object error) {
     if (error is FormatException) return WorkerIssueCode.malformedFrame;

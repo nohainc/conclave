@@ -15,15 +15,7 @@ extension _AxAppViews on _AxAppStateMixin {
   }
 
   Widget _homeView() => ListenableBuilder(
-      listenable: Listenable.merge([
-        store.spaces,
-        store.workspaces,
-        store.executionChanges,
-        store.invitations,
-        store.unreadNotifications,
-        store.productUpdateReadStates,
-        store.productUpdatesNotifier,
-      ]),
+      listenable: store.homeChanges,
       builder: (context, _) => _HomeThreadCollection(
           spaces: store.spaces.items,
           spaceThreads: store.spaceThreads,
@@ -330,8 +322,7 @@ extension _AxAppViews on _AxAppStateMixin {
               )));
 
   Widget _profileSecurityView() => ListenableBuilder(
-      listenable: Listenable.merge(
-          [store.security, store.securityLoading, store.securityError]),
+      listenable: store.profileSecurityChanges,
       builder: (context, _) => _profileSecurityBody());
   Widget _profileSecurityBody() {
     final viewer = store.auth.viewer;

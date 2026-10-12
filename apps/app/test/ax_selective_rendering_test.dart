@@ -15,6 +15,27 @@ class SelectiveSource extends AxFixtureDataSource {
 }
 
 void main() {
+  test('coalesced view listenables defer and merge synchronous changes',
+      () async {
+    final first = ValueNotifier<int>(0);
+    final second = ValueNotifier<int>(0);
+    final merged = AxCoalescedListenable([first, second]);
+    addTearDown(() {
+      merged.dispose();
+      first.dispose();
+      second.dispose();
+    });
+    var notifications = 0;
+    merged.addListener(() => notifications++);
+
+    first.value = 1;
+    second.value = 1;
+    expect(notifications, 0);
+
+    await Future<void>.delayed(Duration.zero);
+    expect(notifications, 1);
+  });
+
   final builds = <String, int>{};
   void observe() {
     final previous = debugOnRebuildDirtyWidget;

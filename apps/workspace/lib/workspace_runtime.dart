@@ -20,6 +20,22 @@ import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
 import 'package:conclave_workspace/worker_diagnostic_store.dart';
 import 'package:conclave_workspace/tool_profile_resolver.dart';
 
+String _runtimeFailureDiagnostic(
+  String stage,
+  String code, {
+  String? detail,
+  Map<String, Object?> context = const {},
+}) =>
+    jsonEncode({
+      'schemaVersion': 1,
+      'component': 'workspace_service',
+      'stage': stage,
+      'errorCode': code,
+      'providerStarted': false,
+      ...context,
+      if (detail != null) 'detail': detail,
+    });
+
 Future<WorkspaceRuntime> buildWorkspaceRuntime(
   WorkspaceConfig config, {
   List<String> restartArgs = const [],
@@ -204,6 +220,11 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
         throw AssignmentExecutionFailure(
           code: 'worker_not_ready',
           message: executionErrorMessage('worker_not_ready'),
+          localDiagnostic: _runtimeFailureDiagnostic(
+            'profile_resolution',
+            'worker_not_ready',
+            detail: 'Tool Profile Engine is unavailable',
+          ),
         );
       }
       final resolution = await coordinator.resolveProfileForWorker(
@@ -223,6 +244,14 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
                     ToolProfileUnavailableReason.unsupportedProviderVersion
                 ? 'unsupported_provider_tool_version'
                 : 'worker_not_ready',
+          ),
+          localDiagnostic: _runtimeFailureDiagnostic(
+            'profile_resolution',
+            resolution.reason ==
+                    ToolProfileUnavailableReason.unsupportedProviderVersion
+                ? 'unsupported_provider_tool_version'
+                : 'worker_not_ready',
+            detail: 'No admitted Tool Profile release was available',
           ),
         );
       }
@@ -248,6 +277,16 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
         throw AssignmentExecutionFailure(
           code: 'execution_failed',
           message: executionErrorMessage('execution_failed'),
+          localDiagnostic: _runtimeFailureDiagnostic(
+            'assignment_payload_validation',
+            'execution_failed',
+            detail: 'Session policy and logical session key did not match',
+            context: {
+              'sessionPolicy': sessionPolicyValue.toString(),
+              'hasSessionKey': sessionKeyValue is String,
+              'hasWorkerSession': workerSession != null,
+            },
+          ),
         );
       }
       final prompt = input is Map && input['prompt'] is String
@@ -260,6 +299,12 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
         throw AssignmentExecutionFailure(
           code: 'execution_failed',
           message: executionErrorMessage('execution_failed'),
+          localDiagnostic: _runtimeFailureDiagnostic(
+            'assignment_payload_validation',
+            'execution_failed',
+            detail:
+                'Assignment timeout was missing or outside the allowed range',
+          ),
         );
       }
       final profileFile =

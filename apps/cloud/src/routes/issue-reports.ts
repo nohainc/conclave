@@ -12,6 +12,7 @@ const MAX_REPORT_BODY_BYTES = 4096;
 const MAX_SUPPORT_NOTE_LENGTH = 1000;
 const REPORT_RATE_LIMIT_PER_HOUR = 20;
 const SAFE_TOKEN = /^[A-Za-z0-9._:-]+$/;
+const MAX_FAILURE_DIAGNOSTIC_LENGTH = 2048;
 
 type ReportStatus = "open" | "investigating" | "resolved" | "dismissed";
 type DiagnosticState = "complete" | "partial" | "unavailable";
@@ -40,7 +41,13 @@ interface ExecutionEvidence {
   retryable: boolean;
   failureStage: string;
   component: string;
+  failureDetail: string | null;
   updatedAt: string;
+}
+
+interface FailureDiagnosticMetadata {
+  component: string | null;
+  stage: string | null;
 }
 
 interface ReportRow {
@@ -114,7 +121,9 @@ function reportSelect(): string {
 function boundedToken(value: unknown, max = 128): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
-  return normalized.length > 0 && normalized.length <= max && SAFE_TOKEN.test(normalized)
+  return normalized.length > 0 &&
+    normalized.length <= max &&
+    SAFE_TOKEN.test(normalized)
     ? normalized
     : null;
 }
@@ -134,15 +143,59 @@ function parseJsonRecord(value: unknown): Record<string, unknown> {
 function normalizedError(value: unknown): {
   code: string;
   retryable: boolean;
+  diagnostic: string | null;
 } {
   const parsed = parseJsonRecord(value);
   const nested =
-    parsed.error && typeof parsed.error === "object" && !Array.isArray(parsed.error)
+    parsed.error &&
+    typeof parsed.error === "object" &&
+    !Array.isArray(parsed.error)
       ? (parsed.error as Record<string, unknown>)
       : parsed;
+  const diagnosticValue =
+    nested.details &&
+    typeof nested.details === "object" &&
+    !Array.isArray(nested.details)
+      ? (nested.details as Record<string, unknown>).diagnostic
+      : null;
   return {
     code: boundedToken(nested.code, 64) ?? "execution_failed",
     retryable: nested.retryable === true,
+    diagnostic:
+      typeof diagnosticValue === "string"
+        ? sanitizeFailureDiagnostic(diagnosticValue)
+        : null,
+  };
+}
+
+function sanitizeFailureDiagnostic(value: string): string | null {
+  const normalized = value
+    .replace(/(bearer\s+)[a-z0-9._~+/-]+=*/gi, "$1[REDACTED]")
+    .replace(
+      /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|cookie|authorization|secret)\s*[:=]\s*)[^\s,;]+/gi,
+      "$1[REDACTED]",
+    )
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(
+      /(?<![A-Za-z0-9])(?:\/Users|\/home|\/private\/var|\/tmp)\/[^\s,;]+/g,
+      "[PATH]",
+    )
+    .replace(/(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s,;]+/g, "[PATH]")
+    .trim();
+  if (!normalized) return null;
+  return normalized.length > MAX_FAILURE_DIAGNOSTIC_LENGTH
+    ? `${normalized.slice(0, MAX_FAILURE_DIAGNOSTIC_LENGTH)}…`
+    : normalized;
+}
+
+function failureDiagnosticMetadata(
+  value: string | null,
+): FailureDiagnosticMetadata {
+  if (!value) return { component: null, stage: null };
+  const parsed = parseJsonRecord(value);
+  return {
+    component: boundedToken(parsed.component, 64),
+    stage: boundedToken(parsed.stage, 64),
   };
 }
 
@@ -150,9 +203,15 @@ function failureClassification(
   errorCode: string,
   assignmentStatus: string | null,
 ): { component: string; stage: string } {
-  if (errorCode.includes("profile") || errorCode.includes("engine_incompatible"))
+  if (
+    errorCode.includes("profile") ||
+    errorCode.includes("engine_incompatible")
+  )
     return { component: "tool_profile", stage: "profile_resolution" };
-  if (errorCode === "provider_authentication_required" || errorCode.includes("provider"))
+  if (
+    errorCode === "provider_authentication_required" ||
+    errorCode.includes("provider")
+  )
     return { component: "provider_cli", stage: "provider_execution" };
   if (errorCode === "worker_not_ready" || errorCode === "provider_unavailable")
     return { component: "workspace_service", stage: "transport" };
@@ -165,7 +224,8 @@ function reportRow(row: Record<string, unknown>): ReportRow {
   return {
     id: String(row.id),
     publicReference: String(row.publicReference),
-    reporterUserId: row.reporterUserId == null ? null : String(row.reporterUserId),
+    reporterUserId:
+      row.reporterUserId == null ? null : String(row.reporterUserId),
     workspaceId: row.workspaceId == null ? null : String(row.workspaceId),
     requestId: String(row.requestId),
     assignmentId: row.assignmentId == null ? null : String(row.assignmentId),
@@ -184,12 +244,15 @@ function reportRow(row: Record<string, unknown>): ReportRow {
     profileDefinitionId:
       row.profileDefinitionId == null ? null : String(row.profileDefinitionId),
     profileReleaseVersion:
-      row.profileReleaseVersion == null ? null : Number(row.profileReleaseVersion),
+      row.profileReleaseVersion == null
+        ? null
+        : Number(row.profileReleaseVersion),
     providerToolVersion:
       row.providerToolVersion == null ? null : String(row.providerToolVersion),
     applicationVersion:
       row.applicationVersion == null ? null : String(row.applicationVersion),
-    incidentGroupId: row.incidentGroupId == null ? null : String(row.incidentGroupId),
+    incidentGroupId:
+      row.incidentGroupId == null ? null : String(row.incidentGroupId),
     incidentGroup:
       row.groupId == null
         ? null
@@ -199,17 +262,25 @@ function reportRow(row: Record<string, unknown>): ReportRow {
             label: String(row.groupLabel),
             count: Number(row.groupCount ?? 0),
             firstOccurrence:
-              row.groupFirstOccurrence == null ? null : String(row.groupFirstOccurrence),
+              row.groupFirstOccurrence == null
+                ? null
+                : String(row.groupFirstOccurrence),
             lastOccurrence:
-              row.groupLastOccurrence == null ? null : String(row.groupLastOccurrence),
+              row.groupLastOccurrence == null
+                ? null
+                : String(row.groupLastOccurrence),
           },
     fingerprintGroup: {
       fingerprint: String(row.fingerprint),
       count: Number(row.fingerprintCount ?? 1),
       firstOccurrence:
-        row.fingerprintFirstOccurrence == null ? null : String(row.fingerprintFirstOccurrence),
+        row.fingerprintFirstOccurrence == null
+          ? null
+          : String(row.fingerprintFirstOccurrence),
       lastOccurrence:
-        row.fingerprintLastOccurrence == null ? null : String(row.fingerprintLastOccurrence),
+        row.fingerprintLastOccurrence == null
+          ? null
+          : String(row.fingerprintLastOccurrence),
     },
   };
 }
@@ -294,6 +365,8 @@ async function loadExecutionEvidence(
     assignmentError.code !== "execution_failed"
       ? assignmentError.code
       : taskError.code;
+  const failureDetail = assignmentError.diagnostic ?? taskError.diagnostic;
+  const diagnosticMetadata = failureDiagnosticMetadata(failureDetail);
   const snapshot = parseJsonRecord(row.permissionSnapshotJson);
   const classification = failureClassification(
     errorCode,
@@ -311,8 +384,10 @@ async function loadExecutionEvidence(
     workspaceId: row.workspaceId == null ? null : String(row.workspaceId),
     workerId: row.workerId == null ? null : String(row.workerId),
     workerTypeId: row.workerTypeId == null ? null : String(row.workerTypeId),
-    assignmentStatus: row.assignmentStatus == null ? null : String(row.assignmentStatus),
-    engineVersion: row.engineVersion == null ? null : boundedToken(row.engineVersion),
+    assignmentStatus:
+      row.assignmentStatus == null ? null : String(row.assignmentStatus),
+    engineVersion:
+      row.engineVersion == null ? null : boundedToken(row.engineVersion),
     modelId: row.modelId == null ? null : boundedToken(row.modelId),
     effort: boundedToken(snapshot.reasoningEffort ?? snapshot.effort),
     profileDefinitionId: boundedToken(snapshot.profileDefinitionId),
@@ -324,11 +399,14 @@ async function loadExecutionEvidence(
         : null,
     providerToolVersion: null,
     applicationVersion:
-      row.applicationVersion == null ? null : boundedToken(row.applicationVersion),
+      row.applicationVersion == null
+        ? null
+        : boundedToken(row.applicationVersion),
     errorCode,
     retryable: assignmentError.retryable || taskError.retryable,
-    failureStage: classification.stage,
-    component: classification.component,
+    failureStage: diagnosticMetadata.stage ?? classification.stage,
+    component: diagnosticMetadata.component ?? classification.component,
+    failureDetail,
     updatedAt: String(row.assignmentUpdatedAt ?? row.requestUpdatedAt),
   };
 }
@@ -417,8 +495,42 @@ function diagnosticFor(
       workerTypeId: evidence.workerTypeId,
       assignmentStatus: evidence.assignmentStatus,
       updatedAt: evidence.updatedAt,
+      ...(evidence.failureDetail
+        ? { failureDetail: evidence.failureDetail }
+        : {}),
     },
-    workspace: { state: "unavailable", reason: "local_diagnostics_not_connected" },
+    workspace: workspaceEvidenceFor(evidence),
+  };
+}
+
+function workspaceEvidenceFor(
+  evidence: ExecutionEvidence,
+): Record<string, string> {
+  const diagnosticComponent = failureDiagnosticMetadata(
+    evidence.failureDetail,
+  ).component;
+  if (
+    !evidence.assignmentId ||
+    !evidence.assignmentStatus ||
+    diagnosticComponent === "cloud"
+  ) {
+    return {
+      state: "disconnected",
+      reason:
+        diagnosticComponent === "cloud"
+          ? "workspace_not_reached"
+          : "assignment_not_observed",
+    };
+  }
+  if (evidence.failureDetail) {
+    return {
+      state: "diagnostics_unavailable",
+      reason: "assignment_error_only",
+    };
+  }
+  return {
+    state: "diagnostics_unavailable",
+    reason: "local_diagnostics_not_attached",
   };
 }
 
@@ -503,7 +615,13 @@ export async function handleCreateIssueReport(
   const actor = await securityContext(request, env, ctx);
   const preliminary = await loadExecutionEvidence(env, requestId);
   if (preliminary.requestedByUserId !== actor.userId) {
-    await authorizeThreadAccess(request, env, preliminary.threadId, "view", ctx);
+    await authorizeThreadAccess(
+      request,
+      env,
+      preliminary.threadId,
+      "view",
+      ctx,
+    );
   }
   const evidence = await enrichProviderVersion(env, preliminary);
   const attemptKey = evidence.assignmentId ?? `request:${evidence.requestId}`;
@@ -712,7 +830,10 @@ export async function handleListAdminIssueReports(
 ): Promise<Response> {
   const actor = await issueSupportContext(request, env, ctx);
   const url = new URL(request.url);
-  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50), 1), 100);
+  const limit = Math.min(
+    Math.max(Number(url.searchParams.get("limit") ?? 50), 1),
+    100,
+  );
   const allowedStatuses = new Set<ReportStatus>([
     "open",
     "investigating",
@@ -763,7 +884,9 @@ export async function handleListAdminIssueReports(
     .all<Record<string, unknown>>();
   const listedReports = (rows.results ?? []).map(reportRow);
   const audit = Promise.all(
-    listedReports.map((report) => recordEvent(env, report.id, actor.userId, "report.admin_listed")),
+    listedReports.map((report) =>
+      recordEvent(env, report.id, actor.userId, "report.admin_listed"),
+    ),
   );
   if (ctx) ctx.waitUntil(audit);
   else await audit;
@@ -861,7 +984,9 @@ export async function handleGetAdminIssueReport(
   }));
   const timeline = [
     ...diagnosticEvents.map((event) => ({
-      timestamp: String(event.timestamp ?? diagnostic?.createdAt ?? report.createdAt),
+      timestamp: String(
+        event.timestamp ?? diagnostic?.createdAt ?? report.createdAt,
+      ),
       source: "diagnostic",
       eventType: "diagnostic.event",
       component: event.component ?? null,
@@ -888,7 +1013,8 @@ export async function handleGetAdminIssueReport(
       },
     })),
   ].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-  const firstError = diagnosticEvents.find((event) => event.severity === "error") ?? null;
+  const firstError =
+    diagnosticEvents.find((event) => event.severity === "error") ?? null;
   const workspaceEvidence = diagnosticData?.workspace;
   const missingEvidence: string[] = [];
   if (!diagnostic) missingEvidence.push("diagnostic_record");
@@ -963,7 +1089,11 @@ export async function handlePatchAdminIssueReport(
   if (!body || typeof body !== "object" || Array.isArray(body))
     throw new HttpError(400, "Issue update must be an object");
   const value = body as Record<string, unknown>;
-  if (Object.keys(value).some((key) => !["status", "note", "groupId"].includes(key)))
+  if (
+    Object.keys(value).some(
+      (key) => !["status", "note", "groupId"].includes(key),
+    )
+  )
     throw new HttpError(400, "Only status, note and groupId may be supplied");
   const status = value.status;
   if (
@@ -974,7 +1104,10 @@ export async function handlePatchAdminIssueReport(
   const note = value.note == null ? null : String(value.note).trim();
   if (note != null && note.length > MAX_SUPPORT_NOTE_LENGTH)
     throw new HttpError(413, "Issue note is too large");
-  const groupWasSupplied = Object.prototype.hasOwnProperty.call(value, "groupId");
+  const groupWasSupplied = Object.prototype.hasOwnProperty.call(
+    value,
+    "groupId",
+  );
   const requestedGroupId = !groupWasSupplied
     ? undefined
     : value.groupId == null
@@ -989,7 +1122,9 @@ export async function handlePatchAdminIssueReport(
     .first<{ status: ReportStatus; incidentGroupId: string | null }>();
   if (!existing) throw new HttpError(404, "Issue report not found");
   const currentStatus = existing.status as ReportStatus;
-  const nextStatus = (status == null ? currentStatus : String(status)) as ReportStatus;
+  const nextStatus = (
+    status == null ? currentStatus : String(status)
+  ) as ReportStatus;
   const allowedNext: Record<ReportStatus, ReportStatus[]> = {
     open: ["open", "investigating"],
     investigating: ["investigating", "resolved", "dismissed"],
@@ -997,18 +1132,30 @@ export async function handlePatchAdminIssueReport(
     dismissed: ["dismissed"],
   };
   if (!allowedNext[currentStatus]?.includes(nextStatus))
-    throw new HttpError(409, `Cannot change issue status from ${currentStatus} to ${nextStatus}`);
+    throw new HttpError(
+      409,
+      `Cannot change issue status from ${currentStatus} to ${nextStatus}`,
+    );
   if (requestedGroupId != null) {
     const group = await env.CONCLAVE_DB.prepare(
       "SELECT id FROM issue_report_groups WHERE id = ?1",
-    ).bind(requestedGroupId).first<{ id: string }>();
+    )
+      .bind(requestedGroupId)
+      .first<{ id: string }>();
     if (!group) throw new HttpError(404, "Incident group not found");
   }
   const now = new Date().toISOString();
   const statements = [
     env.CONCLAVE_DB.prepare(
       "UPDATE issue_reports SET status = ?1, incident_group_id = ?2, updated_at = ?3 WHERE id = ?4",
-    ).bind(nextStatus, requestedGroupId === undefined ? existing.incidentGroupId : requestedGroupId, now, reportId),
+    ).bind(
+      nextStatus,
+      requestedGroupId === undefined
+        ? existing.incidentGroupId
+        : requestedGroupId,
+      now,
+      reportId,
+    ),
     env.CONCLAVE_DB.prepare(
       `INSERT INTO issue_report_events
          (id, report_id, actor_user_id, event_type, from_status, to_status, details_json, created_at)
@@ -1023,7 +1170,10 @@ export async function handlePatchAdminIssueReport(
       now,
     ),
   ];
-  const nextGroupId = requestedGroupId === undefined ? existing.incidentGroupId : requestedGroupId;
+  const nextGroupId =
+    requestedGroupId === undefined
+      ? existing.incidentGroupId
+      : requestedGroupId;
   if (existing.incidentGroupId !== nextGroupId) {
     statements.push(
       env.CONCLAVE_DB.prepare(
@@ -1034,7 +1184,10 @@ export async function handlePatchAdminIssueReport(
         `ire-${crypto.randomUUID()}`,
         reportId,
         actor.userId,
-        JSON.stringify({ fromGroupId: existing.incidentGroupId ?? null, toGroupId: nextGroupId }),
+        JSON.stringify({
+          fromGroupId: existing.incidentGroupId ?? null,
+          toGroupId: nextGroupId,
+        }),
         now,
       ),
     );
@@ -1067,7 +1220,10 @@ export async function handleListAdminIssueReportGroups(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   await issueSupportContext(request, env, ctx);
-  const limit = Math.min(Math.max(Number(new URL(request.url).searchParams.get("limit") ?? 100), 1), 200);
+  const limit = Math.min(
+    Math.max(Number(new URL(request.url).searchParams.get("limit") ?? 100), 1),
+    200,
+  );
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT g.id, g.public_reference AS publicReference, g.label, g.fingerprint,
             g.created_at AS createdAt, g.updated_at AS updatedAt,
@@ -1080,7 +1236,9 @@ export async function handleListAdminIssueReportGroups(
        FROM issue_report_groups g
        LEFT JOIN issue_reports r ON r.incident_group_id = g.id
       GROUP BY g.id ORDER BY g.updated_at DESC, g.id DESC LIMIT ?1`,
-  ).bind(limit).all<Record<string, unknown>>();
+  )
+    .bind(limit)
+    .all<Record<string, unknown>>();
   return json({
     groups: (rows.results ?? []).map((row) => ({
       id: String(row.id),
@@ -1088,12 +1246,22 @@ export async function handleListAdminIssueReportGroups(
       label: String(row.label),
       fingerprint: row.fingerprint == null ? null : String(row.fingerprint),
       reportCount: Number(row.reportCount ?? 0),
-      firstOccurrence: row.firstOccurrence == null ? null : String(row.firstOccurrence),
-      lastOccurrence: row.lastOccurrence == null ? null : String(row.lastOccurrence),
-      affectedWorkerTypes: row.workerTypes ? String(row.workerTypes).split(",") : [],
-      affectedProviderVersions: row.providerVersions ? String(row.providerVersions).split(",") : [],
-      affectedEngineVersions: row.engineVersions ? String(row.engineVersions).split(",") : [],
-      affectedProfileVersions: row.profileVersions ? String(row.profileVersions).split(",") : [],
+      firstOccurrence:
+        row.firstOccurrence == null ? null : String(row.firstOccurrence),
+      lastOccurrence:
+        row.lastOccurrence == null ? null : String(row.lastOccurrence),
+      affectedWorkerTypes: row.workerTypes
+        ? String(row.workerTypes).split(",")
+        : [],
+      affectedProviderVersions: row.providerVersions
+        ? String(row.providerVersions).split(",")
+        : [],
+      affectedEngineVersions: row.engineVersions
+        ? String(row.engineVersions).split(",")
+        : [],
+      affectedProfileVersions: row.profileVersions
+        ? String(row.profileVersions).split(",")
+        : [],
       createdAt: String(row.createdAt),
       updatedAt: String(row.updatedAt),
     })),
@@ -1118,17 +1286,35 @@ export async function handleCreateAdminIssueReportGroup(
   if (Object.keys(value).some((key) => !["label", "fingerprint"].includes(key)))
     throw new HttpError(400, "Only label and fingerprint may be supplied");
   const label = typeof value.label === "string" ? value.label.trim() : "";
-  if (!label || label.length > 160) throw new HttpError(400, "A group label is required");
-  const fingerprint = value.fingerprint == null ? null : boundedToken(value.fingerprint, 128);
-  if (value.fingerprint != null && !fingerprint) throw new HttpError(400, "Invalid fingerprint");
+  if (!label || label.length > 160)
+    throw new HttpError(400, "A group label is required");
+  const fingerprint =
+    value.fingerprint == null ? null : boundedToken(value.fingerprint, 128);
+  if (value.fingerprint != null && !fingerprint)
+    throw new HttpError(400, "Invalid fingerprint");
   const id = `issue-group-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   const reference = groupReference();
   await env.CONCLAVE_DB.prepare(
     `INSERT INTO issue_report_groups (id, public_reference, label, fingerprint, created_by_user_id, created_at, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)`,
-  ).bind(id, reference, label, fingerprint, actor.userId, now).run();
-  return json({ group: { id, publicReference: reference, label, fingerprint, reportCount: 0, createdAt: now, updatedAt: now } }, { status: 201 });
+  )
+    .bind(id, reference, label, fingerprint, actor.userId, now)
+    .run();
+  return json(
+    {
+      group: {
+        id,
+        publicReference: reference,
+        label,
+        fingerprint,
+        reportCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      },
+    },
+    { status: 201 },
+  );
 }
 
 export async function handleGetAdminIssueReportGroup(
@@ -1142,11 +1328,15 @@ export async function handleGetAdminIssueReportGroup(
     `SELECT id, public_reference AS publicReference, label, fingerprint,
             created_at AS createdAt, updated_at AS updatedAt
        FROM issue_report_groups WHERE id = ?1`,
-  ).bind(groupId).first<Record<string, unknown>>();
+  )
+    .bind(groupId)
+    .first<Record<string, unknown>>();
   if (!group) throw new HttpError(404, "Incident group not found");
   const reports = await env.CONCLAVE_DB.prepare(
     `${reportSelect()} WHERE ir.incident_group_id = ?1 ORDER BY ir.created_at DESC, ir.id DESC`,
-  ).bind(groupId).all<Record<string, unknown>>();
+  )
+    .bind(groupId)
+    .all<Record<string, unknown>>();
   return json({
     group: {
       id: String(group.id),

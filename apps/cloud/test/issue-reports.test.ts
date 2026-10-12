@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { handleCreateIssueReport, handleCreateAdminIssueReportGroup, handleGetAdminIssueReport, handleGetAdminIssueReportGroup, handleGetIssueReport, handleGetIssueReportForRequest, handleListAdminIssueReportGroups, handleListAdminIssueReports, handlePatchAdminIssueReport } from "../src/routes/issue-reports.js";
+import {
+  handleCreateIssueReport,
+  handleCreateAdminIssueReportGroup,
+  handleGetAdminIssueReport,
+  handleGetAdminIssueReportGroup,
+  handleGetIssueReport,
+  handleGetIssueReportForRequest,
+  handleListAdminIssueReportGroups,
+  handleListAdminIssueReports,
+  handlePatchAdminIssueReport,
+} from "../src/routes/issue-reports.js";
 import type { SecurityEnv } from "../src/routes/handlers.js";
 import { pruneExpiredIssueReports } from "../src/issue-report-retention.js";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
@@ -39,7 +49,7 @@ function seedExecution(sqlite: ReturnType<typeof sqliteD1>["sqlite"]) {
     ) VALUES (
       'assignment-1','space-1','run-1','thread-1','request-1','workspace-1',
       'runtime-1','gemini','failed','now','now','worker-1','task-1','attempt-1',
-      '1.3.0','gemini-pro','{"error":{"code":"provider_authentication_required","retryable":true}}',
+      '1.3.0','gemini-pro','{"error":{"code":"provider_authentication_required","retryable":true,"details":{"diagnostic":"provider exited with token=secret at /Users/tester/provider.log"}}}',
       '{"profileDefinitionId":"gemini-antigravity","profileReleaseVersion":2,"reasoningEffort":"high"}',
       'stateless'
     );
@@ -102,11 +112,14 @@ describe("issue reports", () => {
 
     const first = await handleCreateIssueReport(request(), env);
     expect(first.status).toBe(201);
-    const firstBody = (await first.json()) as { report: Record<string, unknown> };
+    const firstBody = (await first.json()) as {
+      report: Record<string, unknown>;
+    };
     expect(firstBody.report).toMatchObject({
       status: "open",
       diagnosticState: "partial",
     });
+    expect(firstBody.report).not.toHaveProperty("failureDetail");
     expect(firstBody.report).not.toHaveProperty("fingerprint");
     expect(bundles.size).toBe(1);
     expect(
@@ -129,11 +142,16 @@ describe("issue reports", () => {
 
     const duplicate = await handleCreateIssueReport(request(), env);
     expect(duplicate.status).toBe(200);
-    const duplicateBody = (await duplicate.json()) as { report: Record<string, unknown> };
+    const duplicateBody = (await duplicate.json()) as {
+      report: Record<string, unknown>;
+    };
     expect(duplicateBody.report.id).toBe(firstBody.report.id);
     expect(
-      (fixture.sqlite.prepare("SELECT COUNT(*) AS count FROM issue_reports").get() as { count: number })
-        .count,
+      (
+        fixture.sqlite
+          .prepare("SELECT COUNT(*) AS count FROM issue_reports")
+          .get() as { count: number }
+      ).count,
     ).toBe(1);
 
     const admin = await handleGetAdminIssueReport(
@@ -142,10 +160,16 @@ describe("issue reports", () => {
       String(firstBody.report.id),
     );
     expect(admin.status).toBe(200);
-    const adminBody = (await admin.json()) as { diagnostics: { data: Record<string, unknown> } };
+    const adminBody = (await admin.json()) as {
+      diagnostics: { data: Record<string, unknown> };
+    };
     const diagnosticText = JSON.stringify(adminBody.diagnostics.data);
     expect(diagnosticText).toContain("provider_authentication_required");
     expect(diagnosticText).toContain("1.3.3");
+    expect(diagnosticText).toContain(
+      "provider exited with token=[REDACTED] at [PATH]",
+    );
+    expect(diagnosticText).not.toContain("secret");
     expect(diagnosticText).not.toContain("Prompt");
 
     fixture.sqlite.exec(`
@@ -171,6 +195,62 @@ describe("issue reports", () => {
     ).toBe(2);
   });
 
+  it("uses structured private Engine diagnostics for stage and Workspace evidence", async () => {
+    const fixture = sqliteD1();
+    seedExecution(fixture.sqlite);
+    fixture.sqlite
+      .prepare("UPDATE worker_assignments SET error_json = ? WHERE id = ?")
+      .run(
+        JSON.stringify({
+          error: {
+            code: "execution_failed",
+            retryable: true,
+            details: {
+              diagnostic: JSON.stringify({
+                schemaVersion: 1,
+                component: "cli_worker_engine",
+                stage: "session_lookup",
+                errorCode: "session_resume_failed",
+                providerStarted: false,
+                recovered: true,
+              }),
+            },
+          },
+        }),
+        "assignment-1",
+      );
+    const created = await handleCreateIssueReport(
+      new Request("https://conclave.test/api/issue-reports", {
+        method: "POST",
+        body: JSON.stringify({ requestId: "request-1" }),
+        headers: { "content-type": "application/json" },
+      }),
+      envFor(fixture.db, "owner"),
+    );
+    const createdBody = (await created.json()) as { report: { id: string } };
+    const admin = await handleGetAdminIssueReport(
+      new Request("https://conclave.test/api/admin/issue-reports/x"),
+      envFor(fixture.db, "support", { support: true }),
+      createdBody.report.id,
+    );
+    const body = (await admin.json()) as {
+      report: Record<string, unknown>;
+      diagnostics: { data: Record<string, any> };
+      investigation: { workspace: Record<string, unknown> };
+    };
+    expect(body.report).toMatchObject({
+      component: "cli_worker_engine",
+      failureStage: "session_lookup",
+    });
+    expect(body.diagnostics.data.execution).toMatchObject({
+      failureDetail: expect.stringContaining('"providerStarted":false'),
+    });
+    expect(body.investigation.workspace).toMatchObject({
+      state: "diagnostics_unavailable",
+      reason: "assignment_error_only",
+    });
+  });
+
   it("rejects browser-supplied authority and unauthorized report access", async () => {
     const fixture = sqliteD1();
     seedExecution(fixture.sqlite);
@@ -179,7 +259,10 @@ describe("issue reports", () => {
       handleCreateIssueReport(
         new Request("https://conclave.test/api/issue-reports", {
           method: "POST",
-          body: JSON.stringify({ requestId: "request-1", workspaceId: "workspace-1" }),
+          body: JSON.stringify({
+            requestId: "request-1",
+            workspaceId: "workspace-1",
+          }),
           headers: { "content-type": "application/json" },
         }),
         outsiderEnv,
@@ -226,7 +309,10 @@ describe("issue reports", () => {
     const patch = await handlePatchAdminIssueReport(
       new Request("https://conclave.test/api/admin/issue-reports/x", {
         method: "PATCH",
-        body: JSON.stringify({ status: "investigating", note: "Grouped for triage" }),
+        body: JSON.stringify({
+          status: "investigating",
+          note: "Grouped for triage",
+        }),
         headers: { "content-type": "application/json" },
       }),
       supportEnv,
@@ -243,9 +329,11 @@ describe("issue reports", () => {
     expect(listed.reports[0]?.status).toBe("investigating");
     expect(
       (
-        fixture.sqlite.prepare(
-          "SELECT COUNT(*) AS count FROM issue_report_events WHERE event_type = 'report.status_changed'",
-        ).get() as { count: number }
+        fixture.sqlite
+          .prepare(
+            "SELECT COUNT(*) AS count FROM issue_report_events WHERE event_type = 'report.status_changed'",
+          )
+          .get() as { count: number }
       ).count,
     ).toBe(1);
   });
@@ -263,11 +351,21 @@ describe("issue reports", () => {
     );
     const body = (await create.json()) as { report: { id: string } };
     fixture.sqlite
-      .prepare("UPDATE issue_reports SET created_at = '2000-01-01T00:00:00.000Z'")
+      .prepare(
+        "UPDATE issue_reports SET created_at = '2000-01-01T00:00:00.000Z'",
+      )
       .run();
-    expect(await pruneExpiredIssueReports(fixture.db, undefined, new Date("2026-01-01"))).toBe(1);
     expect(
-      fixture.sqlite.prepare("SELECT id FROM issue_reports WHERE id = ?").get(body.report.id),
+      await pruneExpiredIssueReports(
+        fixture.db,
+        undefined,
+        new Date("2026-01-01"),
+      ),
+    ).toBe(1);
+    expect(
+      fixture.sqlite
+        .prepare("SELECT id FROM issue_reports WHERE id = ?")
+        .get(body.report.id),
     ).toBeUndefined();
   });
 
@@ -284,21 +382,30 @@ describe("issue reports", () => {
       }),
       owner,
     );
-    const reportId = ((await created.json()) as { report: { id: string } }).report.id;
+    const reportId = ((await created.json()) as { report: { id: string } })
+      .report.id;
     const groupResponse = await handleCreateAdminIssueReportGroup(
       new Request("https://conclave.test/api/admin/issue-reports/groups", {
         method: "POST",
-        body: JSON.stringify({ label: "Provider authentication failures", fingerprint: "auth-group" }),
+        body: JSON.stringify({
+          label: "Provider authentication failures",
+          fingerprint: "auth-group",
+        }),
         headers: { "content-type": "application/json" },
       }),
       support,
     );
     expect(groupResponse.status).toBe(201);
-    const groupId = ((await groupResponse.json()) as { group: { id: string } }).group.id;
+    const groupId = ((await groupResponse.json()) as { group: { id: string } })
+      .group.id;
     const investigating = await handlePatchAdminIssueReport(
       new Request("https://conclave.test/api/admin/issue-reports/x", {
         method: "PATCH",
-        body: JSON.stringify({ status: "investigating", groupId, note: "Correlate provider sign-in failures" }),
+        body: JSON.stringify({
+          status: "investigating",
+          groupId,
+          note: "Correlate provider sign-in failures",
+        }),
         headers: { "content-type": "application/json" },
       }),
       support,
@@ -306,10 +413,14 @@ describe("issue reports", () => {
     );
     expect(investigating.status).toBe(200);
     const filtered = await handleListAdminIssueReports(
-      new Request("https://conclave.test/api/admin/issue-reports?component=provider_cli&workerTypeId=gemini&status=investigating"),
+      new Request(
+        "https://conclave.test/api/admin/issue-reports?component=provider_cli&workerTypeId=gemini&status=investigating",
+      ),
       support,
     );
-    const filteredBody = (await filtered.json()) as { reports: Array<Record<string, unknown>> };
+    const filteredBody = (await filtered.json()) as {
+      reports: Array<Record<string, unknown>>;
+    };
     expect(filteredBody.reports).toHaveLength(1);
     expect(filteredBody.reports[0]).toMatchObject({
       workerTypeId: "gemini",
@@ -324,18 +435,28 @@ describe("issue reports", () => {
     );
     const detailBody = (await detail.json()) as {
       timeline: Array<Record<string, unknown>>;
-      investigation: { missingEvidence: string[]; failure: { firstSignificantError: unknown } };
+      investigation: {
+        missingEvidence: string[];
+        failure: { firstSignificantError: unknown };
+      };
     };
     expect(detailBody.timeline.length).toBeGreaterThan(0);
-    expect(detailBody.investigation.missingEvidence).toContain("workspace_diagnostics");
-    expect(detailBody.investigation.failure.firstSignificantError).toMatchObject({
+    expect(detailBody.investigation.missingEvidence).toContain(
+      "workspace_diagnostics",
+    );
+    expect(
+      detailBody.investigation.failure.firstSignificantError,
+    ).toMatchObject({
       errorCode: "provider_authentication_required",
     });
     const groups = await handleListAdminIssueReportGroups(
       new Request("https://conclave.test/api/admin/issue-reports/groups"),
       support,
     );
-    expect(((await groups.json()) as { groups: Array<Record<string, unknown>> }).groups[0]).toMatchObject({
+    expect(
+      ((await groups.json()) as { groups: Array<Record<string, unknown>> })
+        .groups[0],
+    ).toMatchObject({
       id: groupId,
       reportCount: 1,
       affectedWorkerTypes: ["gemini"],
@@ -345,7 +466,10 @@ describe("issue reports", () => {
       support,
       groupId,
     );
-    expect(((await groupDetail.json()) as { group: { reports: unknown[] } }).group.reports).toHaveLength(1);
+    expect(
+      ((await groupDetail.json()) as { group: { reports: unknown[] } }).group
+        .reports,
+    ).toHaveLength(1);
     await expect(
       handlePatchAdminIssueReport(
         new Request("https://conclave.test/api/admin/issue-reports/x", {
@@ -378,7 +502,11 @@ describe("issue reports", () => {
     );
     expect(created.status).toBe(201);
     expect(
-      (fixture.sqlite.prepare("SELECT bundle_key FROM issue_report_diagnostics").get() as { bundle_key: string | null }).bundle_key,
+      (
+        fixture.sqlite
+          .prepare("SELECT bundle_key FROM issue_report_diagnostics")
+          .get() as { bundle_key: string | null }
+      ).bundle_key,
     ).toBeNull();
 
     const now = new Date().toISOString();

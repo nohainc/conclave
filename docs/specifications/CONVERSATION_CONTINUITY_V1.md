@@ -118,6 +118,23 @@ provider catch-up, multiple Conversations, switching/reset semantics and concurr
 submission policy. Native handles and credentials remain Workspace/Engine-owned;
 Core remains provider-independent.
 
+## Local native-session recovery
+
+Native provider sessions are reconstructible local execution state. A missing
+local mapping is recoverable when the assignment contains a validated canonical
+bootstrap: the Engine starts a replacement native session with that bootstrap
+and persists the new mapping only after the provider succeeds. A malformed local
+mapping follows the same path after it is quarantined inside the Worker state
+directory. Session identity, Worker/Profile scope, model compatibility, and
+canonical bootstrap validation remain strict; an attribution mismatch or a
+missing bootstrap is an actionable failure rather than permission to create an
+empty context.
+
+Early recovery and provider-independent execution failures carry bounded,
+redacted private diagnostics with a stable stage name. User-facing assignment
+messages remain generic, and prompts, responses, credentials, provider-native
+handles, and local paths are excluded from the diagnostic channel.
+
 ## Workflow execution policy (Phase 2)
 
 Every product Workflow definition includes `executionPolicy: WorkflowCapabilities`.

@@ -211,6 +211,32 @@ class EngineSessionStore {
     return true;
   }
 
+  /// Moves a malformed local mapping aside so a canonical Conversation
+  /// bootstrap can safely rebuild it. The native handle remains local and is
+  /// never sent across a protocol boundary; keeping the quarantined file also
+  /// gives local diagnostics a recoverable record instead of silently deleting
+  /// state.
+  Future<bool> quarantine({
+    required String sessionKey,
+    required String workerTypeId,
+    required String profileDefinitionId,
+    required String providerToolIdentity,
+  }) async {
+    final file = _file(
+      sessionKey,
+      workerTypeId,
+      profileDefinitionId,
+      providerToolIdentity,
+    );
+    if (!await file.exists()) return false;
+    await _assertContained(file);
+    final stamp = DateTime.now().toUtc().microsecondsSinceEpoch;
+    final destination = File('${file.path}.recovery-$stamp');
+    await _assertContained(destination, allowMissing: true);
+    await file.rename(destination.path);
+    return true;
+  }
+
   Future<void> write({
     required String sessionKey,
     required String workerTypeId,

@@ -173,6 +173,36 @@ it("retries retain one StepRun and first-start evidence while clearing stale ter
   }
 });
 
+it("persists only bounded private assignment diagnostics", async () => {
+  const f = await conversationFixture();
+  try {
+    f.assign("DIAGNOSTIC");
+    await recordAssignmentError(f.db as unknown as D1Database, "DIAGNOSTIC", {
+      error: {
+        code: "execution_failed",
+        message: "ignored public message",
+        retryable: true,
+        details: {
+          diagnostic:
+            "provider failed with token=secret at /Users/tester/provider.log",
+        },
+      },
+      failedAt: "failed",
+    });
+    const row = f.sqlite
+      .prepare(
+        "SELECT error_json FROM worker_assignments WHERE id='DIAGNOSTIC'",
+      )
+      .get() as { error_json: string };
+    expect(row.error_json).toContain("token=[REDACTED]");
+    expect(row.error_json).toContain("[PATH]");
+    expect(row.error_json).not.toContain("secret");
+    expect(row.error_json).not.toContain("/Users/tester");
+  } finally {
+    f.sqlite.close();
+  }
+});
+
 it("StepRun and immutable turns retain their accepted context boundary as the Conversation advances", async () => {
   const f = await conversationFixture();
   try {

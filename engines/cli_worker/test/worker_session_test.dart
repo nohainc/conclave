@@ -147,6 +147,59 @@ void main() {
   );
 
   test(
+    'corrupt local session state can be quarantined before canonical reconstruction',
+    () async {
+      final root = await Directory.systemTemp.createTemp('session-recovery-');
+      addTearDown(() => root.delete(recursive: true));
+      final store = EngineSessionStore(root);
+      final context = WorkerSessionContext(
+        id: 'session-A',
+        conversationId: 'conversation-A',
+        workerId: 'worker-A',
+        baseContextRevision: 1,
+      );
+      await store.write(
+        sessionKey: 'scope',
+        workerTypeId: 'worker',
+        profileDefinitionId: 'profile',
+        providerToolIdentity: 'tool',
+        profileReleaseVersion: 1,
+        sessionFormatId: 'format',
+        sessionId: 'native',
+        workerSession: context,
+      );
+      final stateFile = root.listSync().whereType<File>().single;
+      await stateFile.writeAsString('{not-json');
+
+      expect(
+        await store.quarantine(
+          sessionKey: 'scope',
+          workerTypeId: 'worker',
+          profileDefinitionId: 'profile',
+          providerToolIdentity: 'tool',
+        ),
+        isTrue,
+      );
+      expect(await stateFile.exists(), isFalse);
+      expect(
+        root.listSync().whereType<File>().map((file) => file.path).single,
+        contains('.recovery-'),
+      );
+      expect(
+        await store.read(
+          sessionKey: 'scope',
+          workerTypeId: 'worker',
+          profileDefinitionId: 'profile',
+          providerToolIdentity: 'tool',
+          compatibleFormatIds: ['format'],
+          workerSession: context,
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
     'fast path requires exact synchronized context and active native state',
     () async {
       final root = await Directory.systemTemp.createTemp('session-fast-path-');
