@@ -9,6 +9,14 @@ after publishing the qualified Draft. Desktop signing does not change this flow.
 The unsigned Draft shortcut remains an explicit, non-release, loopback-only opt-in
 through `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`; it does not test Cloud rollout.
 
+If Profile Lab can list a Worker but Workspace reports that its Profile is
+unavailable, check the Workspace diagnostic report for
+`profile_trust_key_unavailable`. This means the Cloud release is signed by a
+public key that is not embedded in the Workspace build. Rebuild Workspace with
+the managed Cloud Profile trust roots or republish the release with the current
+signer; do not delete the cached Profile directories or bypass signature
+verification.
+
 Conclave Workspace is the machine-side execution and security runtime.
 
 It maintains the Cloud connection, owns application-managed runtime state,

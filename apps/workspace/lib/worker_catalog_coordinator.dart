@@ -492,6 +492,10 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
         providerCliVersion: worker?.toolVersion,
       );
       if (!resolution.isAvailable) {
+        final trustIssues =
+            resolution.reason == ToolProfileUnavailableReason.noEligibleRelease
+                ? await releaseStore.untrustedReleaseTrustIssues(definitionId)
+                : const <ToolProfileTrustIssue>[];
         final incompatible = resolution.reason ==
                 ToolProfileUnavailableReason.unsupportedProviderVersion ||
             resolution.reason ==
@@ -504,14 +508,33 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
                 : WorkspaceWorkerProfileState.unavailable,
             message: switch (resolution.reason) {
               ToolProfileUnavailableReason.noEligibleRelease =>
-                'No eligible signed Profile release is available for the '
-                    'selected channel. Publish and promote a qualified '
-                    'release to the channel selected for this Workspace.',
+                trustIssues.isNotEmpty
+                    ? 'The cached Profile release is signed by a key this '
+                        'Workspace does not trust. Rebuild Workspace with '
+                        'the Cloud Profile trust root or republish the '
+                        'release with the current signer.'
+                    : 'No eligible signed Profile release is available for '
+                        'the selected channel. Publish and promote a '
+                        'qualified release to the channel selected for this '
+                        'Workspace.',
               ToolProfileUnavailableReason.unsupportedProviderVersion =>
                 'The installed Provider CLI version is not supported by a Profile release.',
               ToolProfileUnavailableReason.incompatibleEngineVersion =>
                 'No downloaded Profile release is compatible with this Engine version.',
               null => 'No compatible Profile release is available.',
+            },
+            details: {
+              'definitionId': definitionId,
+              'channel': profileState.selectedChannel,
+              if (trustIssues.isNotEmpty)
+                'trustIssues': [
+                  for (final issue in trustIssues)
+                    {
+                      'publisher': issue.publisher,
+                      'signingKeyId': issue.signingKeyId,
+                      'releaseVersions': issue.releaseVersions,
+                    },
+                ],
             },
           ),
           generation,

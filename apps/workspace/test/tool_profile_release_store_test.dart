@@ -431,6 +431,28 @@ void main() {
     expect(await workspaceWithoutKey.activeRelease('fixture-cli'), isNull);
   });
 
+  test('reports cached releases whose signing key is not trusted', () async {
+    await store.installRelease(
+      releaseInput: await makeRelease(1),
+      expectedWorkerTypeId: 'fixture-worker',
+    );
+    await store.activateVersion('fixture-cli', 1);
+
+    final workspaceWithoutKey = ToolProfileReleaseStore(
+      profilesRoot: store.profilesRoot,
+      trustPolicy: WorkerTrustPolicy(),
+      retentionLimit: 2,
+    );
+    await workspaceWithoutKey.reconcileRevocations();
+
+    final issues =
+        await workspaceWithoutKey.untrustedReleaseTrustIssues('fixture-cli');
+    expect(issues, hasLength(1));
+    expect(issues.single.publisher, fixturePublisher);
+    expect(issues.single.signingKeyId, fixtureKeyId);
+    expect(issues.single.releaseVersions, [1]);
+  });
+
   test('fetches Cloud revocations and the catalog before caching releases',
       () async {
     final release = await makeRelease(1);

@@ -43,7 +43,10 @@ void main() {
           'errorCode': 'provider_auth_required',
           'profilePayload': {'secret': 'profile-private-value'},
           'stderr': 'Authorization: Bearer live-provider-token',
-          'environment': {'HOME': '/Users/vitaliinoha', 'API_KEY': 'env-secret'},
+          'environment': {
+            'HOME': '/Users/vitaliinoha',
+            'API_KEY': 'env-secret'
+          },
           'sourceCode': 'class PrivateSource {}',
           'cookie': 'session=private-cookie',
           'misleadingNested': {'message': 'raw provider output'},
@@ -119,6 +122,32 @@ void main() {
     expect(decoded['severity'], 'error');
     expect(decoded['retryable'], isTrue);
     expect(jsonEncode(decoded), isNot(contains('must not be exported')));
+  });
+
+  test('preserves safe Profile trust diagnostics in reports', () async {
+    final store = WorkerDiagnosticStore(
+      directory: Directory('${temporary.path}/logs'),
+    );
+    await store.record(
+      workerTypeId: 'chatgpt',
+      workerVersion: '8.2.0',
+      protocolStage: 'profile_probe',
+      event: 'profile.probe.failed',
+      errorCode: 'profile_trust_key_unavailable',
+      context: {
+        'profileTrustIssue': 'untrusted_signing_key',
+        'profilePublisher': 'conclave-development',
+        'profileSigningKeyId': 'local-profile-51724',
+        'privateDetail': 'must not be exported',
+      },
+    );
+
+    final report = await store.createCopyableReport();
+    expect(report, contains('profile_trust_key_unavailable'));
+    expect(report, contains('untrusted_signing_key'));
+    expect(report, contains('conclave-development'));
+    expect(report, contains('local-profile-51724'));
+    expect(report, isNot(contains('must not be exported')));
   });
 
   test('rotates Worker logs by both size and retained file count', () async {

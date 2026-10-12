@@ -484,6 +484,9 @@ final class WorkerDiagnosticStore {
       'lineBytes',
       'httpStatusCode',
       'recovered',
+      'profilePublisher',
+      'profileSigningKeyId',
+      'profileTrustIssue',
     };
     return {
       for (final entry in context.entries)

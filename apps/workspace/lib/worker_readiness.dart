@@ -285,6 +285,7 @@ class WorkerReadinessMonitor {
             const {
               'tool_profile_unavailable',
               'profile_signature_invalid',
+              'profile_trust_key_unavailable',
               'unsupported_provider_tool_version',
               'engine_incompatible'
             }.contains(assessment.issueCode);
@@ -567,12 +568,19 @@ class WorkerReadinessMonitor {
     }
     var release = candidate as ToolProfileReleaseAdmission?;
     if (release == null) {
+      final trustIssues =
+          resolution.reason == ToolProfileUnavailableReason.noEligibleRelease
+              ? await store.untrustedReleaseTrustIssues(profileDefinitionId)
+              : const <ToolProfileTrustIssue>[];
+      final trustIssue = trustIssues.firstOrNull;
       final issueCode = switch (resolution.reason) {
         ToolProfileUnavailableReason.unsupportedProviderVersion =>
           'unsupported_provider_tool_version',
         ToolProfileUnavailableReason.incompatibleEngineVersion =>
           'engine_incompatible',
-        _ => 'tool_profile_unavailable',
+        _ => trustIssue == null
+            ? 'tool_profile_unavailable'
+            : 'profile_trust_key_unavailable',
       };
       await _recordToolProfileDiagnostic(
         worker,
@@ -583,14 +591,25 @@ class WorkerReadinessMonitor {
         issueCode: issueCode,
         failureLayer: 'profile',
         profileResolutionSource: resolution.source.name,
+        profileReleaseVersion: trustIssue?.releaseVersions.firstOrNull,
+        context: {
+          if (trustIssue != null) ...{
+            'profileTrustIssue': 'untrusted_signing_key',
+            'profilePublisher': trustIssue.publisher,
+            'profileSigningKeyId': trustIssue.signingKeyId,
+          },
+        },
       );
       return WorkerReadinessAssessment(
         WorkerReadinessState.runtimeUnavailable,
         issueCode: issueCode,
-        diagnosticDetails:
-            'No eligible signed Tool Profile is available for the selected '
-            'channel. Publish and promote a qualified release to that '
-            'channel, then refresh the Worker catalog.',
+        diagnosticDetails: trustIssue == null
+            ? 'No eligible signed Tool Profile is available for the selected '
+                'channel. Publish and promote a qualified release to that '
+                'channel, then refresh the Worker catalog.'
+            : 'The cached Tool Profile is signed by a key this Workspace does '
+                'not trust. Rebuild Workspace with the Cloud Profile trust '
+                'root or republish the release with the current signer.',
       );
     }
 
@@ -773,6 +792,7 @@ class WorkerReadinessMonitor {
     String? providerToolVersion,
     String? issueCode,
     String? failureLayer,
+    Map<String, Object?> context = const {},
   }) async {
     final store = profileDiagnosticStoreForWorker?.call(worker.workerTypeId);
     if (store == null) return;
@@ -795,6 +815,7 @@ class WorkerReadinessMonitor {
       providerToolVersion: providerToolVersion,
       durationMs: durationMs,
       errorCode: issueCode,
+      context: context,
     );
   }
 
@@ -815,7 +836,8 @@ class WorkerReadinessMonitor {
         'engine',
       'unsupported_provider_tool_version' ||
       'tool_profile_unavailable' ||
-      'profile_signature_invalid' =>
+      'profile_signature_invalid' ||
+      'profile_trust_key_unavailable' =>
         'profile',
       _ => 'provider_tool',
     };

@@ -23,6 +23,21 @@ class ToolProfileReleaseState {
   final String selectedChannel;
 }
 
+/// Identifies a cached release that cannot be admitted because its signing
+/// root is not present in this Workspace build. Key IDs are public metadata;
+/// no signing material is exposed here.
+class ToolProfileTrustIssue {
+  const ToolProfileTrustIssue({
+    required this.publisher,
+    required this.signingKeyId,
+    required this.releaseVersions,
+  });
+
+  final String publisher;
+  final String signingKeyId;
+  final List<int> releaseVersions;
+}
+
 /// Owns verified, immutable Profile material independently of Engine binaries.
 class ToolProfileReleaseStore {
   ToolProfileReleaseStore({
@@ -419,6 +434,66 @@ class ToolProfileReleaseStore {
     }
     versions.sort((left, right) => right.compareTo(left));
     return List.unmodifiable(versions);
+  }
+
+  /// Returns cached releases signed by a key that this build does not trust.
+  ///
+  /// These releases remain on disk by design so a later trust-root refresh can
+  /// recover them, but they are never eligible for execution while untrusted.
+  Future<List<ToolProfileTrustIssue>> untrustedReleaseTrustIssues(
+    String profileDefinitionId,
+  ) async {
+    await restoreRevocations();
+    final issues =
+        <String, ({String publisher, String keyId, List<int> versions})>{};
+    for (final version in await installedVersions(profileDefinitionId)) {
+      try {
+        final metadata = jsonDecode(
+          await _releaseMetadataFile(
+            _safeDefinitionId(profileDefinitionId),
+            version,
+          ).readAsString(),
+        );
+        if (metadata is! Map ||
+            metadata['publisher'] is! String ||
+            metadata['signingKeyId'] is! String ||
+            metadata['payloadDigest'] is! String) {
+          continue;
+        }
+        final publisher = metadata['publisher'] as String;
+        final keyId = metadata['signingKeyId'] as String;
+        final digest = metadata['payloadDigest'] as String;
+        if (trustPolicy.isToolProfileReleaseRevoked(
+          publisher: publisher,
+          signingKeyId: keyId,
+          digest: digest,
+          releaseId: '${_safeDefinitionId(profileDefinitionId)}@$version',
+        )) {
+          continue;
+        }
+        if (trustPolicy.hasTrustedSigningKey(publisher, keyId)) continue;
+        final identity = '$publisher\u0000$keyId';
+        final issue = issues.putIfAbsent(
+          identity,
+          () => (publisher: publisher, keyId: keyId, versions: <int>[]),
+        );
+        issue.versions.add(version);
+      } on Object {
+        // Malformed releases are reported through the existing invalid-release
+        // path, not as a trust-root mismatch.
+      }
+    }
+    return List.unmodifiable(
+      issues.values
+          .map(
+            (issue) => ToolProfileTrustIssue(
+              publisher: issue.publisher,
+              signingKeyId: issue.keyId,
+              releaseVersions: List.unmodifiable(issue.versions),
+            ),
+          )
+          .toList(),
+    );
   }
 
   /// Loads a bounded revocation snapshot saved by the most recent Cloud sync.
