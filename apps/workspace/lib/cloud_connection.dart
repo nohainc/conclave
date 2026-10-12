@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_protocol/conclave_protocol.dart';
+import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
+    show CliWorkerEngineProbeException;
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'assignment_journal.dart';
@@ -116,6 +118,52 @@ class AssignmentExecutionFailure implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// Converts generic Engine issue codes into the public Workspace execution
+/// error contract. Provider-neutral Engine diagnostics stay local, while
+/// Cloud receives only the stable protocol code.
+String canonicalWorkerExecutionErrorCode(Object? value) => switch (value) {
+      'provider_tool_unavailable' => 'cli_not_found',
+      'provider_authentication_required' => 'authentication_required',
+      'unsupported_provider_tool_version' => 'unsupported_cli_version',
+      'deadline_exceeded' => 'timeout',
+      'cancelled' => 'cancelled',
+      'model_not_supported' => 'model_not_supported',
+      'quota_exhausted' => 'quota_exhausted',
+      'provider_unavailable' => 'provider_unavailable',
+      'permission_denied' => 'permission_denied',
+      _ => canonicalExecutionErrorCode(value),
+    };
+
+bool isWorkerExecutionErrorRetryable(String code) => switch (code) {
+      'cancelled' ||
+      'permission_denied' ||
+      'authentication_required' ||
+      'cli_not_found' ||
+      'unsupported_cli_version' ||
+      'model_not_supported' ||
+      'quota_exhausted' =>
+        false,
+      _ => true,
+    };
+
+AssignmentExecutionFailure normalizeAssignmentExecutionFailure(Object error) {
+  if (error is AssignmentExecutionFailure) return error;
+  if (error is CliWorkerEngineProbeException) {
+    final code = canonicalWorkerExecutionErrorCode(error.issueCode);
+    return AssignmentExecutionFailure(
+      code: code,
+      message: executionErrorMessage(code),
+      retryable: isWorkerExecutionErrorRetryable(code),
+      localDiagnostic: error.localDiagnostics ?? error.safeMessage,
+    );
+  }
+  return const AssignmentExecutionFailure(
+    code: 'execution_failed',
+    message: 'The assignment could not be completed.',
+    retryable: true,
+  );
 }
 
 class WebSocketWorkspaceTransport implements WorkspaceTransport {

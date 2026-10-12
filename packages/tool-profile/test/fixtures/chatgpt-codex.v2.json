@@ -85,8 +85,6 @@
   },
   "execution": {
     "arguments": [
-      "--ask-for-approval",
-      "never",
       {
         "sandboxPolicyMapping": true
       },
@@ -375,10 +373,14 @@
   "sandbox": {
     "mappings": {
       "restricted": [
+        "--ask-for-approval",
+        "never",
         "--sandbox",
         "workspace-write"
       ],
       "provider_default": [
+        "--ask-for-approval",
+        "never",
         "--sandbox",
         "read-only"
       ],
@@ -483,8 +485,6 @@
         "maxExclusive": "0.181.0"
       },
       "executionArguments": [
-        "--ask-for-approval",
-        "never",
         "exec",
         {
           "sandboxPolicyMapping": true

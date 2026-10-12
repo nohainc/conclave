@@ -86,6 +86,7 @@ describe("Tool Profile v1 pure interpreter", () => {
         expect(fullAccess).toContain(
           "--dangerously-bypass-approvals-and-sandbox",
         );
+        expect(fullAccess).not.toContain("--ask-for-approval");
         expect(fullAccess).not.toContain("--sandbox");
       }
     }

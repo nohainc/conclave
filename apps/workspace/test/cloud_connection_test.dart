@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_workspace/assignment_journal.dart';
+import 'package:conclave_workspace/cli_worker_engine_supervisor.dart'
+    show CliWorkerEngineProbeException;
 import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_protocol/workspace_runtime_protocol.dart'
     show workspaceRuntimeProtocolVersion;
@@ -1124,6 +1126,65 @@ void main() {
     expect(error['code'], 'quota_exhausted');
     expect(error['retryable'], isFalse);
     expect(error['message'], contains('usage limit'));
+    await connection.close();
+  });
+
+  test(
+      'normalizes Engine provider failures instead of hiding them as generic execution errors',
+      () async {
+    final socket = FakeSocket();
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentHandler: (_) async => throw const CliWorkerEngineProbeException(
+        'provider_tool_unavailable',
+        'CLI Worker Engine could not be started.',
+        localDiagnostics: 'provider launch failed',
+      ),
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'engine-provider-error',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'workspace-1',
+      'workerId': 'worker-1',
+      'runId': 'run-engine-error',
+      'taskId': 'task-engine-error',
+      'attemptId': 'attempt-engine-error',
+      'assignmentId': 'assignment-engine-error',
+      'idempotencyKey': 'idem-engine-error',
+      'payload': {
+        'objective': 'test engine error normalization',
+        'role': 'implementer',
+        'workerId': 'chatgpt',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
+        'input': {},
+        'contextArtifactIds': [],
+        'timeoutMs': 1000,
+      },
+    }));
+    await waitFor(() => socket.sent.any((message) {
+          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+          return decoded['type'] == 'assignment.error';
+        }));
+    final errorMessage = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'assignment.error');
+    final error = (errorMessage['payload'] as Map<String, dynamic>)['error']
+        as Map<String, dynamic>;
+    expect(error['code'], 'cli_not_found');
+    expect(error['retryable'], isFalse);
+    expect(error['message'], contains('CLI'));
     await connection.close();
   });
 

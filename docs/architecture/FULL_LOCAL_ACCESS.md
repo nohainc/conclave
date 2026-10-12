@@ -21,12 +21,18 @@ mode to
 `--dangerously-bypass-approvals-and-sandbox`; Gemini profiles omit `--sandbox`
 and pass `--dangerously-skip-permissions`. Active signed releases must be
 verified against the installed provider versions before production rollout.
+Codex rejects `--ask-for-approval` when it is combined with the unrestricted
+flag, so that approval option belongs only to the restricted and
+provider-default mappings.
 The forward migration `0041_full_local_access_profile_mappings.sql` repairs
 the Gemini authoring starter for databases that already ran the earlier
 migrations. It does not rewrite an already published signed release: after
 the migration, publish and promote a new Gemini release, then refresh the
 Workspace profile catalog. A local app rebuild alone cannot change the active
 signed profile.
+The Codex flag conflict is repaired by
+`0042_codex_full_access_approval_conflict.sql`; publish and promote the
+updated ChatGPT release before enabling Full Local Access on existing workers.
 
 The Engine does not inherit the entire parent environment. It preserves the
 profile allowlist and, in full-access mode, adds only the host variables needed

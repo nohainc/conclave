@@ -57,6 +57,26 @@ function publishedRelease(version: number): string {
 }
 
 describe("v8 Tool Profile Cloud release domain", () => {
+  it("publishes a Codex full-access starter without conflicting approval flags", () => {
+    const rows = apply(`
+      SELECT
+        json_extract(profile_json, '$.execution.arguments[0]') AS first_argument,
+        json_extract(profile_json, '$.sandbox.mappings.restricted[0]') AS restricted_first,
+        json_extract(profile_json, '$.sandbox.mappings.full_access[0]') AS full_access_first,
+        json_extract(profile_json, '$.sandbox.mappings.full_access[1]') AS full_access_second
+      FROM tool_profile_starter_templates
+      WHERE profile_definition_id = 'chatgpt-codex';
+    `);
+    expect(rows).toEqual([
+      {
+        first_argument: '{"sandboxPolicyMapping":true}',
+        restricted_first: '--ask-for-approval',
+        full_access_first: '--dangerously-bypass-approvals-and-sandbox',
+        full_access_second: null,
+      },
+    ]);
+  });
+
   it("seeds bounded v8 logical Worker metadata and rejects arbitrary enum values", () => {
     expect(
       apply(`

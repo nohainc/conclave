@@ -212,16 +212,15 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       result = await assignmentHandler!(context);
     } catch (error) {
       try {
-        final normalizedError =
-            error is AssignmentExecutionFailure ? error : null;
-        final errorCode = canonicalExecutionErrorCode(normalizedError?.code);
+        final normalizedError = normalizeAssignmentExecutionFailure(error);
+        final errorCode = canonicalExecutionErrorCode(normalizedError.code);
         final errorMessage = executionErrorMessage(errorCode);
         final errorPayload = <String, Object?>{
           'status': 'failed',
           'error': {
             'code': errorCode,
             'message': errorMessage,
-            'retryable': normalizedError?.retryable ?? true,
+            'retryable': normalizedError.retryable,
           },
         };
         await _recordAssignment(
@@ -240,7 +239,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
           stage: 'worker_execution',
           severity: 'error',
           errorCode: errorCode,
-          retryable: normalizedError?.retryable ?? true,
+          retryable: normalizedError.retryable,
         );
         socket.send(jsonEncode(_assignmentEnvelope(
           'assignment.error',
