@@ -32,6 +32,9 @@ class WorkerDescriptor {
       'profileDefinitionId',
       'providerToolName',
       'releaseStage',
+      // V9 Cloud catalogs report Worker lifecycle separately from the
+      // removed Profile release-channel concept.
+      'lifecycleState',
       'visibilityState',
       'sortOrder',
     };
@@ -42,8 +45,13 @@ class WorkerDescriptor {
     final profileDefinitionId = json['profileDefinitionId'];
     final providerToolName = json['providerToolName'];
     final releaseStage = json['releaseStage'];
+    final lifecycleState = json['lifecycleState'];
     final visibilityState = json['visibilityState'];
     final sortOrder = json['sortOrder'];
+    final normalizedReleaseStage = releaseStage ??
+        (lifecycleState == 'active' || lifecycleState == 'retired'
+            ? 'stable'
+            : null);
     if (json.keys.any((key) => !fields.contains(key)) ||
         workerTypeId is! String ||
         !_identifier.hasMatch(workerTypeId) ||
@@ -60,7 +68,9 @@ class WorkerDescriptor {
         providerToolName is! String ||
         providerToolName.trim().isEmpty ||
         providerToolName.length > 128 ||
-        !const {'testing', 'beta', 'stable'}.contains(releaseStage) ||
+        !const {'testing', 'beta', 'stable'}.contains(normalizedReleaseStage) ||
+        (lifecycleState != null &&
+            !const {'active', 'retired'}.contains(lifecycleState)) ||
         !const {'hidden', 'visible'}.contains(visibilityState) ||
         sortOrder is! int ||
         sortOrder < 0 ||
@@ -74,7 +84,7 @@ class WorkerDescriptor {
       engineFamily: engineFamily as String,
       profileDefinitionId: profileDefinitionId,
       providerToolName: providerToolName,
-      releaseStage: releaseStage as String,
+      releaseStage: normalizedReleaseStage as String,
       visibilityState: visibilityState as String,
       sortOrder: sortOrder,
     );

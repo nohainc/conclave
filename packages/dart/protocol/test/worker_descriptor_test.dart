@@ -38,4 +38,22 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('deserializes the V9 Cloud catalog lifecycle field', () {
+    final descriptor = WorkerDescriptor.fromJson({
+      'workerTypeId': 'chatgpt',
+      'displayName': 'ChatGPT',
+      'description': 'Logical Worker implemented by approved local tools.',
+      'engineFamily': 'cli',
+      'profileDefinitionId': 'chatgpt-codex',
+      'providerToolName': 'Codex CLI',
+      'lifecycleState': 'active',
+      'visibilityState': 'visible',
+      'sortOrder': 10,
+    });
+
+    expect(descriptor.workerTypeId, 'chatgpt');
+    expect(descriptor.profileDefinitionId, 'chatgpt-codex');
+    expect(descriptor.releaseStage, 'stable');
+  });
 }
