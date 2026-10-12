@@ -119,46 +119,6 @@ class StatusBadge extends StatelessWidget {
   }
 }
 
-class LabLifecycleStep {
-  const LabLifecycleStep(this.title,
-      {this.isDone = false, this.isActive = false});
-  final String title;
-  final bool isDone, isActive;
-}
-
-class LifecycleStepper extends StatelessWidget {
-  const LifecycleStepper({super.key, required this.steps});
-  final List<LabLifecycleStep> steps;
-  @override
-  Widget build(BuildContext context) => Card(
-      child: Padding(
-          padding: const EdgeInsets.all(LabSpace.medium),
-          child: Wrap(spacing: 16, runSpacing: 12, children: [
-            for (final step in steps)
-              Semantics(
-                  container: true,
-                  label:
-                      '${step.title}: ${step.isDone ? 'Complete' : step.isActive ? 'Current step' : 'Pending'}',
-                  child: ExcludeSemantics(
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(
-                        step.isDone
-                            ? Icons.check_circle_outline
-                            : step.isActive
-                                ? Icons.radio_button_checked
-                                : Icons.radio_button_unchecked,
-                        color: step.isDone
-                            ? ProfileLabTheme.passColor
-                            : step.isActive
-                                ? ProfileLabTheme.primaryAccent
-                                : ProfileLabTheme.secondaryText,
-                        size: 18),
-                    const SizedBox(width: 8),
-                    Text(step.title)
-                  ])))
-          ])));
-}
-
 class EmptyState extends StatelessWidget {
   const EmptyState(
       {super.key,
@@ -258,64 +218,6 @@ class WorkerSidebarItem extends StatelessWidget {
                     Text('Profile: $profileStatus')
                   ]),
               onTap: onTap)));
-}
-
-class PrimaryActionCard extends StatelessWidget {
-  const PrimaryActionCard(
-      {super.key,
-      required this.title,
-      required this.description,
-      required this.actionLabel,
-      required this.onPressed,
-      this.status});
-  final String title, description, actionLabel;
-  final VoidCallback? onPressed;
-  final Widget? status;
-  @override
-  Widget build(BuildContext context) => Card(
-      child: Padding(
-          padding: const EdgeInsets.all(LabSpace.medium),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Wrap(
-                spacing: 12,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  const Text('Next step'),
-                  if (status != null) status!
-                ]),
-            const SizedBox(height: LabSpace.small),
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: LabSpace.small),
-            Text(description),
-            const SizedBox(height: 16),
-            Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.icon(
-                    icon: const Icon(Icons.arrow_forward, size: 18),
-                    onPressed: onPressed,
-                    label: Text(actionLabel)))
-          ])));
-}
-
-class TechnicalInspector extends StatelessWidget {
-  const TechnicalInspector(
-      {super.key,
-      this.title = 'Technical details',
-      this.subtitle,
-      required this.children});
-  final String title;
-  final Widget? subtitle;
-  final List<Widget> children;
-  @override
-  Widget build(BuildContext context) => Card(
-      clipBehavior: Clip.antiAlias,
-      child: ExpansionTile(
-          title: Text(title),
-          subtitle: subtitle,
-          childrenPadding: const EdgeInsets.all(LabSpace.medium),
-          children: children));
 }
 
 class OperationProgress extends StatelessWidget {

@@ -13,21 +13,7 @@ class _ImmediateApi extends ProfileAdminApiClient {
   _ImmediateApi() : super(baseUrl: 'http://localhost');
 
   @override
-  Future<ProfileLabDefinitionReadModel> fetchDefinition(String id) async {
-    return ProfileLabDefinitionReadModel.fromJson({
-      'profileDefinitionId': id,
-      'displayName': '$id profile',
-      'channels': {'stable': 1},
-    });
-  }
-
-  @override
   Future<List<ProfileLabWorkerReadModel>> fetchWorkerCatalog() async => [];
-
-  @override
-  Future<List<ProfileLabReleaseReadModel>> fetchReleases(
-          String profileDefinitionId) async =>
-      [];
 
   @override
   Future<List<ProfileLabAuditEventReadModel>> fetchAudit(

@@ -52,14 +52,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       }
     }
     currentMetadata = await store.loadDraftMetadata(profileDefinitionId);
-    baseCloudDigest = null;
-    cloudDigest = null;
-    cloudDraftPayload = null;
-    cloudDraftExists = null;
-    cloudDraftVersion = null;
-    cloudReleaseLifecycleState = null;
-    syncState = DraftSyncState.saved;
-
     if (currentDraft != null) {
       const encoder = JsonEncoder.withIndent('  ');
       currentJsonText = encoder.convert(currentDraft!.profile);
@@ -67,62 +59,8 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       jsonValidationLocation = null;
       isDirty = false;
       await refreshEvidence();
-      if (!isV9ProfileRegistry) await fetchAndSyncCloudDraft();
     }
     notifyListeners();
-  }
-
-  @override
-  Future<void> fetchAndSyncCloudDraft() async {
-    if (selectedDefinitionId == null || currentDraft == null) return;
-    try {
-      final release = await apiClient.fetchRelease(
-        selectedDefinitionId!,
-        currentDraft!.releaseVersion,
-      );
-      cloudDraftVersion = currentDraft!.releaseVersion;
-      cloudReleaseLifecycleState = release.lifecycleState.toLowerCase();
-      cloudDraftExists = cloudReleaseLifecycleState == 'draft';
-      if (release.profile != null) {
-        cloudDraftPayload = Map<String, dynamic>.from(release.profile!);
-        if (cloudDraftExists == true) {
-          cloudDigest = release.payloadDigest ??
-              release['profileDigest'] as String? ??
-              sha256
-                  .convert(utf8.encode(canonicalJson(cloudDraftPayload!)))
-                  .toString();
-          baseCloudDigest ??= cloudDigest;
-          updateSyncState();
-        }
-      }
-    } on ProfileAdminNotFoundException {
-      cloudDraftVersion = currentDraft!.releaseVersion;
-      cloudDraftExists = false;
-      cloudReleaseLifecycleState = null;
-      cloudDigest = null;
-      baseCloudDigest = null;
-      cloudDraftPayload = null;
-    } catch (_) {
-      updateSyncState();
-    }
-  }
-
-  void updateSyncState() {
-    if (cloudDigest != null &&
-        baseCloudDigest != null &&
-        cloudDigest != baseCloudDigest) {
-      if (isDirty) {
-        syncState = DraftSyncState.conflict;
-      } else {
-        syncState = DraftSyncState.cloudChanged;
-      }
-    } else {
-      if (isDirty) {
-        syncState = DraftSyncState.modifiedLocally;
-      } else {
-        syncState = DraftSyncState.saved;
-      }
-    }
   }
 
   @override
@@ -138,19 +76,11 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
         payloadDigest: currentDraft!.payloadDigest,
       );
       currentEvidence = storedEvidence.where((evidence) {
-        final legacy = ToolProfileAcceptanceEvidence.hasCloudContractShape(
-              evidence,
-              profile: currentDraft!.profile,
-            ) &&
-            evidence['profileDefinitionId'] ==
-                currentDraft!.profileDefinitionId &&
-            evidence['releaseVersion'] == currentDraft!.releaseVersion &&
-            evidence['profileDigest'] == currentDraft!.payloadDigest;
         final v9 = evidence['formatVersion'] == 1 &&
             evidence['workerTypeId'] == currentDraft!.logicalWorkerTypeId &&
             evidence['candidateDigest'] == currentDraft!.payloadDigest &&
             evidence['scenarios'] is Map;
-        return legacy || v9;
+        return v9;
       }).toList();
     }
     notifyListeners();
@@ -163,7 +93,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     // A candidate digest changes with the editor buffer. Invalidate both local
     // test evidence and Cloud validation immediately, before the next save.
     resetDraftTestState();
-    updateSyncState();
     try {
       final decoded = jsonDecode(text);
       if (decoded is! Map<String, Object?>) {
@@ -239,49 +168,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     }
   }
 
-  /// Duplicates the current draft as the next release version draft (e.g. v1 -> v2).
-  Future<void> duplicateCurrentDraftAsNextRelease() async {
-    if (selectedDefinitionId == null || currentDraft == null) return;
-    try {
-      final decoded = Map<String, Object?>.from(
-        jsonDecode(currentJsonText) as Map,
-      );
-      final currentVer = (decoded['releaseVersion'] as int?) ?? 1;
-      final nextVer = currentVer + 1;
-      decoded['releaseVersion'] = nextVer;
-      const encoder = JsonEncoder.withIndent('  ');
-      currentJsonText = encoder.convert(decoded);
-      await saveCurrentDraft(
-        notes: 'Duplicated from v$currentVer as v$nextVer',
-      );
-    } catch (e) {
-      jsonValidationError = 'Failed to duplicate draft: $e';
-      notifyListeners();
-    }
-  }
-
-  /// Creates next draft version automatically from a published release payload.
-  Future<void> createDraftFromRelease({
-    required String profileDefinitionId,
-    required Map<String, dynamic> releasePayload,
-  }) async {
-    final releaseVer = (releasePayload['releaseVersion'] as int?) ?? 1;
-    final nextVer = releaseVer + 1;
-    final newDraftJson = Map<String, Object?>.from(releasePayload);
-    newDraftJson['releaseVersion'] = nextVer;
-
-    currentDraft = await store.saveDraft(
-      profileDefinitionId: profileDefinitionId,
-      profileJson: newDraftJson,
-      author: currentSession?.displayName ?? 'developer',
-      notes: 'Created draft v$nextVer from published release v$releaseVer',
-    );
-    await refreshDrafts();
-    await selectDraft(profileDefinitionId);
-    setWorkerSubView(WorkerSubView.draftAndTest);
-    setArea(LabArea.workers);
-  }
-
   Future<void> saveCurrentDraft({
     String author = 'developer',
     String notes = '',
@@ -308,7 +194,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     pendingAiProvenance = null;
     isDirty = false;
     jsonValidationLocation = null;
-    updateSyncState();
     await refreshEvidence();
     notifyListeners();
   }
@@ -344,116 +229,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     }
   }
 
-  Future<void> saveCurrentDraftToCloud({
-    bool force = false,
-    String author = 'developer',
-    String notes = '',
-  }) =>
-      _refresh(
-        'save-draft',
-        () => _saveCurrentDraftToCloud(
-            force: force, author: author, notes: notes),
-      );
-
-  Future<void> _saveCurrentDraftToCloud({
-    bool force = false,
-    String author = 'developer',
-    String notes = '',
-  }) async {
-    if (selectedDefinitionId == null || jsonValidationError != null) return;
-    final decoded = jsonDecode(currentJsonText) as Map<String, Object?>;
-
-    currentDraft = await store.saveDraft(
-      profileDefinitionId: selectedDefinitionId!,
-      profileJson: decoded,
-      author: author,
-      notes: notes,
-      provenance: pendingAiProvenance,
-    );
-    currentMetadata = await store.loadDraftMetadata(selectedDefinitionId!);
-    pendingAiProvenance = null;
-    await refreshEvidence();
-
-    try {
-      if (cloudDraftVersion != currentDraft!.releaseVersion ||
-          cloudDraftExists == null) {
-        await fetchAndSyncCloudDraft();
-      }
-      if (cloudDraftExists == null) {
-        throw StateError(
-          'Could not determine whether this release draft exists on Cloud. Check the Cloud connection and try again.',
-        );
-      }
-      if (!cloudDraftExists! && cloudReleaseLifecycleState != null) {
-        throw StateError(
-          'Cloud release v${currentDraft!.releaseVersion} is ${cloudReleaseLifecycleState!} and cannot be edited as a draft.',
-        );
-      }
-      final resp = cloudDraftExists == true
-          ? await apiClient.updateDraft(
-              profileDefinitionId: selectedDefinitionId!,
-              releaseVersion: currentDraft!.releaseVersion,
-              profile: Map<String, dynamic>.from(decoded),
-              expectedBaseDigest: force ? null : baseCloudDigest,
-            )
-          : await apiClient.createDraftRelease(
-              profileDefinitionId: selectedDefinitionId!,
-              releaseVersion: currentDraft!.releaseVersion,
-              profile: Map<String, dynamic>.from(decoded),
-            );
-      final newDigest = (resp['payloadDigest'] as String?) ??
-          (resp['digest'] as String?) ??
-          currentDraft!.payloadDigest;
-      baseCloudDigest = newDigest;
-      cloudDigest = newDigest;
-      cloudDraftPayload = Map<String, dynamic>.from(decoded);
-      cloudDraftExists = true;
-      cloudDraftVersion = currentDraft!.releaseVersion;
-      cloudReleaseLifecycleState = 'draft';
-      isDirty = false;
-      syncState = DraftSyncState.saved;
-      cloudError = null;
-    } on StateError catch (e) {
-      if (e.message.contains('409') ||
-          e.message.toLowerCase().contains('conflict') ||
-          e.message.contains('digest mismatch')) {
-        syncState = DraftSyncState.conflict;
-        cloudError = 'Draft conflict detected on Cloud: ${e.message}';
-      } else {
-        cloudError = 'Save to Cloud failed: ${e.message}';
-      }
-      rethrow;
-    } catch (e) {
-      cloudError = 'Save to Cloud failed: $e';
-      rethrow;
-    } finally {
-      notifyListeners();
-    }
-  }
-
-  Future<void> resolveConflictKeepLocal() async {
-    await saveCurrentDraftToCloud(
-      force: true,
-      notes: 'Resolved conflict by forcing local draft payload onto Cloud',
-    );
-  }
-
-  Future<void> resolveConflictKeepCloud() async {
-    if (cloudDraftPayload == null || selectedDefinitionId == null) return;
-    const encoder = JsonEncoder.withIndent('  ');
-    currentJsonText = encoder.convert(cloudDraftPayload!);
-    currentDraft = await store.saveDraft(
-      profileDefinitionId: selectedDefinitionId!,
-      profileJson: cloudDraftPayload!,
-      notes: 'Resolved conflict by accepting Cloud draft payload',
-    );
-    baseCloudDigest = cloudDigest;
-    isDirty = false;
-    jsonValidationError = null;
-    syncState = DraftSyncState.saved;
-    notifyListeners();
-  }
-
   /// Creates an unsigned local candidate from the selected Cloud definition.
   Future<void> createInitialDraft() => _refresh('initial-draft', () async {
         final worker = selectedCloudWorker;
@@ -462,8 +237,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
         if (worker == null ||
             definition == null ||
             id == null ||
-            currentDraft != null ||
-            cloudReleases.isNotEmpty) {
+            currentDraft != null) {
           return;
         }
         if (await store.loadDraft(id) != null) {
@@ -513,9 +287,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
           if (selectedDefinitionId == id) {
             await selectDraft(id);
           }
-        }
-        if (selectedDefinitionId == id) {
-          setWorkerSubView(WorkerSubView.draftAndTest);
         }
       });
 
@@ -668,10 +439,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       addExecutable(worker['providerToolName']);
     }
     addProfile(selectedCloudDefinition);
-    addProfile(selectedCloudRelease);
-    for (final release in cloudReleases) {
-      addProfile(release);
-    }
     for (final definitionId in await store.listDraftDefinitionIds()) {
       try {
         addProfile((await store.loadDraft(definitionId))?.profile);

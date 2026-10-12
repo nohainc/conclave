@@ -6,21 +6,21 @@ import '../controllers/profile_lab_controller.dart';
 class AiAssistantContext {
   const AiAssistantContext({
     required this.workerMetadata,
-    required this.stableProfile,
+    required this.currentProfile,
     required this.currentDraft,
     required this.testDiagnostics,
     required this.providerCliInfo,
   });
 
   final Map<String, dynamic> workerMetadata;
-  final Map<String, dynamic>? stableProfile;
+  final Map<String, dynamic>? currentProfile;
   final Map<String, dynamic> currentDraft;
   final List<Map<String, dynamic>> testDiagnostics;
   final Map<String, dynamic> providerCliInfo;
 
   Map<String, dynamic> toJson() => {
         'worker': workerMetadata,
-        'stableProfile': stableProfile,
+        'currentProfile': currentProfile,
         'currentDraft': currentDraft,
         'testDiagnostics': testDiagnostics,
         'providerCliInfo': providerCliInfo,
@@ -40,12 +40,13 @@ class ProfileAiHeuristicRepairService {
           'displayName': controller.selectedDefinitionId ?? 'Unknown Worker',
         };
 
-    // 2. Stable profile
-    final stableRelease = controller.cloudReleases.firstWhere(
-      (r) => (r['lifecycleState'] as String? ?? '').toLowerCase() == 'stable',
-      orElse: () => <String, dynamic>{},
-    );
-    final stableProfile = stableRelease['profile'] as Map<String, dynamic>?;
+    // 2. Current published Profile
+    final currentProfile =
+        controller.currentCloudProfileSnapshot?['profile'] is Map
+            ? Map<String, dynamic>.from(
+                controller.currentCloudProfileSnapshot!['profile'] as Map,
+              )
+            : null;
 
     // 3. Current candidate draft
     Map<String, dynamic> currentDraftPayload = {};
@@ -88,7 +89,7 @@ class ProfileAiHeuristicRepairService {
 
     return AiAssistantContext(
       workerMetadata: worker,
-      stableProfile: stableProfile,
+      currentProfile: currentProfile,
       currentDraft: currentDraftPayload,
       testDiagnostics: diagnostics,
       providerCliInfo: providerInfo,

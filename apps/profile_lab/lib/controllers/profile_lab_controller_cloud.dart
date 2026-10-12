@@ -15,7 +15,6 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     notifyListeners();
 
     try {
-      isV9ProfileRegistry = true;
       final workers = await apiClient.fetchV9WorkerProfiles();
       if (generation != _cloudGeneration) {
         return;
@@ -25,9 +24,6 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
         selectedCloudWorker = null;
         selectedCloudDefinition = null;
         selectedDefinitionId = null;
-        cloudReleases = [];
-        selectedCloudRelease = null;
-        cloudEvidence = [];
       }
       if (selectedCloudWorker != null) {
         final match = cloudWorkers.firstWhere(
@@ -55,7 +51,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     }
   }
 
-  /// Selects a Worker from the Cloud catalog and fetches its definition & releases.
+  /// Selects a Worker and loads its one current published Profile.
   Future<void> selectWorker(Map<String, dynamic> worker) async {
     final generation = _cloudGeneration;
     currentDraft = null;
@@ -64,11 +60,6 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     currentEvidence = [];
     isDirty = false;
     jsonValidationError = null;
-    cloudDraftExists = null;
-    cloudDraftVersion = null;
-    cloudDigest = null;
-    baseCloudDigest = null;
-    cloudDraftPayload = null;
     resetDraftTestState();
     currentCloudProfileSnapshot = null;
     currentProfileHistory = [];
@@ -77,107 +68,57 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     candidateCloudValidatedDigest = null;
     selectedCloudWorker = worker;
     selectedDefinitionId = worker['profileDefinitionId'] as String?;
-    cloudReleases = [];
-    selectedCloudRelease = null;
-    cloudEvidence = [];
     selectedCloudDefinition = null;
     definitionsError = null;
     notifyListeners();
-    final defId = worker['profileDefinitionId'] as String?;
-
-    if (isV9ProfileRegistry) {
-      final workerTypeId = worker['workerTypeId'] as String?;
-      if (workerTypeId == null || workerTypeId.isEmpty) return;
-      try {
-        final snapshot = await apiClient.fetchCurrentWorkerProfile(
-          workerTypeId,
-        );
-        if (generation != _cloudGeneration ||
-            selectedCloudWorker?['workerTypeId'] != workerTypeId) {
-          return;
-        }
-        currentCloudProfileSnapshot = snapshot;
-        currentProfileRevision = (snapshot['revision'] as num?)?.toInt() ?? 0;
-        currentProfileDigest = snapshot['digest'] as String?;
-        final profile = snapshot['profile'];
-        if (profile is Map) {
-          final profileMap = Map<String, dynamic>.from(profile);
-          selectedDefinitionId = profileMap['profileDefinitionId'] as String?;
-          final provider = profileMap['providerTool'];
-          selectedCloudDefinition = {
-            'profileDefinitionId': selectedDefinitionId,
-            'displayName': worker['displayName'],
-            'providerToolName': provider is Map ? provider['name'] : null,
-            'status': 'current',
-          };
-          if (selectedDefinitionId != null &&
-              draftDefinitionIds.contains(selectedDefinitionId)) {
-            await selectDraft(selectedDefinitionId!);
-          } else if (selectedDefinitionId != null) {
-            await store.saveDraft(
-              profileDefinitionId: selectedDefinitionId!,
-              profileJson: profileMap,
-              notes: 'Created from current V9 Worker Profile',
-            );
-            draftDefinitionIds = await store.listDraftDefinitionIds();
-            await selectDraft(selectedDefinitionId!);
-          }
-          cloudDigest = currentProfileDigest;
-          baseCloudDigest = currentProfileDigest;
-          cloudDraftExists = true;
-          cloudReleaseLifecycleState = 'current';
-        }
-        await discoverInstalledProviders();
-        setWorkerSubView(WorkerSubView.draftAndTest);
-        notifyListeners();
-        return;
-      } on ProfileAdminNotFoundException {
-        // A V9 Worker may exist before its first Profile is published.
-        selectedCloudDefinition = null;
-        definitionsError = null;
-        notifyListeners();
-        return;
-      } catch (e) {
-        definitionsError = 'Failed to fetch current Worker Profile: $e';
-        notifyListeners();
+    final workerTypeId = worker['workerTypeId'] as String?;
+    if (workerTypeId == null || workerTypeId.isEmpty) return;
+    try {
+      final snapshot = await apiClient.fetchCurrentWorkerProfile(workerTypeId);
+      if (generation != _cloudGeneration ||
+          selectedCloudWorker?['workerTypeId'] != workerTypeId) {
         return;
       }
+      currentCloudProfileSnapshot = snapshot;
+      currentProfileRevision = (snapshot['revision'] as num?)?.toInt() ?? 0;
+      currentProfileDigest = snapshot['digest'] as String?;
+      final profile = snapshot['profile'];
+      if (profile is Map) {
+        final profileMap = Map<String, dynamic>.from(profile);
+        selectedDefinitionId = profileMap['profileDefinitionId'] as String?;
+        final provider = profileMap['providerTool'];
+        selectedCloudDefinition = {
+          'profileDefinitionId': selectedDefinitionId,
+          'displayName': worker['displayName'],
+          'providerToolName': provider is Map ? provider['name'] : null,
+          'status': 'current',
+        };
+        if (selectedDefinitionId != null &&
+            draftDefinitionIds.contains(selectedDefinitionId)) {
+          await selectDraft(selectedDefinitionId!);
+        } else if (selectedDefinitionId != null) {
+          await store.saveDraft(
+            profileDefinitionId: selectedDefinitionId!,
+            profileJson: profileMap,
+            notes: 'Created from current Worker Profile',
+          );
+          draftDefinitionIds = await store.listDraftDefinitionIds();
+          await selectDraft(selectedDefinitionId!);
+        }
+      }
+      await discoverInstalledProviders();
+      notifyListeners();
+    } on ProfileAdminNotFoundException {
+      selectedCloudDefinition = {
+        'displayName': worker['displayName'],
+        'providerToolName': worker['providerToolName'],
+      };
+      definitionsError = null;
+      notifyListeners();
+    } catch (e) {
+      definitionsError = 'Failed to fetch current Worker Profile: $e';
+      notifyListeners();
     }
-
-    if (defId != null && defId.isNotEmpty) {
-      selectedDefinitionId = defId;
-      try {
-        await _refresh('definition:$defId', () async {
-          final definition = await apiClient.fetchDefinition(defId);
-          if (generation == _cloudGeneration && selectedDefinitionId == defId) {
-            selectedCloudDefinition = definition.toJson();
-          }
-        });
-      } catch (e) {
-        if (generation == _cloudGeneration && selectedDefinitionId == defId) {
-          definitionsError = 'Failed to fetch definition: $e';
-        }
-      }
-      if (generation != _cloudGeneration || selectedDefinitionId != defId) {
-        return;
-      }
-
-      // Check if a local draft exists for this definition
-      if (draftDefinitionIds.contains(defId)) {
-        await selectDraft(defId);
-      }
-
-      await fetchCloudReleases(defId);
-      if (auditFilterCurrentDefinition) {
-        await fetchCloudAudit(definitionOnly: true);
-      }
-    } else {
-      selectedDefinitionId = null;
-      selectedCloudDefinition = null;
-      cloudReleases = [];
-      selectedCloudRelease = null;
-    }
-    notifyListeners();
   }
 
   /// Loads signed historical snapshots on demand for the selected Worker.
@@ -185,10 +126,6 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       _refresh('profile-history', _fetchCurrentProfileHistory);
 
   Future<void> _fetchCurrentProfileHistory() async {
-    if (!isV9ProfileRegistry) {
-      currentProfileHistory = [];
-      return;
-    }
     final workerTypeId = selectedCloudWorker?['workerTypeId'] as String?;
     if (workerTypeId == null || workerTypeId.isEmpty) return;
     currentProfileHistory =
@@ -202,7 +139,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     required String restorationReason,
   }) =>
       _refresh('restore-profile', () async {
-        if (!isV9ProfileRegistry || selectedCloudWorker == null) return;
+        if (selectedCloudWorker == null) return;
         final workerTypeId = selectedCloudWorker!['workerTypeId'] as String?;
         if (workerTypeId == null || workerTypeId.isEmpty) return;
         if (!canPublish) {
@@ -231,10 +168,6 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     currentProfileRevision =
         (snapshot['revision'] as num?)?.toInt() ?? currentProfileRevision + 1;
     currentProfileDigest = snapshot['digest'] as String?;
-    cloudDigest = currentProfileDigest;
-    baseCloudDigest = currentProfileDigest;
-    cloudDraftExists = true;
-    cloudReleaseLifecycleState = 'current';
     if (selectedCloudWorker != null) {
       selectedCloudWorker = {
         ...selectedCloudWorker!,
@@ -261,204 +194,6 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     resetDraftTestState();
     await refreshEvidence();
     notifyListeners();
-  }
-
-  /// Fetches releases for a profile definition.
-  @override
-  Future<void> fetchCloudReleases([String? profileDefinitionId]) => _refresh(
-        'releases:${profileDefinitionId ?? selectedDefinitionId}',
-        () => _fetchCloudReleases(profileDefinitionId),
-      );
-
-  Future<void> _fetchCloudReleases(String? profileDefinitionId) async {
-    if (isV9ProfileRegistry) {
-      cloudReleases = [];
-      selectedCloudRelease = null;
-      cloudEvidence = [];
-      return;
-    }
-    final generation = _cloudGeneration;
-    final defId = profileDefinitionId ?? selectedDefinitionId;
-    if (defId == null) {
-      cloudReleases = [];
-      selectedCloudRelease = null;
-      notifyListeners();
-      return;
-    }
-
-    releasesError = null;
-    try {
-      final result = await apiClient.fetchReleases(defId);
-      if (generation != _cloudGeneration || selectedDefinitionId != defId) {
-        return;
-      }
-      cloudReleases = result.map((release) => release.toJson()).toList();
-      try {
-        final definition = await apiClient.fetchDefinition(defId);
-        if (generation != _cloudGeneration || selectedDefinitionId != defId) {
-          return;
-        }
-        selectedCloudDefinition = definition.toJson();
-        definitionsError = null;
-      } catch (e) {
-        if (generation != _cloudGeneration || selectedDefinitionId != defId) {
-          return;
-        }
-        definitionsError = 'Failed to refresh channel assignments: $e';
-      }
-      if (cloudReleases.isNotEmpty) {
-        final previousVersion = selectedCloudRelease?['releaseVersion'];
-        selectedCloudRelease = cloudReleases
-                .where(
-                  (r) =>
-                      r['releaseVersion'] == previousVersion &&
-                      r['lifecycleState'] != 'draft',
-                )
-                .firstOrNull ??
-            cloudReleases
-                .where((r) => r['lifecycleState'] != 'draft')
-                .firstOrNull ??
-            cloudReleases.first;
-        final version = selectedCloudRelease!['releaseVersion'] as int?;
-        if (version != null) {
-          await fetchCloudEvidence(
-            profileDefinitionId: defId,
-            version: version,
-          );
-        }
-      } else {
-        selectedCloudRelease = null;
-        cloudEvidence = [];
-      }
-    } catch (e) {
-      if (generation != _cloudGeneration || selectedDefinitionId != defId) {
-        return;
-      }
-      releasesError = 'Failed to fetch releases: $e';
-      cloudError = releasesError;
-    }
-    await discoverInstalledProviders();
-    notifyListeners();
-  }
-
-  /// Selects a release and fetches its acceptance evidence.
-  Future<void> selectCloudRelease(Map<String, dynamic> release) async {
-    selectedCloudRelease = release;
-    cloudEvidence = [];
-    final defId = selectedDefinitionId;
-    final version = release['releaseVersion'] as int?;
-    if (defId != null && version != null) {
-      await fetchCloudEvidence(profileDefinitionId: defId, version: version);
-    }
-    notifyListeners();
-  }
-
-  /// Fetches Cloud acceptance evidence for a release.
-  @override
-  Future<void> fetchCloudEvidence({
-    String? profileDefinitionId,
-    int? version,
-  }) =>
-      _refresh(
-        'evidence:${profileDefinitionId ?? selectedDefinitionId}:${version ?? selectedCloudRelease?['releaseVersion']}',
-        () => _fetchCloudEvidence(
-          profileDefinitionId: profileDefinitionId,
-          version: version,
-        ),
-      );
-
-  Future<void> _fetchCloudEvidence({
-    String? profileDefinitionId,
-    int? version,
-  }) async {
-    final generation = _cloudGeneration;
-    final defId = profileDefinitionId ?? selectedDefinitionId;
-    final ver = version ?? selectedCloudRelease?['releaseVersion'] as int?;
-    if (defId == null || ver == null) {
-      cloudEvidence = [];
-      notifyListeners();
-      return;
-    }
-
-    evidenceError = null;
-    try {
-      final result = await apiClient.fetchReleaseEvidence(defId, ver);
-      if (generation != _cloudGeneration ||
-          selectedDefinitionId != defId ||
-          selectedCloudRelease?['releaseVersion'] != ver) {
-        return;
-      }
-      cloudEvidence = result.map((evidence) => evidence.toJson()).toList();
-    } catch (e) {
-      if (generation != _cloudGeneration ||
-          selectedDefinitionId != defId ||
-          selectedCloudRelease?['releaseVersion'] != ver) {
-        return;
-      }
-      evidenceError = 'Failed to fetch evidence: $e';
-    }
-    notifyListeners();
-  }
-
-  /// Stores a complete local sandbox contract as immutable Cloud evidence for
-  /// the published release with the exact same identity and digest.
-  Future<Map<String, dynamic>> submitCloudAcceptanceEvidence(
-    Map<String, Object?> evidence,
-  ) async {
-    final draft = currentDraft;
-    final definitionId = selectedDefinitionId;
-    if (draft == null || definitionId == null) {
-      throw StateError('Select a Profile Definition and release first.');
-    }
-    if (!ToolProfileAcceptanceEvidence.hasCloudContractShape(
-      evidence,
-      profile: draft.profile,
-    )) {
-      throw StateError(
-        'Only complete sandbox acceptance evidence can be submitted.',
-      );
-    }
-    if (evidence['profileDefinitionId'] != draft.profileDefinitionId ||
-        evidence['releaseVersion'] != draft.releaseVersion ||
-        evidence['profileDigest'] != draft.payloadDigest) {
-      throw StateError('Evidence must match the selected Profile payload.');
-    }
-    Map<String, dynamic>? publishedRelease;
-    for (final release in cloudReleases) {
-      if (release['releaseVersion'] == draft.releaseVersion &&
-          release['payloadDigest'] == draft.payloadDigest &&
-          release['publishedAt'] is String) {
-        publishedRelease = release;
-        break;
-      }
-    }
-    if (publishedRelease == null) {
-      throw StateError(
-        'Publish this exact Profile payload before submitting its evidence.',
-      );
-    }
-
-    isSubmittingCloudEvidence = true;
-    notifyListeners();
-    try {
-      final result = await apiClient.submitReleaseEvidence(
-        profileDefinitionId: definitionId,
-        releaseVersion: draft.releaseVersion,
-        evidence: evidence,
-      );
-      await fetchCloudEvidence(
-        profileDefinitionId: definitionId,
-        version: draft.releaseVersion,
-      );
-      await fetchCloudAudit();
-      return result;
-    } catch (e) {
-      cloudError = 'Cloud evidence submission failed: $e';
-      rethrow;
-    } finally {
-      isSubmittingCloudEvidence = false;
-      notifyListeners();
-    }
   }
 
   /// Fetches audit events globally or scoped to the current definition.
@@ -496,118 +231,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     notifyListeners();
   }
 
-  /// Executes channel pointer rollback.
-  Future<void> rollbackChannelPointer({
-    required String channel,
-    required int targetReleaseVersion,
-    String? reason,
-  }) =>
-      _refresh(
-        'rollback',
-        () => _rollbackChannelPointer(
-          channel: channel,
-          targetReleaseVersion: targetReleaseVersion,
-          reason: reason,
-        ),
-      );
-
-  Future<void> _rollbackChannelPointer({
-    required String channel,
-    required int targetReleaseVersion,
-    String? reason,
-  }) async {
-    if (selectedDefinitionId == null) return;
-    try {
-      await apiClient.rollbackChannel(
-        profileDefinitionId: selectedDefinitionId!,
-        channel: channel,
-        targetReleaseVersion: targetReleaseVersion,
-        reason: reason,
-      );
-      await fetchCloudReleases();
-      await fetchCloudAudit();
-    } catch (e) {
-      cloudError = 'Rollback failed: $e';
-      rethrow;
-    }
-  }
-
-  /// Promotes a release. Stable promotion requires a separately stored Cloud
-  /// evidence record and sends only its immutable identifier.
-  Future<void> promoteCloudRelease({
-    required int releaseVersion,
-    required String channel,
-    String? acceptanceEvidenceId,
-  }) =>
-      _refresh(
-        'promote',
-        () => _promoteCloudRelease(
-          releaseVersion: releaseVersion,
-          channel: channel,
-          acceptanceEvidenceId: acceptanceEvidenceId,
-        ),
-      );
-
-  Future<void> _promoteCloudRelease({
-    required int releaseVersion,
-    required String channel,
-    String? acceptanceEvidenceId,
-  }) async {
-    final normalizedChannel = channel.toLowerCase();
-    if (normalizedChannel == 'stable' &&
-        (acceptanceEvidenceId == null || acceptanceEvidenceId.trim().isEmpty)) {
-      throw StateError(
-        'Stable promotion requires a qualifying Cloud evidence record.',
-      );
-    }
-    if (selectedDefinitionId == null) return;
-    try {
-      await apiClient.promoteRelease(
-        profileDefinitionId: selectedDefinitionId!,
-        releaseVersion: releaseVersion,
-        channel: normalizedChannel,
-        acceptanceEvidenceId: acceptanceEvidenceId,
-      );
-      await fetchCloudReleases();
-      await fetchCloudAudit();
-    } catch (e) {
-      cloudError = 'Promotion failed: $e';
-      rethrow;
-    }
-  }
-
-  /// Revokes a release version permanently for security/safety reasons.
-  Future<void> revokeCloudRelease({
-    required int releaseVersion,
-    required String reason,
-  }) =>
-      _refresh(
-        'revoke',
-        () =>
-            _revokeCloudRelease(releaseVersion: releaseVersion, reason: reason),
-      );
-
-  Future<void> _revokeCloudRelease({
-    required int releaseVersion,
-    required String reason,
-  }) async {
-    if (selectedDefinitionId == null) return;
-    try {
-      await apiClient.changeLifecycle(
-        profileDefinitionId: selectedDefinitionId!,
-        releaseVersion: releaseVersion,
-        lifecycle: 'revoked',
-        reason: reason,
-      );
-      await fetchCloudReleases(selectedDefinitionId!);
-      await fetchCloudAudit();
-    } catch (e) {
-      cloudError = 'Revocation failed: $e';
-      rethrow;
-    }
-  }
-
-  /// Requests Cloud publication of the current draft.
+  /// Requests Cloud publication of the current local candidate.
   /// Signing occurs in the controlled Cloud signing service; Profile Lab does
   /// not hold or manage private keys.
   Future<void> publishCurrentDraft() =>
@@ -619,97 +243,33 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
       final draft = currentDraft!;
       if (!canPublish) {
         throw StateError(
-          'Release Manager access and a ready Cloud signer are required.',
+          'Profile Lab authorization and a ready Cloud signer are required.',
         );
       }
-      if (isV9ProfileRegistry) {
-        final evidence = _publicationEvidenceFor(draft);
-        if (evidence == null) {
-          throw StateError(
-            'Run the complete local Test Ladder for this exact candidate before publishing.',
-          );
-        }
-        final profile = Map<String, dynamic>.from(draft.profile);
-        final validation = await apiClient.validateWorkerProfileCandidate(
-          workerTypeId: selectedCloudWorker!['workerTypeId'] as String,
-          profile: profile,
-          candidateDigest: draft.payloadDigest,
-          evidence: evidence,
-        );
-        candidateCloudValidatedDigest =
-            validation['digest'] as String? ?? draft.payloadDigest;
-        final snapshot = await apiClient.publishWorkerProfile(
-          workerTypeId: selectedCloudWorker!['workerTypeId'] as String,
-          expectedRevision: currentProfileRevision,
-          profile: profile,
-          candidateDigest: draft.payloadDigest,
-          evidence: evidence,
-        );
-        currentCloudProfileSnapshot = snapshot;
-        currentProfileRevision = (snapshot['revision'] as num?)?.toInt() ??
-            currentProfileRevision + 1;
-        currentProfileDigest =
-            snapshot['digest'] as String? ?? draft.payloadDigest;
-        cloudDigest = currentProfileDigest;
-        baseCloudDigest = currentProfileDigest;
-        cloudDraftExists = true;
-        cloudReleaseLifecycleState = 'current';
-        await fetchCloudCatalog();
-        return;
-      }
-      if (isDirty ||
-          cloudDraftExists != true ||
-          cloudDraftVersion != draft.releaseVersion ||
-          cloudDigest != draft.payloadDigest) {
+      final evidence = _publicationEvidenceFor(draft);
+      if (evidence == null) {
         throw StateError(
-          'Save and sync this exact Draft to Cloud before publishing.',
+          'Run the complete local Test Ladder for this exact candidate before publishing.',
         );
       }
-      Map<String, Object?>? localQualification;
-      for (final item in currentEvidence) {
-        if (ToolProfileAcceptanceEvidence.hasCloudContractShape(
-              item,
-              profile: draft.profile,
-            ) &&
-            item['profileDefinitionId'] == draft.profileDefinitionId &&
-            item['releaseVersion'] == draft.releaseVersion &&
-            item['profileDigest'] == draft.payloadDigest) {
-          localQualification = item;
-          break;
-        }
-      }
-      if (localQualification == null) {
-        throw StateError(
-          'Run the complete local Test Ladder for this exact draft before publishing.',
-        );
-      }
-
-      final preflight = await apiClient.checkSigningPreflight();
-      if (!preflight.ready) {
-        throw StateError(
-          'Cloud release signing preflight failed: '
-          '${preflight.issues.isNotEmpty ? preflight.issues.join(', ') : 'signer configuration is invalid'}',
-        );
-      }
-      final qualification = await apiClient.submitLocalQualification(
-        profileDefinitionId: draft.profileDefinitionId,
-        releaseVersion: draft.releaseVersion,
-        evidence: localQualification,
+      final profile = Map<String, dynamic>.from(draft.profile);
+      final validation = await apiClient.validateWorkerProfileCandidate(
+        workerTypeId: selectedCloudWorker!['workerTypeId'] as String,
+        profile: profile,
+        candidateDigest: draft.payloadDigest,
+        evidence: evidence,
       );
-      final qualificationEvidenceId =
-          qualification['qualificationEvidenceId'] as String?;
-      if (qualificationEvidenceId == null ||
-          qualificationEvidenceId.trim().isEmpty) {
-        throw StateError('Cloud did not return a qualification evidence ID.');
-      }
-      await apiClient.publishRelease(
-        profileDefinitionId: draft.profileDefinitionId,
-        releaseVersion: draft.releaseVersion,
-        qualificationEvidenceId: qualificationEvidenceId,
+      candidateCloudValidatedDigest =
+          validation['digest'] as String? ?? draft.payloadDigest;
+      final snapshot = await apiClient.publishWorkerProfile(
+        workerTypeId: selectedCloudWorker!['workerTypeId'] as String,
+        expectedRevision: currentProfileRevision,
+        profile: profile,
+        candidateDigest: draft.payloadDigest,
+        evidence: evidence,
       );
-      await fetchCloudReleases(draft.profileDefinitionId);
-      await fetchCloudAudit();
-      await refreshDrafts();
+      await _adoptPublishedSnapshot(snapshot,
+          notes: 'Published Profile candidate');
     } catch (e) {
       cloudError = 'Publish failed: $e';
       rethrow;
@@ -724,7 +284,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
   Future<void> _validateCurrentDraft() async {
     final draft = currentDraft;
     final workerTypeId = selectedCloudWorker?['workerTypeId'] as String?;
-    if (!isV9ProfileRegistry || draft == null || workerTypeId == null) return;
+    if (draft == null || workerTypeId == null) return;
     if (isDirty || jsonValidationError != null) {
       throw StateError('Save a valid local candidate before Cloud validation.');
     }

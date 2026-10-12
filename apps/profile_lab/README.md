@@ -2,7 +2,7 @@
 
 Conclave Profile Lab is an internal macOS desktop application for creating and maintaining Logical Workers and their Tool Profiles. Operators open a Worker, edit one local JSON candidate, run the generic CLI Worker Engine against locally installed provider CLIs, validate the exact candidate with Cloud, and publish it as the Worker’s next current Profile revision.
 
-This README is for developers and authorized operators. The normative product and API contracts are in the [Profile Lab specification](../../docs/specifications/PROFILE_LAB.md), [Tool Profile lifecycle specification](../../docs/specifications/TOOL_PROFILE_LIFECYCLE.md), [Tool Profile v1 contract](../../docs/specifications/TOOL_PROFILE_V1.md), [Architecture v8](../../docs/architecture/ARCHITECTURE_V8.md), and [ADR-019](../../docs/decisions/ADR-019-conclave-profile-lab.md).
+This README is for developers and authorized operators. The normative product and API contracts are in the [Worker Profile V9 specification](../../docs/specifications/WORKER_PROFILE_V9.md), [Profile Lab specification](../../docs/specifications/PROFILE_LAB.md), [Tool Profile v1 contract](../../docs/specifications/TOOL_PROFILE_V1.md), and [ADR-019](../../docs/decisions/ADR-019-conclave-profile-lab.md). The V8 lifecycle documents remain historical and are superseded by V9.
 
 ## Product boundaries
 
@@ -98,16 +98,15 @@ Cloud is the release signing authority. Its production signer and matching trust
 - Keep Profile Lab sessions in macOS Keychain. Do not log credentials, access tokens, provider secrets, or unredacted provider output.
 - Keep provider credentials in the provider's own local CLI login. Never put credentials in a Tool Profile, Draft metadata, evidence, or source control.
 - Treat sandbox input and process output as untrusted. Use the supervised Engine path, bounded execution, secret redaction, and cleanup; do not bypass it with direct provider execution in application code.
-- Keep authorization and release transitions server-side. The UI may request an operation, but Cloud must enforce permissions, step-up, evidence qualification, signer readiness, and release state.
+- Keep authorization and publication transitions server-side. The UI may request an operation, but Cloud must enforce permissions, evidence qualification, signer readiness, revision concurrency, and atomic Profile publication.
 - Never embed a Cloud private key, signing seed, or other secret in the app bundle. Public verification roots may be bundled.
 
 ## Implementation references
 
 - [Profile Lab specification](../../docs/specifications/PROFILE_LAB.md)
-- [Tool Profile lifecycle](../../docs/specifications/TOOL_PROFILE_LIFECYCLE.md)
 - [Tool Profile evidence contract](../../docs/specifications/TOOL_PROFILE_EVIDENCE_CONTRACT.md)
 - [Tool Profile v1](../../docs/specifications/TOOL_PROFILE_V1.md)
-- [Architecture v8](../../docs/architecture/ARCHITECTURE_V8.md)
+- [Worker Profile V9](../../docs/specifications/WORKER_PROFILE_V9.md)
 - [ADR-019: Conclave Profile Lab](../../docs/decisions/ADR-019-conclave-profile-lab.md)
 
 ## Unsigned development
@@ -136,6 +135,10 @@ use `--unsigned` explicitly when packaging development builds. See the
 
 ## Operator workflow and acceptance
 
-Use **Workers → Overview / Draft & Test**, **Workspaces**, and **Activity**. Open a Worker, edit its candidate, run the local ladder, choose **Validate candidate**, then **Publish Profile**. Publication uses the current revision as an optimistic-concurrency guard; an edit after testing requires the ladder and validation to run again. See the V9 [canonical specification](../../docs/specifications/WORKER_PROFILE_V9.md) and the current [update runbook](../../docs/runbooks/OPERATOR_RUNBOOK_UPDATE_PROFILE.md).
+Use **Workers**, **Issues**, and **Activity**. Selecting a Worker opens its Profile candidate directly in the editor; there is no separate Overview or Draft & Test screen. The compact toolbar keeps the stable actions **Save**, **Validate**, **Run tests**, and **Publish**. Test results open in a collapsible bottom panel, history is available as a secondary view, and **Focus editor** hides auxiliary UI for large JSON files.
+
+The normal workflow is **Edit → Save → Validate → Run tests → Publish**. Local recovery snapshots never publish automatically. Every validation and test result is bound to the exact candidate digest, so changing the JSON makes the candidate require validation and testing again. Cloud checks authorization, evidence freshness, expected revision, candidate digest, and trusted signing before atomically publishing the next current Profile revision. History can restore an older snapshot only as a new current revision.
+
+V9 has no testing, beta, stable, draft-release, promotion, or channel-selection UI. Installed CLI compatibility, readiness, revision, and current Profile status are shown as operational Worker information. The editor preserves its buffer, cursor, scroll position, and unsaved state while the Worker sidebar, test panel, and inspector are resized or toggled.
 
 Run `flutter test test/worker_first_run_acceptance_test.dart` for the complete ChatGPT/Gemini first-run flows and the no-template fallback. These widget tests use the real local store, controller, and bundled generic Engine with isolated temporary provider executables and controlled browser/Cloud boundaries. No vendor credentials or live-provider calls are required; live signing and Workspace admission must still satisfy the V9 contract. Existing local candidate/evidence data remains digest-bound.

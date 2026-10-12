@@ -30,12 +30,15 @@ class _IssueReportsViewState extends State<IssueReportsView> {
   Widget build(BuildContext context) {
     final reports = c.issueReports.where((report) {
       final statusMatches = _status == 'all' || report['status'] == _status;
-      final componentMatches = _component == 'all' || report['component'] == _component;
-      final workerMatches = _worker == 'all' || report['workerTypeId'] == _worker;
+      final componentMatches =
+          _component == 'all' || report['component'] == _component;
+      final workerMatches =
+          _worker == 'all' || report['workerTypeId'] == _worker;
       final created = DateTime.tryParse('${report['createdAt']}');
       final dateMatches = created == null ||
           (_from == null || !created.isBefore(_from!)) &&
-          (_to == null || created.isBefore(_to!.add(const Duration(days: 1))));
+              (_to == null ||
+                  created.isBefore(_to!.add(const Duration(days: 1))));
       final searchable = [
         report['publicReference'],
         report['errorCode'],
@@ -43,10 +46,20 @@ class _IssueReportsViewState extends State<IssueReportsView> {
         report['workerTypeId'],
         report['modelId'],
       ].whereType<Object>().join(' ').toLowerCase();
-      return statusMatches && componentMatches && workerMatches && dateMatches && searchable.contains(_query.toLowerCase());
+      return statusMatches &&
+          componentMatches &&
+          workerMatches &&
+          dateMatches &&
+          searchable.contains(_query.toLowerCase());
     }).toList();
-    final components = c.issueReports.map((r) => '${r['component']}').toSet().toList()..sort();
-    final workers = c.issueReports.map((r) => '${r['workerTypeId']}').where((v) => v != 'null').toSet().toList()..sort();
+    final components =
+        c.issueReports.map((r) => '${r['component']}').toSet().toList()..sort();
+    final workers = c.issueReports
+        .map((r) => '${r['workerTypeId']}')
+        .where((v) => v != 'null')
+        .toSet()
+        .toList()
+      ..sort();
     final selected = c.selectedIssueReport;
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -72,7 +85,8 @@ class _IssueReportsViewState extends State<IssueReportsView> {
               items: const [
                 DropdownMenuItem(value: 'all', child: Text('All statuses')),
                 DropdownMenuItem(value: 'open', child: Text('Open')),
-                DropdownMenuItem(value: 'investigating', child: Text('Investigating')),
+                DropdownMenuItem(
+                    value: 'investigating', child: Text('Investigating')),
                 DropdownMenuItem(value: 'resolved', child: Text('Resolved')),
                 DropdownMenuItem(value: 'dismissed', child: Text('Dismissed')),
               ],
@@ -86,8 +100,10 @@ class _IssueReportsViewState extends State<IssueReportsView> {
               initialValue: _component,
               decoration: const InputDecoration(labelText: 'Component'),
               items: [
-                const DropdownMenuItem(value: 'all', child: Text('All components')),
-                ...components.map((value) => DropdownMenuItem(value: value, child: Text(value))),
+                const DropdownMenuItem(
+                    value: 'all', child: Text('All components')),
+                ...components.map((value) =>
+                    DropdownMenuItem(value: value, child: Text(value))),
               ],
               onChanged: (value) => setState(() => _component = value ?? 'all'),
             ),
@@ -98,8 +114,10 @@ class _IssueReportsViewState extends State<IssueReportsView> {
               initialValue: _worker,
               decoration: const InputDecoration(labelText: 'Worker'),
               items: [
-                const DropdownMenuItem(value: 'all', child: Text('All workers')),
-                ...workers.map((value) => DropdownMenuItem(value: value, child: Text(value))),
+                const DropdownMenuItem(
+                    value: 'all', child: Text('All workers')),
+                ...workers.map((value) =>
+                    DropdownMenuItem(value: value, child: Text(value))),
               ],
               onChanged: (value) => setState(() => _worker = value ?? 'all'),
             ),
@@ -117,19 +135,29 @@ class _IssueReportsViewState extends State<IssueReportsView> {
           ),
           OutlinedButton.icon(
             icon: const Icon(Icons.date_range, size: 16),
-            label: Text(_from == null ? 'Date range' : '${_from!.toIso8601String().substring(0, 10)} – ${_to?.toIso8601String().substring(0, 10) ?? '…'}'),
+            label: Text(_from == null
+                ? 'Date range'
+                : '${_from!.toIso8601String().substring(0, 10)} – ${_to?.toIso8601String().substring(0, 10) ?? '…'}'),
             onPressed: () async {
               final range = await showDateRangePicker(
                 context: context,
                 firstDate: DateTime(2020),
                 lastDate: DateTime.now().add(const Duration(days: 1)),
-                initialDateRange: _from == null ? null : DateTimeRange(start: _from!, end: _to ?? _from!),
+                initialDateRange: _from == null
+                    ? null
+                    : DateTimeRange(start: _from!, end: _to ?? _from!),
               );
-              if (range != null) setState(() { _from = range.start; _to = range.end; });
+              if (range != null) {
+                setState(() {
+                  _from = range.start;
+                  _to = range.end;
+                });
+              }
             },
           ),
         ]),
-        if (c.isLoadingIssueReports) const OperationProgress(label: 'Loading issue reports…'),
+        if (c.isLoadingIssueReports)
+          const OperationProgress(label: 'Loading issue reports…'),
         if (c.issueReportsError != null)
           ErrorState(
             message: c.issueReportsError!,
@@ -141,21 +169,25 @@ class _IssueReportsViewState extends State<IssueReportsView> {
             Expanded(
               flex: 5,
               child: reports.isEmpty
-                  ? const EmptyState(title: 'No issue reports match the filter.')
+                  ? const EmptyState(
+                      title: 'No issue reports match the filter.')
                   : ListView.separated(
                       itemCount: reports.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 6),
                       itemBuilder: (context, index) {
                         final report = reports[index];
-                        final isSelected = selected?['report']?['id'] == report['id'];
+                        final isSelected =
+                            selected?['report']?['id'] == report['id'];
                         final group = report['incidentGroup'] as Map?;
                         return Card(
                           color: isSelected
-                              ? ProfileLabTheme.primaryAccent.withValues(alpha: .15)
+                              ? ProfileLabTheme.primaryAccent
+                                  .withValues(alpha: .15)
                               : null,
                           child: ListTile(
                             selected: isSelected,
-                            title: Text('${report['publicReference']} · ${report['errorCode']}'),
+                            title: Text(
+                                '${report['publicReference']} · ${report['errorCode']}'),
                             subtitle: Text(
                               '${report['component']} · ${report['workerTypeId'] ?? 'Unknown worker'} · ${report['diagnosticState']}\nEngine ${((report['versions'] as Map?)?['engine']) ?? '?'} · Provider ${((report['versions'] as Map?)?['providerTool']) ?? '?'} · ${report['createdAt']}',
                             ),
@@ -166,9 +198,18 @@ class _IssueReportsViewState extends State<IssueReportsView> {
                               children: [
                                 _StatusChip(status: '${report['status']}'),
                                 if (group != null)
-                                  Text('${group['publicReference'] ?? 'Grouped'} (${group['count'] ?? 0})', style: const TextStyle(fontSize: 10)),
-                                if (group == null && (report['fingerprintGroup'] as Map?)?['count'] is int && ((report['fingerprintGroup'] as Map)['count'] as int) > 1)
-                                  Text('Fingerprint group (${(report['fingerprintGroup'] as Map)['count']})', style: const TextStyle(fontSize: 10)),
+                                  Text(
+                                      '${group['publicReference'] ?? 'Grouped'} (${group['count'] ?? 0})',
+                                      style: const TextStyle(fontSize: 10)),
+                                if (group == null &&
+                                    (report['fingerprintGroup']
+                                        as Map?)?['count'] is int &&
+                                    ((report['fingerprintGroup']
+                                            as Map)['count'] as int) >
+                                        1)
+                                  Text(
+                                      'Fingerprint group (${(report['fingerprintGroup'] as Map)['count']})',
+                                      style: const TextStyle(fontSize: 10)),
                               ],
                             ),
                             onTap: () => c.selectIssueReport('${report['id']}'),
@@ -181,7 +222,9 @@ class _IssueReportsViewState extends State<IssueReportsView> {
             Expanded(
               flex: 7,
               child: selected == null
-                  ? const Card(child: EmptyState(title: 'Select a report to investigate.'))
+                  ? const Card(
+                      child:
+                          EmptyState(title: 'Select a report to investigate.'))
                   : _IssueDetail(controller: c, data: selected),
             ),
           ]),
@@ -204,8 +247,12 @@ class _StatusChip extends StatelessWidget {
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(color: color.withValues(alpha: .2), borderRadius: BorderRadius.circular(10)),
-      child: Text(status, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: .2),
+          borderRadius: BorderRadius.circular(10)),
+      child: Text(status,
+          style: TextStyle(
+              color: color, fontSize: 11, fontWeight: FontWeight.bold)),
     );
   }
 }
@@ -230,31 +277,45 @@ class _IssueDetail extends StatelessWidget {
         title: const Text('Add internal note'),
         content: TextField(controller: note, autofocus: true, maxLines: 4),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, note.text.trim()), child: const Text('Save note')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, note.text.trim()),
+              child: const Text('Save note')),
         ],
       ),
     );
     note.dispose();
     final id = (data['report'] as Map?)?['id'] as String?;
     if (value != null && value.isNotEmpty && id != null) {
-      await controller.updateIssueReport(id, note: value, status: (data['report'] as Map)['status'] as String?);
+      await controller.updateIssueReport(id,
+          note: value, status: (data['report'] as Map)['status'] as String?);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final report = (data['report'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
-    final investigation = (data['investigation'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final report = (data['report'] as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
+    final investigation =
+        (data['investigation'] as Map?)?.cast<String, dynamic>() ??
+            const <String, dynamic>{};
     final timeline = (data['timeline'] as List?) ?? const [];
-    final missing = (investigation['missingEvidence'] as List?)?.whereType<Object>().toList() ?? const [];
+    final missing = (investigation['missingEvidence'] as List?)
+            ?.whereType<Object>()
+            .toList() ??
+        const [];
     final versions = (investigation['versions'] as Map?) ?? const {};
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
-            Expanded(child: Text('${report['publicReference'] ?? 'Issue report'}', style: Theme.of(context).textTheme.titleLarge)),
+            Expanded(
+                child: Text('${report['publicReference'] ?? 'Issue report'}',
+                    style: Theme.of(context).textTheme.titleLarge)),
             _StatusChip(status: '${report['status'] ?? 'open'}'),
             PopupMenuButton<String>(
               tooltip: 'Change status',
@@ -263,7 +324,8 @@ class _IssueDetail extends StatelessWidget {
                 final current = '${report['status'] ?? 'open'}';
                 return [
                   if (current == 'open' || current == 'investigating')
-                    const PopupMenuItem(value: 'investigating', child: Text('Investigating')),
+                    const PopupMenuItem(
+                        value: 'investigating', child: Text('Investigating')),
                   if (current == 'investigating') ...const [
                     PopupMenuItem(value: 'resolved', child: Text('Resolved')),
                     PopupMenuItem(value: 'dismissed', child: Text('Dismissed')),
@@ -271,63 +333,98 @@ class _IssueDetail extends StatelessWidget {
                 ];
               },
             ),
-            IconButton(tooltip: 'Add internal note', icon: const Icon(Icons.note_add_outlined), onPressed: () => _addNote(context)),
+            IconButton(
+                tooltip: 'Add internal note',
+                icon: const Icon(Icons.note_add_outlined),
+                onPressed: () => _addNote(context)),
           ]),
-          Text('${report['errorCode']} · ${report['component']} · ${report['failureStage']}'),
+          Text(
+              '${report['errorCode']} · ${report['component']} · ${report['failureStage']}'),
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 6, children: [
-            _Fact(label: 'Worker', value: '${report['workerTypeId'] ?? 'Unknown'}'),
+            _Fact(
+                label: 'Worker',
+                value: '${report['workerTypeId'] ?? 'Unknown'}'),
             _Fact(label: 'Model', value: '${report['modelId'] ?? 'Unknown'}'),
             _Fact(label: 'Effort', value: '${report['effort'] ?? 'Unknown'}'),
             _Fact(label: 'Engine', value: '${versions['engine'] ?? 'Unknown'}'),
-            _Fact(label: 'Profile', value: '${versions['profileDefinition'] ?? 'Unknown'} v${versions['profileRelease'] ?? '?'}'),
-            _Fact(label: 'Provider', value: '${versions['providerTool'] ?? 'Unknown'}'),
-            _Fact(label: 'Diagnostics', value: '${report['diagnosticState'] ?? 'Unknown'}'),
+            _Fact(
+                label: 'Profile',
+                value:
+                    '${versions['profileDefinition'] ?? 'Unknown'} v${versions['profileRelease'] ?? '?'}'),
+            _Fact(
+                label: 'Provider',
+                value: '${versions['providerTool'] ?? 'Unknown'}'),
+            _Fact(
+                label: 'Diagnostics',
+                value: '${report['diagnosticState'] ?? 'Unknown'}'),
           ]),
           if (missing.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text('Missing evidence: ${missing.join(', ')}', style: const TextStyle(color: Colors.orange)),
+            Text('Missing evidence: ${missing.join(', ')}',
+                style: const TextStyle(color: Colors.orange)),
           ],
           const SizedBox(height: 8),
           Row(children: [
-            const Text('Incident group: ', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text('Incident group: ',
+                style: TextStyle(fontWeight: FontWeight.w600)),
             Expanded(
               child: DropdownButton<String?>(
                 isExpanded: true,
                 value: (report['incidentGroup'] as Map?)?['id'] as String?,
                 hint: const Text('No group'),
                 items: [
-                  const DropdownMenuItem<String?>(value: null, child: Text('No group')),
-                  ...controller.issueReportGroups.map((group) => DropdownMenuItem<String?>(
-                        value: group['id'] as String?,
-                        child: Text('${group['publicReference'] ?? ''} · ${group['label'] ?? ''}'),
-                      )),
+                  const DropdownMenuItem<String?>(
+                      value: null, child: Text('No group')),
+                  ...controller.issueReportGroups
+                      .map((group) => DropdownMenuItem<String?>(
+                            value: group['id'] as String?,
+                            child: Text(
+                                '${group['publicReference'] ?? ''} · ${group['label'] ?? ''}'),
+                          )),
                 ],
                 onChanged: (groupId) {
                   final id = report['id'] as String?;
                   if (id != null) {
-                    controller.updateIssueReport(id, groupId: groupId, clearGroup: groupId == null);
+                    controller.updateIssueReport(id,
+                        groupId: groupId, clearGroup: groupId == null);
                   }
                 },
               ),
             ),
           ]),
           const Divider(height: 24),
-          const Text('Execution timeline', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text('Execution timeline',
+              style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           Expanded(
             child: timeline.isEmpty
-                ? const EmptyState(title: 'No correlated timeline is available.')
+                ? const EmptyState(
+                    title: 'No correlated timeline is available.')
                 : ListView.builder(
                     itemCount: timeline.length,
                     itemBuilder: (context, index) {
-                      final event = (timeline[index] as Map).cast<String, dynamic>();
+                      final event =
+                          (timeline[index] as Map).cast<String, dynamic>();
                       return ListTile(
                         dense: true,
-                        leading: Icon(event['severity'] == 'error' ? Icons.error_outline : Icons.timeline, color: event['severity'] == 'error' ? Colors.red : null),
-                        title: Text('${event['eventType'] ?? 'event'} · ${event['component'] ?? event['source'] ?? ''}'),
-                        subtitle: Text('${event['timestamp'] ?? ''}  ${event['stage'] ?? ''}  ${event['errorCode'] ?? ''}'),
-                        trailing: event['details'] is Map ? Tooltip(message: const JsonEncoder().convert(event['details']), child: const Icon(Icons.info_outline, size: 16)) : null,
+                        leading: Icon(
+                            event['severity'] == 'error'
+                                ? Icons.error_outline
+                                : Icons.timeline,
+                            color: event['severity'] == 'error'
+                                ? Colors.red
+                                : null),
+                        title: Text(
+                            '${event['eventType'] ?? 'event'} · ${event['component'] ?? event['source'] ?? ''}'),
+                        subtitle: Text(
+                            '${event['timestamp'] ?? ''}  ${event['stage'] ?? ''}  ${event['errorCode'] ?? ''}'),
+                        trailing: event['details'] is Map
+                            ? Tooltip(
+                                message: const JsonEncoder()
+                                    .convert(event['details']),
+                                child: const Icon(Icons.info_outline, size: 16))
+                            : null,
                       );
                     },
                   ),

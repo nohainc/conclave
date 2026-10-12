@@ -73,7 +73,7 @@ void main() {
     temp = await Directory.systemTemp.createTemp('lab_design_');
     c = _Controller(ProfileLabPaths(homeDirectory: temp.path));
     c.labAccess = ProfileLabAccessReadModel.fromJson({
-      'permissions': {'profilesAdmin': true, 'releaseManager': true},
+      'permissions': {'profilesAdmin': true},
       'signer': {'ready': false},
     });
     c.currentSession = ProfileLabSession(
@@ -96,24 +96,19 @@ void main() {
         'displayName': 'ChatGPT',
         'profileDefinitionId': 'chatgpt-codex',
         'providerToolName': 'codex',
-        'releaseStage': 'stable'
+        'currentRevision': 1,
+        'currentDigest': 'digest-1'
       }
     ];
     c.selectedCloudWorker = c.cloudWorkers.first;
     c.selectedCloudDefinition = {
-      'channels': {'testing': 1, 'beta': null, 'stable': null}
+      'profileDefinitionId': 'chatgpt-codex',
+      'displayName': 'ChatGPT',
+      'providerToolName': 'codex',
+      'status': 'current',
     };
-    c.cloudReleases = [
-      {
-        'profileDefinitionId': 'chatgpt-codex',
-        'releaseVersion': 1,
-        'lifecycleState': 'testing',
-        'profile': payload,
-        'publishedAt': '2026-10-05',
-        'payloadDigest': c.currentDraft!.payloadDigest
-      }
-    ];
-    c.selectedCloudRelease = c.cloudReleases.first;
+    c.currentProfileRevision = 1;
+    c.currentProfileDigest = c.currentDraft!.payloadDigest;
     c.cloudAuditEvents = [
       {
         'id': 'event',
@@ -139,7 +134,6 @@ void main() {
   testWidgets(
       'Command shortcuts respect active resource, editor focus and dialog boundaries',
       (t) async {
-    c.workerSubView = WorkerSubView.draftAndTest;
     c.isDirty = true;
     late BuildContext page;
     await t.pumpWidget(MaterialApp(home: Builder(builder: (context) {
@@ -164,10 +158,9 @@ void main() {
     c.isTesting = false;
     await key(t, LogicalKeyboardKey.keyR);
     expect(c.draftRefresh, 1);
-    c.workerSubView = WorkerSubView.draftAndTest;
     await key(t, LogicalKeyboardKey.keyR);
     expect(c.draftRefresh, 2);
-    c.workerSubView = WorkerSubView.overview;
+    c.currentDraft = null;
     await key(t, LogicalKeyboardKey.keyR);
     expect(c.catalog, 1);
     c.selectedArea = LabArea.audit;
@@ -188,30 +181,24 @@ void main() {
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.resetPhysicalSize);
       addTearDown(t.view.resetDevicePixelRatio);
-      for (final view in WorkerSubView.values) {
-        c.selectedArea = LabArea.workers;
-        c.workerSubView = view;
-        await t.pumpWidget(RepaintBoundary(
-            key: const ValueKey('capture'),
-            child:
-                ProfileLabApp(key: ValueKey('workers-$view'), controller: c)));
+      c.selectedArea = LabArea.workers;
+      await t.pumpWidget(RepaintBoundary(
+          key: const ValueKey('capture'),
+          child: ProfileLabApp(key: const ValueKey('workers'), controller: c)));
+      await t.pump();
+      expect(t.takeException(), isNull, reason: 'Workers at $size');
+      expect(find.text('ChatGPT'), findsWidgets);
+      if (const bool.fromEnvironment('LAB_CAPTURE')) {
         await t.pump();
-        expect(t.takeException(), isNull, reason: 'Worker $view at $size');
-        expect(find.text('ChatGPT'), findsWidgets);
-        if (const bool.fromEnvironment('LAB_CAPTURE')) {
-          await t.pump();
-          final boundary = t.renderObject<RenderRepaintBoundary>(
-              find.byKey(const ValueKey('capture')));
-          await t.runAsync(() async {
-            final image = await boundary.toImage();
-            final bytes =
-                await image.toByteData(format: ui.ImageByteFormat.png);
-            await File(
-                    '/tmp/profile-lab-${size.width.toInt()}-${view.name}.png')
-                .writeAsBytes(bytes!.buffer.asUint8List());
-            image.dispose();
-          });
-        }
+        final boundary = t.renderObject<RenderRepaintBoundary>(
+            find.byKey(const ValueKey('capture')));
+        await t.runAsync(() async {
+          final image = await boundary.toImage();
+          final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+          await File('/tmp/profile-lab-${size.width.toInt()}-workers.png')
+              .writeAsBytes(bytes!.buffer.asUint8List());
+          image.dispose();
+        });
       }
       for (final tab in [LabArea.audit]) {
         c.selectedArea = tab;
@@ -232,18 +219,10 @@ void main() {
           StatusBadge(label: 'Saved locally', status: LabStatus.success),
           StatusBadge(label: 'Version unsupported', status: LabStatus.warning),
           StatusBadge(label: 'Test failed', status: LabStatus.error),
-          LifecycleStepper(steps: [
-            LabLifecycleStep('Configure', isDone: true),
-            LabLifecycleStep('Test', isActive: true),
-            LabLifecycleStep('Sync')
-          ]),
-          OperationProgress(label: 'Loading releases'),
-          TechnicalInspector(children: [Text('Hidden identity')])
+          OperationProgress(label: 'Loading Worker catalog')
         ]))));
     expect(find.bySemanticsLabel('Saved locally'), findsOneWidget);
-    expect(find.bySemanticsLabel('Test: Current step'), findsOneWidget);
-    expect(find.bySemanticsLabel('Sync: Pending'), findsOneWidget);
-    expect(find.text('Hidden identity'), findsNothing);
+    expect(find.text('Loading Worker catalog'), findsOneWidget);
     expect(t.takeException(), isNull);
     await expectLater(t, meetsGuideline(labeledTapTargetGuideline));
     await expectLater(t, meetsGuideline(textContrastGuideline));

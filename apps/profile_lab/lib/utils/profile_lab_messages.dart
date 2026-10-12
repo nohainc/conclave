@@ -12,8 +12,6 @@ String profileLabMessageReport(ProfileLabController c) {
       'Access': c.labAccessError,
       'Workers': c.workerCatalogError,
       'Definitions': c.definitionsError,
-      'Releases': c.releasesError,
-      'Evidence': c.evidenceError,
       'Activity': c.auditError,
       'JSON validation': c.jsonValidationError,
       'AI proposal': c.aiProposalError,

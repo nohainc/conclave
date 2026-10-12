@@ -17,24 +17,11 @@ class _Controller extends ProfileLabController {
             sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths));
 
   int saves = 0;
-  int syncs = 0;
   @override
   Future<void> saveCurrentDraft(
       {String author = 'developer', String notes = ''}) async {
     saves++;
     isDirty = false;
-    notifyListeners();
-  }
-
-  @override
-  Future<void> saveCurrentDraftToCloud(
-      {bool force = false,
-      String author = 'developer',
-      String notes = ''}) async {
-    syncs++;
-    cloudDraftExists = true;
-    cloudDraftVersion = currentDraft!.releaseVersion;
-    cloudDigest = currentDraft!.payloadDigest;
     notifyListeners();
   }
 }
@@ -52,7 +39,7 @@ void main() {
         .saveDraft(profileDefinitionId: 'chatgpt-codex', profileJson: payload);
     c.currentJsonText = const JsonEncoder.withIndent('  ').convert(payload);
     c.selectedDefinitionId = 'chatgpt-codex';
-    c.cloudDraftExists = false;
+    c.currentProfileRevision = 1;
     c.currentSession = ProfileLabSession(
         credential: 'test',
         sessionId: 'test',
@@ -87,8 +74,7 @@ void main() {
     expect(find.text('Split View'), findsNothing);
     expect(find.text('Editor Only'), findsNothing);
     expect(find.text('Test Bench Only'), findsNothing);
-    expect(find.text('Draft v1 · Saved locally · Not synced to Cloud'),
-        findsOneWidget);
+    expect(find.text('Worker Profile · revision 1'), findsOneWidget);
     final editor = find.byKey(const ValueKey('profile-json-editor'));
     expect(find.text('Profile Tests'), findsNothing);
     await tester.tap(find.byTooltip('Show tests'));
@@ -139,19 +125,13 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, 'Save'));
     await tester.pumpAndSettle();
     expect(c.saves, 1);
-    expect(c.syncs, 0);
     expect(find.widgetWithText(OutlinedButton, 'Validate'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Run tests'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Publish'), findsOneWidget);
-    c.cloudDraftVersion = 2;
-    c.notifyListeners();
-    await tester.pump();
-    expect(find.text('Draft v1 · Saved locally · Not synced to Cloud'),
-        findsOneWidget);
     c.updateJsonText('{ invalid');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 800));
-    expect(find.textContaining('Synced to Cloud'), findsNothing);
+    expect(find.textContaining('Cloud conflict'), findsNothing);
     expect(
         tester
             .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Save'))
@@ -159,20 +139,15 @@ void main() {
         isNull);
   });
 
-  testWidgets('Cloud conflicts stay actionable in a short split pane',
+  testWidgets('invalid candidates remain editable in a short split pane',
       (tester) async {
     await mount(tester, const Size(1050, 460));
-    c.syncState = DraftSyncState.conflict;
-    c.cloudDraftPayload = Map<String, dynamic>.from(c.currentDraft!.profile);
+    c.updateJsonText('{ invalid');
     c.isDirty = true;
     c.notifyListeners();
     await tester.pump();
-    expect(find.text('Draft v1 · Unsaved changes · Cloud conflict'),
-        findsOneWidget);
-    await tester.ensureVisible(find.text('Overwrite Cloud Draft'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 800));
     expect(find.byType(EditableText), findsOneWidget);
-    expect(find.text('Compare Local vs Cloud'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -184,7 +159,7 @@ void main() {
     expect(find.text('AI Proposal'), findsNothing);
     c.updateJsonText(jsonEncode(c.currentDraft!.profile));
     await tester.pump();
-    await tester.tap(find.byTooltip('More draft actions'));
+    await tester.tap(find.byTooltip('More candidate actions'));
     await tester.pumpAndSettle();
     for (final action in [
       'Format JSON',

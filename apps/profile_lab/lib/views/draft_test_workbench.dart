@@ -12,7 +12,7 @@ import 'profile_publish_confirmation_dialog.dart';
 import 'profile_history_dialog.dart';
 import 'test_bench_view.dart';
 
-/// Worker-scoped Draft authoring and test execution.
+/// Worker-scoped candidate authoring and test execution.
 class DraftTestWorkbench extends StatefulWidget {
   const DraftTestWorkbench({
     super.key,
@@ -60,7 +60,7 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
     } catch (_) {}
     ProfileReleaseDiffDialog.show(
       context,
-      titleA: 'Local Draft',
+      titleA: 'Local Candidate',
       payloadA: payload,
       titleB: 'Current Profile',
       payloadB: c.currentCloudProfileSnapshot?['profile'] is Map
@@ -104,7 +104,6 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
 
   Future<void> _publish() async {
     final c = widget.controller;
-    if (!c.isV9ProfileRegistry) return;
     final confirmed = await ProfilePublishConfirmationDialog.show(context, c);
     if (confirmed == true && mounted) {
       await _perform(c.publishCurrentDraft);
@@ -121,31 +120,6 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
       }
     });
     widget.onFocusChanged?.call(_focusMode);
-  }
-
-  String _draftStatus(ProfileLabController c) {
-    final local = c.isDirty ? 'Unsaved changes' : 'Saved locally';
-    if (c.isV9ProfileRegistry) {
-      final cloud = c.candidateIsCloudValidated
-          ? 'Candidate validated by Cloud'
-          : c.currentProfileDigest == c.currentDraft?.payloadDigest
-              ? 'Current published Profile'
-              : 'Not validated by Cloud';
-      return 'Candidate · $local · $cloud';
-    }
-    final cloud = switch (c.syncState) {
-      DraftSyncState.conflict => 'Cloud conflict',
-      DraftSyncState.cloudChanged => 'Cloud draft changed',
-      _ => c.cloudDraftExists == true &&
-              c.cloudDraftVersion == c.currentDraft!.releaseVersion &&
-              c.cloudDigest == c.currentDraft!.payloadDigest &&
-              !c.isDirty
-          ? 'Synced to Cloud'
-          : c.cloudDraftExists == null
-              ? 'Cloud status unavailable'
-              : 'Not synced to Cloud',
-    };
-    return 'Draft v${c.currentDraft!.releaseVersion} · $local · $cloud';
   }
 
   Widget _panes(ProfileLabController c) => LayoutBuilder(
@@ -228,8 +202,8 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
         action: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (c.definitionsError != null || c.releasesError != null)
-              ErrorState(message: c.definitionsError ?? c.releasesError!),
+            if (c.definitionsError != null)
+              ErrorState(message: c.definitionsError!),
             FilledButton(
               onPressed: c.canCreateInitialDraft
                   ? () async {
@@ -239,7 +213,8 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Could not create draft: $error'),
+                              content:
+                                  Text('Could not create candidate: $error'),
                             ),
                           );
                         }
@@ -250,8 +225,8 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                 c.isCreatingInitialDraft
                     ? 'Creating…'
                     : c.hasStarterTemplate
-                        ? 'Create Initial Draft'
-                        : 'Create blank Profile',
+                        ? 'Create local candidate'
+                        : 'Create blank candidate',
               ),
             ),
           ],
@@ -261,7 +236,6 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
 
     final locked = _saving ||
         c.isSavingLocally ||
-        c.isSavingToCloud ||
         c.isTesting ||
         c.isValidatingCandidate ||
         c.isPublishing;
@@ -274,9 +248,7 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                c.isV9ProfileRegistry
-                    ? 'Worker Profile · revision ${c.currentProfileRevision}'
-                    : _draftStatus(c),
+                'Worker Profile · revision ${c.currentProfileRevision}',
                 key: const ValueKey('draft-status'),
                 style: const TextStyle(
                   fontSize: 13,
@@ -341,12 +313,10 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                   OutlinedButton.icon(
                     icon: const Icon(Icons.verified_outlined, size: 16),
                     label: const Text('Validate'),
-                    onPressed: locked ||
-                            !c.isV9ProfileRegistry ||
-                            c.isDirty ||
-                            c.jsonValidationError != null
-                        ? null
-                        : () => _perform(c.validateCurrentDraft),
+                    onPressed:
+                        locked || c.isDirty || c.jsonValidationError != null
+                            ? null
+                            : () => _perform(c.validateCurrentDraft),
                   ),
                   OutlinedButton.icon(
                     icon: const Icon(Icons.science_outlined, size: 16),
@@ -360,7 +330,6 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                     icon: const Icon(Icons.cloud_upload_outlined, size: 16),
                     label: const Text('Publish'),
                     onPressed: locked ||
-                            !c.isV9ProfileRegistry ||
                             c.isDirty ||
                             c.jsonValidationError != null ||
                             !c.candidateIsCloudValidated ||
@@ -408,7 +377,7 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                     onPressed: _toggleFocusMode,
                   ),
                   PopupMenuButton<String>(
-                    tooltip: 'More draft actions',
+                    tooltip: 'More candidate actions',
                     onSelected: _advanced,
                     itemBuilder: (_) => [
                       PopupMenuItem(
@@ -432,7 +401,7 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                       ),
                       PopupMenuItem(
                         value: 'history',
-                        enabled: c.isV9ProfileRegistry,
+                        enabled: true,
                         child: const Text('Profile history'),
                       ),
                       PopupMenuItem(

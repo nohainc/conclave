@@ -7,7 +7,7 @@ import '../profile_lab_test_sandbox.dart';
 import '../theme/profile_lab_theme.dart';
 import 'ai_repair_loop_dialog.dart';
 
-/// Testing and local acceptance evidence belong to the active Draft.
+/// Testing and local evidence belong to the active local candidate.
 class TestBenchView extends StatelessWidget {
   const TestBenchView({super.key, required this.controller});
   final ProfileLabController controller;
@@ -35,7 +35,7 @@ class TestBenchView extends StatelessWidget {
     final draft = c.currentDraft;
     if (draft == null) {
       return const Center(
-        child: Text('Create an initial draft to start testing.'),
+        child: Text('Create a local candidate to start testing.'),
       );
     }
     final tool = draft.profile['providerTool'] as Map;
@@ -64,8 +64,7 @@ class TestBenchView extends StatelessWidget {
     final running = c.isTesting && c.testResultMatchesDraft;
     final completed =
         !running && c.testResultMatchesDraft && c.lastTestResult != null;
-    final busy = c.isTesting || c.isPublishing || c.isSavingToCloud;
-    final v9 = c.isV9ProfileRegistry;
+    final busy = c.isTesting || c.isPublishing;
     final canRun = !busy && !c.isDirty && c.jsonValidationError == null;
     final passed = stages.where((s) => s.status == 'passed').length;
     final notApplicable = stages.where((s) => s.status == 'skipped').length;
@@ -73,17 +72,10 @@ class TestBenchView extends StatelessWidget {
     final failed = stages.where((s) => s.status == 'failed').toList();
     Map<String, Object?>? evidence;
     for (final item in c.currentEvidence) {
-      final legacy = item['profileDefinitionId'] == draft.profileDefinitionId &&
-          item['releaseVersion'] == draft.releaseVersion &&
-          item['profileDigest'] == draft.payloadDigest &&
-          ToolProfileAcceptanceEvidence.hasCloudContractShape(
-            item,
-            profile: draft.profile,
-          );
       final publication = item['formatVersion'] == 1 &&
           item['workerTypeId'] == draft.logicalWorkerTypeId &&
           item['candidateDigest'] == draft.payloadDigest;
-      if (legacy || publication) {
+      if (publication) {
         evidence = item;
         break;
       }
@@ -183,13 +175,13 @@ class TestBenchView extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.only(top: 8),
               child: Text(
-                'A test is running for another Draft. Cancel it or wait to start this Draft’s test.',
+                'A test is running for another candidate. Cancel it or wait to start this candidate’s test.',
               ),
             ),
           if (c.isDirty || c.jsonValidationError != null)
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text('Save a valid Draft before testing.'),
+              child: Text('Save a valid candidate before testing.'),
             ),
           if (!running && !completed && evidence == null)
             const Padding(
@@ -237,7 +229,7 @@ class TestBenchView extends StatelessWidget {
                       qualified
                           ? 'Ready for Cloud qualification'
                           : c.isDirty
-                              ? 'Draft modified · Save and rerun to qualify'
+                              ? 'Candidate modified · Save and rerun to qualify'
                               : 'Not qualified · Full test required',
                       style: TextStyle(
                         color: qualified
@@ -278,9 +270,7 @@ class TestBenchView extends StatelessWidget {
                 key: ValueKey('local-evidence-${draft.payloadDigest}'),
                 title: const Text('Local acceptance evidence'),
                 subtitle: Text(
-                  v9
-                      ? 'Saved for this exact candidate digest · Cloud revalidates it on publication'
-                      : 'Saved for this exact Draft · Cloud validates on publication',
+                  'Saved for this exact candidate digest · Cloud revalidates it on publication',
                 ),
                 children: [
                   Padding(

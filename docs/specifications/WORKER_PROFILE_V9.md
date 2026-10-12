@@ -180,6 +180,15 @@ editor toolbar owns the single `Publish` action, and the publication review
 shows a compact current-versus-candidate comparison, including provider CLI,
 environment, and security-sensitive changes.
 
+The V9 cleanup invariant is that no production Profile Lab route can reach a
+draft-release, promotion, testing/beta/stable channel, or channel-browsing
+screen. Diagnostic audit history, local recovery snapshots, test scenarios,
+and signed Profile history remain available because they support operations;
+none of them is an alternate active Profile state. The editor and its local
+candidate state must survive Worker switching, panel resizing, focus mode, and
+background test progress. Compact macOS windows must preserve readable JSON,
+keyboard access, visible focus, sufficient contrast, and accessible labels.
+
 Cloud owns the authoritative transition:
 
 1. authenticate the Profile Lab audience and required operator permission;

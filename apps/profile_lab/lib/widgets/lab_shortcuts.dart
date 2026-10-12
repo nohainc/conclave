@@ -35,14 +35,12 @@ class _LabShortcutsState extends State<LabShortcuts> {
   void _save() {
     final c = widget.controller;
     if (c.selectedArea != LabArea.workers ||
-        c.workerSubView != WorkerSubView.draftAndTest ||
         c.currentDraft == null ||
         !c.isDirty ||
         c.jsonValidationError != null ||
         c.isTesting ||
         c.isPublishing ||
-        c.isSavingLocally ||
-        c.isSavingToCloud) {
+        c.isSavingLocally) {
       return;
     }
     _perform(c.saveCurrentDraft);
@@ -50,10 +48,7 @@ class _LabShortcutsState extends State<LabShortcuts> {
 
   void _refresh() {
     final c = widget.controller;
-    if (c.isTesting ||
-        c.isPublishing ||
-        c.isSavingLocally ||
-        c.isSavingToCloud) {
+    if (c.isTesting || c.isPublishing || c.isSavingLocally) {
       return;
     }
     switch (c.selectedArea) {
@@ -62,10 +57,9 @@ class _LabShortcutsState extends State<LabShortcuts> {
       case LabArea.audit:
         if (!c.isLoadingAudit) _perform(() => c.fetchCloudAudit());
       case LabArea.workers:
-        if (c.workerSubView == WorkerSubView.draftAndTest &&
-            c.currentDraft != null) {
+        if (c.currentDraft != null) {
           // refreshEvidence checks Cloud state without replacing the editor text.
-          if (!c.isLoadingEvidence) _perform(c.refreshEvidence);
+          _perform(c.refreshEvidence);
         } else if (!c.isLoadingWorkerCatalog) {
           _perform(c.fetchCloudCatalog);
         }

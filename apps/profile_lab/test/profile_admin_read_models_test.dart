@@ -5,65 +5,46 @@ void main() {
   group('Profile Admin read models', () {
     test('access diagnostics separate permission from signer readiness', () {
       final access = ProfileLabAccessReadModel.fromJson({
-        'permissions': {'profilesAdmin': true, 'releaseManager': true},
+        'permissions': {'profilesAdmin': true, 'issueSupport': true},
         'signer': {
           'ready': false,
           'issues': ['private_key_missing']
         }
       });
       expect(access.profilesAdmin, isTrue);
-      expect(access.releaseManager, isTrue);
+      expect(access.issueSupport, isTrue);
       expect(access.signerReady, isFalse);
       expect(access.signerIssues, ['private_key_missing']);
       expect(ProfileLabAccessReadModel.fromJson({}).profilesAdmin, isFalse);
     });
-    test('release exposes lifecycle identity and preserves open Profile data',
-        () {
-      final release = ProfileLabReleaseReadModel.fromJson({
-        'profileDefinitionId': 'custom-worker',
-        'releaseVersion': 7,
-        'lifecycleState': 'testing',
-        'payloadDigest': 'digest-7',
-        'profile': {
-          'schemaVersion': 1,
-          'providerTool': {'name': 'future-provider'},
-        },
-        'futureCloudField': true,
-      });
-
-      expect(release.profileDefinitionId, 'custom-worker');
-      expect(release.releaseVersion, 7);
-      expect(release.lifecycleState, 'testing');
-      expect(release.profile?['providerTool'], {'name': 'future-provider'});
-      expect(release.toJson()['futureCloudField'], isTrue);
-    });
-
     test('worker catalog fields are typed without capability metadata', () {
       final worker = ProfileLabWorkerReadModel.fromJson({
         'workerTypeId': 'new-worker',
         'profileDefinitionId': 'new-worker-profile',
         'displayName': 'New Worker',
         'providerToolName': 'new-cli',
-        'releaseStage': 'draft',
+        'currentRevision': 7,
+        'currentDigest': 'digest-7',
         'sortOrder': 4,
       });
 
       expect(worker.workerTypeId, 'new-worker');
       expect(worker.providerToolName, 'new-cli');
+      expect(worker.currentRevision, 7);
+      expect(worker.currentDigest, 'digest-7');
       expect(worker.toJson().containsKey('capabilities'), isFalse);
     });
 
-    test('signing preflight keeps a typed readiness result and issue list', () {
-      final preflight = ProfileLabSigningPreflightReadModel.fromJson({
-        'ready': false,
-        'publisher': 'conclave',
-        'signingKeyId': 'profile-key-v2',
-        'issues': ['trust root mismatch'],
+    test('audit events preserve diagnostic identity and unknown fields', () {
+      final event = ProfileLabAuditEventReadModel.fromJson({
+        'id': 'event-1',
+        'action': 'profile_published',
+        'actor': 'operator',
+        'createdAt': '2026-10-12T10:00:00Z',
+        'futureField': true,
       });
-
-      expect(preflight.ready, isFalse);
-      expect(preflight.signingKeyId, 'profile-key-v2');
-      expect(preflight.issues, ['trust root mismatch']);
+      expect(event.action, 'profile_published');
+      expect(event.toJson()['futureField'], isTrue);
     });
   });
 }

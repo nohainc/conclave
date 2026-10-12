@@ -29,7 +29,9 @@ void main() {
       paths: tempPaths,
       sessionStore: ProfileLabSessionStore.inMemoryForTesting(tempPaths),
     );
-    controller.setApiClientForTesting(_OfflineProfileAdminApiClient());
+    controller.setApiClientForTesting(
+      ProfileAdminApiClient(baseUrl: 'http://127.0.0.1:1'),
+    );
     await controller.createNewDraft(
       profileDefinitionId: 'example-runtime-test',
       workerTypeId: 'example-worker',
@@ -88,7 +90,7 @@ void main() {
       };
       final context = AiAssistantContext(
         workerMetadata: {'workerTypeId': 'dynamic-worker'},
-        stableProfile: null,
+        currentProfile: null,
         currentDraft: originalProfile,
         testDiagnostics: [
           {'stage': 'session_test', 'status': 'failed'},
@@ -179,34 +181,10 @@ void main() {
       await tester.tap(find.text('Open AI Draft Proposal'));
       await tester.pumpAndSettle();
 
-      expect(find.text('AI Profile Draft Proposal'), findsOneWidget);
-      expect(
-          find.textContaining('signed Stable Worker Profile'), findsOneWidget);
+      expect(find.text('AI Profile Candidate Proposal'), findsOneWidget);
+      expect(find.textContaining('trusted current Worker Profile'),
+          findsOneWidget);
       expect(find.textContaining('Sign in to Cloud'), findsOneWidget);
     });
   });
-}
-
-class _OfflineProfileAdminApiClient extends ProfileAdminApiClient {
-  _OfflineProfileAdminApiClient() : super(baseUrl: 'http://127.0.0.1:1');
-
-  @override
-  Future<ProfileLabReleaseReadModel> fetchRelease(
-          String profileDefinitionId, int releaseVersion) async =>
-      ProfileLabReleaseReadModel.fromJson({});
-
-  @override
-  Future<ProfileLabReleaseTrustReadModel> fetchReleaseTrust() async =>
-      ProfileLabReleaseTrustReadModel.fromJson({
-        'revokedKeyIds': <String>[],
-        'revokedToolProfiles': <Map<String, Object?>>[],
-      });
-
-  @override
-  Future<List<ProfileLabWorkerReadModel>> fetchWorkerCatalog() async => [];
-
-  @override
-  Future<List<ProfileLabChannelPointerReadModel>> fetchChannelPointers(
-          [String? profileDefinitionId]) async =>
-      [];
 }

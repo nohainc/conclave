@@ -148,7 +148,7 @@ void main() {
     await tester.ensureVisible(consent);
     await tester.tap(consent);
     await tester.pumpAndSettle();
-    final generate = find.text('Generate Draft Proposal');
+    final generate = find.text('Generate Candidate Proposal');
     await tester.ensureVisible(generate);
     await tester.tap(generate);
     await tester.pumpAndSettle();

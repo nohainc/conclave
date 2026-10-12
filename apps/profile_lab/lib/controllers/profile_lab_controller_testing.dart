@@ -6,8 +6,7 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
         isTesting ||
         isDirty ||
         jsonValidationError != null ||
-        isPublishing ||
-        isSavingToCloud) {
+        isPublishing) {
       return;
     }
     final candidate = currentDraft!;
@@ -76,18 +75,11 @@ mixin _ProfileLabTestOperations on _ProfileLabControllerState {
       }
 
       final publicationEvidence = result.publicationEvidence;
-      final acceptanceEvidence = result.acceptanceEvidence;
-      if (isV9ProfileRegistry && publicationEvidence != null) {
+      if (publicationEvidence != null) {
         await store.saveEvidence(
           profileDefinitionId: candidate.profileDefinitionId,
           payloadDigest: candidate.payloadDigest,
           evidenceRecord: publicationEvidence.toJson(),
-        );
-      } else if (acceptanceEvidence != null) {
-        await store.saveEvidence(
-          profileDefinitionId: candidate.profileDefinitionId,
-          payloadDigest: candidate.payloadDigest,
-          evidenceRecord: acceptanceEvidence.toJson(),
         );
       }
       await refreshEvidence();

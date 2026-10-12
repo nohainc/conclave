@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import '../bundled_cli_worker_engine_loader.dart';
@@ -29,30 +28,6 @@ part 'profile_lab_controller_cloud.dart';
 part 'profile_lab_controller_ai.dart';
 
 enum LabArea { workers, issues, audit }
-
-enum WorkerSubView {
-  overview,
-  draftAndTest;
-
-  String get label => switch (this) {
-        WorkerSubView.overview => 'Overview',
-        WorkerSubView.draftAndTest => 'Draft & Test',
-      };
-}
-
-enum DraftSyncState {
-  saved,
-  modifiedLocally,
-  cloudChanged,
-  conflict;
-
-  String get label => switch (this) {
-        DraftSyncState.saved => 'Saved',
-        DraftSyncState.modifiedLocally => 'Modified locally',
-        DraftSyncState.cloudChanged => 'Cloud changed',
-        DraftSyncState.conflict => 'Conflict',
-      };
-}
 
 class TestExecutionLog {
   const TestExecutionLog({
@@ -106,15 +81,6 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   bool isDirty = false;
   Timer? _recoveryTimer;
 
-  // Draft Sync state & optimistic concurrency
-  DraftSyncState syncState = DraftSyncState.saved;
-  String? baseCloudDigest;
-  String? cloudDigest;
-  Map<String, dynamic>? cloudDraftPayload;
-  bool? cloudDraftExists;
-  int? cloudDraftVersion;
-  String? cloudReleaseLifecycleState;
-
   // Test bench state
   bool isTesting = false;
   String? testStatusMessage;
@@ -126,9 +92,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   String? testedDraftDigest;
   String? testedProfileDefinitionId;
 
-  /// V9 uses one current Worker Profile instead of Cloud draft releases and
-  /// channel pointers. These fields bind local eligibility to that snapshot.
-  bool isV9ProfileRegistry = false;
+  /// These fields bind local eligibility to the one current Worker Profile.
   Map<String, dynamic>? currentCloudProfileSnapshot;
   List<Map<String, dynamic>> currentProfileHistory = [];
   int currentProfileRevision = 0;
@@ -162,13 +126,10 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   // Local evidence state
   List<Map<String, Object?>> currentEvidence = [];
 
-  // Cloud dynamic catalog & release state
+  // Cloud dynamic catalog and current Profile state.
   List<Map<String, dynamic>> cloudWorkers = [];
   Map<String, dynamic>? selectedCloudWorker;
   Map<String, dynamic>? selectedCloudDefinition;
-  List<Map<String, dynamic>> cloudReleases = [];
-  Map<String, dynamic>? selectedCloudRelease;
-  List<Map<String, dynamic>> cloudEvidence = [];
   List<Map<String, dynamic>> cloudAuditEvents = [];
   bool isSubmittingCloudEvidence = false;
   bool isGeneratingAiProposal = false;
@@ -186,11 +147,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
       selectedCloudWorker != null &&
       selectedCloudDefinition != null &&
       currentDraft == null &&
-      cloudReleases.isEmpty &&
       definitionsError == null &&
-      releasesError == null &&
-      !isLoadingDefinitions &&
-      !isLoadingReleases &&
       !isCreatingInitialDraft;
   bool get isPublishing => _refreshes.containsKey('publish');
   bool get isLoadingProfileHistory => _refreshes.containsKey('profile-history');
@@ -198,13 +155,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   bool get isValidatingCandidate =>
       _refreshes.containsKey('validate-candidate');
   bool get isSavingLocally => _refreshes.containsKey('save-local-draft');
-  bool get isSavingToCloud => _refreshes.containsKey('save-draft');
-  bool get isRollingBack => _refreshes.containsKey('rollback');
-  bool get isPromoting => _refreshes.containsKey('promote');
-  bool get isRevoking => _refreshes.containsKey('revoke');
   bool get isScanningProviders => _refreshes.containsKey('providers');
-  String? releasesError;
-  String? evidenceError;
   String? auditError;
   String? issueReportsError;
   bool isLoadingIssueReports = false;
@@ -215,12 +166,6 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   String? draftError;
   String? startupError;
   bool get isLoadingWorkerCatalog => _refreshes.containsKey('catalog');
-  bool get isLoadingDefinitions =>
-      _refreshes.keys.any((k) => k.startsWith('definition:'));
-  bool get isLoadingReleases =>
-      _refreshes.keys.any((k) => k.startsWith('releases:'));
-  bool get isLoadingEvidence =>
-      _refreshes.keys.any((k) => k.startsWith('evidence:'));
   bool get isLoadingAudit => _refreshes.keys.any((k) => k.startsWith('audit:'));
   String? workerCatalogError;
   bool workerCatalogUnauthorized = false;
@@ -237,8 +182,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
       try {
         await action();
         if (generation == _cloudGeneration &&
-            (key != 'catalog' || workerCatalogError == null) &&
-            (!key.startsWith('releases:') || releasesError == null)) {
+            (key != 'catalog' || workerCatalogError == null)) {
           _loaded.add(key);
         }
         completer.complete();
@@ -306,16 +250,9 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   ProfileLabAuthIntent? _activeAuthIntent;
   bool _cancelSignInRequested = false;
 
-  WorkerSubView workerSubView = WorkerSubView.overview;
-
   /// Unified UX state model for the selected logical Worker and its Profile.
   SelectedWorkerState get selectedWorkerState =>
       SelectedWorkerState.fromController(this as ProfileLabController);
-
-  void setWorkerSubView(WorkerSubView view) {
-    workerSubView = view;
-    notifyListeners();
-  }
 
   void setArea(LabArea area) {
     selectedArea = area;
@@ -454,8 +391,6 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
     _loaded.clear();
     labAccess = null;
     labAccessError = null;
-    releasesError = null;
-    evidenceError = null;
     auditError = null;
     issueReportsError = null;
     isLoadingIssueReports = false;
@@ -468,33 +403,23 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
     cloudWorkers = [];
     selectedCloudWorker = null;
     selectedCloudDefinition = null;
-    cloudReleases = [];
-    selectedCloudRelease = null;
-    cloudEvidence = [];
     cloudAuditEvents = [];
     currentCloudProfileSnapshot = null;
     currentProfileHistory = [];
     currentProfileRevision = 0;
     currentProfileDigest = null;
     candidateCloudValidatedDigest = null;
-    baseCloudDigest = null;
-    cloudDigest = null;
-    cloudDraftPayload = null;
-    syncState = DraftSyncState.saved;
   }
 
   // Cross-feature operations used by the composition root during initialization
   // and selection. Feature implementations live in the controller parts below.
   Future<void> refreshDrafts();
   Future<void> selectDraft(String profileDefinitionId);
-  Future<void> fetchAndSyncCloudDraft();
   Future<void> refreshEvidence();
   Future<void> discoverInstalledProviders();
   Future<void> loadSavedSession();
   Future<void> fetchCloudCatalog();
-  Future<void> fetchCloudReleases([String? profileDefinitionId]);
   Future<void> fetchCloudAudit({bool? definitionOnly});
-  Future<void> fetchCloudEvidence({String? profileDefinitionId, int? version});
 }
 
 class ProfileLabController extends _ProfileLabControllerState

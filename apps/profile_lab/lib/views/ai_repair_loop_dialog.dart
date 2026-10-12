@@ -168,7 +168,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
           content: CopyableMessage(
-              'Repaired candidate proposal with provenance applied to local Draft.')),
+              'Repaired candidate proposal with provenance applied to the local candidate.')),
     );
   }
 
@@ -384,7 +384,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Human Authority Safeguard: AI operates strictly inside the local repair loop sandbox. AI cannot publish, sign, or promote releases. Material draft changes require human confirmation.',
+                        'Human Authority Safeguard: AI operates strictly inside the local repair loop sandbox. AI cannot publish or sign Profiles. Material candidate changes require human confirmation.',
                         style: TextStyle(
                             fontSize: 11,
                             color: ProfileLabTheme.secondaryText,
@@ -423,7 +423,7 @@ class _AiRepairLoopDialogState extends State<AiRepairLoopDialog> {
               ? null
               : _applyFinalToDraft,
           icon: const Icon(Icons.check, size: 16),
-          label: const Text('Apply Candidate to Local Draft'),
+          label: const Text('Apply Candidate to Local Candidate'),
           style: ElevatedButton.styleFrom(
             backgroundColor: ProfileLabTheme.passColor,
             foregroundColor: Colors.white,

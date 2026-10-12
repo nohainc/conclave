@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../theme/profile_lab_theme.dart';
 import '../utils/profile_domain_diff.dart';
 
-/// Interactive domain-based Tool Profile Release Diff viewer and modal dialog.
+/// Interactive domain-based current-versus-candidate Profile diff dialog.
 class ProfileReleaseDiffDialog extends StatefulWidget {
   const ProfileReleaseDiffDialog({
     super.key,

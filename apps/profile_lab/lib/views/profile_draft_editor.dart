@@ -6,10 +6,8 @@ import 'package:flutter/services.dart';
 import '../controllers/profile_lab_controller.dart';
 import '../theme/profile_lab_theme.dart';
 
-import 'profile_release_diff_view.dart';
-
-/// Schema-aware Tool Profile v1 Draft Editor with live validation,
-/// structured summary panels, compare, revert, and duplicate options.
+/// Schema-aware Tool Profile v1 candidate editor with live validation,
+/// structured summary panels, compare, and recovery options.
 class ProfileDraftEditor extends StatefulWidget {
   const ProfileDraftEditor(
       {super.key, required this.controller, this.showInspector = false});
@@ -178,7 +176,8 @@ class _ProfileDraftEditorState extends State<ProfileDraftEditor> {
         Expanded(
           child: c.currentDraft == null
               ? const Center(
-                  child: Text('Select or create a draft to begin authoring.',
+                  child: Text(
+                      'Select or create a candidate to begin authoring.',
                       style: TextStyle(
                           fontSize: 13, color: ProfileLabTheme.secondaryText)))
               : LayoutBuilder(
@@ -189,130 +188,6 @@ class _ProfileDraftEditorState extends State<ProfileDraftEditor> {
                                 maxHeight: layout.maxHeight * 0.4),
                             child: SingleChildScrollView(
                                 child: Column(children: [
-                              // Conflict Banner
-                              if (c.syncState == DraftSyncState.conflict)
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: ProfileLabTheme.failColor
-                                        .withValues(alpha: 0.15),
-                                    border: const Border(
-                                        bottom: BorderSide(
-                                            color: ProfileLabTheme.failColor)),
-                                  ),
-                                  child: Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    children: [
-                                      const Icon(Icons.warning_amber_rounded,
-                                          color: ProfileLabTheme.failColor,
-                                          size: 18),
-                                      const SizedBox(width: 8),
-                                      const SizedBox(
-                                        width: 260,
-                                        child: Text(
-                                          'CONFLICT DETECTED: Local edits conflict with updated Cloud draft payload.',
-                                          style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: ProfileLabTheme.failColor),
-                                        ),
-                                      ),
-                                      OutlinedButton.icon(
-                                        icon: const Icon(Icons.compare_arrows,
-                                            size: 14),
-                                        label: const Text(
-                                            'Compare Local vs Cloud',
-                                            style: TextStyle(fontSize: 11)),
-                                        onPressed: () {
-                                          Map<String, dynamic>? draftPayload;
-                                          try {
-                                            final decoded =
-                                                jsonDecode(c.currentJsonText);
-                                            if (decoded
-                                                is Map<String, dynamic>) {
-                                              draftPayload = decoded;
-                                            }
-                                          } catch (_) {}
-                                          ProfileReleaseDiffDialog.show(
-                                            context,
-                                            titleA:
-                                                'Local Draft (${c.selectedDefinitionId})',
-                                            payloadA: draftPayload,
-                                            titleB: 'Cloud Draft (Concurrent)',
-                                            payloadB: c.cloudDraftPayload,
-                                          );
-                                        },
-                                      ),
-                                      const SizedBox(width: 6),
-                                      ElevatedButton(
-                                        style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                ProfileLabTheme.failColor),
-                                        onPressed: () =>
-                                            c.resolveConflictKeepLocal(),
-                                        child: const Text(
-                                            'Overwrite Cloud Draft',
-                                            style: TextStyle(fontSize: 11)),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      OutlinedButton(
-                                        onPressed: () =>
-                                            c.resolveConflictKeepCloud(),
-                                        child: const Text('Discard Local Edits',
-                                            style: TextStyle(fontSize: 11)),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                              // Cloud Changed Banner
-                              if (c.syncState == DraftSyncState.cloudChanged)
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: ProfileLabTheme.primaryAccent
-                                        .withValues(alpha: 0.15),
-                                    border: const Border(
-                                        bottom: BorderSide(
-                                            color:
-                                                ProfileLabTheme.primaryAccent)),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.cloud_download,
-                                          color: ProfileLabTheme.primaryAccent,
-                                          size: 18),
-                                      const SizedBox(width: 8),
-                                      const Expanded(
-                                        child: Text(
-                                          'CLOUD UPDATED: A newer draft version is available on Cloud.',
-                                          style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: ProfileLabTheme
-                                                  .primaryAccent),
-                                        ),
-                                      ),
-                                      ElevatedButton(
-                                        style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                ProfileLabTheme.primaryAccent),
-                                        onPressed: () =>
-                                            c.resolveConflictKeepCloud(),
-                                        child: const Text('Load Cloud Version',
-                                            style: TextStyle(fontSize: 11)),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
                               // Continuous Validation Diagnostics Banner
                               Container(
                                 width: double.infinity,
@@ -875,7 +750,7 @@ class _FindReplaceBar extends StatelessWidget {
   }
 }
 
-/// Structured Summary Panel rendering live parsed fields from the draft JSON payload.
+/// Structured Summary Panel rendering live parsed fields from the candidate JSON payload.
 class _StructuredSummaryPanel extends StatelessWidget {
   const _StructuredSummaryPanel({required this.controller});
 
@@ -938,7 +813,7 @@ class _StructuredSummaryPanel extends StatelessWidget {
                   value:
                       parsedJson['logicalWorkerTypeId']?.toString() ?? 'n/a'),
               _SummaryRow(
-                  label: 'Release Version',
+                  label: 'Candidate payload version',
                   value: 'v${parsedJson['releaseVersion']}'),
               _SummaryRow(
                   label: 'Engine Family',
@@ -1041,9 +916,16 @@ class _SummaryRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
-          Text(label,
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                  fontSize: 11, color: ProfileLabTheme.secondaryText)),
+                fontSize: 11,
+                color: ProfileLabTheme.secondaryText,
+              ),
+            ),
+          ),
           Expanded(
             child: Text(
               value,

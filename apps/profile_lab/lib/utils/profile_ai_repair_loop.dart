@@ -124,7 +124,7 @@ class ProfileAiRepairLoopRunner {
 
     final enrichedContext = AiAssistantContext(
       workerMetadata: context.workerMetadata,
-      stableProfile: context.stableProfile,
+      currentProfile: context.currentProfile,
       currentDraft: workingPayload,
       testDiagnostics: enrichedDiagnostics,
       providerCliInfo: context.providerCliInfo,

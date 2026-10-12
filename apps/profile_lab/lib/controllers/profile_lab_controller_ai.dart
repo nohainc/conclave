@@ -44,18 +44,19 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
       throw StateError('A model proposal is already running.');
     }
     if (currentDraft == null || selectedDefinitionId == null) {
-      throw StateError('Select a local Draft before generating a proposal.');
+      throw StateError(
+          'Select a local candidate before generating a proposal.');
     }
     if (jsonValidationError != null) {
       throw StateError(
-          'Fix Draft validation errors before requesting a proposal.');
+          'Fix candidate validation errors before requesting a proposal.');
     }
     if (userInstruction.trim().isEmpty) {
       throw ArgumentError.value(userInstruction, 'userInstruction');
     }
     if (!dataSharingConfirmed) {
       throw StateError(
-          'Confirm sharing Draft context with the selected model.');
+          'Confirm sharing candidate context with the selected model.');
     }
 
     isGeneratingAiProposal = true;
@@ -82,7 +83,7 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
       }
       final draftJson = jsonDecode(currentJsonText);
       if (draftJson is! Map<String, dynamic>) {
-        throw const FormatException('Current Draft must be a JSON object.');
+        throw const FormatException('Current candidate must be a JSON object.');
       }
       EngineProfile.parse(utf8.encode(canonicalJson(draftJson)));
 

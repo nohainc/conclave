@@ -31,7 +31,7 @@ class AiAssistantDialog extends StatefulWidget {
 class _AiAssistantDialogState extends State<AiAssistantDialog> {
   final _instructionCtrl = TextEditingController(
     text:
-        'Review the current Draft and recent test diagnostics. Suggest a minimal safe improvement.',
+        'Review the current candidate and recent test diagnostics. Suggest a minimal safe improvement.',
   );
   final _contextBuilder = const ProfileAiAssistantContextBuilder();
 
@@ -137,7 +137,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
           Icon(Icons.auto_awesome,
               color: ProfileLabTheme.primaryAccent, size: 22),
           SizedBox(width: 8),
-          Expanded(child: Text('AI Profile Draft Proposal')),
+          Expanded(child: Text('AI Profile Candidate Proposal')),
         ],
       ),
       content: SizedBox(
@@ -161,7 +161,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
-                        'A signed current Worker Profile runs through the local generic Engine. The model proposes a Draft edit only. Review the diff, apply it yourself, and run the real test ladder; model output is never evidence.',
+                        'A signed current Worker Profile runs through the local generic Engine. The model proposes a candidate edit only. Review the diff, apply it yourself, and run the real test ladder; model output is never evidence.',
                         style: TextStyle(
                             fontSize: 11,
                             color: ProfileLabTheme.darkForeground),
@@ -200,11 +200,11 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                             'Worker: ${_context.workerMetadata['workerTypeId']}',
                             Icons.engineering),
                         _buildContextChip(
-                          'Current Profile: ${_context.stableProfile != null ? "Ingested" : "None"}',
+                          'Current Profile: ${_context.currentProfile != null ? "Ingested" : "None"}',
                           Icons.verified,
                         ),
                         _buildContextChip(
-                            'Draft Payload: v${c.currentDraft?.releaseVersion ?? 1}',
+                            'Candidate payload: v${c.currentDraft?.releaseVersion ?? 1}',
                             Icons.description),
                         _buildContextChip(
                             'Test Diagnostics: ${_context.testDiagnostics.length} items',
@@ -240,7 +240,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
               ),
               const SizedBox(height: 12),
 
-              const Text('Draft change request:',
+              const Text('Candidate change request:',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
               TextField(
@@ -263,7 +263,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                         setState(() => _shareContextConfirmed = value ?? false),
                 controlAffinity: ListTileControlAffinity.leading,
                 title: const Text(
-                  'I agree to send this Draft and its bounded test diagnostics to the selected provider.',
+                  'I agree to send this candidate and its bounded test diagnostics to the selected provider.',
                   style: TextStyle(fontSize: 11),
                 ),
                 subtitle: const Text(
@@ -295,7 +295,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                         : const Icon(Icons.auto_awesome, size: 16),
                     label: Text(_isGenerating
                         ? 'Generating with Model…'
-                        : 'Generate Draft Proposal'),
+                        : 'Generate Candidate Proposal'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: ProfileLabTheme.primaryAccent,
                       foregroundColor: Colors.white,
@@ -422,7 +422,7 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Human review required: Applying only updates the local Draft editor. Publication remains a separate human action that requires successful local qualification and Cloud signer preflight. Stable promotion requires separate Cloud acceptance evidence.',
+                          'Human review required: Applying only updates the local candidate editor. Publication remains a separate human action that requires successful local qualification and Cloud validation.',
                           style: TextStyle(
                               fontSize: 11,
                               color: ProfileLabTheme.secondaryText,
@@ -467,11 +467,11 @@ class _AiAssistantDialogState extends State<AiAssistantDialog> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                         content: CopyableMessage(
-                            'Reviewed model proposal applied to the local Draft.')),
+                            'Reviewed model proposal applied to the local candidate.')),
                   );
                 },
           icon: const Icon(Icons.check, size: 16),
-          label: const Text('Review & Apply to Draft'),
+          label: const Text('Review & Apply to Candidate'),
           style: ElevatedButton.styleFrom(
             backgroundColor: ProfileLabTheme.passColor,
             foregroundColor: Colors.white,
