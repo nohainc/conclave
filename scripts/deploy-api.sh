@@ -13,6 +13,11 @@ cd "$repo_root"
 
 # Ensure assets directory exists for wrangler config schema requirement
 mkdir -p apps/app/build/web
+if [[ ! -f apps/app/build/web/index.html ]]; then
+  echo "Flutter web assets are missing from apps/app/build/web." >&2
+  echo "Build the web app first with: flutter build web --release --dart-define=CONCLAVE_API_URL=/api" >&2
+  exit 1
+fi
 
 echo "Deploying Conclave Cloud API Worker (conclave-ax-app)..."
 pnpm exec wrangler deploy --config "$wrangler_config" "$@"
