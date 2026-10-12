@@ -48,6 +48,7 @@ const workspaceRuntimeProtocolSchemaMessageTypes = <String>{
   'assignment.start',
   'assignment.ack',
   'assignment.progress',
+  'assignment.activity',
   'assignment.result',
   'assignment.error',
   'assignment.cancel',
@@ -149,6 +150,7 @@ const durableRealtimeEventTypes = <String>{
 };
 const ephemeralRealtimeEventTypes = <String>{
   'assignment.progress',
+  'assignment.activity',
   'stream.delta',
   'tool.invocation.status',
   'heartbeat',

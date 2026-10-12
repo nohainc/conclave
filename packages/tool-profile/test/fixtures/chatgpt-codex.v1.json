@@ -401,8 +401,7 @@
         ],
         "type": "message.updated",
         "status": "updated",
-        "title": "Response updated",
-        "messageSelector": "$.item.text"
+        "title": "Response updated"
       }
     ]
   },

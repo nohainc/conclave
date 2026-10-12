@@ -293,10 +293,34 @@ const activityStatus = z.enum([
   "failed",
   "cancelled",
 ]);
+const safeActivitySelector = selector.superRefine((value, ctx) => {
+  const unsafe = new Set([
+    "prompt",
+    "content",
+    "text",
+    "output",
+    "stdout",
+    "stderr",
+    "arguments",
+    "command",
+    "environment",
+    "env",
+    "token",
+    "secret",
+    "password",
+    "api_key",
+  ]);
+  if (value.slice(2).split(".").some((part) => unsafe.has(part.toLowerCase()))) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Activity selectors cannot copy content or execution details",
+    });
+  }
+});
 const activityDetailSelectors = z
   .record(
     z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
-    selector,
+    safeActivitySelector,
   )
   .superRefine((record, ctx) => {
     if (Object.keys(record).length > TOOL_PROFILE_LIMITS.activityDetails)
@@ -312,7 +336,7 @@ const activityMapping = z
     status: activityStatus,
     title: shortString,
     activityIdSelector: selector.optional(),
-    messageSelector: selector.optional(),
+    messageSelector: safeActivitySelector.optional(),
     detailSelectors: activityDetailSelectors.optional(),
     percentage: z.number().int().min(0).max(100).optional(),
   })

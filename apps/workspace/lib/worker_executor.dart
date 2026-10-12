@@ -160,6 +160,15 @@ typedef ToolProfileAssignmentExecutor = Future<WorkerResult> Function(
   void Function(WorkerProgress progress)? onProgress,
 });
 
+typedef ToolProfileActivityAssignmentExecutor = Future<WorkerResult> Function(
+  AssignmentLogicalWorker worker,
+  Directory workingDirectory,
+  WorkspaceAssignmentContext context,
+  Map<String, Object?> payload, {
+  void Function(WorkerProgress progress)? onProgress,
+  FutureOr<void> Function(WorkerActivity activity)? onActivity,
+});
+
 class AssignmentLogicalWorker {
   const AssignmentLogicalWorker({
     required this.id,
@@ -196,6 +205,7 @@ class WorkerAssignmentHandler {
   WorkerAssignmentHandler({
     required this.resolveLogicalWorker,
     this.executeWithToolProfile,
+    this.executeWithActivity,
     this.defaultWorkingDirectory,
     this.applicationStateDirectory,
     this.spaceDirectoryLifecycle,
@@ -203,6 +213,7 @@ class WorkerAssignmentHandler {
     this.threadDirectoryLifecycle,
     ThreadMutationCoordinator? threadMutationCoordinator,
     this.onProgress,
+    this.onActivity,
     this.cancelToolProfileAssignment,
   })  : spaceMutationCoordinator = spaceMutationCoordinator ??
             (spaceDirectoryLifecycle == null
@@ -220,6 +231,7 @@ class WorkerAssignmentHandler {
 
   final AssignmentLogicalWorkerResolver resolveLogicalWorker;
   final ToolProfileAssignmentExecutor? executeWithToolProfile;
+  final ToolProfileActivityAssignmentExecutor? executeWithActivity;
   final Directory? defaultWorkingDirectory;
   final Directory? applicationStateDirectory;
   final SpaceDirectoryLifecycle? spaceDirectoryLifecycle;
@@ -227,6 +239,7 @@ class WorkerAssignmentHandler {
   final ThreadDirectoryLifecycle? threadDirectoryLifecycle;
   final ThreadMutationCoordinator? threadMutationCoordinator;
   final WorkerProgressRelay? onProgress;
+  final WorkerActivityRelay? onActivity;
   final Future<bool> Function(String assignmentId)? cancelToolProfileAssignment;
 
   /// Resolves the local Logical Worker and Workspace-owned execution directory.
@@ -344,18 +357,32 @@ class WorkerAssignmentHandler {
     Future<WorkspaceAssignmentResult> execute() async {
       final workerPayload = _withCorrelation(context.payload, context);
       final profileExecutor = executeWithToolProfile;
-      if (profileExecutor == null) {
+      final activityProfileExecutor = executeWithActivity;
+      if (profileExecutor == null && activityProfileExecutor == null) {
         throw StateError('Tool Profile Engine assignment runner is required');
       }
-      final engineResult = await profileExecutor(
-        worker,
-        scope.workingDirectory,
-        context,
-        workerPayload,
-        onProgress: onProgress == null
-            ? null
-            : (progress) => onProgress!(context, progress),
-      );
+      final engineResult = activityProfileExecutor != null
+          ? await activityProfileExecutor(
+              worker,
+              scope.workingDirectory,
+              context,
+              workerPayload,
+              onProgress: onProgress == null
+                  ? null
+                  : (progress) => onProgress!(context, progress),
+              onActivity: onActivity == null
+                  ? null
+                  : (activity) => onActivity!(context, activity),
+            )
+          : await profileExecutor!(
+              worker,
+              scope.workingDirectory,
+              context,
+              workerPayload,
+              onProgress: onProgress == null
+                  ? null
+                  : (progress) => onProgress!(context, progress),
+            );
       final output = {
         'summary': engineResult.output.isEmpty
             ? 'Worker $workerId completed assignment'
@@ -461,4 +488,9 @@ class WorkerAssignmentHandler {
 typedef WorkerProgressRelay = FutureOr<void> Function(
   WorkspaceAssignmentContext context,
   WorkerProgress progress,
+);
+
+typedef WorkerActivityRelay = FutureOr<void> Function(
+  WorkspaceAssignmentContext context,
+  WorkerActivity activity,
 );

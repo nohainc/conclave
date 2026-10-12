@@ -27,6 +27,7 @@ export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "assignment.start",
   "assignment.ack",
   "assignment.progress",
+  "assignment.activity",
   "assignment.result",
   "assignment.error",
   "assignment.cancel",
@@ -44,6 +45,71 @@ const executionErrorCode = z.enum(EXECUTION_ERROR_CODES);
 /** Canonical execution permissions carried from Cloud to Workspace. */
 export const EXECUTION_PERMISSION_IDS = EXECUTION_PERMISSIONS;
 const executionPermission = z.enum(EXECUTION_PERMISSIONS);
+const workerActivityPayload = z
+  .object({
+    assignmentId: nonEmptyString.max(128),
+    executionId: nonEmptyString.max(128),
+    workerId: nonEmptyString.max(128),
+    eventId: nonEmptyString.max(128),
+    sequence: z.number().int().positive().max(2_147_483_647),
+    timestamp,
+    eventType: z.enum([
+      "execution.started",
+      "model.started",
+      "message.updated",
+      "tool.started",
+      "tool.completed",
+      "tool.failed",
+      "model.status",
+      "execution.completed",
+      "execution.failed",
+      "execution.cancelled",
+    ]),
+    status: z.enum(["running", "updated", "completed", "failed", "cancelled"]),
+    title: z.string().min(1).max(256),
+    activityId: nonEmptyString.max(128).optional(),
+    percentage: z.number().min(0).max(100).optional(),
+    details: z
+      .record(
+        z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
+        z.union([z.string().max(2048), z.number(), z.boolean(), z.null()]),
+      )
+      .superRefine((details, ctx) => {
+        if (Object.keys(details).length > 32) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Activity details exceed 32 fields",
+          });
+        }
+        const unsafe = new Set([
+          "prompt",
+          "content",
+          "text",
+          "output",
+          "stdout",
+          "stderr",
+          "arguments",
+          "command",
+          "environment",
+          "env",
+          "token",
+          "secret",
+          "password",
+          "api_key",
+        ]);
+        for (const key of Object.keys(details)) {
+          if (unsafe.has(key.toLowerCase())) {
+            ctx.addIssue({
+              code: "custom",
+              path: [key],
+              message: "Activity details cannot contain provider content",
+            });
+          }
+        }
+      })
+      .optional(),
+  })
+  .strict();
 
 /** Product-facing Worker Type IDs; legacy provider package IDs are not valid. */
 export const WorkspaceProductWorkerTypeIdSchema = nonEmptyString
@@ -403,6 +469,18 @@ export const workspaceRuntimeEnvelopeSchema = z
         })
         .passthrough()
         .safeParse(message.payload);
+      if (!payload.success) {
+        for (const issue of payload.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payload", ...issue.path],
+            message: issue.message,
+          });
+        }
+      }
+    }
+    if (message.type === "assignment.activity") {
+      const payload = workerActivityPayload.safeParse(message.payload);
       if (!payload.success) {
         for (const issue of payload.error.issues) {
           ctx.addIssue({

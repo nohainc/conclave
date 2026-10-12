@@ -19,6 +19,7 @@ export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_MESSAGE_TYPES = [
   "assignment.start",
   "assignment.ack",
   "assignment.progress",
+  "assignment.activity",
   "assignment.result",
   "assignment.error",
   "assignment.cancel",

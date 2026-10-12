@@ -54,6 +54,18 @@ class WorkspaceAssignmentContext {
       );
 }
 
+final class _PendingWorkerActivity {
+  const _PendingWorkerActivity({
+    required this.context,
+    required this.activity,
+    required this.replaceableKey,
+  });
+
+  final WorkspaceAssignmentContext context;
+  final WorkerActivity activity;
+  final String? replaceableKey;
+}
+
 class WorkspaceAssignmentResult {
   const WorkspaceAssignmentResult({
     required this.summary,
@@ -194,6 +206,12 @@ class WebSocketWorkspaceTransport implements WorkspaceTransport {
 
   @override
   void send(Object message) => socket.add(message);
+
+  @override
+  Future<void> sendAndWait(Object message) {
+    socket.add(message);
+    return Future<void>.value();
+  }
 
   @override
   Future<void> close() async {
@@ -445,6 +463,10 @@ class WorkspaceCloudConnection {
   final _cancelledBeforeStart = <String>{};
   final _pendingAssignmentsDuringSync = <Map<String, dynamic>>[];
   final _lastEphemeralWorkerEvent = <String, DateTime>{};
+  static const _maxPendingActivityEvents = 256;
+  final _pendingActivityEvents = <_PendingWorkerActivity>[];
+  final _activitySpaceWaiters = <Completer<void>>[];
+  bool _drainingActivityEvents = false;
 
   void _notifyStateChanged() => onStateChanged?.call();
 
@@ -618,6 +640,153 @@ class WorkspaceCloudConnection {
     )));
   }
 
+  /// Relays structured Worker Activity without throttling lifecycle events.
+  /// Status-only events may replace an older queued status for the same
+  /// assignment; tool lifecycle and terminal events apply backpressure until
+  /// queue space is available. A disconnected transport drops only this
+  /// cosmetic relay and records a local diagnostic.
+  Future<void> reportWorkerActivity(
+    WorkspaceAssignmentContext context,
+    WorkerActivity activity,
+  ) async {
+    if (activity.assignmentId != context.assignmentId) return;
+    if (_transport == null || sessionId == null) {
+      unawaited(recordAssignmentDiagnostic(
+        context,
+        event: 'worker.activity.forwarding_skipped',
+        stage: 'transport',
+        severity: 'warning',
+        errorCode: 'activity_forwarding_unavailable',
+        contextData: {'eventType': activity.eventType},
+      ));
+      return;
+    }
+    final replaceable = activity.eventType == 'model.status' ||
+        activity.eventType == 'message.updated';
+    final key =
+        '${context.assignmentId}:${activity.eventType}:${activity.activityId ?? ''}';
+    if (replaceable) {
+      final index = _pendingActivityEvents.indexWhere(
+        (item) => item.replaceableKey == key,
+      );
+      if (index >= 0) {
+        _pendingActivityEvents[index] = _PendingWorkerActivity(
+          context: context,
+          activity: activity,
+          replaceableKey: key,
+        );
+        _drainActivityEvents();
+        return;
+      }
+    }
+    while (_pendingActivityEvents.length >= _maxPendingActivityEvents) {
+      if (_transport == null || sessionId == null || _closing) {
+        unawaited(recordAssignmentDiagnostic(
+          context,
+          event: 'worker.activity.forwarding_skipped',
+          stage: 'transport',
+          severity: 'warning',
+          errorCode: 'activity_forwarding_unavailable',
+          contextData: {'eventType': activity.eventType},
+        ));
+        return;
+      }
+      final waiter = Completer<void>();
+      _activitySpaceWaiters.add(waiter);
+      await waiter.future;
+    }
+    _pendingActivityEvents.add(_PendingWorkerActivity(
+      context: context,
+      activity: activity,
+      replaceableKey: replaceable ? key : null,
+    ));
+    unawaited(_drainActivityEvents());
+  }
+
+  Future<void> _drainActivityEvents() async {
+    if (_drainingActivityEvents) return;
+    _drainingActivityEvents = true;
+    try {
+      while (_pendingActivityEvents.isNotEmpty &&
+          _transport != null &&
+          sessionId != null &&
+          !_closing) {
+        final item = _pendingActivityEvents.removeAt(0);
+        _wakeActivitySpaceWaiter();
+        final activity = item.activity;
+        try {
+          await _transport!.sendAndWait(jsonEncode(_assignmentEnvelope(
+            'assignment.activity',
+            _assignmentCorrelationForContext(item.context),
+            {
+              'assignmentId': item.context.assignmentId,
+              'executionId': activity.executionId,
+              'workerId': activity.workerId,
+              'eventId': activity.eventId,
+              'sequence': activity.sequence,
+              'timestamp': activity.timestamp,
+              'eventType': activity.eventType,
+              'status': activity.status,
+              'title': activity.title,
+              if (activity.activityId != null)
+                'activityId': activity.activityId,
+              if (activity.percentage != null)
+                'percentage': activity.percentage,
+              if (activity.details != null) 'details': activity.details,
+            },
+          )));
+        } on Object catch (error) {
+          unawaited(recordAssignmentDiagnostic(
+            item.context,
+            event: 'worker.activity.forwarding_failed',
+            stage: 'transport',
+            severity: 'warning',
+            errorCode: 'activity_forwarding_failed',
+            contextData: {
+              'eventType': activity.eventType,
+              'errorType': error.runtimeType.toString(),
+            },
+          ));
+        }
+      }
+    } finally {
+      _drainingActivityEvents = false;
+      if (_pendingActivityEvents.isNotEmpty &&
+          _transport != null &&
+          sessionId != null &&
+          !_closing) {
+        unawaited(_drainActivityEvents());
+      }
+    }
+  }
+
+  void _wakeActivitySpaceWaiter() {
+    if (_activitySpaceWaiters.isEmpty) return;
+    final waiter = _activitySpaceWaiters.removeAt(0);
+    if (!waiter.isCompleted) waiter.complete();
+  }
+
+  void _wakeAllActivitySpaceWaiters() {
+    while (_activitySpaceWaiters.isNotEmpty) {
+      final waiter = _activitySpaceWaiters.removeAt(0);
+      if (!waiter.isCompleted) waiter.complete();
+    }
+  }
+
+  Map<String, Object?> _assignmentCorrelationForContext(
+    WorkspaceAssignmentContext context,
+  ) =>
+      {
+        'executionWorkspaceId': context.workspaceId,
+        'workspaceRuntimeId': context.workspaceRuntimeId,
+        'workerId': context.workerId,
+        'runId': context.runId,
+        'taskId': context.taskId,
+        'attemptId': context.attemptId,
+        'assignmentId': context.assignmentId,
+        'idempotencyKey': context.idempotencyKey,
+      };
+
   void _sendIfConnected(String type, Map<String, Object?> payload) {
     final socket = _transport;
     if (socket == null || sessionId == null) return;
@@ -702,6 +871,7 @@ class WorkspaceCloudConnection {
     activeTransportMode = null;
     _pendingTransportMode = null;
     sessionId = null;
+    _wakeAllActivitySpaceWaiters();
     if (transport != null) {
       try {
         await transport.close().timeout(
@@ -993,6 +1163,7 @@ class WorkspaceCloudConnection {
         lastHelloAcknowledgedAt = DateTime.now().toUtc();
         connectionStage = WorkspaceConnectionStage.synchronizing;
         sessionId = payload['sessionId'] as String;
+        unawaited(_drainActivityEvents());
         _syncTimer?.cancel();
         _syncTimer = Timer(syncTimeout, () {
           if ((_syncResultReceived &&

@@ -738,6 +738,7 @@ void _validateActivityMappings(Object? value) {
     }
     _validateSelector(raw['activityIdSelector']);
     _validateSelector(raw['messageSelector']);
+    _validateSafeActivitySelector(raw['messageSelector']);
     final details = raw['detailSelectors'];
     if (details != null) {
       if (details is! Map || details.length > 8) {
@@ -751,6 +752,7 @@ void _validateActivityMappings(Object? value) {
               'activity detail selector name is invalid');
         }
         _validateSelector(entry.value);
+        _validateSafeActivitySelector(entry.value);
       }
     }
     final percentage = raw['percentage'];
@@ -758,6 +760,34 @@ void _validateActivityMappings(Object? value) {
         (percentage is! int || percentage < 0 || percentage > 100)) {
       throw const FormatException('activity percentage is invalid');
     }
+  }
+}
+
+void _validateSafeActivitySelector(Object? value) {
+  if (value is! String) return;
+  const unsafe = {
+    'prompt',
+    'content',
+    'text',
+    'output',
+    'stdout',
+    'stderr',
+    'arguments',
+    'command',
+    'environment',
+    'env',
+    'token',
+    'secret',
+    'password',
+    'api_key',
+  };
+  if (value
+      .substring(2)
+      .split('.')
+      .any((part) => unsafe.contains(part.toLowerCase()))) {
+    throw const FormatException(
+      'activity selectors cannot copy content or execution details',
+    );
   }
 }
 

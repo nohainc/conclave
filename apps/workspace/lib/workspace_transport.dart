@@ -8,6 +8,7 @@ import 'dart:math';
 abstract interface class WorkspaceTransport {
   Stream<Object?> get messages;
   void send(Object message);
+  Future<void> sendAndWait(Object message);
   Future<void> close();
 }
 
@@ -87,7 +88,18 @@ class HttpLongPollWorkspaceTransport implements WorkspaceTransport {
 
   @override
   void send(Object message) {
-    if (_closed || _sessionId == null) return;
+    unawaited(_enqueueSend(message, propagateErrors: false));
+  }
+
+  @override
+  Future<void> sendAndWait(Object message) =>
+      _enqueueSend(message, propagateErrors: true);
+
+  Future<void> _enqueueSend(
+    Object message, {
+    required bool propagateErrors,
+  }) {
+    if (_closed || _sessionId == null) return Future<void>.value();
     final decoded = message is String ? jsonDecode(message) : message;
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException(
@@ -106,13 +118,14 @@ class HttpLongPollWorkspaceTransport implements WorkspaceTransport {
               'sessionId': sessionId,
               'events': [event],
             }))
-        .then<void>((_) {})
-        .catchError((Object error, StackTrace stack) {
+        .then<void>((_) {});
+    final settled = send.catchError((Object error, StackTrace stack) {
       if (!_closed) _messages.addError(error, stack);
     });
-    _sendChain = send;
-    _pendingSends.add(send);
-    unawaited(send.whenComplete(() => _pendingSends.remove(send)));
+    _sendChain = settled;
+    _pendingSends.add(settled);
+    unawaited(settled.whenComplete(() => _pendingSends.remove(settled)));
+    return propagateErrors ? send : settled;
   }
 
   Future<void> _poll() async {

@@ -41,6 +41,62 @@ describe("Workspace Runtime protocol", () => {
     ).toBe("assignment.start");
   });
 
+  it("accepts bounded structured activity assignments", () => {
+    expect(
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "assignment.activity",
+        executionWorkspaceId: "workspace-a",
+        workspaceRuntimeId: "runtime-a",
+        workerId: "worker-a",
+        runId: "run-a",
+        taskId: "task-a",
+        attemptId: "attempt-a",
+        assignmentId: "assignment-a",
+        idempotencyKey: "idem-a",
+        payload: {
+          assignmentId: "assignment-a",
+          executionId: "execution-a",
+          workerId: "chatgpt",
+          eventId: "event-a",
+          sequence: 3,
+          timestamp: "2026-10-12T12:00:00.000Z",
+          eventType: "tool.started",
+          status: "running",
+          title: "Running tool",
+          activityId: "tool-a",
+          details: { toolName: "shell" },
+        },
+      }).type,
+    ).toBe("assignment.activity");
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "assignment.activity",
+        executionWorkspaceId: "workspace-a",
+        workspaceRuntimeId: "runtime-a",
+        workerId: "worker-a",
+        runId: "run-a",
+        taskId: "task-a",
+        attemptId: "attempt-a",
+        assignmentId: "assignment-a",
+        idempotencyKey: "idem-a",
+        payload: {
+          assignmentId: "assignment-a",
+          executionId: "execution-a",
+          workerId: "chatgpt",
+          eventId: "event-a",
+          sequence: 3,
+          timestamp: "2026-10-12T12:00:00.000Z",
+          eventType: "tool.started",
+          status: "running",
+          title: "Running tool",
+          details: { prompt: "do not forward" },
+        },
+      }),
+    ).toThrow();
+  });
+
   it("accepts only canonical execution permissions in assignment snapshots", () => {
     const assignment = {
       ...base,

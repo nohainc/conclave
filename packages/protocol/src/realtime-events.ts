@@ -28,6 +28,58 @@ export const RealtimeEventPayloadSchema = z
     leaseId: id.optional(),
     workerId: id.optional(),
     percentage: z.number().min(0).max(100).optional(),
+    sourceEventId: id.optional(),
+    executionId: id.optional(),
+    activityId: id.optional(),
+    activitySequence: z.number().int().positive().optional(),
+    activityType: id.optional(),
+    activityStatus: z.enum([
+      "running",
+      "updated",
+      "completed",
+      "failed",
+      "cancelled",
+    ]).optional(),
+    title: z.string().max(256).optional(),
+    details: z
+      .record(
+        z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
+        z.union([z.string().max(2048), z.number(), z.boolean(), z.null()]),
+      )
+      .superRefine((details, ctx) => {
+        if (Object.keys(details).length > 32) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Activity details exceed 32 fields",
+          });
+        }
+        const unsafe = new Set([
+          "prompt",
+          "content",
+          "text",
+          "output",
+          "stdout",
+          "stderr",
+          "arguments",
+          "command",
+          "environment",
+          "env",
+          "token",
+          "secret",
+          "password",
+          "api_key",
+        ]);
+        for (const key of Object.keys(details)) {
+          if (unsafe.has(key.toLowerCase())) {
+            ctx.addIssue({
+              code: "custom",
+              path: [key],
+              message: "Activity details cannot contain provider content",
+            });
+          }
+        }
+      })
+      .optional(),
     durationMs: z.number().int().min(0).optional(),
     tokenCount: z.number().int().min(0).optional(),
     coalesced: z.boolean().optional(),

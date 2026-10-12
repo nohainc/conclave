@@ -36,6 +36,28 @@ describe("realtime event contract", () => {
     expect(parseRealtimeEvent(JSON.stringify(event))).toEqual(event);
     expect(isDurableRealtimeEventType("run.completed")).toBe(true);
     expect(isEphemeralRealtimeEventType("stream.delta")).toBe(true);
+    expect(isEphemeralRealtimeEventType("assignment.activity")).toBe(true);
+  });
+
+  it("accepts normalized activity payloads without raw provider content", () => {
+    const activity = {
+      ...event,
+      type: "assignment.activity",
+      assignmentId: "assignment-1",
+      payload: {
+        entityId: "assignment-1",
+        workerId: "chatgpt",
+        sourceEventId: "event-1",
+        executionId: "execution-1",
+        activityId: "tool-1",
+        activitySequence: 4,
+        activityType: "tool.started",
+        activityStatus: "running",
+        title: "Running tool",
+        details: { toolName: "shell" },
+      },
+    };
+    expect(parseRealtimeEvent(activity)).toEqual(activity);
   });
 
   it("retains unknown events from a compatible minor version", () => {

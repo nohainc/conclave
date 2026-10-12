@@ -63,6 +63,12 @@ class FakeSocket implements WorkspaceTransport {
   void send(Object message) => sent.add(message);
 
   @override
+  Future<void> sendAndWait(Object message) {
+    send(message);
+    return Future<void>.value();
+  }
+
+  @override
   Future<void> close() => controller.close();
 }
 
@@ -910,6 +916,83 @@ void main() {
       (messages.single['payload'] as Map<String, dynamic>)['message'],
       '[REDACTED]',
     );
+    await connection.close();
+  });
+
+  test('forwards every Worker activity with ordering and safe details',
+      () async {
+    final socket = FakeSocket();
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      heartbeat: const Duration(hours: 1),
+    );
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'server-activity',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'workspace.hello.ack',
+      'payload': {'sessionId': 'session-activity'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    const context = WorkspaceAssignmentContext(
+      workspaceId: 'workspace-1',
+      workspaceRuntimeId: 'workspace-1',
+      workerId: 'worker-1',
+      runId: 'run-1',
+      taskId: 'task-1',
+      attemptId: 'attempt-1',
+      assignmentId: 'assignment-activity',
+      idempotencyKey: 'idem-activity',
+      payload: {},
+    );
+    for (final entry in [
+      ('tool-call-1', 'tool.started', 'running', 1),
+      ('tool-call-1', 'tool.completed', 'completed', 2),
+      ('tool-call-2', 'tool.started', 'running', 3),
+    ]) {
+      await connection.reportWorkerActivity(
+        context,
+        WorkerActivity(
+          requestId: 'request-activity',
+          assignmentId: context.assignmentId,
+          executionId: 'execution-activity',
+          workerId: 'chatgpt',
+          eventId: 'event-${entry.$4}',
+          sequence: entry.$4,
+          timestamp: '2026-10-12T18:00:0${entry.$4}Z',
+          eventType: entry.$2,
+          status: entry.$3,
+          title: 'Tool',
+          activityId: entry.$1,
+          details: const {'toolName': 'shell'},
+        ),
+      );
+    }
+    await waitFor(() =>
+        socket.sent.where((item) {
+          final value = jsonDecode(item as String) as Map<String, dynamic>;
+          return value['type'] == 'assignment.activity';
+        }).length ==
+        3);
+    final messages = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .where((message) => message['type'] == 'assignment.activity')
+        .toList();
+    expect(
+        messages.map((message) =>
+            (message['payload'] as Map<String, dynamic>)['sequence']),
+        [1, 2, 3]);
+    expect(
+        messages.map((message) =>
+            (message['payload'] as Map<String, dynamic>)['activityId']),
+        ['tool-call-1', 'tool-call-1', 'tool-call-2']);
+    expect(jsonEncode(messages), isNot(contains('prompt')));
     await connection.close();
   });
 

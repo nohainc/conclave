@@ -1227,9 +1227,11 @@ class CliWorkerEngine {
     final executionClock = Stopwatch()..start();
     var reconstructed = false;
     var providerStarted = false;
+    var acceptingProviderEvents = true;
     try {
       final executable = await _resolveTool();
       while (true) {
+        acceptingProviderEvents = true;
         final remainingMs =
             request.timeoutMs - executionClock.elapsedMilliseconds;
         if (remainingMs <= 0)
@@ -1259,6 +1261,7 @@ class CliWorkerEngine {
             );
           },
           onStdoutLine: (line) async {
+            if (!acceptingProviderEvents) return;
             stdoutBytes += utf8.encode(line).length + 1;
             if (stdoutBytes > 4 * 1024 * 1024) {
               throw const FormatException(
@@ -1285,6 +1288,7 @@ class CliWorkerEngine {
             }
           },
         );
+        acceptingProviderEvents = false;
         final interpreted = _interpret(
           stdout.toString(),
           result.stderr,
@@ -1477,6 +1481,7 @@ class CliWorkerEngine {
         return;
       }
     } on TimeoutException catch (error) {
+      acceptingProviderEvents = false;
       await _write(
         sink,
         _executionError(
@@ -1491,6 +1496,7 @@ class CliWorkerEngine {
         ),
       );
     } on ProcessException catch (error) {
+      acceptingProviderEvents = false;
       await _write(
         sink,
         _executionError(
@@ -1503,6 +1509,7 @@ class CliWorkerEngine {
         ),
       );
     } on Object catch (error) {
+      acceptingProviderEvents = false;
       await _write(
         sink,
         _executionError(
@@ -1867,7 +1874,9 @@ class CliWorkerEngine {
       final detailSelectors = mapping['detailSelectors'];
       if (detailSelectors is Map) {
         for (final entry in detailSelectors.entries) {
-          final value = _select(decoded, _string(entry.value));
+          final selector = _string(entry.value);
+          if (!_isSafeActivitySelector(selector)) continue;
+          final value = _select(decoded, selector);
           if (value == null ||
               value is String ||
               value is bool ||
@@ -1881,12 +1890,6 @@ class CliWorkerEngine {
       final activityIdValue = mapping['activityIdSelector'] == null
           ? null
           : _select(decoded, _string(mapping['activityIdSelector']));
-      final messageValue = mapping['messageSelector'] == null
-          ? null
-          : _select(decoded, _string(mapping['messageSelector']));
-      if (messageValue is String && messageValue.isNotEmpty) {
-        details['message'] = messageValue;
-      }
       events.add(
         WorkerActivity(
           requestId: request.requestId,
@@ -1948,6 +1951,29 @@ class CliWorkerEngine {
         details: safeDetails.isEmpty ? null : safeDetails,
       ),
     );
+  }
+
+  bool _isSafeActivitySelector(String selector) {
+    const unsafe = {
+      'prompt',
+      'content',
+      'text',
+      'output',
+      'stdout',
+      'stderr',
+      'arguments',
+      'command',
+      'environment',
+      'env',
+      'token',
+      'secret',
+      'password',
+      'api_key',
+    };
+    return !selector
+        .substring(2)
+        .split('.')
+        .any((part) => unsafe.contains(part.toLowerCase()));
   }
 
   _InterpretedOutput _interpret(

@@ -52,21 +52,26 @@ class CliStreamingRunner {
     final stdoutTask = () async {
       try {
         var pending = '';
+        var pendingBytes = 0;
         await for (final chunk in process.stdout.transform(utf8.decoder)) {
-          stdoutBytes += utf8.encode(chunk).length;
+          final chunkBytes = utf8.encode(chunk).length;
+          stdoutBytes += chunkBytes;
           if (stdoutBytes > maxStdoutBytes) {
             throw const FormatException('CLI output exceeds configured limit');
           }
           pending += chunk;
+          pendingBytes += chunkBytes;
           var newline = pending.indexOf('\n');
           while (newline >= 0) {
             var line = pending.substring(0, newline);
             if (line.endsWith('\r')) line = line.substring(0, line.length - 1);
             await onStdoutLine(line);
+            pendingBytes -=
+                utf8.encode(pending.substring(0, newline + 1)).length;
             pending = pending.substring(newline + 1);
             newline = pending.indexOf('\n');
           }
-          if (pending.length > maxStdoutBytes) {
+          if (pendingBytes > maxStdoutBytes) {
             throw const FormatException(
               'CLI event line exceeds configured limit',
             );

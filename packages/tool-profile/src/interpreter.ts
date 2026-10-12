@@ -85,6 +85,30 @@ export function mapProfileActivities(
         : undefined;
       const details: Record<string, string | number | boolean | null> = {};
       for (const [key, path] of Object.entries(mapping.detailSelectors ?? {})) {
+        if (
+          path
+            .slice(2)
+            .split(".")
+            .some((part) =>
+              [
+                "prompt",
+                "content",
+                "text",
+                "output",
+                "stdout",
+                "stderr",
+                "arguments",
+                "command",
+                "environment",
+                "env",
+                "token",
+                "secret",
+                "password",
+                "api_key",
+              ].includes(part.toLowerCase()),
+            )
+        )
+          continue;
         const value = selectProfileValue(event, path);
         if (
           value === null ||

@@ -211,9 +211,15 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     defaultWorkingDirectory: workRoot,
     applicationStateDirectory: workspacePaths.applicationSupportDirectory,
     spaceDirectoryLifecycle: spaceDirectoryLifecycle,
+    onProgress: (context, progress) {
+      connection?.reportWorkerProgress(context, progress);
+    },
+    onActivity: (context, activity) async {
+      await connection?.reportWorkerActivity(context, activity);
+    },
     cancelToolProfileAssignment: cliWorkerEngineSupervisor?.cancel,
-    executeWithToolProfile: (worker, workingDirectory, context, payload,
-        {onProgress}) async {
+    executeWithActivity: (worker, workingDirectory, context, payload,
+        {onProgress, onActivity}) async {
       final supervisor = cliWorkerEngineSupervisor;
       final coordinator = workerCatalogCoordinator;
       if (coordinator == null || supervisor == null) {
@@ -348,6 +354,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             fullAccessAuthorized: worker.fullLocalAccessAuthorized,
           ),
           onProgress: onProgress,
+          onActivity: onActivity,
         );
       } finally {
         // The service republishes bounded Engine metadata after execution;

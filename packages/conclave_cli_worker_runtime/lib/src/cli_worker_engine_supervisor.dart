@@ -237,6 +237,7 @@ final class CliWorkerEngineSupervisor {
     Duration? engineExecutionTimeout,
     void Function()? onExecutionStarted,
     void Function(WorkerProgress progress)? onProgress,
+    FutureOr<void> Function(WorkerActivity activity)? onActivity,
   }) async {
     if (workerSession != null && workerSession.workerId != workerId) {
       throw const FormatException(
@@ -353,6 +354,7 @@ final class CliWorkerEngineSupervisor {
             onProgress?.call(progress);
           }
         },
+        onActivity: onActivity,
       );
       if (result is WorkerErrorFrame) {
         throw CliWorkerEngineProbeException(
@@ -640,6 +642,7 @@ final class CliEngineChannel {
     ExecuteRequest request,
     Duration timeout, {
     void Function(WorkerProgress progress)? onProgress,
+    FutureOr<void> Function(WorkerActivity activity)? onActivity,
   }) async {
     process.stdin.writeln(request.encode());
     await process.stdin.flush();
@@ -669,6 +672,15 @@ final class CliEngineChannel {
           );
         }
         onProgress?.call(frame);
+        continue;
+      }
+      if (frame is WorkerActivity) {
+        if (frame.assignmentId != request.assignmentId) {
+          throw const FormatException(
+            'CLI Worker Engine assignment ID mismatch',
+          );
+        }
+        await onActivity?.call(frame);
         continue;
       }
       if (frame is WorkerResult || frame is WorkerErrorFrame) {

@@ -21,9 +21,11 @@ Normalized event types are `execution.started`, `model.started`,
 
 The protocol enforces a 1 MiB frame limit. Activity details are limited to
 16 KiB, four nested levels and 32 fields/items per object or array. Detail
-keys are safe ASCII names and values are JSON scalars, arrays or objects only.
-Executable values, provider credentials and arbitrary transformation code are
-not permitted.
+keys are safe ASCII names and values are bounded JSON scalars, arrays or
+objects only. Content-bearing selectors such as prompts, text, output,
+commands, arguments, stdout/stderr and environment values are rejected for
+activity details. Executable values, provider credentials and arbitrary
+transformation code are not permitted.
 
 ## Ordering and terminal behavior
 
@@ -50,4 +52,9 @@ The Codex and agy fixtures use the same mapping shape and produce equivalent
 names and nesting differ.
 
 Existing `progress` frames remain available for milestone consumers. Activity
-frames are the authoritative repeated-event stream for live timelines.
+frames are the authoritative repeated-event stream for live timelines. The
+Workspace relay forwards activity as `assignment.activity` over the existing
+runtime transport. Its bounded queue coalesces replaceable model/status
+updates, applies backpressure to important lifecycle events, and records
+forwarding failures as Workspace diagnostics without converting a lost
+cosmetic event into Worker failure.

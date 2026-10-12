@@ -5,6 +5,7 @@ import {
   WORKSPACE_RUNTIME_PROTOCOL_VERSION,
   type WorkspaceRuntimeMessage,
 } from "@conclave/workspace-runtime-protocol";
+import { RealtimeEventPayloadSchema } from "@conclave/protocol";
 import { createEventPublisher } from "./event-publisher.js";
 import {
   recordAssignmentCancelled,
@@ -917,6 +918,80 @@ export class WorkspaceGateway implements DurableObject {
               ? { summary: JSON.stringify(payload.metrics).slice(0, 32768) }
               : {}),
           },
+        });
+        return;
+      }
+      case "assignment.activity": {
+        const payload = message.payload as Record<string, unknown>;
+        const workspaceId =
+          this.executionWorkspaceId ?? message.executionWorkspaceId;
+        if (!workspaceId) return;
+        if (
+          payload.assignmentId !== message.assignmentId ||
+          payload.workerId !== message.workerId
+        ) {
+          tryLogDiagnosticEvent({
+            assignmentId: message.assignmentId,
+            workspaceId,
+            workspaceRuntimeId:
+              this.workspaceRuntimeId ?? message.workspaceRuntimeId,
+            workerId: message.workerId,
+            runId: message.runId,
+            taskId: message.taskId,
+            attemptId: message.attemptId,
+            component: "cloud",
+            operation: "assignment.activity",
+            stage: "validation",
+            severity: "warning",
+            errorCode: "activity_correlation_mismatch",
+            retryable: false,
+          });
+          return;
+        }
+        const activityPayload = RealtimeEventPayloadSchema.safeParse({
+          entityId: message.assignmentId,
+          workerId: message.workerId,
+          sourceEventId: payload.eventId,
+          executionId: payload.executionId,
+          activityId: payload.activityId,
+          activitySequence: payload.sequence,
+          activityType: payload.eventType,
+          activityStatus: payload.status,
+          title: payload.title,
+          percentage: payload.percentage,
+          details: payload.details,
+        });
+        if (!activityPayload.success) {
+          tryLogDiagnosticEvent({
+            assignmentId: message.assignmentId,
+            workspaceId,
+            workspaceRuntimeId:
+              this.workspaceRuntimeId ?? message.workspaceRuntimeId,
+            workerId: message.workerId,
+            runId: message.runId,
+            taskId: message.taskId,
+            attemptId: message.attemptId,
+            component: "cloud",
+            operation: "assignment.activity",
+            stage: "validation",
+            severity: "warning",
+            errorCode: "activity_payload_invalid",
+            retryable: false,
+          });
+          return;
+        }
+        await createEventPublisher(this.env).publish({
+          type: "assignment.activity",
+          durable: false,
+          workspaceId,
+          workspaceRuntimeId:
+            this.workspaceRuntimeId ?? message.workspaceRuntimeId,
+          runId: message.runId,
+          taskId: message.taskId,
+          attemptId: message.attemptId,
+          assignmentId: message.assignmentId,
+          idempotencyKey: `assignment-activity:${message.messageId}`,
+          payload: activityPayload.data,
         });
         return;
       }
