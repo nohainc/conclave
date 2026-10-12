@@ -1,21 +1,5 @@
 import { generateKeyPairSync, createPrivateKey, sign } from "node:crypto";
 
-export function canonicalReleaseJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalReleaseJson).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    return `{${Object.keys(record)
-      .sort()
-      .map(
-        (key) => `${JSON.stringify(key)}:${canonicalReleaseJson(record[key])}`,
-      )
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
 export function generateEd25519ReleaseKeyPair(): {
   privateKeyBase64: string;
   publicKeyBase64: string;
