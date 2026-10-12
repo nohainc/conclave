@@ -835,6 +835,10 @@ class ToolProfileReleaseStore {
           digest: digest,
           releaseId: 'worker:$workerTypeId@$revision',
         )) {
+      // A revoked current snapshot cannot be activated, but a newly verified
+      // replacement must still be able to atomically supersede it. Treat it
+      // as absent for replacement bookkeeping so it is not retained as LKG.
+      if (allowMissing && !lastKnownGood && !staging) return null;
       if (!lastKnownGood && !staging) {
         throw WorkerProfileRevokedException(workerTypeId);
       }
