@@ -102,7 +102,7 @@ class _BrowserRealtimeClient implements RealtimeClient {
         } else if (message['type'] == 'event' && message['event'] is Map) {
           final eventValue = Map<String, dynamic>.from(message['event'] as Map);
           final type = eventValue['type'];
-          if (type is String && durableRealtimeEventTypes.contains(type)) {
+          if (type is String && isReplayableRealtimeEvent(eventValue)) {
             _cursors.record(eventValue);
           }
           _events.add(eventValue);

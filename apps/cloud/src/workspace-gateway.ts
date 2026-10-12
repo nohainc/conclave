@@ -930,6 +930,7 @@ export class WorkspaceGateway implements DurableObject {
         const assignment = await this.env.CONCLAVE_DB.prepare(
           `SELECT id, execution_workspace_id, runtime_identity_id,
                   worker_type_id, workspace_worker_id, run_id, task_id,
+                  thread_id,
                   attempt_id, idempotency_key, status
            FROM worker_assignments
            WHERE id = ?1`,
@@ -1078,6 +1079,10 @@ export class WorkspaceGateway implements DurableObject {
             this.workspaceRuntimeId ?? message.workspaceRuntimeId,
           runId: message.runId,
           taskId: message.taskId,
+          threadId:
+            typeof assignment.thread_id === "string"
+              ? assignment.thread_id
+              : undefined,
           attemptId: message.attemptId,
           assignmentId: message.assignmentId,
           payload: activityPayload.data,

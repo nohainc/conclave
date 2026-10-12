@@ -63,4 +63,32 @@ void main() {
     expect(durableRealtimeEventTypes, contains('run.completed'));
     expect(ephemeralRealtimeEventTypes, contains('stream.delta'));
   });
+
+  test('accepts replayable Worker Activity and classifies status as ephemeral',
+      () {
+    final event = {
+      'eventId': 'activity-1',
+      'type': 'assignment.activity',
+      'version': '1.0',
+      'timestamp': '2026-09-23T10:00:00.000Z',
+      'workspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'runtime-1',
+      'assignmentId': 'assignment-1',
+      'attemptId': 'attempt-1',
+      'sequence': 7,
+      'payload': <String, Object?>{
+        'entityId': 'assignment-1',
+        'workerId': 'chatgpt',
+        'sourceEventId': 'source-1',
+        'executionId': 'execution-1',
+        'activitySequence': 1,
+        'activityType': 'tool.started',
+        'activityStatus': 'running',
+        'title': 'Running tool',
+      },
+    };
+    final parsed = RealtimeEvent.parse(event);
+    expect(isReplayableRealtimeEvent(parsed.toJson()), isTrue);
+    expect(ephemeralRealtimeEventTypes, contains('assignment.activity'));
+  });
 }

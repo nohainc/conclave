@@ -2,6 +2,24 @@ import 'dart:convert';
 
 import 'conclave_protocol.dart';
 
+bool isReplayableRealtimeEvent(Map<String, Object?> event) {
+  final type = event['type'];
+  if (type is String && durableRealtimeEventTypes.contains(type)) return true;
+  if (type != 'assignment.activity') return false;
+  final payload = event['payload'];
+  if (payload is! Map) return false;
+  return const {
+    'execution.started',
+    'model.started',
+    'tool.started',
+    'tool.completed',
+    'tool.failed',
+    'execution.completed',
+    'execution.failed',
+    'execution.cancelled',
+  }.contains(payload['activityType']);
+}
+
 class RealtimeEvent {
   RealtimeEvent._(this.value);
 
@@ -65,12 +83,14 @@ class RealtimeEvent {
       if (kind == 'execution_workspace') {
         if (_requiredString(decoded, 'workspaceId') != streamId) {
           throw const ProtocolException(
-              'Execution stream must match workspaceId');
+            'Execution stream must match workspaceId',
+          );
         }
       } else {
         if (decoded.containsKey('workspaceId') || version == '1.0') {
           throw const ProtocolException(
-              'Synchronization streams require 1.1 and no workspaceId');
+            'Synchronization streams require 1.1 and no workspaceId',
+          );
         }
         if (kind == 'space' && decoded['spaceId'] != streamId) {
           throw const ProtocolException('Space stream must match spaceId');
@@ -89,13 +109,15 @@ class RealtimeEvent {
     if (collaborationRealtimeEventTypes.contains(decoded['type'])) {
       if (rawStream is! Map || rawStream['kind'] == 'execution_workspace') {
         throw const ProtocolException(
-            'Collaboration requires a synchronization stream');
+          'Collaboration requires a synchronization stream',
+        );
       }
       _requiredString(decoded, 'spaceId');
       _requiredString(Map<String, Object?>.from(payload), 'entityId');
       if (payload.keys.any((key) => key != 'entityId' && key != 'threadId')) {
         throw const ProtocolException(
-            'Collaboration payloads contain identifiers only');
+          'Collaboration payloads contain identifiers only',
+        );
       }
       if ((decoded['type'] as String).startsWith('thread.') ||
           (decoded['type'] as String).startsWith('discussion.')) {
@@ -107,6 +129,27 @@ class RealtimeEvent {
             ephemeralRealtimeEventTypes.contains(decoded['type'])) &&
         decoded['workspaceId'] == null) {
       throw const ProtocolException('Execution events require workspaceId');
+    }
+    if (decoded['type'] == 'assignment.activity') {
+      _requiredString(decoded, 'assignmentId');
+      _requiredString(decoded, 'attemptId');
+      _requiredString(decoded, 'workspaceRuntimeId');
+      final activity = Map<String, Object?>.from(payload as Map);
+      if (_requiredString(activity, 'entityId') != decoded['assignmentId']) {
+        throw const ProtocolException(
+          'Worker Activity entity does not match assignment',
+        );
+      }
+      _requiredString(activity, 'workerId');
+      _requiredString(activity, 'sourceEventId');
+      _requiredString(activity, 'executionId');
+      final activitySequence = activity['activitySequence'];
+      if (activitySequence is! int || activitySequence < 1) {
+        throw const ProtocolException('Worker Activity sequence is invalid');
+      }
+      _requiredString(activity, 'activityType');
+      _requiredString(activity, 'activityStatus');
+      _requiredString(activity, 'title');
     }
     const allowedPayloadFields = {
       'entityId',
@@ -126,16 +169,37 @@ class RealtimeEvent {
       'durationMs',
       'tokenCount',
       'coalesced',
+      'sourceEventId',
+      'executionId',
+      'activityId',
+      'activitySequence',
+      'activityType',
+      'activityStatus',
+      'title',
+      'details',
     };
     if (payload.keys.any((key) => !allowedPayloadFields.contains(key))) {
       throw const ProtocolException(
-          'Realtime event payload contains an unsupported or secret field');
+        'Realtime event payload contains an unsupported or secret field',
+      );
     }
     if ((payload['delta'] is String &&
             (payload['delta'] as String).length > 8192) ||
         (payload['text'] is String &&
             (payload['text'] as String).length > 32768)) {
       throw const ProtocolException('Realtime event payload is too large');
+    }
+    if (decoded['type'] == 'assignment.activity') {
+      final details = payload['details'];
+      if (details != null && details is! Map) {
+        throw const ProtocolException('Worker Activity details are invalid');
+      }
+      if (details is Map && details.length > 32) {
+        throw const ProtocolException('Worker Activity details are too large');
+      }
+      if (jsonEncode(payload).length > 16 * 1024) {
+        throw const ProtocolException('Worker Activity payload is too large');
+      }
     }
     return RealtimeEvent._(decoded);
   }

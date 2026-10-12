@@ -137,6 +137,7 @@ class _ThreadPageState extends State<ThreadPage>
   late AxWorkHistoryCache _fallbackWorkHistoryCache;
   AxWorkHistoryCache get _workHistoryCache =>
       widget.workHistoryCache ?? _fallbackWorkHistoryCache;
+  final _workActivityStore = AxWorkActivityStore();
   void Function()? _cancelWorkHistory;
   bool _loadingOlderWork = false;
   List<AxWorkRequest> get _workTimeline =>
@@ -666,6 +667,7 @@ class _ThreadPageState extends State<ThreadPage>
       _workExecutionSelection = {};
       _workflow = '';
       _followWork = _followChat = true;
+      _workActivityStore.clear();
       unawaited(_restoreThreadViewState());
     } else if (oldWidget.currentUserId != widget.currentUserId) {
       unawaited(_restoreThreadViewState());
@@ -688,6 +690,7 @@ class _ThreadPageState extends State<ThreadPage>
     _cancelWorkRealtime = AxWorkRealtimeSync.forCache(_workHistoryCache)
         .listen(widget.realtimeEvents, threadId: widget.thread.id);
     _workEventSubscription = widget.realtimeEvents?.listen((event) {
+      _workActivityStore.handle(event, threadId: widget.thread.id);
       final type = event['type'];
       final payload = event['payload'];
       if ((type is String &&
@@ -718,6 +721,7 @@ class _ThreadPageState extends State<ThreadPage>
     _cancelWorkHistory?.call();
     _cancelWorkRealtime?.call();
     _workEventSubscription?.cancel();
+    _workActivityStore.dispose();
     _threadViewStateSaveTimer?.cancel();
     unawaited(_saveThreadViewState());
     _tabController.dispose();
@@ -1073,6 +1077,7 @@ class _ThreadPageState extends State<ThreadPage>
         workflowCatalogError: _workflowCatalogError,
         canExecute: _canExecute,
         workTimeline: _workTimeline,
+        activityStore: _workActivityStore,
         localWorkProgress: _localWorkProgress,
         loadingTimeline: _loadingWorkTimeline,
         timelineError: _workTimelineError,

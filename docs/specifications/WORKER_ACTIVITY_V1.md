@@ -78,3 +78,18 @@ events after the acknowledged sequence, suppresses duplicates, and emits a
 gap signal when retained history cannot fill a sequence gap. The assignment
 result/error remains the authoritative completion record; activity is
 diagnostic and timeline state only.
+
+## AX Work presentation
+
+Conclave AX renders activity inside the existing Work execution card. The
+operational panel identifies the logical Worker and provider CLI, shows elapsed
+time, keeps active tool rows visible, and moves completed rows behind a compact
+summary. A tool completion with the same activity identifier updates its
+started row; it does not create a second timeline entry.
+
+AX keeps activity state separate from Work messages and result text. It accepts
+only normalized safe fields, never renders raw provider JSON, chain of thought,
+terminal output or unrestricted tool output, and bounds the local assignment
+projection. Replayed events are deduplicated by event identity and attempt,
+while the bounded activity list uses a virtualized scroll surface for long
+executions.

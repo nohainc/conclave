@@ -89,6 +89,7 @@ class _WorkComposer extends StatelessWidget {
     required this.workflowCatalogError,
     required this.canExecute,
     required this.workTimeline,
+    required this.activityStore,
     required this.localWorkProgress,
     required this.loadingTimeline,
     required this.timelineError,
@@ -127,6 +128,7 @@ class _WorkComposer extends StatelessWidget {
   final String? workflowCatalogError;
   final bool canExecute;
   final List<AxWorkRequest> workTimeline;
+  final AxWorkActivityStore activityStore;
   final Map<String, String> localWorkProgress;
   final bool loadingTimeline;
   final String? timelineError;
@@ -223,41 +225,46 @@ class _WorkComposer extends StatelessWidget {
               ),
             )
           else
-            ListView.separated(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: workTimeline.length,
-              // Preserve render and selection state by request when entries move.
-              findItemIndexCallback: (key) {
-                if (key is! ValueKey<String>) return null;
-                final index = workTimeline.indexWhere((r) => r.id == key.value);
-                return index < 0 ? null : index;
-              },
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final request = workTimeline[index];
-                return _WorkTimelineCard(
-                  key: ValueKey(request.id),
-                  request: request,
-                  progressText: localWorkProgress[request.id],
-                  currentUserId: currentUserId,
-                  currentUserName: currentUserName,
-                  workflowCatalog: workflowCatalog,
-                  onReportIssue: localWorkProgress.containsKey(request.id)
-                      ? null
-                      : onReportIssue,
-                  reportedIssue: reportedIssues[request.id],
-                  reportingIssue: reportingIssueIds.contains(request.id),
-                  issueReportError: issueReportErrors[request.id],
-                  onRetryStep: localWorkProgress.containsKey(request.id)
-                      ? null
-                      : onRetryStep,
-                  onCancelRun: localWorkProgress.containsKey(request.id)
-                      ? null
-                      : onCancelRun,
-                );
-              },
+            ListenableBuilder(
+              listenable: activityStore,
+              builder: (context, _) => ListView.separated(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: workTimeline.length,
+                // Preserve render and selection state by request when entries move.
+                findItemIndexCallback: (key) {
+                  if (key is! ValueKey<String>) return null;
+                  final index =
+                      workTimeline.indexWhere((r) => r.id == key.value);
+                  return index < 0 ? null : index;
+                },
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final request = workTimeline[index];
+                  return _WorkTimelineCard(
+                    key: ValueKey(request.id),
+                    request: request,
+                    activities: activityStore.forRequest(request),
+                    progressText: localWorkProgress[request.id],
+                    currentUserId: currentUserId,
+                    currentUserName: currentUserName,
+                    workflowCatalog: workflowCatalog,
+                    onReportIssue: localWorkProgress.containsKey(request.id)
+                        ? null
+                        : onReportIssue,
+                    reportedIssue: reportedIssues[request.id],
+                    reportingIssue: reportingIssueIds.contains(request.id),
+                    issueReportError: issueReportErrors[request.id],
+                    onRetryStep: localWorkProgress.containsKey(request.id)
+                        ? null
+                        : onRetryStep,
+                    onCancelRun: localWorkProgress.containsKey(request.id)
+                        ? null
+                        : onCancelRun,
+                  );
+                },
+              ),
             ),
         ]));
   }
@@ -563,6 +570,7 @@ class _WorkTimelineCard extends StatelessWidget {
   const _WorkTimelineCard({
     super.key,
     required this.request,
+    required this.activities,
     this.progressText,
     required this.currentUserId,
     required this.currentUserName,
@@ -576,6 +584,7 @@ class _WorkTimelineCard extends StatelessWidget {
   });
 
   final AxWorkRequest request;
+  final List<AxWorkActivity> activities;
   final String? progressText;
   final String? currentUserId;
   final String? currentUserName;
@@ -920,6 +929,15 @@ class _WorkTimelineCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 10),
+                      if (activities.isNotEmpty) ...[
+                        AxWorkerActivityPanel(
+                          workerName: workerName,
+                          providerToolName: senderStep?.providerToolName,
+                          requestStatus: request.status,
+                          activities: activities,
+                        ),
+                        const SizedBox(height: 12),
+                      ],
                       Builder(builder: (context) {
                         final message = error?.isNotEmpty == true
                             ? error!
@@ -1068,6 +1086,338 @@ class _WorkTimelineCard extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class AxWorkerActivityPanel extends StatefulWidget {
+  const AxWorkerActivityPanel({
+    super.key,
+    required this.workerName,
+    required this.providerToolName,
+    required this.requestStatus,
+    required this.activities,
+  });
+
+  final String workerName;
+  final String? providerToolName;
+  final String requestStatus;
+  final List<AxWorkActivity> activities;
+
+  @override
+  State<AxWorkerActivityPanel> createState() => _AxWorkerActivityPanelState();
+}
+
+class _AxWorkerActivityPanelState extends State<AxWorkerActivityPanel> {
+  Timer? _elapsedTimer;
+  DateTime _now = DateTime.now();
+  bool _showCompleted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _syncTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant AxWorkerActivityPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activities != widget.activities ||
+        oldWidget.requestStatus != widget.requestStatus) {
+      _syncTimer();
+    }
+  }
+
+  void _syncTimer() {
+    final active = widget.activities.any((activity) => activity.isRunning) &&
+        widget.requestStatus == 'running';
+    if (active && _elapsedTimer == null) {
+      _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _now = DateTime.now());
+      });
+    } else if (!active) {
+      _elapsedTimer?.cancel();
+      _elapsedTimer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _elapsedTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = Theme.of(context).colorScheme;
+    final active = widget.activities.where((item) => !item.isFinished).toList();
+    final completed =
+        widget.activities.where((item) => item.isFinished).toList();
+    final status = _statusLabel(completed);
+    final startedAt = widget.activities
+            .where((item) => item.type == 'execution.started')
+            .map((item) => item.timestamp)
+            .firstOrNull ??
+        widget.activities.first.timestamp;
+    final terminal =
+        widget.activities.where((item) => item.isTerminalExecution).lastOrNull;
+    final elapsed = _formatElapsed(
+      startedAt,
+      terminal?.timestamp ?? _now,
+    );
+    final rows = <Object>[...active];
+    if (completed.isNotEmpty) rows.add(_CompletedActivitySummary(completed));
+    if (_showCompleted) rows.addAll(completed);
+    final rowHeight = rows.length * 52.0;
+    final panelHeight = rows.isEmpty ? 0.0 : rowHeight.clamp(52.0, 280.0);
+    final workerLabel = widget.providerToolName?.trim().isNotEmpty == true
+        ? '${widget.workerName} · ${widget.providerToolName}'
+        : widget.workerName;
+
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
+        decoration: BoxDecoration(
+          color:
+              isDark ? Colors.white.withValues(alpha: 0.035) : Colors.black12,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark ? Colors.white12 : Colors.black12,
+          ),
+        ),
+        padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  status == 'Running'
+                      ? Icons.bolt_rounded
+                      : status == 'Failed'
+                          ? Icons.error_outline_rounded
+                          : status == 'Cancelled'
+                              ? Icons.stop_circle_outlined
+                              : Icons.check_circle_outline_rounded,
+                  size: 16,
+                  color: status == 'Failed'
+                      ? colors.error
+                      : status == 'Running'
+                          ? colors.primary
+                          : isDark
+                              ? Colors.white54
+                              : Colors.black54,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    workerLabel,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: status == 'Failed' ? colors.error : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Padding(
+              padding: const EdgeInsets.only(left: 23),
+              child: Text(
+                'Elapsed: $elapsed',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? Colors.white54 : Colors.black54,
+                ),
+              ),
+            ),
+            if (rows.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              SizedBox(
+                height: panelHeight,
+                child: ListView.builder(
+                  itemCount: rows.length,
+                  itemBuilder: (context, index) {
+                    final row = rows[index];
+                    if (row is _CompletedActivitySummary) {
+                      return Material(
+                        type: MaterialType.transparency,
+                        child: ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.done_all_rounded, size: 16),
+                          title: Text(
+                            '${row.activities.length} completed ${row.activities.length == 1 ? 'activity' : 'activities'}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          trailing: Icon(
+                            _showCompleted
+                                ? Icons.expand_less_rounded
+                                : Icons.expand_more_rounded,
+                            size: 18,
+                          ),
+                          onTap: () =>
+                              setState(() => _showCompleted = !_showCompleted),
+                        ),
+                      );
+                    }
+                    return _ActivityRow(activity: row as AxWorkActivity);
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _statusLabel(List<AxWorkActivity> completed) {
+    if (widget.requestStatus == 'failed' ||
+        widget.activities.any((item) => item.type == 'execution.failed')) {
+      return 'Failed';
+    }
+    if (widget.requestStatus == 'cancelled' ||
+        widget.activities.any((item) => item.type == 'execution.cancelled')) {
+      return 'Cancelled';
+    }
+    if (widget.requestStatus == 'completed' ||
+        widget.activities.any((item) => item.type == 'execution.completed')) {
+      return 'Completed';
+    }
+    return 'Running';
+  }
+
+  String _formatElapsed(DateTime start, DateTime end) {
+    final seconds = end.difference(start).inSeconds.clamp(0, 864000);
+    final minutes = seconds ~/ 60;
+    final remainder = seconds % 60;
+    return minutes > 0 ? '${minutes}m ${remainder}s' : '${remainder}s';
+  }
+}
+
+class _CompletedActivitySummary {
+  const _CompletedActivitySummary(this.activities);
+  final List<AxWorkActivity> activities;
+}
+
+class _ActivityRow extends StatelessWidget {
+  const _ActivityRow({required this.activity});
+
+  final AxWorkActivity activity;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final detailEntries = activity.details.entries.toList();
+    return Material(
+      type: MaterialType.transparency,
+      child: ExpansionTile(
+        key: ValueKey(activity.eventId),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(left: 30, right: 8, bottom: 8),
+        initiallyExpanded: activity.isError,
+        leading: Icon(
+          activity.isError
+              ? Icons.error_outline_rounded
+              : activity.isFinished
+                  ? Icons.check_rounded
+                  : Icons.circle,
+          size: activity.isFinished ? 17 : 10,
+          color: activity.isError
+              ? colors.error
+              : activity.isRunning
+                  ? colors.primary
+                  : isDark
+                      ? Colors.white54
+                      : Colors.black45,
+        ),
+        title: Text(
+          activity.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 12),
+        ),
+        subtitle: Text(
+          '${_activityTypeLabel(activity.type)} · ${_activityStatusLabel(activity.status)}',
+          style: TextStyle(
+            fontSize: 10,
+            color: activity.isError ? colors.error : null,
+          ),
+        ),
+        trailing: Text(
+          _timeLabel(activity.timestamp),
+          style: TextStyle(
+            fontSize: 10,
+            color: isDark ? Colors.white38 : Colors.black45,
+          ),
+        ),
+        children: [
+          if (detailEntries.isEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                activity.isError
+                    ? 'The Worker reported an execution error.'
+                    : 'No additional details available.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? Colors.white54 : Colors.black54,
+                ),
+              ),
+            )
+          else
+            for (final entry in detailEntries)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text(
+                    '${entry.key}: ${entry.value ?? '—'}',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
+  static String _activityTypeLabel(String type) => switch (type) {
+        'execution.started' => 'Execution',
+        'model.started' => 'Model',
+        'message.updated' => 'Worker message',
+        'tool.started' => 'Tool',
+        'tool.completed' => 'Tool',
+        'tool.failed' => 'Tool',
+        'model.status' => 'Status',
+        'execution.completed' => 'Execution',
+        'execution.failed' => 'Execution',
+        'execution.cancelled' => 'Execution',
+        _ => 'Activity',
+      };
+
+  static String _activityStatusLabel(String status) => switch (status) {
+        'running' => 'running',
+        'updated' => 'updated',
+        'completed' => 'completed',
+        'failed' => 'failed',
+        'cancelled' => 'cancelled',
+        _ => status,
+      };
+
+  static String _timeLabel(DateTime timestamp) {
+    final local = timestamp.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 }
 
