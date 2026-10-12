@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:conclave_workspace/development_tool_profiles.dart';
-import 'package:conclave_workspace/tool_profile_release_store.dart';
+import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:conclave_workspace/tool_profile_resolver.dart';
 import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
@@ -14,7 +14,7 @@ import 'support/ed25519_release_fixture.dart';
 void main() {
   late Directory root;
   late DevelopmentToolProfiles development;
-  late ToolProfileReleaseStore store;
+  late WorkerProfileStore store;
   late Map<String, Object?> profile;
   setUp(() async {
     root = await Directory.systemTemp
@@ -24,7 +24,7 @@ void main() {
         draftsRoot: Directory('${root.path}/Drafts'),
         snapshotsRoot: Directory('${root.path}/Development'),
         cloudUri: Uri.parse('http://localhost:8787'));
-    store = ToolProfileReleaseStore(
+    store = WorkerProfileStore(
         profilesRoot: Directory('${root.path}/Signed'),
         trustPolicy: signing.trustPolicy,
         developmentProfiles: development);
@@ -70,9 +70,9 @@ void main() {
         providerCliVersion: '0.3.0');
     expect(resolution.source, ToolProfileResolutionSource.draft);
     expect(resolution.release!.isSigned, isFalse);
-    expect(resolution.release, isNot(isA<ToolProfileReleaseAdmission>()));
-    expect(await store.activeRelease('fixture-cli'), isNull);
-    final productionStore = ToolProfileReleaseStore(
+    expect(resolution.release, isA<LocalDraftProfileCandidate>());
+    expect(await store.currentWorkerProfile('fixture-worker'), isNull);
+    final productionStore = WorkerProfileStore(
         profilesRoot: store.profilesRoot, trustPolicy: store.trustPolicy);
     expect(
         (await ToolProfileResolver(productionStore).resolveForWorker(
@@ -166,6 +166,6 @@ void main() {
         sessionPolicy: WorkerSessionPolicy.stateless,
         executionPolicy: WorkerExecutionPolicy.restricted);
     expect(result.output, contains('unsigned-development-ok'));
-    expect(await store.activeRelease('fixture-cli'), isNull);
+    expect(await store.currentWorkerProfile('fixture-worker'), isNull);
   });
 }

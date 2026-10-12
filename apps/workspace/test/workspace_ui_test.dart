@@ -299,9 +299,6 @@ void main() {
           store: store,
           trustPolicy: trustPolicy,
           trustRefresher: () => SynchronousFuture<void>(null),
-          listLoader: (workerTypeId, channel) => Future.error(
-            StateError('No Profile release fixture for $workerTypeId'),
-          ),
           workerCatalogLoader: () => SynchronousFuture([
             logicalWorkerCatalogFixture('chatgpt').toJson(),
             logicalWorkerCatalogFixture('gemini').toJson(),
@@ -1414,9 +1411,6 @@ void main() {
       store: store,
       trustPolicy: trustPolicy,
       trustRefresher: () => SynchronousFuture<void>(null),
-      listLoader: (workerTypeId, channel) => Future.error(
-        StateError('No Profile release fixture for $workerTypeId'),
-      ),
       workerCatalogLoader: () {
         workerCatalogLoads++;
         return SynchronousFuture([

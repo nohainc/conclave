@@ -2,12 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+    show ToolProfileCompatibility, ToolProfileResolution;
 
 import 'local_worker_registry.dart';
 import 'cli_worker_engine_supervisor.dart';
 import 'worker_profile_store.dart';
 import 'tool_profile_release_verifier.dart';
-import 'tool_profile_resolver.dart';
 import 'worker_catalog_coordinator.dart';
 import 'worker_diagnostic_store.dart';
 import 'workspace_registration.dart';
@@ -445,10 +446,7 @@ class WorkerReadinessMonitor {
     final timer = Stopwatch()..start();
     final runId = 'profile-probe-${DateTime.now().microsecondsSinceEpoch}';
     final engine = cliWorkerEngineSupervisor;
-    // The V9 path below is the only reachable production path. Keep the
-    // legacy branch below dynamically typed for one release so old fixture
-    // tests can compile while their release-store helpers are removed.
-    final store = toolProfileReleaseStore! as dynamic;
+    final store = toolProfileReleaseStore!;
     final stateDirectory = workerStateDirectory?.call(worker.id);
     if (engine == null || stateDirectory == null) {
       await _recordToolProfileDiagnostic(
@@ -466,8 +464,6 @@ class WorkerReadinessMonitor {
         diagnosticDetails: 'The generic CLI Worker Engine is unavailable.',
       );
     }
-    final resolver = ToolProfileResolver(toolProfileReleaseStore!);
-    const profileChannel = 'current';
     late ToolProfileResolution<ToolProfileCandidate> resolution;
     try {
       resolution = await workerCatalogCoordinator!.resolveProfileForWorker(
@@ -613,217 +609,22 @@ class WorkerReadinessMonitor {
         diagnosticDetails: 'No current Worker Profile is available.',
       );
     }
-    var release = candidate as ToolProfileReleaseAdmission?;
-    if (release == null) {
-      final trustIssues =
-          resolution.reason == ToolProfileUnavailableReason.noEligibleRelease
-              ? await store.untrustedReleaseTrustIssues(profileDefinitionId)
-              : const <dynamic>[];
-      final trustIssue = trustIssues.firstOrNull;
-      final issueCode = switch (resolution.reason) {
-        ToolProfileUnavailableReason.unsupportedProviderVersion =>
-          'unsupported_provider_tool_version',
-        ToolProfileUnavailableReason.incompatibleEngineVersion =>
-          'engine_incompatible',
-        _ => trustIssue == null
-            ? 'tool_profile_unavailable'
-            : 'profile_trust_key_unavailable',
-      };
-      await _recordToolProfileDiagnostic(
-        worker,
-        runId: runId,
-        mode: mode,
-        durationMs: timer.elapsedMilliseconds,
-        profileDefinitionId: profileDefinitionId,
-        issueCode: issueCode,
-        failureLayer: 'profile',
-        profileResolutionSource: resolution.source.name,
-        profileReleaseVersion: trustIssue?.releaseVersions.firstOrNull,
-        context: {
-          if (trustIssue != null) ...{
-            'profileTrustIssue': 'untrusted_signing_key',
-            'profilePublisher': trustIssue.publisher,
-            'profileSigningKeyId': trustIssue.signingKeyId,
-          },
-        },
-      );
-      return WorkerReadinessAssessment(
-        WorkerReadinessState.runtimeUnavailable,
-        issueCode: issueCode,
-        diagnosticDetails: trustIssue == null
-            ? 'No eligible signed Tool Profile is available for the selected '
-                'channel. Publish and promote a qualified release to that '
-                'channel, then refresh the Worker catalog.'
-            : 'The cached Tool Profile is signed by a key this Workspace does '
-                'not trust. Rebuild Workspace with the Cloud Profile trust '
-                'root or republish the release with the current signer.',
-      );
-    }
-
-    Future<ProbeResult> run(
-      ToolProfileReleaseAdmission selected, {
-      WorkerProbeMode? modeOverride,
-    }) =>
-        engine.probe(
-          selected,
-          profileFile: store.profileFile(
-            selected.profileDefinitionId,
-            selected.releaseVersion,
-          ),
-          stateDirectory: stateDirectory,
-          mode: modeOverride ??
-              (mode == LocalWorkerProbeMode.live
-                  ? WorkerProbeMode.live
-                  : WorkerProbeMode.passive),
-          timeout: mode == LocalWorkerProbeMode.live
-              ? const Duration(
-                  milliseconds: WorkerProtocolLimits.maxProbeTimeoutMs)
-              : const Duration(seconds: 20),
-        );
-
-    var resolutionSource = resolution.source.name;
-    var passivePreflightFailed = false;
-    ProbeResult probe;
-    try {
-      final releaseState = await store.releaseState(profileDefinitionId);
-      if (mode == LocalWorkerProbeMode.live &&
-          releaseState.activeVersion != release.releaseVersion) {
-        final passiveCandidate = await run(
-          release,
-          modeOverride: WorkerProbeMode.passive,
-        );
-        if (!passiveCandidate.ready ||
-            !resolver.isCompatibleRelease(
-              release: release,
-              logicalWorkerTypeId: worker.workerTypeId,
-              profileDefinitionId: profileDefinitionId,
-              engineVersion: cliWorkerEngineVersion,
-              providerCliVersion: passiveCandidate.providerToolVersion,
-              channel: profileChannel,
-            )) {
-          probe = passiveCandidate;
-          passivePreflightFailed = true;
-        } else {
-          await store.activateVersion(
-              profileDefinitionId, release.releaseVersion);
-          probe = await run(release);
-        }
-      } else {
-        probe = await run(release);
-      }
-    } on Object catch (error) {
-      final issueCode = error is CliWorkerEngineProbeException
-          ? error.issueCode
-          : error is TimeoutException
-              ? 'deadline_exceeded'
-              : 'provider_failure';
-      await _recordToolProfileDiagnostic(
-        worker,
-        runId: runId,
-        mode: mode,
-        durationMs: timer.elapsedMilliseconds,
-        profileDefinitionId: profileDefinitionId,
-        profileReleaseVersion: release.releaseVersion,
-        profileResolutionSource: resolutionSource,
-        issueCode: issueCode,
-        failureLayer: _profileProbeFailureLayer(issueCode, error: error),
-      );
-      rethrow;
-    }
-    final actualVersion = probe.providerToolVersion;
-    if (actualVersion != null) {
-      final actualResolution = await resolver.resolve(
-        logicalWorkerTypeId: worker.workerTypeId,
-        profileDefinitionId: profileDefinitionId,
-        engineVersion: cliWorkerEngineVersion,
-        providerCliVersion: actualVersion,
-        channel: profileChannel,
-      );
-      final actualRelease = actualResolution.release;
-      final liveWasRun = probe.checks.any(
-        (check) =>
-            check.code == 'provider_live_execution' &&
-            check.status != ProbeCheckStatus.warning,
-      );
-      if (actualRelease != null &&
-          !passivePreflightFailed &&
-          actualRelease.releaseVersion != release.releaseVersion &&
-          !liveWasRun) {
-        release = actualRelease;
-        resolutionSource = actualResolution.source.name;
-        try {
-          probe = await run(release);
-        } on Object catch (error) {
-          final issueCode = error is CliWorkerEngineProbeException
-              ? error.issueCode
-              : error is TimeoutException
-                  ? 'deadline_exceeded'
-                  : 'provider_failure';
-          await _recordToolProfileDiagnostic(
-            worker,
-            runId: runId,
-            mode: mode,
-            durationMs: timer.elapsedMilliseconds,
-            profileDefinitionId: profileDefinitionId,
-            profileReleaseVersion: release.releaseVersion,
-            profileResolutionSource: resolutionSource,
-            issueCode: issueCode,
-            failureLayer: _profileProbeFailureLayer(issueCode, error: error),
-            providerToolName: probe.providerToolName,
-            providerToolVersion: actualVersion,
-          );
-          rethrow;
-        }
-      }
-    }
-    final issue = probe.issueCode;
-    if (mode == LocalWorkerProbeMode.passive && probe.ready) {
-      final currentState = await store.releaseState(profileDefinitionId);
-      if (currentState.activeVersion != release.releaseVersion) {
-        await store.activateVersion(
-          profileDefinitionId,
-          release.releaseVersion,
-        );
-      }
-    }
     await _recordToolProfileDiagnostic(
       worker,
       runId: runId,
       mode: mode,
       durationMs: timer.elapsedMilliseconds,
       profileDefinitionId: profileDefinitionId,
-      profileReleaseVersion: release.releaseVersion,
-      profileResolutionSource: resolutionSource,
-      providerToolName: probe.providerToolName,
-      providerToolVersion: probe.providerToolVersion,
-      issueCode: issue,
-      failureLayer: issue == null ? null : _profileProbeFailureLayer(issue),
+      profileReleaseVersion: candidate.revision,
+      profileResolutionSource: resolution.source.name,
+      issueCode: 'tool_profile_unavailable',
+      failureLayer: 'profile',
+      context: {'reason': 'unsupported_profile_candidate_type'},
     );
-    final state = probe.ready
-        ? profileProbeReadiness(worker, release, probe, mode)
-        : switch (issue) {
-            'provider_authentication_required' =>
-              WorkerReadinessState.signInRequired,
-            'provider_tool_unavailable' ||
-            'cli_worker_engine_unavailable' =>
-              WorkerReadinessState.runtimeUnavailable,
-            'unsupported_provider_tool_version' ||
-            'engine_incompatible' =>
-              WorkerReadinessState.setupRequired,
-            _ => WorkerReadinessState.testFailed,
-          };
-    return WorkerReadinessAssessment(
-      state,
-      issueCode: issue,
-      diagnosticDetails:
-          issue == null ? null : 'Provider readiness check failed ($issue).',
-      modelCatalog: probe.modelCatalog,
-      profileDigest: release.payloadDigest,
-      toolVersion: probe.providerToolVersion,
-      replaceToolVersion: true,
-      toolName: probe.providerToolName,
-      replaceToolName: true,
-      replaceToolPath: true,
+    return const WorkerReadinessAssessment(
+      WorkerReadinessState.runtimeUnavailable,
+      issueCode: 'tool_profile_unavailable',
+      diagnosticDetails: 'The Workspace requires a V9 Worker Profile.',
     );
   }
 

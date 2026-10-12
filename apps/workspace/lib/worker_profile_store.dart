@@ -8,9 +8,8 @@ import 'platform_runtime.dart';
 
 /// The small persistence boundary used by the Workspace runtime.
 ///
-/// The compatibility implementation in [tool_profile_release_store.dart]
-/// implements this interface for old tests and installations. Runtime code
-/// must depend on this boundary, not on release/channel storage APIs.
+/// Runtime code depends on this boundary rather than release/channel storage
+/// APIs. Legacy on-disk snapshots are migrated by [WorkerProfileStore] itself.
 abstract interface class WorkerProfileStorePort {
   Directory get profilesRoot;
   WorkerTrustPolicy get trustPolicy;

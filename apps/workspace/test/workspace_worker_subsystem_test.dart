@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/release_trust_roots.dart';
-import 'package:conclave_workspace/tool_profile_release_store.dart';
+import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:conclave_workspace/workspace_worker_subsystem.dart';
 
@@ -32,7 +32,7 @@ void main() {
     );
     final subsystem = WorkspaceWorkerSubsystem(
       registry: registry,
-      releaseStore: ToolProfileReleaseStore(
+      releaseStore: WorkerProfileStore(
         profilesRoot: Directory('${directory.path}/profiles'),
         trustPolicy: workspaceReleaseTrustPolicy(),
       ),

@@ -81,10 +81,6 @@ void main() {
         return cloudCatalog.future;
       },
       trustRefresher: () async => order.add('trust'),
-      listLoader: (workerTypeId, channel) async {
-        order.add('profiles:$workerTypeId');
-        return ToolProfileCatalogResult(channel: channel, releases: const []);
-      },
     );
     final readinessRefreshed = Completer<void>();
     final controller = WorkerCatalogCoordinator(
@@ -300,8 +296,6 @@ void main() {
       trustPolicy: signing.trustPolicy,
       workerCatalogLoader: () async => remoteDescriptors,
       trustRefresher: () async {},
-      listLoader: (workerTypeId, channel) async =>
-          ToolProfileCatalogResult(channel: channel, releases: const []),
     );
     final controller = WorkerCatalogCoordinator(
       catalog: catalog,

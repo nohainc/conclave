@@ -1,24 +1,23 @@
 import 'dart:io';
 
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'package:conclave_workspace/tool_profile_release_store.dart';
+import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late Directory temporary;
-  late ToolProfileReleaseStore workspaceStore;
+  late WorkerProfileStore workspaceStore;
   late WorkerTrustPolicy trustPolicy;
 
   setUp(() async {
     temporary =
         await Directory.systemTemp.createTemp('workspace_unsigned_test_');
     trustPolicy = WorkerTrustPolicy(trustedPublicKeys: {});
-    workspaceStore = ToolProfileReleaseStore(
+    workspaceStore = WorkerProfileStore(
       profilesRoot: Directory('${temporary.path}/Profiles'),
       trustPolicy: trustPolicy,
-      retentionLimit: 2,
     );
   });
 
@@ -94,37 +93,17 @@ void main() {
       final candidate = LocalDraftProfileCandidate.fromProfileMap(draftPayload);
       expect(candidate.isSigned, isFalse);
 
-      final unsignedReleaseMap = <String, Object?>{
-        'profileDefinitionId': candidate.profileDefinitionId,
-        'workerTypeId': candidate.logicalWorkerTypeId,
-        'displayName': 'Unsigned Lab Draft',
-        'providerToolName': candidate.providerToolName,
-        'channel': 'testing',
-        'releaseVersion': candidate.releaseVersion,
-        'profile': candidate.profile,
-        'schemaVersion': 1,
-        'engineFamily': 'cli',
-        'payloadDigest': candidate.payloadDigest,
-        // Notice: signature is intentionally omitted or invalid
-      };
-
-      // Workspace store must reject the unsigned release input
+      // Workspace execution storage must reject the unsigned candidate.
       expect(
-        () async => await workspaceStore.installRelease(
-          releaseInput: unsignedReleaseMap,
-          expectedWorkerTypeId: candidate.logicalWorkerTypeId,
-        ),
-        throwsA(isA<Exception>()),
+        () => workspaceStore.executionProfileFile(candidate),
+        throwsStateError,
       );
 
-      // Verify the profile was never written to disk or activated in Workspace store
-      final installedVersions =
-          await workspaceStore.installedVersions(candidate.profileDefinitionId);
-      expect(installedVersions, isEmpty);
-
-      final activeRelease =
-          await workspaceStore.activeRelease(candidate.profileDefinitionId);
-      expect(activeRelease, isNull);
+      expect(
+        await workspaceStore
+            .currentWorkerProfile(candidate.logicalWorkerTypeId),
+        isNull,
+      );
     });
   });
 }

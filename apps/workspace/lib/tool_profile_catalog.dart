@@ -11,23 +11,9 @@ import 'worker_profile_store.dart';
 import 'tool_profile_release_verifier.dart';
 import 'worker_trust_policy.dart';
 
-typedef ToolProfileListLoader = Future<ToolProfileCatalogResult> Function(
-  String workerTypeId,
-  String defaultChannel,
-);
 typedef ToolProfileCurrentLoader = Future<WorkerProfileSnapshotAdmission>
     Function(String workerTypeId);
 typedef WorkerDescriptorLoader = Future<List<Object?>> Function();
-
-class ToolProfileCatalogResult {
-  const ToolProfileCatalogResult({
-    required this.channel,
-    required this.releases,
-  });
-
-  final String channel;
-  final List<Object?> releases;
-}
 
 typedef ToolProfileTrustRefresher = Future<void> Function();
 typedef ToolProfileCandidateValidator = Future<bool> Function(
@@ -38,8 +24,8 @@ typedef ToolProfileRevocationHandler = Future<void> Function(
   Set<String> affectedWorkerTypeIds,
 );
 
-/// Downloads the Workspace's Cloud-selected official channel and activates a
-/// candidate only after its passive probe succeeds.
+/// Downloads the current Worker catalog and Profile snapshots, activating a
+/// candidate only after local verification and optional probing succeeds.
 class ToolProfileCatalogClient {
   ToolProfileCatalogClient({
     required this.cloudUri,
@@ -50,7 +36,6 @@ class ToolProfileCatalogClient {
     this.humanAuthToken,
     HttpClient? client,
     this.timeout = const Duration(seconds: 30),
-    this.listLoader,
     this.currentProfileLoader,
     this.workerCatalogLoader,
     this.trustRefresher,
@@ -59,7 +44,6 @@ class ToolProfileCatalogClient {
   }) : _client = client ?? HttpClient();
 
   static const maxResponseBytes = 2 * 1024 * 1024;
-  static const maxProfilesPerResponse = 64;
   static const maxWorkersPerResponse = 64;
 
   final Uri cloudUri;
@@ -72,7 +56,6 @@ class ToolProfileCatalogClient {
   /// the Workspace runtime is intentionally disconnected.
   final String? humanAuthToken;
   final Duration timeout;
-  final ToolProfileListLoader? listLoader;
   final ToolProfileCurrentLoader? currentProfileLoader;
   final WorkerDescriptorLoader? workerCatalogLoader;
   final ToolProfileTrustRefresher? trustRefresher;
@@ -265,67 +248,6 @@ class ToolProfileCatalogClient {
     return [activated];
   }
 
-  Future<ToolProfileCatalogResult> listReleases(
-    String workerTypeId, {
-    String channel = 'stable',
-  }) async {
-    _validateWorkerQuery(workerTypeId, channel);
-    final loader = listLoader;
-    if (loader != null) {
-      final result = await loader(workerTypeId, channel);
-      if (result.releases.length > maxProfilesPerResponse) {
-        throw StateError('Tool Profile catalog has too many releases');
-      }
-      if (!const {'testing', 'beta', 'stable'}.contains(result.channel)) {
-        throw const FormatException(
-            'Cloud selected an invalid Profile channel');
-      }
-      return ToolProfileCatalogResult(
-        channel: result.channel,
-        releases: List.unmodifiable(result.releases),
-      );
-    }
-    final runtimeId = workspaceRuntimeId;
-    if (runtimeId == null || runtimeId.isEmpty) {
-      throw StateError(
-          'Workspace runtime identity is required for Profile sync');
-    }
-    final uri = _baseUri().replace(
-      path: _apiPath('/api/tool-profiles'),
-      queryParameters: {
-        'workerTypeId': workerTypeId,
-        'workspaceRuntimeId': runtimeId,
-      },
-    );
-    final response = await _get(uri);
-    if (response.statusCode != HttpStatus.ok) {
-      throw StateError(
-        'Tool Profile catalog returned HTTP ${response.statusCode}',
-      );
-    }
-    final decoded = jsonDecode(utf8.decode(await _readBounded(response)));
-    if (decoded is! Map ||
-        decoded['profiles'] is! List ||
-        decoded['channel'] is! String ||
-        !const {'testing', 'beta', 'stable'}
-            .contains(decoded['channel'] as String)) {
-      throw const FormatException('Tool Profile catalog response is invalid');
-    }
-    final values = decoded['profiles'] as List;
-    if (values.length > maxProfilesPerResponse) {
-      throw StateError('Tool Profile catalog has too many releases');
-    }
-    if (values.any((value) => value is! Map)) {
-      throw const FormatException('Tool Profile catalog entry is invalid');
-    }
-    return ToolProfileCatalogResult(
-      channel: decoded['channel'] as String,
-      releases: List.unmodifiable(
-        values.map((value) => Map<String, Object?>.from(value as Map)),
-      ),
-    );
-  }
-
   Future<void> _refreshTrustState() async {
     await const WorkspaceReleaseClient().refreshRevocations(
       cloudUri: cloudUri,
@@ -384,13 +306,6 @@ class ToolProfileCatalogClient {
       return path;
     }
     return '$existing$path';
-  }
-}
-
-void _validateWorkerQuery(String workerTypeId, String channel) {
-  _validateWorkerTypeId(workerTypeId);
-  if (!const {'testing', 'beta', 'stable'}.contains(channel)) {
-    throw ArgumentError('Tool Profile catalog query is invalid');
   }
 }
 

@@ -126,39 +126,4 @@ class ToolProfileResolver {
           ToolProfileUnavailableReason.noEligibleRelease);
     }
   }
-
-  /// Legacy lifecycle APIs are intentionally unavailable after the V9
-  /// cutover. Keeping a fail-closed stub avoids activating a pre-V9 cache
-  /// through older readiness callers while they migrate to [resolveForWorker].
-  Future<ToolProfileResolution<ToolProfileReleaseAdmission>>
-      resolveBootstrapProfile({
-    required String logicalWorkerTypeId,
-    required String profileDefinitionId,
-    required String engineVersion,
-    String channel = 'stable',
-  }) async =>
-          const ToolProfileResolution<ToolProfileReleaseAdmission>.unavailable(
-            ToolProfileUnavailableReason.noEligibleRelease,
-          );
-
-  Future<ToolProfileResolution<ToolProfileReleaseAdmission>> resolve({
-    required String logicalWorkerTypeId,
-    required String profileDefinitionId,
-    required String engineVersion,
-    required String providerCliVersion,
-    String channel = 'stable',
-  }) async =>
-      const ToolProfileResolution<ToolProfileReleaseAdmission>.unavailable(
-        ToolProfileUnavailableReason.noEligibleRelease,
-      );
-
-  bool isCompatibleRelease({
-    required ToolProfileReleaseAdmission release,
-    required String logicalWorkerTypeId,
-    required String profileDefinitionId,
-    required String engineVersion,
-    String? providerCliVersion,
-    String channel = 'stable',
-  }) =>
-      false;
 }
