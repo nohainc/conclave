@@ -37,6 +37,13 @@ class WorkerDescriptor {
       'lifecycleState',
       'visibilityState',
       'sortOrder',
+      // The Cloud catalog shares this descriptor with Profile Lab and may
+      // include current published-profile metadata. These fields are
+      // informational for Workspace and are intentionally not persisted in
+      // the descriptor model.
+      'currentRevision',
+      'currentDigest',
+      'currentUpdatedAt',
     };
     final workerTypeId = json['workerTypeId'];
     final displayName = json['displayName'];
@@ -48,6 +55,9 @@ class WorkerDescriptor {
     final lifecycleState = json['lifecycleState'];
     final visibilityState = json['visibilityState'];
     final sortOrder = json['sortOrder'];
+    final currentRevision = json['currentRevision'];
+    final currentDigest = json['currentDigest'];
+    final currentUpdatedAt = json['currentUpdatedAt'];
     final normalizedReleaseStage = releaseStage ??
         (lifecycleState == 'active' || lifecycleState == 'retired'
             ? 'stable'
@@ -71,6 +81,15 @@ class WorkerDescriptor {
         !const {'testing', 'beta', 'stable'}.contains(normalizedReleaseStage) ||
         (lifecycleState != null &&
             !const {'active', 'retired'}.contains(lifecycleState)) ||
+        (currentRevision != null &&
+            (currentRevision is! int || currentRevision < 1)) ||
+        (currentDigest != null &&
+            (currentDigest is! String ||
+                !_sha256Digest.hasMatch(currentDigest))) ||
+        (currentUpdatedAt != null &&
+            (currentUpdatedAt is! String ||
+                currentUpdatedAt.length > 64 ||
+                DateTime.tryParse(currentUpdatedAt) == null)) ||
         !const {'hidden', 'visible'}.contains(visibilityState) ||
         sortOrder is! int ||
         sortOrder < 0 ||
@@ -104,3 +123,4 @@ class WorkerDescriptor {
 }
 
 final _identifier = RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$');
+final _sha256Digest = RegExp(r'^[0-9a-f]{64}$');

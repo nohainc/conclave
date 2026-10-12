@@ -56,4 +56,25 @@ void main() {
     expect(descriptor.profileDefinitionId, 'chatgpt-codex');
     expect(descriptor.releaseStage, 'stable');
   });
+
+  test('deserializes the complete V9 Cloud catalog response', () {
+    final descriptor = WorkerDescriptor.fromJson({
+      'workerTypeId': 'chatgpt',
+      'displayName': 'ChatGPT',
+      'description': 'Logical Worker implemented by approved local tools.',
+      'engineFamily': 'cli',
+      'profileDefinitionId': 'chatgpt-codex',
+      'providerToolName': 'codex',
+      'lifecycleState': 'active',
+      'visibilityState': 'visible',
+      'sortOrder': 10,
+      'currentRevision': 1,
+      'currentDigest':
+          '5086e28eac72607adcded224f051f1f4c080771455d2395f9f2302f121e49fca',
+      'currentUpdatedAt': '2026-10-12T20:37:32.103Z',
+    });
+
+    expect(descriptor.workerTypeId, 'chatgpt');
+    expect(descriptor.releaseStage, 'stable');
+  });
 }
