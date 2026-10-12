@@ -1,8 +1,8 @@
 # ADR-018: Generic CLI Worker Engine and Signed Tool Profiles
 
-**Status:** Accepted for Architecture v8 implementation  
+**Status:** Superseded for V9 Profile identity and lifecycle; retained as the historical V8 decision
 **Date:** 2026-10-01  
-**Decision:** one generic Engine with signed Tool Profiles for all supported local CLI Workers.
+**Historical decision:** one generic Engine with signed Tool Profiles for all supported local CLI Workers.
 **Preserves:** ADR-012 Workspace ownership, ADR-015 logical Worker catalog, ADR-016 AX-owned Worker usage
 
 ## Context
@@ -604,3 +604,34 @@ resolution and immutable native audit evidence remain inside the Engine; public
 assignment/history snapshots contain only logical selections and frozen display
 names. Combined effort variants obey the signed native-model session switching
 contract. See the [execution selection contract](../specifications/WORKER_EXECUTION_OPTIONS_V2.md#phase-8--immutable-execution-resolution-and-history).
+
+## V9 superseding decision (2026-10-12)
+
+This ADR preserves the V8 rationale and implementation record above. It is not
+silently rewritten. Architecture V9 supersedes only the V8 Tool Profile
+identity, publication, activation, and rollback lifecycle described in this
+ADR; the generic, provider-independent Engine and its compiled safety
+invariants remain in force.
+
+For V9:
+
+- each logical Worker has exactly one centrally published Profile;
+- the Profile's canonical JSON is the authoritative definition of Worker
+  behavior;
+- Cloud assigns a monotonically increasing revision and stores bounded history
+  for audit and restore, but history is not a set of active releases;
+- Profile Lab is the only operator surface that may request publication, and
+  Cloud authorizes and commits that publication atomically;
+- Workspace fetches, verifies, caches, and atomically activates the current
+  Profile before it can start new executions;
+- each execution retains an immutable Profile snapshot until completion;
+- one Profile may declare multiple supported provider CLI versions and bounded
+  version-specific overrides;
+- restoring a known-good historical Profile publishes its JSON as a new
+  current revision; it does not move a testing, beta, or stable channel;
+- V9 has no testing, beta, or stable Profile channels.
+
+The complete cross-component contract is canonical in
+[WORKER_PROFILE_V9.md](../specifications/WORKER_PROFILE_V9.md). Where this
+historical ADR conflicts with that specification, the V9 specification governs
+future implementation work.

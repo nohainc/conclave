@@ -1,6 +1,6 @@
 # Conclave AX Roadmap
 
-Architecture v8 is the current implementation target. Its single active plan is [Architecture v8 Implementation](docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md), which records completed work, remaining release gates, and required evidence.
+Architecture V9 is the current design target. The V8 implementation plan remains the historical implementation baseline and records evidence for the existing generic Engine path while V9 is implemented phase by phase. The canonical V9 Profile contract is [WORKER_PROFILE_V9.md](docs/specifications/WORKER_PROFILE_V9.md).
 
 ~~~text
 Conclave AX
@@ -15,17 +15,17 @@ Conclave AX
 
 Work v1 remains the constrained, product-owned collaboration and execution model. Its Steps, built-in Workflows, bindings, snapshots, and user-visible behavior are defined by the [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md).
 
-Spaces and Threads define collaboration. Workspaces provide machine execution. Logical Workers remain stable user-facing identities; the Engine and signed Tool Profiles implement them locally.
+Spaces and Threads define collaboration. Workspaces provide machine execution. Logical Workers remain stable user-facing identities; one centrally published Profile per Worker defines its behavior for the generic Engine.
 
 ## Release declaration
 
-The v8 release declaration is withheld until the current implementation plan records evidence for real ChatGPT and Gemini execution, Profile promotion and rollback, Work v1 full-path execution, failure and security acceptance, and production release operations. Fixture tests establish deterministic behavior but do not replace live-provider or production evidence.
+The V8 release declaration remains a historical implementation gate until its plan records evidence for real ChatGPT and Gemini execution, Work v1 full-path execution, failure and security acceptance, and production operations. V9 removes Profile testing/beta/stable promotion and channel rollback from the target architecture; future release evidence must follow the singular publication and activation contract.
 
 Consult the [Workspace release runbook](docs/deployment/WORKSPACE_RELEASES.md), [release trust guidance](docs/security/RELEASE_TRUST_AND_ROTATION.md), and [desktop lifecycle validation](docs/operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md) for operational evidence.
 
 ## How to plan new work
 
-Use the v8 implementation plan for architecture and release gates, then update the owning current contract when behavior changes. Do not create a new versioned architecture snapshot or a parallel implementation roadmap for work already covered there.
+Use the V9 Profile contract for new Profile architecture work. Keep the V8 implementation plan as historical evidence and update the owning current contract when behavior changes. Do not create a parallel Profile lifecycle specification.
 
 ### Gemini AGY discovery candidate
 

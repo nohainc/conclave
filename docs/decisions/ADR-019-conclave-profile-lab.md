@@ -8,9 +8,9 @@ An explicitly configured internal Lab owner uses its existing authenticated brow
 identity without a separate email-verification requirement. Owner exclusivity,
 audience separation, credential rotation, and revocation remain enforced.
 
-**Status:** Accepted for implementation  
+**Status:** Superseded for V9 Profile lifecycle; retained as the historical V8 decision
 **Date:** 2026-10-03  
-**Decision:** Dedicated internal macOS engineering application (`apps/profile_lab`) for the authoring, inspection, testing, validation, release, promotion, rollback, and revocation of Conclave Worker Tool Profiles.  
+**Historical decision:** Dedicated internal macOS engineering application (`apps/profile_lab`) for the authoring, inspection, testing, validation, release, promotion, rollback, and revocation of Conclave Worker Tool Profiles.
 **Builds on:** [ADR-012](ADR-012-workspace-owned-local-workers.md), [ADR-013](ADR-013-desktop-auth-and-dual-transport.md), [ADR-015](ADR-015-first-party-worker-v1-contract.md), [ADR-018](ADR-018-generic-cli-worker-engine-and-tool-profiles.md)  
 **Normative for:** Profile Lab (`apps/profile_lab`), Cloud Profile administration routes, and shared Profile/Engine runtime boundaries.
 
@@ -406,3 +406,32 @@ builds and remote Cloud connections reject the development path. This exception
 supersedes blanket draft exclusions only for local development; other
 architecture exclusions and browser-based human authentication remain intact.
 See [Profile Lab development access and execution](../specifications/PROFILE_LAB.md#development-access-and-unsigned-execution).
+
+## V9 superseding decision (2026-10-12)
+
+This ADR preserves the V8 Profile Lab rationale and implementation record
+above. It is not silently rewritten. Architecture V9 retains Profile Lab as
+the internal operator tool for Profile authoring, validation, provider-CLI
+testing, publication, and known-good restoration, but removes the V8 release
+channel administration model.
+
+Under V9, Profile Lab:
+
+- edits one unpublished candidate for a selected logical Worker;
+- validates and tests that candidate using the generic, provider-independent
+  Engine and the locally installed provider CLI;
+- requires an authorized Profile Lab operator to request publication;
+- sends the candidate and its validation evidence to Cloud, which performs the
+  final authorization, canonicalization, signing, revision assignment, and
+  atomic publication;
+- can request restoration of a prior known-good Profile, which Cloud records as
+  a new current revision rather than exposing the historical revision as an
+  active channel;
+- must not expose or implement testing, beta, stable, promotion, or channel
+  rollback concepts for V9.
+
+Workspace remains responsible for local verification, caching, activation, and
+execution snapshots. Cloud remains the sole authority for the current
+published Profile and its revision history. The canonical contract is
+[WORKER_PROFILE_V9.md](../specifications/WORKER_PROFILE_V9.md); it governs all
+future Profile Lab, Cloud, Workspace, and Engine work.

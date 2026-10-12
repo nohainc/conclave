@@ -1,8 +1,10 @@
 # Conclave AX Architecture
 
-**Current architecture:** v8 — one generic CLI Worker Engine with signed Tool Profiles.
+**Current architecture contract:** v9 — one centrally published Profile per logical Worker, interpreted by one generic CLI Worker Engine.
 
-**Release status:** The v8 release declaration remains gated by the acceptance evidence in the [implementation roadmap](docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
+**Implementation baseline:** v8 remains the historical implementation baseline while the V9 contract is implemented phase by phase.
+
+**V8 implementation status:** The historical v8 release declaration remains gated by the acceptance evidence in the [implementation roadmap](docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
 
 ~~~text
 Conclave AX
@@ -13,7 +15,15 @@ Conclave AX
 -> provider CLI
 ~~~
 
-## v8 architecture contract
+## V9 Profile contract
+
+The canonical V9 Profile identity, publication, verification, activation, and
+execution-snapshot contract is defined in
+[WORKER_PROFILE_V9.md](docs/specifications/WORKER_PROFILE_V9.md). It supersedes
+the V8 release/channel lifecycle while retaining the provider-independent
+generic Engine boundary.
+
+## v8 architecture contract (historical implementation baseline)
 
 Architecture v8 has one execution path: AX → Cloud → Workspace → CLI Worker Engine → signed Tool Profile → provider CLI. The explicit exclusions in the
 [v8 architecture contract](docs/architecture/ARCHITECTURE_V8.md#architecture-contract)
@@ -22,7 +32,7 @@ are normative and checked by `scripts/verify-v8-architecture.mjs`.
 ## Product model
 
 - **Conclave AX** is the human application for Spaces, Threads, team Chat, AI execution through Work Requests, Workspace grants, user Workflow configuration, results, and audit.
-- **Conclave Cloud** owns collaboration and scheduling state, the logical Worker catalog, Profile releases, and authorization. Provider credentials stay local.
+- **Conclave Cloud** owns collaboration and scheduling state, the logical Worker catalog, the single current Profile and bounded Profile history for each logical Worker, and authorization. Provider credentials stay local.
 - **Conclave Workspace** is the machine execution environment. It owns
   application-managed state below
   `~/Library/Application Support/Conclave/Workspace/` and resolves one
@@ -187,6 +197,7 @@ The repository has converged on the v8 assignment path and clean v8 schema. The 
 
 - [Space/Thread rename completion and rollout requirements](docs/architecture/SPACE_THREAD_RENAME.md)
 
+- [Worker Profile V9](docs/specifications/WORKER_PROFILE_V9.md)
 - [Architecture v8](docs/architecture/ARCHITECTURE_V8.md)
 - [ADR-018: Generic CLI Worker Engine and Tool Profiles](docs/decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
 - [ADR-019: Conclave Profile Lab Architecture Contract](docs/decisions/ADR-019-conclave-profile-lab.md)
