@@ -1,7 +1,7 @@
 # First-Party Worker Testing
 
 Provider integrations are tested through the generic CLI Worker Engine and
-signed Tool Profiles.
+the current Worker Profiles defined by the V9 contract.
 
 ## Deterministic acceptance
 

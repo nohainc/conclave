@@ -65,7 +65,7 @@ background service is unavailable and disables service launch actions instead
 of presenting a control that launchd will reject with a code-signing error.
 
 The standalone service is compiled with the same public
-`CONCLAVE_RELEASE_TRUST_KEYS_JSON` roots as the Flutter application. Profile
-verification therefore has one trust policy in the UI and service; the service
-does not fall back to an empty trust configuration when it downloads a signed
-Tool Profile.
+`CONCLAVE_RELEASE_TRUST_KEYS_JSON` roots as the Flutter application for
+Workspace application-release verification. Worker Profiles are validated by
+canonical digest, schema, identity, and Engine compatibility; they do not use
+that application-release trust configuration.

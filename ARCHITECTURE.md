@@ -11,7 +11,7 @@ Conclave AX
 -> Conclave Cloud
 -> Conclave Workspace
 -> CLI Worker Engine
--> signed Tool Profile
+-> centrally published Worker Profile
 -> provider CLI
 ~~~
 
@@ -25,7 +25,7 @@ generic Engine boundary.
 
 ## v8 architecture contract (historical implementation baseline)
 
-Architecture v8 has one execution path: AX → Cloud → Workspace → CLI Worker Engine → signed Tool Profile → provider CLI. The explicit exclusions in the
+Architecture v8 has one execution path: AX → Cloud → Workspace → CLI Worker Engine → Worker Profile → provider CLI. The explicit exclusions in the
 [v8 architecture contract](docs/architecture/ARCHITECTURE_V8.md#architecture-contract)
 are normative and checked by `scripts/verify-v8-architecture.mjs`.
 
@@ -61,7 +61,7 @@ See the [operator workflow guide](docs/operations/THREAD_EXECUTION.md) and
 The runtime implementation stays below the logical Worker boundary:
 
 ~~~text
-User Workflow Configuration -> execution resolution -> logical Worker -> signed Profile -> CLI Worker Engine -> provider CLI
+User Workflow Configuration -> execution resolution -> logical Worker -> current Profile -> CLI Worker Engine -> provider CLI
 ~~~
 
 ### Filesystem ownership
@@ -122,7 +122,7 @@ execution attribution, and lifecycle evidence; retries retain separate records.
 The CLI Worker Engine reconstructs unavailable native sessions at the Worker-step
 boundary using frozen canonical context, within the same assignment and workflow
 run. Rejected handles remain invalidated locally until replacement succeeds;
-signed Profile error mappings authorize one bounded reconstruction attempt.
+Profile error mappings authorize one bounded reconstruction attempt.
 Dispatch and StepRun evidence retain the frozen request context boundary. Local
 session synchronization advances only on successful consumption and cannot move
 backwards; revision and history-watermark evidence is recorded in local diagnostics.
@@ -135,7 +135,7 @@ responses, workflow/execution events, artifact events, and context events; provi
 sessions remain execution state. The provider-independent Context Engine assembles canonical bootstrap, delta and
 stateless context. Persistent conversation facts are distinct from receiving-step
 workflow execution context, including scoped environment, artifacts and completed
-prerequisite results. Signed Profiles also space versioned, generic Worker execution
+prerequisite results. Worker Profiles also space versioned, generic Worker execution
 options for model selection, session model switching, and model-specific effort;
 provider argument mapping stays local to the Engine. See [Conversation Continuity v1](docs/specifications/CONVERSATION_CONTINUITY_V1.md).
 
@@ -151,7 +151,7 @@ Core's Conversation Router defines continuity policy. The local Engine's
 `ConversationExecutionRouter` prepares continuation, delta synchronization,
 bootstrap, reconstruction or stateless prompts from validated local session state
 and the frozen canonical envelope. The generic CLI Worker Engine owns native
-session validation, locking and persistence, signed Profile interpretation and
+session validation, locking and persistence, Profile interpretation and
 provider process execution. Reconstruction stays inside the Worker step; the
 Workflow receives a generic result and does not manage native provider handles.
 These are responsibilities within the existing v8 path, not additional services.
@@ -185,7 +185,7 @@ records; they are not competing architecture specifications.
 
 ## Security and release trust
 
-Cloud owns human identity, Space roles, Workspace ownership, Space-to-Workspace grants, Thread authorization, step-up authentication, and Profile administration. Workspace verifies signed Profile payloads and supervises Engine and provider CLI processes. Signing keys remain in protected release infrastructure; provider credentials remain with the locally installed provider CLI.
+Cloud owns human identity, Space roles, Workspace ownership, Space-to-Workspace grants, Thread authorization, step-up authentication, and Profile administration. Workspace validates current Profile schema, identity, digest, and compatibility, then supervises Engine and provider CLI processes. Workspace application-release keys remain in protected release infrastructure; provider credentials remain with the locally installed provider CLI.
 
 See [Release Trust and Rotation](docs/security/RELEASE_TRUST_AND_ROTATION.md), [Workspace release operations](docs/deployment/WORKSPACE_RELEASES.md), and [Workspace desktop lifecycle validation](docs/operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md).
 
@@ -274,7 +274,7 @@ StepRun
 Cloud freezes Worker/Profile release/model/effort per accepted step. Scheduler
 retries consume this immutable snapshot; current preferences and catalog changes
 cannot rewrite historical WorkflowRun/StepRun configuration. Auto model and effort
-remain null, preserving the signed Profile/CLI default without provider assumptions.
+remain null, preserving the current Profile/CLI default without provider assumptions.
 
 ```text
 User Workflow Configuration

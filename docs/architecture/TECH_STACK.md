@@ -10,7 +10,7 @@
 | Cloud | TypeScript + Cloudflare Workers |
 | Conclave Workspace | Flutter + Dart desktop/background runtime |
 | Local Worker Protocol | Protocol 4.0, versioned NDJSON |
-| Local CLI execution | Generic Dart CLI Worker Engine + signed Tool Profiles |
+| Local CLI execution | Generic Dart CLI Worker Engine + current Worker Profiles |
 | Database | Cloudflare D1 |
 | Artifact and release storage | Cloudflare R2 |
 | Durable orchestration | Cloudflare Workflows |

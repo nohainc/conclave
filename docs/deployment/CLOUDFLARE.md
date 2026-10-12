@@ -116,23 +116,19 @@ names as GitHub Actions secrets and copies them to the Worker before
 deployment. Client IDs may be ordinary environment configuration, but should
 still be managed per deployment.
 
-Production Profile publication also requires the `CONCLAVE_RELEASE_PRIVATE_KEY`
-GitHub Actions secret and the `CONCLAVE_RELEASE_PUBLISHER`,
-`CONCLAVE_RELEASE_SIGNING_KEY_ID`, and `CONCLAVE_RELEASE_TRUST_KEYS_JSON`
-GitHub Actions variables. The deployment workflow transfers all four values to
-Cloudflare Worker secrets after verifying that the private key matches the
-configured public trust root. It stops before deployment if a value is missing
-or the key pair does not match. The Cloud Profile signing preflight also checks
-the configured key against Cloud's revocation state.
+V9 Profile publication does not require a Profile signing key or Profile trust
+root. Cloud revalidates the candidate JSON, canonical digest, evidence, and
+expected revision, then publishes the current Profile atomically. The
+`CONCLAVE_RELEASE_PUBLISHER` and `CONCLAVE_RELEASE_TRUST_KEYS_JSON` settings
+remain only for Workspace application-release verification.
 
 Profile Lab requires the active browser account `vitalii@nohainc.com`.
 Both Wrangler configurations set `CONCLAVE_PROFILE_LAB_OWNER_EMAIL`; this exclusive
 owner policy replaces the legacy user-ID allowlists for this deployment. Browser
 approval, session claim, and subsequent Lab requests enforce the policy.
 All environments support Profile publication and rollout; there is no release
-mode switch. The access endpoint reports effective permissions and signer readiness.
-Development uses independent Profile keys and desktop public trust roots; macOS
-Developer ID signing does not gate the internal lifecycle.
+mode switch. The access endpoint reports effective permissions. macOS Developer
+ID signing does not gate the internal lifecycle.
 
 Profile Lab builds default to `https://app.conclaveax.com`. Development builds
 can select local Cloud with
@@ -303,7 +299,7 @@ Before production backend deployment:
 
 1. provision production D1/R2 resources; the deployment workflow applies the
    checked-in D1 migrations to `conclave-v8-production`;
-2. configure required signing, callback, and other production secrets;
+2. configure required application-release, callback, and other production secrets;
 3. run Workspace desktop lifecycle and Cloud runtime release validations;
 4. run the external-user security gate, including tenant isolation and
    backup/restore verification;
@@ -322,7 +318,7 @@ The same-origin option should be preferred for the first production release unle
 The explicitly configured internal Lab owner uses its existing authenticated
 browser sign-in without a separate email-verification gate. Other emails remain
 denied, and no verification flags are rewritten. Profile publishing always requires
-matching qualification and a ready signer, regardless of desktop signing.
+matching qualification and expected revision, regardless of desktop signing.
 
 For an existing v8 development database missing `tool_profile_local_qualification_evidence`, run `node scripts/provision-profile-qualification-evidence.mjs` and apply `.development/provision-profile-qualification.sql` to the selected D1 database. This adopts the current baseline table, index, and immutable evidence triggers without resetting Drafts or releases. Fresh databases already include these objects.
 

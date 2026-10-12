@@ -139,9 +139,9 @@ Cloud derives its assignment set from Space role and Workspace Grant policy;
 Workspace independently enforces that set against local Worker permissions.
 Local permission identifiers are not aliases or Cloud-side boundaries.
 
-The Engine owns provider execution through one Workspace-admitted signed Tool Profile. It may launch only the resolved provider CLI using structured arguments with shell execution disabled. It never receives Workspace runtime credentials and never connects directly to Cloud.
+The Engine owns provider execution through one Workspace-admitted Worker Profile. It may launch only the resolved provider CLI using structured arguments with shell execution disabled. It never receives Workspace runtime credentials and never connects directly to Cloud.
 
-Tool Profiles are not protocol peers. They are signed immutable behavior configuration consumed locally by the Engine after Workspace trust/schema/compatibility admission. Profiles cannot disable Engine security invariants or add arbitrary process execution.
+Tool Profiles are not protocol peers. They are immutable behavior configuration consumed locally by the Engine after Workspace digest/schema/compatibility admission. Profiles cannot disable Engine security invariants or add arbitrary process execution.
 
 Provider credentials, provider session IDs, arbitrary Cloud executable paths, shell commands, and raw provider output are not Local Worker Protocol fields.
 

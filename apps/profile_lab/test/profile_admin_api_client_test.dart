@@ -49,9 +49,6 @@ void main() {
           'profile': {'logicalWorkerTypeId': 'claude'},
           'revision': 4,
           'digest': List.filled(64, 'a').join(),
-          'signature': 'signature',
-          'signingKeyId': 'key',
-          'verified': true,
         }));
       } else if (request.uri.path ==
               '/api/admin/workers/claude/profile/validate' &&
@@ -63,7 +60,6 @@ void main() {
           'workerTypeId': 'claude',
           'revision': 5,
           'digest': List.filled(64, 'b').join(),
-          'verified': true,
         }));
       } else if (request.uri.path ==
               '/api/admin/workers/claude/profile/history' &&
@@ -74,7 +70,6 @@ void main() {
               'revision': 4,
               'digest': List.filled(64, 'a').join(),
               'profile': {'logicalWorkerTypeId': 'claude'},
-              'verified': true,
             }
           ],
         }));
@@ -86,7 +81,6 @@ void main() {
           'revision': 6,
           'digest': List.filled(64, 'c').join(),
           'profile': {'logicalWorkerTypeId': 'claude'},
-          'verified': true,
         }));
       } else {
         request.response.statusCode = 404;

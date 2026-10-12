@@ -1,11 +1,31 @@
 # Profile Lab Specification
 
-**Status:** Architecture v8 normative specification  
-**Architecture:** [Architecture v8](../architecture/ARCHITECTURE_V8.md)  
+**Status:** Current V9 operational specification; the V8 material below is retained as a historical migration reference.
+**Architecture:** [Worker Profile V9](WORKER_PROFILE_V9.md)
 **Decision:** [ADR-019](../decisions/ADR-019-conclave-profile-lab.md)  
-**Implementation:** `apps/profile_lab`  
+**Implementation:** `apps/profile_lab`
 
----
+## V9 operating contract
+
+Profile Lab is an authenticated operator tool for one current JSON Profile per
+logical Worker. The operator edits a local candidate, validates it, runs the
+required digest-bound tests, and publishes it through one atomic Cloud
+publication transaction. Cloud revalidates the payload, evidence, candidate
+digest, and expected revision before storing the new current snapshot and
+history record.
+
+V9 Profiles are not cryptographically signed. Workspace verifies the canonical
+payload digest, schema, Worker identity, and Engine compatibility before
+activation. Workspace application releases retain their separate native
+release-signing mechanism. There are no Profile testing, beta, or stable
+channels; previous snapshots are inspected or restored as a new current
+revision. Provider credentials remain local to the provider CLI, and local
+candidate testing remains isolated from production execution.
+
+The remainder of this document is the superseded V8 lifecycle reference. It is
+not an active API, storage, or runtime contract.
+
+## Historical V8 reference (superseded)
 
 ## 1. Executive Summary
 

@@ -428,16 +428,17 @@ Under V9, Profile Lab:
   Engine and the locally installed provider CLI;
 - requires an authorized Profile Lab operator to request publication;
 - sends the candidate and its validation evidence to Cloud, which performs the
-  final authorization, canonicalization, signing, revision assignment, and
-  atomic publication;
+  final authorization, canonicalization, digest calculation, revision
+  assignment, and atomic publication;
 - can request restoration of a prior known-good Profile, which Cloud records as
   a new current revision rather than exposing the historical revision as an
   active channel;
 - must not expose or implement testing, beta, stable, promotion, or channel
   rollback concepts for V9.
 
-Workspace remains responsible for local verification, caching, activation, and
-execution snapshots. Cloud remains the sole authority for the current
+Workspace remains responsible for local schema, identity, digest, and
+compatibility validation, caching, activation, and execution snapshots. Cloud
+remains the sole authority for the current
 published Profile and its revision history. The canonical contract is
 [WORKER_PROFILE_V9.md](../specifications/WORKER_PROFILE_V9.md); it governs all
 future Profile Lab, Cloud, Workspace, and Engine work.

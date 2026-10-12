@@ -107,7 +107,6 @@ FLUTTER_ROOT="$(cd "$(dirname "${FLUTTER_BIN}")/.." && pwd)"
 FLUTTER_ENGINE_VERSION="$(<"${FLUTTER_ROOT}/bin/internal/engine.version")"
 if [[ "$ISOLATED" == true ]]; then
   node "$ROOT_DIR/scripts/setup-development-auth.mjs"
-  node "$ROOT_DIR/scripts/setup-development-profile-signing.mjs"
   API_CONFIG="$ROOT_DIR/apps/cloud/wrangler.jsonc"
   API_MODE="isolated local v8 D1"
 else

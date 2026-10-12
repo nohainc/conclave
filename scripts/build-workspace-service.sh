@@ -24,7 +24,7 @@ VERSION="${CONCLAVE_WORKSPACE_VERSION:-1.0.3}"
 if [[ -z "${CONCLAVE_WORKSPACE_VERSION:-}" ]]; then
   VERSION="$(awk '/^version:/ {print $2; exit}' "$WORKSPACE_DIR/pubspec.yaml")"
 fi
-PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-profile-trust.mjs")"
+PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-release-trust.mjs")"
 
 cd "$WORKSPACE_DIR"
 flutter pub get

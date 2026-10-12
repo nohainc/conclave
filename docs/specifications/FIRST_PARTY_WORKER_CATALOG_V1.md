@@ -3,15 +3,20 @@
 **Contract ID:** `firstPartyWorkerCatalogVersion: 1`  
 **Status:** Product identity frozen by ADR-015; runtime implementation updated by Architecture v8 / ADR-018
 
+> V9 superseding note: this historical catalog specification predates the
+> single-current-Profile model. Current catalog/profile behavior is defined by
+> [WORKER_PROFILE_V9.md](WORKER_PROFILE_V9.md); its release channels, signed
+> Profile envelopes, and channel-based resolution are not active contracts.
+
 Conclave v1 initially provisions ChatGPT and Gemini as official Workers. The
 official Worker Catalog is Cloud-managed and dynamically delivered. Additional
 approved Worker Types can become available without a Workspace application
 release when they can be expressed through an existing Engine family and
 supported Tool Profile schema.
 
-**Implementation rule:** a normal local CLI integration is a Logical Worker
-implemented by the generic CLI Worker Engine and an official signed Tool
-Profile Release.
+**Historical implementation rule:** a normal local CLI integration was a
+Logical Worker implemented by the generic CLI Worker Engine and an official
+signed Tool Profile Release. V9 uses a current Worker Profile instead.
 
 ## Cloud-owned Worker Catalog
 

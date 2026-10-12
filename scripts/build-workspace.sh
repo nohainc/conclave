@@ -33,7 +33,7 @@ case "$OS" in
   *) echo "Unsupported desktop build machine: $OS" >&2; exit 1 ;;
 esac
 
-PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-profile-trust.mjs")"
+PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-release-trust.mjs")"
 WORKSPACE_DIR="$ROOT/apps/workspace"
 command -v flutter >/dev/null 2>&1 || { echo "Flutter is required." >&2; exit 1; }
 cd "$WORKSPACE_DIR"

@@ -79,8 +79,6 @@ jobs:
       - name: Run macOS Profile Lab tests
         run: bash scripts/test-profile-lab-macos.sh
       - name: Build unsigned development Profile Lab
-        env:
-          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
         run: |
           bash scripts/build-profile-lab-macos.sh \
             --release \

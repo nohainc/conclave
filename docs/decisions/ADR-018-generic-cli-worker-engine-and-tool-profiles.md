@@ -8,7 +8,7 @@
 **V9 superseding decision:** [WORKER_PROFILE_V9.md](../specifications/WORKER_PROFILE_V9.md)
 defines one centrally published Profile per logical Worker. The V8 release and
 channel lifecycle described below remains historical; V9 cleanup removes its
-production routes and D1 lifecycle tables while retaining signed snapshots,
+production routes and D1 lifecycle tables while retaining Profile snapshots,
 diagnostic history, and security audit records.
 
 ## Context
@@ -624,11 +624,14 @@ For V9:
 - each logical Worker has exactly one centrally published Profile;
 - the Profile's canonical JSON is the authoritative definition of Worker
   behavior;
+- V9 Profiles are published through authenticated Cloud authorization and
+  canonical digest/schema validation; they do not carry cryptographic Profile
+  signatures. Workspace retains local integrity and compatibility checks;
 - Cloud assigns a monotonically increasing revision and stores bounded history
   for audit and restore, but history is not a set of active releases;
 - Profile Lab is the only operator surface that may request publication, and
   Cloud authorizes and commits that publication atomically;
-- Workspace fetches, verifies, caches, and atomically activates the current
+- Workspace fetches, validates, caches, and atomically activates the current
   Profile before it can start new executions;
 - each execution retains an immutable Profile snapshot until completion;
 - one Profile may declare multiple supported provider CLI versions and bounded

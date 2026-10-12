@@ -4,7 +4,7 @@
 
 Conclave defines four primary product surfaces:
 1. **Conclave AX** (`apps/app`): Human web interface for space orchestration, thread binding, and approvals.
-2. **Conclave Cloud** (`apps/cloud`): Authoritative Cloud API, database, catalog store, signature authority, and Workspace Gateway.
+2. **Conclave Cloud** (`apps/cloud`): Authoritative Cloud API, database, Profile publication authority, and Workspace Gateway.
 3. **Conclave Workspace** (`apps/workspace`): Native machine-side desktop application and execution runtime.
 4. **Conclave Profile Lab** (`apps/profile_lab`): Internal administrative desktop engineering application for Worker catalog management, Profile authoring, sandbox testing, release promotion, and revocation.
 
@@ -87,7 +87,7 @@ the sole authoritative catalog.
 - human authentication;
 - realtime App connections;
 - Workspace Gateway;
-- built-in Work catalog, logical Worker catalog, and signed Tool Profile release registry;
+- built-in Work catalog, logical Worker catalog, and current Worker Profile registry;
 - synchronized logical Worker inventory and readiness;
 - Space/Thread Worker authorization;
 - assignment scheduling;
@@ -125,7 +125,7 @@ latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
 - local Work Root and Thread directories;
 - local logical Worker registry;
 - provider CLI-owned local sign-in;
-- CLI Worker Engine and signed Tool Profile cache/admission;
+- CLI Worker Engine and digest-validated Worker Profile cache/admission;
 - local permission approval;
 - child-process supervision;
 - assignment execution/cancellation;
@@ -174,7 +174,7 @@ does not ask the user to choose subscription versus API-key authentication or
 store the provider credentials. See the
 [Worker catalog contract v1](../specifications/FIRST_PARTY_WORKER_CATALOG_V1.md).
 
-Conclave Workspace resolves each Logical Worker to one compatible signed Tool
+Conclave Workspace resolves each Logical Worker to one compatible current Worker
 Profile Release and starts the generic CLI Worker Engine out of process. The
 Engine invokes the locally installed Provider CLI using structured arguments
 and Local Worker Protocol 4.1. The Engine is the sole production CLI Worker
@@ -247,7 +247,7 @@ one another.
 
 Conclave Workspace launches one generic CLI Worker Engine process
 per assignment/probe by default. Product-visible ChatGPT/Gemini rows remain
-Logical Workers. Official signed Tool Profile Releases map those identities to
+Logical Workers. Official current Worker Profiles map those identities to
 supported Provider CLI behavior. New normal CLI integrations should be added
 through the Cloud Worker catalog and Tool Profile releases when Profile v1 can
 express them.
@@ -271,7 +271,7 @@ express them.
 - author, edit, and validate local Draft Profiles;
 - test unsigned local Draft Profile candidates directly against locally installed provider CLIs using the generic CLI Worker Engine in an isolated test sandbox;
 - capture cryptographic test evidence bound to exact Profile payload digests;
-- request immutable signed Profile releases from Cloud;
+- publish the next current Profile revision through Cloud;
 - manage release lifecycle promotion (`Testing` → `Beta` → `Stable`), rollback, and revocation.
 
 Conclave Profile Lab is strictly separated from Conclave Workspace and Conclave AX. It never registers as an execution Workspace, never advertises Workers to Cloud inventory, never accepts Work assignments, and never owns Space Work Roots. Provider credentials remain owned by local provider CLIs; Profile Lab never stores provider credentials. See [ADR-019](../decisions/ADR-019-conclave-profile-lab.md).

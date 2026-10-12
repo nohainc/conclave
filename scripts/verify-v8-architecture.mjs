@@ -68,6 +68,8 @@ const workspaceRuntimePackage = JSON.parse(
 );
 
 const canonicalExecutionPath =
+  "AX → Cloud → Workspace → CLI Worker Engine → current Worker Profile → provider CLI";
+const canonicalV8ExecutionPath =
   "AX → Cloud → Workspace → CLI Worker Engine → signed Tool Profile → provider CLI";
 const architectureProhibitions = [
   [
@@ -104,7 +106,7 @@ if (
     "ARCHITECTURE.md must link to the normative v8 architecture contract.",
   );
 }
-if (!architectureV8.includes(canonicalExecutionPath)) {
+if (!architectureV8.includes(canonicalV8ExecutionPath)) {
   failures.push("Architecture v8 must state the canonical v8 execution path.");
 }
 for (const [label, declaration] of architectureProhibitions) {
@@ -613,7 +615,7 @@ for (const path of profileLabLibFiles) {
   }
 }
 
-// 5. Prevent unsigned/local Draft objects from satisfying the signed Profile admission type
+// 5. Keep unpublished/local Draft objects separate from published Profile admissions
 const profileReleaseSource = readRequired(
   "packages/tool_profile_v1/lib/src/tool_profile_release.dart",
 );
@@ -630,15 +632,15 @@ if (
   );
 }
 if (
-  !/class\s+ToolProfileReleaseAdmission\b[\s\S]*?bool\s+get\s+isSigned\s*=>\s*true;/.test(
+  !/class\s+ToolProfileReleaseAdmission\b[\s\S]*?bool\s+get\s+isPublished\s*=>\s*true;/.test(
     profileReleaseSource,
   ) ||
-  !/class\s+LocalDraftProfileCandidate\b[\s\S]*?bool\s+get\s+isSigned\s*=>\s*false;/.test(
+  !/class\s+LocalDraftProfileCandidate\b[\s\S]*?bool\s+get\s+isPublished\s*=>\s*false;/.test(
     profileReleaseSource,
   )
 ) {
   failures.push(
-    "Signed Profile admission type must require isSigned => true, and draft candidates must specify isSigned => false.",
+    "Published Profile admission types must require isPublished => true, and draft candidates must specify isPublished => false.",
   );
 }
 
@@ -646,10 +648,10 @@ const developmentProfiles = readRequired(
   "apps/workspace/lib/development_tool_profiles.dart",
 );
 for (const required of [
-  "kReleaseMode || releaseBuild",
+  "releaseBuild ||",
   "'localhost', '127.0.0.1', '::1'",
   "profile.logicalWorkerTypeId != workerTypeId",
-  "candidate.isSigned",
+  "candidate.isPublished",
   "snapshotsRoot",
 ]) {
   if (!developmentProfiles.replace(/\s+/g, " ").includes(required)) {

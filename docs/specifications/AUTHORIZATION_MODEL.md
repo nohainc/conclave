@@ -58,7 +58,11 @@ driven by `expiresAt` and is not a client-settable status.
 
 ## Tool Profile administration
 
-Profile administration and release management use the dedicated `profiles:admin` and `profiles:release:manage` permissions. Cloud resolves authorized administrators from its configured operator identity set. Profile payloads remain signed, immutable, schema-validated releases; authorization does not replace signature verification.
+Profile administration and publication use the dedicated `profiles:admin` and
+`profiles:release:manage` permissions. Cloud resolves authorized operators
+from its configured identity set. V9 Profile payloads are canonical,
+schema-validated revisions; authorization, digest validation, and Workspace
+admission protect them without a separate Profile signature.
 
 ## Step-up authentication and audit
 

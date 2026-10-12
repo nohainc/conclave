@@ -1,28 +1,24 @@
 # Conclave Workspace
 
-Development launchers now exercise signed Cloud Profile releases by default,
-with public roots matching the independent development signer. Start
+Development launchers now exercise current Cloud Profiles by default. Start
 `bash scripts/run-workspace-development.sh` for localhost, or set
 `CONCLAVE_DEVELOPMENT_CLOUD_URL=https://app.conclaveax.com` for the provisioned
-hosted development deployment. Assign the Workspace to Testing in Profile Lab
-after publishing the qualified Draft. Desktop signing does not change this flow.
+hosted development deployment. Publish the Profile from Profile Lab before
+using it in Workspace. Desktop signing does not change this flow.
 The unsigned Draft shortcut remains an explicit, non-release, loopback-only opt-in
 through `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`; it does not test Cloud rollout.
 
 If Profile Lab can list a Worker but Workspace reports that its Profile is
-unavailable, check the Workspace diagnostic report for
-`profile_trust_key_unavailable`. This means the Cloud release is signed by a
-public key that is not embedded in the Workspace build. Rebuild Workspace with
-the managed Cloud Profile trust roots or republish the release with the current
-signer; do not delete the cached Profile directories or bypass signature
-verification.
+unavailable, check the Workspace diagnostic report for the schema, digest,
+identity, Engine-compatibility, or Cloud-connectivity error. Do not bypass
+local Profile validation or delete the cached Profile directories.
 
 Conclave Workspace is the machine-side execution and security runtime.
 
 It maintains the Cloud connection, owns application-managed runtime state,
 resolves the user-owned local Work Root, and creates/resolves one stable
 working directory per Space shared by its Threads, manages logical Workers and local provider
-credentials, resolves signed Tool Profiles, launches the generic CLI Worker
+credentials, resolves current Tool Profiles, launches the generic CLI Worker
 Engine, enforces local permissions, supervises execution, and reports safe
 readiness/status back to Conclave Cloud.
 
@@ -53,7 +49,7 @@ created during normal execution; Thread sessions and runtime metadata remain
 under Application Data Root.
 
 Users install only Conclave Workspace. Workspace manages the bundled generic
-Engine and signed Tool Profile releases; provider CLI software is installed
+Engine and current Tool Profiles; provider CLI software is installed
 separately by its provider.
 
 Workspace update metadata is signed by an independent Ed25519 application
@@ -77,7 +73,7 @@ Worker protocols and does not import Flutter APIs. Build it with
 `bash scripts/build-workspace-service.sh`; the resulting executable and its
 generic CLI Worker Engine are placed under `dist/conclave-workspace/service/`.
 The build injects `CONCLAVE_RELEASE_TRUST_KEYS_JSON` into the service as well
-as the Flutter app, so the service can verify and use signed Tool Profiles.
+as the Flutter app so the service can verify Workspace application releases.
 The service can be run without starting the Flutter application and maintains
 separate process, Cloud-connection, and execution state in
 `workspace-state.json`.
@@ -140,10 +136,9 @@ Optional environment:
 - `CONCLAVE_MACOS_SIGN_IDENTITY` — optional signing identity override;
 - `CONCLAVE_MACOS_NOTARY_PROFILE` — `notarytool` keychain profile;
 - `CONCLAVE_WORKSPACE_VERSION` — override build version.
-- `CONCLAVE_RELEASE_TRUST_KEYS_JSON` — explicit public Ed25519 roots. Unsigned
-  builds otherwise reuse `.development/hosted-profile-trust.json`. Missing,
-  empty, or invalid roots fail the build; Developer ID signed builds require
-  explicit roots and never automatically adopt development keys.
+- `CONCLAVE_RELEASE_TRUST_KEYS_JSON` — explicit public Ed25519 roots for
+  Workspace application-release verification. It is not used to admit Worker
+  Profiles.
 
 The output ZIP is written under `dist/conclave-workspace/macos`.
 
@@ -212,7 +207,7 @@ provider credentials. See [ADR-015](../../docs/decisions/ADR-015-first-party-wor
 
 The native ChatGPT and Gemini Worker source packages remain pending the real
 Engine/Profile acceptance gate, but their build/install/release tooling is
-retired. Normal Workspace execution uses the generic Engine and signed Tool
+retired. Normal Workspace execution uses the generic Engine and current Worker
 Profiles. Worker readiness remains a local execution fact; Cloud receives only
 safe inventory.
 

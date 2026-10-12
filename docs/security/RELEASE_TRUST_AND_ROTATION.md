@@ -1,21 +1,34 @@
-# Workspace, Engine, and Tool Profile Release Trust
+# Workspace and Engine Release Trust
 
-**Status:** Current Architecture v8 release trust contract. Trust is separated
-for the Workspace application and immutable Tool Profile releases; the generic
-CLI Worker Engine ships within a signed Workspace release.
+**Status:** Current Workspace application-release trust contract. The historical
+V8 Profile-signing material below is retained for rationale only and is
+superseded by the V9 Worker Profile contract.
+
+## V9 Profile publication
+
+V9 does not cryptographically sign Worker Profiles. Profile Lab is restricted
+to the authorized operator account, Cloud revalidates the candidate JSON and
+fresh evidence, checks the canonical digest and expected revision, and commits
+the current Profile plus history atomically. Workspace validates schema,
+identity, Engine compatibility, and digest before caching or activation.
+
+Profile digests remain important for concurrency, corruption detection,
+candidate/test binding, execution snapshots, and explicit digest revocation.
+They are not signatures and do not require Profile signing keys or trust-root
+configuration. Workspace application-release signatures and macOS code signing
+remain separate and continue to protect native application updates.
 
 ## Trust model
 
 Conclave Workspace verifies release metadata with Ed25519 public keys. Signing
 seeds remain in release infrastructure and are never shipped in Workspace or
 Engine releases. Workspace release metadata binds the publisher, key ID,
-version, channel, platform/architecture, and archive digest. Tool Profile
-signatures bind their canonical behavior payload and release identity.
+version, channel, platform/architecture, and archive digest.
 
-Workspace application, CLI Worker Engine, and Tool Profile release classes use
-explicit trust separation. Workspace application signing material must never
-be reused for Engine/Profile release signing. Profiles use the shared
-public-key trust-root format; historical per-Worker signing trust is retired.
+Workspace application and CLI Worker Engine release classes use explicit trust
+separation. Workspace application signing material is never used as Profile
+data; V9 Profiles are authenticated through Cloud authorization and validated
+locally by canonical digest, schema, identity, and Engine compatibility.
 Apple Developer ID signing and notarization verify macOS origin/platform
 requirements; Conclave release metadata verification remains required.
 
@@ -23,15 +36,10 @@ Production builds fail closed when no trusted public verification key is
 configured. Development fixture signing is separate and must never be promoted
 as a production key.
 
-Development runs the same complete Profile publication and channel lifecycle as
-customer environments, using independent development signing material. Desktop
-Developer ID signing/notarization does not gate Profile operations. Local setup
-stores private material only in ignored, permission-restricted Wrangler files;
-the Lab and Workspace receive only public roots. Hosted development setup uses
-another independent key, retained under ignored `.development/` files. Never
-inject either development root into customer builds or reuse it for app signing.
-The retired `CONCLAVE_PROFILE_RELEASE_MODE` switch no longer blocks publication;
-Cloud always enforces signer readiness, authorization, and exact qualification.
+Development and production use the same Profile publication contract. Profile
+Lab operator authorization, current revision, candidate digest, validation,
+and fresh evidence gate publication. Desktop Developer ID signing and
+Workspace application-release signing do not gate Profile publication.
 
 ## Key material and configuration
 
@@ -41,7 +49,6 @@ The release workflows use GitHub Environments and repository variables:
 | --- | --- | --- |
 | Workspace app release metadata | `CONCLAVE_WORKSPACE_ED25519_SEED` | `CONCLAVE_WORKSPACE_SIGNING_KEY_ID` |
 | Release publication authorization | `CONCLAVE_RELEASE_PUBLISH_TOKEN` | `CLOUD_API_URL` |
-| Tool Profile release signing | `CONCLAVE_RELEASE_PRIVATE_KEY` | `CONCLAVE_RELEASE_PUBLISHER`, `CONCLAVE_RELEASE_SIGNING_KEY_ID`, `CONCLAVE_RELEASE_TRUST_KEYS_JSON` |
 | macOS Developer ID/notarization | `CONCLAVE_MACOS_CERTIFICATE_P12`, password and Apple credentials | — |
 | Workspace client trust anchors | — | `CONCLAVE_RELEASE_TRUST_KEYS_JSON` |
 
@@ -51,14 +58,11 @@ Ed25519 public keys encoded as base64, keyed by publisher and key ID in
 certificate passwords, Apple credentials, or publication tokens in workflow
 logs or artifacts.
 
-Cloud Profile publication requires all four Tool Profile signing settings. The
-private key must match the public key under the configured publisher and key ID
-in `CONCLAVE_RELEASE_TRUST_KEYS_JSON`, and the key ID must not be revoked. The
-admin-only `GET /api/admin/tool-profiles/signing-preflight` checks that exact
-configuration without returning key material. Profile Lab checks it before
-publication, and Cloud repeats the check inside the publication operation.
-Missing settings, malformed keys, mismatched trust roots, failed revocation
-checks, and revoked keys block publication.
+Cloud Profile publication does not require a Profile private key, signing key
+ID, or Profile trust-root configuration. The obsolete signing preflight and
+its deployment secrets are retired. Cloud still enforces operator
+authorization, candidate validation, evidence freshness, digest binding, and
+optimistic revision concurrency.
 
 ## Planned rotation
 
@@ -90,9 +94,8 @@ installed clients until a recovery distribution path is available.
 - Revoke a compromised key ID or publisher immediately in Cloud trust state;
   clients refresh revocation state before release checks/admission.
 - Revoke an individual Workspace app release through the workspace-release
-  revoke endpoint. Profile release, publisher, or signing-key revocations use
-  the shared `/api/release-trust` mechanism and are checked before Profile
-  admission.
+  revoke endpoint. Profile revocation is a Cloud publication/activation policy
+  and does not use the Workspace application-release trust endpoint.
 - Release revocation prevents future install/update admission. It does not
   terminate an already-running process; follow the incident response plan for
   active work and publish a replacement immutable release when safe.
@@ -106,7 +109,7 @@ Cloud, compare digests, and verify the signature/admission before reporting
 success. A workflow dispatch is not production evidence until its run succeeds
 against the intended Cloud environment. See [Workspace release operations](../deployment/WORKSPACE_RELEASES.md).
 
-## Architecture v8 Profile trust
+## Historical V8 Profile trust (superseded)
 
 Tool Profiles are configuration but are treated as executable behavior policy. Every official Profile release is immutable and signed. Workspace verifies Profile definition/release identity, payload digest, schema version, logical Worker binding, Engine compatibility, and signing key before the generic Engine may consume it.
 
@@ -130,7 +133,7 @@ Tool Profile signing
 
 These may use separate keys or carefully scoped publisher/key classes, but a compromised Profile-signing credential must not authorize a Workspace application release.
 
-# Tool Profile Release v1 signing envelope
+# Historical V8 Tool Profile Release v1 signing envelope (superseded)
 
 Tool Profiles are executable policy. Workspace admits an official Profile only
 after recomputing the SHA-256 digest of the canonical Profile JSON and verifying

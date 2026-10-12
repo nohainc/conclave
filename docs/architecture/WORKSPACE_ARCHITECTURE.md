@@ -24,7 +24,7 @@ Conclave Workspace.app
                               │
                        generic CLI Worker Engine
                               │
-                       signed Tool Profile → provider CLI
+                       current Worker Profile → provider CLI
 ```
 
 Workspace.app must not create a Cloud connection, run readiness checks, spawn
@@ -155,7 +155,7 @@ shell profile or hidden environment fallback.
 | Variable | Classification | Purpose |
 | --- | --- | --- |
 | `CONCLAVE_WORKSPACE_VERSION` | build/release | UI and service version |
-| `CONCLAVE_RELEASE_TRUST_KEYS_JSON` | build/release | public Tool Profile trust roots |
+| `CONCLAVE_RELEASE_TRUST_KEYS_JSON` | build/release | public Workspace application-release trust roots |
 | `CONCLAVE_MACOS_SIGN_IDENTITY` | build/release | application/service signing |
 | `CONCLAVE_MACOS_NOTARY_PROFILE` | release-only | notarization keychain profile |
 | `CONCLAVE_DART_EXECUTABLE` | build/test-only | select a Dart SDK for Engine builds |
@@ -225,7 +225,7 @@ work and are not part of this implementation.
 
 ### Profile-declared model discovery
 
-The Worker Engine owns bounded CLI model discovery under the signed Profile;
+The Worker Engine owns bounded CLI model discovery under the current Profile;
 the Service persists and republishes public metadata through existing inventory
 and IPC events. UI refresh requests go through the Service and do not run provider
 commands. Workflow/request settings remain the authoritative selection surface.
@@ -280,7 +280,7 @@ adapters supply authorized catalogs. See the shared presentation contract in
 
 Cloud freezes public effective selections and display names in the assignment;
 Workspace Service forwards provider catalog pins using Local Worker Protocol 4.1.
-The separately supervised Engine 1.3.0 validates current signed-profile/catalog
+The separately supervised Engine 1.3.0 validates current Profile/catalog
 compatibility and writes immutable private native-resolution evidence in its
 runtime state directory before invoking a CLI. Completion evidence distinguishes
 observed provider exit status from unavailable model/effort attestation. Native

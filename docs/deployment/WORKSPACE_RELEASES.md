@@ -1,24 +1,23 @@
-# Workspace, Engine, and Tool Profile Releases
+# Workspace, Engine, and Worker Profile Releases
 
 Workspace application releases use the Cloud API under `/api/workspace-releases`. Architecture v8 has three release classes:
 
 1. **Workspace application:** signed and notarized desktop application.
 2. **CLI Worker Engine:** generic executable bundled with a Workspace release; it has no separate Cloud release catalog.
-3. **Tool Profile:** immutable signed provider integration payload with its own lifecycle and promotion channels.
+3. **Worker Profile:** one current provider integration payload per logical Worker, published through Cloud with digest and revision validation.
 
 Provider CLI software is installed and updated by its provider.
 
-## Tool Profile release flow
+## Worker Profile publication flow
 
 ~~~text
-create immutable Profile release
+edit local candidate
 -> schema/security validation and fixture tests
--> publish Draft and promote to Testing
--> real provider acceptance
--> optional Beta, then Stable
+-> atomic Cloud publication with expected revision and digest
+-> Workspace refresh and activation
 ~~~
 
-The signature binds the canonical Profile payload and release identity. Workspace verifies the digest, identity, trust roots, and refreshed revocation state before caching a release. Promotion changes lifecycle metadata; it does not alter signed payload bytes. Rollback selects a prior trusted and compatible release.
+Cloud stores the canonical Profile digest, revision, actor, and bounded history. Workspace validates the digest, identity, schema, and Engine compatibility before caching and activation. Restoring a prior snapshot publishes it as a new current revision; there are no Profile channels.
 
 Real acceptance evidence is produced by [the Profile acceptance suite](../../apps/workspace/test/tool_profile_real_acceptance_test.dart). It covers passive/live probes, a Thread write, durable session start/resume, timeout, and process-tree cancellation. Stable promotion requires evidence for the immutable release digest. The current release gates are listed in the [v8 implementation roadmap](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md#release-gates).
 

@@ -103,7 +103,7 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
-PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-profile-trust.mjs")"
+PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-release-trust.mjs")"
 echo "Building Conclave Workspace $VERSION for macOS (mode: $MODE)"
 cd "$WORKSPACE_DIR"
 if [[ "$PREPARED" == "1" ]]; then

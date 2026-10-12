@@ -5,7 +5,7 @@
 
 ## Prerequisites
 
-Sign in with an account authorized for `profiles:admin`. Install the intended provider CLI on the test machine and authenticate locally using the vendor’s supported flow. Profile Lab does not collect provider credentials. Publication additionally requires `profiles:release:manage` and a ready Cloud signer. Stable rollout and rollback require recent passkey verification. Revocation requires release-manager authorization, a mandatory reason, and explicit confirmation.
+Sign in with an account authorized for Profile administration. Install the intended provider CLI on the test machine and authenticate locally using the vendor’s supported flow. Profile Lab does not collect provider credentials. Publication additionally requires the Profile Lab publication permission. Profile history restoration requires an explicit reason.
 
 ## Register or select a Worker
 
@@ -26,15 +26,15 @@ There is no second Draft selector or identity-entry dialog. Cloud-managed starte
 
 1. Review the schema-aware JSON editor and optional Inspector. Use **Save** (or `⌘S`) for local edits. Initial Draft creation already persists the first payload locally.
 2. Review Provider CLI, Version, and Authentication in the Test pane. Discovery is dynamic from the selected Worker/Profile. Version and authentication remain unchecked until observed by the test run.
-3. Choose **Run Full Test**. Review the progressive ladder and final passed/skipped counts, provider/version, duration, and qualification. Only scenarios unsupported by the signed execution contract may be skipped. Expand **Execution details** for logs and **Local acceptance evidence** for the recorded result.
+3. Choose **Run Full Test**. Review the progressive ladder and final passed/skipped counts, provider/version, duration, and qualification. Only scenarios unsupported by the Worker Profile contract may be skipped. Expand **Execution details** for logs and **Local acceptance evidence** for the recorded result.
 4. For a failure, use the offered Retry, version-range, or Repair Profile action. Save any changed payload and rerun. Proposals and repairs are Draft edits, never evidence.
-5. Choose **Sync to Cloud** after saving. Confirm the header reports **Synced to Cloud** for the exact version and digest. Sync creates a mutable Cloud Draft; it does not publish a signed release. Resolve conflicts explicitly using compare/reload controls.
+5. Choose **Sync to Cloud** after saving. Confirm the header reports **Synced to Cloud** for the exact version and digest. Sync does not publish automatically. Resolve conflicts explicitly using compare/reload controls.
 
 ## Publish and test in Workspace
 
-After saving, qualifying, and syncing the exact Draft, choose **Publish to Testing** in Draft & Test. Cloud stores the local qualification, validates its ID against the Draft digest, and signs an immutable Testing release. Review **Releases**, assign a development Workspace to Testing through **Workspaces**, and run a real task. Promote to Beta and Stable after the required evidence gates pass.
+After saving, validating, and testing the exact candidate, choose **Publish**. Cloud authenticates the operator, revalidates the candidate and evidence, checks the expected revision and digest, and atomically publishes the next current Profile revision. Refresh Workspace and run a real task.
 
-Development and customer environments use the same lifecycle. Desktop app signing does not control these actions. Missing release permission or signer configuration is explained beside the publish action; development uses separate Profile signing keys and public trust roots. The retired `CONCLAVE_PROFILE_RELEASE_MODE` setting is no longer used.
+Development and customer environments use the same lifecycle. Desktop app signing does not control Profile publication. Missing authorization, stale revision, invalid JSON, or stale evidence is explained beside the publish action.
 
 For publication, Beta/Stable promotion, Workspace assignment, rollback, and revocation, follow [Updating an Existing Profile](OPERATOR_RUNBOOK_UPDATE_PROFILE.md).
 

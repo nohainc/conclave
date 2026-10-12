@@ -49,12 +49,12 @@ Workspace.
 | Profile revision | Cloud-assigned monotonically increasing revision of the same logical Worker's published Profile. A revision is not an active release channel. |
 | Profile digest | SHA-256 digest of the canonical Profile JSON. |
 | Profile candidate | Unpublished JSON being edited and tested in Profile Lab. It is not a published Profile and is never admitted to normal Workspace execution. |
-| Profile snapshot | The verified Profile identity, revision, digest, signature, and canonical JSON captured for one execution. It remains immutable until that execution completes. |
+| Profile snapshot | The verified Profile identity, revision, digest, and canonical JSON captured for one execution. It remains immutable until that execution completes. |
 | Known-good history | Retained prior published snapshots used for audit or restoration. Historical snapshots are not separately active. |
 
 The V9 contract uses one stable logical Worker identity and one current
 published Profile identity. Storage may separate current state, audit history,
-signatures, and payload blobs, but those implementation details MUST NOT create
+audit metadata and payload blobs, but those implementation details MUST NOT create
 multiple active Profiles for one logical Worker.
 
 ## 3. Required invariants
@@ -63,18 +63,18 @@ multiple active Profiles for one logical Worker.
    Profile for each logical Worker, and a valid Worker MUST have exactly one
    when it is enabled for execution.
 2. **Authoritative JSON:** The canonical Profile JSON is the source of truth
-   for executable behavior. Identity, revision, digest, signature, publisher,
-   and timestamps are integrity metadata around that JSON, not competing
+   for executable behavior. Identity, revision, digest, actor, and timestamps
+   are metadata around that JSON, not competing
    behavior definitions.
 3. **Authorized publication:** Only an authorized Profile Lab operator MAY
    publish or restore a Profile. AI assistance MAY edit a candidate but MUST
-   NOT publish, sign, or activate it.
+   NOT publish or activate it.
 4. **Provider-independent Engine:** The generic CLI Worker Engine owns process
    supervision, protocol handling, limits, session integrity, and security
    invariants. Profiles select only behavior supported by its finite schema.
-5. **Atomic publication:** Cloud MUST validate, canonicalize, digest, sign,
-   assign the next revision, persist the current Profile, and record audit
-   evidence as one atomic state transition. A partial publication MUST NOT be
+5. **Atomic publication:** Cloud MUST validate, canonicalize, digest, assign
+   the next revision, persist the current Profile, and record audit evidence as
+   one atomic state transition. A partial publication MUST NOT be
    observable as current state.
 6. **Verified Workspace activation:** Workspace MUST fetch, verify, cache, and
    validate a Profile before activation. A failed candidate MUST NOT replace
@@ -191,7 +191,7 @@ clients.
 The V9 cleanup invariant is that no production Profile Lab route can reach a
 draft-release, promotion, testing/beta/stable channel, or channel-browsing
 screen. Diagnostic audit history, local recovery snapshots, test scenarios,
-and signed Profile history remain available because they support operations;
+and Profile history remain available because they support operations;
 none of them is an alternate active Profile state. The editor and its local
 candidate state must survive Worker switching, panel resizing, focus mode, and
 background test progress. Compact macOS windows must preserve readable JSON,
@@ -204,15 +204,13 @@ Cloud owns the authoritative transition:
 3. verify validation/test evidence is bound to the candidate digest;
 4. canonicalize the JSON and calculate its digest;
 5. allocate the next Cloud revision;
-6. sign the canonical Profile metadata/payload;
-7. verify the generated signature against Cloud's configured trust root;
-8. atomically replace the logical Worker's current published Profile and append
+6. atomically replace the logical Worker's current published Profile and append
    audit/history metadata in one database transaction.
 
-Cloud MUST NOT persist a newly signed snapshot until verification of that exact
-signature, revision, Worker identity, schema version, and canonical payload
-digest succeeds. The current row and its prior-history append are one atomic
-operation; a failed conditional revision update MUST leave both unchanged.
+Cloud MUST NOT persist a snapshot until the revision, Worker identity, schema
+version, and canonical payload digest checks succeed. The current row and its
+prior-history append are one atomic operation; a failed conditional revision
+update MUST leave both unchanged.
 
 Publication requests MUST use optimistic concurrency against the current
 revision or digest so that a stale candidate cannot silently overwrite a newer
@@ -233,7 +231,7 @@ temporarily unavailable.
 
 For a newly fetched or refreshed Profile, Workspace MUST:
 
-1. verify the logical Worker identity, signature, digest, and canonical JSON;
+1. verify the logical Worker identity, digest, and canonical JSON;
 2. validate the Profile schema and Engine compatibility;
 3. detect the installed provider CLI and validate the declared version range;
 4. stage the verified payload in Profile-owned application data;
@@ -241,11 +239,9 @@ For a newly fetched or refreshed Profile, Workspace MUST:
 6. atomically mark it current only after all admission checks pass;
 7. retain the prior verified known-good snapshot for recovery and diagnostics.
 
-Workspace MUST repeat the canonical digest and signature verification locally;
-the Cloud `verified` response field is not an attestation and is never a
-substitute for the Workspace trust-root check. A snapshot that fails any
-check MUST remain staged or be discarded and MUST NOT become the active
-Profile.
+Workspace MUST repeat the canonical digest and schema verification locally.
+A snapshot that fails any check MUST remain staged or be discarded and MUST
+NOT become the active Profile.
 
 Activation failure leaves the prior active cache entry unchanged. A revoked,
 invalid, incompatible, or tampered Profile MUST fail closed and MUST NOT be
@@ -258,16 +254,16 @@ part of every assignment. A fetched snapshot is verified, staged, and then
 activated for new executions; the resolver never searches a release list.
 
 On first access after upgrade, Workspace may read the legacy approved stable
-snapshot exactly once, verify its original signature, and materialize it as a
+snapshot exactly once, validate its digest and schema, and materialize it as a
 V9 current snapshot with migration metadata. The legacy per-definition,
 per-version directory is removed only after that V9 snapshot has been written
 and verified. An invalid or untrusted legacy cache is left untouched for
 recoverability and is never activated. New runtime code does not read
 `release-state.json`, channel pointers, or legacy release directories.
 
-Legacy release signatures are accepted only for this bounded on-disk migration
-adapter; newly fetched Cloud snapshots must use the V9 signing domain. Explicit
-revocation of current must not fall back to last-known-good. Each execution
+Legacy release metadata is accepted only for this bounded on-disk migration
+adapter; newly fetched Cloud snapshots use the V9 current-snapshot shape.
+Explicit revocation of current must not fall back to last-known-good. Each execution
 opens an immutable `revision-digest` payload, so activation of a later Profile
 cannot rewrite the bytes used by an execution already in progress.
 
@@ -287,7 +283,6 @@ snapshot containing at least:
 logicalWorkerId
 profileRevision
 profileDigest
-profileSignature
 engineVersion
 providerToolName
 providerToolVersion
@@ -310,7 +305,7 @@ and fixture providers use the same execution pipeline.
 
 | Component | V9 responsibility | V9 prohibition |
 | --- | --- | --- |
-| Cloud | Own logical Worker identity, current Profile, revision/digest/signature metadata, bounded history, authorization, atomic publication, and audit. | Must not execute provider CLIs or expose multiple active channels. |
+| Cloud | Own logical Worker identity, current Profile, revision/digest metadata, bounded history, authorization, atomic publication, and audit. | Must not execute provider CLIs or expose multiple active channels. |
 | Profile Lab | Edit candidates, validate, run Engine-backed provider tests, show diffs, request publication, and request known-good restoration. | Must not publish without operator authorization, store provider credentials, or make candidates active in Workspace. |
 | Workspace / Service | Fetch, verify, cache, activate, snapshot, and supervise Profile-backed Engine executions. | Must not edit Profile JSON, select a channel, or use an unverified payload. |
 | CLI Worker Engine | Interpret the finite Profile schema, supervise provider CLI processes, enforce limits/security/session integrity, and emit provider-neutral results. | Must not contain provider-specific Worker executables or bypass Profile/Workspace admission. |
@@ -328,14 +323,14 @@ The following V8 concepts are not compatibility targets for V9:
 - channel rollback APIs.
 
 V9 still permits unpublished Profile Lab candidates, immutable published
-history, automatic revisions, digest/signature verification, and one-click
+history, automatic revisions, digest verification, and one-click
 known-good restoration through a new atomic publication.
 
 ## 10. D1 persistence and migration contract
 
 Cloud stores the current published state in one `worker_profiles` row keyed by
 `worker_type_id`. The row contains the canonical JSON, schema version, Cloud
-revision, digest, signature, signing key ID, publishing actor, and timestamp.
+revision, digest, publishing actor, and timestamp.
 
 The Worker catalog also retains the configured Profile identity
 (`profile_definition_id` and `provider_tool_name`). This metadata is needed
@@ -345,8 +340,8 @@ inventing provider-specific defaults. Once a Profile is published, its JSON
 is authoritative for execution behavior.
 
 Cloud stores prior published snapshots in `worker_profile_history`, keyed by
-`(worker_type_id, revision)`, with the snapshot JSON, digest, signature,
-signing key ID, actor, publication timestamp, and optional restoration reason.
+`(worker_type_id, revision)`, with the snapshot JSON, digest, actor, publication
+timestamp, and optional restoration reason.
 History is for audit and restoration only; it is never selected through a
 channel pointer.
 
@@ -355,8 +350,8 @@ The D1 migration sequence is mandatory:
 1. create `worker_profiles` and `worker_profile_history` first;
 2. migrate the currently approved stable Profile for each Worker into the
    single current row;
-3. validate JSON shape, digest format, and required signature metadata through
-   destination constraints, failing closed on malformed data;
+3. validate JSON shape and digest format through destination constraints,
+   failing closed on malformed data;
 4. preserve earlier published snapshots in V9 history where they can be
    mapped unambiguously;
 5. deploy and verify the V9 readers and writers;
@@ -384,8 +379,8 @@ The V9 Cloud API exposes one current Profile identity per logical Worker:
 The publish request MUST contain `expectedRevision`, `candidateDigest`, the
 candidate `profile`, and recent `evidence`. `expectedRevision` is `0` only
 for a Worker with no current Profile. Cloud recalculates the canonical digest,
-validates the Profile schema and compatibility ranges, checks evidence identity
-and freshness, and signs the resulting revision. Client evidence demonstrates
+validates the Profile schema and compatibility ranges, and checks evidence
+identity and freshness. Client evidence demonstrates
 what Profile Lab reported from its local Engine/CLI test; it is not treated as
 cryptographic proof of local execution.
 
@@ -405,9 +400,8 @@ Engine runtime validation. Both implementations MUST remain semantically
 aligned with the versioned Profile schema.
 
 The Dart package owns the canonical V9 snapshot admission check used by both
-Profile Lab and Workspace. Each consumer supplies its local trust policy and
-expected Worker identity; neither consumer may substitute Cloud's `verified`
-flag for local digest, schema, or signature verification.
+Profile Lab and Workspace. Each consumer supplies the expected Worker identity
+and repeats digest/schema validation locally.
 
 The validation contract MUST include:
 
@@ -449,7 +443,7 @@ V8 lifecycle documents and retained audit/event records are historical
 references only. They do not describe a supported runtime API. The cleanup
 removes release definitions, release rows, channel pointers, promotion
 evidence, and workspace channel assignments after the V9 readers and writers
-are deployed. It preserves `worker_catalog`, signed current/history snapshots,
+are deployed. It preserves `worker_catalog`, current/history snapshots,
 diagnostic event history, security audit records, local test scenarios, and the
 Profile Lab sandbox boundary for unpublished candidates.
 
