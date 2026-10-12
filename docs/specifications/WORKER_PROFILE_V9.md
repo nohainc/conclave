@@ -229,7 +229,36 @@ V9 still permits unpublished Profile Lab candidates, immutable published
 history, automatic revisions, digest/signature verification, and one-click
 known-good restoration through a new atomic publication.
 
-## 10. Acceptance contract
+## 10. D1 persistence and migration contract
+
+Cloud stores the current published state in one `worker_profiles` row keyed by
+`worker_type_id`. The row contains the canonical JSON, schema version, Cloud
+revision, digest, signature, signing key ID, publishing actor, and timestamp.
+
+Cloud stores prior published snapshots in `worker_profile_history`, keyed by
+`(worker_type_id, revision)`, with the snapshot JSON, digest, signature,
+signing key ID, actor, publication timestamp, and optional restoration reason.
+History is for audit and restoration only; it is never selected through a
+channel pointer.
+
+The D1 migration sequence is mandatory:
+
+1. create `worker_profiles` and `worker_profile_history` first;
+2. migrate the currently approved stable Profile for each Worker into the
+   single current row;
+3. validate JSON shape, digest format, and required signature metadata through
+   destination constraints, failing closed on malformed data;
+4. preserve earlier published snapshots in V9 history where they can be
+   mapped unambiguously;
+5. deploy and verify the V9 readers and writers;
+6. remove legacy Profile release/channel tables only in a later cleanup
+   migration.
+
+Existing migrations MUST remain in order and production migration history MUST
+NOT be deleted or renumbered. The first replacement migration MUST NOT delete
+or rewrite the V8 Profile tables it reads.
+
+## 11. Acceptance contract
 
 Phase 1 is accepted when all four runtime/control-plane components reference
 this specification and agree on these facts:
