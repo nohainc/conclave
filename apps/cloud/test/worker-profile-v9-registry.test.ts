@@ -54,6 +54,15 @@ function setup() {
       "utf8",
     ),
   );
+  sqlite.exec(
+    readFileSync(
+      new URL(
+        "../migrations-v8/0046_worker_catalog_profile_identity.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   const now = new Date().toISOString();
   sqlite
     .prepare(
@@ -66,8 +75,8 @@ function setup() {
       `INSERT INTO worker_catalog
          (worker_type_id, display_name, description, lifecycle_state,
           created_at, updated_at, engine_family, visibility_state,
-          release_stage, sort_order)
-       VALUES (?, ?, ?, 'active', ?, ?, 'cli', 'visible', 'stable', ?)`,
+          release_stage, profile_definition_id, provider_tool_name, sort_order)
+       VALUES (?, ?, ?, 'active', ?, ?, 'cli', 'visible', 'stable', ?, ?, ?)`,
     )
     .run(
       "fixture-worker",
@@ -75,6 +84,8 @@ function setup() {
       "V9 registry fixture",
       now,
       now,
+      "fixture-cli",
+      "fixture",
       1,
     );
   const keyPair = generateEd25519ReleaseKeyPair();
@@ -228,6 +239,8 @@ describe("V9 Worker Profile registry", () => {
         expect.arrayContaining([
           expect.objectContaining({
             workerTypeId: "fixture-worker",
+            profileDefinitionId: "fixture-cli",
+            providerToolName: "fixture",
             currentRevision: null,
             currentDigest: null,
           }),

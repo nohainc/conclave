@@ -99,6 +99,8 @@ export interface WorkerProfileSummary {
   workerTypeId: string;
   displayName: string;
   description: string;
+  profileDefinitionId: string | null;
+  providerToolName: string | null;
   lifecycleState: string;
   engineFamily: string;
   visibilityState: string;
@@ -222,6 +224,12 @@ export async function listWorkerProfiles(
       `SELECT worker.worker_type_id, worker.display_name, worker.description,
               worker.lifecycle_state, worker.engine_family,
               worker.visibility_state, worker.sort_order,
+              COALESCE(worker.profile_definition_id,
+                json_extract(current_profile.profile_json,
+                  '$.profileDefinitionId')) AS profile_definition_id,
+              COALESCE(worker.provider_tool_name,
+                json_extract(current_profile.profile_json,
+                  '$.providerTool.name')) AS provider_tool_name,
               current_profile.revision AS current_revision,
               current_profile.digest AS current_digest,
               current_profile.updated_at AS current_updated_at
@@ -239,6 +247,8 @@ export async function listWorkerProfiles(
       engine_family: string;
       visibility_state: string;
       sort_order: number;
+      profile_definition_id: string | null;
+      provider_tool_name: string | null;
       current_revision: number | null;
       current_digest: string | null;
       current_updated_at: string | null;
@@ -248,6 +258,12 @@ export async function listWorkerProfiles(
       workerTypeId: row.worker_type_id,
       displayName: row.display_name,
       description: row.description,
+      profileDefinitionId:
+        row.profile_definition_id == null
+          ? null
+          : String(row.profile_definition_id),
+      providerToolName:
+        row.provider_tool_name == null ? null : String(row.provider_tool_name),
       lifecycleState: row.lifecycle_state,
       engineFamily: row.engine_family,
       visibilityState: row.visibility_state,

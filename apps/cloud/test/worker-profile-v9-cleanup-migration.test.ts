@@ -18,6 +18,7 @@ describe("Worker Profile V9 cleanup migration", () => {
             "0001_conclave_v8.sql",
             "0043_worker_profiles_v9.sql",
             "0044_remove_v8_profile_lifecycle.sql",
+            "0046_worker_catalog_profile_identity.sql",
           ]
             .map(migration)
             .join("\n") +
@@ -30,5 +31,23 @@ describe("Worker Profile V9 cleanup migration", () => {
       "worker_profile_history",
       "worker_profiles",
     ]);
+
+    const columns = JSON.parse(
+      execFileSync("sqlite3", ["-bail", "-json", ":memory:"], {
+        input:
+          [
+            "0001_conclave_v8.sql",
+            "0043_worker_profiles_v9.sql",
+            "0044_remove_v8_profile_lifecycle.sql",
+            "0046_worker_catalog_profile_identity.sql",
+          ]
+            .map(migration)
+            .join("\n") + "\nPRAGMA table_info(worker_catalog);",
+        encoding: "utf8",
+      }),
+    ) as Array<{ name: string }>;
+    expect(columns.map((column) => column.name)).toEqual(
+      expect.arrayContaining(["profile_definition_id", "provider_tool_name"]),
+    );
   });
 });

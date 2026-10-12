@@ -49,6 +49,15 @@ function setup() {
       "utf8",
     ),
   );
+  sqlite.exec(
+    readFileSync(
+      new URL(
+        "../migrations-v8/0046_worker_catalog_profile_identity.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   const now = new Date().toISOString();
   sqlite
     .prepare(
@@ -61,10 +70,19 @@ function setup() {
       `INSERT INTO worker_catalog
          (worker_type_id, display_name, description, lifecycle_state,
           created_at, updated_at, engine_family, visibility_state,
-          release_stage, sort_order)
-       VALUES (?, ?, ?, 'active', ?, ?, 'cli', 'visible', 'stable', ?)`,
+          release_stage, profile_definition_id, provider_tool_name, sort_order)
+       VALUES (?, ?, ?, 'active', ?, ?, 'cli', 'visible', 'stable', ?, ?, ?)`,
     )
-    .run("route-worker", "Route Worker", "V9 route fixture", now, now, 1);
+    .run(
+      "route-worker",
+      "Route Worker",
+      "V9 route fixture",
+      now,
+      now,
+      "route-profile",
+      "route-cli",
+      1,
+    );
 
   const keyPair = generateEd25519ReleaseKeyPair();
   const env = {
@@ -147,7 +165,11 @@ describe("V9 Worker Profile routes", () => {
       expect(listed.response.status).toBe(200);
       expect(listed.body.workers).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ workerTypeId: "route-worker" }),
+          expect.objectContaining({
+            workerTypeId: "route-worker",
+            profileDefinitionId: "route-profile",
+            providerToolName: "route-cli",
+          }),
         ]),
       );
 

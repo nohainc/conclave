@@ -337,6 +337,13 @@ Cloud stores the current published state in one `worker_profiles` row keyed by
 `worker_type_id`. The row contains the canonical JSON, schema version, Cloud
 revision, digest, signature, signing key ID, publishing actor, and timestamp.
 
+The Worker catalog also retains the configured Profile identity
+(`profile_definition_id` and `provider_tool_name`). This metadata is needed
+only while a Worker has no current Profile, so Profile Lab can create its
+first local candidate without consulting removed V8 definition tables or
+inventing provider-specific defaults. Once a Profile is published, its JSON
+is authoritative for execution behavior.
+
 Cloud stores prior published snapshots in `worker_profile_history`, keyed by
 `(worker_type_id, revision)`, with the snapshot JSON, digest, signature,
 signing key ID, actor, publication timestamp, and optional restoration reason.
@@ -366,7 +373,7 @@ The V9 Cloud API exposes one current Profile identity per logical Worker:
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/admin/workers` | List managed Workers and current Profile summaries. |
+| `GET` | `/api/admin/workers` | List managed Workers, configured authoring identity, and current Profile summaries. |
 | `GET` | `/api/admin/workers/:id/profile` | Read the current published Profile. |
 | `POST` | `/api/admin/workers/:id/profile/validate` | Validate candidate JSON and optional test evidence without publishing. |
 | `PUT` | `/api/admin/workers/:id/profile` | Publish a tested candidate as the next revision. |

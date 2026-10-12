@@ -78,7 +78,7 @@ The app archive is written under `dist/conclave-profile-lab/macos/`. An unsigned
 
 ## Candidate authoring, testing, and publication
 
-1. Open a Worker. Profile Lab loads its one current published Profile, or starts the initial candidate from the Worker template.
+1. Open a Worker. Profile Lab loads its one current published Profile, or creates the initial local candidate from the Worker catalog's configured Profile identity.
 2. Edit the JSON candidate locally. JSON schema validation, required fields, strict unknown-field handling, and size limits run immediately. Any edit invalidates prior test and Cloud-validation eligibility.
 3. Run the local test ladder: schema validation, declarative Event Mapping Replay against sanitized Codex/agy fixtures, Engine compatibility, CLI discovery, CLI version support, authentication/readiness, deterministic execution and stdin transport, model discovery/selection, session continuation, error interpretation, cancellation/timeout enforcement, and authorized local-access checks where the Profile declares them. Repeated tool identifiers must produce matching start/completion activities, and unknown provider events are ignored.
 4. Save the ladder evidence against the exact canonical candidate digest. Evidence contains only bounded identity, version, timestamp, and scenario results; it is not remote attestation of the local Mac or provider process.

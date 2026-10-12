@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
+import 'package:conclave_profile_lab/profile_admin_api_client.dart';
 import 'package:conclave_profile_lab/profile_lab_auth.dart';
 import 'package:conclave_profile_lab/profile_lab_paths.dart';
 import 'package:conclave_profile_lab/profile_lab_session_store.dart';
@@ -71,6 +72,34 @@ void main() {
     expect(controller.isDirty, isTrue);
     expect(controller.currentDraft!.payloadDigest, initialDigest);
     expect(controller.lastTestResult, isNull);
+  });
+
+  test('creates a blank candidate when the Worker has no current Profile',
+      () async {
+    final api = _NoPublishedProfileApi();
+    final noProfileController = ProfileLabController(
+      paths: paths,
+      sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths),
+      apiClientOverride: api,
+    );
+    addTearDown(noProfileController.dispose);
+
+    await noProfileController.selectWorker({
+      'workerTypeId': 'chatgpt',
+      'displayName': 'ChatGPT',
+      'profileDefinitionId': 'chatgpt-codex',
+      'providerToolName': 'codex',
+    });
+
+    expect(noProfileController.currentDraft, isNull);
+    expect(noProfileController.canCreateInitialDraft, isTrue);
+    await noProfileController.createInitialDraft();
+
+    expect(noProfileController.currentDraft, isNotNull);
+    expect(
+        noProfileController.currentDraft!.profileDefinitionId, 'chatgpt-codex');
+    expect(noProfileController.currentDraft!.logicalWorkerTypeId, 'chatgpt');
+    expect(noProfileController.currentDraft!.providerToolName, 'codex');
   });
 
   test('invalid JSON reports a location and supports local recovery', () async {
@@ -159,4 +188,17 @@ void main() {
     expect(sessionValues, isEmpty);
     expect(await paths.cloudSettingsFile.exists(), isTrue);
   });
+}
+
+class _NoPublishedProfileApi extends ProfileAdminApiClient {
+  _NoPublishedProfileApi() : super(baseUrl: 'http://localhost');
+
+  @override
+  Future<Map<String, dynamic>> fetchCurrentWorkerProfile(
+    String workerTypeId,
+  ) async {
+    throw ProfileAdminNotFoundException(
+      'The Worker does not have a published Profile',
+    );
+  }
 }
