@@ -75,6 +75,18 @@ void main() {
     expect((await first).output, 'first');
   });
 
+  test('times out while waiting for the Worker concurrency slot', () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final first = _execute(setup, 'first', prompt: 'slow');
+    await _waitFor(File('${setup.state.path}/active').existsSync);
+    await expectLater(
+      _execute(setup, 'queued-timeout', timeout: const Duration(seconds: 1)),
+      throwsA(isA<CliWorkerEngineProbeException>()),
+    );
+    expect((await first).output, 'slow');
+  });
+
   test('cancels the active Engine process tree as an assignment failure',
       () async {
     final setup = await _setup();
@@ -93,6 +105,7 @@ Future<WorkerResult> _execute(
   _Setup setup,
   String assignmentId, {
   String? prompt,
+  Duration timeout = const Duration(seconds: 10),
 }) =>
     setup.supervisor.execute(
       setup.admission,
@@ -103,7 +116,7 @@ Future<WorkerResult> _execute(
       maxConcurrentAssignments: 1,
       assignmentId: assignmentId,
       prompt: prompt ?? assignmentId,
-      timeout: const Duration(seconds: 10),
+      timeout: timeout,
     );
 
 Future<_Setup> _setup() async {

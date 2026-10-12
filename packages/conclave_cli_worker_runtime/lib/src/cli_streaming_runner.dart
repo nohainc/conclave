@@ -44,7 +44,7 @@ class CliStreamingRunner {
       environment: environment,
       includeParentEnvironment: false,
       runInShell: false,
-    );
+    ).timeout(timeout);
     final stderr = StringBuffer();
     var stderrBytes = 0;
     var stdoutBytes = 0;
@@ -97,7 +97,11 @@ class CliStreamingRunner {
       }
     }();
     try {
-      await onStarted?.call();
+      final timer = Stopwatch()..start();
+      final started = onStarted;
+      if (started != null) {
+        await Future.sync(started).timeout(_remaining(timeout, timer));
+      }
       Object? stdinError;
       final stdinTask = () async {
         try {
@@ -107,9 +111,12 @@ class CliStreamingRunner {
           stdinError = error;
         }
       }();
-      final code = await process.exitCode.timeout(timeout);
-      await stdinTask;
-      await Future.wait([stdoutTask, stderrTask]);
+      final code = await process.exitCode.timeout(_remaining(timeout, timer));
+      await stdinTask.timeout(_remaining(timeout, timer));
+      await Future.wait([
+        stdoutTask,
+        stderrTask,
+      ]).timeout(_remaining(timeout, timer));
       if (streamError != null) throw streamError!;
       // Some CLIs ignore stdin and exit as soon as their argument-based
       // request finishes. A closed stdin pipe must not override a successful
@@ -123,5 +130,13 @@ class CliStreamingRunner {
       await cleanup.terminate(process);
       rethrow;
     }
+  }
+
+  Duration _remaining(Duration timeout, Stopwatch timer) {
+    final remaining = timeout - timer.elapsed;
+    if (remaining <= Duration.zero) {
+      throw TimeoutException('CLI execution deadline elapsed');
+    }
+    return remaining;
   }
 }

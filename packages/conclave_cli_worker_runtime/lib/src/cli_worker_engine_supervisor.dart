@@ -267,8 +267,13 @@ final class CliWorkerEngineSupervisor {
     await stateDirectory.create(recursive: true);
     await workingDirectory.create(recursive: true);
 
-    await _acquireSlot(workerId, assignmentId, maxConcurrentAssignments);
     final timer = Stopwatch()..start();
+    await _acquireSlot(
+      workerId,
+      assignmentId,
+      maxConcurrentAssignments,
+      timeout: _remaining(boundedTimeout, timer),
+    );
     Process? process;
     File? processRecord;
     CliEngineChannel? channel;
@@ -461,8 +466,9 @@ final class CliWorkerEngineSupervisor {
   Future<void> _acquireSlot(
     String workerId,
     String assignmentId,
-    int maxConcurrentAssignments,
-  ) async {
+    int maxConcurrentAssignments, {
+    required Duration timeout,
+  }) async {
     final active = _activeByWorker[workerId] ?? 0;
     if (active < maxConcurrentAssignments) {
       _activeByWorker[workerId] = active + 1;
@@ -473,7 +479,19 @@ final class CliWorkerEngineSupervisor {
     final queued = _QueuedEngineAssignment(workerId, assignmentId);
     _queuedAssignments[assignmentId] = queued;
     _waitersByWorker.putIfAbsent(workerId, () => []).add(queued);
-    await queued.permit.future;
+    try {
+      await queued.permit.future.timeout(timeout);
+    } on TimeoutException {
+      _queuedAssignments.remove(assignmentId);
+      _waitersByWorker[workerId]?.remove(queued);
+      if (_waitersByWorker[workerId]?.isEmpty == true) {
+        _waitersByWorker.remove(workerId);
+      }
+      throw const CliWorkerEngineProbeException(
+        WorkerIssueCode.deadlineExceeded,
+        'Assignment execution exceeded its deadline while waiting for a Worker slot.',
+      );
+    }
     _reservedAssignmentIds.add(assignmentId);
     _reservedWorkerByAssignment[assignmentId] = workerId;
   }
@@ -680,7 +698,10 @@ final class CliEngineChannel {
             'CLI Worker Engine assignment ID mismatch',
           );
         }
-        await onActivity?.call(frame);
+        final callback = onActivity;
+        if (callback != null) {
+          await Future.sync(() => callback(frame)).timeout(remaining);
+        }
         continue;
       }
       if (frame is WorkerResult || frame is WorkerErrorFrame) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
 import 'package:test/test.dart';
@@ -27,4 +28,24 @@ void main() {
     await expectLater(pending, throwsA(isA<WorkerCancelledException>()));
     expect(cleaned, isTrue);
   });
+
+  test(
+    'CLI streaming startup callback is included in the execution deadline',
+    () async {
+      if (Platform.isWindows) return;
+      await expectLater(
+        const CliStreamingRunner().run(
+          '/bin/sh',
+          ['-c', 'sleep 30'],
+          environment: {},
+          workingDirectory: Directory.current.path,
+          stdinText: '',
+          timeout: Duration(milliseconds: 100),
+          onStdoutLine: (_) {},
+          onStarted: () => Future<void>.delayed(const Duration(seconds: 1)),
+        ),
+        throwsA(isA<TimeoutException>()),
+      );
+    },
+  );
 }

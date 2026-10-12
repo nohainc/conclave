@@ -1,6 +1,9 @@
 part of '../cloud_connection.dart';
 
 extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
+  static const _terminalDeliveryTimeout = Duration(seconds: 10);
+  static const _cancellationTimeout = Duration(seconds: 5);
+
   Future<void> _handleAssignmentStart(Map<String, dynamic> message) async {
     final socket = _transport;
     final payload = message['payload'];
@@ -22,7 +25,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
 
     if (!authorizedWorkspaceIds.contains(message['executionWorkspaceId']) ||
         message['workspaceRuntimeId'] != workspaceRuntimeId) {
-      _sendAssignmentError(
+      await _sendAssignmentError(
         socket,
         message,
         'worker_not_ready',
@@ -44,7 +47,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         : payload;
     final payloadError = _validateAssignmentPayload(assignmentPayload);
     if (payloadError != null) {
-      _sendAssignmentError(
+      await _sendAssignmentError(
         socket,
         message,
         'execution_failed',
@@ -106,7 +109,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
           correlation,
           {'accepted': true, 'estimatedStartMs': 0},
         )));
-        socket.send(jsonEncode(_assignmentEnvelope(
+        await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
           'assignment.result',
           correlation,
           {
@@ -120,7 +123,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
           },
         )));
       } else if (previous.status == AssignmentStatus.failed) {
-        _sendAssignmentError(
+        await _sendAssignmentError(
           socket,
           message,
           'execution_failed',
@@ -156,7 +159,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         context: context,
         result: const {'reason': 'Cancelled before Worker launch'},
       );
-      socket.send(jsonEncode(_assignmentEnvelope(
+      await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
         'assignment.cancelled',
         correlation,
         {
@@ -179,7 +182,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         retryable: false,
         contextData: const {'status': 'no_assignment_handler'},
       );
-      socket.send(jsonEncode(_assignmentEnvelope(
+      await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
         'assignment.ack',
         correlation,
         {'accepted': false, 'reason': 'no assignment handler configured'},
@@ -222,17 +225,27 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
     )));
     WorkspaceAssignmentResult result;
     try {
-      result = await assignmentHandler!(context);
+      final timeoutMs = context.payload['timeoutMs'];
+      final timeout = Duration(milliseconds: timeoutMs as int);
+      result = await assignmentHandler!(context).timeout(timeout);
     } catch (error) {
       try {
-        final normalizedError = normalizeAssignmentExecutionFailure(error);
-        final errorCode = canonicalExecutionErrorCode(normalizedError.code);
+        final normalizedError = normalizeAssignmentExecutionFailure(
+          error is TimeoutException ? await _deadlineFailure(context) : error,
+        );
+        final errorCode =
+            canonicalWorkerExecutionErrorCode(normalizedError.code);
         final errorMessage = executionErrorMessage(errorCode);
         final diagnostic = SafeProviderDiagnostics.safeFailureDetail(
           normalizedError.localDiagnostic,
         );
+        final processExitCode =
+            _processExitCode(normalizedError.localDiagnostic);
         final errorPayload = <String, Object?>{
           'status': 'failed',
+          'executionId': context.executionId,
+          'errorCode': errorCode,
+          if (processExitCode != null) 'processExitCode': processExitCode,
           'error': {
             'code': errorCode,
             'message': errorMessage,
@@ -240,6 +253,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
             if (diagnostic != null)
               'details': {
                 'diagnostic': diagnostic,
+                if (processExitCode != null) 'processExitCode': processExitCode,
               },
           },
         };
@@ -265,11 +279,13 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
             'transport': 'assignment_error',
           },
         );
-        socket.send(jsonEncode(_assignmentEnvelope(
+        await _sendTerminal(
+          socket,
+          context,
           'assignment.error',
           correlation,
           errorPayload,
-        )));
+        );
       } finally {
         _activeAssignments.remove(context.assignmentId);
         _notifyStateChanged();
@@ -278,6 +294,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
     }
     final resultPayload = <String, Object?>{
       'status': 'completed',
+      'executionId': context.executionId,
       'summary': result.summary,
       'output': result.output,
       'artifactIds': result.artifactIds,
@@ -299,14 +316,76 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         event: 'assignment.completed',
         stage: 'result',
       );
-      socket.send(jsonEncode(_assignmentEnvelope(
+      await _sendTerminal(
+        socket,
+        context,
         'assignment.result',
         correlation,
         resultPayload,
-      )));
+      );
     } finally {
       _activeAssignments.remove(context.assignmentId);
       _notifyStateChanged();
+    }
+  }
+
+  Future<AssignmentExecutionFailure> _deadlineFailure(
+    WorkspaceAssignmentContext context,
+  ) async {
+    // The handler may be waiting in profile resolution or process startup,
+    // before the Engine has registered an active process. Request cleanup
+    // without waiting indefinitely; the terminal journal record below is
+    // authoritative even if cancellation races the deadline.
+    final cancel = assignmentCancellationHandler;
+    if (cancel != null) {
+      try {
+        await cancel(context.assignmentId, 'Assignment deadline exceeded')
+            .timeout(_cancellationTimeout);
+      } on Object {
+        // Terminal reconciliation must proceed even when cleanup fails.
+      }
+    }
+    return AssignmentExecutionFailure(
+      code: 'deadline_exceeded',
+      message: 'Assignment execution exceeded its deadline.',
+      retryable: true,
+      localDiagnostic: jsonEncode({
+        'stage': 'service_execution_deadline',
+        'assignmentId': context.assignmentId,
+        'executionId': context.executionId,
+        'attemptId': context.attemptId,
+      }),
+    );
+  }
+
+  Future<void> _sendTerminal(
+    WorkspaceTransport socket,
+    WorkspaceAssignmentContext context,
+    String type,
+    Map<String, Object?> correlation,
+    Map<String, Object?> payload,
+  ) async {
+    try {
+      await socket
+          .sendAndWait(
+              jsonEncode(_assignmentEnvelope(type, correlation, payload)))
+          .timeout(_terminalDeliveryTimeout);
+    } on Object catch (error) {
+      // The terminal record was written before this call. Cloud sync retries
+      // it from the journal, so a dead transport cannot keep this assignment
+      // in the active set or turn a completed result into an unknown outcome.
+      await recordAssignmentDiagnostic(
+        context,
+        event: 'assignment.terminal_delivery_failed',
+        stage: 'terminal_delivery',
+        severity: 'warning',
+        errorCode: 'terminal_delivery_failed',
+        retryable: true,
+        contextData: {
+          'messageType': type,
+          'errorType': error.runtimeType.toString(),
+        },
+      );
     }
   }
 
@@ -484,18 +563,31 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
     return null;
   }
 
-  void _sendAssignmentError(
+  Future<void> _sendAssignmentError(
     WorkspaceTransport socket,
     Map<String, dynamic> message,
     String code, {
     required bool retryable,
     String? diagnostic,
-  }) {
+  }) async {
     final canonicalCode = canonicalExecutionErrorCode(code);
     final safeDiagnostic = diagnostic == null
         ? null
         : SafeProviderDiagnostics.safeFailureDetail(diagnostic);
-    socket.send(jsonEncode(_assignmentEnvelope(
+    final assignmentId = message['assignmentId'];
+    if (assignmentId is String) {
+      await _recordAssignment(
+        assignmentId,
+        AssignmentStatus.failed,
+        correlation: _assignmentCorrelation(message),
+        result: {
+          'status': 'failed',
+          'error': executionErrorMessage(canonicalCode),
+          'errorCode': canonicalCode,
+        },
+      );
+    }
+    await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
       'assignment.error',
       _assignmentCorrelation(message),
       {
@@ -535,6 +627,33 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
   }) async {
     final journal = assignmentJournal;
     if (journal == null) return;
+    final current = (await journal.reconcile())[assignmentId];
+    if (current != null) {
+      final terminal = const {
+        AssignmentStatus.completed,
+        AssignmentStatus.failed,
+        AssignmentStatus.cancelled,
+        AssignmentStatus.interrupted,
+        AssignmentStatus.reconciled,
+      }.contains(current.status);
+      // Terminal state is authoritative and monotonic. Duplicate delivery is
+      // harmless, but a late success/error must never overwrite the first
+      // terminal outcome.
+      if (current.status == AssignmentStatus.reconciled ||
+          (terminal &&
+              status != current.status &&
+              status != AssignmentStatus.reconciled)) {
+        return;
+      }
+      if (current.status == status &&
+          const {
+            AssignmentStatus.completed,
+            AssignmentStatus.failed,
+            AssignmentStatus.cancelled,
+          }.contains(status)) {
+        return;
+      }
+    }
     await journal.append(AssignmentRecord(
       assignmentId: assignmentId,
       status: status,
@@ -549,7 +668,30 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       attemptId: context?.attemptId ?? correlation?['attemptId'] as String?,
       idempotencyKey:
           context?.idempotencyKey ?? correlation?['idempotencyKey'] as String?,
+      executionId: context?.executionId ??
+          correlation?['executionId'] as String? ??
+          context?.assignmentId ??
+          assignmentId,
+      processExitCode: result?['processExitCode'] is int
+          ? result!['processExitCode'] as int
+          : null,
+      errorCode: result?['errorCode'] is String
+          ? result!['errorCode'] as String
+          : null,
       result: result,
     ));
+  }
+
+  int? _processExitCode(String? diagnostic) {
+    if (diagnostic == null) return null;
+    try {
+      final decoded = jsonDecode(diagnostic);
+      if (decoded is Map && decoded['processExitCode'] is int) {
+        return decoded['processExitCode'] as int;
+      }
+    } on Object {
+      // Diagnostics are optional evidence and never affect reconciliation.
+    }
+    return null;
   }
 }

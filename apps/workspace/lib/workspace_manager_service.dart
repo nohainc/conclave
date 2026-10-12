@@ -21,6 +21,8 @@ import 'worker_diagnostic_store.dart';
 
 /// Runtime command boundary and event publisher for the local management UI.
 class WorkspaceManagerService {
+  static const _workerReadinessCommandTimeout = Duration(seconds: 40);
+
   WorkspaceManagerService(
     WorkspaceRuntime workspace, {
     this.reloadRuntime,
@@ -493,10 +495,11 @@ class WorkspaceManagerService {
           workerTypeId,
           waitForActiveRefresh: true,
         );
-        await workspace.workerReadinessMonitor?.checkNow(
-          mode: LocalWorkerProbeMode.passive,
-          workerTypeId: workerTypeId,
-        );
+        await _runWorkerReadiness(
+            () => workspace.workerReadinessMonitor?.checkNow(
+                  mode: LocalWorkerProbeMode.passive,
+                  workerTypeId: workerTypeId,
+                ));
         return (await registry.find(worker.id))?.toJson();
       case 'workers.enableWorker':
       case 'workers.disableWorker':
@@ -561,14 +564,16 @@ class WorkspaceManagerService {
           throw const WorkspaceManagerProtocolException(
               'worker_not_found', 'Worker does not exist.');
         }
-        final tested = await (workerSubsystem?.testWorker(workerId) ??
-            (() async {
-              await workspace.workerReadinessMonitor?.checkNow(
-                mode: LocalWorkerProbeMode.live,
-                workerTypeId: worker.workerTypeId,
-              );
-              return registry.find(workerId);
-            })());
+        final tested = await _runWorkerReadinessResult(
+          workerSubsystem?.testWorker(workerId) ??
+              (() async {
+                await workspace.workerReadinessMonitor?.checkNow(
+                  mode: LocalWorkerProbeMode.live,
+                  workerTypeId: worker.workerTypeId,
+                );
+                return registry.find(workerId);
+              })(),
+        );
         return tested?.toJson();
       case 'workers.checkReadiness':
         final workerTypeId = payload['workerTypeId'];
@@ -579,7 +584,8 @@ class WorkspaceManagerService {
         final mode = payload['mode'] == 'live'
             ? LocalWorkerProbeMode.live
             : LocalWorkerProbeMode.passive;
-        await (workerSubsystem?.refreshReadiness(
+        await _runWorkerReadiness(() =>
+            workerSubsystem?.refreshReadiness(
               mode: mode,
               workerTypeId: workerTypeId as String?,
             ) ??
@@ -669,6 +675,28 @@ class WorkspaceManagerService {
       workspace.config.dataDirectory,
     );
     await store.write(store.readSync().copyWith(desiredCloudState: desired));
+  }
+
+  Future<void> _runWorkerReadiness(Future<void>? Function() operation) async {
+    try {
+      await operation()?.timeout(_workerReadinessCommandTimeout);
+    } on TimeoutException {
+      throw const WorkspaceManagerProtocolException(
+        'worker_probe_timeout',
+        'Worker readiness check exceeded its deadline.',
+      );
+    }
+  }
+
+  Future<T?> _runWorkerReadinessResult<T>(Future<T?> operation) async {
+    try {
+      return await operation.timeout(_workerReadinessCommandTimeout);
+    } on TimeoutException {
+      throw const WorkspaceManagerProtocolException(
+        'worker_probe_timeout',
+        'Worker readiness check exceeded its deadline.',
+      );
+    }
   }
 
   Future<void> _reloadRuntime() async {

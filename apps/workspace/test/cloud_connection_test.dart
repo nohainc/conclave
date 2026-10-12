@@ -996,6 +996,62 @@ void main() {
     await connection.close();
   });
 
+  test('retains activity generated while disconnected until reconnect',
+      () async {
+    final socket = FakeSocket();
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      heartbeat: const Duration(hours: 1),
+    );
+    const context = WorkspaceAssignmentContext(
+      workspaceId: 'workspace-1',
+      workspaceRuntimeId: 'workspace-1',
+      workerId: 'worker-1',
+      runId: 'run-1',
+      taskId: 'task-1',
+      attemptId: 'attempt-1',
+      assignmentId: 'assignment-disconnected',
+      idempotencyKey: 'idem-disconnected',
+      payload: {},
+    );
+
+    await connection.reportWorkerActivity(
+      context,
+      WorkerActivity(
+        requestId: 'request-disconnected',
+        assignmentId: 'assignment-disconnected',
+        executionId: 'execution-disconnected',
+        workerId: 'worker-1',
+        eventId: 'event-disconnected',
+        sequence: 1,
+        timestamp: '2026-10-12T18:00:01Z',
+        eventType: 'execution.started',
+        status: 'running',
+        title: 'Worker started',
+      ),
+    );
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'server-disconnected-activity',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'workspace.hello.ack',
+      'payload': {'sessionId': 'session-disconnected-activity'},
+    }));
+
+    await waitFor(() => socket.sent.any((item) {
+          final value = jsonDecode(item as String) as Map<String, dynamic>;
+          return value['type'] == 'assignment.activity' &&
+              value['assignmentId'] == 'assignment-disconnected';
+        }));
+    await connection.close();
+  });
+
   test('reconnects when Gateway heartbeat acknowledgements stop', () async {
     var socketCount = 0;
     final sockets = <FakeSocket>[];
@@ -1149,6 +1205,77 @@ void main() {
     expect(records['assignment-1']!.status, AssignmentStatus.completed);
     expect((records['assignment-1']!.result?['output'] as Map)['text'],
         'durable result payload');
+    await connection.close();
+    await directory.delete(recursive: true);
+  });
+
+  test('reconciles a handler that exceeds the assignment deadline', () async {
+    final socket = FakeSocket();
+    final directory =
+        await Directory.systemTemp.createTemp('workspace-timeout-');
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    var cancellationRequested = false;
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentJournal: journal,
+      assignmentCancellationHandler: (assignmentId, reason) async {
+        cancellationRequested = assignmentId == 'assignment-timeout' &&
+            reason == 'Assignment deadline exceeded';
+        return cancellationRequested;
+      },
+      assignmentHandler: (_) async {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        return const WorkspaceAssignmentResult(summary: 'too late');
+      },
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'server-assignment-timeout',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'workspace-1',
+      'workerId': 'worker-1',
+      'runId': 'run-timeout',
+      'taskId': 'task-timeout',
+      'attemptId': 'attempt-timeout',
+      'assignmentId': 'assignment-timeout',
+      'idempotencyKey': 'idem-timeout',
+      'payload': {
+        'objective': 'deadline test',
+        'role': 'implementer',
+        'workerId': 'worker-1',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
+        'input': {},
+        'contextArtifactIds': [],
+        'timeoutMs': 1000,
+      },
+    }));
+
+    await waitFor(() => socket.sent.any((message) {
+          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+          return decoded['type'] == 'assignment.error';
+        }));
+    final errorMessage = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'assignment.error');
+    final payload = errorMessage['payload'] as Map<String, dynamic>;
+    expect(payload['executionId'], 'assignment-timeout');
+    expect((payload['error'] as Map)['code'], 'timeout');
+    expect(cancellationRequested, isTrue);
+    expect(connection.activeAssignmentCount, 0);
+    expect((await journal.reconcile())['assignment-timeout']!.status,
+        AssignmentStatus.failed);
     await connection.close();
     await directory.delete(recursive: true);
   });
@@ -1468,6 +1595,23 @@ void main() {
     expect(
         ((replay['payload'] as Map<String, dynamic>)['output'] as Map)['text'],
         'saved output');
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'terminal-ack-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.ack',
+      'executionWorkspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'workspace-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-1',
+      'idempotencyKey': 'idem-1',
+      'payload': {'accepted': true, 'terminal': true, 'status': 'completed'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
     expect(
       (await journal.reconcile())['assignment-1']!.status,
       AssignmentStatus.reconciled,
