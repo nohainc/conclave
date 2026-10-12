@@ -72,6 +72,32 @@ describe("Worker smoke tests", () => {
     expect(response.status).toBe(404);
   });
 
+  it("serves the SPA asset for browser routes when static assets are bound", async () => {
+    const requests: Request[] = [];
+    const response = await worker.fetch(
+      new Request(
+        "https://conclave.test/desktop-auth/approve?intentId=intent-1",
+      ),
+      {
+        ...env,
+        ASSETS: {
+          fetch: async (request: Request) => {
+            requests.push(request);
+            return new Response("flutter-index", {
+              headers: { "content-type": "text/html" },
+            });
+          },
+        },
+      } as unknown as Env,
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("flutter-index");
+    expect(requests[0]?.url).toBe(
+      "https://conclave.test/desktop-auth/approve?intentId=intent-1",
+    );
+  });
+
   it("uses the development sign-in helper only for a real Better Auth flow", async () => {
     const response = await worker.fetch(
       new Request(

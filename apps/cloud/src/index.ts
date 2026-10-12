@@ -25,6 +25,12 @@ export {
 } from "./auth/index.js";
 export { requireSameOriginForCookieMutation } from "./routes/handlers.js";
 
+type StaticAssetEnvironment = {
+  ASSETS?: {
+    fetch: (request: Request) => Promise<Response>;
+  };
+};
+
 import * as handlers from "./routes/handlers.js";
 import { handleBetterAuthRequest, identityService } from "./auth/index.js";
 import {
@@ -266,6 +272,19 @@ export default {
     }
 
     const response = await (async (): Promise<Response> => {
+      const staticAssets = (env as Env & StaticAssetEnvironment).ASSETS;
+      if (
+        staticAssets &&
+        (request.method === "GET" || request.method === "HEAD") &&
+        !url.pathname.startsWith("/api/") &&
+        url.pathname !== "/health"
+      ) {
+        // The AX Flutter app owns browser routes such as
+        // /desktop-auth/approve. Explicitly delegate these requests to the
+        // SPA asset binding; otherwise a Worker deployment can return the
+        // API router's JSON not_found response before SPA fallback runs.
+        return staticAssets.fetch(request);
+      }
       if (request.method === "GET" && url.pathname === "/health") {
         return handlers.json({
           ok: true,
