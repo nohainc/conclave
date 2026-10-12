@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildBetterAuthOptions,
   copySetCookieHeaders,
@@ -70,6 +70,9 @@ describe("IdentityService", () => {
     expect(options.user?.changeEmail).toMatchObject({
       enabled: true,
     });
+    expect(options.user?.deleteUser).toMatchObject({
+      enabled: true,
+    });
     expect(options.user?.changeEmail?.sendChangeEmailConfirmation).toEqual(
       expect.any(Function),
     );
@@ -92,6 +95,7 @@ describe("IdentityService", () => {
     });
     expect(options.emailVerification).toMatchObject({
       expiresIn: 3600,
+      sendOnSignUp: true,
     });
     expect(options.session?.modelName).toBe("auth_sessions");
     expect(options.verification?.modelName).toBe("auth_verifications");
@@ -131,6 +135,106 @@ describe("IdentityService", () => {
       "github",
       "google",
     ]);
+  });
+
+  it("uses the centralized sender for verification, reset, and email change messages", async () => {
+    const send = vi.fn(async (_message: unknown) => ({
+      messageId: "message-1",
+    }));
+    const options = buildBetterAuthOptions({
+      CONCLAVE_DB: {} as D1Database,
+      CONCLAVE_ENVIRONMENT: "production",
+      BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
+      BETTER_AUTH_URL: "https://app.conclave.test",
+      CONCLAVE_EMAIL: { send },
+    });
+    const user = { email: "person@example.com", name: "Person" };
+
+    await options.emailVerification?.sendVerificationEmail?.({
+      user,
+      url: "https://app.conclave.test/verify",
+    });
+    await options.emailAndPassword?.sendResetPassword?.({
+      user,
+      url: "https://app.conclave.test/reset",
+    });
+    await options.user?.changeEmail?.sendChangeEmailConfirmation?.({
+      user,
+      newEmail: "new@example.com",
+      url: "https://app.conclave.test/change",
+    });
+
+    expect(send).toHaveBeenCalledTimes(3);
+    const messages = send.mock.calls.map(
+      ([message]) =>
+        message as {
+          to: string;
+          subject: string;
+          text?: string;
+          html?: string;
+          from: { email: string; name: string };
+        },
+    );
+    for (const message of messages) {
+      expect(message).toMatchObject({
+        from: { email: "conclave@nohainc.com", name: "Conclave AX" },
+        to: "person@example.com",
+      });
+    }
+    expect(messages.map((message) => message.subject)).toEqual([
+      "Verify your Conclave AX email address",
+      "Reset your Conclave AX password",
+      "Confirm your Conclave AX email change",
+    ]);
+    expect(messages[0]?.text).toContain("https://app.conclave.test/verify");
+    expect(messages[0]?.text).toContain("This link is valid for 60 minutes.");
+    expect(messages[1]?.text).toContain("https://app.conclave.test/reset");
+    expect(messages[2]?.text).toContain("https://app.conclave.test/change");
+  });
+
+  it("uses the fallback once when the primary sender is rejected", async () => {
+    const send = vi
+      .fn(async (_message: unknown) => ({ messageId: "message-1" }))
+      .mockRejectedValueOnce({ code: "E_SENDER_NOT_VERIFIED" })
+      .mockResolvedValueOnce({ messageId: "message-2" });
+    const options = buildBetterAuthOptions({
+      CONCLAVE_DB: {} as D1Database,
+      CONCLAVE_ENVIRONMENT: "production",
+      BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
+      BETTER_AUTH_URL: "https://app.conclave.test",
+      CONCLAVE_EMAIL: { send },
+    });
+
+    await options.emailAndPassword?.sendResetPassword?.({
+      user: { email: "person@example.com", name: "Person" },
+      url: "https://app.conclave.test/reset",
+    });
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]?.[0]).toMatchObject({
+      from: { email: "vitalii@nohainc.com", name: "Conclave AX" },
+    });
+  });
+
+  it("does not submit authentication mail when template rendering fails", async () => {
+    const send = vi.fn(async (_message: unknown) => ({
+      messageId: "message-1",
+    }));
+    const options = buildBetterAuthOptions({
+      CONCLAVE_DB: {} as D1Database,
+      CONCLAVE_ENVIRONMENT: "production",
+      BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
+      BETTER_AUTH_URL: "https://app.conclave.test",
+      CONCLAVE_EMAIL: { send },
+    });
+
+    await expect(
+      options.emailVerification?.sendVerificationEmail?.({
+        user: { email: "person@example.com", name: "Person" },
+        url: "javascript:alert(1)",
+      }),
+    ).rejects.toThrow("absolute http(s) URL");
+    expect(send).not.toHaveBeenCalled();
   });
 
   it("maps a Better Auth session to the application identity contract", async () => {

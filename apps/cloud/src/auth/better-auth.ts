@@ -1,4 +1,10 @@
 import { publishPeopleProfileChanged } from "../people.js";
+import {
+  EmailDeliveryError,
+  type EmailSenderEnvironment,
+} from "../email/email-config.js";
+import { sendTemplateEmail } from "../email/email-service.js";
+import type { EmailTemplateInputMap } from "../email/email-types.js";
 import { betterAuth } from "better-auth";
 import { passkey } from "@better-auth/passkey";
 import {
@@ -13,22 +19,25 @@ type SocialProviderCredentials = {
   scope: string[];
 };
 
-export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> & {
-  CONCLAVE_ENVIRONMENT: string;
-  CONCLAVE_E2E?: string;
-  BETTER_AUTH_SECRET?: string;
-  BETTER_AUTH_URL?: string;
-  BETTER_AUTH_TRUSTED_ORIGINS?: string;
-  BETTER_AUTH_RP_ID?: string;
-  BETTER_AUTH_ORIGIN?: string;
-  CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
-  CONCLAVE_EMAIL?: SendEmail;
-  CONCLAVE_EMAIL_FROM?: string;
-  CONCLAVE_AUTH_GITHUB_CLIENT_ID?: string;
-  CONCLAVE_AUTH_GITHUB_CLIENT_SECRET?: string;
-  CONCLAVE_AUTH_GOOGLE_CLIENT_ID?: string;
-  CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET?: string;
-};
+const AUTH_EMAIL_LINK_EXPIRATION_SECONDS = 60 * 60;
+const AUTH_EMAIL_LINK_EXPIRATION_MINUTES =
+  AUTH_EMAIL_LINK_EXPIRATION_SECONDS / 60;
+
+export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> &
+  EmailSenderEnvironment & {
+    CONCLAVE_ENVIRONMENT: string;
+    CONCLAVE_E2E?: string;
+    BETTER_AUTH_SECRET?: string;
+    BETTER_AUTH_URL?: string;
+    BETTER_AUTH_TRUSTED_ORIGINS?: string;
+    BETTER_AUTH_RP_ID?: string;
+    BETTER_AUTH_ORIGIN?: string;
+    CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
+    CONCLAVE_AUTH_GITHUB_CLIENT_ID?: string;
+    CONCLAVE_AUTH_GITHUB_CLIENT_SECRET?: string;
+    CONCLAVE_AUTH_GOOGLE_CLIENT_ID?: string;
+    CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET?: string;
+  };
 
 function providerCredentials(
   clientId: string | undefined,
@@ -39,50 +48,41 @@ function providerCredentials(
   return { clientId, clientSecret, scope };
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(
-    /[&<>"']/g,
-    (character) =>
-      ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;",
-      })[character] ?? character,
-  );
-}
-
-async function sendAuthEmail(
+async function sendAuthEmail<
+  TId extends
+    | "auth.verify-email.v1"
+    | "auth.reset-password.v1"
+    | "auth.confirm-email-change.v1",
+>(
   env: BetterAuthRuntimeEnv,
   user: { email: string; name?: string | null },
-  url: string,
-  subject: string,
+  templateId: TId,
+  input: EmailTemplateInputMap[TId],
   action: string,
+  actionUrl: string,
 ): Promise<void> {
   if (!env.CONCLAVE_EMAIL) {
     if (env.CONCLAVE_ENVIRONMENT === "development") {
       console.info("auth.email.development", {
         action,
         email: user.email,
-        url,
       });
       return;
     }
-    throw new Error("CONCLAVE_EMAIL is required for authentication emails");
+    throw new EmailDeliveryError(
+      "configuration_error",
+      "CONCLAVE_EMAIL is required for authentication emails",
+    );
   }
 
-  const safeUrl = escapeHtml(url);
-  const safeName = escapeHtml(user.name?.trim() || "there");
-  await env.CONCLAVE_EMAIL.send({
+  const configuredOrigin = env.BETTER_AUTH_URL
+    ? new URL(env.BETTER_AUTH_URL).origin
+    : new URL(actionUrl).origin;
+  await sendTemplateEmail(env, {
     to: user.email,
-    from: {
-      email: env.CONCLAVE_EMAIL_FROM ?? "auth@auth.earthuc.com",
-      name: "Conclave AX",
-    },
-    subject,
-    text: `Hi ${user.name?.trim() || "there"},\n\n${action}: ${url}\n\nIf you did not request this, you can ignore this email.`,
-    html: `<p>Hi ${safeName},</p><p>${action}:</p><p><a href="${safeUrl}">${safeUrl}</a></p><p>If you did not request this, you can ignore this email.</p>`,
+    templateId,
+    input,
+    renderOptions: { approvedOrigins: [configuredOrigin] },
   });
 }
 
@@ -207,10 +207,19 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
           sendAuthEmail(
             env,
             user,
-            url,
-            "Confirm your Conclave AX email change",
+            "auth.confirm-email-change.v1",
+            {
+              recipientName: user.name,
+              newEmail,
+              confirmationUrl: url,
+              expiresInMinutes: AUTH_EMAIL_LINK_EXPIRATION_MINUTES,
+            },
             `Confirm changing your email to ${newEmail}`,
+            url,
           ),
+      },
+      deleteUser: {
+        enabled: true,
       },
     },
     account: {
@@ -244,6 +253,7 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
       },
     },
     emailVerification: {
+      sendOnSignUp: true,
       sendVerificationEmail: async ({
         user,
         url,
@@ -254,11 +264,16 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
         sendAuthEmail(
           env,
           user,
-          url,
-          "Verify your Conclave AX email address",
+          "auth.verify-email.v1",
+          {
+            recipientName: user.name,
+            verificationUrl: url,
+            expiresInMinutes: AUTH_EMAIL_LINK_EXPIRATION_MINUTES,
+          },
           "Verify your email address",
+          url,
         ),
-      expiresIn: 60 * 60,
+      expiresIn: AUTH_EMAIL_LINK_EXPIRATION_SECONDS,
     },
     emailAndPassword: {
       enabled: true,
@@ -267,7 +282,7 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
       maxPasswordLength: 128,
       autoSignIn: true,
       revokeSessionsOnPasswordReset: true,
-      resetPasswordTokenExpiresIn: 60 * 60,
+      resetPasswordTokenExpiresIn: AUTH_EMAIL_LINK_EXPIRATION_SECONDS,
       sendResetPassword: async ({
         user,
         url,
@@ -278,9 +293,14 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
         sendAuthEmail(
           env,
           user,
-          url,
-          "Reset your Conclave AX password",
+          "auth.reset-password.v1",
+          {
+            recipientName: user.name,
+            resetUrl: url,
+            expiresInMinutes: AUTH_EMAIL_LINK_EXPIRATION_MINUTES,
+          },
           "Reset your password",
+          url,
         ),
     },
     socialProviders: {

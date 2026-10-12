@@ -1,0 +1,6 @@
+# Local development does not send real email unless a local test binding is
+# deliberately supplied. These optional overrides use non-deliverable addresses
+# so tests never depend on production sender authorization.
+CONCLAVE_EMAIL_FROM=conclave@conclave.test
+CONCLAVE_EMAIL_FALLBACK_FROM=fallback@conclave.test
+CONCLAVE_EMAIL_FROM_NAME="Conclave AX (Local)"

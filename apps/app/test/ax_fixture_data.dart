@@ -363,6 +363,9 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
   Future<void> revokeAccountSession(String token) async {}
 
   @override
+  Future<void> deleteAccount() async {}
+
+  @override
   Future<Uri> beginAccountLink(String provider, Uri returnTo) async =>
       Uri.parse('https://accounts.example.test/link/$provider');
 

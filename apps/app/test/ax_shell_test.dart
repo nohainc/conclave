@@ -88,6 +88,34 @@ void main() {
     expect(find.text('Other browser'), findsNothing);
   });
 
+  testWidgets('profile can delete the account after confirmation',
+      (tester) async {
+    final data = _DeleteAccountFixture();
+    await tester.pumpWidget(MaterialApp(
+      theme: ConclaveBrand.lightTheme(),
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: data,
+        initialUri: Uri.parse('/settings/profile'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final deleteButton = find.text('Delete account').last;
+    await tester.ensureVisible(deleteButton);
+    await tester.tap(deleteButton);
+    await tester.pumpAndSettle();
+    expect(
+        find.text(
+            'This permanently deletes your Conclave account and signs you out on every device. This action cannot be undone.'),
+        findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete account'));
+    await tester.pumpAndSettle();
+    expect(data.deleted, isTrue);
+    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+  });
+
   testWidgets('profile security remains loading until both lists arrive',
       (tester) async {
     final data = _DelayedAccountSecurityDataSource();
@@ -2421,6 +2449,15 @@ class _DelayedAccountSecurityDataSource extends AxFixtureDataSource {
   Future<AxAccountSecurity> loadAccountSecurity() {
     securityLoadCalls++;
     return _securityCompleter.future;
+  }
+}
+
+class _DeleteAccountFixture extends AxFixtureDataSource {
+  var deleted = false;
+
+  @override
+  Future<void> deleteAccount() async {
+    deleted = true;
   }
 }
 

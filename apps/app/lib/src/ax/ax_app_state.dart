@@ -83,6 +83,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   }
 
   bool revokingAllAccountSessions = false;
+  bool deletingAccount = false;
   ThemeMode _themeMode = ThemeMode.system;
   bool _desktopSidebarCollapsed = false;
   bool get showRunDetails => switch (navigation.kind) {

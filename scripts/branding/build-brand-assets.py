@@ -36,6 +36,7 @@ for name, color in [('conclave_wordmark.svg', '#20202A'), ('conclave_wordmark_da
     assets[name] = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 96"><g transform="scale(.075)">{image}</g><text x="106" y="62" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="800" letter-spacing="0.06em" fill="{color}">CONCLAVE</text></svg>\n').encode()
 icons = {size: render(size) for size in [16, 32, 64, 128, 192, 256, 512, 1024]}
 assets['conclave_logo.png'] = icons[1024]
+assets['conclave_email_logo.png'] = icons[128]
 for size in [32, 64, 128, 192, 512]:
     assets[f'conclave_logo_{size}.png'] = icons[size]
 for name, data in assets.items():

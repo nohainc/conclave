@@ -20,6 +20,7 @@ import {
   resolveAppUrl,
   sendSpaceInvitationEmail,
 } from "../invitation-email.js";
+import { classifyEmailDeliveryFailure } from "../email/email-config.js";
 import { hashToken, authorizeSpaceOwner } from "@conclave/security";
 import {
   HttpError,
@@ -736,7 +737,11 @@ export async function handleCreateSpaceInvitation(
       appUrl: invitationLink,
     });
   } catch (emailError) {
-    console.warn("Failed to dispatch invitation email", emailError);
+    const failure = classifyEmailDeliveryFailure(emailError);
+    console.warn("Failed to dispatch invitation email", {
+      status: failure.status,
+      providerCode: failure.providerCode,
+    });
   }
 
   return json(

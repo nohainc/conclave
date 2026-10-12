@@ -70,6 +70,18 @@ class AxStore {
     }
   }
 
+  Future<void> markAccountDeleted() async {
+    final userId = auth.session?.viewer?.id;
+    final clearing = persistence.clearUser();
+    final clearingThreadView = userId == null
+        ? Future<void>.value()
+        : threadViewState.clearUser(userId);
+    clearServerState();
+    auth.markUnauthenticated();
+    await clearing;
+    await clearingThreadView;
+  }
+
   int _sessionGeneration = 0;
   bool _disposed = false;
   AxSnapshot _execution = AxSnapshot.empty();
@@ -497,6 +509,12 @@ class AuthStore {
       _generation++;
       _loggingOut = false;
     }
+  }
+
+  void markUnauthenticated() {
+    _generation++;
+    session = const AxSession(authenticated: false);
+    viewer = null;
   }
 }
 

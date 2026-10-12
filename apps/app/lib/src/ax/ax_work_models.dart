@@ -753,6 +753,8 @@ abstract interface class AxDataSource {
       throw UnimplementedError('Space collaboration is not available');
   Future<AxAccountSecurity> loadAccountSecurity();
   Future<void> revokeAccountSession(String token);
+  Future<void> deleteAccount() async =>
+      throw UnimplementedError('Account deletion is not available');
   Future<Uri> beginAccountLink(String provider, Uri returnTo);
   Future<void> approveDesktopAuthIntent({
     required String intentId,

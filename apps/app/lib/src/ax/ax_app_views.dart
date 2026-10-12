@@ -522,6 +522,25 @@ extension _AxAppViews on _AxAppStateMixin {
                   ],
                 ),
         ),
+        _profileSection(
+          title: 'Account',
+          child: OutlinedButton.icon(
+            onPressed: deletingAccount ? null : _deleteAccount,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: ConclaveColors.error,
+              side: BorderSide(
+                  color: ConclaveColors.error.withValues(alpha: .45)),
+            ),
+            icon: deletingAccount
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.delete_forever_outlined, size: 17),
+            label: Text(deletingAccount ? 'Deleting…' : 'Delete account'),
+          ),
+        ),
       ],
     );
   }

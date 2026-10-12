@@ -929,6 +929,34 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
+  Future<void> _deleteAccount() async {
+    if (deletingAccount) return;
+    final confirmed = await _confirmSpaceAction(
+      title: 'Delete account?',
+      message:
+          'This permanently deletes your Conclave account and signs you out on every device. This action cannot be undone.',
+      action: 'Delete account',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    _updateState(() => deletingAccount = true);
+    try {
+      await widget.dataSource.deleteAccount();
+      await store.markAccountDeleted();
+      if (!mounted) return;
+      _updateState(() {
+        deletingAccount = false;
+        selectedSpaceId = null;
+        authRequired = true;
+      });
+      browserNavigation.replaceWithLogin(navigation.toUri());
+    } catch (error) {
+      if (!mounted) return;
+      _updateState(() => deletingAccount = false);
+      _showSnackBar(error.toString(), type: ToastType.error);
+    }
+  }
+
   Future<void> _uploadAvatar() async {
     if (avatarUploadBusy) return;
     AxAvatarFile? selected;

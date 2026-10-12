@@ -27,6 +27,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Validate production Gateway smoke script
         run: node --check scripts/production-workspace-gateway-smoke.mjs
+      - name: Validate email sender configuration without sending mail
+        run: pnpm email:config-check
       - id: flutter
         uses: subosito/flutter-action@v2
         with:

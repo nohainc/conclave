@@ -169,6 +169,8 @@ export type SecurityEnv = Env & {
   ) => Promise<SecurityContext>;
   readonly CONCLAVE_APP_URL?: string;
   readonly CONCLAVE_EMAIL_FROM?: string;
+  readonly CONCLAVE_EMAIL_FALLBACK_FROM?: string;
+  readonly CONCLAVE_EMAIL_FROM_NAME?: string;
   readonly CONCLAVE_WORKSPACE_GATEWAY?: DurableObjectNamespace;
   readonly CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
   readonly CONCLAVE_THREAD_COORDINATOR?: DurableObjectNamespace;

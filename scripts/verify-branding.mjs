@@ -18,6 +18,7 @@ export const REQUIRED_CANONICAL_PNGS = [
   "conclave_logo_512.png",
   "conclave_logo_192.png",
   "conclave_logo_128.png",
+  "conclave_email_logo.png",
   "conclave_logo_64.png",
   "conclave_logo_32.png",
 ];
@@ -182,6 +183,7 @@ export function verifyRequiredGeneratedIcons(rootDir) {
     "conclave_wordmark.svg",
     "conclave_wordmark_dark.svg",
     "conclave_logo.png",
+    "conclave_email_logo.png",
     "favicon.png",
     "favicon.svg",
   ];

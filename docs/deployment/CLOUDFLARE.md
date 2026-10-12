@@ -70,14 +70,37 @@ Set these values in the Worker environment:
 - `BETTER_AUTH_TRUSTED_ORIGINS` — optional comma-separated additional Conclave AX
   origins for local or controlled preview environments.
 
-The production Worker also uses Cloudflare Email Service for email verification
-and password reset. The current configured sender is
-`auth@auth.earthuc.com`, under the enabled `auth.earthuc.com` sending domain.
-The planned sender-domain migration is to `conclaveax.com`: first enable and
-verify that domain for Cloudflare Email Sending, then change
-`CONCLAVE_EMAIL_FROM` in the production Wrangler configuration. Until then,
-keep the verified current sender. Local development logs the generated link
-instead of sending mail.
+The production Worker also uses Cloudflare Email Service for email verification,
+password reset, and Space invitations. Sender configuration is centralized in
+the Cloud email service and uses these production variables:
+
+- `CONCLAVE_EMAIL_FROM=conclave@nohainc.com`
+- `CONCLAVE_EMAIL_FALLBACK_FROM=vitalii@nohainc.com`
+- `CONCLAVE_EMAIL_FROM_NAME=Conclave AX`
+
+Both addresses must be independently authorized by the Cloudflare Email
+Sending configuration before deploying this change. The fallback is used only
+when the provider explicitly rejects the primary sender before accepting the
+message. Timeouts, recipient failures, and unknown errors are not retried with
+another sender, which avoids duplicate messages after an uncertain provider
+acceptance. The retired `auth@auth.earthuc.com` address is rejected by the
+configuration validator. Local development logs generated links instead of
+sending mail.
+
+For local overrides, copy `apps/cloud/.dev.vars.example` to `apps/cloud/.dev.vars` and use
+non-deliverable `*.test` addresses. The development Wrangler configuration keeps
+the email binding for local simulation but does not configure production sender
+identities. The production deployment workflows validate configuration and binding shape;
+they do not send a test message or prove Cloudflare sender authorization.
+
+The shared delivery service reports accepted delivery separately from sender
+authorization, recipient rejection, rate limiting, provider availability,
+temporary failure, and configuration errors. Authentication preserves its
+throw-on-failure behavior; invitation creation preserves its boolean delivery
+result.
+
+The automated coverage and the controlled production sender smoke test are
+documented in the [email delivery verification runbook](EMAIL_DELIVERY_VERIFICATION.md).
 
 Store `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET`,
 `CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET`, and

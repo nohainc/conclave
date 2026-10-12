@@ -10,6 +10,7 @@ coverage/
 .env
 .env.*
 !.env.example
+.email-preview/
 # Dart and Flutter generated state.
 **/.dart_tool/
 **/build/

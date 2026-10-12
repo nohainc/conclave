@@ -99,6 +99,9 @@ mixin _AuthApi on _AxApiClientCore {
   }
 
   @override
+  Future<void> deleteAccount() => _postAuth('/auth/delete-user', {});
+
+  @override
   Future<String> uploadAvatar({
     required List<int> bytes,
     required String mediaType,

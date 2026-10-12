@@ -79,12 +79,9 @@ describe("Invitation Email Delivery", () => {
     );
   });
 
-  it("escapes HTML in user inputs for security", async () => {
-    const sentEmails: Array<{ html: string }> = [];
+  it("rejects markup in recipient addresses before delivery", async () => {
     const mockEmail = {
-      send: vi.fn(async (msg: unknown) => {
-        sentEmails.push(msg as (typeof sentEmails)[0]);
-      }),
+      send: vi.fn(async (_msg: unknown) => undefined),
     };
 
     const env = {
@@ -99,12 +96,76 @@ describe("Invitation Email Delivery", () => {
       appUrl: "https://app.conclave.dev/?invitation=pinv-xss",
     });
 
-    const sent = sentEmails[0]!;
-    expect(sent.html).not.toContain("<script>");
-    expect(sent.html).toContain(
-      "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;",
+    expect(mockEmail.send).not.toHaveBeenCalled();
+  });
+
+  it("returns false when production delivery is unavailable", async () => {
+    await expect(
+      sendSpaceInvitationEmail(
+        { CONCLAVE_ENVIRONMENT: "production" } as never,
+        {
+          recipientEmail: "person@example.com",
+          inviterName: "Vitalii Noha",
+          spaceName: "Conclave AX",
+          role: "collaborator",
+          appUrl: "https://app.conclave.dev",
+        },
+      ),
+    ).resolves.toBe(false);
+  });
+
+  it("uses the fallback once for an explicit sender rejection", async () => {
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "E_SENDER_NOT_VERIFIED" })
+      .mockResolvedValueOnce({ messageId: "message-2" });
+    const ok = await sendSpaceInvitationEmail(
+      { CONCLAVE_EMAIL: { send } } as never,
+      {
+        recipientEmail: "person@example.com",
+        inviterName: "Vitalii Noha",
+        spaceName: "Conclave AX",
+        role: "collaborator",
+        appUrl: "https://app.conclave.dev",
+      },
     );
-    expect(sent.html).toContain("Space &lt;img src=x onerror=alert(1)&gt;");
+
+    expect(ok).toBe(true);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]?.[0]).toMatchObject({
+      from: { email: "vitalii@nohainc.com", name: "Conclave AX" },
+    });
+  });
+
+  it("does not expose raw provider details in delivery logs", async () => {
+    const error = new Error(
+      "token=reset-secret https://app.conclave.test/reset?token=secret body=private message",
+    );
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        sendSpaceInvitationEmail(
+          {
+            CONCLAVE_EMAIL: {
+              send: vi.fn().mockRejectedValue(error),
+            },
+          } as never,
+          {
+            recipientEmail: "person@example.com",
+            inviterName: "Vitalii Noha",
+            spaceName: "Conclave AX",
+            role: "collaborator",
+            appUrl: "https://app.conclave.dev",
+          },
+        ),
+      ).resolves.toBe(false);
+      const output = log.mock.calls.flat().map(String).join(" ");
+      expect(output).not.toContain("reset-secret");
+      expect(output).not.toContain("https://app.conclave.test/reset");
+      expect(output).not.toContain("private message");
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("sends email and creates invitation on handleCreateSpaceInvitation", async () => {
@@ -166,6 +227,71 @@ describe("Invitation Email Delivery", () => {
     expect(sentEmails[0]).toMatchObject({
       to: "ulikossnokia@gmail.com",
       subject: "Vitalii Noha invited you to Conclave AX Development",
+      from: {
+        email: "conclave@nohainc.com",
+        name: "Conclave AX",
+      },
     });
+  });
+
+  it("keeps a pending invitation when email delivery is rejected", async () => {
+    const { sqlite, db } = sqliteD1();
+    const now = new Date().toISOString();
+
+    sqlite.exec(`
+      INSERT INTO users (id, email, display_name, status, created_at, updated_at)
+      VALUES ('user-vitalii', 'vitalii@nohainc.com', 'Vitalii Noha', 'active', '${now}', '${now}');
+      INSERT INTO spaces (id, name, owner_user_id, created_at, updated_at)
+      VALUES ('proj-1', 'Conclave AX Development', 'user-vitalii', '${now}', '${now}');
+      INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at)
+      VALUES ('pm-1', 'proj-1', 'user-vitalii', 'owner', '${now}', '${now}');
+    `);
+
+    const env = {
+      CONCLAVE_ENVIRONMENT: "development",
+      CONCLAVE_DB: db,
+      CONCLAVE_APP_URL: "https://app.conclave.dev",
+      CONCLAVE_EMAIL: {
+        send: vi.fn().mockRejectedValue({ code: "E_RECIPIENT_NOT_ALLOWED" }),
+      },
+      TEST_AUTHENTICATION: async () => ({
+        userId: "user-vitalii",
+        user: {
+          id: "user-vitalii",
+          email: "vitalii@nohainc.com",
+          displayName: "Vitalii Noha",
+          status: "active",
+        },
+        workspaceId: "",
+        spaceRoles: { "proj-1": "owner" },
+        sessionId: "sess-vitalii",
+        clientType: "web",
+      }),
+    };
+
+    const req = new Request(
+      "https://conclave.internal/api/spaces/proj-1/invitations",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer vitalii",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          email: "person@example.com",
+          role: "collaborator",
+        }),
+      },
+    );
+
+    const res = await handleCreateSpaceInvitation(req, env as never, "proj-1");
+    expect(res.status).toBe(201);
+    const invitation = await db
+      .prepare(
+        "SELECT status FROM space_invitations WHERE space_id = ?1 AND email = ?2",
+      )
+      .bind("proj-1", "person@example.com")
+      .first<{ status: string }>();
+    expect(invitation).toEqual({ status: "pending" });
   });
 });
