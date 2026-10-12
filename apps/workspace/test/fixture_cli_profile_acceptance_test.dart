@@ -7,7 +7,7 @@ import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/worker_executor.dart';
 import 'package:conclave_workspace/space_directory.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/tool_profile_release_store.dart';
+import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:conclave_workspace/worker_diagnostic_store.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:conclave_workspace/worker_catalog_coordinator.dart';
@@ -16,6 +16,7 @@ import 'package:conclave_workspace/workspace_worker_view.dart';
 import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
+import 'support/worker_profile_snapshot_fixture.dart';
 
 void main() {
   test(
@@ -26,7 +27,7 @@ void main() {
       addTearDown(() => root.delete(recursive: true));
 
       final signing = await Ed25519ReleaseFixture.create();
-      var profileStore = ToolProfileReleaseStore(
+      var profileStore = WorkerProfileStore(
         profilesRoot: Directory('${root.path}/Profiles'),
         trustPolicy: signing.trustPolicy,
       );
@@ -37,25 +38,20 @@ void main() {
           jsonDecode(await profileFile.readAsString()) as Map<String, Object?>;
       profile['profileDefinitionId'] = 'dynamic-test-cli';
       profile['logicalWorkerTypeId'] = 'dynamic-test-worker';
-      final release = <String, Object?>{
-        'profileDefinitionId': 'dynamic-test-cli',
-        'workerTypeId': 'dynamic-test-worker',
-        'displayName': 'Dynamic Test Worker',
-        'providerToolName': 'Fixture CLI',
-        'channel': 'stable',
-        'releaseVersion': 1,
-        'profile': profile,
-        'schemaVersion': profile['schemaVersion'],
-        'engineFamily': profile['engineFamily'],
-        'engineCompatibility': profile['engineCompatibility'],
-      };
-      await signing.signToolProfileRelease(release);
+      final currentProfile = await workerProfileSnapshotFixture(
+        signing: signing,
+        profile: profile,
+        workerTypeId: 'dynamic-test-worker',
+        revision: 1,
+      );
       final newerProfile = Map<String, Object?>.from(profile)
         ..['releaseVersion'] = 2;
-      final newerRelease = Map<String, Object?>.from(release)
-        ..['releaseVersion'] = 2
-        ..['profile'] = newerProfile;
-      await signing.signToolProfileRelease(newerRelease);
+      final newerSnapshot = await workerProfileSnapshotFixture(
+        signing: signing,
+        profile: newerProfile,
+        workerTypeId: 'dynamic-test-worker',
+        revision: 2,
+      );
       const dynamicDescriptor = {
         'workerTypeId': 'dynamic-test-worker',
         'displayName': 'Dynamic Test Worker',
@@ -81,7 +77,6 @@ void main() {
       var cloudAvailable = true;
       var catalogActive = true;
       var newWorkerApproved = false;
-      var dynamicReleases = <Map<String, Object?>>[release];
       var catalog = ToolProfileCatalogClient(
         cloudUri: Uri.https('cloud.example', '/'),
         store: profileStore,
@@ -96,14 +91,11 @@ void main() {
             if (newWorkerApproved) newlyApprovedDescriptor,
           ];
         },
-        listLoader: (workerTypeId, channel) async {
-          expect(channel, 'stable');
-          return ToolProfileCatalogResult(
-            channel: channel,
-            releases: workerTypeId == 'dynamic-test-worker'
-                ? dynamicReleases
-                : const [],
-          );
+        currentProfileLoader: (workerTypeId) async {
+          if (!cloudAvailable) throw const SocketException('offline');
+          return workerTypeId == 'dynamic-test-worker'
+              ? currentProfile
+              : (throw StateError('unexpected Worker'));
         },
         candidateValidator: (admission, file) async =>
             admission.logicalWorkerTypeId == 'dynamic-test-worker' &&
@@ -123,11 +115,8 @@ void main() {
       final entry = coordinator.entryForWorker('dynamic-test-worker');
       expect(entry?.displayName, 'Dynamic Test Worker');
       expect(
-        await profileStore.profileFile('dynamic-test-cli', 1).exists(),
-        isTrue,
-      );
-      expect(
-        (await profileStore.activeRelease('dynamic-test-cli'))?.releaseVersion,
+        (await profileStore.currentWorkerProfile('dynamic-test-worker'))
+            ?.revision,
         1,
       );
 
@@ -141,12 +130,11 @@ void main() {
       // Simulate a Cloud-side Worker addition and Profile update, then restart
       // Workspace with Cloud unreachable. The durable local state must win.
       newWorkerApproved = true;
-      dynamicReleases = [newerRelease];
       cloudAvailable = false;
       coordinator.dispose();
       catalog.close();
       var postRestartProfileRequests = 0;
-      profileStore = ToolProfileReleaseStore(
+      profileStore = WorkerProfileStore(
         profilesRoot: Directory('${root.path}/Profiles'),
         trustPolicy: signing.trustPolicy,
       );
@@ -169,15 +157,12 @@ void main() {
             if (newWorkerApproved) newlyApprovedDescriptor,
           ];
         },
-        listLoader: (workerTypeId, channel) async {
+        currentProfileLoader: (workerTypeId) async {
           if (!cloudAvailable) throw const SocketException('offline');
           postRestartProfileRequests++;
-          return ToolProfileCatalogResult(
-            channel: channel,
-            releases: workerTypeId == 'dynamic-test-worker'
-                ? dynamicReleases
-                : const [],
-          );
+          return workerTypeId == 'dynamic-test-worker'
+              ? newerSnapshot
+              : (throw StateError('unexpected Worker'));
         },
         candidateValidator: (admission, file) async =>
             admission.logicalWorkerTypeId == 'dynamic-test-worker' &&
@@ -206,12 +191,9 @@ void main() {
       expect(
           await coordinator.ensureCatalogEntry('offline-added-worker'), isNull);
       expect(
-        (await profileStore.activeRelease('dynamic-test-cli'))?.releaseVersion,
+        (await profileStore.currentWorkerProfile('dynamic-test-worker'))
+            ?.revision,
         1,
-      );
-      expect(
-        await profileStore.profileFile('dynamic-test-cli', 2).exists(),
-        isFalse,
       );
       final worker = (await registry.find(initialWorker.id))!;
 
@@ -340,10 +322,7 @@ void main() {
           final input = Map<String, Object?>.from(payload['input'] as Map);
           return engine.execute(
             release,
-            profileFile: profileStore.profileFile(
-              'dynamic-test-cli',
-              release.releaseVersion,
-            ),
+            profileFile: await profileStore.executionProfileFile(release),
             stateDirectory: Directory('${root.path}/permission-state'),
             workingDirectory: workingDirectory,
             workerId: logicalWorker.id,
@@ -399,19 +378,12 @@ void main() {
       await coordinator.refresh(force: true);
       expect(coordinator.snapshot.catalogConfirmed, isTrue);
       expect(coordinator.entryForWorker('offline-added-worker'), isNotNull);
-      expect(postRestartProfileRequests, 2);
       expect(
-        await profileStore.installedVersions('dynamic-test-cli'),
-        contains(2),
-      );
-      expect(
-        (await profileStore.activeRelease('dynamic-test-cli'))?.releaseVersion,
+        (await profileStore.currentWorkerProfile('dynamic-test-worker'))
+            ?.revision,
         2,
       );
-      expect(
-        await profileStore.profileFile('dynamic-test-cli', 2).exists(),
-        isTrue,
-      );
+      expect(postRestartProfileRequests, 2);
 
       // Cloud retires the Worker while offline. The cached active catalog and
       // signed Profile remain authoritative until the next successful sync.

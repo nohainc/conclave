@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'tool_profile_release_store.dart';
+import 'worker_profile_store.dart';
 
 export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
     show
@@ -13,7 +13,7 @@ export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
 /// snapshot available only when the current snapshot is unavailable.
 class ToolProfileResolver {
   const ToolProfileResolver(this.store);
-  final ToolProfileReleaseStore store;
+  final WorkerProfileStorePort store;
 
   Future<ToolProfileResolution<ToolProfileCandidate>> resolveForWorker({
     required String logicalWorkerTypeId,
@@ -61,7 +61,13 @@ class ToolProfileResolver {
     } on WorkerProfileRevokedException {
       return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
           ToolProfileUnavailableReason.noEligibleRelease);
-    } on Object {
+    } on Object catch (error) {
+      // Keep the revocation fail-closed even when a Workspace binary has a
+      // different copy of the transitional exception class loaded.
+      if (error.toString().contains('Worker Profile is revoked')) {
+        return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
+            ToolProfileUnavailableReason.noEligibleRelease);
+      }
       current = null;
     }
     if (current != null) {

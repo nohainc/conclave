@@ -7,7 +7,7 @@ import 'package:conclave_protocol/worker_descriptor.dart';
 export 'package:conclave_protocol/worker_descriptor.dart';
 
 import 'self_update.dart';
-import 'tool_profile_release_store.dart';
+import 'worker_profile_store.dart';
 import 'tool_profile_release_verifier.dart';
 import 'worker_trust_policy.dart';
 
@@ -63,7 +63,7 @@ class ToolProfileCatalogClient {
   static const maxWorkersPerResponse = 64;
 
   final Uri cloudUri;
-  final ToolProfileReleaseStore store;
+  final WorkerProfileStorePort store;
   final WorkerTrustPolicy trustPolicy;
   final String? workspaceRuntimeId;
   final String? authToken;

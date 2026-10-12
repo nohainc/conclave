@@ -9,7 +9,7 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/tool_profile_release_store.dart';
+import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:conclave_workspace/tool_profile_resolver.dart';
 import 'package:test/test.dart';
 
@@ -18,13 +18,13 @@ import 'support/ed25519_release_fixture.dart';
 void main() {
   late Ed25519ReleaseFixture signing;
   late Directory temporary;
-  late ToolProfileReleaseStore store;
+  late WorkerProfileStore store;
   late Map<String, Object?> profile;
 
   setUp(() async {
     signing = await Ed25519ReleaseFixture.create();
     temporary = await Directory.systemTemp.createTemp('conclave-profile-v9-');
-    store = ToolProfileReleaseStore(
+    store = WorkerProfileStore(
       profilesRoot: Directory('${temporary.path}/Profiles'),
       trustPolicy: signing.trustPolicy,
     );
@@ -131,5 +131,69 @@ void main() {
     expect(validated, 1);
     expect(result.single, isA<WorkerProfileSnapshotAdmission>());
     expect((await store.currentWorkerProfile('fixture-worker'))?.revision, 1);
+  });
+
+  test('migrates the approved legacy stable snapshot into V9 cache', () async {
+    final legacyDefinition = Directory(
+      '${store.profilesRoot.path}${Platform.pathSeparator}fixture-cli',
+    );
+    final legacyRelease = Directory(
+      '${legacyDefinition.path}${Platform.pathSeparator}1',
+    );
+    await legacyRelease.create(recursive: true);
+    final legacy = <String, Object?>{
+      'profileDefinitionId': 'fixture-cli',
+      'workerTypeId': 'fixture-worker',
+      'displayName': 'Fixture CLI',
+      'providerToolName': 'Fixture CLI',
+      'channel': 'stable',
+      'releaseVersion': 1,
+      'profile': profile,
+      'schemaVersion': profile['schemaVersion'],
+      'engineFamily': profile['engineFamily'],
+      'engineCompatibility': profile['engineCompatibility'],
+    };
+    await signing.signToolProfileRelease(legacy);
+    await File(
+            '${legacyDefinition.path}${Platform.pathSeparator}release-state.json')
+        .writeAsString(canonicalJson({
+      'schemaVersion': 1,
+      'activeVersion': 1,
+      'stableVersion': 1,
+      'selectedChannel': 'stable',
+    }));
+    await File('${legacyRelease.path}${Platform.pathSeparator}release.json')
+        .writeAsString(canonicalJson(legacy));
+    await File('${legacyRelease.path}${Platform.pathSeparator}profile.json')
+        .writeAsString(canonicalJson(profile));
+
+    final migrated = await store.currentWorkerProfile('fixture-worker');
+
+    expect(migrated?.revision, 1);
+    expect(await legacyDefinition.exists(), isFalse,
+        reason:
+            'Legacy per-release cache must not remain active after migration.');
+    final migratedSnapshot = File(
+      '${store.workerProfileDirectory('fixture-worker').path}'
+      '${Platform.pathSeparator}current.json',
+    );
+    expect(jsonDecode(await migratedSnapshot.readAsString())['signatureDomain'],
+        'conclave-tool-profile-release-v1');
+  });
+
+  test('keeps an immutable execution snapshot across activation', () async {
+    final first = await snapshot(1);
+    await store.activateWorkerProfile(await store.stageWorkerProfile(first));
+    final pinned = await store.executionProfileFile(first);
+
+    final second = await snapshot(2);
+    await store.activateWorkerProfile(await store.stageWorkerProfile(second));
+
+    expect(await pinned.readAsString(), canonicalJson(first.profile));
+    expect(
+      pinned.path,
+      contains('${Platform.pathSeparator}revisions${Platform.pathSeparator}'),
+    );
+    expect((await store.currentWorkerProfile('fixture-worker'))?.revision, 2);
   });
 }

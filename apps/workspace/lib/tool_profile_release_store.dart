@@ -5,7 +5,7 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 
 import 'platform_runtime.dart';
 import 'development_tool_profiles.dart';
-import 'tool_profile_release_verifier.dart';
+import 'worker_profile_store.dart';
 
 export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
     show canonicalJson;
@@ -39,19 +39,9 @@ class ToolProfileTrustIssue {
   final List<int> releaseVersions;
 }
 
-/// Raised when the current V9 snapshot was explicitly revoked. Resolvers must
-/// fail closed instead of treating the last-known-good snapshot as a bypass.
-class WorkerProfileRevokedException implements Exception {
-  const WorkerProfileRevokedException(this.workerTypeId);
-
-  final String workerTypeId;
-
-  @override
-  String toString() => 'Worker Profile is revoked: $workerTypeId';
-}
-
 /// Owns verified, immutable Profile material independently of Engine binaries.
-class ToolProfileReleaseStore {
+@Deprecated('Use WorkerProfileStore for Workspace runtime state.')
+class ToolProfileReleaseStore implements WorkerProfileStorePort {
   ToolProfileReleaseStore({
     required this.profilesRoot,
     required this.trustPolicy,
@@ -73,8 +63,10 @@ class ToolProfileReleaseStore {
   static const maxDefinitions = 128;
   static const maxCachedReleases = 512;
 
+  @override
   final DevelopmentToolProfiles? developmentProfiles;
 
+  @override
   Future<File> executionProfileFile(ToolProfileCandidate candidate) async {
     if (candidate.isSigned) {
       if (candidate is WorkerProfileSnapshotAdmission) {
@@ -100,10 +92,13 @@ class ToolProfileReleaseStore {
 
   /// Returns the staged payload for catalog-side Engine validation before the
   /// snapshot becomes current.
+  @override
   File stagedWorkerProfileFile(WorkerProfileSnapshotAdmission candidate) =>
       _workerProfileStagingPayloadFile(candidate.workerTypeId);
 
+  @override
   final Directory profilesRoot;
+  @override
   final WorkerTrustPolicy trustPolicy;
   final PlatformRuntime fileSystemPlatform;
   final int retentionLimit;
@@ -171,6 +166,7 @@ class ToolProfileReleaseStore {
   /// Whether this Worker has entered the V9 cache model. This lets a fresh
   /// installation retain a bounded migration fallback for legacy fixtures
   /// until its first V9 snapshot arrives.
+  @override
   Future<bool> hasWorkerProfileCache(String workerTypeId) async {
     return await _workerProfileSnapshotFile(workerTypeId).exists() ||
         await _workerProfileSnapshotFile(workerTypeId, lastKnownGood: true)
@@ -181,6 +177,7 @@ class ToolProfileReleaseStore {
   /// Stages a locally verified current V9 snapshot without making it active.
   /// The admission was already verified by the catalog client; it is
   /// re-encoded and verified again before it is materialized on disk.
+  @override
   Future<WorkerProfileSnapshotAdmission> stageWorkerProfile(
     WorkerProfileSnapshotAdmission candidate,
   ) async {
@@ -222,6 +219,7 @@ class ToolProfileReleaseStore {
 
   /// Atomically promotes the staged V9 snapshot for new executions and
   /// retains only the immediately preceding valid snapshot as LKG.
+  @override
   Future<WorkerProfileSnapshotAdmission> activateWorkerProfile(
     WorkerProfileSnapshotAdmission candidate,
   ) async {
@@ -278,11 +276,13 @@ class ToolProfileReleaseStore {
     return activated!;
   }
 
+  @override
   Future<WorkerProfileSnapshotAdmission?> currentWorkerProfile(
     String workerTypeId,
   ) =>
       _readWorkerProfileSnapshot(workerTypeId);
 
+  @override
   Future<WorkerProfileSnapshotAdmission?> lastKnownGoodWorkerProfile(
     String workerTypeId,
   ) =>
@@ -674,6 +674,7 @@ class ToolProfileReleaseStore {
   }
 
   /// Loads a bounded revocation snapshot saved by the most recent Cloud sync.
+  @override
   Future<void> restoreRevocations({bool force = false}) async {
     if (_revocationSnapshotRestored && !force) return;
     final file = _trustStateFile();
@@ -712,6 +713,7 @@ class ToolProfileReleaseStore {
     _revocationSnapshotRestored = true;
   }
 
+  @override
   Future<void> persistRevocations() async {
     await _withLock(() async {
       await profilesRoot.create(recursive: true);
@@ -731,6 +733,7 @@ class ToolProfileReleaseStore {
 
   /// Removes revoked or corrupted releases and repairs pointers to verified
   /// cached versions. Releases from an unknown key remain cached but inactive.
+  @override
   Future<Set<String>> reconcileRevocations(
       {String? profileDefinitionId}) async {
     await restoreRevocations();

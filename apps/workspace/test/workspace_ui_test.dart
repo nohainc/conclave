@@ -8,7 +8,7 @@ import 'package:conclave_workspace/main.dart';
 import 'package:conclave_workspace/platform_runtime.dart';
 import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/tool_profile_release_store.dart';
+import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:conclave_workspace/worker_catalog_coordinator.dart';
 import 'package:conclave_workspace/workspace_background_service.dart';
@@ -21,9 +21,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/ed25519_release_fixture.dart';
 import 'support/logical_worker_catalog_fixture.dart';
+import 'support/worker_profile_snapshot_fixture.dart';
 
 Future<void> _installTestToolProfile({
-  required ToolProfileReleaseStore store,
+  required WorkerProfileStore store,
   required Ed25519ReleaseFixture signing,
   required String workerTypeId,
   required String profileDefinitionId,
@@ -45,25 +46,14 @@ Future<void> _installTestToolProfile({
     {'min': '0.0.0', 'maxExclusive': '99.0.0'},
   ];
 
-  final release = <String, Object?>{
-    'profileDefinitionId': profileDefinitionId,
-    'workerTypeId': workerTypeId,
-    'displayName': '$workerTypeId Test Profile',
-    'providerToolName': toolName,
-    'channel': 'stable',
-    'releaseVersion': version,
-    'profile': profile,
-    'schemaVersion': profile['schemaVersion'],
-    'engineFamily': profile['engineFamily'],
-    'engineCompatibility': profile['engineCompatibility'],
-  };
-  await signing.signToolProfileRelease(release);
-  await store.installRelease(
-    releaseInput: release,
-    expectedWorkerTypeId: workerTypeId,
+  final snapshot = await workerProfileSnapshotFixture(
+    signing: signing,
+    profile: profile,
+    workerTypeId: workerTypeId,
+    revision: version,
   );
-  await store.activateVersion(profileDefinitionId, version,
-      selectAsStable: true);
+  await store.stageWorkerProfile(snapshot);
+  await store.activateWorkerProfile(snapshot);
 }
 
 class _TestPlatformRuntime implements PlatformRuntime {
@@ -299,7 +289,7 @@ void main() {
     );
     final signing = await tester.runAsync(Ed25519ReleaseFixture.create);
     final trustPolicy = signing!.trustPolicy;
-    final store = ToolProfileReleaseStore(
+    final store = WorkerProfileStore(
       profilesRoot: profileDirectory,
       trustPolicy: trustPolicy,
     );
@@ -550,6 +540,7 @@ void main() {
     final workspacePage = find.byType(SingleChildScrollView).first;
     await tester.drag(workspacePage, const Offset(0, -320));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Register'));
     await tester.tap(find.text('Register'));
     expect(connectStarted, isTrue);
   });
@@ -1413,7 +1404,7 @@ void main() {
     );
     final signing = await tester.runAsync(Ed25519ReleaseFixture.create);
     final trustPolicy = signing!.trustPolicy;
-    final store = ToolProfileReleaseStore(
+    final store = WorkerProfileStore(
       profilesRoot: profileDirectory,
       trustPolicy: trustPolicy,
     );

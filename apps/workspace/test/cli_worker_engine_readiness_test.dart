@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
 import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/tool_profile_release_store.dart';
+import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:conclave_workspace/worker_catalog_coordinator.dart';
 import 'package:conclave_workspace/worker_diagnostic_store.dart';
@@ -13,6 +13,7 @@ import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
 import 'support/logical_worker_catalog_fixture.dart';
+import 'support/worker_profile_snapshot_fixture.dart';
 
 void main() {
   test(
@@ -22,7 +23,7 @@ void main() {
     final root = await Directory.systemTemp.createTemp('profile-live-test-');
     addTearDown(() => root.delete(recursive: true));
     final signing = await Ed25519ReleaseFixture.create();
-    final profileStore = ToolProfileReleaseStore(
+    final profileStore = WorkerProfileStore(
       profilesRoot: Directory('${root.path}/Profiles'),
       trustPolicy: signing.trustPolicy,
     );
@@ -60,39 +61,27 @@ void main() {
       'output': {'mode': 'plain_text'},
       'events': <Object?>[],
     };
-    final release = <String, Object?>{
-      'profileDefinitionId': profile['profileDefinitionId'],
-      'workerTypeId': 'chatgpt',
-      'displayName': 'Codex Test Profile',
-      'providerToolName': (profile['providerTool']! as Map)['name'],
-      'channel': 'stable',
-      'releaseVersion': profile['releaseVersion'],
-      'profile': profile,
-      'schemaVersion': profile['schemaVersion'],
-      'engineFamily': profile['engineFamily'],
-      'engineCompatibility': profile['engineCompatibility'],
-    };
-    await signing.signToolProfileRelease(release);
-    await profileStore.installRelease(
-      releaseInput: release,
-      expectedWorkerTypeId: 'chatgpt',
+    final first = await workerProfileSnapshotFixture(
+      signing: signing,
+      profile: profile,
+      workerTypeId: 'chatgpt',
+      revision: 1,
     );
-    await profileStore.activateVersion('chatgpt-codex', 1,
-        selectAsStable: true);
+    await profileStore.activateWorkerProfile(
+      await profileStore.stageWorkerProfile(first),
+    );
     final candidateProfile =
         jsonDecode(jsonEncode(profile)) as Map<String, Object?>;
     candidateProfile['releaseVersion'] = 2;
-    final candidateRelease = <String, Object?>{
-      ...release,
-      'releaseVersion': 2,
-      'profile': candidateProfile,
-    };
-    await signing.signToolProfileRelease(candidateRelease);
-    await profileStore.installRelease(
-      releaseInput: candidateRelease,
-      expectedWorkerTypeId: 'chatgpt',
+    final second = await workerProfileSnapshotFixture(
+      signing: signing,
+      profile: candidateProfile,
+      workerTypeId: 'chatgpt',
+      revision: 2,
     );
-    await profileStore.activateVersion('chatgpt-codex', 2);
+    await profileStore.activateWorkerProfile(
+      await profileStore.stageWorkerProfile(second),
+    );
 
     final registry = LocalWorkerRegistry(
       dataDirectory: Directory('${root.path}/Registry'),
@@ -145,9 +134,11 @@ void main() {
     );
 
     expect(await monitor.rollbackToolProfile('chatgpt'), isTrue);
-    final stateAfterRollback = await profileStore.releaseState('chatgpt-codex');
-    expect(stateAfterRollback.activeVersion, 1);
-    expect(stateAfterRollback.lastKnownGoodVersion, 2);
+    expect((await profileStore.currentWorkerProfile('chatgpt'))?.revision, 1);
+    expect(
+      (await profileStore.lastKnownGoodWorkerProfile('chatgpt'))?.revision,
+      2,
+    );
     expect((await registry.find(worker.id))!.lastLiveTestAt, isNull,
         reason: 'Profile rollback must use only a passive probe.');
 
@@ -191,7 +182,7 @@ void main() {
     final root = await Directory.systemTemp.createTemp('profile-gemini-live-');
     addTearDown(() => root.delete(recursive: true));
     final signing = await Ed25519ReleaseFixture.create();
-    final profileStore = ToolProfileReleaseStore(
+    final profileStore = WorkerProfileStore(
       profilesRoot: Directory('${root.path}/Profiles'),
       trustPolicy: signing.trustPolicy,
     );
@@ -251,25 +242,21 @@ Future<void> main(List<String> arguments) async {
       providerScript,
       ...(execution['arguments']! as List<Object?>),
     ];
-    final release = <String, Object?>{
-      'profileDefinitionId': profile['profileDefinitionId'],
-      'workerTypeId': 'gemini',
-      'displayName': 'Antigravity Test Profile',
-      'providerToolName': provider['name'],
-      'channel': 'stable',
-      'releaseVersion': profile['releaseVersion'],
-      'profile': profile,
-      'schemaVersion': profile['schemaVersion'],
-      'engineFamily': profile['engineFamily'],
-      'engineCompatibility': profile['engineCompatibility'],
-    };
-    await signing.signToolProfileRelease(release);
-    await profileStore.installRelease(
-      releaseInput: release,
-      expectedWorkerTypeId: 'gemini',
+    final model = Map<String, Object?>.from(profile['model']! as Map)
+      ..['supported'] = false
+      ..['arguments'] = []
+      ..remove('discovery')
+      ..remove('selectionMapping');
+    profile['model'] = model;
+    final snapshot = await workerProfileSnapshotFixture(
+      signing: signing,
+      profile: profile,
+      workerTypeId: 'gemini',
+      revision: 1,
     );
-    await profileStore.activateVersion('gemini-antigravity', 1,
-        selectAsStable: true);
+    await profileStore.activateWorkerProfile(
+      await profileStore.stageWorkerProfile(snapshot),
+    );
 
     final registry = LocalWorkerRegistry(
       dataDirectory: Directory('${root.path}/Registry'),

@@ -2,10 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:crypto/crypto.dart';
+import 'package:cryptography/cryptography.dart';
 
 import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/tool_profile_release_store.dart';
+import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:conclave_workspace/worker_catalog_coordinator.dart';
@@ -17,12 +20,12 @@ import 'support/ed25519_release_fixture.dart';
 void main() {
   late Directory directory;
   late Ed25519ReleaseFixture signing;
-  late ToolProfileReleaseStore store;
+  late WorkerProfileStore store;
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('worker-catalog-');
     signing = await Ed25519ReleaseFixture.create();
-    store = ToolProfileReleaseStore(
+    store = WorkerProfileStore(
       profilesRoot: Directory('${directory.path}/Profiles'),
       trustPolicy: signing.trustPolicy,
     );
@@ -117,9 +120,7 @@ void main() {
       [
         'catalog',
         'trust',
-        'profiles:fixture-cli',
         'trust',
-        'profiles:fixture-cli-two',
         'readiness',
       ],
     );
@@ -134,19 +135,12 @@ void main() {
         dataDirectory: Directory('${directory.path}/Registry'),
         workspaceId: 'workspace-startup');
     await registry.create(catalogEntry: WorkerDescriptor.fromJson(descriptor));
-    final syncEntered = Completer<void>();
-    final finishSync = Completer<void>();
     final catalog = ToolProfileCatalogClient(
       cloudUri: Uri.https('cloud.example', '/'),
       store: store,
       trustPolicy: signing.trustPolicy,
       workerCatalogLoader: () async => [descriptor],
       trustRefresher: () async {},
-      listLoader: (_, channel) async {
-        if (!syncEntered.isCompleted) syncEntered.complete();
-        await finishSync.future;
-        return ToolProfileCatalogResult(channel: channel, releases: const []);
-      },
     );
     await catalog.syncCatalog();
     late WorkerReadinessMonitor monitor;
@@ -164,13 +158,10 @@ void main() {
         workerStateDirectory: (id) =>
             Directory('${directory.path}/Workers/$id/state'));
     try {
-      final refresh = coordinator.refresh(force: true);
-      await syncEntered.future;
-      final readiness = monitor.checkNow();
-      await Future<void>.delayed(Duration.zero);
-      finishSync.complete();
-      await Future.wait([refresh, readiness])
-          .timeout(const Duration(seconds: 2));
+      await Future.wait([
+        coordinator.refresh(force: true),
+        monitor.checkNow(),
+      ]).timeout(const Duration(seconds: 2));
       expect((await registry.list()).single.readinessIssueCode,
           'tool_profile_unavailable');
       expect(coordinator.snapshot.refreshing, isFalse);
@@ -183,30 +174,16 @@ void main() {
 
   test('keeps verified cached catalog and signed Profile when Cloud is offline',
       () async {
-    final releaseProfile = jsonDecode(
+    final profile = jsonDecode(
       File('../../packages/tool-profile/test/fixtures/fixture-cli.v1.json')
           .readAsStringSync(),
     ) as Map<String, Object?>;
-    releaseProfile['profileDefinitionId'] = 'fixture-profile';
-    releaseProfile['logicalWorkerTypeId'] = 'fixture-cli';
-    final release = <String, Object?>{
-      'profileDefinitionId': 'fixture-profile',
-      'workerTypeId': 'fixture-cli',
-      'displayName': 'Fixture CLI',
-      'providerToolName': 'Fixture CLI',
-      'channel': 'stable',
-      'releaseVersion': 1,
-      'profile': releaseProfile,
-      'schemaVersion': releaseProfile['schemaVersion'],
-      'engineFamily': releaseProfile['engineFamily'],
-      'engineCompatibility': releaseProfile['engineCompatibility'],
-    };
-    await signing.signToolProfileRelease(release);
-    await store.installRelease(
-      releaseInput: release,
-      expectedWorkerTypeId: 'fixture-cli',
+    profile['profileDefinitionId'] = 'fixture-profile';
+    profile['logicalWorkerTypeId'] = 'fixture-cli';
+    final current = await _snapshot(signing, profile, revision: 1);
+    await store.activateWorkerProfile(
+      await store.stageWorkerProfile(current),
     );
-    await store.activateVersion('fixture-profile', 1, selectAsStable: true);
 
     final seedCatalog = ToolProfileCatalogClient(
       cloudUri: Uri.https('cloud.example', '/'),
@@ -306,67 +283,6 @@ void main() {
     controller.dispose();
   });
 
-  test('force refresh applies the current Cloud Profile channel', () async {
-    final profile = jsonDecode(
-      File('../../packages/tool-profile/test/fixtures/fixture-cli.v1.json')
-          .readAsStringSync(),
-    ) as Map<String, Object?>;
-    profile['profileDefinitionId'] = 'fixture-profile';
-    profile['logicalWorkerTypeId'] = 'fixture-cli';
-    final release = <String, Object?>{
-      'profileDefinitionId': 'fixture-profile',
-      'workerTypeId': 'fixture-cli',
-      'displayName': 'Fixture CLI',
-      'providerToolName': 'Fixture CLI',
-      'channel': 'stable',
-      'releaseVersion': 1,
-      'profile': profile,
-      'schemaVersion': profile['schemaVersion'],
-      'engineFamily': profile['engineFamily'],
-      'engineCompatibility': profile['engineCompatibility'],
-    };
-    await signing.signToolProfileRelease(release);
-    await store.installRelease(
-      releaseInput: release,
-      expectedWorkerTypeId: 'fixture-cli',
-    );
-    await store.activateVersion('fixture-profile', 1, selectAsStable: true);
-
-    var remoteChannel = 'stable';
-    final catalog = ToolProfileCatalogClient(
-      cloudUri: Uri.https('cloud.example', '/'),
-      store: store,
-      trustPolicy: signing.trustPolicy,
-      workerCatalogLoader: () async => [descriptor],
-      trustRefresher: () async {},
-      listLoader: (workerTypeId, channel) async => ToolProfileCatalogResult(
-        channel: remoteChannel,
-        releases: const [],
-      ),
-    );
-    final controller = WorkerCatalogCoordinator(
-      catalog: catalog,
-      releaseStore: store,
-    );
-    addTearDown(catalog.close);
-    addTearDown(controller.dispose);
-
-    expect(controller.minimumRefreshInterval, const Duration(minutes: 1));
-
-    await controller.refresh(force: true);
-    expect(
-      (await store.releaseState('fixture-profile')).selectedChannel,
-      'stable',
-    );
-
-    remoteChannel = 'beta';
-    await controller.refresh(force: true);
-    expect(
-      (await store.releaseState('fixture-profile')).selectedChannel,
-      'beta',
-    );
-  });
-
   test('reconciles additions, metadata, retirement, and Worker restoration',
       () async {
     final registry = LocalWorkerRegistry(
@@ -415,7 +331,7 @@ void main() {
         .singleWhere((state) => state.descriptor?.workerTypeId == 'claude');
     expect(claudeState.localWorker, isNull);
     expect(claudeState.profileAvailability.state,
-        WorkspaceWorkerProfileState.unavailable);
+        WorkspaceWorkerProfileState.error);
     expect(claudeState.readiness, isNull);
     expect((await registry.list()).map((worker) => worker.workerTypeId),
         ['fixture-cli']);
@@ -487,4 +403,32 @@ void main() {
     controller.dispose();
     catalog.close();
   });
+}
+
+Future<WorkerProfileSnapshotAdmission> _snapshot(
+  Ed25519ReleaseFixture signing,
+  Map<String, Object?> profile, {
+  required int revision,
+}) async {
+  final digest = sha256.convert(utf8.encode(canonicalJson(profile))).toString();
+  final message = workerProfileSigningMessage(
+    publisher: fixturePublisher,
+    signingKeyId: fixtureKeyId,
+    workerTypeId: 'fixture-cli',
+    revision: revision,
+    schemaVersion: profile['schemaVersion']! as int,
+    payloadDigest: digest,
+  );
+  final signature = base64.encode(
+    (await Ed25519().sign(utf8.encode(message), keyPair: signing.pair)).bytes,
+  );
+  return WorkerProfileSnapshotAdmission(
+    profile: profile,
+    workerTypeId: 'fixture-cli',
+    revision: revision,
+    payloadDigest: digest,
+    signature: signature,
+    signingKeyId: fixtureKeyId,
+    publisher: fixturePublisher,
+  );
 }

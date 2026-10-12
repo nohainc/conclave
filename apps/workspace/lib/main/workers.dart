@@ -225,9 +225,7 @@ class _WorkersTabState extends State<_WorkersTab> {
       WorkspaceProviderToolState.available =>
         worker?.toolVersion ?? 'Available',
     };
-    final profileRevision = profile?['revision'] ??
-        profile?['releaseVersion'] ??
-        profile?['activeVersion'];
+    final profileRevision = profile?['revision'] ?? profile?['releaseVersion'];
     final profileStatus = _profileStatusLabel(view, pending: pending);
     final workerState = worker == null
         ? 'Not configured'

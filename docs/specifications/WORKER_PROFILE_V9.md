@@ -252,12 +252,24 @@ invalid, incompatible, or tampered Profile MUST fail closed and MUST NOT be
 used for a new execution.
 
 The on-disk V9 cache is keyed by logical Worker and contains only current and
-last-known-good snapshot/payload pairs. Refresh is periodic or event-triggered,
-not part of every assignment. A fetched snapshot is verified, staged, and
-then activated for new executions; the resolver never searches a release list.
-Legacy release-state files may remain during migration, but they are not
-consulted once a Worker has a V9 cache entry. Explicit revocation of current
-must not fall back to last-known-good.
+last-known-good snapshot/payload pairs, plus bounded immutable revision payloads
+needed by in-flight executions. Refresh is periodic or event-triggered, not
+part of every assignment. A fetched snapshot is verified, staged, and then
+activated for new executions; the resolver never searches a release list.
+
+On first access after upgrade, Workspace may read the legacy approved stable
+snapshot exactly once, verify its original signature, and materialize it as a
+V9 current snapshot with migration metadata. The legacy per-definition,
+per-version directory is removed only after that V9 snapshot has been written
+and verified. An invalid or untrusted legacy cache is left untouched for
+recoverability and is never activated. New runtime code does not read
+`release-state.json`, channel pointers, or legacy release directories.
+
+Legacy release signatures are accepted only for this bounded on-disk migration
+adapter; newly fetched Cloud snapshots must use the V9 signing domain. Explicit
+revocation of current must not fall back to last-known-good. Each execution
+opens an immutable `revision-digest` payload, so activation of a later Profile
+cannot rewrite the bytes used by an execution already in progress.
 
 Workspace's Worker management view is operational rather than publication-
 oriented. It SHOULD show the logical Worker, provider tool and detected CLI

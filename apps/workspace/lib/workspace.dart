@@ -11,7 +11,7 @@ import 'work_root.dart';
 import 'workspace_paths.dart';
 import 'worker_readiness.dart';
 import 'tool_profile_catalog.dart';
-import 'tool_profile_release_store.dart';
+import 'worker_profile_store.dart';
 import 'worker_catalog_coordinator.dart';
 import 'workspace_service_state.dart';
 import 'workspace_registration_models.dart';
@@ -21,7 +21,7 @@ export 'local_worker_registry.dart';
 export 'release_trust_roots.dart';
 export 'tool_profile_release_verifier.dart';
 export 'tool_profile_catalog.dart';
-export 'tool_profile_release_store.dart';
+export 'worker_profile_store.dart';
 export 'worker_catalog_coordinator.dart';
 export 'workspace_paths.dart';
 export 'workspace_background_service.dart';
@@ -177,7 +177,7 @@ class WorkspaceRuntime {
 
   final WorkspaceConfig config;
   final SecureCredentialStore credentialStore;
-  final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final WorkerProfileStorePort? toolProfileReleaseStore;
   final ToolProfileCatalogClient? toolProfileCatalog;
   final WorkerCatalogCoordinator? workerCatalogCoordinator;
 

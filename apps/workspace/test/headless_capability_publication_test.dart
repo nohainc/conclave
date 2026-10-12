@@ -1,15 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+    show WorkerProfileSnapshotAdmission;
 import 'package:test/test.dart';
 import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
 import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/tool_profile_release_store.dart';
+import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:conclave_workspace/worker_catalog_coordinator.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'support/ed25519_release_fixture.dart';
 import 'support/logical_worker_catalog_fixture.dart';
+import 'support/worker_profile_snapshot_fixture.dart';
 
 void main() {
   test('signed Codex and Gemini profiles discover and publish headlessly',
@@ -43,10 +47,10 @@ Future<void> main(List<String> args) async {
 }
 ''');
     final signing = await Ed25519ReleaseFixture.create();
-    final store = ToolProfileReleaseStore(
+    final store = WorkerProfileStore(
         profilesRoot: Directory('${root.path}/Profiles'),
         trustPolicy: signing.trustPolicy);
-    final releases = <String, Map<String, Object?>>{};
+    final profiles = <String, WorkerProfileSnapshotAdmission>{};
     for (final type in ['chatgpt', 'gemini']) {
       final descriptor = logicalWorkerCatalogFixture(type);
       final profile = jsonDecode(await File(
@@ -69,20 +73,12 @@ Future<void> main(List<String> args) async {
         type == 'chatgpt' ? 'codex' : 'agy',
         type == 'chatgpt' ? 'app-server' : 'models'
       ];
-      final release = <String, Object?>{
-        'profileDefinitionId': descriptor.profileDefinitionId,
-        'workerTypeId': type,
-        'displayName': descriptor.displayName,
-        'providerToolName': tool['name'],
-        'channel': 'stable',
-        'releaseVersion': 1,
-        'profile': profile,
-        'schemaVersion': 1,
-        'engineFamily': 'cli',
-        'engineCompatibility': profile['engineCompatibility']
-      };
-      await signing.signToolProfileRelease(release);
-      releases[type] = release;
+      profiles[type] = await workerProfileSnapshotFixture(
+        signing: signing,
+        profile: profile,
+        workerTypeId: type,
+        revision: 1,
+      );
     }
     final engine = CliWorkerEngineSupervisor(
         engineExecutable:
@@ -97,11 +93,10 @@ Future<void> main(List<String> args) async {
         trustPolicy: signing.trustPolicy,
         trustRefresher: () async {},
         workerCatalogLoader: () async => [
-              for (final type in releases.keys)
+              for (final type in profiles.keys)
                 logicalWorkerCatalogFixture(type).toJson()
             ],
-        listLoader: (type, channel) async => ToolProfileCatalogResult(
-            channel: channel, releases: [releases[type]!]),
+        currentProfileLoader: (type) async => profiles[type]!,
         candidateValidator: (candidate, file) async => true);
     addTearDown(client.close);
     late final LocalWorkerRegistry registry;
@@ -124,16 +119,13 @@ Future<void> main(List<String> args) async {
         catalog: client, releaseStore: store, registry: registry);
     addTearDown(coordinator.dispose);
     await coordinator.refresh(force: true);
-    for (final type in releases.keys) {
+    for (final type in profiles.keys) {
       expect(coordinator.entryForWorker(type), isNotNull,
           reason: coordinator.snapshot.catalogError);
-      expect(
-          await store.activeRelease(
-              logicalWorkerCatalogFixture(type).profileDefinitionId),
-          isNotNull,
+      expect((await store.currentWorkerProfile(type))?.revision, 1,
           reason: coordinator.snapshot.profiles[type]?.message);
     }
-    for (final type in releases.keys) {
+    for (final type in profiles.keys) {
       await registry.create(catalogEntry: logicalWorkerCatalogFixture(type));
     }
     final monitor = WorkerReadinessMonitor(

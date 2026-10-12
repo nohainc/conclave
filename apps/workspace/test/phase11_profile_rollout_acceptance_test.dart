@@ -9,7 +9,7 @@ import 'package:conclave_worker_protocol/conclave_worker_protocol.dart'
 import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/local_worker_setup.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/tool_profile_release_store.dart';
+import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:conclave_workspace/tool_profile_resolver.dart';
 import 'package:conclave_workspace/worker_catalog_coordinator.dart';
 import 'package:conclave_workspace/workspace_worker_view.dart';
@@ -28,7 +28,7 @@ void main() {
       addTearDown(() => root.delete(recursive: true));
 
       final signing = await Ed25519ReleaseFixture.create();
-      final store = ToolProfileReleaseStore(
+      final store = WorkerProfileStore(
         profilesRoot: Directory('${root.path}/Profiles'),
         trustPolicy: signing.trustPolicy,
       );
@@ -204,7 +204,7 @@ void main() {
               .output,
           'OK');
 
-      final restartedStore = ToolProfileReleaseStore(
+      final restartedStore = WorkerProfileStore(
         profilesRoot: Directory('${root.path}/Profiles'),
         trustPolicy: signing.trustPolicy,
       );
@@ -258,7 +258,11 @@ void main() {
       final currentDigest =
           (await store.currentWorkerProfile('chatgpt'))!.payloadDigest;
       cloudRevokedDigests.add(currentDigest);
-      await catalog.syncWorkerProfiles('chatgpt').catchError((_) => []);
+      try {
+        await catalog.syncWorkerProfiles('chatgpt');
+      } on Object {
+        // Revocation is expected to block activation and execution.
+      }
       final revokedResolution =
           await ToolProfileResolver(store).resolveForWorker(
         logicalWorkerTypeId: 'chatgpt',

@@ -6,7 +6,7 @@ import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
 import 'cli_worker_engine_supervisor.dart';
 import 'local_worker_registry.dart';
 import 'tool_profile_catalog.dart';
-import 'tool_profile_release_store.dart';
+import 'worker_profile_store.dart';
 import 'tool_profile_release_verifier.dart';
 import 'tool_profile_resolver.dart';
 import 'worker_inventory_projection.dart';
@@ -63,7 +63,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
   });
 
   final ToolProfileCatalogClient catalog;
-  final ToolProfileReleaseStore releaseStore;
+  final WorkerProfileStorePort releaseStore;
   final LocalWorkerRegistry? registry;
   final Future<void> Function()? onCatalogReconciled;
   final Future<void> Function()? refreshReadiness;
@@ -491,10 +491,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
         providerCliVersion: worker?.toolVersion,
       );
       if (!resolution.isAvailable) {
-        final trustIssues =
-            resolution.reason == ToolProfileUnavailableReason.noEligibleRelease
-                ? await releaseStore.untrustedReleaseTrustIssues(definitionId)
-                : const <ToolProfileTrustIssue>[];
         final incompatible = resolution.reason ==
                 ToolProfileUnavailableReason.unsupportedProviderVersion ||
             resolution.reason ==
@@ -507,14 +503,9 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
                 : WorkspaceWorkerProfileState.unavailable,
             message: switch (resolution.reason) {
               ToolProfileUnavailableReason.noEligibleRelease =>
-                trustIssues.isNotEmpty
-                    ? 'The cached Worker Profile is signed by a key this '
-                        'Workspace does not trust. Rebuild Workspace with '
-                        'the Cloud Profile trust root or republish the '
-                        'Profile with the current signer.'
-                    : 'No eligible signed Worker Profile is available for '
-                        'this Worker. Refresh the current published Profile '
-                        'or restore connectivity to use the authorized cache.',
+                'No eligible signed Worker Profile is available for this '
+                    'Worker. Refresh the current published Profile or '
+                    'restore connectivity to use the authorized cache.',
               ToolProfileUnavailableReason.unsupportedProviderVersion =>
                 'The installed Provider CLI version is not supported by the current Profile.',
               ToolProfileUnavailableReason.incompatibleEngineVersion =>
@@ -523,15 +514,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
             },
             details: {
               'definitionId': definitionId,
-              if (trustIssues.isNotEmpty)
-                'trustIssues': [
-                  for (final issue in trustIssues)
-                    {
-                      'publisher': issue.publisher,
-                      'signingKeyId': issue.signingKeyId,
-                      'releaseVersions': issue.releaseVersions,
-                    },
-                ],
             },
           ),
           generation,

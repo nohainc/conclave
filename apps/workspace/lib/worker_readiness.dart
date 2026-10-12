@@ -5,7 +5,7 @@ import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'local_worker_registry.dart';
 import 'cli_worker_engine_supervisor.dart';
-import 'tool_profile_release_store.dart';
+import 'worker_profile_store.dart';
 import 'tool_profile_release_verifier.dart';
 import 'tool_profile_resolver.dart';
 import 'worker_catalog_coordinator.dart';
@@ -55,7 +55,7 @@ class WorkerReadinessMonitor {
   });
 
   final LocalWorkerRegistry registry;
-  final ToolProfileReleaseStore? toolProfileReleaseStore;
+  final WorkerProfileStorePort? toolProfileReleaseStore;
   final WorkerCatalogCoordinator? workerCatalogCoordinator;
   final CliWorkerEngineSupervisor? cliWorkerEngineSupervisor;
   final Directory Function(String workerId)? workerStateDirectory;
@@ -154,14 +154,12 @@ class WorkerReadinessMonitor {
   }
 
   /// Validates and atomically activates the trusted last-known-good Profile.
-  /// The callback always performs a passive Engine probe; no model request is
-  /// used for rollback.
+  /// Rollback is a snapshot restore, never a channel or release selection.
   Future<bool> rollbackToolProfile(String workerTypeId) async {
     final timer = Stopwatch()..start();
-    final profileDefinitionId = _profileDefinitionFor(workerTypeId);
     final store = toolProfileReleaseStore;
     final engine = cliWorkerEngineSupervisor;
-    if (profileDefinitionId == null || store == null || engine == null) {
+    if (store is! WorkerProfileStore || engine == null) {
       return false;
     }
     final worker = (await registry.list(includeRemoved: true))
@@ -173,38 +171,17 @@ class WorkerReadinessMonitor {
     final stateDirectory = workerStateDirectory?.call(worker.id);
     if (stateDirectory == null) return false;
 
-    final resolver = ToolProfileResolver(store);
-    final profileChannel =
-        (await store.releaseState(profileDefinitionId)).selectedChannel;
     final runId = 'profile-rollback-${DateTime.now().microsecondsSinceEpoch}';
     var issueCode = 'tool_profile_unavailable';
     ProbeResult? candidateProbe;
     try {
-      final rolledBack = await store.rollbackToLastKnownGood(
-        profileDefinitionId,
-        candidateValidator: (candidate) async {
-          if (!resolver.isCompatibleRelease(
-            release: candidate,
-            logicalWorkerTypeId: workerTypeId,
-            profileDefinitionId: profileDefinitionId,
-            engineVersion: cliWorkerEngineVersion,
-            // The stored version can be stale. The Engine's passive probe
-            // discovers the installed CLI version and validates it below.
-            providerCliVersion: null,
-            channel: profileChannel,
-          )) {
-            issueCode = worker.toolVersion == null
-                ? 'engine_incompatible'
-                : 'unsupported_provider_tool_version';
-            return false;
-          }
+      final rolledBack = await store.restoreLastKnownGood(
+        workerTypeId,
+        validator: (candidate) async {
           try {
             candidateProbe = await engine.probe(
               candidate,
-              profileFile: store.profileFile(
-                profileDefinitionId,
-                candidate.releaseVersion,
-              ),
+              profileFile: await store.executionProfileFile(candidate),
               stateDirectory: stateDirectory,
               mode: WorkerProbeMode.passive,
               timeout: const Duration(seconds: 20),
@@ -222,14 +199,13 @@ class WorkerReadinessMonitor {
             issueCode = result.issueCode ?? 'provider_failure';
             return false;
           }
-          if (result.providerToolVersion == null ||
-              !resolver.isCompatibleRelease(
-                release: candidate,
+          if (result.providerToolVersion != null &&
+              !ToolProfileCompatibility.isCandidateCompatible(
+                candidate: candidate,
                 logicalWorkerTypeId: workerTypeId,
-                profileDefinitionId: profileDefinitionId,
+                profileDefinitionId: candidate.profileDefinitionId,
                 engineVersion: cliWorkerEngineVersion,
                 providerCliVersion: result.providerToolVersion,
-                channel: profileChannel,
               )) {
             issueCode = 'unsupported_provider_tool_version';
             return false;
@@ -244,8 +220,8 @@ class WorkerReadinessMonitor {
         runId: runId,
         mode: LocalWorkerProbeMode.passive,
         durationMs: timer.elapsedMilliseconds,
-        profileDefinitionId: profileDefinitionId,
-        profileReleaseVersion: rolledBack.releaseVersion,
+        profileDefinitionId: rolledBack.profileDefinitionId,
+        profileReleaseVersion: rolledBack.revision,
         profileResolutionSource: 'lastKnownGood',
         providerToolName: result.providerToolName,
         providerToolVersion: result.providerToolVersion,
@@ -262,7 +238,7 @@ class WorkerReadinessMonitor {
         runId: runId,
         mode: LocalWorkerProbeMode.passive,
         durationMs: timer.elapsedMilliseconds,
-        profileDefinitionId: profileDefinitionId,
+        profileDefinitionId: workerTypeId,
         profileResolutionSource: 'lastKnownGood',
         issueCode: issueCode,
         failureLayer: _profileProbeFailureLayer(issueCode),
@@ -469,7 +445,10 @@ class WorkerReadinessMonitor {
     final timer = Stopwatch()..start();
     final runId = 'profile-probe-${DateTime.now().microsecondsSinceEpoch}';
     final engine = cliWorkerEngineSupervisor;
-    final store = toolProfileReleaseStore!;
+    // The V9 path below is the only reachable production path. Keep the
+    // legacy branch below dynamically typed for one release so old fixture
+    // tests can compile while their release-store helpers are removed.
+    final store = toolProfileReleaseStore! as dynamic;
     final stateDirectory = workerStateDirectory?.call(worker.id);
     if (engine == null || stateDirectory == null) {
       await _recordToolProfileDiagnostic(
@@ -487,13 +466,8 @@ class WorkerReadinessMonitor {
         diagnosticDetails: 'The generic CLI Worker Engine is unavailable.',
       );
     }
-    final resolver = ToolProfileResolver(store);
-    final v9Cache = await store.hasWorkerProfileCache(worker.workerTypeId);
-    var profileChannel = 'stable';
-    if (!v9Cache) {
-      profileChannel =
-          (await store.releaseState(profileDefinitionId)).selectedChannel;
-    }
+    final resolver = ToolProfileResolver(toolProfileReleaseStore!);
+    const profileChannel = 'current';
     late ToolProfileResolution<ToolProfileCandidate> resolution;
     try {
       resolution = await workerCatalogCoordinator!.resolveProfileForWorker(
@@ -504,10 +478,6 @@ class WorkerReadinessMonitor {
         // wait on that refresh from a readiness check: it may be waiting on us.
         synchronizeIfUnavailable: false,
       );
-      if (!v9Cache) {
-        profileChannel =
-            (await store.releaseState(profileDefinitionId)).selectedChannel;
-      }
     } on Object catch (error) {
       final issueCode = error is FormatException
           ? 'profile_signature_invalid'
@@ -626,12 +596,29 @@ class WorkerReadinessMonitor {
         replaceToolVersion: true,
       );
     }
+    if (candidate == null) {
+      await _recordToolProfileDiagnostic(
+        worker,
+        runId: runId,
+        mode: mode,
+        durationMs: timer.elapsedMilliseconds,
+        profileDefinitionId: profileDefinitionId,
+        profileResolutionSource: 'unavailable',
+        issueCode: 'tool_profile_unavailable',
+        failureLayer: 'profile',
+      );
+      return const WorkerReadinessAssessment(
+        WorkerReadinessState.runtimeUnavailable,
+        issueCode: 'tool_profile_unavailable',
+        diagnosticDetails: 'No current Worker Profile is available.',
+      );
+    }
     var release = candidate as ToolProfileReleaseAdmission?;
     if (release == null) {
       final trustIssues =
           resolution.reason == ToolProfileUnavailableReason.noEligibleRelease
               ? await store.untrustedReleaseTrustIssues(profileDefinitionId)
-              : const <ToolProfileTrustIssue>[];
+              : const <dynamic>[];
       final trustIssue = trustIssues.firstOrNull;
       final issueCode = switch (resolution.reason) {
         ToolProfileUnavailableReason.unsupportedProviderVersion =>

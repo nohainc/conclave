@@ -29,6 +29,11 @@ abstract final class WorkerProfileSnapshotVerifier {
       'signature',
       'signingKeyId',
       'publisher',
+      // Transitional metadata used only while a signed V8 stable snapshot is
+      // migrated into the V9 current-profile cache. New Cloud snapshots do
+      // not include these fields.
+      'signatureDomain',
+      'signatureReleaseId',
       'updatedByUserId',
       'updatedAt',
       'verified',
@@ -69,20 +74,39 @@ abstract final class WorkerProfileSnapshotVerifier {
       throw const FormatException(
           'Worker Profile snapshot digest or identity mismatch');
     }
+    final signatureDomain = snapshot['signatureDomain'];
+    final signatureReleaseId = snapshot['signatureReleaseId'];
+    final legacySignature =
+        signatureDomain == 'conclave-tool-profile-release-v1' &&
+            signatureReleaseId is String &&
+            signatureReleaseId.isNotEmpty;
+    if (signatureDomain != null && !legacySignature) {
+      throw const FormatException('Worker Profile signature domain is invalid');
+    }
+    final message = legacySignature
+        ? toolProfileReleaseSigningMessage(
+            publisher: publisher,
+            signingKeyId: signingKeyId,
+            payloadDigest: digest,
+            profile: profile,
+          )
+        : workerProfileSigningMessage(
+            publisher: publisher,
+            signingKeyId: signingKeyId,
+            workerTypeId: workerTypeId,
+            revision: revision,
+            schemaVersion: schemaVersion,
+            payloadDigest: digest,
+          );
     final valid = await trustPolicy.verifyToolProfileRelease(
       publisher: publisher,
       signingKeyId: signingKeyId,
       digest: digest,
-      releaseId: 'worker:$workerTypeId@$revision',
+      releaseId: legacySignature
+          ? signatureReleaseId
+          : 'worker:$workerTypeId@$revision',
       signature: signature,
-      message: workerProfileSigningMessage(
-        publisher: publisher,
-        signingKeyId: signingKeyId,
-        workerTypeId: workerTypeId,
-        revision: revision,
-        schemaVersion: schemaVersion,
-        payloadDigest: digest,
-      ),
+      message: message,
     );
     if (!valid) {
       throw StateError('Worker Profile snapshot signature is not trusted');

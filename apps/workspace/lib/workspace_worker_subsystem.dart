@@ -3,7 +3,7 @@ import 'cloud_connection.dart';
 import 'worker_catalog_coordinator.dart';
 import 'worker_executor.dart';
 import 'worker_readiness.dart';
-import 'tool_profile_release_store.dart';
+import 'worker_profile_store.dart';
 import 'cli_worker_engine_supervisor.dart';
 
 /// The service-owned boundary for all local Worker management.
@@ -23,7 +23,7 @@ class WorkspaceWorkerSubsystem {
   });
 
   final LocalWorkerRegistry registry;
-  final ToolProfileReleaseStore releaseStore;
+  final WorkerProfileStorePort releaseStore;
   final WorkerReadinessMonitor readiness;
   final WorkerCatalogCoordinator? catalog;
   final CliWorkerEngineSupervisor? engineSupervisor;

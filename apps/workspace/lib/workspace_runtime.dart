@@ -102,7 +102,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       releaseBuild: const bool.fromEnvironment('dart.vm.product'),
     );
   }
-  final toolProfileReleaseStore = ToolProfileReleaseStore(
+  final toolProfileReleaseStore = WorkerProfileStore(
     profilesRoot: WorkspacePaths(config.dataDirectory).profilesDirectory,
     trustPolicy: workerTrustPolicy,
     developmentProfiles: developmentProfiles,

@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
-    show canonicalJson, workerProfileSigningMessage;
+    show
+        WorkerProfileSnapshotAdmission,
+        canonicalJson,
+        workerProfileSigningMessage;
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
 import 'package:conclave_workspace/tool_profile_release_store.dart';
@@ -12,6 +15,7 @@ import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
+import 'support/worker_profile_snapshot_fixture.dart';
 
 void main() {
   late Ed25519ReleaseFixture signing;
@@ -169,38 +173,31 @@ void main() {
     );
   });
 
-  test('activates Cloud-selected testing channel without moving stable pointer',
-      () async {
-    final stable = await makeRelease(1);
-    await store.installRelease(
-      releaseInput: stable,
-      expectedWorkerTypeId: 'fixture-worker',
+  test('syncs the current V9 Profile without channel selection', () async {
+    final candidateProfile =
+        jsonDecode(jsonEncode(profile)) as Map<String, Object?>
+          ..['logicalWorkerTypeId'] = 'fixture-worker'
+          ..['releaseVersion'] = 2;
+    final candidate = await workerProfileSnapshotFixture(
+      signing: signing,
+      profile: candidateProfile,
+      workerTypeId: 'fixture-worker',
+      revision: 2,
     );
-    await store.activateVersion('fixture-cli', 1, selectAsStable: true);
-    final testing = await makeRelease(2, channel: 'testing');
-    await store.installRelease(
-      releaseInput: testing,
-      expectedWorkerTypeId: 'fixture-worker',
-    );
-
     final catalog = ToolProfileCatalogClient(
       cloudUri: Uri.https('cloud.example', '/'),
       store: store,
       trustPolicy: signing.trustPolicy,
       trustRefresher: () async {},
-      listLoader: (workerTypeId, _) async => ToolProfileCatalogResult(
-        channel: 'testing',
-        releases: [testing],
-      ),
+      currentProfileLoader: (_) async => candidate,
       candidateValidator: (_, __) async => true,
     );
     try {
       await catalog.syncWorkerProfiles('fixture-worker');
-      final state = await store.releaseState('fixture-cli');
-      expect(state.selectedChannel, 'testing');
-      expect(state.activeVersion, 2);
-      expect(state.stableVersion, 1);
-      expect(state.lastKnownGoodVersion, 1);
+      expect(
+        (await store.currentWorkerProfile('fixture-worker'))?.revision,
+        2,
+      );
     } finally {
       catalog.close();
     }
@@ -514,11 +511,23 @@ void main() {
     expect(issues.single.releaseVersions, [1]);
   });
 
-  test('fetches Cloud revocations and the catalog before caching releases',
+  test('refreshes trust before syncing and preserves the active V9 Profile',
       () async {
-    final release = await makeRelease(1);
+    Future<WorkerProfileSnapshotAdmission> makeSnapshot(int revision) async {
+      final snapshotProfile =
+          jsonDecode(jsonEncode(profile)) as Map<String, Object?>
+            ..['logicalWorkerTypeId'] = 'fixture-worker'
+            ..['releaseVersion'] = revision;
+      return workerProfileSnapshotFixture(
+        signing: signing,
+        profile: snapshotProfile,
+        workerTypeId: 'fixture-worker',
+        revision: revision,
+      );
+    }
+
+    var candidate = await makeSnapshot(1);
     var trustRefreshed = false;
-    var releases = <Object?>[release];
     final catalog = ToolProfileCatalogClient(
       cloudUri: Uri.https('cloud.example', '/'),
       store: store,
@@ -526,50 +535,36 @@ void main() {
       trustRefresher: () async {
         trustRefreshed = true;
       },
-      listLoader: (workerTypeId, channel) async {
+      currentProfileLoader: (workerTypeId) async {
         expect(trustRefreshed, isTrue);
         expect(workerTypeId, 'fixture-worker');
-        expect(channel, 'stable');
-        return ToolProfileCatalogResult(
-          channel: channel,
-          releases: releases,
-        );
+        return candidate;
       },
       candidateValidator: (candidate, file) async {
         expect(await file.exists(), isTrue);
-        if (candidate.releaseVersion == 3) {
-          final state = await store.releaseState('fixture-cli');
-          expect(state.activeVersion, 2);
-          expect(state.lastKnownGoodVersion, 1);
-          return false;
-        }
-        return true;
+        return candidate.revision != 3;
       },
     );
     try {
       final results = await catalog.syncWorkerProfiles('fixture-worker');
       expect(results, hasLength(1));
       expect(trustRefreshed, isTrue);
-      expect((await store.releaseState('fixture-cli')).activeVersion, 1);
-      expect(await store.profileFile('fixture-cli', 1).exists(), isTrue);
-      final release2 = await makeRelease(2);
-      releases = [release2];
+      expect(
+        (await store.currentWorkerProfile('fixture-worker'))?.revision,
+        1,
+      );
+      candidate = await makeSnapshot(2);
       await catalog.syncWorkerProfiles('fixture-worker');
-      final afterAcceptedCandidate = await store.releaseState('fixture-cli');
-      expect(afterAcceptedCandidate.activeVersion, 2);
-      expect(afterAcceptedCandidate.lastKnownGoodVersion, 1);
-      final release3 = await makeRelease(3);
-      releases = [release3];
+      expect(
+        (await store.currentWorkerProfile('fixture-worker'))?.revision,
+        2,
+      );
+      candidate = await makeSnapshot(3);
       await catalog.syncWorkerProfiles('fixture-worker');
-      final afterFailedCandidate = await store.releaseState('fixture-cli');
-      expect(afterFailedCandidate.activeVersion, 2);
-      expect(afterFailedCandidate.lastKnownGoodVersion, 1);
-      expect(afterFailedCandidate.stableVersion, 2);
-      expect(await store.profileFile('fixture-cli', 3).exists(), isFalse);
-      releases = [];
-      await catalog.syncWorkerProfiles('fixture-worker');
-      expect((await store.releaseState('fixture-cli')).activeVersion, isNull);
-      expect(await store.profileFile('fixture-cli', 1).exists(), isTrue);
+      expect(
+        (await store.currentWorkerProfile('fixture-worker'))?.revision,
+        2,
+      );
     } finally {
       catalog.close();
     }
