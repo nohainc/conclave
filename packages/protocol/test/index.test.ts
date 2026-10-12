@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isDurableRealtimeEventType,
   isEphemeralRealtimeEventType,
+  isReplayableRealtimeEvent,
   parseRealtimeEvent,
 } from "../src/index.js";
 
@@ -16,6 +17,25 @@ describe("realtime event contract", () => {
     runId: "run-1",
     sequence: 7,
     payload: { entityId: "run-1", status: "completed", summary: "Done" },
+  };
+  const activity = {
+    ...event,
+    type: "assignment.activity",
+    assignmentId: "assignment-1",
+    attemptId: "attempt-1",
+    workspaceRuntimeId: "runtime-1",
+    payload: {
+      entityId: "assignment-1",
+      workerId: "chatgpt",
+      sourceEventId: "event-1",
+      executionId: "execution-1",
+      activityId: "tool-1",
+      activitySequence: 4,
+      activityType: "tool.started",
+      activityStatus: "running",
+      title: "Running tool",
+      details: { toolName: "shell" },
+    },
   };
 
   it("preserves the acceptance submission correlation ID", () => {
@@ -40,24 +60,43 @@ describe("realtime event contract", () => {
   });
 
   it("accepts normalized activity payloads without raw provider content", () => {
-    const activity = {
-      ...event,
-      type: "assignment.activity",
-      assignmentId: "assignment-1",
-      payload: {
-        entityId: "assignment-1",
-        workerId: "chatgpt",
-        sourceEventId: "event-1",
-        executionId: "execution-1",
-        activityId: "tool-1",
-        activitySequence: 4,
-        activityType: "tool.started",
-        activityStatus: "running",
-        title: "Running tool",
-        details: { toolName: "shell" },
+    const parsed = parseRealtimeEvent(activity);
+    expect(parsed).toEqual(activity);
+    expect(isReplayableRealtimeEvent(parsed)).toBe(true);
+    expect(
+      isReplayableRealtimeEvent({
+        ...parsed,
+        payload: { ...parsed.payload, activityType: "model.status" },
+      }),
+    ).toBe(false);
+  });
+
+  it.each([
+    ["missing attempt correlation", { ...activity, attemptId: undefined }],
+    [
+      "unknown activity type",
+      {
+        ...activity,
+        payload: { ...activity.payload, activityType: "provider.unknown" },
       },
-    };
-    expect(parseRealtimeEvent(activity)).toEqual(activity);
+    ],
+    [
+      "oversized activity payload",
+      {
+        ...activity,
+        payload: {
+          ...activity.payload,
+          details: Object.fromEntries(
+            Array.from({ length: 10 }, (_, index) => [
+              `field${index}`,
+              "x".repeat(2048),
+            ]),
+          ),
+        },
+      },
+    ],
+  ])("rejects %s", (_name, input) => {
+    expect(() => parseRealtimeEvent(input)).toThrow();
   });
 
   it("retains unknown events from a compatible minor version", () => {

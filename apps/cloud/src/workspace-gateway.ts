@@ -7,6 +7,7 @@ import {
 } from "@conclave/workspace-runtime-protocol";
 import { RealtimeEventPayloadSchema } from "@conclave/protocol";
 import { createEventPublisher } from "./event-publisher.js";
+import { shouldPersistWorkerActivity } from "./worker-activity-history.js";
 import {
   recordAssignmentCancelled,
   recordAssignmentError,
@@ -926,9 +927,31 @@ export class WorkspaceGateway implements DurableObject {
         const workspaceId =
           this.executionWorkspaceId ?? message.executionWorkspaceId;
         if (!workspaceId) return;
+        const assignment = await this.env.CONCLAVE_DB.prepare(
+          `SELECT id, execution_workspace_id, runtime_identity_id,
+                  worker_type_id, workspace_worker_id, run_id, task_id,
+                  attempt_id, idempotency_key, status
+           FROM worker_assignments
+           WHERE id = ?1`,
+        )
+          .bind(message.assignmentId)
+          .first<Record<string, unknown>>();
+        const correlation: WorkspaceAssignmentCorrelation = {
+          executionWorkspaceId: message.executionWorkspaceId!,
+          workspaceRuntimeId: message.workspaceRuntimeId!,
+          workerId: message.workerId!,
+          runId: message.runId!,
+          taskId: message.taskId!,
+          attemptId: message.attemptId!,
+          assignmentId: message.assignmentId!,
+          idempotencyKey: message.idempotencyKey!,
+        };
         if (
+          !assignment ||
+          !workspaceAssignmentContextMatches(correlation, assignment) ||
+          !workspaceAssignmentIsActive(assignment) ||
           payload.assignmentId !== message.assignmentId ||
-          payload.workerId !== message.workerId
+          payload.workerId !== String(assignment.worker_type_id)
         ) {
           tryLogDiagnosticEvent({
             assignmentId: message.assignmentId,
@@ -950,7 +973,7 @@ export class WorkspaceGateway implements DurableObject {
         }
         const activityPayload = RealtimeEventPayloadSchema.safeParse({
           entityId: message.assignmentId,
-          workerId: message.workerId,
+          workerId: payload.workerId,
           sourceEventId: payload.eventId,
           executionId: payload.executionId,
           activityId: payload.activityId,
@@ -980,9 +1003,76 @@ export class WorkspaceGateway implements DurableObject {
           });
           return;
         }
+        const replayable = shouldPersistWorkerActivity(activityPayload.data);
+        if (replayable) {
+          const conflict = await this.env.CONCLAVE_DB.prepare(
+            `SELECT source_event_id, provider_sequence
+             FROM worker_activity_history
+             WHERE assignment_id = ?1 AND attempt_id = ?2
+               AND (source_event_id = ?3 OR provider_sequence = ?4)
+             LIMIT 1`,
+          )
+            .bind(
+              message.assignmentId,
+              message.attemptId,
+              activityPayload.data.sourceEventId,
+              activityPayload.data.activitySequence,
+            )
+            .first<{ source_event_id: string; provider_sequence: number }>();
+          if (
+            conflict &&
+            conflict.source_event_id !== activityPayload.data.sourceEventId
+          ) {
+            tryLogDiagnosticEvent({
+              assignmentId: message.assignmentId,
+              workspaceId,
+              workspaceRuntimeId:
+                this.workspaceRuntimeId ?? message.workspaceRuntimeId,
+              workerId: message.workerId,
+              runId: message.runId,
+              taskId: message.taskId,
+              attemptId: message.attemptId,
+              component: "cloud",
+              operation: "assignment.activity",
+              stage: "validation",
+              severity: "warning",
+              errorCode: "activity_sequence_conflict",
+              retryable: false,
+            });
+            return;
+          }
+        }
+        const eventId = `assignment-activity:${message.assignmentId}:${message.attemptId}:${activityPayload.data.sourceEventId}`;
+        const historyMutation = replayable
+          ? this.env.CONCLAVE_DB.prepare(
+              `INSERT OR IGNORE INTO worker_activity_history
+               (history_id, assignment_id, workspace_id, attempt_id,
+                execution_id, worker_id, source_event_id, provider_sequence,
+                event_type, status, activity_id, title, details_json, occurred_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`,
+            ).bind(
+              eventId,
+              message.assignmentId,
+              workspaceId,
+              message.attemptId,
+              activityPayload.data.executionId,
+              activityPayload.data.workerId,
+              activityPayload.data.sourceEventId,
+              activityPayload.data.activitySequence,
+              activityPayload.data.activityType,
+              activityPayload.data.activityStatus,
+              activityPayload.data.activityId ?? null,
+              activityPayload.data.title,
+              JSON.stringify(activityPayload.data.details ?? {}),
+              new Date().toISOString(),
+            )
+          : undefined;
         await createEventPublisher(this.env).publish({
           type: "assignment.activity",
-          durable: false,
+          eventId,
+          idempotencyKey: eventId,
+          durable: replayable,
+          ...(historyMutation ? { mutations: [historyMutation] } : {}),
           workspaceId,
           workspaceRuntimeId:
             this.workspaceRuntimeId ?? message.workspaceRuntimeId,
@@ -990,7 +1080,6 @@ export class WorkspaceGateway implements DurableObject {
           taskId: message.taskId,
           attemptId: message.attemptId,
           assignmentId: message.assignmentId,
-          idempotencyKey: `assignment-activity:${message.messageId}`,
           payload: activityPayload.data,
         });
         return;

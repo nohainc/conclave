@@ -11,6 +11,40 @@ const realtimeVersionPattern = /^\d+\.\d+$/;
 const id = z.string().trim().min(1);
 const timestamp = z.string().datetime();
 
+export const WORKER_ACTIVITY_EVENT_TYPES = [
+  "execution.started",
+  "model.started",
+  "message.updated",
+  "tool.started",
+  "tool.completed",
+  "tool.failed",
+  "model.status",
+  "execution.completed",
+  "execution.failed",
+  "execution.cancelled",
+] as const;
+
+export const REPLAYABLE_WORKER_ACTIVITY_EVENT_TYPES = [
+  "execution.started",
+  "model.started",
+  "tool.started",
+  "tool.completed",
+  "tool.failed",
+  "execution.completed",
+  "execution.failed",
+  "execution.cancelled",
+] as const;
+
+const workerActivityEventType = z.enum(WORKER_ACTIVITY_EVENT_TYPES);
+const workerActivityStatus = z.enum([
+  "running",
+  "updated",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+const MAX_WORKER_ACTIVITY_PAYLOAD_BYTES = 16 * 1024;
+
 export const RealtimeEventPayloadSchema = z
   .object({
     entityId: id.optional(),
@@ -28,19 +62,13 @@ export const RealtimeEventPayloadSchema = z
     leaseId: id.optional(),
     workerId: id.optional(),
     percentage: z.number().min(0).max(100).optional(),
-    sourceEventId: id.optional(),
-    executionId: id.optional(),
-    activityId: id.optional(),
-    activitySequence: z.number().int().positive().optional(),
-    activityType: id.optional(),
-    activityStatus: z.enum([
-      "running",
-      "updated",
-      "completed",
-      "failed",
-      "cancelled",
-    ]).optional(),
-    title: z.string().max(256).optional(),
+    sourceEventId: id.max(128).optional(),
+    executionId: id.max(128).optional(),
+    activityId: id.max(128).optional(),
+    activitySequence: z.number().int().positive().max(2_147_483_647).optional(),
+    activityType: workerActivityEventType.optional(),
+    activityStatus: workerActivityStatus.optional(),
+    title: z.string().min(1).max(256).optional(),
     details: z
       .record(
         z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
@@ -179,6 +207,51 @@ export const RealtimeEventEnvelopeSchema = z
         message: "Existing execution events require workspaceId",
       });
     }
+    if (event.type === "assignment.activity") {
+      const payload = event.payload;
+      const required = [
+        "entityId",
+        "workerId",
+        "sourceEventId",
+        "executionId",
+        "activitySequence",
+        "activityType",
+        "activityStatus",
+        "title",
+      ] as const;
+      for (const field of required) {
+        if (payload[field] === undefined) {
+          context.addIssue({
+            code: "custom",
+            path: ["payload", field],
+            message: `assignment.activity requires ${field}`,
+          });
+        }
+      }
+      if (!event.assignmentId || !event.attemptId || !event.workspaceRuntimeId) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "assignment.activity requires assignment, attempt and runtime correlation",
+        });
+      }
+      if (payload.entityId !== event.assignmentId) {
+        context.addIssue({
+          code: "custom",
+          path: ["payload", "entityId"],
+          message: "assignment.activity entityId must match assignmentId",
+        });
+      }
+      if (
+        new TextEncoder().encode(JSON.stringify(payload)).byteLength >
+        MAX_WORKER_ACTIVITY_PAYLOAD_BYTES
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "assignment.activity payload exceeds size limit",
+        });
+      }
+    }
     if (
       (!stream || stream.kind === "execution_workspace") &&
       !event.workspaceId
@@ -257,6 +330,23 @@ export function isDurableRealtimeEventType(type: string): boolean {
 export function isEphemeralRealtimeEventType(type: string): boolean {
   return EPHEMERAL_REALTIME_EVENT_TYPES.includes(
     type as (typeof EPHEMERAL_REALTIME_EVENT_TYPES)[number],
+  );
+}
+
+export function isReplayableWorkerActivityType(type: string): boolean {
+  return REPLAYABLE_WORKER_ACTIVITY_EVENT_TYPES.includes(
+    type as (typeof REPLAYABLE_WORKER_ACTIVITY_EVENT_TYPES)[number],
+  );
+}
+
+export function isReplayableRealtimeEvent(
+  event: Pick<RealtimeEventEnvelope, "type" | "payload">,
+): boolean {
+  return (
+    isDurableRealtimeEventType(event.type) ||
+    (event.type === "assignment.activity" &&
+      typeof event.payload.activityType === "string" &&
+      isReplayableWorkerActivityType(event.payload.activityType))
   );
 }
 

@@ -1,11 +1,12 @@
 import {
-  isDurableRealtimeEventType,
+  isReplayableRealtimeEvent,
   parseRealtimeEvent,
   realtimeEventStream,
   realtimeStreamKey,
   RealtimeStreamSchema,
   type RealtimeEventEnvelope,
 } from "@conclave/protocol";
+import { realtimeEventFromRow } from "./event-publisher.js";
 import {
   identityService,
   type AuthenticatedIdentity,
@@ -61,6 +62,7 @@ export interface RealtimeGatewayMetrics {
 }
 
 const MAX_SOCKET_BUFFERED_BYTES = 256 * 1024;
+const MAX_REPLAY_EVENTS = 256;
 
 export function scopeKey(scope: RealtimeScope): string {
   if (scope.kind) {
@@ -528,6 +530,7 @@ export class RealtimeGateway implements DurableObject {
           type: "subscription.confirmed",
           scope: message.scope,
         });
+        await this.replayScope(connected, message.scope);
       } else {
         connected.subscriptions.delete(key);
         this.sendRaw(connected.socket, {
@@ -616,43 +619,43 @@ export class RealtimeGateway implements DurableObject {
           (scope) => eventMatchesScope(event, scope),
         );
         if (matchingScopes.length === 0) continue;
-        const gapScope = isDurableRealtimeEventType(event.type)
+        const replayable = isReplayableRealtimeEvent(event);
+        const lastSequence = connected.lastDurableSequences.get(streamKey);
+        if (replayable && lastSequence !== undefined && event.sequence <= lastSequence) {
+          continue;
+        }
+        const gapScope = replayable
           ? matchingScopes.find((_scope) =>
               requiresRealtimeReconnect(
-                connected.lastDurableSequences.get(streamKey) ?? null,
+                lastSequence ?? null,
                 event.sequence,
               ),
             )
           : undefined;
         if (gapScope) {
           this.metrics.reconnects += 1;
-          const lastSequence = connected.lastDurableSequences.get(streamKey);
-          connected.lastDurableSequences.set(
-            streamKey,
-            Math.max(
-              connected.lastDurableSequences.get(streamKey) ?? 0,
-              event.sequence,
-            ),
-          );
-          this.sendRaw(connected.socket, {
-            type: "reconnect.required",
-            reason: "durable_event_gap",
-            scope:
-              stream.kind === "space"
-                ? { kind: "space", spaceId: stream.id }
-                : stream.kind === "user"
-                  ? { kind: "user" }
-                  : gapScope,
-            ...(event.workspaceId ? { workspaceId: event.workspaceId } : {}),
-            stream: realtimeEventStream(event),
-            lastDurableSequence: lastSequence,
-            nextSequence: event.sequence,
-          });
+          const recoveryScope =
+            stream.kind === "space"
+              ? { kind: "space" as const, spaceId: stream.id }
+              : stream.kind === "user"
+                ? { kind: "user" as const }
+                : gapScope;
+          await this.replayScope(connected, recoveryScope, event);
+          if (
+            connected.lastDurableSequences.get(streamKey) ===
+            event.sequence - 1
+          ) {
+            const result = this.enqueueEvent(connected, event);
+            this.recordQueueResult(result);
+            if (result !== "resync-required") {
+              connected.lastDurableSequences.set(streamKey, event.sequence);
+            }
+          }
           continue;
         }
         const result = this.enqueueEvent(connected, event);
         this.recordQueueResult(result);
-        if (isDurableRealtimeEventType(event.type)) {
+        if (replayable) {
           connected.lastDurableSequences.set(
             streamKey,
             Math.max(
@@ -678,7 +681,7 @@ export class RealtimeGateway implements DurableObject {
     connected: ConnectedClient,
     event: RealtimeEventEnvelope,
   ): RealtimeQueueEnqueueResult {
-    const durable = isDurableRealtimeEventType(event.type);
+    const durable = isReplayableRealtimeEvent(event);
     const coalesceKey = durable
       ? undefined
       : `${event.type}:${realtimeStreamKey(realtimeEventStream(event))}:${event.spaceId ?? ""}:${event.runId ?? ""}:${event.assignmentId ?? ""}`;
@@ -773,5 +776,139 @@ export class RealtimeGateway implements DurableObject {
     } catch {
       // Close handlers remove dead sockets; delivery is best effort.
     }
+  }
+
+  private async replayScope(
+    connected: ConnectedClient,
+    scope: RealtimeScope,
+    until?: RealtimeEventEnvelope,
+  ): Promise<void> {
+    const rows = await this.loadReplayRows(connected.identity.userId, scope);
+    const blockedStreams = new Set<string>();
+    for (const row of rows) {
+      let event: RealtimeEventEnvelope;
+      try {
+        event = realtimeEventFromRow(row);
+      } catch {
+        continue;
+      }
+      if (!isReplayableRealtimeEvent(event) || !eventMatchesScope(event, scope)) {
+        continue;
+      }
+      const stream = realtimeEventStream(event);
+      const streamKey = realtimeStreamKey(stream);
+      if (blockedStreams.has(streamKey)) continue;
+      const lastSequence = connected.lastDurableSequences.get(streamKey);
+      if (lastSequence !== undefined && event.sequence <= lastSequence) {
+        continue;
+      }
+      if (
+        lastSequence !== undefined &&
+        requiresRealtimeReconnect(lastSequence, event.sequence)
+      ) {
+        this.metrics.reconnects += 1;
+        this.sendReplayGap(connected, scope, event, lastSequence);
+        blockedStreams.add(streamKey);
+        continue;
+      }
+      if (
+        until &&
+        realtimeStreamKey(realtimeEventStream(until)) === streamKey &&
+        event.sequence > until.sequence
+      ) {
+        continue;
+      }
+      const result = this.enqueueEvent(connected, event);
+      this.recordQueueResult(result);
+      if (result === "resync-required") continue;
+      connected.lastDurableSequences.set(streamKey, event.sequence);
+    }
+    if (until) {
+      const stream = realtimeEventStream(until);
+      const streamKey = realtimeStreamKey(stream);
+      const lastSequence = connected.lastDurableSequences.get(streamKey);
+      if (
+        lastSequence !== undefined &&
+        lastSequence < until.sequence - 1 &&
+        !blockedStreams.has(streamKey)
+      ) {
+        this.sendReplayGap(connected, scope, until, lastSequence);
+      }
+    }
+  }
+
+  private async loadReplayRows(
+    userId: string,
+    scope: RealtimeScope,
+  ): Promise<Record<string, unknown>[]> {
+    let query = `
+      SELECT e.*
+      FROM realtime_events e`;
+    const conditions = ["1 = 1"];
+    const bindings: string[] = [];
+    if (scope.kind === "execution_workspace" && scope.executionWorkspaceId) {
+      conditions.push(
+        "e.stream_kind = 'execution_workspace' AND COALESCE(e.stream_id, e.workspace_id) = ?",
+      );
+      bindings.push(scope.executionWorkspaceId);
+    } else if (scope.kind === "space" && scope.spaceId) {
+      conditions.push("e.stream_kind = 'space' AND e.stream_id = ?");
+      bindings.push(scope.spaceId);
+    } else if (scope.kind === "user") {
+      query += " LEFT JOIN execution_workspaces w ON w.id = e.workspace_id";
+      conditions.push(
+        `(e.stream_kind = 'user' AND e.stream_id = ?) OR
+         (e.stream_kind = 'execution_workspace' AND w.owner_user_id = ?) OR
+         (e.stream_kind = 'space' AND EXISTS (
+           SELECT 1 FROM space_memberships m
+           WHERE m.space_id = e.stream_id AND m.user_id = ?
+         ))`,
+      );
+      bindings.push(userId, userId, userId);
+    } else if (scope.kind === "run" && scope.runId) {
+      conditions.push("e.run_id = ?");
+      bindings.push(scope.runId);
+    } else if (scope.kind === "thread" && scope.threadId) {
+      conditions.push("e.thread_id = ?");
+      bindings.push(scope.threadId);
+    } else if (scope.workspaceId) {
+      conditions.push(
+        "e.stream_kind = 'execution_workspace' AND COALESCE(e.stream_id, e.workspace_id) = ?",
+      );
+      bindings.push(scope.workspaceId);
+    } else {
+      return [];
+    }
+    const result = await this.env.CONCLAVE_DB.prepare(
+      `${query}
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY e.occurred_at ASC, e.sequence ASC, e.event_id ASC
+       LIMIT ${MAX_REPLAY_EVENTS}`,
+    )
+      .bind(...bindings)
+      .all<Record<string, unknown>>();
+    return result.results ?? [];
+  }
+
+  private sendReplayGap(
+    connected: ConnectedClient,
+    scope: RealtimeScope,
+    event: RealtimeEventEnvelope,
+    lastSequence: number,
+  ): void {
+    const streamKey = realtimeStreamKey(realtimeEventStream(event));
+    connected.lastDurableSequences.set(
+      streamKey,
+      Math.max(connected.lastDurableSequences.get(streamKey) ?? 0, event.sequence),
+    );
+    this.sendRaw(connected.socket, {
+      type: "reconnect.required",
+      reason: "durable_event_gap",
+      scope,
+      ...(event.workspaceId ? { workspaceId: event.workspaceId } : {}),
+      stream: realtimeEventStream(event),
+      lastDurableSequence: lastSequence,
+      nextSequence: event.sequence,
+    });
   }
 }

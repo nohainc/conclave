@@ -239,6 +239,35 @@ describe("Cloud event publisher", () => {
     expect(harness.fanoutCount).toBe(2);
   });
 
+  it("persists replayable Worker Activity with assignment correlation", async () => {
+    const harness = createHarness();
+    const result = await new CloudEventPublisher(harness.env).publish({
+      type: "assignment.activity",
+      durable: true,
+      eventId: "activity-1",
+      idempotencyKey: "activity-1",
+      workspaceId: "workspace-1",
+      attemptId: "attempt-1",
+      assignmentId: "assignment-1",
+      workspaceRuntimeId: "runtime-1",
+      payload: {
+        entityId: "assignment-1",
+        workerId: "chatgpt",
+        sourceEventId: "source-1",
+        executionId: "execution-1",
+        activitySequence: 1,
+        activityType: "tool.started",
+        activityStatus: "running",
+        title: "Running tool",
+      },
+    });
+
+    expect(result.persisted).toBe(true);
+    expect(result.event.type).toBe("assignment.activity");
+    expect(result.event.sequence).toBe(1);
+    expect(result.event.attemptId).toBe("attempt-1");
+  });
+
   it("returns safely when a subscriber is disconnected", async () => {
     const harness = createHarness();
     const namespace = harness.env.CONCLAVE_REALTIME_GATEWAY as unknown as {

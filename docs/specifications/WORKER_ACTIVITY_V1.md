@@ -58,3 +58,23 @@ runtime transport. Its bounded queue coalesces replaceable model/status
 updates, applies backpressure to important lifecycle events, and records
 forwarding failures as Workspace diagnostics without converting a lost
 cosmetic event into Worker failure.
+
+## Cloud delivery and recovery
+
+Cloud validates the runtime origin against the current assignment, Workspace
+runtime, Worker, run, task and attempt before publishing an activity. The
+payload is normalized and size-limited; provider JSON, terminal output,
+reasoning and arbitrary tool output are not stored.
+
+Lifecycle and tool events are replayable. Cloud persists their sanitized
+envelopes in the existing realtime event stream and a bounded
+assignment-scoped history projection. `model.status` and `message.updated`
+remain ephemeral. The event identity is derived from assignment, attempt and
+source event identity, so retries are idempotent.
+
+Realtime clients acknowledge durable stream positions through their existing
+cursor hello. On subscription or reconnect, the realtime Gateway replays
+events after the acknowledged sequence, suppresses duplicates, and emits a
+gap signal when retained history cannot fill a sequence gap. The assignment
+result/error remains the authoritative completion record; activity is
+diagnostic and timeline state only.

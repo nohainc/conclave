@@ -66,6 +66,7 @@ export function sqliteD1() {
     "0040_issue_report_investigation.sql",
     "0041_full_local_access_profile_mappings.sql",
     "0042_codex_full_access_approval_conflict.sql",
+    "0045_worker_activity_history.sql",
   ]) {
     sqlite.exec(
       readFileSync(

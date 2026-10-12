@@ -46,6 +46,7 @@ import {
   withRequestId,
 } from "./observability.js";
 import { pruneExpiredRealtimeEvents } from "./realtime-retention.js";
+import { pruneWorkerActivityHistory } from "./worker-activity-history.js";
 import { pruneExpiredIssueReports } from "./issue-report-retention.js";
 import {
   handleCreateIssueReport,
@@ -181,6 +182,9 @@ const routeDependencies = {
 export default {
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     const deleted = await pruneExpiredRealtimeEvents(env.CONCLAVE_DB);
+    const deletedWorkerActivity = await pruneWorkerActivityHistory(
+      env.CONCLAVE_DB,
+    );
     const deletedIssueReports = await pruneExpiredIssueReports(
       env.CONCLAVE_DB,
       env.CONCLAVE_ARTIFACTS,
@@ -189,6 +193,7 @@ export default {
       JSON.stringify({
         event: "realtime_event_retention_complete",
         deleted,
+        deletedWorkerActivity,
         deletedIssueReports,
       }),
     );

@@ -49,7 +49,9 @@ function json(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function eventFromRow(row: Record<string, unknown>): RealtimeEventEnvelope {
+export function realtimeEventFromRow(
+  row: Record<string, unknown>,
+): RealtimeEventEnvelope {
   return parseRealtimeEvent({
     eventId: String(row.event_id),
     type: String(row.event_type),
@@ -227,7 +229,7 @@ export class CloudEventPublisher implements EventPublisher {
     const inserted = results[results.length - 1]?.results?.[0] as
       Record<string, unknown> | undefined;
     if (inserted) {
-      return { event: eventFromRow(inserted), persisted: true };
+      return { event: realtimeEventFromRow(inserted), persisted: true };
     }
 
     const duplicate = await db
@@ -239,7 +241,8 @@ export class CloudEventPublisher implements EventPublisher {
       )
       .bind(stream.kind, stream.id, input.eventId, input.idempotencyKey)
       .first<Record<string, unknown>>();
-    if (duplicate) return { event: eventFromRow(duplicate), persisted: false };
+    if (duplicate)
+      return { event: realtimeEventFromRow(duplicate), persisted: false };
     throw new Error("Could not persist durable realtime event");
   }
 
