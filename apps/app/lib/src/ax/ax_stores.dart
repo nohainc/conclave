@@ -143,9 +143,6 @@ class _AxDeferredListenableBuilderState
         setState(() {});
       });
     });
-    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
-      binding.scheduleFrame();
-    }
   }
 
   @override
@@ -161,6 +158,13 @@ class _AxDeferredListenableBuilderState
     if (!mounted || _rebuildScheduled) return;
     _rebuildScheduled = true;
     final binding = WidgetsBinding.instance;
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.idle ||
+        phase == SchedulerPhase.postFrameCallbacks) {
+      _rebuildScheduled = false;
+      setState(() {});
+      return;
+    }
     binding.addPostFrameCallback((_) {
       // Flutter Web can begin the next layout pass before a post-frame
       // callback has fully unwound. Cross one event-loop turn before marking
@@ -170,9 +174,6 @@ class _AxDeferredListenableBuilderState
         if (mounted) setState(() {});
       });
     });
-    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
-      binding.scheduleFrame();
-    }
   }
 
   @override

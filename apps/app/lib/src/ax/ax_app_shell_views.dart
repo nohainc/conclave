@@ -38,6 +38,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                   return Scaffold(
                     drawer: !isDesktop
                         ? Drawer(
+                            width: 220,
                             child: AxSidebar(
                               shellContext: shell,
                               onNavigateTo: _navigateTo,
@@ -90,7 +91,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                       () => _desktopSidebarCollapsed = false),
                                 )
                               : SizedBox(
-                                  width: 248,
+                                  width: 220,
                                   child: AxSidebar(
                                     shellContext: shell,
                                     onNavigateTo: _navigateTo,

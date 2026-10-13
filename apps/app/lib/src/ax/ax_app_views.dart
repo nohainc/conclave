@@ -608,11 +608,17 @@ class _HomeThreadCollectionState extends State<_HomeThreadCollection> {
   void _cacheChanged() {
     if (!mounted || _cacheRebuildPending) return;
     _cacheRebuildPending = true;
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.idle ||
+        phase == SchedulerPhase.postFrameCallbacks) {
+      _cacheRebuildPending = false;
+      setState(() {});
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _cacheRebuildPending = false;
       if (mounted) setState(() {});
     });
-    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   @override

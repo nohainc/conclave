@@ -759,10 +759,12 @@ class _ThreadPageState extends State<ThreadPage>
       }
 
       // Handle thread mutation events (archive, clear, rename)
-      if (type is String && payload is Map && payload['threadId'] == widget.thread.id) {
+      if (type is String &&
+          payload is Map &&
+          payload['threadId'] == widget.thread.id) {
         if (type == 'thread.archived') {
           // Thread was archived by another user or session
-          _handleThreadArchived(payload);
+          _handleThreadArchived(Map<String, dynamic>.from(payload));
         } else if (type == 'thread.cleared' || type == 'thread.clearChat') {
           // Chat was cleared, re-synchronize to prevent history reappearance
           unawaited(_discussionCache

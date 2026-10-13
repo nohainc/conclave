@@ -420,51 +420,49 @@ class _WorkComposer extends StatelessWidget {
               ),
             ),
           ),
-          if (stepKind != null) ...[
-            const SizedBox(width: 6),
-            ModelEffortSelector(
-              scope: 'work-composer',
-              helperMessage: eligibleWorkers
-                          .where((worker) => worker.id == selectedWorkerId)
-                          .firstOrNull
-                          ?.executionOptions
-                          ?.modelSwitchSupported ==
-                      false
-                  ? 'Changing the model starts a new session with the conversation context. Effort changes that select another model follow the same rule.'
-                  : null,
-              compact: true,
-              showWorkerInCompactSummary: false,
-              showWorker: true,
-              showModel: true,
-              showEffort: true,
-              showCatalog: false,
-              allowWorkerChange: policy.userSelectsWorker,
-              allowModelChange: policy.userSelectsModel,
-              allowEffortChange: policy.userSelectsEffort,
-              catalog:
-                  AxWorkflowSelectionOptions(eligibleWorkers).sharedCatalog,
-              value: ExecutionSelection(
-                  worker: selectedWorkerId,
-                  catalogRevision: (executionSelection['catalogRevision'] ??
-                      binding['catalogRevision']) as String?,
-                  model: selectedModel.isEmpty ? null : selectedModel,
-                  effort: selectedReasoningEffort.isEmpty
-                      ? null
-                      : selectedReasoningEffort),
-              readOnly: !canExecute ||
-                  submitting ||
-                  !(policy.userSelectsWorker ||
-                      policy.userSelectsModel ||
-                      policy.userSelectsEffort),
-              onChanged: (value) => onExecutionSelectionChanged({
-                'workerId': value.worker,
-                'model': value.model,
-                'reasoningEffort': value.effort,
-                if (value.catalogRevision != null)
-                  'catalogRevision': value.catalogRevision,
-              }),
-            ),
-          ],
+          const SizedBox(width: 6),
+          ModelEffortSelector(
+            scope: 'work-composer',
+            helperMessage: eligibleWorkers
+                        .where((worker) => worker.id == selectedWorkerId)
+                        .firstOrNull
+                        ?.executionOptions
+                        ?.modelSwitchSupported ==
+                    false
+                ? 'Changing the model starts a new session with the conversation context. Effort changes that select another model follow the same rule.'
+                : null,
+            compact: true,
+            showWorkerInCompactSummary: false,
+            showWorker: true,
+            showModel: true,
+            showEffort: true,
+            showCatalog: false,
+            allowWorkerChange: policy.userSelectsWorker,
+            allowModelChange: policy.userSelectsModel,
+            allowEffortChange: policy.userSelectsEffort,
+            catalog:
+                AxWorkflowSelectionOptions(eligibleWorkers).sharedCatalog,
+            value: ExecutionSelection(
+                worker: selectedWorkerId,
+                catalogRevision: (executionSelection['catalogRevision'] ??
+                    binding['catalogRevision']) as String?,
+                model: selectedModel.isEmpty ? null : selectedModel,
+                effort: selectedReasoningEffort.isEmpty
+                    ? null
+                    : selectedReasoningEffort),
+            readOnly: !canExecute ||
+                submitting ||
+                !(policy.userSelectsWorker ||
+                    policy.userSelectsModel ||
+                    policy.userSelectsEffort),
+            onChanged: (value) => onExecutionSelectionChanged({
+              'workerId': value.worker,
+              'model': value.model,
+              'reasoningEffort': value.effort,
+              if (value.catalogRevision != null)
+                'catalogRevision': value.catalogRevision,
+            }),
+          ),
         ],
       ),
     );

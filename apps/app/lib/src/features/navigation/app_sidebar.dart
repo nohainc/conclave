@@ -61,7 +61,7 @@ class AppSidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Builder(
       builder: (sidebarContext) => Container(
-        width: compact ? double.infinity : 248,
+        width: compact ? double.infinity : 220,
         color: ConclaveColors.navigationBackgroundDark,
         padding: const EdgeInsets.fromLTRB(10, 16, 10, 14),
         child: Column(
