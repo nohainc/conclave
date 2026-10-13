@@ -64,6 +64,46 @@ void main() {
     expect(find.text('build-$builds'), findsOneWidget);
   });
 
+  testWidgets(
+      'defers coalesced notifications raised while a layout pass mounts a listener',
+      (tester) async {
+    final source = ValueNotifier<int>(0);
+    final merged = AxCoalescedListenable([source]);
+    addTearDown(() {
+      merged.dispose();
+      source.dispose();
+    });
+    var builds = 0;
+    var notified = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LayoutBuilder(
+          builder: (context, constraints) {
+            // Runs during layout. The notification must not reach the
+            // ListenableBuilder that is being mounted in this same pass.
+            if (!notified) {
+              notified = true;
+              source.value = 1;
+            }
+            return ListenableBuilder(
+              listenable: merged,
+              builder: (context, child) {
+                builds++;
+                return Text('layout-$builds');
+              },
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(builds, greaterThanOrEqualTo(2));
+    expect(find.text('layout-$builds'), findsOneWidget);
+  });
+
   final builds = <String, int>{};
   void observe() {
     final previous = debugOnRebuildDirtyWidget;

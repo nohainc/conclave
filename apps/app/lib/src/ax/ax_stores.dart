@@ -41,32 +41,54 @@ class AxCoalescedListenable extends ChangeNotifier {
   void _sourceChanged() {
     if (_disposed || _notificationScheduled) return;
     _notificationScheduled = true;
-    void flush() {
-      _notificationScheduled = false;
-      if (!_disposed) notifyListeners();
-    }
-
-    final scheduler = SchedulerBinding.instance;
-    final isBuilding =
-        WidgetsBinding.instance.buildOwner?.debugBuilding ?? false;
-
-    // A microtask is sufficient when a source changes outside a frame and
-    // preserves synchronous coalescing for callers. During a build/layout,
-    // however, a microtask can run before Flutter has finished rebuilding the
-    // current element. schedulerPhase can still be idle during a manually
-    // entered BuildOwner scope, so check both signals before notifying.
-    if (!isBuilding && scheduler.schedulerPhase == SchedulerPhase.idle) {
-      scheduleMicrotask(flush);
+    if (_isMidFrame) {
+      _deferToPostFrame();
     } else {
-      scheduler.addPostFrameCallback((_) => flush());
-      // addPostFrameCallback does not request a frame. This matters when a
-      // callback is queued from an idle/manual build scope or from another
-      // post-frame callback; ensure the deferred notification is delivered.
-      if (scheduler.schedulerPhase == SchedulerPhase.idle ||
-          scheduler.schedulerPhase == SchedulerPhase.postFrameCallbacks) {
-        scheduler.scheduleFrame();
-      }
+      scheduleMicrotask(_deliverFromMicrotask);
     }
+  }
+
+  // The frame state is checked again when the microtask runs. It can change
+  // between scheduling and delivery, for example when a frame starts first.
+  void _deliverFromMicrotask() {
+    if (_isMidFrame) {
+      _deferToPostFrame();
+      return;
+    }
+    _deliver();
+  }
+
+  void _deferToPostFrame() {
+    final scheduler = SchedulerBinding.instance;
+    scheduler.addPostFrameCallback((_) => _deliverFromPostFrame());
+    // addPostFrameCallback does not request a frame, so ask for one explicitly
+    // to make sure the deferred notification is delivered.
+    scheduler.scheduleFrame();
+  }
+
+  void _deliver() {
+    if (_isMidFrame) {
+      _deferToPostFrame();
+      return;
+    }
+    _notificationScheduled = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  // This callback is registered by _deferToPostFrame, so Flutter has already
+  // completed the frame's build and layout work before listeners are notified.
+  void _deliverFromPostFrame() {
+    _notificationScheduled = false;
+    if (!_disposed) notifyListeners();
+  }
+
+  // Build and layout (including LayoutBuilder callbacks that mount subtrees)
+  // are unsafe for notifying listeners. Post-frame callbacks are safe because
+  // the frame's build and layout have already finished.
+  bool get _isMidFrame {
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    final building = WidgetsBinding.instance.buildOwner?.debugBuilding ?? false;
+    return building || phase != SchedulerPhase.idle;
   }
 
   @override
