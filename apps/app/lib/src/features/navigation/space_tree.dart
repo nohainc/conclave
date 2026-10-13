@@ -152,6 +152,8 @@ class SpaceTree extends StatelessWidget {
     final isExpanded = shellContext.isSpaceExpanded(space.id);
     final visibleThreads =
         threads.where((t) => t.status.toLowerCase() != 'archived').toList();
+    final archivedThreads =
+        threads.where((t) => t.status.toLowerCase() == 'archived').toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -266,6 +268,66 @@ class SpaceTree extends StatelessWidget {
                         statusIndicator,
                       ],
                     ],
+                  ),
+                ),
+              );
+            },
+          ),
+        if (isExpanded && archivedThreads.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(34, 8, 10, 4),
+            child: Row(
+              children: [
+                Icon(Icons.archive_outlined, size: 12, color: Colors.white38),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Archived (${archivedThreads.length})',
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      color: Colors.white38,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (isExpanded)
+          ...archivedThreads.map(
+            (thread) {
+              final isThreadSelected =
+                  shellContext.navigation.threadId == thread.id ||
+                      shellContext.selectedThread?.id == thread.id;
+
+              return InkWell(
+                onTap: thread.id.startsWith('local-thread-') ||
+                        thread.id.startsWith('local-thread-')
+                    ? null
+                    : () {
+                        onNavigateTo(AxNavigation.thread(space.id, thread.id));
+                        if (compact) Scaffold.maybeOf(context)?.closeDrawer();
+                      },
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 1),
+                  padding: const EdgeInsets.fromLTRB(48, 4, 10, 4),
+                  decoration: BoxDecoration(
+                    color: isThreadSelected
+                        ? ConclaveColors.navigationSelected
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    thread.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: isThreadSelected ? Colors.white : Colors.white38,
+                      fontSize: 11,
+                      fontWeight:
+                          isThreadSelected ? FontWeight.w600 : FontWeight.w400,
+                    ),
                   ),
                 ),
               );

@@ -757,6 +757,23 @@ class _ThreadPageState extends State<ThreadPage>
             .synchronize(widget.thread.id, reconcileNewest: true)
             .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       }
+
+      // Handle thread mutation events (archive, clear, rename)
+      if (type is String && payload is Map && payload['threadId'] == widget.thread.id) {
+        if (type == 'thread.archived') {
+          // Thread was archived by another user or session
+          _handleThreadArchived(payload);
+        } else if (type == 'thread.cleared' || type == 'thread.clearChat') {
+          // Chat was cleared, re-synchronize to prevent history reappearance
+          unawaited(_discussionCache
+              .synchronize(widget.thread.id, reconcileNewest: true)
+              .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+        } else if (type == 'thread.clearWork') {
+          // Work was cleared, refresh work history
+          unawaited(_refreshWorkTimeline()
+              .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+        }
+      }
     });
   }
 

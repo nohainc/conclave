@@ -475,6 +475,7 @@ extension _ThreadActions on _ThreadPageState {
     final hasActiveWork = _workTimeline
         .any((w) => !w.id.startsWith('local-') &&
             const {'queued', 'running', 'waiting'}.contains(w.status));
+    final isArchived = widget.thread.archived;
 
     showMenu<String>(
       context: context,
@@ -492,13 +493,14 @@ extension _ThreadActions on _ThreadPageState {
           ),
         ),
         PopupMenuItem<String>(
-          value: 'archive',
+          value: isArchived ? 'unarchive' : 'archive',
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.archive_outlined, size: 18, color: textColor),
+              Icon(isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+                size: 18, color: textColor),
               const SizedBox(width: 12),
-              const Text('Archive Thread'),
+              Text(isArchived ? 'Unarchive Thread' : 'Archive Thread'),
             ],
           ),
         ),
@@ -549,6 +551,8 @@ extension _ThreadActions on _ThreadPageState {
         await _showRenameDialog();
       } else if (value == 'archive') {
         await _showArchiveDialog();
+      } else if (value == 'unarchive') {
+        await _showUnarchiveDialog();
       } else if (value == 'clearChat') {
         await _showClearChatDialog();
       } else if (value == 'clearWork') {
@@ -647,6 +651,48 @@ extension _ThreadActions on _ThreadPageState {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Failed to archive thread: $error'),
+              backgroundColor: ConclaveColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showUnarchiveDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Unarchive Thread'),
+        content: const Text(
+          'This Thread will be moved back to your active Threads.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Unarchive'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await widget.onRename?.call(widget.thread.title);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Thread unarchived.')),
+          );
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to unarchive thread: $error'),
               backgroundColor: ConclaveColors.error,
             ),
           );
@@ -785,6 +831,22 @@ extension _ThreadActions on _ThreadPageState {
           );
         }
       }
+    }
+  }
+
+  void _handleThreadArchived(Map<String, dynamic> payload) {
+    if (!mounted) return;
+    final isArchived = payload['archived'] == true;
+    final archivedBy = payload['archivedBy'] as String?;
+    final byAnother = archivedBy != null && archivedBy != widget.currentUserId;
+
+    if (isArchived && byAnother) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('This Thread was archived.'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
     }
   }
 }
