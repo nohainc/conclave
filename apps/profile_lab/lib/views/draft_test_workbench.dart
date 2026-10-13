@@ -74,6 +74,8 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
   void _advanced(String action) {
     final c = widget.controller;
     switch (action) {
+      case 'source':
+        _loadSourceProfile();
       case 'format':
         c.formatCurrentJson();
       case 'compare':
@@ -94,6 +96,37 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
         ProfileHistoryDialog.show(context, c);
       case 'repair':
         AiRepairLoopDialog.show(context, c);
+    }
+  }
+
+  Future<void> _loadSourceProfile() async {
+    final c = widget.controller;
+    final worker = c.selectedCloudWorker?['workerTypeId'] as String?;
+    if (worker == null ||
+        !const {'chatgpt', 'gemini', 'claude'}.contains(worker)) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Load source Profile?'),
+        content: const Text(
+          'Replace the local candidate with the bundled source Profile? '
+          'Unsaved edits and local candidate changes will be lost. '
+          'The published Cloud Profile will not change.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Load source'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      await _perform(c.loadSourceProfileCandidate);
     }
   }
 
@@ -382,6 +415,13 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                     tooltip: 'More candidate actions',
                     onSelected: _advanced,
                     itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'source',
+                        enabled: !locked &&
+                            const {'chatgpt', 'gemini', 'claude'}.contains(
+                              c.selectedCloudWorker?['workerTypeId']),
+                        child: const Text('Load source Profile…'),
+                      ),
                       PopupMenuItem(
                         value: 'format',
                         enabled: !locked,
