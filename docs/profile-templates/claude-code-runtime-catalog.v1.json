@@ -196,6 +196,13 @@
       "opus",
       "haiku"
     ],
+    "supportedReasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
     "catalog": [
       {
         "id": "sonnet",
