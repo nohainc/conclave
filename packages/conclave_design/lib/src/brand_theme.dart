@@ -30,6 +30,9 @@ abstract final class ConclaveBrand {
   static const darkSurfaceHover = ConclaveColors.surfaceHoverDark;
   static const darkLine = ConclaveColors.borderDark;
   static const darkCodeBackground = ConclaveColors.codeBackgroundDark;
+  static const darkComposer = ConclaveColors.composerBackgroundDark;
+  static const darkNavigation = ConclaveColors.navigationBackgroundDark;
+  static const darkOwnMessage = ConclaveColors.ownMessageBackgroundDark;
 
   // Semantic Status Colors
   static const success = ConclaveColors.success;
@@ -201,7 +204,7 @@ abstract final class ConclaveBrand {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: ConclaveColors.surfaceDark,
+        fillColor: ConclaveColors.composerBackgroundDark,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(ConclaveRadius.md),
           borderSide: const BorderSide(color: ConclaveColors.borderDark),

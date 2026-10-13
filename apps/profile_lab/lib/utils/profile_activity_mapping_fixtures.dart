@@ -124,60 +124,41 @@ _ProfileActivityFixture? _fixtureFor(String provider) {
     ]);
   }
   if (normalized.contains('agy') || normalized.contains('antigravity')) {
-    return const _ProfileActivityFixture(
+    // Shape observed from a real headless run of the documented stream-json
+    // format. Tool steps are identified by step_index, and the ACTIVE and DONE
+    // events for one step share it. Text and tool output are omitted. The
+    // second tool call is a synthetic repeat of the first.
+    const conversation = 'fixture-conversation-1';
+    Map<String, Object?> step(int index, String state, String stepType,
+            [Map<String, Object?> extra = const {}]) =>
+        {
+          'event': 'step_update',
+          'step_update': {
+            'conversation_id': conversation,
+            'step_index': index,
+            'state': state,
+            'step_type': stepType,
+            ...extra,
+          },
+        };
+    const toolInfo = {'name': 'run_command'};
+    return _ProfileActivityFixture(
       'antigravity-events/success.jsonl',
       [
-        {
-          'event': 'init',
-          'conversation_id': 'fixture-conversation-1',
-        },
-        {
-          'event': 'step_update',
-          'step_update': {
-            'state': 'ACTIVE',
-            'step_type': 'agent_response',
-          },
-        },
-        {
-          'event': 'step_update',
-          'step_update': {
-            'state': 'ACTIVE',
-            'step_type': 'tool_execution',
-            'tool_id': 'tool-call-1',
-            'tool_name': 'shell',
-          },
-        },
-        {
-          'event': 'step_update',
-          'step_update': {
-            'state': 'COMPLETED',
-            'step_type': 'tool_execution',
-            'tool_id': 'tool-call-1',
-            'tool_name': 'shell',
-          },
-        },
-        {
-          'event': 'step_update',
-          'step_update': {
-            'state': 'ACTIVE',
-            'step_type': 'tool_execution',
-            'tool_id': 'tool-call-2',
-            'tool_name': 'shell',
-          },
-        },
-        {
-          'event': 'step_update',
-          'step_update': {
-            'state': 'COMPLETED',
-            'step_type': 'tool_execution',
-            'tool_id': 'tool-call-2',
-            'tool_name': 'shell',
-          },
-        },
-        {
-          'event': 'result',
-          'result': {'conversation_id': 'fixture-conversation-1'},
-        },
+        {'event': 'init', 'conversation_id': conversation},
+        step(0, 'DONE', 'user_input'),
+        step(1, 'DONE', 'agent_response'),
+        step(2, 'ACTIVE', 'tool',
+            {'tool_name': 'run_command', 'tool_info': toolInfo}),
+        step(2, 'DONE', 'tool',
+            {'tool_name': 'run_command', 'tool_info': toolInfo}),
+        step(3, 'ACTIVE', 'tool',
+            {'tool_name': 'run_command', 'tool_info': toolInfo}),
+        step(3, 'DONE', 'tool',
+            {'tool_name': 'run_command', 'tool_info': toolInfo}),
+        step(4, 'ACTIVE', 'agent_response'),
+        step(4, 'DONE', 'agent_response'),
+        {'event': 'result', 'result': {'conversation_id': conversation, 'status': 'SUCCESS'}},
       ],
     );
   }

@@ -20,6 +20,59 @@ Future<void> choose(WidgetTester tester, String label, String text) async {
 }
 
 void main() {
+  testWidgets(
+    'catalog refresh preserves supported choices and exposes removed efforts',
+    (tester) async {
+      const selection = ExecutionSelection(
+        worker: 'worker',
+        model: 'one',
+        effort: 'deep',
+        catalogRevision: 'old',
+      );
+      final changes = <ExecutionSelection>[];
+      Future<void> render(List<String> efforts) => tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: ModelEffortSelector(
+                  catalog: ExecutionSelectionCatalog([
+                    WorkerSelectionCapability(
+                      id: 'worker',
+                      name: 'Worker',
+                      catalogRevision: 'current',
+                      models: [
+                        ExecutionModelCapability(
+                          id: 'one',
+                          name: 'One',
+                          efforts: efforts,
+                        ),
+                      ],
+                    ),
+                  ]),
+                  value: selection,
+                  onChanged: changes.add,
+                ),
+              ),
+            ),
+          );
+      await render(['deep', 'brief']);
+      expect(
+        find.text('Worker catalog changed; refresh and confirm the selection.'),
+        findsNothing,
+      );
+      expect(changes, isEmpty);
+      await render(['brief']);
+      expect(
+        find.text(
+          'The selected effort is not supported for this Worker and model.',
+        ),
+        findsOneWidget,
+      );
+      expect(changes, isEmpty);
+      expect(selection.effort, 'deep');
+      expect(selection.catalogRevision, 'old');
+    },
+  );
+
   test('effort labels agree for selectors and historical summaries', () {
     expect(executionEffortDisplayName('xhigh'), 'Extra High');
     expect(executionEffortDisplayName('medium'), 'Medium');

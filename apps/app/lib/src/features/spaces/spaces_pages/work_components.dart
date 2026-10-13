@@ -225,27 +225,29 @@ class _WorkComposer extends StatelessWidget {
               ),
             )
           else
-            ListenableBuilder(
-              listenable: activityStore,
-              builder: (context, _) => ListView.separated(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: workTimeline.length,
-                // Preserve render and selection state by request when entries move.
-                findItemIndexCallback: (key) {
-                  if (key is! ValueKey<String>) return null;
-                  final index =
-                      workTimeline.indexWhere((r) => r.id == key.value);
-                  return index < 0 ? null : index;
-                },
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final request = workTimeline[index];
-                  return _WorkTimelineCard(
-                    key: ValueKey(request.id),
+            // Only the card whose assignment changed rebuilds on Worker
+            // activity; the list itself depends on the Work history alone.
+            ListView.separated(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: workTimeline.length,
+              // Preserve render and selection state by request when entries move.
+              findItemIndexCallback: (key) {
+                if (key is! ValueKey<String>) return null;
+                final index = workTimeline.indexWhere((r) => r.id == key.value);
+                return index < 0 ? null : index;
+              },
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final request = workTimeline[index];
+                return ListenableBuilder(
+                  key: ValueKey(request.id),
+                  listenable: activityStore.listenableForRequest(request),
+                  builder: (context, _) => _WorkTimelineCard(
                     request: request,
                     activities: activityStore.forRequest(request),
+                    clockOffset: activityStore.clockOffsetForRequest(request),
                     progressText: localWorkProgress[request.id],
                     currentUserId: currentUserId,
                     currentUserName: currentUserName,
@@ -262,9 +264,9 @@ class _WorkComposer extends StatelessWidget {
                     onCancelRun: localWorkProgress.containsKey(request.id)
                         ? null
                         : onCancelRun,
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             ),
         ]));
   }
@@ -571,6 +573,7 @@ class _WorkTimelineCard extends StatelessWidget {
     super.key,
     required this.request,
     required this.activities,
+    this.clockOffset = Duration.zero,
     this.progressText,
     required this.currentUserId,
     required this.currentUserName,
@@ -585,6 +588,7 @@ class _WorkTimelineCard extends StatelessWidget {
 
   final AxWorkRequest request;
   final List<AxWorkActivity> activities;
+  final Duration clockOffset;
   final String? progressText;
   final String? currentUserId;
   final String? currentUserName;
@@ -614,11 +618,13 @@ class _WorkTimelineCard extends StatelessWidget {
     return minutes > 0 ? '${minutes}m ${remainder}s' : '${remainder}s';
   }
 
+  int get _totalElapsedMs => request.steps
+      .map((step) => step.elapsedMs)
+      .whereType<int>()
+      .fold<int>(0, (total, value) => total + value);
+
   String _totalElapsed() {
-    final elapsed = request.steps
-        .map((step) => step.elapsedMs)
-        .whereType<int>()
-        .fold<int>(0, (total, value) => total + value);
+    final elapsed = _totalElapsedMs;
     return elapsed == 0 ? '' : _elapsed(elapsed);
   }
 
@@ -630,7 +636,6 @@ class _WorkTimelineCard extends StatelessWidget {
 
     final timestamp = DateTime.tryParse(request.createdAt)?.toLocal();
     final timeLabel = timestamp == null ? '' : _chatTimestamp(timestamp);
-    final elapsed = _totalElapsed();
     final rawRequesterName = request.requestedByName.trim();
     final effectiveRequesterName = (rawRequesterName.isEmpty ||
             rawRequesterName == request.requestedByUserId ||
@@ -701,6 +706,18 @@ class _WorkTimelineCard extends StatelessWidget {
     final senderStep = activeStep?.status == 'running'
         ? activeStep
         : lastCompletedStep ?? stepForContext;
+    final stepStartedAt =
+        DateTime.tryParse((activeStep ?? senderStep)?.startedAt ?? '')
+            ?.toLocal();
+    AxWorkProgress resolveProgress(DateTime now) => AxWorkProgress.resolve(
+          requestStatus: request.status,
+          activities: activities,
+          now: now,
+          stepStartedAt: stepStartedAt,
+          serverElapsedMs: _totalElapsedMs == 0 ? null : _totalElapsedMs,
+          clockOffset: clockOffset,
+        );
+    final progress = resolveProgress(DateTime.now());
     final senderTurn = request.turns
         .where((turn) => turn.assignmentId == senderStep?.assignmentId)
         .lastOrNull;
@@ -719,7 +736,9 @@ class _WorkTimelineCard extends StatelessWidget {
         WorkerPresentation.resolve(workerType, workerDisplayName);
     final workerName = presentation.name;
     final isWorkerResponse = !isError &&
-        (senderStep?.status == 'running' || response?.isNotEmpty == true) &&
+        (senderStep?.status == 'running' ||
+            progress.isExecuting ||
+            response?.isNotEmpty == true) &&
         (workerDisplayName?.isNotEmpty == true ||
             workerType?.isNotEmpty == true);
     final senderName = isWorkerResponse ? workerName : 'Conclave';
@@ -751,37 +770,59 @@ class _WorkTimelineCard extends StatelessWidget {
           : 'Default effort';
       formattedModelInfo = '$modelLabel · $effortLabel';
     }
-    final metadataSegments = [
-      if (_workflowName.isNotEmpty) _workflowName,
-      if (elapsed.isNotEmpty) elapsed,
-    ];
-    final metadataString =
-        metadataSegments.isEmpty ? '' : '· ${metadataSegments.join(' · ')}';
+    // Live elapsed time comes from the Worker flow while the request is
+    // unfinished; the server-reported duration replaces it once it is not.
+    String metadataAt(DateTime now) {
+      final live = progress.showsLiveElapsed
+          ? resolveProgress(now).elapsedAt(now)
+          : null;
+      final elapsed = live != null
+          ? AxWorkProgress.formatDuration(live)
+          : progress.showsLiveElapsed
+              ? ''
+              : _totalElapsed();
+      final segments = [
+        if (_workflowName.isNotEmpty) _workflowName,
+        if (elapsed.isNotEmpty) elapsed,
+      ];
+      return segments.isEmpty ? '' : '· ${segments.join(' · ')}';
+    }
+
+    final hasMetadata = _workflowName.isNotEmpty ||
+        progress.showsLiveElapsed ||
+        _totalElapsedMs != 0;
+    final senderIconOpacity = isDark ? 0.72 : 0.85;
 
     final Widget senderAvatar = isWorkerResponse
         ? (workerIcon != null
-            ? Image.asset(workerIcon,
-                width: 22,
-                height: 22,
-                fit: BoxFit.contain,
-                semanticLabel: '$workerName icon')
+            ? Opacity(
+                opacity: senderIconOpacity,
+                child: Image.asset(workerIcon,
+                    width: 22,
+                    height: 22,
+                    fit: BoxFit.contain,
+                    semanticLabel: '$workerName icon'),
+              )
             : CircleAvatar(
                 radius: 11,
                 backgroundColor: ConclaveColors.primarySoftColor(isDark),
                 child: Text(workerName.substring(0, 1).toUpperCase(),
                     style: TextStyle(
                         fontSize: 12,
-                        color: ConclaveColors.primaryForeground(isDark))),
+                        color: metaColor)),
               ))
-        : Image.asset(
-            ConclaveBrandAssets.logoPng32,
-            width: 20,
-            height: 20,
-            fit: BoxFit.contain,
-            errorBuilder: (ctx, err, stack) => Icon(
-              Icons.auto_awesome,
-              size: 14,
-              color: ConclaveColors.primaryForeground(isDark),
+        : Opacity(
+            opacity: senderIconOpacity,
+            child: Image.asset(
+              ConclaveBrandAssets.logoPng32,
+              width: 20,
+              height: 20,
+              fit: BoxFit.contain,
+              errorBuilder: (ctx, err, stack) => Icon(
+                Icons.auto_awesome,
+                size: 14,
+                color: metaColor,
+              ),
             ),
           );
 
@@ -800,7 +841,7 @@ class _WorkTimelineCard extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     color: isOwnRequest
-                        ? ConclaveColors.primarySoftColor(isDark)
+                        ? ConclaveColors.ownMessageBackground(isDark)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -903,7 +944,7 @@ class _WorkTimelineCard extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
-                              color: isDark ? Colors.white : Colors.black87,
+                              color: metaColor,
                             ),
                           ),
                           if (isWorkerResponse &&
@@ -919,44 +960,47 @@ class _WorkTimelineCard extends StatelessWidget {
                               ),
                             ),
                           ],
-                          if (metadataString.isNotEmpty) ...[
+                          if (hasMetadata) ...[
                             const SizedBox(width: 6),
                             Expanded(
-                              child: Text(
-                                metadataString,
-                                overflow: TextOverflow.ellipsis,
-                                style:
-                                    TextStyle(fontSize: 12, color: metaColor),
+                              child: AxLiveTicker(
+                                active: progress.isTicking,
+                                builder: (context, now) => Text(
+                                  metadataAt(now),
+                                  overflow: TextOverflow.ellipsis,
+                                  style:
+                                      TextStyle(fontSize: 12, color: metaColor),
+                                ),
                               ),
                             ),
                           ],
                         ],
                       ),
                       const SizedBox(height: 10),
-                      AxWorkerActivityPanel(
-                        workerName: workerName,
-                        providerToolName: senderStep?.providerToolName,
-                        requestStatus: request.status,
-                        activities: activities,
-                      ),
-                      const SizedBox(height: 12),
                       Builder(builder: (context) {
-                        final message = error?.isNotEmpty == true
-                            ? error!
+                        // The body shows the Worker's live status while the
+                        // request is unfinished and the real outcome at the end.
+                        final String? message = error?.isNotEmpty == true
+                            ? error
                             : response?.isNotEmpty == true
-                                ? response!
+                                ? response
                                 : request.status == 'cancelled'
                                     ? 'Request cancelled.'
-                                    : progressText ??
+                                    : (progress.isExecuting
+                                            ? null
+                                            : progressText) ??
                                         switch (request.status) {
-                                          'running' =>
-                                            'Working on your request…',
-                                          'waiting' => 'Waiting to continue…',
                                           'completed' => 'Request completed.',
                                           'failed' =>
                                             'Your request could not be completed.',
-                                          _ => 'Preparing your request…',
+                                          'timed_out' =>
+                                            'The worker took too long to respond. Please retry your request.',
+                                          'lost' =>
+                                            'The connection to the worker was lost. Please retry your request.',
+                                          _ => null,
                                         };
+                        final showLiveStatus =
+                            message == null && !progress.isTerminal;
                         final isError = error?.isNotEmpty == true;
                         Widget compactAction({
                           required String tooltip,
@@ -981,19 +1025,44 @@ class _WorkTimelineCard extends StatelessWidget {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (isError)
-                              SelectableText(
-                                message,
-                                style: ConclaveMessageTypography.fromTheme(
-                                        Theme.of(context))
-                                    .copyWith(color: colors.error),
-                              )
-                            else
-                              ConclaveMarkdownBody(
-                                key: ValueKey((request.id, message)),
-                                data: message,
+                            if (showLiveStatus) ...[
+                              AxLiveTicker(
+                                active: progress.isTicking,
+                                builder: (context, now) {
+                                  final live = resolveProgress(now);
+                                  final text = live.currentAction ?? '';
+                                  return Text(
+                                    live.isStale
+                                        ? '$text · no recent updates'
+                                        : text,
+                                    key: const ValueKey('work-live-status'),
+                                    style: ConclaveMessageTypography
+                                            .fromTheme(Theme.of(context))
+                                        .copyWith(
+                                      color: isDark
+                                          ? Colors.white60
+                                          : Colors.black54,
+                                    ),
+                                  );
+                                },
                               ),
-                            const SizedBox(height: 8),
+                              const SizedBox(height: 8),
+                            ],
+                            if (message != null) ...[
+                              if (isError)
+                                SelectableText(
+                                  message,
+                                  style: ConclaveMessageTypography.fromTheme(
+                                          Theme.of(context))
+                                      .copyWith(color: colors.error),
+                                )
+                              else
+                                ConclaveMarkdownBody(
+                                  key: ValueKey((request.id, message)),
+                                  data: message,
+                                ),
+                              const SizedBox(height: 8),
+                            ],
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1091,384 +1160,66 @@ class _WorkTimelineCard extends StatelessWidget {
   }
 }
 
-class AxWorkerActivityPanel extends StatefulWidget {
-  const AxWorkerActivityPanel({
+/// Rebuilds [builder] once a second while [active], handing it the current
+/// time. Used for live elapsed time and stale-progress hints that must keep
+/// moving between Worker events.
+class AxLiveTicker extends StatefulWidget {
+  const AxLiveTicker({
     super.key,
-    required this.workerName,
-    required this.providerToolName,
-    required this.requestStatus,
-    required this.activities,
+    required this.active,
+    required this.builder,
+    this.clock,
   });
 
-  final String workerName;
-  final String? providerToolName;
-  final String requestStatus;
-  final List<AxWorkActivity> activities;
+  final bool active;
+  final Widget Function(BuildContext context, DateTime now) builder;
+
+  /// Overrides the wall clock; used by tests.
+  final DateTime Function()? clock;
 
   @override
-  State<AxWorkerActivityPanel> createState() => _AxWorkerActivityPanelState();
+  State<AxLiveTicker> createState() => _AxLiveTickerState();
 }
 
-class _AxWorkerActivityPanelState extends State<AxWorkerActivityPanel> {
-  Timer? _elapsedTimer;
-  DateTime _now = DateTime.now();
-  bool _showCompleted = false;
+class _AxLiveTickerState extends State<AxLiveTicker> {
+  Timer? _timer;
+  late DateTime _now;
+
+  DateTime _clock() => (widget.clock ?? DateTime.now)();
 
   @override
   void initState() {
     super.initState();
-    _syncTimer();
+    _now = _clock();
+    _sync();
   }
 
   @override
-  void didUpdateWidget(covariant AxWorkerActivityPanel oldWidget) {
+  void didUpdateWidget(covariant AxLiveTicker oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.activities != widget.activities ||
-        oldWidget.requestStatus != widget.requestStatus) {
-      _syncTimer();
-    }
+    _now = _clock();
+    _sync();
   }
 
-  void _syncTimer() {
-    final active = widget.activities.any((activity) => activity.isRunning) &&
-        widget.requestStatus == 'running';
-    if (active && _elapsedTimer == null) {
-      _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() => _now = DateTime.now());
+  void _sync() {
+    if (widget.active && _timer == null) {
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _now = _clock());
       });
-    } else if (!active) {
-      _elapsedTimer?.cancel();
-      _elapsedTimer = null;
+    } else if (!widget.active) {
+      _timer?.cancel();
+      _timer = null;
     }
   }
 
   @override
   void dispose() {
-    _elapsedTimer?.cancel();
+    _timer?.cancel();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final colors = Theme.of(context).colorScheme;
-    final requestIsTerminal = const {
-      'completed',
-      'failed',
-      'cancelled',
-      'timed_out',
-      'lost',
-    }.contains(widget.requestStatus);
-    final active = requestIsTerminal
-        ? const <AxWorkActivity>[]
-        : widget.activities.where((item) => !item.isFinished).toList();
-    final completed =
-        widget.activities.where((item) => item.isFinished).toList();
-    final status = _statusLabel(completed);
-    final startedAt = widget.activities
-            .where((item) => item.type == 'execution.started')
-            .map((item) => item.timestamp)
-            .firstOrNull ??
-        widget.activities.firstOrNull?.timestamp;
-    final terminal =
-        widget.activities.where((item) => item.isTerminalExecution).lastOrNull;
-    final elapsed = startedAt == null
-        ? ''
-        : _formatElapsed(startedAt, terminal?.timestamp ?? _now);
-    final rows = <Object>[...active];
-    if (completed.isNotEmpty) rows.add(_CompletedActivitySummary(completed));
-    if (_showCompleted) rows.addAll(completed);
-    final rowHeight = rows.length * 52.0;
-    final panelHeight = rows.isEmpty ? 0.0 : rowHeight.clamp(52.0, 280.0);
-    final workerLabel = widget.providerToolName?.trim().isNotEmpty == true
-        ? '${widget.workerName} · ${widget.providerToolName}'
-        : widget.workerName;
-
-    return Material(
-      type: MaterialType.transparency,
-      child: Container(
-        decoration: BoxDecoration(
-          color:
-              isDark ? Colors.white.withValues(alpha: 0.035) : Colors.black12,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isDark ? Colors.white12 : Colors.black12,
-          ),
-        ),
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  status == 'Running'
-                      ? Icons.bolt_rounded
-                      : status == 'Failed'
-                          ? Icons.error_outline_rounded
-                          : status == 'Cancelled'
-                              ? Icons.stop_circle_outlined
-                              : Icons.check_circle_outline_rounded,
-                  size: 16,
-                  color: status == 'Failed'
-                      ? colors.error
-                      : status == 'Running'
-                          ? colors.primary
-                          : isDark
-                              ? Colors.white54
-                              : Colors.black54,
-                ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    workerLabel,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                Text(
-                  status,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: status == 'Failed' ? colors.error : null,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 3),
-            Padding(
-              padding: const EdgeInsets.only(left: 23),
-              child: Text(
-                'Elapsed: ${startedAt == null ? 'Not reported' : elapsed}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? Colors.white54 : Colors.black54,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(left: 23, top: 2),
-              child: Text(
-                _currentAction(active),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? Colors.white60 : Colors.black54,
-                ),
-              ),
-            ),
-            if (widget.activities.isEmpty &&
-                const {'failed', 'timed_out', 'lost'}
-                    .contains(widget.requestStatus))
-              Padding(
-                padding: const EdgeInsets.only(left: 23, top: 6),
-                child: Text(
-                  'Worker stopped without a normal provider response. Check Worker and transport diagnostics.',
-                  style: TextStyle(fontSize: 11, color: colors.error),
-                ),
-              ),
-            if (rows.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              SizedBox(
-                height: panelHeight,
-                child: ListView.builder(
-                  itemCount: rows.length,
-                  itemBuilder: (context, index) {
-                    final row = rows[index];
-                    if (row is _CompletedActivitySummary) {
-                      return Material(
-                        type: MaterialType.transparency,
-                        child: ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.done_all_rounded, size: 16),
-                          title: Text(
-                            '${row.activities.length} ${row.activities.any((activity) => activity.status == 'interrupted') ? 'closed' : 'completed'} ${row.activities.length == 1 ? 'activity' : 'activities'}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          trailing: Icon(
-                            _showCompleted
-                                ? Icons.expand_less_rounded
-                                : Icons.expand_more_rounded,
-                            size: 18,
-                          ),
-                          onTap: () =>
-                              setState(() => _showCompleted = !_showCompleted),
-                        ),
-                      );
-                    }
-                    return _ActivityRow(activity: row as AxWorkActivity);
-                  },
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _statusLabel(List<AxWorkActivity> completed) {
-    // The assignment/Work Request projection is authoritative. Activity is
-    // observational and may legitimately be missing its final event.
-    return switch (widget.requestStatus) {
-      'queued' => 'Queued',
-      'starting' || 'acknowledged' => 'Starting',
-      'running' => 'Running',
-      'waiting' => 'Waiting',
-      'recovering' => 'Recovering',
-      'completed' => 'Completed',
-      'failed' => 'Failed',
-      'cancelled' => 'Cancelled',
-      'timed_out' => 'Timed out',
-      'lost' => 'Lost',
-      _ => 'Recovering',
-    };
-  }
-
-  String _currentAction(List<AxWorkActivity> active) {
-    final current = active.lastOrNull;
-    if (current != null) return 'Current action: ${current.title}';
-    return switch (widget.requestStatus) {
-      'queued' || 'starting' || 'acknowledged' => 'Starting Worker…',
-      'running' => 'Waiting for Worker activity…',
-      'recovering' => 'Recovering Worker connection…',
-      'completed' => 'Execution completed',
-      'failed' ||
-      'timed_out' ||
-      'lost' =>
-        'Execution ended without a final provider response',
-      'cancelled' => 'Execution cancelled',
-      _ => 'Worker status unavailable',
-    };
-  }
-
-  String _formatElapsed(DateTime start, DateTime end) {
-    final seconds = end.difference(start).inSeconds.clamp(0, 864000);
-    final minutes = seconds ~/ 60;
-    final remainder = seconds % 60;
-    return minutes > 0 ? '${minutes}m ${remainder}s' : '${remainder}s';
-  }
-}
-
-class _CompletedActivitySummary {
-  const _CompletedActivitySummary(this.activities);
-  final List<AxWorkActivity> activities;
-}
-
-class _ActivityRow extends StatelessWidget {
-  const _ActivityRow({required this.activity});
-
-  final AxWorkActivity activity;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final detailEntries = activity.details.entries.toList();
-    return Material(
-      type: MaterialType.transparency,
-      child: ExpansionTile(
-        key: ValueKey(activity.eventId),
-        tilePadding: EdgeInsets.zero,
-        childrenPadding: const EdgeInsets.only(left: 30, right: 8, bottom: 8),
-        initiallyExpanded: activity.isError,
-        leading: Icon(
-          activity.isError
-              ? Icons.error_outline_rounded
-              : activity.isFinished
-                  ? Icons.check_rounded
-                  : Icons.circle,
-          size: activity.isFinished ? 17 : 10,
-          color: activity.isError
-              ? colors.error
-              : activity.isRunning
-                  ? colors.primary
-                  : isDark
-                      ? Colors.white54
-                      : Colors.black45,
-        ),
-        title: Text(
-          activity.title,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 12),
-        ),
-        subtitle: Text(
-          '${_activityTypeLabel(activity.type)} · ${_activityStatusLabel(activity.status)}',
-          style: TextStyle(
-            fontSize: 10,
-            color: activity.isError ? colors.error : null,
-          ),
-        ),
-        trailing: Text(
-          _timeLabel(activity.timestamp),
-          style: TextStyle(
-            fontSize: 10,
-            color: isDark ? Colors.white38 : Colors.black45,
-          ),
-        ),
-        children: [
-          if (detailEntries.isEmpty)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                activity.isError
-                    ? 'The Worker reported an execution error.'
-                    : 'No additional details available.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? Colors.white54 : Colors.black54,
-                ),
-              ),
-            )
-          else
-            for (final entry in detailEntries)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Text(
-                    '${entry.key}: ${entry.value ?? '—'}',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                ),
-              ),
-        ],
-      ),
-    );
-  }
-
-  static String _activityTypeLabel(String type) => switch (type) {
-        'execution.started' => 'Execution',
-        'model.started' => 'Model',
-        'message.updated' => 'Worker message',
-        'tool.started' => 'Tool',
-        'tool.completed' => 'Tool',
-        'tool.failed' => 'Tool',
-        'model.status' => 'Status',
-        'execution.completed' => 'Execution',
-        'execution.failed' => 'Execution',
-        'execution.cancelled' => 'Execution',
-        _ => 'Activity',
-      };
-
-  static String _activityStatusLabel(String status) => switch (status) {
-        'running' => 'running',
-        'updated' => 'updated',
-        'completed' => 'completed',
-        'failed' => 'failed',
-        'cancelled' => 'cancelled',
-        'interrupted' => 'interrupted',
-        _ => status,
-      };
-
-  static String _timeLabel(DateTime timestamp) {
-    final local = timestamp.toLocal();
-    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-  }
+  Widget build(BuildContext context) => widget.builder(context, _now);
 }
 
 class _DiscussionItem {
@@ -1594,7 +1345,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
             child: Container(
               decoration: BoxDecoration(
                 color: isMe
-                    ? ConclaveColors.primarySoftColor(isDark)
+                    ? ConclaveColors.ownMessageBackground(isDark)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(10),
               ),

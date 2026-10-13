@@ -119,3 +119,27 @@ Focused Workspace registry/inventory coverage verifies private-field stripping.
 No real provider inference was run: process fixtures prove parameter routing,
 while the installed catalog establishes listed support. Provider-account execution
 verification remains a separate release acceptance activity.
+
+## Workspace static model display and Gemini reversal (2026-10-13)
+
+The Service projects filtered static model names and hasModelDiscovery from its
+resolved Profile through existing local IPC. Worker cards use static names for
+Profiles without discovery, including Claude with an empty runtime catalog.
+Allowlist and availability filtering remain enforced; an empty discovered catalog
+for a Profile with discovery stays authoritative. No discovery state is synthesized.
+
+At the user's request, migration 0052 reverses the model mapping additions from
+0050 and 0051. It restores the exact pre-change payload from immutable history
+only for those two known digests, advances the revision, and preserves dynamic
+CLI discovery and live-activity behavior. Applied migrations remain historical
+records. Customized Profiles or missing restoration history are left untouched.
+The added authoring candidate and Engine test changes are reverted; the Claude
+display fix remains. Saved family selections introduced by the reverted mapping
+may require reselection. Runtime refresh invalidates the prior catalog by digest.
+
+Reversal verification: seven focused Cloud migration tests, thirteen Engine
+discovery/execution tests, and two Workspace static/empty-catalog regressions
+passed. Production and the running Workspace show the original digest at
+revision 9; the live Gemini Worker Test passed and both Workers show Ready.
+Cloud component validation stops on existing stale generated types; Engine
+component validation stops on existing unrelated formatting violations.

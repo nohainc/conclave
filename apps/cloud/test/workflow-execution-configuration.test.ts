@@ -91,15 +91,21 @@ function fixture(
       },
     },
   } as unknown as SecurityEnv;
-  const resolve = (requester = "user", threadId = "thread") =>
+  const resolve = (
+    requester = "user",
+    threadId = "thread",
+    definition = BUILTIN_WORKFLOWS.implement_verify,
+    executionSelection?: unknown,
+  ) =>
     resolveWorkflowExecutionBindings(
       env,
       requester,
       "space",
       threadId,
-      BUILTIN_WORKFLOWS.implement_verify,
+      definition,
       {},
       [],
+      executionSelection,
     );
   admission.mockImplementation(
     async (_env, _space, _thread, definition, bindings) => {
@@ -110,6 +116,7 @@ function fixture(
         issues: supports ? [] : [{ message: "Unsupported capability" }],
         primaryWorkspaceId: binding.workerId === "b" ? "second" : "first",
         workerProfiles: {},
+        workerCatalogRevisions: {},
       };
     },
   );
@@ -172,7 +179,7 @@ it("requires an explicit Worker and does not fall back to another Workspace", as
   ).rejects.toMatchObject({ status: 422 });
 });
 
-it("accepts exact reviewed catalog revisions on transient selections", () => {
+it("accepts observed catalog revisions on transient selections", () => {
   expect(
     parseWorkflowExecutionSelection({
       workerId: "worker",
@@ -182,4 +189,89 @@ it("accepts exact reviewed catalog revisions on transient selections", () => {
   expect(() =>
     parseWorkflowExecutionSelection({ catalogRevision: "Auto" }),
   ).toThrow("catalogRevision is invalid");
+});
+
+it("revalidates inherited preferences and pins current revisions without rewriting settings", async () => {
+  const oldRevision = "a".repeat(64);
+  const currentRevision = "b".repeat(64);
+  const f = fixture(
+    {
+      worker: "b",
+      model: "model",
+      effort: "medium",
+      catalogRevision: oldRevision,
+    },
+    { verify: { effort: "high", catalogRevision: oldRevision } },
+  );
+  admission.mockImplementation(
+    async (_env, _space, _thread, definition, bindings) => {
+      const binding = Object.values(bindings)[0] as {
+        catalogRevision?: string;
+      };
+      expect(binding.catalogRevision).toBeUndefined();
+      return {
+        issues: [],
+        primaryWorkspaceId: "second",
+        workerProfiles: {},
+        workerCatalogRevisions: { [definition.steps[0].kind]: currentRevision },
+      };
+    },
+  );
+  expect(await f.resolve()).toEqual({
+    implement: {
+      workerId: "b",
+      model: "model",
+      reasoningEffort: "medium",
+      catalogRevision: currentRevision,
+    },
+    verify: {
+      workerId: "b",
+      model: "model",
+      reasoningEffort: "high",
+      catalogRevision: currentRevision,
+    },
+  });
+  expect(f.configuration.defaults).toHaveProperty(
+    "catalogRevision",
+    oldRevision,
+  );
+  expect(f.configuration.stepOverrides).toHaveProperty(
+    "verify.catalogRevision",
+    oldRevision,
+  );
+});
+
+it("revalidates restored composer choices against current capabilities", async () => {
+  const f = fixture({ worker: "b" });
+  f.configuration.workflowId = "chat";
+  admission.mockImplementation(
+    async (_env, _space, _thread, _definition, bindings) => {
+      expect(bindings.chat).toEqual({
+        workerId: "b",
+        model: "model",
+        reasoningEffort: "high",
+      });
+      return {
+        issues: [],
+        primaryWorkspaceId: "second",
+        workerProfiles: {},
+        workerCatalogRevisions: { chat: "b".repeat(64) },
+      };
+    },
+  );
+  expect(
+    await f.resolve("user", "thread", BUILTIN_WORKFLOWS.chat, {
+      workerId: "b",
+      model: "model",
+      reasoningEffort: "high",
+      catalogRevision: "a".repeat(64),
+    }),
+  ).toEqual({
+    chat: {
+      workerId: "b",
+      model: "model",
+      reasoningEffort: "high",
+      catalogRevision: "b".repeat(64),
+    },
+  });
 });

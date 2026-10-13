@@ -13,7 +13,8 @@ AxWorker worker(String id,
         {bool offline = false,
         bool metadata = true,
         String workspaceId = 'ws',
-        bool combined = false}) =>
+        bool combined = false,
+        String? catalogRevision}) =>
     AxWorker(
       id: id,
       workspaceId: workspaceId,
@@ -26,6 +27,7 @@ AxWorker worker(String id,
       executionOptions: !metadata
           ? null
           : AxWorkerExecutionOptions(
+              catalogRevision: catalogRevision,
               modelSelectionSupported: true,
               modelDiscovery: 'profile_catalog',
               allowsCustomModel: false,
@@ -127,6 +129,29 @@ Future<void> openStep(WidgetTester tester, String id) async {
 }
 
 void main() {
+  test('workflow defaults and inherited steps survive catalog revision changes',
+      () {
+    const saved = AxWorkflowSelection(
+        worker: 'a', model: 'analysis', effort: 'low', catalogRevision: 'old');
+    final options =
+        AxWorkflowSelectionOptions([worker('a', catalogRevision: 'current')]);
+    expect(options.validate(saved, saved: saved), isNull);
+    final inherited = configuration(defaults: saved, overrides: {
+      'verify':
+          const AxWorkflowSelection(effort: 'high', catalogRevision: 'old'),
+    });
+    final selected = inherited.selectionFor('verify');
+    expect(options.validate(selected, saved: selected), isNull);
+    const removed = AxWorkflowSelection(
+        worker: 'a',
+        model: 'analysis',
+        effort: 'removed',
+        catalogRevision: 'old');
+    expect(
+        options.validate(removed, saved: removed), contains('not supported'));
+    expect(saved.catalogRevision, 'old');
+  });
+
   test(
       'combined families without a provider default require an explicit effort',
       () {

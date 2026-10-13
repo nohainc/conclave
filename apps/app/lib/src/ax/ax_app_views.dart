@@ -412,8 +412,8 @@ extension _AxAppViews on _AxAppStateMixin {
                               ? Icons.code
                               : Icons.account_circle_outlined),
                           title: Text(_providerLabel(account.providerId)),
-                          trailing: const Icon(Icons.verified_outlined,
-                              color: Color(0xff3ca879)),
+                          trailing: Icon(Icons.verified_outlined,
+                              color: Theme.of(context).colorScheme.primary),
                         )),
                     const SizedBox(height: 8),
                     Wrap(
@@ -485,7 +485,7 @@ extension _AxAppViews on _AxAppStateMixin {
                                           MaterialTapTargetSize.shrinkWrap,
                                       alignment: Alignment.centerRight,
                                       disabledForegroundColor:
-                                          const Color(0xff3ca879),
+                                          Theme.of(context).colorScheme.primary,
                                     ),
                                     child: const Text('Current',
                                         style: TextStyle(

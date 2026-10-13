@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'ax_work_models.dart';
@@ -239,18 +241,99 @@ class AxWorkActivity {
 
 /// Thread-local activity projection. It is intentionally separate from Work
 /// request/result state so operational events cannot mutate conversation text.
+class _AssignmentSignal extends ChangeNotifier {
+  void fire() => notifyListeners();
+}
+
 class AxWorkActivityStore extends ChangeNotifier {
+  AxWorkActivityStore({
+    DateTime Function()? clock,
+    Duration notifyInterval = const Duration(milliseconds: 250),
+  })  : _clock = clock ?? DateTime.now,
+        _notifyInterval = notifyInterval;
+
   static const maxActivitiesPerAssignment = 512;
   static const maxRememberedEventIds = 4096;
 
+  /// Clock offsets larger than this are treated as late delivery (a replay on
+  /// reconnect), not as clock skew, and are never used to shift timestamps.
+  static const maxTrustedClockOffset = Duration(minutes: 2);
+
+  final DateTime Function() _clock;
+  final Duration _notifyInterval;
   final _activities = <String, List<AxWorkActivity>>{};
   final _eventIds = <String>{};
+  final _signals = <String, _AssignmentSignal>{};
+  final _clockOffsets = <String, Duration>{};
+  final _lastNotified = <String, DateTime>{};
+  final _pendingNotifications = <String, Timer>{};
+  bool _disposed = false;
+
+  static Set<String> assignmentIdsFor(AxWorkRequest request) => {
+        ...request.steps.map((step) => step.assignmentId).whereType<String>(),
+        ...request.turns.map((turn) => turn.assignmentId).whereType<String>(),
+      };
+
+  /// Fires only when activity for one of this request's assignments changes,
+  /// so a live progress line does not rebuild every card in the timeline.
+  Listenable listenableForRequest(AxWorkRequest request) => Listenable.merge([
+        for (final id in assignmentIdsFor(request)) _signal(id),
+      ]);
+
+  _AssignmentSignal _signal(String assignmentId) =>
+      _signals.putIfAbsent(assignmentId, _AssignmentSignal.new);
+
+  /// Estimated `local clock - event clock` for the request's assignments, from
+  /// the least-delayed live event seen. Applied to event timestamps so elapsed
+  /// time is not skewed by a differing device clock.
+  Duration clockOffsetForRequest(AxWorkRequest request) {
+    Duration? best;
+    for (final id in assignmentIdsFor(request)) {
+      final offset = _clockOffsets[id];
+      if (offset != null && (best == null || offset < best)) best = offset;
+    }
+    return best ?? Duration.zero;
+  }
+
+  void _recordClockOffset(AxWorkActivity activity) {
+    final observed = _clock().difference(activity.timestamp);
+    if (observed.abs() > maxTrustedClockOffset) return;
+    final known = _clockOffsets[activity.assignmentId];
+    if (known == null || observed < known) {
+      _clockOffsets[activity.assignmentId] = observed;
+    }
+  }
+
+  /// Lifecycle and tool changes notify immediately. Replaceable status and
+  /// message updates arrive in bursts, so they are limited to one rebuild per
+  /// interval with a trailing update that always delivers the latest value.
+  void _notify(String assignmentId, {required bool immediate}) {
+    if (_disposed) return;
+    final now = _clock();
+    final last = _lastNotified[assignmentId];
+    final elapsed = last == null ? _notifyInterval : now.difference(last);
+    if (immediate || elapsed >= _notifyInterval) {
+      _pendingNotifications.remove(assignmentId)?.cancel();
+      _fire(assignmentId, now);
+      return;
+    }
+    if (_pendingNotifications.containsKey(assignmentId)) return;
+    _pendingNotifications[assignmentId] =
+        Timer(_notifyInterval - elapsed, () {
+      _pendingNotifications.remove(assignmentId);
+      if (_disposed) return;
+      _fire(assignmentId, _clock());
+    });
+  }
+
+  void _fire(String assignmentId, DateTime now) {
+    _lastNotified[assignmentId] = now;
+    _signals[assignmentId]?.fire();
+    notifyListeners();
+  }
 
   List<AxWorkActivity> forRequest(AxWorkRequest request) {
-    final assignmentIds = {
-      ...request.steps.map((step) => step.assignmentId).whereType<String>(),
-      ...request.turns.map((turn) => turn.assignmentId).whereType<String>(),
-    };
+    final assignmentIds = assignmentIdsFor(request);
     if (assignmentIds.isEmpty) return const [];
     final result = <AxWorkActivity>[];
     final requestIsTerminal = const {
@@ -307,6 +390,7 @@ class AxWorkActivityStore extends ChangeNotifier {
       return false;
     }
     if (!_eventIds.add(activity.eventId)) return false;
+    _recordClockOffset(activity);
     if (_eventIds.length > maxRememberedEventIds) {
       _eventIds.remove(_eventIds.first);
     }
@@ -323,15 +407,36 @@ class AxWorkActivityStore extends ChangeNotifier {
     if (list.length > maxActivitiesPerAssignment) {
       list.removeRange(0, list.length - maxActivitiesPerAssignment);
     }
-    notifyListeners();
+    _notify(activity.assignmentId, immediate: !activity.isReplaceable);
     return true;
   }
 
   void clear() {
+    if (_disposed) return;
     if (_activities.isEmpty && _eventIds.isEmpty) return;
+    final affected = _signals.values.toList();
     _activities.clear();
     _eventIds.clear();
+    _clockOffsets.clear();
+    _lastNotified.clear();
+    for (final timer in _pendingNotifications.values) {
+      timer.cancel();
+    }
+    _pendingNotifications.clear();
+    for (final signal in affected) {
+      signal.fire();
+    }
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    for (final timer in _pendingNotifications.values) {
+      timer.cancel();
+    }
+    _pendingNotifications.clear();
+    super.dispose();
   }
 
   int _matchingIndex(List<AxWorkActivity> list, AxWorkActivity incoming) {

@@ -59,11 +59,12 @@ class AxCoalescedListenable extends ChangeNotifier {
   }
 
   void _deferToPostFrame() {
-    final scheduler = SchedulerBinding.instance;
-    scheduler.addPostFrameCallback((_) => _deliverFromPostFrame());
-    // addPostFrameCallback does not request a frame, so ask for one explicitly
-    // to make sure the deferred notification is delivered.
-    scheduler.scheduleFrame();
+    // Do not explicitly request a frame here. On Flutter Web, a route or
+    // browser view can be torn down between this notification and the next
+    // scheduler turn; scheduleFrame() would then try to render the disposed
+    // EngineFlutterView. The event-loop turn still gets us out of the current
+    // build/frame stack, and any mounted listener can request its own frame.
+    Timer.run(_deliverFromPostFrame);
   }
 
   void _deliver() {

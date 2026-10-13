@@ -237,11 +237,16 @@ class _WorkersTabState extends State<_WorkersTab> {
         : ready
             ? 'Ready'
             : 'Needs attention';
-    final availableModels = worker?.modelCatalog?.models
-            .where((model) => model.status != 'unavailable')
-            .map((model) => model.name)
-            .toList() ??
-        const <String>[];
+    final staticModelNames =
+        (profile?['staticModelNames'] as List?)?.whereType<String>().toList() ??
+            const <String>[];
+    final availableModels = profile?['hasModelDiscovery'] == false
+        ? staticModelNames
+        : worker?.modelCatalog?.models
+                .where((model) => model.status != 'unavailable')
+                .map((model) => model.name)
+                .toList() ??
+            staticModelNames;
     return Card(
       key: Key('worker-catalog-${entry.workerTypeId}'),
       margin: const EdgeInsets.only(bottom: 12),

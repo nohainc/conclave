@@ -56,7 +56,9 @@ List<ProfileActivityMappingResult> mapProfileActivityEvents(
         }
       }
       final id = mapping['activityIdSelector'];
-      final selectedId = id is String ? selectProfileValue(event, id) : null;
+      final rawId = id is String ? selectProfileValue(event, id) : null;
+      // Some providers identify a step by its numeric index within one run.
+      final selectedId = rawId is num ? rawId.toString() : rawId;
       final messageSelector = mapping['messageSelector'];
       final selectedMessage = messageSelector is String
           ? selectProfileValue(event, messageSelector)

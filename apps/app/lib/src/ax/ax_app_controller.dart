@@ -216,25 +216,25 @@ extension _AxAppController on _AxAppStateMixin {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xff7c6cf0).withValues(alpha: 0.1),
+                  color: ConclaveColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.verified_outlined,
                       size: 14,
-                      color: Color(0xff9e95ff),
+                      color: ConclaveColors.primaryForegroundDark,
                     ),
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                     Flexible(
                       child: Text(
                         'Conclave AX v0.4.0 • Provider-Independent Core',
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xff9e95ff),
+                          color: ConclaveColors.primaryForegroundDark,
                         ),
                       ),
                     ),
@@ -501,14 +501,14 @@ extension _AxAppController on _AxAppStateMixin {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (pendingInvitations.isNotEmpty) ...[
-                            const Padding(
+                            Padding(
                               padding: EdgeInsets.only(bottom: 8),
                               child: Text(
                                 'Pending invitations',
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: Color(0xff8e8e9a),
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                               ),
                             ),
@@ -615,14 +615,14 @@ extension _AxAppController on _AxAppStateMixin {
                           ],
                           if (notifications.isNotEmpty) ...[
                             if (pendingInvitations.isNotEmpty)
-                              const Padding(
+                              Padding(
                                 padding: EdgeInsets.only(bottom: 8),
                                 child: Text(
                                   'Activity',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
-                                    color: Color(0xff8e8e9a),
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ),
@@ -665,10 +665,10 @@ extension _AxAppController on _AxAppStateMixin {
                                         Icons.mail_outline,
                                     },
                                     color: notification.read
-                                        ? const Color(0xff8e8e9a)
+                                        ? Theme.of(context).colorScheme.onSurfaceVariant
                                         : notification.priority ==
                                                 AxNotificationPriority.high
-                                            ? const Color(0xffc64b4b)
+                                            ? Theme.of(context).colorScheme.error
                                             : Theme.of(context)
                                                 .colorScheme
                                                 .primary,

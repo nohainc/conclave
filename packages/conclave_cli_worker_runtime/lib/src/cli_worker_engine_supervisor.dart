@@ -557,6 +557,10 @@ final class CliWorkerEngineSupervisor {
   Map<String, String> _engineEnvironment() {
     const inheritedKeys = {
       'HOME',
+      'USER',
+      'LOGNAME',
+      'SHELL',
+      '__CF_USER_TEXT_ENCODING',
       'PATH',
       'TMPDIR',
       'TMP',

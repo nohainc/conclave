@@ -1,0 +1,328 @@
+{
+  "schemaVersion": 1,
+  "profileDefinitionId": "claude-code",
+  "releaseVersion": 1,
+  "logicalWorkerTypeId": "claude",
+  "engineFamily": "cli",
+  "engineCompatibility": {
+    "min": "1.0.0",
+    "maxExclusive": "2.0.0"
+  },
+  "providerTool": {
+    "name": "Claude Code",
+    "executableCandidates": [
+      "claude"
+    ],
+    "discovery": {
+      "standardLocations": [
+        "{{home}}/.local/bin",
+        "/usr/local/bin"
+      ],
+      "allowPathSearch": true
+    },
+    "versionProbe": {
+      "arguments": [
+        "--version"
+      ],
+      "timeoutMs": 10000,
+      "source": "stdout",
+      "extract": {
+        "kind": "regex_capture",
+        "patternId": "semver"
+      }
+    },
+    "supportedVersions": [
+      {
+        "min": "2.1.0",
+        "maxExclusive": "3.0.0"
+      }
+    ]
+  },
+  "environment": {
+    "passthrough": [
+      "PATH",
+      "HOME",
+      "USER",
+      "LOGNAME",
+      "SHELL",
+      "__CF_USER_TEXT_ENCODING",
+      "USERPROFILE",
+      "TMP",
+      "TEMP",
+      "TMPDIR",
+      "LANG",
+      "LC_ALL",
+      "SSL_CERT_FILE",
+      "SSL_CERT_DIR",
+      "CLAUDE_CONFIG_DIR",
+      "ANTHROPIC_API_KEY"
+    ],
+    "set": {
+      "NO_COLOR": "1"
+    }
+  },
+  "probe": {
+    "passive": {
+      "checks": [],
+      "configChecks": []
+    },
+    "live": {
+      "timeoutMs": 60000,
+      "expectedFinalText": {
+        "kind": "exact",
+        "value": "OK"
+      }
+    }
+  },
+  "execution": {
+    "arguments": [
+      {
+        "sandboxPolicyMapping": true
+      },
+      "-p",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      {
+        "modelArguments": true
+      },
+      {
+        "sessionResumeArguments": true
+      },
+      {
+        "providerTimeoutArguments": true
+      }
+    ],
+    "stdin": {
+      "mode": "raw_text",
+      "value": "{{prompt}}"
+    },
+    "output": {
+      "mode": "jsonl"
+    },
+    "events": [
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "system"
+          },
+          {
+            "kind": "equals",
+            "selector": "$.subtype",
+            "value": "init"
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_session",
+            "selector": "$.session_id"
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "result"
+          },
+          {
+            "kind": "equals",
+            "selector": "$.is_error",
+            "value": false
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_session",
+            "selector": "$.session_id"
+          },
+          {
+            "type": "set_final_text",
+            "selector": "$.result"
+          },
+          {
+            "type": "mark_success"
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "result"
+          },
+          {
+            "kind": "equals",
+            "selector": "$.is_error",
+            "value": true
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_session",
+            "selector": "$.session_id"
+          },
+          {
+            "type": "set_provider_error",
+            "selector": "$.result"
+          },
+          {
+            "type": "mark_failure"
+          }
+        ]
+      }
+    ]
+  },
+  "model": {
+    "supported": true,
+    "arguments": [
+      "--model",
+      "{{model}}"
+    ],
+    "unknownModelPolicy": "profile_allowlist",
+    "allowlist": [
+      "sonnet",
+      "opus",
+      "haiku"
+    ],
+    "catalog": [
+      {
+        "id": "sonnet",
+        "name": "Claude Sonnet",
+        "badge": "Workhorse",
+        "description": "Latest Sonnet model for coding and everyday work"
+      },
+      {
+        "id": "opus",
+        "name": "Claude Opus",
+        "badge": "Frontier",
+        "description": "Latest Opus model for the most demanding work"
+      },
+      {
+        "id": "haiku",
+        "name": "Claude Haiku",
+        "badge": "Fast",
+        "description": "Latest Haiku model for quick, lightweight tasks"
+      }
+    ]
+  },
+  "progress": [
+    {
+      "messageKey": "provider_working",
+      "percentage": 10,
+      "when": [
+        {
+          "kind": "equals",
+          "selector": "$.type",
+          "value": "system"
+        },
+        {
+          "kind": "equals",
+          "selector": "$.subtype",
+          "value": "init"
+        }
+      ]
+    },
+    {
+      "messageKey": "provider_response_received",
+      "percentage": 60,
+      "when": [
+        {
+          "kind": "equals",
+          "selector": "$.type",
+          "value": "assistant"
+        }
+      ]
+    }
+  ],
+  "errors": {
+    "mappings": [
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "cancelled"
+        },
+        "issueCode": "cancelled"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "deadline_exceeded"
+        },
+        "issueCode": "deadline_exceeded"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "provider_tool_unavailable"
+        },
+        "issueCode": "provider_tool_unavailable"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "provider_authentication_required"
+        },
+        "issueCode": "provider_authentication_required"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "permission_denied"
+        },
+        "issueCode": "permission_denied"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "session_unavailable"
+        },
+        "issueCode": "session_resume_failed"
+      },
+      {
+        "evidence": {
+          "kind": "missing_terminal"
+        },
+        "issueCode": "provider_failure"
+      }
+    ]
+  },
+  "sandbox": {
+    "mappings": {
+      "restricted": [
+        "--permission-mode",
+        "acceptEdits"
+      ],
+      "provider_default": [
+        "--permission-mode",
+        "plan"
+      ],
+      "full_access": [
+        "--permission-mode",
+        "bypassPermissions"
+      ]
+    }
+  },
+  "session": {
+    "supported": true,
+    "formatId": "claude-session-v1",
+    "compatibleFormatIds": [
+      "claude-session-v1"
+    ],
+    "extract": "$.session_id",
+    "resumeArguments": [
+      "--resume",
+      "{{sessionId}}"
+    ],
+    "requireObservedIdMatch": true
+  },
+  "timeout": {
+    "providerArguments": [],
+    "providerReserveMs": 2000
+  },
+  "compatibilityOverrides": []
+}

@@ -133,6 +133,13 @@ class WorkerSelectionCapability {
     return selected?.selectionMode != 'combined';
   }
 
+  /// Mutable preferences follow current capabilities; observed revisions are
+  /// retained as metadata. Cloud pins the revision when accepting execution.
+  String? validatePreference(ExecutionSelection value) =>
+      validate(ExecutionSelection(
+          worker: value.worker, model: value.model, effort: value.effort));
+
+  /// Exact revision validation for an already pinned execution selection.
   String? validate(ExecutionSelection value) {
     if (state == CapabilityState.loading) return 'Loading Worker capabilities…';
     if (state == CapabilityState.stale)

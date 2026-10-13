@@ -138,4 +138,38 @@ it("validates selected effort and models against the selected Worker Profile", a
       ),
     ).toBe(invalid);
   }
+  const admitted = await validateWorkflowWorkerEligibility(
+    env,
+    "P",
+    "W",
+    BUILTIN_WORKFLOWS.chat,
+    { chat: { workerId: "worker", model: "a", reasoningEffort: "deep" } },
+  );
+  const revision = admitted.workerCatalogRevisions.chat;
+  expect(revision).toMatch(/^[a-f0-9]{64}$/);
+  const pinned = {
+    chat: {
+      workerId: "worker",
+      model: "a",
+      reasoningEffort: "deep",
+      catalogRevision: revision,
+    },
+  };
+  row.executionProfileJson = row.executionProfileJson.replace(
+    '"name":"A"',
+    '"name":"Renamed A"',
+  );
+  const changed = await validateWorkflowWorkerEligibility(
+    env,
+    "P",
+    "W",
+    BUILTIN_WORKFLOWS.chat,
+    pinned,
+  );
+  expect(changed.issues).toContainEqual(
+    expect.objectContaining({
+      code: "profile_execution_option_unavailable",
+      message: expect.stringContaining("catalog changed"),
+    }),
+  );
 });

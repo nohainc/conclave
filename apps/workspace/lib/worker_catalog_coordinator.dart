@@ -527,6 +527,13 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
           details: {
             'definitionId': definitionId,
             'source': resolution.source.name,
+            if (resolution.release != null)
+              'hasModelDiscovery': (resolution.release!.profile['model']
+                      as Map?)?['discovery'] !=
+                  null,
+            if (resolution.release != null)
+              'staticModelNames':
+                  _staticModelNames(resolution.release!.profile),
             'unpublishedDevelopment': resolution.release?.isPublished == false,
             if (resolution.release != null)
               'releaseVersion': resolution.release!.releaseVersion,
@@ -648,4 +655,22 @@ extension on WorkerCatalogSnapshot {
             ? null
             : localRegistryError ?? this.localRegistryError,
       );
+}
+
+// Safe display projection only; discovery and runtime state remain authoritative.
+List<String> _staticModelNames(Map<String, Object?> profile) {
+  final model = profile['model'];
+  if (model is! Map || model['supported'] != true) return const [];
+  final catalog = model['catalog'];
+  if (catalog is! List) return const [];
+  final allowlist = model['allowlist'];
+  return catalog
+      .whereType<Map>()
+      .where((entry) =>
+          entry['status'] != 'unavailable' &&
+          (allowlist is! List || allowlist.contains(entry['id'])))
+      .map((entry) => entry['name'])
+      .whereType<String>()
+      .where((name) => name.isNotEmpty)
+      .toList();
 }

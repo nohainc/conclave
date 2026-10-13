@@ -41,10 +41,20 @@ fi
 # only receive materialized copies of that same artifact; they must never drift
 # into independently maintained binaries.
 cp "$OUTPUT" "$PROFILE_LAB_OUTPUT"
-cmp -s "$OUTPUT" "$PROFILE_LAB_OUTPUT" || {
+if command -v shasum >/dev/null 2>&1; then
+  OUTPUT_DIGEST="$(shasum -a 256 "$OUTPUT")"
+  PROFILE_LAB_DIGEST="$(shasum -a 256 "$PROFILE_LAB_OUTPUT")"
+elif command -v sha256sum >/dev/null 2>&1; then
+  OUTPUT_DIGEST="$(sha256sum "$OUTPUT")"
+  PROFILE_LAB_DIGEST="$(sha256sum "$PROFILE_LAB_OUTPUT")"
+else
+  echo "shasum or sha256sum is required to verify Engine materializations." >&2
+  exit 1
+fi
+if [[ "${OUTPUT_DIGEST%% *}" != "${PROFILE_LAB_DIGEST%% *}" ]]; then
   echo "Engine materializations differ after the canonical build." >&2
   exit 1
-}
+fi
 if [[ "$OUTPUT" != *.exe ]]; then
   chmod 755 "$OUTPUT"
   chmod 755 "$PROFILE_LAB_OUTPUT"

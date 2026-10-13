@@ -292,3 +292,27 @@ removed. Read-only grant metadata now uses
 `GET /api/spaces/:spaceId/workflow-workspace/grants`; canonical Workspace grant
 management APIs remain for execution authorization. Historical snapshots are
 unchanged; no production migration is performed by implementing this feature.
+
+## Catalog refresh and selection intent
+
+Saved global/Space Workflow preferences and transient Work-tab selections express
+Worker/model/effort intent. Their optional `catalogRevision` records the observed
+catalog; it is not an execution pin. Fresh catalog changes do not invalidate a
+still-supported selection or mutate saved settings, inherited overrides, or
+restored composer state. Removed models or unsupported efforts remain visible
+and require an explicit replacement; stale or unavailable catalogs still block
+new execution. The existing unchanged-unavailable preference preservation rule
+continues to apply to saved settings.
+
+Cloud validates effective choices against current authorized Worker capabilities
+and records that catalog revision in each accepted request binding. Acceptance
+rechecks the pinned bindings before persistence. Scheduler dispatch and retries
+continue enforcing exact catalog revision matches. The Engine additionally
+enforces Service-owned provider-catalog pins; static capabilities remain bound
+by the admitted Profile. An accepted request is never rebased onto a newer
+catalog. Auto values remain user intent
+rather than being materialized into saved preferences.
+
+No D1 migration or protocol version change is required. Existing observed
+revisions in preferences and local view state remain readable; historical
+request/assignment snapshots retain their original immutable revisions.

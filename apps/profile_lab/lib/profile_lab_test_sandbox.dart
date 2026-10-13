@@ -1032,6 +1032,7 @@ class ProfileLabTestSandbox {
         try {
           await executeAssignment(
             label: 'representative-thread-write',
+            timeout: const Duration(minutes: 3),
             prompt: 'Create the file "acceptance-write.txt" in the current '
                 'working directory and write exactly this UTF-8 text into it '
                 '(a single final line ending is acceptable): '
@@ -1054,9 +1055,12 @@ class ProfileLabTestSandbox {
               if (await writeTarget.exists()) await writeTarget.delete();
               await executeAssignment(
                 label: 'full-local-access',
+                timeout: const Duration(minutes: 3),
                 prompt: 'Create the file "acceptance-write.txt" in the '
                     'current working directory and write exactly this UTF-8 '
-                    'text into it: $writeSentinel.',
+                    'text into it: $writeSentinel. Do not just describe the '
+                    'action. After writing the file, reply that the file was '
+                    'written and finish. No additional tasks are required.',
                 executionPolicy: WorkerExecutionPolicy.fullAccess,
               );
               fullAccessPassed = await writeTarget.exists() &&
@@ -1072,7 +1076,7 @@ class ProfileLabTestSandbox {
           }
           s7Timer.stop();
           observedAcceptanceScenarios['representative_thread_write'] =
-              wroteExpectedContent ? 'passed' : 'failed';
+              wroteExpectedContent && fullAccessPassed ? 'passed' : 'failed';
           if (wroteExpectedContent && fullAccessPassed) {
             addStage(
               stageId: 'representative_thread_write',

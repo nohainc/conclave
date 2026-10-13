@@ -157,13 +157,12 @@ export async function resolveWorkflowExecutionBindings(
         422,
         `${step.kind}: Configured Worker is unavailable for this Space`,
       );
-    const value = {
+    // Preferences and composer choices are intent. Admission validates against
+    // current capabilities, then pins that revision for acceptance and dispatch.
+    const value: (typeof requested)[string] = {
       ...(selection.worker ? { workerId: selection.worker } : {}),
       ...(selection.model ? { model: selection.model } : {}),
       ...(selection.effort ? { reasoningEffort: selection.effort } : {}),
-      ...(selection.catalogRevision
-        ? { catalogRevision: selection.catalogRevision }
-        : {}),
       ...(instructions ? { additionalInstructions: instructions } : {}),
     };
     requested[id] = value;
@@ -180,6 +179,8 @@ export async function resolveWorkflowExecutionBindings(
           422,
           admission.issues.map((issue) => issue.message).join(" "),
         );
+      const currentRevision = admission.workerCatalogRevisions?.[id];
+      if (currentRevision) value.catalogRevision = currentRevision;
       if (pinnedWorkspace && admission.primaryWorkspaceId !== pinnedWorkspace)
         throw new HttpError(
           422,

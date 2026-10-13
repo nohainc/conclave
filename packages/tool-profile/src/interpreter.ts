@@ -77,9 +77,11 @@ export function mapProfileActivities(
   for (const event of events) {
     for (const mapping of mappings) {
       if (!matchesConditions(event, mapping.when)) continue;
-      const selectedId = mapping.activityIdSelector
+      const rawId = mapping.activityIdSelector
         ? selectProfileValue(event, mapping.activityIdSelector)
         : undefined;
+      // Some providers identify a step by its numeric index within one run.
+      const selectedId = typeof rawId === "number" ? String(rawId) : rawId;
       const selectedMessage = mapping.messageSelector
         ? selectProfileValue(event, mapping.messageSelector)
         : undefined;

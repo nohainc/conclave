@@ -325,11 +325,13 @@ export async function validateWorkflowWorkerEligibility(
 ): Promise<{
   issues: WorkEligibilityIssue[];
   primaryWorkspaceId: string | null;
+  workerCatalogRevisions: Record<string, string>;
   workerProfiles: Record<
     string,
     { profileId: string; profileReleaseVersion: number }
   >;
 }> {
+  const workerCatalogRevisions: Record<string, string> = {};
   const issues: WorkEligibilityIssue[] = [];
   const workerProfiles: Record<
     string,
@@ -516,6 +518,8 @@ export async function validateWorkflowWorkerEligibility(
       });
     }
     if (executionOptions) {
+      if (executionOptions.schemaVersion === 2)
+        workerCatalogRevisions[bindingId] = executionOptions.catalogRevision;
       const error = validateWorkerExecutionSelection(
         executionOptions,
         binding.model ?? null,
@@ -561,7 +565,7 @@ export async function validateWorkflowWorkerEligibility(
     )
       push("workspace_not_primary");
   }
-  return { issues, primaryWorkspaceId, workerProfiles };
+  return { issues, primaryWorkspaceId, workerProfiles, workerCatalogRevisions };
 }
 
 export function summarizeTestCounts(text: string): string | null {

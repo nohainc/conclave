@@ -134,6 +134,8 @@ class ProviderActivityAdapter {
       'command_execution',
       'mcp_tool_call',
       'web_search_call',
+      'web_search',
+      'collab_tool_call',
       'file_change',
     }.contains(itemType);
     final toolKind = itemType is String ? itemType : 'tool';
@@ -203,6 +205,9 @@ class ProviderActivityAdapter {
       // adapter does not duplicate them.
       return const [];
     }
+    // Codex emits item.updated for non-tool items too (plans, reasoning,
+    // messages). Those are expected progress, not an unsupported event.
+    if (type == 'item.updated') return const [];
     if (type == 'turn.failed' || type == 'error') {
       return <ProviderActivityObservation>[
         const ProviderActivityObservation(
@@ -232,60 +237,28 @@ class ProviderActivityAdapter {
     if (eventName == 'step_update' && event['step_update'] is Map) {
       final step = event['step_update'] as Map;
       final stepType = step['step_type'];
-      final state = step['state'];
-      if (stepType == 'tool_execution') {
-        final failed = const {'FAILED', 'ERROR', 'ERRORED'}.contains(state);
-        if (failed ||
-            (state == 'ACTIVE' || state == 'COMPLETED') &&
-                (step['tool_id'] is! String ||
-                    (step['tool_id'] as String).isEmpty)) {
-          final completed = state == 'COMPLETED';
-          return <ProviderActivityObservation>[
-            ProviderActivityObservation(
-              type: failed
-                  ? 'tool.failed'
-                  : completed
-                  ? 'tool.completed'
-                  : 'tool.started',
-              status: failed
-                  ? 'failed'
-                  : completed
-                  ? 'completed'
-                  : 'running',
-              title: failed
-                  ? 'Tool failed'
-                  : completed
-                  ? 'Tool completed'
-                  : 'Running tool',
-              activityId: _activityId(
-                step['tool_id'],
-                family: 'agy-tool',
-                toolKind: _safeText(step['tool_name']) ?? 'tool',
-                terminal: failed || completed,
-              ),
-              details: {
-                ..._toolDetails(_safeText(step['tool_name']) ?? 'tool'),
-                if (step['tool_id'] is! String ||
-                    (step['tool_id'] as String).isEmpty)
-                  'identifierSource': 'generated',
-              },
-            ),
-          ];
-        }
-        if (!declarativeMatched &&
-            (state == 'ACTIVE' || state == 'COMPLETED')) {
-          return _diagnostic('unsupported_tool_state');
-        }
+      // Documented AGY step types: user_input, agent_response, tool and
+      // checkpoint. `tool_execution` is still accepted for older captures.
+      if (stepType == 'tool' || stepType == 'tool_execution') {
+        return _normalizeAgyTool(
+          step,
+          declarativeMatched: declarativeMatched,
+        );
+      }
+      if (const {
+        'agent_response',
+        'user_input',
+        'checkpoint',
+      }.contains(stepType)) {
         return const [];
       }
-      if (stepType == 'agent_response') return const [];
       return _diagnostic('unsupported_step_type');
     }
     if (eventName == 'result') {
       final result = event['result'];
       final resultMap = result is Map ? result : const <Object?, Object?>{};
       final status = resultMap['status'];
-      if (const {'ERROR', 'FAILED', 'FAILURE'}.contains(status)) {
+      if (const {'ERROR', 'FAILED', 'FAILURE', 'INVALID'}.contains(status)) {
         return <ProviderActivityObservation>[
           const ProviderActivityObservation(
             type: 'model.status',
@@ -295,11 +268,103 @@ class ProviderActivityAdapter {
           ),
         ];
       }
-      if (const {'SUCCESS', 'COMPLETED'}.contains(status)) return const [];
+      // Cancellation and interruption are reported by the Engine's terminal
+      // activity, so they are not repeated here.
+      if (const {
+        'SUCCESS',
+        'COMPLETED',
+        'CANCELED',
+        'INTERRUPTED',
+        'WAITING',
+        'RUNNING',
+      }.contains(status)) {
+        return const [];
+      }
       return _diagnostic('unsupported_result_status');
     }
     if (eventName == 'init') return const [];
     return _diagnostic('unsupported_event');
+  }
+
+  /// A tool step runs as ACTIVE and then ends with DONE (or COMPLETED in older
+  /// captures). The DONE event carries `tool_info.error` when the tool failed.
+  /// Pairing uses `tool_id` when present, otherwise the conversation and
+  /// `step_index`, which repeat on the start and end events of one step.
+  List<ProviderActivityObservation> _normalizeAgyTool(
+    Map step, {
+    required bool declarativeMatched,
+  }) {
+    final rawToolInfo = step['tool_info'];
+    final toolInfo = rawToolInfo is Map
+        ? rawToolInfo
+        : const <Object?, Object?>{};
+    final rawId = _safeText(step['tool_id']);
+    // A tool line that a declarative mapping already matched is owned by that
+    // mapping. The adapter only fills in tool lines the profile did not map.
+    if (declarativeMatched) return const [];
+
+    final state = step['state'];
+    final failed =
+        const {'FAILED', 'ERROR', 'ERRORED'}.contains(state) ||
+        toolInfo['error'] is Map;
+    final completed = state == 'DONE' || state == 'COMPLETED';
+    final started = state == 'ACTIVE' && !failed;
+    if (!failed && !completed && !started) {
+      return declarativeMatched
+          ? const []
+          : _diagnostic('unsupported_tool_state');
+    }
+
+    final toolKind =
+        _safeText(step['tool_name']) ?? _safeText(toolInfo['name']) ?? 'tool';
+    final index = step['step_index'];
+    final terminal = failed || completed;
+    final String activityId;
+    final String identifierSource;
+    if (rawId != null) {
+      activityId = rawId;
+      identifierSource = 'provider';
+    } else if (index is int && index >= 0) {
+      final conversation = _safeText(step['conversation_id']) ?? 'session';
+      final composed = 'agy-step-$conversation-$index';
+      activityId =
+          composed.length > 128 ? composed.substring(0, 128) : composed;
+      identifierSource = 'step_index';
+    } else {
+      activityId = _activityId(
+        null,
+        family: 'agy-tool',
+        toolKind: toolKind,
+        terminal: terminal,
+      );
+      identifierSource = 'generated';
+    }
+    final details = <String, Object?>{
+      ..._toolDetails(toolKind),
+      if (rawId == null) 'identifierSource': identifierSource,
+    };
+    final type = failed
+        ? 'tool.failed'
+        : completed
+        ? 'tool.completed'
+        : 'tool.started';
+    return <ProviderActivityObservation>[
+      ProviderActivityObservation(
+        type: type,
+        status: failed
+            ? 'failed'
+            : completed
+            ? 'completed'
+            : 'running',
+        title: failed
+            ? 'Tool failed'
+            : completed
+            ? 'Tool completed'
+            : 'Running tool',
+        activityId: activityId,
+        details: details,
+      ),
+    ];
   }
 
   Map<String, Object?> _toolDetails(String toolKind) => {

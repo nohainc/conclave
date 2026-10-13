@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/desktop_auth.dart';
@@ -30,6 +31,7 @@ Future<void> _installTestToolProfile({
   required String profileDefinitionId,
   required String toolName,
   int version = 1,
+  Map<String, Object?>? model,
 }) async {
   final baseFile =
       File('../../packages/tool-profile/test/fixtures/fixture-cli.v1.json');
@@ -41,6 +43,7 @@ Future<void> _installTestToolProfile({
   profile['profileDefinitionId'] = profileDefinitionId;
   profile['logicalWorkerTypeId'] = workerTypeId;
   profile['releaseVersion'] = version;
+  if (model != null) profile['model'] = model;
   (profile['providerTool']! as Map<String, Object?>)['name'] = toolName;
   (profile['providerTool']! as Map<String, Object?>)['supportedVersions'] = [
     {'min': '0.0.0', 'maxExclusive': '99.0.0'},
@@ -326,7 +329,7 @@ void main() {
     addTearDown(catalog.close);
     final catalogCoordinator = WorkerCatalogCoordinator(
       catalog: catalog,
-      releaseStore: store,
+      releaseStore: catalog.store,
       registry: localWorkerRegistry,
       refreshExecutor: (operation) => Zone.root.run(operation),
     );
@@ -1341,6 +1344,103 @@ void main() {
     expect(find.text('Gemini'), findsNothing);
     expect(find.text('Add Worker'), findsNothing);
   });
+
+  for (final hasDiscovery in [false, true]) {
+    testWidgets(
+        'Workers page handles empty runtime catalog with discovery=$hasDiscovery',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final directory = (await tester
+          .runAsync(() => Directory.systemTemp.createTemp('claude-catalog-')))!;
+      addTearDown(
+          () => tester.runAsync(() => directory.delete(recursive: true)));
+      final signing = (await tester.runAsync(Ed25519ReleaseFixture.create))!;
+      final store = WorkerProfileStore(
+          profilesRoot: directory, trustPolicy: signing.trustPolicy);
+      await tester.runAsync(() => _installTestToolProfile(
+              store: store,
+              signing: signing,
+              workerTypeId: 'claude',
+              profileDefinitionId: 'claude-code',
+              toolName: 'claude',
+              model: {
+                'supported': true,
+                if (hasDiscovery)
+                  'discovery': {
+                    'schemaVersion': 1,
+                    'arguments': ['models'],
+                    'format': 'tsv',
+                    'timeoutMs': 10000,
+                    'idPrefix': ''
+                  },
+                'arguments': ['--model', '{{model}}'],
+                'allowlist': ['sonnet', 'opus', 'haiku'],
+                'unknownModelPolicy': 'reject',
+                'catalog': [
+                  {'id': 'sonnet', 'name': 'Claude Sonnet'},
+                  {'id': 'opus', 'name': 'Claude Opus'},
+                  {
+                    'id': 'haiku',
+                    'name': 'Claude Haiku',
+                    'status': 'unavailable'
+                  },
+                  {'id': 'excluded', 'name': 'Excluded'},
+                ],
+              }));
+      final catalog = ToolProfileCatalogClient(
+          cloudUri: Uri.parse('https://catalog.test'),
+          store: store,
+          trustPolicy: signing.trustPolicy,
+          trustRefresher: () => SynchronousFuture<void>(null),
+          workerCatalogLoader: () => SynchronousFuture([
+                logicalWorkerCatalogFixture('claude',
+                        displayName: 'Claude',
+                        profileDefinitionId: 'claude-code',
+                        providerToolName: 'claude')
+                    .toJson()
+              ]));
+      addTearDown(catalog.close);
+      await tester.runAsync(() => catalog.syncCatalog());
+      await pumpDashboard(
+          tester,
+          const WorkspaceUiSnapshot(
+              mode: WorkspaceUiMode.ready,
+              title: 'Ready',
+              detail: 'Ready',
+              registered: true,
+              workspaceReady: true,
+              cloudConnected: true,
+              serviceRunning: true),
+          toolProfileCatalog: catalog,
+          localWorkerRegistry: _FakeWorkerRegistry([
+            LocalWorker(
+                id: 'claude-local',
+                workspaceId: 'ws-test',
+                workerTypeId: 'claude',
+                localPermissions: const ['repository:read'],
+                localConcurrencyLimit: 1,
+                modelCatalog: DiscoveredModelCatalog(
+                    profileDigest: 'a' * 64,
+                    providerToolVersion: '1.0.0',
+                    discoveredAt: '2026-10-13T00:00:00Z',
+                    models: const []),
+                status: LocalWorkerStatus.disabled,
+                revision: 1,
+                createdAt: '2026-10-13T00:00:00Z',
+                updatedAt: '2026-10-13T00:00:00Z')
+          ]));
+      await openWorkers(tester);
+      expect(find.textContaining('Claude Sonnet'),
+          hasDiscovery ? findsNothing : findsOneWidget);
+      expect(find.textContaining('Claude Opus'),
+          hasDiscovery ? findsNothing : findsOneWidget);
+      expect(find.textContaining('Claude Haiku'), findsNothing);
+      expect(find.textContaining('Excluded'), findsNothing);
+    });
+  }
 
   testWidgets('Workers page renders each Cloud catalog entry', (tester) async {
     tester.view.physicalSize = const Size(800, 1200);

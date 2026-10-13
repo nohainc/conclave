@@ -71,6 +71,18 @@ malformed JSON, unsupported event shapes, and provider errors. Unsupported CLI
 versions fail through the existing Profile compatibility gate before execution;
 they are not silently normalized as a compatible stream.
 
+The official Codex Profile (`docs/profile-templates/chatgpt-codex-runtime-catalog.v2.json`)
+declares `activity.adapter: codex-jsonl` and maps the Codex `exec --json` item
+types to user-facing activity titles: `reasoning` and `todo_list` to
+`model.status` ("Thinking", "Updating the plan"), `command_execution`,
+`mcp_tool_call`, `web_search`, `file_change` and `collab_tool_call` to
+`tool.started`/`tool.completed` pairs keyed by `item.id`, `agent_message` to
+`message.updated`, and an `item.completed` whose `item.status` is `failed` to
+`tool.failed`. Codex reports a failed tool as a completed item with a failed
+status, not as a separate event, so the failure mapping follows the completion
+mapping for the same activity identifier. A Profile without an `activity`
+block emits no activity at all, only coarse `progress` milestones.
+
 The sanitized replay streams in
 `packages/tool-profile/test/fixtures/{codex-events,antigravity-events}` cover
 normal tool pairs, repeated calls, missing identifiers, provider failures, and
@@ -155,18 +167,65 @@ conversation turn are rejected at the Cloud gateway and are never projected.
 
 ## AX Work presentation
 
-Conclave AX renders activity inside the existing Work execution card. The
-operational panel identifies the logical Worker and provider CLI, shows elapsed
-time, keeps active tool rows visible, and moves completed rows behind a compact
-summary. A tool completion with the same activity identifier updates its
-started row; it does not create a second timeline entry.
+Conclave AX shows live Worker progress inside the normal Work response, with no
+separate activity widget and no list of events. Three parts of the response
+follow the live flow:
 
-AX keeps activity state separate from Work messages and result text. It accepts
-only normalized safe fields, never renders raw provider JSON, chain of thought,
-terminal output or unrestricted tool output, and bounds the local assignment
-projection. Replayed events are deduplicated by event identity and attempt,
-while the bounded activity list uses a virtualized scroll surface for long
-executions. The Work panel uses the authoritative Work status for Starting,
-Running, Recovering, Completed and Failed, reconciles unfinished rows when that
-status is terminal, and shows a bounded diagnostic when a Worker terminates
-without a normal provider response.
+1. The sender (icon, name and model info) switches to the Worker as soon as the
+   flow reports an execution in progress, without waiting for the step status.
+2. The elapsed time next to the workflow name ticks from the execution start
+   while the request is unfinished. Once the request is terminal, the
+   server-reported duration replaces it.
+3. The message body shows the current status from the flow (the latest
+   unfinished tool or status title, "Starting worker…", "Working…" or
+   "Wrapping up…") and is replaced by the real response, error or cancellation
+   when the request finishes.
+
+Progress combines three sources, resolved by `AxWorkProgress`:
+
+1. The Work Request status is authoritative for every terminal state
+   (Completed, Failed, Cancelled, Timed out, Lost). Activity never marks a
+   request terminal.
+2. Worker Activity is the fast signal. It supplies the current action, the
+   execution start time and liveness. Only the latest attempt is used, so a
+   retry does not inherit the failed attempt's action or start time.
+3. Local submission progress and the step start time cover the phases before
+   any activity exists and Workers that emit none.
+
+A terminal execution activity freezes the elapsed time and shows "Wrapping
+up…" while the request status is still unfinished. The client also re-reads
+the Work Request once, shortly afterwards, if it is still unfinished; the
+result and status remain the authoritative completion record.
+
+Event timestamps are shifted by an estimated clock offset (the least-delayed
+live event; offsets over two minutes are treated as late delivery and
+ignored) and elapsed time is never negative. A running execution silent for 45
+seconds appends "no recent updates" to the status line.
+
+AX keeps activity state separate from Work messages and result text and never
+renders raw provider JSON, chain of thought, terminal output or unrestricted
+tool output. Activity state is bounded per assignment, replayed events are
+deduplicated by event identity and attempt, and history from the Work Request
+projection is merged with live events. Notifications are per assignment, so
+only the affected response rebuilds, and bursts of replaceable `model.status`
+and `message.updated` events are coalesced to a few updates per second.
+
+## Engine ownership of unidentified tool events
+
+When a provider adapter is present, a declarative tool mapping that yields no
+activity identifier is dropped by the Engine. The adapter then assigns a stable
+fallback identifier, so one provider invocation is reported once and pairs with
+its completion. Diagnostic observations (`details.diagnostic`) describe the
+adapter, not the Worker's work, and the AX Work tab never shows them as the
+current action.
+
+## AGY adapter
+
+The `agy-stream-json` adapter follows the documented AGY `stream-json` output:
+`init`, `step_update` (with `step_type` of `user_input`, `agent_response`,
+`tool` or `checkpoint`, and `state` of `ACTIVE` or `DONE`) and `result`. A tool
+step starts as `ACTIVE` and ends with `DONE` carrying `tool_info.error` on
+failure. Start and end events share `step_index` within a conversation, which
+is used as the pairing key when no `tool_id` is present. Older captures using
+`tool_execution` and `COMPLETED` remain accepted. Text arrives as `text_delta`
+fragments; the Work tab shows status only and never renders them.

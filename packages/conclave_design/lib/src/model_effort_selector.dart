@@ -131,7 +131,7 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
             ? 'Select a Worker.'
             : worker == null
                 ? 'Selected Worker is unavailable. Your saved selection is kept.'
-                : worker.validate(effective));
+                : worker.validatePreference(effective));
     return FocusTraversalGroup(
         child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,

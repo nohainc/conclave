@@ -742,17 +742,6 @@ class _FloatingRealtimeStatusBannerState
         _visibleNotice = null;
       });
     }
-    _pendingNotice = Timer(_noticeDelay, () {
-      _pendingNotice = null;
-      if (!mounted) return;
-      final currentStatus = widget.realtimeStatus.value;
-      final currentLifecycle = widget.lifecycleNotice.value;
-      final currentNotice =
-          currentLifecycle ?? widget.realtimeNotice ?? currentStatus.$2;
-      if (currentNotice == noticeText) {
-        _showNotice(noticeText);
-      }
-    });
   }
 
   void _showNotice(String noticeText) {
@@ -803,22 +792,22 @@ class _FloatingRealtimeStatusBannerState
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xffe6c875)),
+                    border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.cloud_off_outlined,
                         size: 16,
-                        color: Color(0xff8a6518),
+                        color: ConclaveColors.warning,
                       ),
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
                           noticeText,
-                          style: const TextStyle(
-                            color: Color(0xff765817),
+                          style: TextStyle(
+                            color: ConclaveColors.warning,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -826,13 +815,13 @@ class _FloatingRealtimeStatusBannerState
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const SizedBox(
+                      SizedBox(
                         width: 12,
                         height: 12,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor:
-                              AlwaysStoppedAnimation<Color>(Color(0xff8a6518)),
+                              AlwaysStoppedAnimation<Color>(ConclaveColors.warning),
                         ),
                       ),
                     ],

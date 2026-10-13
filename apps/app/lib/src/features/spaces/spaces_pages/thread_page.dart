@@ -138,6 +138,9 @@ class _ThreadPageState extends State<ThreadPage>
   AxWorkHistoryCache get _workHistoryCache =>
       widget.workHistoryCache ?? _fallbackWorkHistoryCache;
   final _workActivityStore = AxWorkActivityStore();
+  // A terminal Worker activity precedes the result frame, so the request detail
+  // is re-read shortly after only if Work status events have not caught up.
+  final _terminalActivityChecks = <String, Timer>{};
   void Function()? _cancelWorkHistory;
   bool _loadingOlderWork = false;
   List<AxWorkRequest> get _workTimeline =>
@@ -668,6 +671,7 @@ class _ThreadPageState extends State<ThreadPage>
       _workflow = '';
       _followWork = _followChat = true;
       _workActivityStore.clear();
+      _cancelTerminalActivityChecks();
       unawaited(_restoreThreadViewState());
     } else if (oldWidget.currentUserId != widget.currentUserId) {
       unawaited(_restoreThreadViewState());
@@ -685,12 +689,60 @@ class _ThreadPageState extends State<ThreadPage>
     }
   }
 
+  static const _terminalActivityTypes = {
+    'execution.completed',
+    'execution.failed',
+    'execution.cancelled',
+  };
+
+  void _cancelTerminalActivityChecks() {
+    for (final timer in _terminalActivityChecks.values) {
+      timer.cancel();
+    }
+    _terminalActivityChecks.clear();
+  }
+
+  /// Worker activity can outrun the Work status events. When an execution
+  /// reports a terminal activity, re-read the request once if it is still
+  /// unfinished a moment later. This only triggers a sync; request status
+  /// remains the authority for every terminal state.
+  void _checkRequestAfterTerminalActivity(Map<String, dynamic> event) {
+    final payload = event['payload'];
+    if (payload is! Map ||
+        !_terminalActivityTypes.contains(payload['activityType'])) {
+      return;
+    }
+    final assignmentId = event['assignmentId'] ?? payload['entityId'];
+    if (assignmentId is! String || assignmentId.isEmpty) return;
+    if (_terminalActivityChecks.containsKey(assignmentId)) return;
+    final threadId = widget.thread.id;
+    _terminalActivityChecks[assignmentId] =
+        Timer(const Duration(milliseconds: 1500), () {
+      _terminalActivityChecks.remove(assignmentId);
+      if (!mounted || widget.thread.id != threadId) return;
+      final request = _workTimeline
+          .where((r) => AxWorkActivityStore.assignmentIdsFor(r)
+              .contains(assignmentId))
+          .firstOrNull;
+      if (request == null ||
+          request.id.startsWith('local-') ||
+          AxWorkProgress.terminalStatuses.contains(request.status)) {
+        return;
+      }
+      unawaited(_workHistoryCache
+          .refreshRequest(threadId, request.id)
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    });
+  }
+
   void _subscribeToWorkEvents() {
     _cancelWorkRealtime?.call();
     _cancelWorkRealtime = AxWorkRealtimeSync.forCache(_workHistoryCache)
         .listen(widget.realtimeEvents, threadId: widget.thread.id);
     _workEventSubscription = widget.realtimeEvents?.listen((event) {
-      _workActivityStore.handle(event, threadId: widget.thread.id);
+      if (_workActivityStore.handle(event, threadId: widget.thread.id)) {
+        _checkRequestAfterTerminalActivity(event);
+      }
       final type = event['type'];
       final payload = event['payload'];
       if ((type is String &&
@@ -721,6 +773,7 @@ class _ThreadPageState extends State<ThreadPage>
     _cancelWorkHistory?.call();
     _cancelWorkRealtime?.call();
     _workEventSubscription?.cancel();
+    _cancelTerminalActivityChecks();
     _workActivityStore.dispose();
     _threadViewStateSaveTimer?.cancel();
     unawaited(_saveThreadViewState());

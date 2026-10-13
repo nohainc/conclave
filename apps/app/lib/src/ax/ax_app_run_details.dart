@@ -46,20 +46,20 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(selectedSpace?.name ?? 'Space',
-                            style: const TextStyle(
-                                color: Color(0xff777683), fontSize: 12)),
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
                         const SizedBox(height: 7),
-                        const Text('Run details',
+                        Text('Run details',
                             style: TextStyle(
                                 fontSize: 25,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xff20202c),
+                                color: Theme.of(context).colorScheme.onSurface,
                                 letterSpacing: -.5)),
                         const SizedBox(height: 5),
-                        const Text(
+                        Text(
                             'Follow execution, results, verification, and diagnostics.',
                             style: TextStyle(
-                                color: Color(0xff777683), fontSize: 13)),
+                                color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
                       ]),
                 ],
               ),
@@ -212,16 +212,16 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                             run == null
                                 ? 'Select New work request to begin'
                                 : 'Work Request ${run.id}',
-                            style: const TextStyle(
-                                color: Color(0xff898896), fontSize: 11))
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11))
                       ]),
                   _statusChip(_statusLabel(status), _runStatusColor(status)),
                   const SizedBox(width: 5),
                   if (!compact)
                     Text(
                         '${run?.verifiedCriterionCount ?? 0} / ${run?.criterionCount ?? 0} criteria verified',
-                        style: const TextStyle(
-                            color: Color(0xff777683), fontSize: 11)),
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
                   OutlinedButton.icon(
                       onPressed: canControl
                           ? () => _controlRun(paused ? 'resume' : 'pause')
@@ -241,8 +241,8 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                       icon: const Icon(Icons.close_rounded, size: 16),
                       label: const Text('Cancel'),
                       style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xffa45555),
-                          side: const BorderSide(color: Color(0xffefd5d5)),
+                          foregroundColor: Theme.of(context).colorScheme.error,
+                          side: BorderSide(color: Theme.of(context).colorScheme.error.withValues(alpha: 0.3)),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 9))),
                 ])));
@@ -304,14 +304,14 @@ extension _AxAppRunDetails on _AxAppStateMixin {
   Widget _contextLine(IconData icon, String label, String value) => SizedBox(
         width: 190,
         child: Row(children: [
-          Icon(icon, size: 16, color: const Color(0xff9997a3)),
+          Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
           Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(label,
                   style:
-                      const TextStyle(color: Color(0xff9997a3), fontSize: 11)),
+                      TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
               Text(value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -362,7 +362,7 @@ extension _AxAppRunDetails on _AxAppStateMixin {
               Text(
                   'Correlation IDs: ${executionSnapshot.events.where((event) => event.correlationId != null).map((event) => event.correlationId).toSet().join(', ')}',
                   style:
-                      const TextStyle(fontSize: 11, color: Color(0xff777683))),
+                      TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ),
       );
@@ -437,10 +437,10 @@ extension _AxAppRunDetails on _AxAppStateMixin {
             ]),
             const SizedBox(height: 6),
             Text(decision.summary,
-                style: const TextStyle(color: Color(0xff777683), fontSize: 11)),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
             const SizedBox(height: 4),
             Text('${decision.worker} · ${decision.evidence}',
-                style: const TextStyle(color: Color(0xff9a98a3), fontSize: 11)),
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
           ],
         ],
       ),
@@ -495,8 +495,8 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                             fontSize: 12, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 3),
                     Text('${task.worker}  ·  ${task.status.name}',
-                        style: const TextStyle(
-                            fontSize: 11, color: Color(0xff95939e)))
+                        style: TextStyle(
+                            fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant))
                   ])),
               if (task.status == TaskStatus.running)
                 SizedBox(
@@ -509,8 +509,8 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                         backgroundColor:
                             ConclaveColors.primarySoftColor(isDark))),
               const SizedBox(width: 5),
-              const Icon(Icons.chevron_right_rounded,
-                  size: 17, color: Color(0xffb5b3bd))
+              Icon(Icons.chevron_right_rounded,
+                  size: 17, color: Theme.of(context).colorScheme.onSurfaceVariant)
             ])));
   }
 
@@ -538,21 +538,21 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                   const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
           const SizedBox(height: 8),
           Text(task.detail,
-              style: const TextStyle(
-                  color: Color(0xff777683), fontSize: 12, height: 1.45)),
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12, height: 1.45)),
           if (task.errorCode != null) ...[
             const SizedBox(height: 8),
             Text(task.errorMessage ?? 'The assignment could not be completed.',
                 key: const ValueKey('task-execution-error-message'),
-                style: const TextStyle(
-                    color: Color(0xff9a3d3d),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
                     fontSize: 11,
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 3),
             Text('Error code: ${task.errorCode}',
                 key: const ValueKey('task-execution-error-code'),
-                style: const TextStyle(
-                    color: Color(0xff9a3d3d),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
                     fontSize: 11,
                     fontWeight: FontWeight.w600)),
           ],
@@ -590,17 +590,17 @@ extension _AxAppRunDetails on _AxAppStateMixin {
   Widget _detailLine(IconData icon, String label, String value) => Padding(
       padding: const EdgeInsets.only(bottom: 11),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, size: 16, color: const Color(0xff9997a3)),
+        Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
         const SizedBox(width: 9),
         SizedBox(
             width: 82,
             child: Text(label,
                 style:
-                    const TextStyle(color: Color(0xff9997a3), fontSize: 11))),
+                    TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11))),
         Expanded(
             child: Text(value,
-                style: const TextStyle(
-                    color: Color(0xff454450),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontSize: 11,
                     fontWeight: FontWeight.w600)))
       ]));
@@ -622,8 +622,8 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                       SizedBox(
                           width: 42,
                           child: Text(event.time,
-                              style: const TextStyle(
-                                  fontSize: 11, color: Color(0xffaaa8b1)))),
+                              style: TextStyle(
+                                  fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant))),
                       Container(
                           width: 8,
                           height: 8,
@@ -640,8 +640,8 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                                     fontWeight: FontWeight.w600, fontSize: 12)),
                             const SizedBox(height: 3),
                             Text(event.detail,
-                                style: const TextStyle(
-                                    color: Color(0xff898792), fontSize: 11)),
+                                style: TextStyle(
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
                           ],
                         ),
                       ),

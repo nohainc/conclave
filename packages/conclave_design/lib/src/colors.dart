@@ -20,28 +20,36 @@ abstract final class ConclaveColors {
   static const codeBackgroundLight = Color(0xfff0eee8);
 
   // Dark Mode Surfaces & Inks
-  static const canvasDark = Color(0xff121217);
-  static const surfaceDark = Color(0xff1a1a22);
-  static const surfaceHoverDark = Color(0xff24242f);
-  static const borderDark = Color(0xff2e2e3a);
+  static const canvasDark = Color(0xff1b1a24);
+  static const surfaceDark = Color(0xff24222e);
+  static const surfaceHoverDark = Color(0xff343142);
+  static const borderDark = Color(0xff393645);
   static const textPrimaryDark = Color(0xfff4f4f6);
-  static const textSecondaryDark = Color(0xff9e9eaf);
+  static const textSecondaryDark = Color(0xffaaa7b8);
   static const codeBackgroundDark = Color(0xff15151d);
 
   // Navigation Tokens
   static const navigationBackgroundLight = Color(0xffffffff);
-  static const navigationBackgroundDark = Color(0xff20202a);
+  static const navigationBackgroundDark = Color(0xff121119);
   static const navigationRaisedLight = Color(0xfff8f7f3);
-  static const navigationRaisedDark = Color(0xff20202a);
+  static const navigationRaisedDark = Color(0xff121119);
   static const navigationHoverLight = Color(0xfff1efe8);
-  static const navigationHoverDark = Color(0xff24242f);
-  static const navigationSelected = Color(0xff302d4b);
+  static const navigationHoverDark = Color(0xff1d1c28);
+  static const navigationSelected = Color(0xff302b4d);
   static const navigationBorderLight = Color(0xffdfded8);
-  static const navigationBorderDark = Color(0xff2e2e3a);
+  static const navigationBorderDark = Color(0xff1f1e2a);
   static const navigationTextLight = Color(0xff20202a);
   static const navigationTextDark = Color(0xfff4f4f6);
   static const navigationTextMutedLight = Color(0xff6e6e7c);
-  static const navigationTextMutedDark = Color(0xff9e9eaf);
+  static const navigationTextMutedDark = Color(0xffaaa7b8);
+
+  // Composer/Input Panel Tokens
+  static const composerBackgroundDark = Color(0xff2c2939);
+  static const composerBackgroundLight = Color(0xfffaf9f5);
+
+  // Own Message Background Token (matches composer input area)
+  static const ownMessageBackgroundDark = Color(0xff2c2939);
+  static const ownMessageBackgroundLight = Color(0xfffaf9f5);
 
   // Contextual Getters
   static Color primaryForeground(bool isDark) =>
@@ -71,6 +79,10 @@ abstract final class ConclaveColors {
       isDark ? navigationTextDark : navigationTextLight;
   static Color navigationTextMuted(bool isDark) =>
       isDark ? navigationTextMutedDark : navigationTextMutedLight;
+  static Color composerBackground(bool isDark) =>
+      isDark ? composerBackgroundDark : composerBackgroundLight;
+  static Color ownMessageBackground(bool isDark) =>
+      isDark ? ownMessageBackgroundDark : ownMessageBackgroundLight;
 
   // Semantic Status Colors
   static const success = Color(0xff22c55e);

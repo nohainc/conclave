@@ -62,7 +62,7 @@ class AxWorkflowSelectionOptions {
     if (selected.executionOptions == null) {
       return 'Model and effort options are unavailable for this Worker.';
     }
-    return capabilityForWorker(selected).validate(ExecutionSelection(
+    return capabilityForWorker(selected).validatePreference(ExecutionSelection(
         worker: value.worker,
         model: value.model,
         effort: value.effort,

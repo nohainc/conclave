@@ -197,64 +197,148 @@ void main() {
     expect(activities.single.title, 'Reading repository');
   });
 
-  testWidgets('shows Worker identity, elapsed time and expandable activity',
+  testWidgets('ticks the current time once a second only while active',
       (tester) async {
-    final activities = [
-      AxWorkActivity(
-        eventId: 'start',
-        assignmentId: 'assignment-1',
-        attemptId: 'attempt-1',
-        executionId: 'execution-1',
-        workerId: 'chatgpt',
-        activitySequence: 1,
-        streamSequence: 1,
-        type: 'tool.started',
-        status: 'running',
-        title: 'Executing repository checks',
-        timestamp: DateTime.now().subtract(const Duration(seconds: 4)),
-        details: const {'toolName': 'shell'},
-      ),
-    ];
+    var now = DateTime.utc(2026, 10, 13, 12);
+    var active = true;
+    late StateSetter setOuter;
 
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: AxWorkerActivityPanel(
-            workerName: 'ChatGPT',
-            providerToolName: 'Codex CLI',
-            requestStatus: 'running',
-            activities: activities,
-          ),
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            setOuter = setState;
+            return AxLiveTicker(
+              active: active,
+              clock: () => now,
+              builder: (context, value) => Text('t=${value.second}'),
+            );
+          },
         ),
       ),
     );
+    expect(find.text('t=0'), findsOneWidget);
 
-    expect(find.text('ChatGPT · Codex CLI'), findsOneWidget);
-    expect(find.text('Running'), findsOneWidget);
-    expect(find.text('Executing repository checks'), findsOneWidget);
-    expect(find.textContaining('Elapsed:'), findsOneWidget);
-    await tester.tap(find.text('Executing repository checks'));
+    now = now.add(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('t=3'), findsOneWidget);
+
+    setOuter(() => active = false);
     await tester.pump();
-    expect(find.text('toolName: shell'), findsOneWidget);
+    now = now.add(const Duration(seconds: 5));
+    await tester.pump(const Duration(seconds: 2));
+    // Inactive tickers no longer follow the clock.
+    expect(find.text('t=3'), findsOneWidget);
+    expect(find.text('t=8'), findsNothing);
   });
 
-  testWidgets('renders a terminal diagnostic when no provider activity arrived',
-      (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: AxWorkerActivityPanel(
-            workerName: 'ChatGPT',
-            providerToolName: 'Codex CLI',
-            requestStatus: 'failed',
-            activities: const [],
+  AxWorkRequest requestFor(String assignmentId) => AxWorkRequest(
+        id: 'request-$assignmentId',
+        requestedByName: 'Team member',
+        prompt: 'inspect',
+        workflowId: 'direct',
+        workflowVersion: 1,
+        status: 'running',
+        createdAt: '2026-10-12T18:00:00Z',
+        steps: [
+          AxWorkRequestStep(
+            kind: 'implement',
+            status: 'running',
+            workerId: 'worker-1',
+            assignmentId: assignmentId,
           ),
-        ),
+        ],
+      );
+
+  test('notifies only the request whose assignment received activity', () {
+    final store = AxWorkActivityStore();
+    var first = 0;
+    var second = 0;
+    store.listenableForRequest(requestFor('assignment-1')).addListener(
+          () => first++,
+        );
+    store.listenableForRequest(requestFor('assignment-2')).addListener(
+          () => second++,
+        );
+
+    store.handle(
+      activityEvent(
+        eventId: 'a',
+        streamSequence: 1,
+        activitySequence: 1,
+        type: 'tool.started',
+        status: 'running',
       ),
+      threadId: 'thread-1',
     );
 
-    expect(find.text('Failed'), findsOneWidget);
-    expect(find.textContaining('stopped without a normal provider response'),
-        findsOneWidget);
+    expect(first, 1);
+    expect(second, 0);
+  });
+
+  testWidgets('coalesces bursts of replaceable status updates',
+      (tester) async {
+    final store = AxWorkActivityStore();
+    var notified = 0;
+    store.listenableForRequest(requestFor('assignment-1')).addListener(
+          () => notified++,
+        );
+    for (var index = 1; index <= 5; index++) {
+      store.handle(
+        activityEvent(
+          eventId: 'status-$index',
+          streamSequence: index,
+          activitySequence: index,
+          type: 'model.status',
+          status: 'updated',
+          activityId: 'status',
+          title: 'Thinking $index',
+        ),
+        threadId: 'thread-1',
+      );
+    }
+    expect(notified, 1);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(notified, 2);
+    expect(store.forAssignment('assignment-1').single.title, 'Thinking 5');
+  });
+
+  test('estimates clock skew from live events and ignores late replays', () {
+    // Event timestamp is 18:00:01 UTC; the device clock reads 18:00:04.
+    final skewed = AxWorkActivityStore(
+      clock: () => DateTime.utc(2026, 10, 12, 18, 0, 4),
+    );
+    skewed.handle(
+      activityEvent(
+        eventId: 'live',
+        streamSequence: 1,
+        activitySequence: 1,
+        type: 'tool.started',
+        status: 'running',
+      ),
+      threadId: 'thread-1',
+    );
+    expect(
+      skewed.clockOffsetForRequest(requestFor('assignment-1')),
+      const Duration(seconds: 3),
+    );
+
+    final replayed = AxWorkActivityStore(
+      clock: () => DateTime.utc(2026, 10, 12, 19),
+    );
+    replayed.handle(
+      activityEvent(
+        eventId: 'replay',
+        streamSequence: 1,
+        activitySequence: 1,
+        type: 'tool.started',
+        status: 'running',
+      ),
+      threadId: 'thread-1',
+    );
+    expect(
+      replayed.clockOffsetForRequest(requestFor('assignment-1')),
+      Duration.zero,
+    );
   });
 }

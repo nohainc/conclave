@@ -29,7 +29,8 @@ void main() {
         contains('not supported'));
     expect(worker.supportsModel('retired'), isFalse);
     expect(worker.supportsModel('unknown'), isFalse);
-    expect(worker.validate(const ExecutionSelection()), isNull);
+    expect(worker.validate(const ExecutionSelection()),
+        contains('Select an explicit model'));
   });
   test('retains only supported explicit efforts on deliberate model changes',
       () {
@@ -105,6 +106,14 @@ void main() {
         catalog.worker('worker')!.validate(
             const ExecutionSelection(model: 'model', catalogRevision: 'old')),
         contains('catalog changed'));
+    expect(
+        catalog.worker('worker')!.validatePreference(
+            const ExecutionSelection(model: 'model', catalogRevision: 'old')),
+        isNull);
+    expect(
+        catalog.worker('worker')!.validatePreference(
+            const ExecutionSelection(model: 'removed', catalogRevision: 'old')),
+        contains('not supported'));
     const base =
         ExecutionSelection(worker: 'one', catalogRevision: 'one-revision');
     expect(

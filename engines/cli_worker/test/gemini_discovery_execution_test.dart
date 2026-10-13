@@ -14,7 +14,7 @@ void main() {
       final provider = File('${root.path}/provider.dart');
       final models = File('${root.path}/models.tsv');
       await models.writeAsString(
-        'gemini-fixture-high\tGemini Fixture (High)\tlow,high\thigh\nclaude-fixture\tClaude\n',
+        'gemini-fixture-high\tGemini Fixture (High)\tlow,high\thigh\n',
       );
       await provider.writeAsString('''
 import 'dart:io';

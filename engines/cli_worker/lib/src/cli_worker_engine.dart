@@ -1903,6 +1903,14 @@ class CliWorkerEngine {
     if (mapped.isEmpty && observations.isEmpty) return const [];
     final events = <WorkerActivity>[];
     for (final mapping in mapped) {
+      // With an adapter, unidentified tool events belong to the adapter, which
+      // assigns a stable fallback id. Keeping both would report one invocation
+      // twice and leave an unfinished row behind.
+      if (_providerActivityAdapter != null &&
+          mapping.activityId == null &&
+          mapping.type.startsWith('tool.')) {
+        continue;
+      }
       final sequence = (_activitySequences[request.requestId] ?? 0) + 1;
       _activitySequences[request.requestId] = sequence;
       events.add(

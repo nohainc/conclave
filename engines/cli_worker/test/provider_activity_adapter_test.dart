@@ -128,4 +128,71 @@ void main() {
       'first second',
     );
   });
+
+  test('Codex adapter treats non-tool item updates as expected progress', () {
+    final adapter = ProviderActivityAdapter.fromProfile({
+      'providerTool': {'name': 'Codex CLI'},
+      'activity': {'adapter': 'codex-jsonl', 'mappings': <Object?>[]},
+    })!;
+    for (final itemType in ['todo_list', 'reasoning', 'agent_message']) {
+      expect(
+        adapter.normalizeEvent({
+          'type': 'item.updated',
+          'item': {'id': 'item-1', 'type': itemType},
+        }, declarativeMatched: true),
+        isEmpty,
+        reason: '$itemType updates must not raise a diagnostic',
+      );
+    }
+    final searchUpdate = adapter.normalizeEvent({
+      'type': 'item.updated',
+      'item': {'id': 'search-1', 'type': 'web_search'},
+    }, declarativeMatched: true);
+    expect(searchUpdate.single.type, 'model.status');
+    expect(searchUpdate.single.activityId, 'search-1');
+  });
+
+  test('agy adapter pairs documented tool steps by step index', () {
+    final adapter = ProviderActivityAdapter.fromProfile({
+      'providerTool': {'name': 'agy'},
+      'activity': {'adapter': 'agy-stream-json', 'mappings': <Object?>[]},
+    })!;
+    Map<String, Object?> step(Map<String, Object?> fields) => {
+      'event': 'step_update',
+      'step_update': {'conversation_id': 'c1', ...fields},
+    };
+
+    final started = adapter.normalizeEvent(
+      step({'step_index': 2, 'state': 'ACTIVE', 'step_type': 'tool',
+        'tool_name': 'run_command'}),
+      declarativeMatched: false,
+    );
+    final completed = adapter.normalizeEvent(
+      step({'step_index': 2, 'state': 'DONE', 'step_type': 'tool',
+        'tool_name': 'run_command',
+        'tool_info': {'name': 'run_command', 'output': 'ok'}}),
+      declarativeMatched: false,
+    );
+    final failed = adapter.normalizeEvent(
+      step({'step_index': 3, 'state': 'DONE', 'step_type': 'tool',
+        'tool_name': 'run_command',
+        'tool_info': {'name': 'run_command',
+          'error': {'type': 'permission', 'message': 'denied'}}}),
+      declarativeMatched: false,
+    );
+
+    expect(started.single.type, 'tool.started');
+    expect(completed.single.type, 'tool.completed');
+    expect(completed.single.activityId, started.single.activityId);
+    expect(failed.single.type, 'tool.failed');
+    expect(failed.single.activityId, isNot(started.single.activityId));
+    // Checkpoints and responses are expected steps, not diagnostics.
+    expect(
+      adapter.normalizeEvent(
+        step({'step_index': 4, 'state': 'ACTIVE', 'step_type': 'checkpoint'}),
+        declarativeMatched: false,
+      ),
+      isEmpty,
+    );
+  });
 }

@@ -246,6 +246,86 @@ it("persists only user overrides, isolates users, retains offline choices, reset
       env,
       "chat",
     );
+    // Existing global/Space preferences may carry a previously observed revision.
+    const capable = inventory.workers.find(
+      (worker) => worker.id === "capable",
+    )!;
+    capable.executionOptions = {
+      ...capable.executionOptions!,
+      schemaVersion: 2,
+      catalogRevision: "b".repeat(64),
+      models: {
+        ...capable.executionOptions!.models,
+        options: [
+          {
+            id: "m",
+            name: "Renamed model",
+            selectionMode: "separate",
+            status: "verified",
+            efforts: ["low", "high"],
+            defaultEffort: "low",
+          },
+        ],
+      },
+    };
+    const observed = {
+      ...configuration,
+      defaults: {
+        worker: "capable",
+        model: "m",
+        catalogRevision: "a".repeat(64),
+      },
+      stepOverrides: { chat: { effort: "low" } },
+    };
+    const saved = await handleWorkflowConfigurations(
+      request("PUT", "U", observed),
+      env,
+      "chat",
+    );
+    expect(await saved.json()).toEqual({ configuration: observed });
+    await expect(
+      handleWorkflowConfigurations(
+        request("PUT", "U", {
+          ...observed,
+          stepOverrides: { chat: { effort: "removed" } },
+        }),
+        env,
+        "chat",
+      ),
+    ).rejects.toThrow("selected effort");
+    capable.executionOptions = {
+      ...capable.executionOptions,
+      catalogStale: true,
+    };
+    await expect(
+      handleWorkflowConfigurations(
+        request("PUT", "U", {
+          ...observed,
+          stepOverrides: { chat: { effort: "high" } },
+        }),
+        env,
+        "chat",
+      ),
+    ).rejects.toThrow("stale");
+    // Restore the unchanged-unavailable fixture below.
+    await handleWorkflowConfigurations(
+      request("PUT", "U", observed),
+      env,
+      "chat",
+    );
+    capable.executionOptions = {
+      ...capable.executionOptions,
+      catalogStale: false,
+    };
+    await handleWorkflowConfigurations(
+      request("PUT", "U", {
+        ...configuration,
+        defaults: { worker: "capable", model: "m" },
+        stepOverrides: { chat: { effort: "low" } },
+      }),
+      env,
+      "chat",
+    );
     inventory.workers.find(
       (worker) => worker.id === "capable",
     )!.executionOptions = null;

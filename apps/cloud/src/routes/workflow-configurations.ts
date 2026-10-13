@@ -202,7 +202,6 @@ export async function handleWorkflowConfigurations(
               worker.executionOptions,
               selection.model ?? null,
               selection.effort ?? null,
-              selection.catalogRevision,
             ),
         )
       )
@@ -249,11 +248,11 @@ export async function handleWorkflowConfigurations(
       continue;
     if (!worker.executionOptions)
       throw new HttpError(400, "Worker execution options are unavailable");
+    // Saved revisions describe observed capabilities, not an execution pin.
     const error = validateWorkerExecutionSelection(
       worker.executionOptions,
       selection.model ?? null,
       selection.effort ?? null,
-      selection.catalogRevision,
     );
     if (error) throw new HttpError(400, error);
   }

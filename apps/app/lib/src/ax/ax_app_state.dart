@@ -97,16 +97,18 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         SnackBar(
           duration: const Duration(seconds: 4),
           showCloseIcon: true,
-          closeIconColor: const Color(0xff9e9ea7),
+          closeIconColor: Theme.of(context).colorScheme.onSurfaceVariant,
           content: Text(
             message,
-            style: const TextStyle(
-              color: Color(0xfff4f4f6),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
               fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
           ),
-          backgroundColor: const Color(0xff20202a),
+          backgroundColor: Theme.of(context).brightness == Brightness.dark
+              ? ConclaveColors.navigationBackgroundDark
+              : ConclaveColors.navigationBackgroundLight,
           behavior: SnackBarBehavior.floating,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
