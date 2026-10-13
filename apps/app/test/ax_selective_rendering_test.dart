@@ -36,6 +36,34 @@ void main() {
     expect(notifications, 1);
   });
 
+  testWidgets('defers coalesced notifications triggered during a build',
+      (tester) async {
+    final source = ValueNotifier<int>(0);
+    final merged = AxCoalescedListenable([source]);
+    addTearDown(() {
+      merged.dispose();
+      source.dispose();
+    });
+    var builds = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ListenableBuilder(
+          listenable: merged,
+          builder: (context, child) {
+            builds++;
+            if (builds == 1) source.value = 1;
+            return Text('build-$builds');
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(builds, greaterThanOrEqualTo(2));
+    expect(find.text('build-$builds'), findsOneWidget);
+  });
+
   final builds = <String, int>{};
   void observe() {
     final previous = debugOnRebuildDirtyWidget;

@@ -280,7 +280,8 @@ class SpaceDirectoryLifecycle {
       resolver.resolve(spaceId: spaceId, spaceName: spaceName);
 }
 
-/// Serializes stateful work that shares one Space directory.
+/// Serializes stateful work that shares one Space directory, while comparing
+/// Cloud-issued fencing tokens only within the Thread that owns the lease.
 class SpaceMutationCoordinator {
   SpaceMutationCoordinator({
     required this.lifecycle,
@@ -293,11 +294,16 @@ class SpaceMutationCoordinator {
 
   Future<T> withMutation<T>({
     required String spaceId,
+    required String threadId,
     required String spaceName,
     required String leaseId,
     required int fencingToken,
     required Future<T> Function(Directory directory) action,
   }) async {
+    if (!SpaceDirectoryResolver._safeId.hasMatch(spaceId) ||
+        !SpaceDirectoryResolver._safeId.hasMatch(threadId)) {
+      throw const SpaceMutationViolation('invalid Space or Thread identity');
+    }
     if (leaseId.trim().isEmpty || fencingToken <= 0) {
       throw const SpaceMutationViolation(
           'leaseId and positive fencingToken are required');
@@ -315,14 +321,21 @@ class SpaceMutationCoordinator {
         await handle.lock(FileLock.exclusive);
         final directory = await lifecycle.ensureForExecution(
             spaceId: spaceId, spaceName: spaceName);
-        final fenceDirectory =
-            Directory(_join(applicationStateDirectory.path, 'space-fences'));
+        // The process lock remains Space-wide because Threads share a CWD.
+        // Lease counters are Thread-scoped in Cloud; a token from one Thread
+        // cannot be ordered against a token from another Thread. Leave legacy
+        // unscoped <spaceId>.json records intact as historical evidence.
+        final fenceDirectory = Directory(_join(
+            _join(applicationStateDirectory.path, 'space-fences'), spaceId));
         await fenceDirectory.create(recursive: true);
-        final fenceFile = File(_join(fenceDirectory.path, '$spaceId.json'));
+        final fenceFile = File(_join(fenceDirectory.path, '$threadId.json'));
         Map<String, Object?>? previousFence;
         if (await fenceFile.exists()) {
           final value = jsonDecode(await fenceFile.readAsString());
-          if (value is! Map) {
+          if (value is! Map ||
+              value['schemaVersion'] != 1 ||
+              value['spaceId'] != spaceId ||
+              value['threadId'] != threadId) {
             throw const SpaceMutationViolation(
                 'Space fencing metadata is invalid');
           }
@@ -340,6 +353,9 @@ class SpaceMutationCoordinator {
         }
         await fenceFile.writeAsString(
             jsonEncode({
+              'schemaVersion': 1,
+              'spaceId': spaceId,
+              'threadId': threadId,
               'leaseId': leaseId,
               'fencingToken': fencingToken,
               'updatedAt': DateTime.now().toUtc().toIso8601String(),

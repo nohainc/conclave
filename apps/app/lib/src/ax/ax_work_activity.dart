@@ -44,6 +44,7 @@ class AxWorkActivity {
       status == 'completed' ||
       status == 'failed' ||
       status == 'cancelled' ||
+      status == 'interrupted' ||
       type == 'tool.completed' ||
       type == 'tool.failed' ||
       type == 'execution.completed' ||
@@ -55,9 +56,32 @@ class AxWorkActivity {
       type == 'execution.failed' ||
       type == 'execution.cancelled';
 
-  bool get isError => status == 'failed' || type == 'tool.failed';
+  bool get isError =>
+      status == 'failed' || status == 'interrupted' || type == 'tool.failed';
 
   bool get isReplaceable => type == 'model.status' || type == 'message.updated';
+
+  AxWorkActivity copyWith({
+    String? type,
+    String? status,
+    String? title,
+    Map<String, Object?>? details,
+  }) =>
+      AxWorkActivity(
+        eventId: eventId,
+        assignmentId: assignmentId,
+        attemptId: attemptId,
+        executionId: executionId,
+        workerId: workerId,
+        activitySequence: activitySequence,
+        streamSequence: streamSequence,
+        type: type ?? this.type,
+        status: status ?? this.status,
+        title: title ?? this.title,
+        timestamp: timestamp,
+        activityId: activityId,
+        details: details ?? this.details,
+      );
 
   AxWorkActivity merge(AxWorkActivity update) => AxWorkActivity(
         eventId: update.eventId,
@@ -158,6 +182,59 @@ class AxWorkActivity {
       details: Map.unmodifiable(details),
     );
   }
+
+  factory AxWorkActivity.fromHistory(Map<String, dynamic> values) {
+    String requiredString(String key) {
+      final value = values[key];
+      if (value is! String || value.trim().isEmpty) {
+        throw FormatException('Worker Activity $key is required');
+      }
+      return value.trim();
+    }
+
+    final activitySequence = values['activitySequence'];
+    final timestamp = values['timestamp'];
+    if (activitySequence is! int ||
+        activitySequence < 1 ||
+        timestamp is! String) {
+      throw const FormatException('Worker Activity history is invalid');
+    }
+    final parsedTimestamp = DateTime.tryParse(timestamp);
+    if (parsedTimestamp == null) {
+      throw const FormatException(
+          'Worker Activity history timestamp is invalid');
+    }
+    final details = <String, Object?>{};
+    final rawDetails = values['details'];
+    if (rawDetails is Map) {
+      for (final entry in rawDetails.entries) {
+        if (entry.key is String &&
+            (entry.value == null ||
+                entry.value is String ||
+                entry.value is num ||
+                entry.value is bool)) {
+          details[entry.key as String] = entry.value;
+        }
+      }
+    }
+    return AxWorkActivity(
+      eventId: requiredString('eventId'),
+      assignmentId: requiredString('assignmentId'),
+      attemptId: requiredString('attemptId'),
+      executionId: requiredString('executionId'),
+      workerId: requiredString('workerId'),
+      activitySequence: activitySequence,
+      streamSequence: 0,
+      type: requiredString('activityType'),
+      status: requiredString('activityStatus'),
+      title: requiredString('title'),
+      timestamp: parsedTimestamp.toLocal(),
+      activityId: values['activityId'] is String
+          ? (values['activityId'] as String).trim()
+          : null,
+      details: Map.unmodifiable(details),
+    );
+  }
 }
 
 /// Thread-local activity projection. It is intentionally separate from Work
@@ -176,8 +253,43 @@ class AxWorkActivityStore extends ChangeNotifier {
     };
     if (assignmentIds.isEmpty) return const [];
     final result = <AxWorkActivity>[];
+    final requestIsTerminal = const {
+      'completed',
+      'failed',
+      'cancelled',
+      'timed_out',
+      'lost',
+    }.contains(request.status);
     for (final assignmentId in assignmentIds) {
-      result.addAll(_activities[assignmentId] ?? const []);
+      final activities = _activities[assignmentId] ?? const [];
+      final historical = request.activityHistory
+          .where((item) => item['assignmentId'] == assignmentId)
+          .map((item) {
+        try {
+          return AxWorkActivity.fromHistory(item);
+        } on FormatException {
+          return null;
+        }
+      }).whereType<AxWorkActivity>();
+      final merged = <String, AxWorkActivity>{
+        for (final activity in historical) activity.eventId: activity,
+        for (final activity in activities) activity.eventId: activity,
+      };
+      if (!requestIsTerminal) {
+        result.addAll(merged.values);
+        continue;
+      }
+      result.addAll(merged.values.map((activity) {
+        if (activity.isFinished) return activity;
+        return activity.copyWith(
+          status: 'interrupted',
+          title: 'Activity ended when the execution terminated',
+          details: {
+            ...activity.details,
+            'reconciled': true,
+          },
+        );
+      }));
     }
     result.sort(_compare);
     return List.unmodifiable(result);

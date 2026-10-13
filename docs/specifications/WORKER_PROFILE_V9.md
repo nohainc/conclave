@@ -188,6 +188,12 @@ detail extractors are rejected before publication. The legacy percentage
 mapping remains only as a temporary compatibility path for older Workspace
 clients.
 
+The V9 integration evidence also includes a real Engine-process harness with a
+controlled fixture CLI. It verifies delayed and high-frequency JSONL activity,
+large responses, provider failure and missing-terminal outcomes, and concurrent
+Worker isolation. The harness is provider-shaped but credential-free; real
+Codex and agy acceptance remains an explicit, locally authorized device test.
+
 The V9 cleanup invariant is that no production Profile Lab route can reach a
 draft-release, promotion, testing/beta/stable channel, or channel-browsing
 screen. Diagnostic audit history, local recovery snapshots, test scenarios,

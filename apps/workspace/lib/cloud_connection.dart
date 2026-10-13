@@ -37,6 +37,11 @@ class WorkspaceAssignmentContext {
   final String idempotencyKey;
   final Map<String, Object?> payload;
 
+  String get executionId => payload['executionId'] is String &&
+          (payload['executionId'] as String).isNotEmpty
+      ? payload['executionId'] as String
+      : assignmentId;
+
   WorkspaceAssignmentContext copyWith({
     String? workerId,
     Map<String, Object?>? payload,
@@ -643,24 +648,14 @@ class WorkspaceCloudConnection {
   /// Relays structured Worker Activity without throttling lifecycle events.
   /// Status-only events may replace an older queued status for the same
   /// assignment; tool lifecycle and terminal events apply backpressure until
-  /// queue space is available. A disconnected transport drops only this
-  /// cosmetic relay and records a local diagnostic.
+  /// queue space is available. A disconnected transport retains the bounded
+  /// queue so reconnect replay can forward the event independently of the
+  /// provider process.
   Future<void> reportWorkerActivity(
     WorkspaceAssignmentContext context,
     WorkerActivity activity,
   ) async {
     if (activity.assignmentId != context.assignmentId) return;
-    if (_transport == null || sessionId == null) {
-      unawaited(recordAssignmentDiagnostic(
-        context,
-        event: 'worker.activity.forwarding_skipped',
-        stage: 'transport',
-        severity: 'warning',
-        errorCode: 'activity_forwarding_unavailable',
-        contextData: {'eventType': activity.eventType},
-      ));
-      return;
-    }
     final replaceable = activity.eventType == 'model.status' ||
         activity.eventType == 'message.updated';
     final key =
@@ -678,6 +673,25 @@ class WorkspaceCloudConnection {
         _drainActivityEvents();
         return;
       }
+    }
+    if (_transport == null || sessionId == null) {
+      if (_pendingActivityEvents.length >= _maxPendingActivityEvents) {
+        unawaited(recordAssignmentDiagnostic(
+          context,
+          event: 'worker.activity.forwarding_skipped',
+          stage: 'transport',
+          severity: 'warning',
+          errorCode: 'activity_forwarding_unavailable',
+          contextData: {'eventType': activity.eventType},
+        ));
+        return;
+      }
+      _pendingActivityEvents.add(_PendingWorkerActivity(
+        context: context,
+        activity: activity,
+        replaceableKey: replaceable ? key : null,
+      ));
+      return;
     }
     while (_pendingActivityEvents.length >= _maxPendingActivityEvents) {
       if (_transport == null || sessionId == null || _closing) {
@@ -1228,6 +1242,11 @@ class WorkspaceCloudConnection {
     } else if (decoded['type'] == 'thread.status') {
       // Runtime readiness is currently informational. The payload is not
       // persisted here and contains no local path.
+    } else if (decoded['type'] == 'assignment.ack') {
+      final payload = decoded['payload'];
+      if (payload is Map<String, dynamic> && payload['terminal'] == true) {
+        unawaited(_handleTerminalAcknowledgement(decoded, payload));
+      }
     } else if (decoded['type'] == 'assignment.start') {
       if (connectionStage != WorkspaceConnectionStage.ready) {
         final assignmentId = decoded['assignmentId'];
@@ -1297,6 +1316,41 @@ class WorkspaceCloudConnection {
       connectionStage = WorkspaceConnectionStage.reconnecting;
       _handleTransportEnd();
     }
+  }
+
+  Future<void> _handleTerminalAcknowledgement(
+    Map<String, dynamic> message,
+    Map<String, dynamic> payload,
+  ) async {
+    final assignmentId = message['assignmentId'];
+    if (assignmentId is! String ||
+        message['executionWorkspaceId'] != workspaceId ||
+        message['workspaceRuntimeId'] != workspaceRuntimeId) {
+      return;
+    }
+    final journal = assignmentJournal;
+    if (journal == null) return;
+    final record = (await journal.reconcile())[assignmentId];
+    if (record == null || record.status == AssignmentStatus.reconciled) {
+      return;
+    }
+    final acknowledgedStatus = payload['status'];
+    final expectedStatus = switch (record.status) {
+      AssignmentStatus.completed => 'completed',
+      AssignmentStatus.failed => 'failed',
+      AssignmentStatus.cancelled => 'cancelled',
+      AssignmentStatus.interrupted => 'failed',
+      _ => null,
+    };
+    if (expectedStatus == null || acknowledgedStatus != expectedStatus) {
+      return;
+    }
+    await _recordAssignment(
+      assignmentId,
+      AssignmentStatus.reconciled,
+      correlation: _assignmentCorrelation(message),
+      result: record.result,
+    );
   }
 
   void _scheduleWebSocketProbe() {
@@ -1422,6 +1476,7 @@ class WorkspaceCloudConnection {
         AssignmentStatus.completed,
         AssignmentStatus.failed,
         AssignmentStatus.cancelled,
+        AssignmentStatus.interrupted,
       }.contains(record.status)) {
         continue;
       }
@@ -1430,7 +1485,7 @@ class WorkspaceCloudConnection {
       final socket = _transport;
       if (socket == null || sessionId == null) continue;
       if (record.status == AssignmentStatus.completed) {
-        socket.send(jsonEncode(_assignmentEnvelope(
+        await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
           'assignment.result',
           correlation,
           {
@@ -1444,21 +1499,23 @@ class WorkspaceCloudConnection {
           },
         )));
       } else if (record.status == AssignmentStatus.failed) {
-        socket.send(jsonEncode(_assignmentEnvelope(
+        await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
           'assignment.error',
           correlation,
           {
             'status': 'failed',
             'error': {
-              'code': 'workspace_assignment_recovered_failure',
+              'code': record.errorCode ?? 'provider_unavailable',
               'message':
                   record.result?['error'] ?? 'Recovered assignment failure',
               'retryable': false,
+              if (record.processExitCode != null)
+                'details': {'processExitCode': record.processExitCode},
             },
           },
         )));
-      } else {
-        socket.send(jsonEncode(_assignmentEnvelope(
+      } else if (record.status == AssignmentStatus.cancelled) {
+        await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
           'assignment.cancelled',
           correlation,
           {
@@ -1467,9 +1524,26 @@ class WorkspaceCloudConnection {
                 'Assignment was cancelled while the Workspace was offline',
           },
         )));
+      } else {
+        await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
+          'assignment.error',
+          correlation,
+          {
+            'status': 'failed',
+            'error': {
+              'code': 'provider_unavailable',
+              'message': executionErrorMessage('provider_unavailable'),
+              'retryable': true,
+              'details': {
+                'recoveryState':
+                    record.result?['recoveryState'] ?? 'workspace_restart',
+              },
+            },
+          },
+        )));
       }
-      await _recordAssignment(record.assignmentId, AssignmentStatus.reconciled,
-          correlation: correlation, result: record.result);
+      // Keep terminal evidence pending until Cloud acknowledges it. This is
+      // what makes delivery independently retryable across transport loss.
     }
   }
 

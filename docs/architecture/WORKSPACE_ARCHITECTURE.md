@@ -135,6 +135,23 @@ directory. Resetting runtime state, clearing logs/cache, deleting a Thread, or
 removing a Workspace must not delete user work. Space directory identity is
 stable and tied to `spaceId`; display-name changes do not silently move files.
 
+Stateful assignments sharing a Space directory are serialized with one
+Space-wide process lock. Cloud mutation leases and their monotonic fencing
+counters belong to individual Threads. Workspace therefore compares tokens
+only within the same `(spaceId, threadId)`, persisting versioned records at
+`space-fences/<spaceId>/<threadId>.json` in application state. A new Thread's
+token `1` must not be rejected because another Thread reached token `23`.
+Lower tokens and equal tokens with a different lease ID remain rejected for
+the same Thread, including after Service restart.
+
+Legacy `space-fences/<spaceId>.json` files remain preserved as historical
+evidence. They contain no Thread identity and cannot safely supply a
+Thread-scoped ordering; they are not copied into an arbitrary Thread's record.
+The first admitted assignment establishes the scoped record, while the
+Space-wide lock continues to prevent simultaneous filesystem mutation. Cloud
+lease issuance and validation remain authoritative. No installation, Workspace,
+registry, credential, Work Root, Profile, Engine, or session identity changes.
+
 ## Authentication and security
 
 The service reads the existing Workspace registration and secure runtime

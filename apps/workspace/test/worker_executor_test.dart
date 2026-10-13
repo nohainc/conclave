@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_workspace/cloud_connection.dart';
@@ -11,6 +12,97 @@ import 'package:test/test.dart';
 import 'support/assignment_worker_fixture.dart';
 
 void main() {
+  test(
+      'new Thread in an existing Space is not rejected by another Thread fence',
+      () async {
+    final root = await Directory.systemTemp.createTemp('space-thread-fence-');
+    addTearDown(() => root.delete(recursive: true));
+    final state = Directory('${root.path}/state');
+    await Directory('${state.path}/space-fences').create(recursive: true);
+    final legacyFence = File('${state.path}/space-fences/space-1.json');
+    final legacyBytes = jsonEncode({
+      'leaseId': 'lease-old-thread',
+      'fencingToken': 23,
+    });
+    await legacyFence.writeAsString(legacyBytes);
+    var executions = 0;
+    var activeExecutions = 0;
+    var maxActiveExecutions = 0;
+    final directories = <String>{};
+    WorkerAssignmentHandler handler() => WorkerAssignmentHandler(
+          applicationStateDirectory: state,
+          spaceDirectoryLifecycle: SpaceDirectoryLifecycle(
+            SpaceDirectoryResolver(
+              workRoot: Directory('${root.path}/work'),
+              registryDirectory: state,
+            ),
+          ),
+          resolveLogicalWorker: (id) => assignmentWorker(id),
+          executeWithToolProfile: (worker, directory, context, payload,
+              {onProgress}) async {
+            executions++;
+            directories.add(directory.path);
+            activeExecutions++;
+            if (activeExecutions > maxActiveExecutions) {
+              maxActiveExecutions = activeExecutions;
+            }
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+            activeExecutions--;
+            return WorkerResult(
+              requestId: 'result-${context.assignmentId}',
+              assignmentId: context.assignmentId,
+              output: 'Executed',
+            );
+          },
+        );
+    WorkspaceAssignmentContext context(String threadId, int token) =>
+        WorkspaceAssignmentContext(
+          workspaceId: 'workspace-1',
+          workspaceRuntimeId: 'runtime-1',
+          workerId: 'worker-1',
+          runId: 'run-1',
+          taskId: 'task-1',
+          attemptId: 'attempt-1',
+          assignmentId: 'assignment-$threadId-$token',
+          idempotencyKey: 'idem-$threadId-$token',
+          payload: {
+            'workerId': 'worker-1',
+            'workerTypeId': 'test-worker',
+            'spaceId': 'space-1',
+            'threadId': threadId,
+            'executionClass': 'stateful_thread',
+            'leaseId': 'lease-$threadId-$token',
+            'fencingToken': token,
+          },
+        );
+    final first = handler();
+    await first.call(context('thread-a', 24));
+    await first.call(context('thread-b', 1));
+    expect(executions, 2);
+    // Restart: each Thread keeps its own monotonic fencing history.
+    final restarted = handler();
+    await expectLater(restarted.call(context('thread-a', 23)),
+        throwsA(isA<SpaceMutationViolation>()));
+    await expectLater(
+        restarted.call(context('thread-b', 1).copyWith(
+          payload: {
+            ...context('thread-b', 1).payload,
+            'leaseId': 'conflicting-lease'
+          },
+        )),
+        throwsA(isA<SpaceMutationViolation>()));
+    await restarted.call(context('thread-b', 2));
+    expect(executions, 3);
+    await Future.wait([
+      restarted.call(context('thread-a', 25)),
+      restarted.call(context('thread-b', 3)),
+    ]);
+    expect(executions, 5);
+    expect(maxActiveExecutions, 1);
+    expect(directories, hasLength(1));
+    expect(await legacyFence.readAsString(), legacyBytes);
+  });
+
   test('desktop lifecycle wiring executes Work with fencing enabled', () async {
     final root = await Directory.systemTemp.createTemp('direct-runtime-');
     addTearDown(() => root.delete(recursive: true));

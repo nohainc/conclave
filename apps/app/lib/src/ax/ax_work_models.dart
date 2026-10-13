@@ -327,6 +327,7 @@ class AxWorkRequestStatus {
     this.originalRequest,
     this.createdAt,
     this.steps = const [],
+    this.activityHistory = const [],
   });
 
   final String? id;
@@ -348,6 +349,7 @@ class AxWorkRequestStatus {
   final String? originalRequest;
   final String? createdAt;
   final List<AxWorkRequestStep> steps;
+  final List<Map<String, dynamic>> activityHistory;
 }
 
 class AxWorkRequestStep {
@@ -479,6 +481,7 @@ class AxWorkRequest {
     required this.steps,
     this.finalText,
     this.error,
+    this.activityHistory = const [],
   });
 
   final String id;
@@ -497,8 +500,13 @@ class AxWorkRequest {
   final List<AxWorkRequestStep> steps;
   final String? finalText;
   final String? error;
+  final List<Map<String, dynamic>> activityHistory;
 
-  AxWorkRequest copyWith({String? status, List<AxWorkRequestStep>? steps}) =>
+  AxWorkRequest copyWith({
+    String? status,
+    List<AxWorkRequestStep>? steps,
+    List<Map<String, dynamic>>? activityHistory,
+  }) =>
       AxWorkRequest(
           id: id,
           conversationId: conversationId,
@@ -515,7 +523,8 @@ class AxWorkRequest {
           createdAt: createdAt,
           steps: steps ?? this.steps,
           finalText: finalText,
-          error: error);
+          error: error,
+          activityHistory: activityHistory ?? this.activityHistory);
 
   String? get testSummary {
     for (final step in steps) {
@@ -539,6 +548,10 @@ class AxWorkRequest {
               Map<String, dynamic>.from(item),
             ))
         .toList();
+    final activityHistory = (json['activities'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
     final rawRequestedByUserId =
         (json['requestedByUserId'] ?? json['requested_by_user_id'])?.toString();
     final rawRequestedByName =
@@ -577,6 +590,7 @@ class AxWorkRequest {
       steps: steps,
       finalText: json['finalText']?.toString(),
       error: json['error']?.toString(),
+      activityHistory: activityHistory,
     );
   }
 }

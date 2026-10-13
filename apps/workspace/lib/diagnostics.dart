@@ -232,12 +232,28 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
     });
   }
   final workerDiagnostics = <Map<String, Object?>>[];
+  final diagnosticTimeline = <Map<String, Object?>>[];
+  var missingTerminalEventCount = 0;
+  var forwardingFailureCount = 0;
   var localDiagnosticsAvailable = workerDiagnosticStore != null;
   if (workerDiagnosticStore != null) {
     for (final worker in workers) {
       try {
         final store = workerDiagnosticStore(worker['workerTypeId'] as String);
         final records = await store.readSafeRecords(maxRecords: 50);
+        for (final record in records) {
+          diagnosticTimeline.add({
+            'kind': 'worker_diagnostic',
+            ...record,
+          });
+          final event = record['event']?.toString() ?? '';
+          if (_diagnosticEventMatches(event, 'missing_terminal_event')) {
+            missingTerminalEventCount++;
+          }
+          if (_diagnosticEventMatches(event, 'forwarding_failed')) {
+            forwardingFailureCount++;
+          }
+        }
         workerDiagnostics.add({
           'workerTypeId': worker['workerTypeId'],
           'records': records,
@@ -247,13 +263,29 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
       }
     }
   }
+  final now = DateTime.now().toUtc();
+  const staleRunningThreshold = Duration(minutes: 5);
+  var staleRunningCount = 0;
+  var maxStaleRunningDurationMs = 0;
   if (journal != null) {
     final records = await journal.reconcile();
     for (final record in records.values) {
+      final staleDuration = now.difference(record.updatedAt.toUtc());
+      if (record.status == AssignmentStatus.running &&
+          staleDuration >= staleRunningThreshold) {
+        staleRunningCount++;
+        if (staleDuration.inMilliseconds > maxStaleRunningDurationMs) {
+          maxStaleRunningDurationMs = staleDuration.inMilliseconds;
+        }
+      }
       assignments.add({
         'assignmentId': record.assignmentId,
         'status': record.status.name,
         'updatedAt': record.updatedAt.toUtc().toIso8601String(),
+        if (record.executionId != null) 'executionId': record.executionId,
+        if (record.processExitCode != null)
+          'processExitCode': record.processExitCode,
+        if (record.errorCode != null) 'errorCode': record.errorCode,
         if (record.workspaceId != null) 'workspaceId': record.workspaceId,
         if (record.workspaceRuntimeId != null)
           'workspaceRuntimeId': record.workspaceRuntimeId,
@@ -262,7 +294,29 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
         if (record.taskId != null) 'taskId': record.taskId,
         if (record.attemptId != null) 'attemptId': record.attemptId,
       });
+      diagnosticTimeline.add({
+        'kind': 'assignment_state',
+        'event': 'assignment.state',
+        'timestamp': record.updatedAt.toUtc().toIso8601String(),
+        'assignmentId': record.assignmentId,
+        'status': record.status.name,
+        if (record.executionId != null) 'executionId': record.executionId,
+        if (record.processExitCode != null)
+          'processExitCode': record.processExitCode,
+        if (record.errorCode != null) 'errorCode': record.errorCode,
+      });
     }
+  }
+  diagnosticTimeline.sort((left, right) {
+    final leftTime = DateTime.tryParse(left['timestamp']?.toString() ?? '');
+    final rightTime = DateTime.tryParse(right['timestamp']?.toString() ?? '');
+    if (leftTime == null && rightTime == null) return 0;
+    if (leftTime == null) return -1;
+    if (rightTime == null) return 1;
+    return leftTime.compareTo(rightTime);
+  });
+  if (diagnosticTimeline.length > 200) {
+    diagnosticTimeline.removeRange(0, diagnosticTimeline.length - 200);
   }
   return {
     'format': 'conclave-workspace-diagnostics-v1',
@@ -331,6 +385,15 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
     },
     'workers': workers,
     'assignments': assignments,
+    'activityObservability': {
+      'missingTerminalEventCount': missingTerminalEventCount,
+      'forwardingFailureCount': forwardingFailureCount,
+      'staleRunningCount': staleRunningCount,
+      'staleRunningThresholdMs': staleRunningThreshold.inMilliseconds,
+      'maxStaleRunningDurationMs': maxStaleRunningDurationMs,
+      'timelineEventCount': diagnosticTimeline.length,
+    },
+    'diagnosticTimeline': diagnosticTimeline,
     'workerDiagnosticEvents': workerDiagnostics,
     'logs': recentLogs.map((line) {
       try {
@@ -341,6 +404,9 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
     }).toList(),
   };
 }
+
+bool _diagnosticEventMatches(String event, String suffix) =>
+    event == suffix || event == 'worker.$suffix' || event.endsWith('.$suffix');
 
 Uri _cloudOrigin(Uri uri) {
   final scheme = switch (uri.scheme) {

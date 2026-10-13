@@ -51,6 +51,33 @@ The Codex and agy fixtures use the same mapping shape and produce equivalent
 `tool.started`/`tool.completed` activity pairs even though their native event
 names and nesting differ.
 
+## Provider normalization
+
+Profiles for the current Codex JSONL and agy stream-JSON formats may declare
+`activity.adapter` (`codex-jsonl` or `agy-stream-json`) with
+`activity.schemaVersion: 1`. The generic Engine uses the adapter only for
+provider lifecycle families that the bounded selector grammar cannot represent:
+tool failures, intermediate tool updates, missing provider identifiers,
+malformed JSONL, and unsupported event shapes. Ordinary mapped events remain
+owned by the declarative Profile mapping, so custom Profiles do not acquire a
+provider branch.
+
+Adapter output is safe status metadata only. It never forwards prompts,
+messages, commands, arguments, stdout/stderr, tool output, credentials, or
+provider error text. Missing tool identifiers receive a deterministic,
+execution-local identifier and repeated invocations remain separate. The
+Engine emits a bounded diagnostic activity once per diagnostic class for
+malformed JSON, unsupported event shapes, and provider errors. Unsupported CLI
+versions fail through the existing Profile compatibility gate before execution;
+they are not silently normalized as a compatible stream.
+
+The sanitized replay streams in
+`packages/tool-profile/test/fixtures/{codex-events,antigravity-events}` cover
+normal tool pairs, repeated calls, missing identifiers, provider failures, and
+malformed lines. Real-provider acceptance remains opt-in because it requires a
+locally authenticated provider account; recorded evidence is retained under
+`docs/acceptance/real-provider/`.
+
 Profile Lab replays a bounded, sanitized Codex or agy JSONL fixture against the
 candidate mapping before publication evidence is eligible for Cloud. The replay
 is bound to the candidate digest and verifies normalized event types, statuses,
@@ -73,6 +100,30 @@ updates, applies backpressure to important lifecycle events, and records
 forwarding failures as Workspace diagnostics without converting a lost
 cosmetic event into Worker failure.
 
+## Integration evidence and diagnostics
+
+The Engine integration harness runs the real Engine process against a
+deterministic JSONL fixture CLI. It covers successful, failed, missing-terminal,
+delayed, high-frequency repeated-tool, large-response, and concurrent Worker
+executions. The fixture is intentionally provider-shaped rather than a second
+adapter implementation, so the test exercises Profile discovery, process
+supervision, JSONL normalization, activity emission, and terminal reconciliation
+at the same boundary used by packaged Workers.
+
+The Workspace diagnostics export includes a bounded, prompt-free timeline of
+Worker diagnostic records and assignment journal states. Its activity
+observability summary reports missing terminal events, activity forwarding
+failures, stale `running` assignments, the stale-running threshold, and the
+maximum observed stale duration. These counters identify whether an incident
+originated in provider event generation, local execution, transport forwarding,
+or assignment projection without exposing provider output or credentials.
+
+The Engine records a `missing_terminal_event` diagnostic whenever a JSONL
+execution exits without a mapped terminal success, failure, or provider-error
+event. A terminal result remains authoritative; the diagnostic explains why a
+normal provider response was unavailable. Duplicate and reordered realtime
+events are handled by event identity and monotonic stream/activity sequences.
+
 ## Cloud delivery and recovery
 
 Cloud validates the runtime origin against the current assignment, Workspace
@@ -93,6 +144,15 @@ gap signal when retained history cannot fill a sequence gap. The assignment
 result/error remains the authoritative completion record; activity is
 diagnostic and timeline state only.
 
+The Work Request detail projection also returns the most recent bounded activity
+history for assignments whose `worker_assignments.work_request_id` matches that
+request. The projection carries the same sanitized identity, attempt, execution,
+sequence, type, status, title, scalar details and timestamp fields as realtime
+activity. AX merges this history with live events by event identity, so opening a
+Work tab or reconnecting does not depend on receiving the original live event.
+Activities from assignments that are not joined to the request's workflow task or
+conversation turn are rejected at the Cloud gateway and are never projected.
+
 ## AX Work presentation
 
 Conclave AX renders activity inside the existing Work execution card. The
@@ -106,4 +166,7 @@ only normalized safe fields, never renders raw provider JSON, chain of thought,
 terminal output or unrestricted tool output, and bounds the local assignment
 projection. Replayed events are deduplicated by event identity and attempt,
 while the bounded activity list uses a virtualized scroll surface for long
-executions.
+executions. The Work panel uses the authoritative Work status for Starting,
+Running, Recovering, Completed and Failed, reconciles unfinished rows when that
+status is terminal, and shows a bounded diagnostic when a Worker terminates
+without a normal provider response.

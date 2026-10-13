@@ -1,0 +1,6 @@
+{"event":"init","conversation_id":"fixture-conversation-edge"}
+{"event":"step_update","step_update":{"state":"ACTIVE","step_type":"tool_execution","tool_name":"shell"}}
+{"event":"step_update","step_update":{"state":"COMPLETED","step_type":"tool_execution","tool_name":"shell"}}
+{"event":"step_update","step_update":{"state":"FAILED","step_type":"tool_execution","tool_id":"tool-call-failed","tool_name":"shell"}}
+{"event":"result","result":{"conversation_id":"fixture-conversation-edge","status":"ERROR"}}
+not-json

@@ -26,6 +26,7 @@ export interface AssignmentFailurePayload {
     /** Private, bounded diagnostics for issue reports; never user-facing. */
     readonly details?: {
       readonly diagnostic?: string;
+      readonly processExitCode?: number;
     };
   };
   readonly failedAt: string;

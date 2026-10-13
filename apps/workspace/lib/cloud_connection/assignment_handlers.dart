@@ -265,6 +265,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
             ...errorPayload,
             'error': errorMessage,
             'errorCode': errorCode,
+            if (diagnostic != null) 'localDiagnostic': diagnostic,
           },
         );
         await recordAssignmentDiagnostic(
@@ -277,6 +278,9 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
           retryable: normalizedError.retryable,
           contextData: {
             'transport': 'assignment_error',
+            if (diagnostic != null) 'diagnostic': diagnostic,
+            if (processExitCode != null) 'processExitCode': processExitCode,
+            'exceptionType': error.runtimeType.toString(),
           },
         );
         await _sendTerminal(
@@ -584,6 +588,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
           'status': 'failed',
           'error': executionErrorMessage(canonicalCode),
           'errorCode': canonicalCode,
+          if (safeDiagnostic != null) 'localDiagnostic': safeDiagnostic,
         },
       );
     }

@@ -114,4 +114,43 @@ void main() {
     expect(text, isNot(contains('must-not-leak')));
     await directory.delete(recursive: true);
   });
+
+  test('activity observability reports stale running assignments and timeline',
+      () async {
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-observability-');
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-running',
+      executionId: 'execution-running',
+      status: AssignmentStatus.running,
+      updatedAt: DateTime.now().toUtc().subtract(const Duration(minutes: 8)),
+      processExitCode: null,
+    ));
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-failed',
+      executionId: 'execution-failed',
+      status: AssignmentStatus.failed,
+      updatedAt: DateTime.now().toUtc(),
+      processExitCode: 7,
+      errorCode: 'provider_failure',
+    ));
+
+    final export = await buildWorkspaceDiagnostics(
+      config: WorkspaceConfig(dataDirectory: directory),
+      journal: journal,
+    );
+    final observability =
+        export['activityObservability'] as Map<String, Object?>;
+    final timeline = export['diagnosticTimeline'] as List<Object?>;
+    expect(observability['staleRunningCount'], 1);
+    expect(observability['maxStaleRunningDurationMs'], greaterThan(0));
+    expect(observability['missingTerminalEventCount'], 0);
+    expect(observability['forwardingFailureCount'], 0);
+    expect(observability['timelineEventCount'], 2);
+    expect(timeline, hasLength(2));
+    expect((timeline.last as Map)['processExitCode'], 7);
+    await directory.delete(recursive: true);
+  });
 }

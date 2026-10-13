@@ -25,6 +25,14 @@ Profile Lab and Workspace boundaries.
   handling.
 - The Worker Engine execution and durable-session compatibility tests remain
   green, including fresh and resumed sessions.
+- The Phase 4 Engine integration harness exercises controlled success, provider
+  failure, missing terminal events, delayed output, high-frequency repeated
+  tools, large responses, and two concurrent Worker processes. Workspace
+  diagnostics expose a bounded correlation timeline plus missing-terminal,
+  forwarding-failure, and stale-running counters.
+- Realtime projection tests inject duplicate and reordered activity events and
+  verify monotonic, bounded AX state. Cloud history remains the recovery source
+  after reconnect; the terminal result remains authoritative.
 
 ## Focused verification commands
 

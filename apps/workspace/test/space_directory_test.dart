@@ -106,6 +106,7 @@ void main() {
       applicationStateDirectory: state,
     ).withMutation<void>(
       spaceId: 'space-a',
+      threadId: 'thread-a',
       spaceName: 'Conclave AX',
       leaseId: 'lease-a',
       fencingToken: 1,
@@ -113,7 +114,8 @@ void main() {
     );
 
     expect(
-        File('${state.path}/space-fences/space-a.json').existsSync(), isTrue);
+        File('${state.path}/space-fences/space-a/thread-a.json').existsSync(),
+        isTrue);
     expect(
         File('${work.path}/Conclave AX/.conclave-space-fence.json')
             .existsSync(),

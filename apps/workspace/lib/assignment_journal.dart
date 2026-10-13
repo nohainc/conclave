@@ -26,6 +26,9 @@ class AssignmentRecord {
     this.taskId,
     this.attemptId,
     this.idempotencyKey,
+    this.executionId,
+    this.processExitCode,
+    this.errorCode,
     this.result,
   });
 
@@ -39,6 +42,9 @@ class AssignmentRecord {
   final String? taskId;
   final String? attemptId;
   final String? idempotencyKey;
+  final String? executionId;
+  final int? processExitCode;
+  final String? errorCode;
   final Map<String, Object?>? result;
 
   Map<String, Object?> toJson() => {
@@ -53,6 +59,9 @@ class AssignmentRecord {
         if (taskId != null) 'taskId': taskId,
         if (attemptId != null) 'attemptId': attemptId,
         if (idempotencyKey != null) 'idempotencyKey': idempotencyKey,
+        if (executionId != null) 'executionId': executionId,
+        if (processExitCode != null) 'processExitCode': processExitCode,
+        if (errorCode != null) 'errorCode': errorCode,
         if (result != null) 'result': result,
       };
 
@@ -88,6 +97,9 @@ class AssignmentRecord {
       taskId: _optionalString(json, 'taskId'),
       attemptId: _optionalString(json, 'attemptId'),
       idempotencyKey: _optionalString(json, 'idempotencyKey'),
+      executionId: _optionalString(json, 'executionId'),
+      processExitCode: _optionalInt(json, 'processExitCode'),
+      errorCode: _optionalString(json, 'errorCode'),
       result: rawResult == null
           ? null
           : Map<String, Object?>.from(rawResult as Map),
@@ -100,6 +112,13 @@ class AssignmentRecord {
     if (value is! String || value.isEmpty) {
       throw FormatException('$key must be a non-empty string');
     }
+    return value;
+  }
+
+  static int? _optionalInt(Map<String, Object?> json, String key) {
+    final value = json[key];
+    if (value == null) return null;
+    if (value is! int) throw FormatException('$key must be an integer');
     return value;
   }
 }

@@ -687,8 +687,12 @@ class _WorkTimelineCard extends StatelessWidget {
         ? request.error!
         : failedStep?.errorMessage;
     final error = request.status == 'failed' || rawError?.isNotEmpty == true
-        ? _executionFailureMessage(failedStep?.errorCode,
-            validationMessage: request.steps.isEmpty ? rawError : null)
+        ? _executionFailureMessage(
+            failedStep?.errorCode,
+            validationMessage: request.steps.isEmpty
+                ? rawError
+                : null,
+          )
         : null;
     final isError = error?.isNotEmpty == true;
 
@@ -929,15 +933,13 @@ class _WorkTimelineCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      if (activities.isNotEmpty) ...[
-                        AxWorkerActivityPanel(
-                          workerName: workerName,
-                          providerToolName: senderStep?.providerToolName,
-                          requestStatus: request.status,
-                          activities: activities,
-                        ),
-                        const SizedBox(height: 12),
-                      ],
+                      AxWorkerActivityPanel(
+                        workerName: workerName,
+                        providerToolName: senderStep?.providerToolName,
+                        requestStatus: request.status,
+                        activities: activities,
+                      ),
+                      const SizedBox(height: 12),
                       Builder(builder: (context) {
                         final message = error?.isNotEmpty == true
                             ? error!
@@ -1150,7 +1152,16 @@ class _AxWorkerActivityPanelState extends State<AxWorkerActivityPanel> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = Theme.of(context).colorScheme;
-    final active = widget.activities.where((item) => !item.isFinished).toList();
+    final requestIsTerminal = const {
+      'completed',
+      'failed',
+      'cancelled',
+      'timed_out',
+      'lost',
+    }.contains(widget.requestStatus);
+    final active = requestIsTerminal
+        ? const <AxWorkActivity>[]
+        : widget.activities.where((item) => !item.isFinished).toList();
     final completed =
         widget.activities.where((item) => item.isFinished).toList();
     final status = _statusLabel(completed);
@@ -1158,13 +1169,12 @@ class _AxWorkerActivityPanelState extends State<AxWorkerActivityPanel> {
             .where((item) => item.type == 'execution.started')
             .map((item) => item.timestamp)
             .firstOrNull ??
-        widget.activities.first.timestamp;
+        widget.activities.firstOrNull?.timestamp;
     final terminal =
         widget.activities.where((item) => item.isTerminalExecution).lastOrNull;
-    final elapsed = _formatElapsed(
-      startedAt,
-      terminal?.timestamp ?? _now,
-    );
+    final elapsed = startedAt == null
+        ? ''
+        : _formatElapsed(startedAt, terminal?.timestamp ?? _now);
     final rows = <Object>[...active];
     if (completed.isNotEmpty) rows.add(_CompletedActivitySummary(completed));
     if (_showCompleted) rows.addAll(completed);
@@ -1232,13 +1242,33 @@ class _AxWorkerActivityPanelState extends State<AxWorkerActivityPanel> {
             Padding(
               padding: const EdgeInsets.only(left: 23),
               child: Text(
-                'Elapsed: $elapsed',
+                'Elapsed: ${startedAt == null ? 'Not reported' : elapsed}',
                 style: TextStyle(
                   fontSize: 11,
                   color: isDark ? Colors.white54 : Colors.black54,
                 ),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.only(left: 23, top: 2),
+              child: Text(
+                _currentAction(active),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? Colors.white60 : Colors.black54,
+                ),
+              ),
+            ),
+            if (widget.activities.isEmpty &&
+                const {'failed', 'timed_out', 'lost'}
+                    .contains(widget.requestStatus))
+              Padding(
+                padding: const EdgeInsets.only(left: 23, top: 6),
+                child: Text(
+                  'Worker stopped without a normal provider response. Check Worker and transport diagnostics.',
+                  style: TextStyle(fontSize: 11, color: colors.error),
+                ),
+              ),
             if (rows.isNotEmpty) ...[
               const SizedBox(height: 6),
               SizedBox(
@@ -1255,7 +1285,7 @@ class _AxWorkerActivityPanelState extends State<AxWorkerActivityPanel> {
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.done_all_rounded, size: 16),
                           title: Text(
-                            '${row.activities.length} completed ${row.activities.length == 1 ? 'activity' : 'activities'}',
+                            '${row.activities.length} ${row.activities.any((activity) => activity.status == 'interrupted') ? 'closed' : 'completed'} ${row.activities.length == 1 ? 'activity' : 'activities'}',
                             style: const TextStyle(fontSize: 12),
                           ),
                           trailing: Icon(
@@ -1281,19 +1311,38 @@ class _AxWorkerActivityPanelState extends State<AxWorkerActivityPanel> {
   }
 
   String _statusLabel(List<AxWorkActivity> completed) {
-    if (widget.requestStatus == 'failed' ||
-        widget.activities.any((item) => item.type == 'execution.failed')) {
-      return 'Failed';
-    }
-    if (widget.requestStatus == 'cancelled' ||
-        widget.activities.any((item) => item.type == 'execution.cancelled')) {
-      return 'Cancelled';
-    }
-    if (widget.requestStatus == 'completed' ||
-        widget.activities.any((item) => item.type == 'execution.completed')) {
-      return 'Completed';
-    }
-    return 'Running';
+    // The assignment/Work Request projection is authoritative. Activity is
+    // observational and may legitimately be missing its final event.
+    return switch (widget.requestStatus) {
+      'queued' => 'Queued',
+      'starting' || 'acknowledged' => 'Starting',
+      'running' => 'Running',
+      'waiting' => 'Waiting',
+      'recovering' => 'Recovering',
+      'completed' => 'Completed',
+      'failed' => 'Failed',
+      'cancelled' => 'Cancelled',
+      'timed_out' => 'Timed out',
+      'lost' => 'Lost',
+      _ => 'Recovering',
+    };
+  }
+
+  String _currentAction(List<AxWorkActivity> active) {
+    final current = active.lastOrNull;
+    if (current != null) return 'Current action: ${current.title}';
+    return switch (widget.requestStatus) {
+      'queued' || 'starting' || 'acknowledged' => 'Starting Worker…',
+      'running' => 'Waiting for Worker activity…',
+      'recovering' => 'Recovering Worker connection…',
+      'completed' => 'Execution completed',
+      'failed' ||
+      'timed_out' ||
+      'lost' =>
+        'Execution ended without a final provider response',
+      'cancelled' => 'Execution cancelled',
+      _ => 'Worker status unavailable',
+    };
   }
 
   String _formatElapsed(DateTime start, DateTime end) {
@@ -1412,6 +1461,7 @@ class _ActivityRow extends StatelessWidget {
         'completed' => 'completed',
         'failed' => 'failed',
         'cancelled' => 'cancelled',
+        'interrupted' => 'interrupted',
         _ => status,
       };
 

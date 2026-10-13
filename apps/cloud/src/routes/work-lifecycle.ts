@@ -44,6 +44,69 @@ function historicalWorkflowName(
       ]?.name ?? String(workflowId));
 }
 
+async function loadWorkRequestActivityHistory(
+  db: D1Database,
+  workRequestId: string,
+): Promise<Record<string, unknown>[]> {
+  const rows = await db
+    .prepare(
+      `SELECT * FROM (
+         SELECT h.history_id AS eventId,
+                h.assignment_id AS assignmentId,
+                h.attempt_id AS attemptId,
+                h.execution_id AS executionId,
+                h.worker_id AS workerId,
+                h.provider_sequence AS activitySequence,
+                h.event_type AS activityType,
+                h.status AS activityStatus,
+                h.activity_id AS activityId,
+                h.title,
+                h.details_json AS detailsJson,
+                h.occurred_at AS timestamp
+           FROM worker_activity_history h
+           JOIN worker_assignments a ON a.id = h.assignment_id
+          WHERE a.work_request_id = ?1
+          ORDER BY h.occurred_at DESC, h.provider_sequence DESC, h.history_id DESC
+          LIMIT 256
+       )
+       ORDER BY timestamp ASC, activitySequence ASC, eventId ASC`,
+    )
+    .bind(workRequestId)
+    .all<Record<string, unknown>>();
+
+  return (rows.results ?? []).map((row) => {
+    const rawDetails = parseJson<Record<string, unknown>>(
+      typeof row.detailsJson === "string" ? row.detailsJson : null,
+      {},
+    );
+    const details = Object.fromEntries(
+      Object.entries(rawDetails).filter(
+        ([, value]) =>
+          value === null ||
+          typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean",
+      ),
+    );
+    return {
+      eventId: String(row.eventId),
+      assignmentId: String(row.assignmentId),
+      attemptId: String(row.attemptId),
+      executionId: String(row.executionId),
+      workerId: String(row.workerId),
+      activitySequence: Number(row.activitySequence),
+      activityType: String(row.activityType),
+      activityStatus: String(row.activityStatus),
+      ...(typeof row.activityId === "string"
+        ? { activityId: row.activityId }
+        : {}),
+      title: String(row.title),
+      details,
+      timestamp: String(row.timestamp),
+    };
+  });
+}
+
 export async function handleRetryWorkRequest(
   request: Request,
   env: SecurityEnv,
@@ -551,6 +614,10 @@ export async function handleGetWorkRequest(
     (await loadConversationWorkflowRuns(env.CONCLAVE_DB, [workRequestId])).get(
       workRequestId,
     ) ?? null;
+  const activities = await loadWorkRequestActivityHistory(
+    env.CONCLAVE_DB,
+    workRequestId,
+  );
   return json({
     workRequest: {
       workflowRun,
@@ -573,6 +640,7 @@ export async function handleGetWorkRequest(
       ),
       createdAt: String(row.createdAt),
       updatedAt: String(row.updatedAt),
+      activities,
     },
     workflowSnapshot: workflow,
     steps,
@@ -893,14 +961,12 @@ export async function handleListWorkRequests(
       row.status === "completed" && terminalStep?.status === "completed"
         ? terminalStep.finalText
         : null;
-    const stepError = [...steps]
-      .reverse()
-      .map((step) => step.error)
-      .find(
-        (error): error is string =>
-          typeof error === "string" && error.length > 0,
-      );
-    const errorCode = stepError ? canonicalExecutionErrorCode(stepError) : null;
+    const errorCode =
+      [...steps]
+        .reverse()
+        .map((step) => step.errorCode)
+        .find((code) => typeof code === "string" && code.length > 0) ??
+      null;
     return {
       id,
       conversationId: row.conversationId ?? null,

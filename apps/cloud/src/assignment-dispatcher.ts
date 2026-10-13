@@ -42,13 +42,24 @@ function safeFailureDiagnostic(value: unknown): string | null {
 
 function safeFailureDetails(
   value: unknown,
-): { diagnostic: string } | undefined {
+): { diagnostic?: string; processExitCode?: number } | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
-  const diagnostic = safeFailureDiagnostic(
-    (value as Record<string, unknown>).diagnostic,
-  );
-  return diagnostic ? { diagnostic } : undefined;
+  const record = value as Record<string, unknown>;
+  const diagnostic = safeFailureDiagnostic(record.diagnostic);
+  const processExitCode =
+    typeof record.processExitCode === "number" &&
+    Number.isInteger(record.processExitCode) &&
+    record.processExitCode >= 0 &&
+    record.processExitCode <= 255
+      ? record.processExitCode
+      : undefined;
+  return diagnostic || processExitCode !== undefined
+    ? {
+        ...(diagnostic ? { diagnostic } : {}),
+        ...(processExitCode !== undefined ? { processExitCode } : {}),
+      }
+    : undefined;
 }
 
 function cloudFailureDiagnostic(

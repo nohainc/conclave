@@ -185,7 +185,8 @@ function createAcceptanceRun(
       };
       return statement;
     },
-    async batch() {
+    async batch(statements: { run: () => Promise<unknown> }[]) {
+      for (const statement of statements) await statement.run();
       return [];
     },
   };

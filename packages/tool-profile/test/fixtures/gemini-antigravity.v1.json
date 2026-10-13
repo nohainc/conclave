@@ -265,6 +265,8 @@
     }
   ],
   "activity": {
+    "adapter": "agy-stream-json",
+    "schemaVersion": 1,
     "mappings": [
       {
         "when": [

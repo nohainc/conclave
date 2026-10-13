@@ -856,6 +856,10 @@ export class WorkspaceGateway implements DurableObject {
         return;
       case "assignment.ack": {
         const payload = message.payload as Record<string, unknown>;
+        // Terminal acknowledgements are emitted by Cloud for Workspace
+        // delivery confirmation. They must never be interpreted as a fresh
+        // admission acknowledgement or move a terminal row back to running.
+        if (payload.terminal === true) return;
         const accepted = payload.accepted ?? payload.status === "accepted";
         tryLogDiagnosticEvent({
           assignmentId: message.assignmentId,
@@ -875,20 +879,38 @@ export class WorkspaceGateway implements DurableObject {
             status: accepted ? "accepted" : "rejected",
           },
         });
-        await this.env.CONCLAVE_DB.prepare(
-          `UPDATE worker_assignments SET status = ?1, updated_at = ?2
-           WHERE id = ?3 AND execution_workspace_id = ?4
-             AND runtime_identity_id = ?5
-             AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
-        )
-          .bind(
-            accepted ? "acknowledged" : "failed",
-            now,
-            message.assignmentId,
-            this.executionWorkspaceId,
-            this.workspaceRuntimeId,
+        if (accepted === true) {
+          await this.env.CONCLAVE_DB.prepare(
+            `UPDATE worker_assignments SET status = 'acknowledged', updated_at = ?1
+             WHERE id = ?2 AND execution_workspace_id = ?3
+               AND runtime_identity_id = ?4
+               AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
           )
-          .run();
+            .bind(
+              now,
+              message.assignmentId,
+              this.executionWorkspaceId,
+              this.workspaceRuntimeId,
+            )
+            .run();
+        } else if (
+          message.assignmentId &&
+          (await this.terminalAssignmentMatches(message))
+        ) {
+          await recordAssignmentError(
+            this.env.CONCLAVE_DB,
+            message.assignmentId,
+            {
+              error: {
+                code: "worker_not_ready",
+                message:
+                  "The Workspace Worker was not ready to accept the assignment.",
+                retryable: true,
+              },
+              failedAt: now,
+            },
+          );
+        }
         return;
       }
       case "assignment.progress": {
@@ -926,12 +948,39 @@ export class WorkspaceGateway implements DurableObject {
         const payload = message.payload as Record<string, unknown>;
         const workspaceId =
           this.executionWorkspaceId ?? message.executionWorkspaceId;
-        if (!workspaceId) return;
+        if (!workspaceId) {
+          tryLogDiagnosticEvent({
+            assignmentId: message.assignmentId,
+            workspaceRuntimeId: message.workspaceRuntimeId,
+            workerId: message.workerId,
+            runId: message.runId,
+            taskId: message.taskId,
+            attemptId: message.attemptId,
+            component: "cloud",
+            operation: "assignment.activity",
+            stage: "correlation",
+            severity: "warning",
+            errorCode: "activity_workspace_missing",
+            retryable: true,
+          });
+          return;
+        }
         const assignment = await this.env.CONCLAVE_DB.prepare(
           `SELECT id, execution_workspace_id, runtime_identity_id,
                   worker_type_id, workspace_worker_id, run_id, task_id,
                   thread_id,
-                  attempt_id, idempotency_key, status
+                  work_request_id, attempt_id, idempotency_key, status,
+                  (
+                    EXISTS (
+                      SELECT 1 FROM workflow_tasks wt
+                       WHERE wt.id = worker_assignments.task_id
+                         AND wt.work_request_id = worker_assignments.work_request_id
+                    ) OR EXISTS (
+                      SELECT 1 FROM conversation_turns ct
+                       WHERE ct.assignment_id = worker_assignments.id
+                         AND ct.work_request_id = worker_assignments.work_request_id
+                    )
+                  ) AS work_request_binding_valid
            FROM worker_assignments
            WHERE id = ?1`,
         )
@@ -951,6 +1000,7 @@ export class WorkspaceGateway implements DurableObject {
           !assignment ||
           !workspaceAssignmentContextMatches(correlation, assignment) ||
           !workspaceAssignmentIsActive(assignment) ||
+          Number(assignment.work_request_binding_valid) !== 1 ||
           payload.assignmentId !== message.assignmentId ||
           payload.workerId !== String(assignment.worker_type_id)
         ) {
@@ -967,7 +1017,10 @@ export class WorkspaceGateway implements DurableObject {
             operation: "assignment.activity",
             stage: "validation",
             severity: "warning",
-            errorCode: "activity_correlation_mismatch",
+            errorCode:
+              Number(assignment?.work_request_binding_valid) === 1
+                ? "activity_correlation_mismatch"
+                : "activity_assignment_not_in_work_request",
             retryable: false,
           });
           return;
@@ -1068,25 +1121,44 @@ export class WorkspaceGateway implements DurableObject {
               new Date().toISOString(),
             )
           : undefined;
-        await createEventPublisher(this.env).publish({
-          type: "assignment.activity",
-          eventId,
-          idempotencyKey: eventId,
-          durable: replayable,
-          ...(historyMutation ? { mutations: [historyMutation] } : {}),
-          workspaceId,
-          workspaceRuntimeId:
-            this.workspaceRuntimeId ?? message.workspaceRuntimeId,
-          runId: message.runId,
-          taskId: message.taskId,
-          threadId:
-            typeof assignment.thread_id === "string"
-              ? assignment.thread_id
-              : undefined,
-          attemptId: message.attemptId,
-          assignmentId: message.assignmentId,
-          payload: activityPayload.data,
-        });
+        try {
+          await createEventPublisher(this.env).publish({
+            type: "assignment.activity",
+            eventId,
+            idempotencyKey: eventId,
+            durable: replayable,
+            ...(historyMutation ? { mutations: [historyMutation] } : {}),
+            workspaceId,
+            workspaceRuntimeId:
+              this.workspaceRuntimeId ?? message.workspaceRuntimeId,
+            runId: message.runId,
+            taskId: message.taskId,
+            threadId:
+              typeof assignment.thread_id === "string"
+                ? assignment.thread_id
+                : undefined,
+            attemptId: message.attemptId,
+            assignmentId: message.assignmentId,
+            payload: activityPayload.data,
+          });
+        } catch {
+          tryLogDiagnosticEvent({
+            assignmentId: message.assignmentId,
+            workspaceId,
+            workspaceRuntimeId:
+              this.workspaceRuntimeId ?? message.workspaceRuntimeId,
+            workerId: message.workerId,
+            runId: message.runId,
+            taskId: message.taskId,
+            attemptId: message.attemptId,
+            component: "cloud",
+            operation: "assignment.activity",
+            stage: "realtime_forwarding",
+            severity: "error",
+            errorCode: "activity_realtime_publish_failed",
+            retryable: true,
+          });
+        }
         return;
       }
       case "thread.status":
@@ -1094,6 +1166,7 @@ export class WorkspaceGateway implements DurableObject {
         // absolute path or repository clone path.
         return;
       case "assignment.result":
+        if (!(await this.terminalAssignmentMatches(message))) return;
         tryLogDiagnosticEvent({
           assignmentId: message.assignmentId,
           workspaceId: message.executionWorkspaceId,
@@ -1114,9 +1187,11 @@ export class WorkspaceGateway implements DurableObject {
           message.assignmentId!,
           message.payload as never,
         );
+        await this.sendTerminalAcknowledgement(message, "completed");
         return;
       case "assignment.error":
         {
+          if (!(await this.terminalAssignmentMatches(message))) return;
           const payload = message.payload as Record<string, unknown>;
           const error =
             payload.error && typeof payload.error === "object"
@@ -1145,13 +1220,16 @@ export class WorkspaceGateway implements DurableObject {
           message.assignmentId!,
           message.payload as never,
         );
+        await this.sendTerminalAcknowledgement(message, "failed");
         return;
       case "assignment.cancelled":
+        if (!(await this.terminalAssignmentMatches(message))) return;
         await recordAssignmentCancelled(
           this.env.CONCLAVE_DB,
           message.assignmentId!,
           message.payload as never,
         );
+        await this.sendTerminalAcknowledgement(message, "cancelled");
         return;
       case "assignment.cancel.ack": {
         const payload = message.payload as Record<string, unknown>;
@@ -1184,14 +1262,29 @@ export class WorkspaceGateway implements DurableObject {
   private async syncWorkspace(correlationId: string): Promise<void> {
     const workspaceId = this.executionWorkspaceId;
     if (!workspaceId) return;
+    const terminalSince = new Date(
+      Date.now() - 24 * 60 * 60 * 1000,
+    ).toISOString();
     const assignments = await this.env.CONCLAVE_DB.prepare(
       `SELECT id AS assignment_id, status
        FROM worker_assignments
        WHERE execution_workspace_id = ?1
-         AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+         AND (
+           status IN ('created', 'dispatched', 'acknowledged', 'running')
+           OR (status IN ('completed', 'failed', 'cancelled') AND updated_at >= ?2)
+         )
+       ORDER BY updated_at DESC
+       LIMIT 500`,
     )
-      .bind(workspaceId)
+      .bind(workspaceId, terminalSince)
       .all<Record<string, unknown>>();
+    const activeStatuses = new Set([
+      "created",
+      "dispatched",
+      "acknowledged",
+      "running",
+    ]);
+    const assignmentRows = assignments.results ?? [];
     await this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
       protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
@@ -1202,15 +1295,84 @@ export class WorkspaceGateway implements DurableObject {
       executionWorkspaceId: workspaceId,
       workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
       payload: {
-        activeAssignmentIds: (assignments.results ?? []).map((row) =>
-          String(row.assignment_id),
-        ),
-        assignmentStates: (assignments.results ?? []).map((row) => ({
+        activeAssignmentIds: assignmentRows
+          .filter((row) => activeStatuses.has(String(row.status)))
+          .map((row) => String(row.assignment_id)),
+        assignmentStates: assignmentRows.map((row) => ({
           assignmentId: String(row.assignment_id),
           status: String(row.status),
         })),
       },
     });
+  }
+
+  private async sendTerminalAcknowledgement(
+    message: WorkspaceRuntimeMessage,
+    status: "completed" | "failed" | "cancelled",
+  ): Promise<void> {
+    const row = message.assignmentId
+      ? await this.env.CONCLAVE_DB.prepare(
+          "SELECT status FROM worker_assignments WHERE id = ?1",
+        )
+          .bind(message.assignmentId)
+          .first<{ status: string }>()
+      : null;
+    const authoritativeStatus =
+      row?.status === "completed" ||
+      row?.status === "failed" ||
+      row?.status === "cancelled"
+        ? row.status
+        : status;
+    await this.send({
+      protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
+      protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+      messageId: `message-${crypto.randomUUID()}`,
+      correlationId: message.messageId,
+      timestamp: new Date().toISOString(),
+      type: "assignment.ack",
+      executionWorkspaceId: message.executionWorkspaceId,
+      workspaceRuntimeId: message.workspaceRuntimeId,
+      workerId: message.workerId,
+      runId: message.runId,
+      taskId: message.taskId,
+      attemptId: message.attemptId,
+      assignmentId: message.assignmentId,
+      idempotencyKey: message.idempotencyKey,
+      payload: {
+        accepted: true,
+        terminal: true,
+        status: authoritativeStatus,
+      },
+    });
+  }
+
+  private async terminalAssignmentMatches(
+    message: WorkspaceRuntimeMessage,
+  ): Promise<boolean> {
+    if (
+      !message.assignmentId ||
+      !message.executionWorkspaceId ||
+      !message.workspaceRuntimeId
+    ) {
+      return false;
+    }
+    const assignment = await this.env.CONCLAVE_DB.prepare(
+      `SELECT id, execution_workspace_id, runtime_identity_id,
+              worker_type_id, workspace_worker_id, run_id, task_id,
+              attempt_id, idempotency_key
+         FROM worker_assignments WHERE id = ?1`,
+    )
+      .bind(message.assignmentId)
+      .first<Record<string, unknown>>();
+    return (
+      assignment != null &&
+      workspaceAssignmentContextMatches(
+        message as unknown as WorkspaceAssignmentCorrelation,
+        assignment,
+      ) &&
+      message.executionWorkspaceId === this.executionWorkspaceId &&
+      message.workspaceRuntimeId === this.workspaceRuntimeId
+    );
   }
 
   private async recordWorkerInventory(payload: unknown): Promise<void> {

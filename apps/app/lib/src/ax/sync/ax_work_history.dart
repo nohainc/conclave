@@ -590,7 +590,14 @@ class AxWorkHistoryCache {
     final context = _context(id);
     context.revisions[value.id] = (context.revisions[value.id] ?? 0) + 1;
     context.detailErrors.remove(value.id);
-    _recordRequest(id, value);
+    final previous = request(id, value.id);
+    _recordRequest(
+      id,
+      value.activityHistory.isEmpty &&
+              previous?.activityHistory.isNotEmpty == true
+          ? value.copyWith(activityHistory: previous!.activityHistory)
+          : value,
+    );
   }
 
   void _recordRequest(String id, AxWorkRequest value) {
@@ -670,7 +677,8 @@ class AxWorkHistoryCache {
               createdAt: detail.createdAt ?? previous!.createdAt,
               steps: List.unmodifiable(detail.steps),
               finalText: detail.text,
-              error: detail.error ?? detail.errorMessage);
+              error: detail.error ?? detail.errorMessage,
+              activityHistory: detail.activityHistory);
           context.detailErrors.remove(requestId);
           context.revisions[requestId] =
               (context.revisions[requestId] ?? 0) + 1;

@@ -695,8 +695,19 @@ void _validateCompatibilityOverrides(Object? value) {
 
 void _validateActivityMappings(Object? value) {
   if (value == null) return;
-  if (value is! Map || value.length != 1 || value['mappings'] is! List) {
+  if (value is! Map ||
+      value.length > 3 ||
+      value['mappings'] is! List ||
+      value.keys.any((key) =>
+          !const {'adapter', 'schemaVersion', 'mappings'}.contains(key))) {
     throw const FormatException('activity mapping container is invalid');
+  }
+  if (value['adapter'] != null &&
+      !const {'codex-jsonl', 'agy-stream-json'}.contains(value['adapter'])) {
+    throw const FormatException('activity adapter is invalid');
+  }
+  if (value['schemaVersion'] != null && value['schemaVersion'] != 1) {
+    throw const FormatException('activity schema version is invalid');
   }
   final mappings = value['mappings'] as List;
   if (mappings.length > 128) {

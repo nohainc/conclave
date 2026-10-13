@@ -454,6 +454,17 @@ export const workspaceRuntimeEnvelopeSchema = z
               code: executionErrorCode,
               message: nonEmptyString.max(512),
               retryable: z.boolean(),
+              details: z
+                .record(
+                  z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
+                  z.union([
+                    z.string().max(2048),
+                    z.number(),
+                    z.boolean(),
+                    z.null(),
+                  ]),
+                )
+                .optional(),
             })
             .strict()
             .superRefine((error, errorCtx) => {

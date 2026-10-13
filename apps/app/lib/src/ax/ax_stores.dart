@@ -3,6 +3,7 @@ import 'sync/ax_archived_spaces.dart';
 import 'sync/ax_workflow_configurations.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'sync/persistence/ax_persistent_read_cache.dart';
 import 'sync/persistence/ax_thread_view_state_store.dart';
 import '../notifications/notification_models.dart';
@@ -39,10 +40,21 @@ class AxCoalescedListenable extends ChangeNotifier {
   void _sourceChanged() {
     if (_disposed || _notificationScheduled) return;
     _notificationScheduled = true;
-    scheduleMicrotask(() {
+    void flush() {
       _notificationScheduled = false;
       if (!_disposed) notifyListeners();
-    });
+    }
+
+    // A microtask is sufficient when a source changes outside a frame and
+    // preserves synchronous coalescing for callers. During build/layout,
+    // however, a microtask can run before Flutter has finished rebuilding the
+    // current element. Deferring that notification to the frame boundary
+    // prevents ListenableBuilder from being marked dirty re-entrantly.
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
+      scheduleMicrotask(flush);
+    } else {
+      SchedulerBinding.instance.addPostFrameCallback((_) => flush());
+    }
   }
 
   @override

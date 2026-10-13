@@ -1,0 +1,6 @@
+{"type":"turn.started"}
+{"type":"item.started","item":{"type":"command_execution"}}
+{"type":"item.completed","item":{"type":"command_execution"}}
+{"type":"item.failed","item":{"id":"tool-call-failed","type":"mcp_tool_call"}}
+{"type":"turn.failed","error":{"message":"sanitized provider failure"}}
+not-json

@@ -371,6 +371,10 @@ mixin _ThreadApi on _AxApiClientCore {
               Map<String, dynamic>.from(item),
             ))
         .toList(growable: false);
+    final activityHistory = (requestMap['activities'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
     if (requestMap['id'] != workRequestId || requestMap['status'] is! String) {
       throw const AxApiException('Malformed Work Request detail');
     }
@@ -405,6 +409,7 @@ mixin _ThreadApi on _AxApiClientCore {
       originalRequest: requestMap['originalRequest']?.toString(),
       createdAt: requestMap['createdAt']?.toString(),
       steps: steps,
+      activityHistory: activityHistory,
     );
   }
 

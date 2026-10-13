@@ -79,6 +79,44 @@ void main() {
     expect(copied, isNot(contains('Copy code')));
     expect(copied, isNot(contains('dart')));
   });
+
+  testWidgets('each message keeps Select All inside its message boundary',
+      (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: Column(
+          children: [
+            ConclaveMarkdownBody(data: 'First message.'),
+            ConclaveMarkdownBody(data: 'Second message.'),
+          ],
+        ),
+      ),
+    ));
+
+    final regions = find.byType(SelectableRegion);
+    expect(regions, findsNWidgets(2));
+    final first = tester.state<SelectableRegionState>(regions.at(0));
+    first.selectAll();
+    await tester.pump();
+    first.contextMenuButtonItems
+        .firstWhere((item) => item.type == ContextMenuButtonType.copy)
+        .onPressed!();
+    await tester.pump();
+
+    expect(copied, 'First message.');
+  });
+
   for (final content in [
     '<script>alert("unsafe")</script>',
     '<iframe src="https://example.com"></iframe>',

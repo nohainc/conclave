@@ -365,6 +365,8 @@
     }
   ],
   "activity": {
+    "adapter": "codex-jsonl",
+    "schemaVersion": 1,
     "mappings": [
       {
         "when": [{ "kind": "equals", "selector": "$.type", "value": "turn.started" }],

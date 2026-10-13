@@ -18,6 +18,7 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'engine_logger.dart';
 import 'engine_session_store.dart';
 import 'conversation_execution_router.dart';
+import 'provider_activity_adapter.dart';
 
 const _liveProbePrompt = 'Reply with exactly the word OK. Do not use tools.';
 const _liveProbeExpectedText = 'OK';
@@ -103,11 +104,13 @@ class CliWorkerEngine {
   late final EngineSessionStore _sessions;
   String? _resolvedExecutable;
   String? _providerVersion;
+  ProviderActivityAdapter? _providerActivityAdapter;
   DiscoveredModelCatalog? _modelCatalog;
   bool _discoveryUsedCache = false;
   bool _initialized = false;
   final _operationStarts = <String, Stopwatch>{};
   final _activitySequences = <String, int>{};
+  int? _providerExitCode;
 
   Future<void> run({Stream<List<int>>? input, IOSink? output}) async {
     final profileFile = File(options.profilePath);
@@ -117,6 +120,9 @@ class CliWorkerEngine {
     final bytes = await profileFile.readAsBytes();
     _profile = EngineProfile.parse(bytes);
     _admittedProfile = _profile;
+    _providerActivityAdapter = ProviderActivityAdapter.fromProfile(
+      _profile.json,
+    );
     if (!engineVersionCompatible(_profile, options.engineVersion)) {
       throw const FormatException(
         'Engine version is outside Profile compatibility',
@@ -304,6 +310,9 @@ class CliWorkerEngine {
         );
       } else {
         _profile = _admittedProfile.resolveForProviderVersion(version);
+        _providerActivityAdapter = ProviderActivityAdapter.fromProfile(
+          _profile.json,
+        );
         checks.add(
           ProbeCheck(
             code: 'provider_tool_version',
@@ -878,6 +887,7 @@ class CliWorkerEngine {
         'errorCode': code,
         'providerStarted': providerStarted,
         'recovered': recovered,
+        if (_providerExitCode != null) 'processExitCode': _providerExitCode,
         if (safeDetail != null) 'detail': safeDetail,
       }),
       maxLength: WorkerProtocolLimits.maxDiagnosticLength,
@@ -934,6 +944,7 @@ class CliWorkerEngine {
 
   Future<void> _executeSession(ExecuteRequest request, IOSink sink) async {
     _operationStarts[request.requestId] = Stopwatch()..start();
+    _providerExitCode = null;
     if (!_initialized)
       return _write(
         sink,
@@ -1288,6 +1299,7 @@ class CliWorkerEngine {
             }
           },
         );
+        _providerExitCode = result.exitCode;
         acceptingProviderEvents = false;
         final interpreted = _interpret(
           stdout.toString(),
@@ -1297,6 +1309,20 @@ class CliWorkerEngine {
           priorSession: priorSession,
           durable: request.sessionPolicy == WorkerSessionPolicy.durableSession,
         );
+        if (_string(_map(execution['output'])['mode']) == 'jsonl' &&
+            !interpreted.terminalObserved) {
+          _logger.log(
+            'warning',
+            'engine.assignment.missing_terminal_event',
+            context: _diagnosticContext(
+              requestId: request.requestId,
+              assignmentId: request.assignmentId,
+              errorCode: 'missing_terminal_event',
+              failureLayer: 'provider_tool',
+              processExitCode: result.exitCode,
+            ),
+          );
+        }
         if (interpreted.nativeSessionUnavailable &&
             result.exitCode != 0 &&
             priorSession != null &&
@@ -1777,7 +1803,11 @@ class CliWorkerEngine {
       discovery['standardLocations'],
     ).map(_expandHomeLocation).toList();
     final candidates = _stringList(tool['executableCandidates']);
-    final discoveryEnvironment = Map<String, String>.from(Platform.environment);
+    // Resolve the executable against the same bounded Profile environment used
+    // to launch it. This keeps discovery and execution consistent when a
+    // Workspace supplies an approved runtime PATH (for example, a bundled
+    // Dart or Node runtime used by a fixture or packaged Worker).
+    final discoveryEnvironment = _environment();
     if (discovery['allowPathSearch'] != true) {
       discoveryEnvironment.remove('PATH');
     }
@@ -1859,11 +1889,18 @@ class CliWorkerEngine {
     try {
       decoded = jsonDecode(line);
     } on Object {
-      return const [];
+      decoded = null;
     }
-    if (decoded is! Map) return const [];
-    final mapped = mapProfileActivityEvents(_profile.json, [decoded]);
-    if (mapped.isEmpty) return const [];
+    final mapped = decoded is Map
+        ? mapProfileActivityEvents(_profile.json, [decoded])
+        : const <ProfileActivityMappingResult>[];
+    final observations =
+        _providerActivityAdapter?.normalizeLine(
+          line,
+          declarativeMatched: mapped.isNotEmpty,
+        ) ??
+        const <ProviderActivityObservation>[];
+    if (mapped.isEmpty && observations.isEmpty) return const [];
     final events = <WorkerActivity>[];
     for (final mapping in mapped) {
       final sequence = (_activitySequences[request.requestId] ?? 0) + 1;
@@ -1883,6 +1920,26 @@ class CliWorkerEngine {
           activityId: mapping.activityId,
           percentage: mapping.percentage?.toDouble(),
           details: mapping.details.isEmpty ? null : mapping.details,
+        ),
+      );
+    }
+    for (final observation in observations) {
+      final sequence = (_activitySequences[request.requestId] ?? 0) + 1;
+      _activitySequences[request.requestId] = sequence;
+      events.add(
+        WorkerActivity(
+          requestId: request.requestId,
+          assignmentId: request.assignmentId,
+          executionId: request.requestId,
+          workerId: _profile.workerTypeId,
+          eventId: '${request.requestId}:activity:$sequence',
+          sequence: sequence,
+          timestamp: DateTime.now().toUtc().toIso8601String(),
+          eventType: observation.type,
+          status: observation.status,
+          title: observation.title,
+          activityId: observation.activityId,
+          details: observation.details.isEmpty ? null : observation.details,
         ),
       );
     }
@@ -1970,6 +2027,12 @@ class CliWorkerEngine {
     var terminalObserved = false;
     for (final event in events) {
       if (event is! Map) continue;
+      final adapterFinalText = _providerActivityAdapter?.finalResponseText(
+        event,
+      );
+      if (finalText == null && adapterFinalText != null) {
+        finalText = adapterFinalText;
+      }
       final profileSession = _profile.session;
       if (profileSession['supported'] == true &&
           profileSession['extract'] is String) {
@@ -2058,13 +2121,21 @@ class CliWorkerEngine {
         requireMatch &&
         (sessionId == null ||
             (priorSession != null && sessionId != priorSession))) {
-      return const _InterpretedOutput(
+      return _InterpretedOutput(
         null,
         null,
         WorkerIssueCode.providerFailure,
+        terminalObserved: terminalObserved,
       );
     }
-    if (successful) return _InterpretedOutput(text, sessionId, null);
+    if (successful) {
+      return _InterpretedOutput(
+        text,
+        sessionId,
+        null,
+        terminalObserved: terminalObserved,
+      );
+    }
 
     final mappings = _list(_map(_profile.json['errors'])['mappings']);
     for (final raw in mappings) {
@@ -2093,6 +2164,7 @@ class CliWorkerEngine {
               mapping['issueCode'] == WorkerIssueCode.sessionResumeFailed &&
               finalText == null &&
               !markedSuccess,
+          terminalObserved: terminalObserved,
         );
     }
     return const _InterpretedOutput(
@@ -2221,6 +2293,7 @@ class CliWorkerEngine {
     String? providerToolVersion,
     int? durationMs,
     String? errorCode,
+    int? processExitCode,
     String? probeStage,
     String? failureLayer,
   }) => {
@@ -2235,6 +2308,7 @@ class CliWorkerEngine {
     if (providerToolVersion != null) 'providerToolVersion': providerToolVersion,
     if (durationMs != null) 'durationMs': durationMs,
     if (errorCode != null) 'errorCode': errorCode,
+    if (processExitCode != null) 'processExitCode': processExitCode,
     if (probeStage != null) 'probeStage': probeStage,
     if (failureLayer != null) 'failureLayer': failureLayer,
   };
@@ -2343,8 +2417,10 @@ class _InterpretedOutput {
     this.sessionId,
     this.issueCode, {
     this.nativeSessionUnavailable = false,
+    this.terminalObserved = false,
   });
   final bool nativeSessionUnavailable;
+  final bool terminalObserved;
   final String? finalText;
   final String? sessionId;
   final String? issueCode;

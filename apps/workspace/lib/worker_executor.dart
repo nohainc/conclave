@@ -423,6 +423,7 @@ class WorkerAssignmentHandler {
     if (spaceCoordinator != null) {
       return spaceCoordinator.withMutation(
         spaceId: spaceId,
+        threadId: threadId,
         spaceName: _spaceName(context.payload),
         leaseId: leaseId,
         fencingToken: fencingToken,

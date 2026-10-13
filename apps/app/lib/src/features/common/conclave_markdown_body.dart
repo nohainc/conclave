@@ -99,12 +99,11 @@ class ConclaveMarkdownBody extends StatelessWidget {
         ],
       ),
     );
-    // The app shell supplies one long-lived selection region. Keeping one
-    // region across route changes avoids Flutter web selection callbacks
-    // retaining a SelectionContainer that has already been deactivated.
-    return SelectionContainer.maybeOf(context) == null
-        ? SelectionArea(child: body)
-        : body;
+    // MarkdownBody keeps its own native selection disabled so this single
+    // region can join paragraphs, lists, tables and custom code blocks. Keep
+    // the region at the message boundary: an ancestor SelectionArea could
+    // otherwise make Select All include neighboring messages or shell UI.
+    return SelectionArea(child: body);
   }
 }
 
