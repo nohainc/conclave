@@ -278,69 +278,73 @@ class SpaceTree extends StatelessWidget {
                               thread,
                               value,
                             ),
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'rename',
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.edit_outlined, size: 16),
-                                    SizedBox(width: 8),
-                                    Text('Rename'),
-                                  ],
+                            itemBuilder: (context) {
+                              final isDark = Theme.of(context).brightness == Brightness.dark;
+                              final textColor = isDark ? Colors.white : Colors.black87;
+                              final errorColor = const Color(0xFFD32F2F);
+                              return [
+                                PopupMenuItem(
+                                  value: 'rename',
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.edit_outlined, size: 18, color: textColor),
+                                      const SizedBox(width: 12),
+                                      Text('Rename Thread'),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              PopupMenuItem(
-                                value: thread.archived ? 'unarchive' : 'archive',
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(thread.archived
-                                      ? Icons.unarchive_outlined
-                                      : Icons.archive_outlined, size: 16),
-                                    const SizedBox(width: 8),
-                                    Text(thread.archived ? 'Unarchive' : 'Archive'),
-                                  ],
+                                PopupMenuItem(
+                                  value: thread.archived ? 'unarchive' : 'archive',
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(thread.archived
+                                        ? Icons.unarchive_outlined
+                                        : Icons.archive_outlined,
+                                        size: 18, color: textColor),
+                                      const SizedBox(width: 12),
+                                      Text(thread.archived ? 'Unarchive Thread' : 'Archive Thread'),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const PopupMenuDivider(),
-                              const PopupMenuItem(
-                                value: 'clearChat',
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.delete_outline, size: 16),
-                                    SizedBox(width: 8),
-                                    Text('Clear Chat'),
-                                  ],
+                                const PopupMenuDivider(),
+                                PopupMenuItem(
+                                  value: 'clearChat',
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.delete_outline, size: 18, color: textColor),
+                                      const SizedBox(width: 12),
+                                      const Text('Clear Chat History'),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'clearWork',
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.delete_outline, size: 16),
-                                    SizedBox(width: 8),
-                                    Text('Clear Work'),
-                                  ],
+                                PopupMenuItem(
+                                  value: 'clearWork',
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.delete_outline, size: 18, color: textColor),
+                                      const SizedBox(width: 12),
+                                      Text('Clear Work History', style: TextStyle(color: textColor)),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              const PopupMenuDivider(),
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.delete_rounded, size: 16,
-                                      color: Color(0xFFD32F2F)),
-                                    SizedBox(width: 8),
-                                    Text('Delete', style: TextStyle(
-                                      color: Color(0xFFD32F2F))),
-                                  ],
+                                const PopupMenuDivider(),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.delete_rounded, size: 18, color: errorColor),
+                                      const SizedBox(width: 12),
+                                      Text('Delete Thread', style: TextStyle(color: errorColor)),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ];
+                            },
                             tooltip: 'Thread menu',
                             padding: const EdgeInsets.all(0),
                             constraints: const BoxConstraints(minWidth: 150),
