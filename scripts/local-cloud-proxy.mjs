@@ -1,5 +1,6 @@
 const upstream = "https://app.conclaveax.com";
 const localPrefix = "conclave-dev-";
+const upstreamTimeoutMs = 10_000;
 
 const legacyWorkHistoryPath =
   /^\/api\/threads\/workstream-[^/]+\/work-requests$/;
@@ -52,15 +53,42 @@ export async function proxyCloud(request, send = fetch) {
   headers.delete("host");
   if (headers.has("cookie"))
     headers.set("cookie", upstreamCookie(headers.get("cookie")));
-  const response = await send(
-    new globalThis.Request(target, {
-      method: request.method,
-      headers,
-      body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body,
-      duplex: "half",
-      redirect: "manual",
-    }),
-  );
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), upstreamTimeoutMs);
+  let response;
+  try {
+    response = await send(
+      new globalThis.Request(target, {
+        method: request.method,
+        headers,
+        body: ["GET", "HEAD"].includes(request.method)
+          ? undefined
+          : request.body,
+        duplex: "half",
+        redirect: "manual",
+        signal: controller.signal,
+      }),
+    );
+  } catch (error) {
+    const timedOut =
+      error instanceof Error &&
+      (error.name === "AbortError" || controller.signal.aborted);
+    return new Response(
+      JSON.stringify({
+        error: timedOut ? "cloud_gateway_timeout" : "cloud_gateway_unreachable",
+        retryable: true,
+      }),
+      {
+        status: 502,
+        headers: {
+          "cache-control": "no-store",
+          "content-type": "application/json; charset=utf-8",
+        },
+      },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
   // Preserve the upstream WebSocket upgrade and live event connection.
   if (response.status === 101) return response;
   const output = new Headers(response.headers);

@@ -60,6 +60,19 @@ it("preserves errors and WebSocket upgrades", async () => {
   expect(error.status).toBe(401);
   expect(await error.text()).toBe("unauthorized");
 });
+it("returns a bounded retryable error when Cloud is unreachable", async () => {
+  const response = await proxyCloud(
+    new globalThis.Request("http://localhost:8787/api/session"),
+    async () => {
+      throw new Error("upstream unavailable");
+    },
+  );
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({
+    error: "cloud_gateway_unreachable",
+    retryable: true,
+  });
+});
 it("does not forward retired workstream history requests", async () => {
   const response = await proxyCloud(
     new globalThis.Request(
