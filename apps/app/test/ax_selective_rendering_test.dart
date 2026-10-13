@@ -104,6 +104,22 @@ void main() {
     expect(find.text('layout-$builds'), findsOneWidget);
   });
 
+  testWidgets('home route tolerates initial cache notifications',
+      (tester) async {
+    tester.view.physicalSize = const Size(1800, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: SelectiveSource(),
+        initialUri: Uri.parse('/')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
   final builds = <String, int>{};
   void observe() {
     final previous = debugOnRebuildDirtyWidget;

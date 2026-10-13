@@ -102,6 +102,67 @@ class AxCoalescedListenable extends ChangeNotifier {
   }
 }
 
+/// Listens to a view signal without allowing a synchronous notification to
+/// mark the current widget dirty while it is being mounted or rebuilt.
+class AxDeferredListenableBuilder extends StatefulWidget {
+  const AxDeferredListenableBuilder({
+    super.key,
+    required this.listenable,
+    required this.builder,
+    this.child,
+  });
+
+  final Listenable listenable;
+  final Widget Function(BuildContext context, Widget? child) builder;
+  final Widget? child;
+
+  @override
+  State<AxDeferredListenableBuilder> createState() =>
+      _AxDeferredListenableBuilderState();
+}
+
+class _AxDeferredListenableBuilderState
+    extends State<AxDeferredListenableBuilder> {
+  bool _rebuildScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.listenable.addListener(_scheduleRebuild);
+  }
+
+  @override
+  void didUpdateWidget(covariant AxDeferredListenableBuilder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.listenable != widget.listenable) {
+      oldWidget.listenable.removeListener(_scheduleRebuild);
+      widget.listenable.addListener(_scheduleRebuild);
+    }
+  }
+
+  void _scheduleRebuild() {
+    if (!mounted || _rebuildScheduled) return;
+    _rebuildScheduled = true;
+    final binding = WidgetsBinding.instance;
+    binding.addPostFrameCallback((_) {
+      _rebuildScheduled = false;
+      if (mounted) setState(() {});
+    });
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
+      binding.scheduleFrame();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.listenable.removeListener(_scheduleRebuild);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, widget.child);
+}
+
 /// Focused Cloud-backed stores. The API remains the source of truth.
 class AxStore {
   AxStore(this.dataSource,

@@ -14,7 +14,7 @@ extension _AxAppViews on _AxAppStateMixin {
     });
   }
 
-  Widget _homeView() => ListenableBuilder(
+  Widget _homeView() => AxDeferredListenableBuilder(
       listenable: store.homeChanges,
       builder: (context, _) => _HomeThreadCollection(
           spaces: store.spaces.items,
