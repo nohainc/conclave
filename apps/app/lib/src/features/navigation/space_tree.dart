@@ -267,6 +267,86 @@ class SpaceTree extends StatelessWidget {
                         const SizedBox(width: 8),
                         statusIndicator,
                       ],
+                      if (isThreadSelected)
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: PopupMenuButton<String>(
+                            onSelected: (value) => _handleThreadMenuItem(
+                              context,
+                              space,
+                              thread,
+                              value,
+                            ),
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'rename',
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.edit_outlined, size: 16),
+                                    SizedBox(width: 8),
+                                    Text('Rename'),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: thread.archived ? 'unarchive' : 'archive',
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(thread.archived
+                                      ? Icons.unarchive_outlined
+                                      : Icons.archive_outlined, size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(thread.archived ? 'Unarchive' : 'Archive'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              const PopupMenuItem(
+                                value: 'clearChat',
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.delete_outline, size: 16),
+                                    SizedBox(width: 8),
+                                    Text('Clear Chat'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'clearWork',
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.delete_outline, size: 16),
+                                    SizedBox(width: 8),
+                                    Text('Clear Work'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.delete_rounded, size: 16,
+                                      color: Color(0xFFD32F2F)),
+                                    SizedBox(width: 8),
+                                    Text('Delete', style: TextStyle(
+                                      color: Color(0xFFD32F2F))),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            tooltip: 'Thread menu',
+                            padding: const EdgeInsets.all(0),
+                            constraints: const BoxConstraints(minWidth: 150),
+                            child: const Icon(Icons.more_vert, size: 16),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -334,6 +414,152 @@ class SpaceTree extends StatelessWidget {
             },
           ),
       ],
+    );
+  }
+
+  void _handleThreadMenuItem(BuildContext context, AxSpace space, AxThread thread, String action) {
+    switch (action) {
+      case 'rename':
+        _showRenameDialog(context, thread);
+        break;
+      case 'archive':
+      case 'unarchive':
+        _showArchiveDialog(context, thread, action == 'archive');
+        break;
+      case 'clearChat':
+        _showClearChatDialog(context, thread);
+        break;
+      case 'clearWork':
+        _showClearWorkDialog(context, thread);
+        break;
+      case 'delete':
+        _showDeleteThreadDialog(context, thread);
+        break;
+    }
+  }
+
+  void _showRenameDialog(BuildContext context, AxThread thread) {
+    final controller = TextEditingController(text: thread.title);
+    showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rename Thread'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 1,
+          decoration: const InputDecoration(
+            labelText: 'Thread name',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: controller.text.trim().isEmpty
+                ? null
+                : () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+  }
+
+  void _showArchiveDialog(BuildContext context, AxThread thread, bool isArchiving) {
+    final title = isArchiving ? 'Archive Thread' : 'Unarchive Thread';
+    final content = isArchiving
+        ? 'This Thread will be moved to archived Threads.'
+        : 'This Thread will be moved back to active Threads.';
+
+    showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(isArchiving ? 'Archive' : 'Unarchive'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearChatDialog(BuildContext context, AxThread thread) {
+    showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear Chat History'),
+        content: const Text(
+          'Delete all chat messages? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Clear Chat'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showClearWorkDialog(BuildContext context, AxThread thread) {
+    showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear Work History'),
+        content: const Text(
+          'Delete all work requests and reset Work context? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Clear Work'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteThreadDialog(BuildContext context, AxThread thread) {
+    showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Thread'),
+        content: const Text(
+          'Permanently delete this Thread and all its history? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFD32F2F),
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
   }
 
