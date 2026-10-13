@@ -303,22 +303,46 @@ class AxWorkHistoryCache {
     if (local == null) return;
     context.localProgress.remove(localId);
     final history = peek(threadId);
-    replace(threadId, [
-      for (final item in history.requests)
-        if (item.id != localId) item,
-      if (!history.requests.any((item) => item.id == requestId))
-        AxWorkRequest(
-            id: requestId,
-            requestedByName: local.requestedByName,
-            requestedByUserId: local.requestedByUserId,
-            prompt: local.prompt,
-            workflowId: local.workflowId,
-            workflowVersion: local.workflowVersion,
-            workflowName: local.workflowName,
-            status: 'queued',
-            createdAt: local.createdAt,
-            steps: const []),
-    ]);
+    if (!history.requests.any((item) => item.id == requestId)) {
+      engine.update(query(threadId), (state) {
+        final current = state.data ?? AxWorkHistory();
+        return AxWorkHistory(
+            requests: _merge(
+              current.requests.where((r) => r.id != localId),
+              [
+                AxWorkRequest(
+                    id: requestId,
+                    requestedByName: local.requestedByName,
+                    requestedByUserId: local.requestedByUserId,
+                    prompt: local.prompt,
+                    workflowId: local.workflowId,
+                    workflowVersion: local.workflowVersion,
+                    workflowName: local.workflowName,
+                    status: 'queued',
+                    createdAt: local.createdAt,
+                    steps: const [])
+              ],
+            ),
+            olderCursor: current.olderCursor,
+            initialLoaded: current.initialLoaded,
+            newestPageRequest: current.newestPageRequest,
+            confirmedIds: current.confirmedIds,
+            gaps: current._gaps);
+      }, fenceReads: false);
+    } else {
+      engine.update(query(threadId), (state) {
+        final current = state.data ?? AxWorkHistory();
+        return AxWorkHistory(
+            requests: current.requests
+                .where((r) => r.id != localId)
+                .toList(),
+            olderCursor: current.olderCursor,
+            initialLoaded: current.initialLoaded,
+            newestPageRequest: current.newestPageRequest,
+            confirmedIds: current.confirmedIds,
+            gaps: current._gaps);
+      }, fenceReads: false);
+    }
   }
 
   /// A local request and progress belong to shared history, not a mounted form.
