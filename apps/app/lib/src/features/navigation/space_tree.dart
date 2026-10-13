@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../brand.dart';
@@ -15,6 +17,11 @@ class SpaceTree extends StatelessWidget {
     this.onToggleSpaceExpanded,
     this.onCreateSpace,
     this.onCreateThread,
+    this.onRenameThread,
+    this.onSetThreadArchived,
+    this.onClearChatHistory,
+    this.onClearWorkHistory,
+    this.onDeleteThread,
     this.compact = false,
   });
 
@@ -23,6 +30,12 @@ class SpaceTree extends StatelessWidget {
   final ValueChanged<String>? onToggleSpaceExpanded;
   final VoidCallback? onCreateSpace;
   final ValueChanged<AxSpace>? onCreateThread;
+  final Future<void> Function(AxThread thread, String name)? onRenameThread;
+  final Future<void> Function(AxThread thread, bool archived)?
+      onSetThreadArchived;
+  final Future<void> Function(AxThread thread)? onClearChatHistory;
+  final Future<void> Function(AxThread thread)? onClearWorkHistory;
+  final Future<void> Function(AxThread thread)? onDeleteThread;
   final bool compact;
 
   @override
@@ -267,90 +280,7 @@ class SpaceTree extends StatelessWidget {
                         const SizedBox(width: 8),
                         statusIndicator,
                       ],
-                      if (isThreadSelected)
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: PopupMenuButton<String>(
-                            onSelected: (value) => _handleThreadMenuItem(
-                              context,
-                              space,
-                              thread,
-                              value,
-                            ),
-                            itemBuilder: (context) {
-                              final isDark = Theme.of(context).brightness == Brightness.dark;
-                              final textColor = isDark ? Colors.white : Colors.black87;
-                              final errorColor = const Color(0xFFD32F2F);
-                              return [
-                                PopupMenuItem(
-                                  value: 'rename',
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.edit_outlined, size: 18, color: textColor),
-                                      const SizedBox(width: 12),
-                                      Text('Rename Thread'),
-                                    ],
-                                  ),
-                                ),
-                                PopupMenuItem(
-                                  value: thread.archived ? 'unarchive' : 'archive',
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(thread.archived
-                                        ? Icons.unarchive_outlined
-                                        : Icons.archive_outlined,
-                                        size: 18, color: textColor),
-                                      const SizedBox(width: 12),
-                                      Text(thread.archived ? 'Unarchive Thread' : 'Archive Thread'),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuDivider(),
-                                PopupMenuItem(
-                                  value: 'clearChat',
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.delete_outline, size: 18, color: textColor),
-                                      const SizedBox(width: 12),
-                                      const Text('Clear Chat History'),
-                                    ],
-                                  ),
-                                ),
-                                PopupMenuItem(
-                                  value: 'clearWork',
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.delete_outline, size: 18, color: textColor),
-                                      const SizedBox(width: 12),
-                                      Text('Clear Work History', style: TextStyle(color: textColor)),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuDivider(),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.delete_rounded, size: 18, color: errorColor),
-                                      const SizedBox(width: 12),
-                                      Text('Delete Thread', style: TextStyle(color: errorColor)),
-                                    ],
-                                  ),
-                                ),
-                              ];
-                            },
-                            tooltip: 'Thread menu',
-                            padding: const EdgeInsets.all(0),
-                            constraints: const BoxConstraints(minWidth: 150),
-                            child: const Icon(Icons.more_vert, size: 16),
-                          ),
-                        ),
+                      if (isThreadSelected) _threadMenu(context, space, thread),
                     ],
                   ),
                 ),
@@ -362,7 +292,8 @@ class SpaceTree extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(34, 8, 10, 4),
             child: Row(
               children: [
-                Icon(Icons.archive_outlined, size: 12, color: Colors.white38),
+                const Icon(Icons.archive_outlined,
+                    size: 12, color: Colors.white38),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -402,16 +333,26 @@ class SpaceTree extends StatelessWidget {
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Text(
-                    thread.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: isThreadSelected ? Colors.white : Colors.white38,
-                      fontSize: 11,
-                      fontWeight:
-                          isThreadSelected ? FontWeight.w600 : FontWeight.w400,
-                    ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          thread.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isThreadSelected
+                                ? Colors.white
+                                : Colors.white38,
+                            fontSize: 11,
+                            fontWeight: isThreadSelected
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                      if (isThreadSelected) _threadMenu(context, space, thread),
+                    ],
                   ),
                 ),
               );
@@ -421,65 +362,210 @@ class SpaceTree extends StatelessWidget {
     );
   }
 
-  void _handleThreadMenuItem(BuildContext context, AxSpace space, AxThread thread, String action) {
-    switch (action) {
-      case 'rename':
-        _showRenameDialog(context, thread);
-        break;
-      case 'archive':
-      case 'unarchive':
-        _showArchiveDialog(context, thread, action == 'archive');
-        break;
-      case 'clearChat':
-        _showClearChatDialog(context, thread);
-        break;
-      case 'clearWork':
-        _showClearWorkDialog(context, thread);
-        break;
-      case 'delete':
-        _showDeleteThreadDialog(context, thread);
-        break;
-    }
-  }
-
-  void _showRenameDialog(BuildContext context, AxThread thread) {
-    final controller = TextEditingController(text: thread.title);
-    showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Rename Thread'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 1,
-          decoration: const InputDecoration(
-            labelText: 'Thread name',
+  Widget _threadMenu(BuildContext context, AxSpace space, AxThread thread) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isArchived =
+        thread.archived || thread.status.toLowerCase() == 'archived';
+    final menuStyle = MenuStyle(
+      backgroundColor: WidgetStatePropertyAll(
+        ConclaveColors.navigationRaised(isDark),
+      ),
+      surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+      elevation: const WidgetStatePropertyAll(12),
+      shadowColor: WidgetStatePropertyAll(
+        Colors.black.withValues(alpha: isDark ? 0.7 : 0.18),
+      ),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: ConclaveColors.navigationBorder(isDark),
+            width: 1,
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
+      ),
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+      ),
+    );
+
+    ButtonStyle itemStyle({bool isDestructive = false}) {
+      return ButtonStyle(
+        padding: const WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        ),
+        minimumSize: const WidgetStatePropertyAll(Size(196, 36)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        ),
+        overlayColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.hovered) ||
+              states.contains(WidgetState.focused)) {
+            if (isDestructive) {
+              return ConclaveColors.error.withValues(alpha: 0.12);
+            }
+            return ConclaveColors.navigationHover(isDark);
+          }
+          return null;
+        }),
+      );
+    }
+
+    Widget divider() => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+          child: Divider(
+            height: 1,
+            thickness: 1,
+            color: ConclaveColors.navigationBorder(isDark),
           ),
-          FilledButton(
-            onPressed: controller.text.trim().isEmpty
-                ? null
-                : () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Rename'),
+        );
+
+    final menuIconColor = isDark ? Colors.white70 : Colors.black87;
+
+    void select(String action) =>
+        _handleThreadMenuItem(context, space, thread, action);
+
+    return SizedBox(
+      width: 28,
+      height: 28,
+      child: MenuAnchor(
+        style: menuStyle,
+        builder: (context, controller, child) {
+          return IconButton(
+            tooltip: 'Thread menu',
+            icon: const Icon(
+              Icons.more_vert,
+              color: Colors.white60,
+              size: 18,
+            ),
+            splashRadius: 14,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            onPressed: () {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                controller.open();
+              }
+            },
+          );
+        },
+        menuChildren: [
+          MenuItemButton(
+            style: itemStyle(),
+            leadingIcon:
+                Icon(Icons.edit_outlined, size: 16, color: menuIconColor),
+            onPressed: () => select('rename'),
+            child: const Text(
+              'Rename Thread',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+            ),
+          ),
+          MenuItemButton(
+            style: itemStyle(),
+            leadingIcon: Icon(
+              isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
+              size: 16,
+              color: menuIconColor,
+            ),
+            onPressed: () => select(isArchived ? 'unarchive' : 'archive'),
+            child: Text(
+              isArchived ? 'Unarchive Thread' : 'Archive Thread',
+              style:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+            ),
+          ),
+          divider(),
+          MenuItemButton(
+            style: itemStyle(),
+            leadingIcon:
+                Icon(Icons.delete_outline, size: 16, color: menuIconColor),
+            onPressed: () => select('clearChat'),
+            child: const Text(
+              'Clear Chat History',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+            ),
+          ),
+          MenuItemButton(
+            style: itemStyle(),
+            leadingIcon:
+                Icon(Icons.delete_outline, size: 16, color: menuIconColor),
+            onPressed: () => select('clearWork'),
+            child: const Text(
+              'Clear Work History',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+            ),
+          ),
+          divider(),
+          MenuItemButton(
+            style: itemStyle(isDestructive: true),
+            leadingIcon: const Icon(
+              Icons.delete_rounded,
+              size: 16,
+              color: ConclaveColors.error,
+            ),
+            onPressed: () => select('delete'),
+            child: const Text(
+              'Delete Thread',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+                color: ConclaveColors.error,
+              ),
+            ),
           ),
         ],
       ),
     );
-    controller.dispose();
   }
 
-  void _showArchiveDialog(BuildContext context, AxThread thread, bool isArchiving) {
+  void _handleThreadMenuItem(
+      BuildContext context, AxSpace space, AxThread thread, String action) {
+    switch (action) {
+      case 'rename':
+        unawaited(_showRenameDialog(context, thread));
+        break;
+      case 'archive':
+      case 'unarchive':
+        unawaited(_showArchiveDialog(context, thread, action == 'archive'));
+        break;
+      case 'clearChat':
+        unawaited(_showClearChatDialog(context, thread));
+        break;
+      case 'clearWork':
+        unawaited(_showClearWorkDialog(context, thread));
+        break;
+      case 'delete':
+        unawaited(_showDeleteThreadDialog(context, thread));
+        break;
+    }
+  }
+
+  Future<void> _showRenameDialog(BuildContext context, AxThread thread) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => _RenameThreadDialog(initialTitle: thread.title),
+    );
+    if (name == null || name.trim().isEmpty || name.trim() == thread.title) {
+      return;
+    }
+    try {
+      await onRenameThread?.call(thread, name.trim());
+    } catch (error) {
+      if (context.mounted) {
+        _showThreadActionError(context, 'rename', error);
+      }
+    }
+  }
+
+  Future<void> _showArchiveDialog(
+      BuildContext context, AxThread thread, bool isArchiving) {
     final title = isArchiving ? 'Archive Thread' : 'Unarchive Thread';
     final content = isArchiving
         ? 'This Thread will be moved to archived Threads.'
         : 'This Thread will be moved back to active Threads.';
 
-    showDialog<bool>(
+    return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(title),
@@ -495,11 +581,22 @@ class SpaceTree extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ).then((confirmed) async {
+      if (confirmed != true) return;
+      try {
+        await onSetThreadArchived?.call(thread, isArchiving);
+      } catch (error) {
+        if (context.mounted) {
+          _showThreadActionError(
+              context, isArchiving ? 'archive' : 'unarchive', error);
+        }
+      }
+    });
   }
 
-  void _showClearChatDialog(BuildContext context, AxThread thread) {
-    showDialog<bool>(
+  Future<void> _showClearChatDialog(
+      BuildContext context, AxThread thread) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Clear Chat History'),
@@ -518,10 +615,19 @@ class SpaceTree extends StatelessWidget {
         ],
       ),
     );
+    if (confirmed != true) return;
+    try {
+      await onClearChatHistory?.call(thread);
+    } catch (error) {
+      if (context.mounted) {
+        _showThreadActionError(context, 'clear chat history', error);
+      }
+    }
   }
 
-  void _showClearWorkDialog(BuildContext context, AxThread thread) {
-    showDialog<bool>(
+  Future<void> _showClearWorkDialog(
+      BuildContext context, AxThread thread) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Clear Work History'),
@@ -540,10 +646,19 @@ class SpaceTree extends StatelessWidget {
         ],
       ),
     );
+    if (confirmed != true) return;
+    try {
+      await onClearWorkHistory?.call(thread);
+    } catch (error) {
+      if (context.mounted) {
+        _showThreadActionError(context, 'clear work history', error);
+      }
+    }
   }
 
-  void _showDeleteThreadDialog(BuildContext context, AxThread thread) {
-    showDialog<bool>(
+  Future<void> _showDeleteThreadDialog(
+      BuildContext context, AxThread thread) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete Thread'),
@@ -558,11 +673,29 @@ class SpaceTree extends StatelessWidget {
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFD32F2F),
+              backgroundColor: ConclaveColors.error,
             ),
             child: const Text('Delete'),
           ),
         ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await onDeleteThread?.call(thread);
+    } catch (error) {
+      if (context.mounted) {
+        _showThreadActionError(context, 'delete thread', error);
+      }
+    }
+  }
+
+  void _showThreadActionError(
+      BuildContext context, String action, Object error) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(
+        content: Text('Failed to $action: $error'),
+        backgroundColor: ConclaveColors.error,
       ),
     );
   }
@@ -619,6 +752,69 @@ class SpaceTree extends StatelessWidget {
       default:
         return null;
     }
+  }
+}
+
+class _RenameThreadDialog extends StatefulWidget {
+  const _RenameThreadDialog({required this.initialTitle});
+
+  final String initialTitle;
+
+  @override
+  State<_RenameThreadDialog> createState() => _RenameThreadDialogState();
+}
+
+class _RenameThreadDialogState extends State<_RenameThreadDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialTitle);
+    _controller.addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    _controller
+      ..removeListener(_onTextChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onTextChanged() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Rename Thread'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLines: 1,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (value) {
+          if (value.trim().isNotEmpty) {
+            Navigator.pop(context, value);
+          }
+        },
+        decoration: const InputDecoration(
+          labelText: 'Thread name',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _controller.text.trim().isEmpty
+              ? null
+              : () => Navigator.pop(context, _controller.text),
+          child: const Text('Rename'),
+        ),
+      ],
+    );
   }
 }
 

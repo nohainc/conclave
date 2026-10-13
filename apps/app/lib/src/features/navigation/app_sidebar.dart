@@ -17,6 +17,11 @@ class AppSidebar extends StatelessWidget {
     ValueChanged<String>? onToggleSpaceExpanded,
     VoidCallback? onCreateSpace,
     this.onCreateThread,
+    this.onRenameThread,
+    this.onSetThreadArchived,
+    this.onClearChatHistory,
+    this.onClearWorkHistory,
+    this.onDeleteThread,
     this.searchController,
     this.searchFocusNode,
     this.onSearchChanged,
@@ -42,6 +47,12 @@ class AppSidebar extends StatelessWidget {
   final ValueChanged<String> onToggleSpaceExpanded;
   final VoidCallback onCreateSpace;
   final ValueChanged<AxSpace>? onCreateThread;
+  final Future<void> Function(AxThread thread, String name)? onRenameThread;
+  final Future<void> Function(AxThread thread, bool archived)?
+      onSetThreadArchived;
+  final Future<void> Function(AxThread thread)? onClearChatHistory;
+  final Future<void> Function(AxThread thread)? onClearWorkHistory;
+  final Future<void> Function(AxThread thread)? onDeleteThread;
   final TextEditingController? searchController;
   final FocusNode? searchFocusNode;
   final ValueChanged<String>? onSearchChanged;
@@ -293,6 +304,11 @@ class AppSidebar extends StatelessWidget {
                   onToggleSpaceExpanded: onToggleSpaceExpanded,
                   onCreateSpace: onCreateSpace,
                   onCreateThread: onCreateThread,
+                  onRenameThread: onRenameThread,
+                  onSetThreadArchived: onSetThreadArchived,
+                  onClearChatHistory: onClearChatHistory,
+                  onClearWorkHistory: onClearWorkHistory,
+                  onDeleteThread: onDeleteThread,
                   compact: compact,
                 ),
               ),

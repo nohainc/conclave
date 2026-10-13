@@ -85,6 +85,104 @@ void main() {
     expect(source.requests[a.id], hasLength(2));
   });
 
+  testWidgets('selected thread menu uses the application menu surface',
+      (tester) async {
+    final source = ControlledSource();
+    final cache = AxSpaceThreads(source);
+    final load = cache.ensure(a.id);
+
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SpaceTree(
+      shellContext: AxShellContext(
+        navigation: AxNavigation.thread(a.id, '${a.id}-stream'),
+        spaces: const [a],
+        spaceThreads: cache,
+        expandedSpaceIds: {a.id},
+      ),
+      onCreateSpace: () {},
+      onNavigateTo: (_) {},
+      onToggleSpaceExpanded: (_) {},
+    ))));
+    source.requests[a.id]!.single.complete([stream(a.id, 'A thread')]);
+    await load;
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Thread menu'), findsOneWidget);
+    expect(find.byType(PopupMenuButton<String>), findsNothing);
+    expect(find.byType(MenuAnchor), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Thread menu'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MenuItemButton), findsNWidgets(5));
+    expect(find.text('Rename Thread'), findsOneWidget);
+    expect(find.text('Delete Thread'), findsOneWidget);
+
+    await tester.tap(find.text('Rename Thread'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('selected thread menu dispatches thread actions', (tester) async {
+    final source = ControlledSource();
+    final cache = AxSpaceThreads(source);
+    final load = cache.ensure(a.id);
+    String? renamed;
+    bool? archived;
+    var deleted = false;
+
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SpaceTree(
+      shellContext: AxShellContext(
+        navigation: AxNavigation.thread(a.id, '${a.id}-stream'),
+        spaces: const [a],
+        spaceThreads: cache,
+        expandedSpaceIds: {a.id},
+      ),
+      onCreateSpace: () {},
+      onNavigateTo: (_) {},
+      onToggleSpaceExpanded: (_) {},
+      onRenameThread: (_, name) async => renamed = name,
+      onSetThreadArchived: (_, value) async => archived = value,
+      onDeleteThread: (_) async => deleted = true,
+    ))));
+    source.requests[a.id]!.single.complete([stream(a.id, 'A thread')]);
+    await load;
+    await tester.pumpAndSettle();
+
+    Future<void> openMenu() async {
+      await tester.tap(find.byTooltip('Thread menu'));
+      await tester.pumpAndSettle();
+    }
+
+    await openMenu();
+    await tester.tap(find.text('Rename Thread'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Renamed thread');
+    await tester.tap(find.widgetWithText(FilledButton, 'Rename'));
+    await tester.pumpAndSettle();
+    expect(renamed, 'Renamed thread');
+
+    await openMenu();
+    await tester.tap(find.text('Archive Thread'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Archive'));
+    await tester.pumpAndSettle();
+    expect(archived, isTrue);
+
+    await openMenu();
+    await tester.tap(find.text('Delete Thread'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(deleted, isTrue);
+  });
+
   testWidgets(
       'A B A: fresh return makes zero reads; stale return stays visible with one read',
       (tester) async {

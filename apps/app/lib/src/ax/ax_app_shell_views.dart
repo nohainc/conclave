@@ -45,6 +45,12 @@ extension _AxAppShellViews on _AxAppStateMixin {
                               onToggleSpaceExpanded: _toggleSpaceExpanded,
                               onCreateSpace: _createSpace,
                               onCreateThread: _createThread,
+                              onRenameThread: _renameThreadFromSidebar,
+                              onSetThreadArchived:
+                                  _setThreadArchivedFromSidebar,
+                              onClearChatHistory: _clearChatHistoryFromSidebar,
+                              onClearWorkHistory: _clearWorkHistoryFromSidebar,
+                              onDeleteThread: _deleteThreadFromSidebar,
                               searchController: _searchQueryController,
                               searchFocusNode: _searchFocusNode,
                               onClearSearch: _clearSearch,
@@ -98,6 +104,14 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                     onToggleSpaceExpanded: _toggleSpaceExpanded,
                                     onCreateSpace: _createSpace,
                                     onCreateThread: _createThread,
+                                    onRenameThread: _renameThreadFromSidebar,
+                                    onSetThreadArchived:
+                                        _setThreadArchivedFromSidebar,
+                                    onClearChatHistory:
+                                        _clearChatHistoryFromSidebar,
+                                    onClearWorkHistory:
+                                        _clearWorkHistoryFromSidebar,
+                                    onDeleteThread: _deleteThreadFromSidebar,
                                     searchController: _searchQueryController,
                                     searchFocusNode: _searchFocusNode,
                                     onClearSearch: _clearSearch,

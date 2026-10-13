@@ -449,6 +449,80 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     }
   }
 
+  Future<void> _renameThreadFromSidebar(AxThread thread, String name) async {
+    try {
+      await store.collaboration.editThread(thread, name: name);
+      if (mounted) _showSnackBar('Thread renamed.');
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar('Failed to rename thread: $error', type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _setThreadArchivedFromSidebar(
+      AxThread thread, bool archived) async {
+    try {
+      await store.collaboration.editThread(
+        thread,
+        status: archived ? 'archived' : 'active',
+      );
+      if (mounted) {
+        _showSnackBar(archived ? 'Thread archived.' : 'Thread restored.');
+      }
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar(
+          'Failed to ${archived ? 'archive' : 'restore'} thread: $error',
+          type: ToastType.error,
+        );
+      }
+    }
+  }
+
+  Future<void> _clearChatHistoryFromSidebar(AxThread thread) async {
+    try {
+      await store.discussion.clearHistory(thread.id);
+      if (mounted) _showSnackBar('Chat history cleared.');
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar(
+          'Failed to clear chat history: $error',
+          type: ToastType.error,
+        );
+      }
+    }
+  }
+
+  Future<void> _clearWorkHistoryFromSidebar(AxThread thread) async {
+    try {
+      await store.workHistory.clearHistory(thread.id);
+      if (mounted) _showSnackBar('Work history cleared.');
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar(
+          'Failed to clear work history: $error',
+          type: ToastType.error,
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteThreadFromSidebar(AxThread thread) async {
+    try {
+      await store.collaboration.deleteThread(thread);
+      if (!mounted) return;
+      _showSnackBar('Thread deleted.');
+      if (navigation.threadId == thread.id) {
+        _navigateTo(AxNavigation.space(thread.spaceId));
+      }
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar('Failed to delete thread: $error', type: ToastType.error);
+      }
+    }
+  }
+
   Future<void> _editSpace(AxSpace space) async {
     var name = space.name;
     var description = space.description;
