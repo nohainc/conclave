@@ -450,7 +450,7 @@ it("normalizes retained installed Codex and AGY evidence into the same public co
       })),
       7,
     ],
-    ["gemini-antigravity", "1.3.3", agy, 11],
+    ["gemini-antigravity", "1.3.3", agy, 18],
   ] as const) {
     const payload = readFileSync(
       new URL(
@@ -505,7 +505,7 @@ it("normalizes retained installed Codex and AGY evidence into the same public co
   }
 });
 
-it("publishes four signed Gemini families and rejects invented effort combinations", async () => {
+it("publishes seven signed AGY families and rejects invented effort combinations", async () => {
   const { spaceWorkerExecutionOptions } =
     await import("../src/worker-execution-options.js");
   const candidate = JSON.parse(
@@ -540,10 +540,10 @@ it("publishes four signed Gemini families and rejects invented effort combinatio
     catalog,
     digest,
   )!;
-  expect(result.models.options).toHaveLength(4);
+  expect(result.models.options).toHaveLength(7);
   expect(
     result.models.options.reduce((sum, m) => sum + m.efforts.length, 0),
-  ).toBe(11);
+  ).toBe(18);
   expect(JSON.stringify(result)).not.toContain("nativeId");
   const stale = spaceWorkerExecutionOptions(
     JSON.stringify(candidate),

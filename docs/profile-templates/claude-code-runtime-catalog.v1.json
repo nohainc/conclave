@@ -33,7 +33,7 @@
     },
     "supportedVersions": [
       {
-        "min": "2.1.0",
+        "min": "2.1.287",
         "maxExclusive": "3.0.0"
       }
     ]
@@ -85,6 +85,13 @@
       "--verbose",
       {
         "modelArguments": true
+      },
+      {
+        "ifPresent": "reasoningEffort",
+        "values": [
+          "--effort",
+          "{{reasoningEffort}}"
+        ]
       },
       {
         "sessionResumeArguments": true
@@ -194,19 +201,34 @@
         "id": "sonnet",
         "name": "Claude Sonnet",
         "badge": "Workhorse",
-        "description": "Latest Sonnet model for coding and everyday work"
+        "description": "Latest Sonnet model for coding and everyday work",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
       },
       {
         "id": "opus",
         "name": "Claude Opus",
         "badge": "Frontier",
-        "description": "Latest Opus model for the most demanding work"
+        "description": "Latest Opus model for the most demanding work",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
       },
       {
         "id": "haiku",
         "name": "Claude Haiku",
         "badge": "Fast",
-        "description": "Latest Haiku model for quick, lightweight tasks"
+        "description": "Latest Haiku model for quick, lightweight tasks",
+        "supportedReasoningEfforts": []
       }
     ]
   },

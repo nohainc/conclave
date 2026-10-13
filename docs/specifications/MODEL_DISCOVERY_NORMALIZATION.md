@@ -143,3 +143,29 @@ passed. Production and the running Workspace show the original digest at
 revision 9; the live Gemini Worker Test passed and both Workers show Ready.
 Cloud component validation stops on existing stale generated types; Engine
 component validation stops on existing unrelated formatting violations.
+
+## Catalog corrections — 2026-10-13
+
+All Gemini/AGY runtime authoring templates now include exact mappings for the
+observed `claude-opus-5-5` and `claude-sonnet-5-5` low/medium/high variants and
+`gpt-oss-120b-medium`. Installed `agy models` returned these ten native rows
+alongside Gemini 3.8 Flash on this date. Normalization still intersects exact
+Profile data with discovery; absent variants and unknown IDs are never inferred.
+
+The Claude Code template declares per-model effort options and an optional
+`--effort {{reasoningEffort}}` invocation. Opus and Sonnet advertise low, medium,
+high, xhigh and max; Haiku retains no efforts because the installed 2.1.287 CLI
+predates the documented Haiku 5.5 support. No provider default is asserted.
+The template requires Claude Code 2.1.287 or later. Source:
+[Claude Code model configuration](https://code.claude.com/docs/en/model-config).
+Local version/help inspection confirmed 2.1.287 and the effort argument; no
+provider inference or account entitlement qualification was performed.
+
+Migration `0053_correct_model_effort_profiles.sql` updates only exact known
+canonical payload digests, records the previous Profile in history and increments
+its revision. Customized Profiles are untouched and require the same reviewed
+metadata update through Profile Lab. Saved native variant selections are not
+rewritten; users must reselect the logical model/effort pair after activation.
+The migration must be applied and updated Profiles refreshed before existing
+installations display the corrected choices. No remote deployment is performed
+by this source change.

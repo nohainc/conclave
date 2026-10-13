@@ -24,13 +24,13 @@ for (const [forward, original] of [
       .sort())
       db.exec(sql(name));
     const profile = original
-      ? sql(original).match(/SET profile_json = '(.*?)',/)![1]
+      ? sql(original).match(/SET profile_json = '(.*?)',/)![1]!
       : JSON.stringify(
           JSON.parse(
             readFileSync(
               fileURLToPath(
                 new URL(
-                  "../../../docs/profile-templates/gemini-antigravity-runtime-catalog.live-activity-v4.json",
+                  "./fixtures/agy-live-activity-pre-0051.json",
                   import.meta.url,
                 ),
               ),

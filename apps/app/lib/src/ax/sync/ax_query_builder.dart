@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'ax_sync_engine.dart';
 
@@ -21,6 +22,9 @@ class AxQueryBuilder<T> extends StatefulWidget {
 class _AxQueryBuilderState<T> extends State<AxQueryBuilder<T>> {
   late AxQueryState<T> state;
   void Function()? cancel;
+  int _subscriptionGeneration = 0;
+  AxQueryState<T>? _pendingState;
+  bool _stateUpdateScheduled = false;
   @override
   void initState() {
     super.initState();
@@ -28,17 +32,48 @@ class _AxQueryBuilderState<T> extends State<AxQueryBuilder<T>> {
   }
 
   void _subscribe() {
+    final generation = ++_subscriptionGeneration;
     state = widget.engine.peek(widget.query);
     cancel = widget.engine.watch(widget.query, (value) {
-      if (mounted) setState(() => state = value);
+      if (!mounted) return;
+      _pendingState = value;
+      if (!_isBuildActive) {
+        _pendingState = null;
+        setState(() => state = value);
+        return;
+      }
+      if (_stateUpdateScheduled) return;
+      _stateUpdateScheduled = true;
+      // Query notifications may be synchronous with a parent rebuild. Cross
+      // the current build stack before marking this consumer dirty.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Timer.run(() {
+          _stateUpdateScheduled = false;
+          final next = _pendingState;
+          _pendingState = null;
+          if (mounted && next != null) setState(() => state = next);
+        });
+      });
     }, fireImmediately: false);
     // Attach query state/error handling locally, never to the complete shell.
     if (widget.ensure) {
-      unawaited(widget.engine
-          .ensure(widget.query)
-          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+      final engine = widget.engine;
+      final query = widget.query;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Timer.run(() {
+          if (!mounted || generation != _subscriptionGeneration) return;
+          unawaited(engine
+              .ensure(query)
+              .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+        });
+      });
     }
   }
+
+  bool get _isBuildActive =>
+      WidgetsBinding.instance.buildOwner?.debugBuilding == true ||
+      SchedulerBinding.instance.schedulerPhase != SchedulerPhase.idle;
 
   @override
   void didUpdateWidget(covariant AxQueryBuilder<T> oldWidget) {

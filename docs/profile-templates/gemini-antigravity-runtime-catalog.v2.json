@@ -221,7 +221,7 @@
         "models"
       ],
       "format": "tsv",
-    "idPrefix": "",
+      "idPrefix": "",
       "schemaVersion": 1,
       "timeoutMs": 10000
     },
@@ -233,35 +233,114 @@
           "id": "gemini-3.8-flash",
           "name": "Gemini 3.8 Flash",
           "variants": [
-            { "nativeId": "gemini-3.8-flash-low", "effort": "low" },
-            { "nativeId": "gemini-3.8-flash-medium", "effort": "medium" },
-            { "nativeId": "gemini-3.8-flash-high", "effort": "high" }
+            {
+              "nativeId": "gemini-3.8-flash-low",
+              "effort": "low"
+            },
+            {
+              "nativeId": "gemini-3.8-flash-medium",
+              "effort": "medium"
+            },
+            {
+              "nativeId": "gemini-3.8-flash-high",
+              "effort": "high"
+            }
           ]
         },
         {
           "id": "gemini-3.7-flash",
           "name": "Gemini 3.7 Flash",
           "variants": [
-            { "nativeId": "gemini-3.7-flash-low", "effort": "low" },
-            { "nativeId": "gemini-3.7-flash-medium", "effort": "medium" },
-            { "nativeId": "gemini-3.7-flash-high", "effort": "high" }
+            {
+              "nativeId": "gemini-3.7-flash-low",
+              "effort": "low"
+            },
+            {
+              "nativeId": "gemini-3.7-flash-medium",
+              "effort": "medium"
+            },
+            {
+              "nativeId": "gemini-3.7-flash-high",
+              "effort": "high"
+            }
           ]
         },
         {
           "id": "gemini-3.6-flash",
           "name": "Gemini 3.6 Flash",
           "variants": [
-            { "nativeId": "gemini-3.6-flash-low", "effort": "low" },
-            { "nativeId": "gemini-3.6-flash-medium", "effort": "medium" },
-            { "nativeId": "gemini-3.6-flash-high", "effort": "high" }
+            {
+              "nativeId": "gemini-3.6-flash-low",
+              "effort": "low"
+            },
+            {
+              "nativeId": "gemini-3.6-flash-medium",
+              "effort": "medium"
+            },
+            {
+              "nativeId": "gemini-3.6-flash-high",
+              "effort": "high"
+            }
           ]
         },
         {
           "id": "gemini-3.1-pro",
           "name": "Gemini 3.1 Pro",
           "variants": [
-            { "nativeId": "gemini-3.1-pro-low", "effort": "low" },
-            { "nativeId": "gemini-3.1-pro-high", "effort": "high" }
+            {
+              "nativeId": "gemini-3.1-pro-low",
+              "effort": "low"
+            },
+            {
+              "nativeId": "gemini-3.1-pro-high",
+              "effort": "high"
+            }
+          ]
+        },
+        {
+          "id": "claude-opus-5-5",
+          "name": "Claude Opus 5.5",
+          "variants": [
+            {
+              "nativeId": "claude-opus-5-5-low",
+              "effort": "low"
+            },
+            {
+              "nativeId": "claude-opus-5-5-medium",
+              "effort": "medium"
+            },
+            {
+              "nativeId": "claude-opus-5-5-high",
+              "effort": "high"
+            }
+          ]
+        },
+        {
+          "id": "claude-sonnet-5-5",
+          "name": "Claude Sonnet 5.5",
+          "variants": [
+            {
+              "nativeId": "claude-sonnet-5-5-low",
+              "effort": "low"
+            },
+            {
+              "nativeId": "claude-sonnet-5-5-medium",
+              "effort": "medium"
+            },
+            {
+              "nativeId": "claude-sonnet-5-5-high",
+              "effort": "high"
+            }
+          ]
+        },
+        {
+          "id": "gpt-oss-120b",
+          "name": "GPT-OSS 120B",
+          "variants": [
+            {
+              "nativeId": "gpt-oss-120b-medium",
+              "effort": "medium"
+            }
           ]
         }
       ]
@@ -365,7 +444,9 @@
   "releaseVersion": 2,
   "sandbox": {
     "mappings": {
-      "full_access": ["--dangerously-skip-permissions"],
+      "full_access": [
+        "--dangerously-skip-permissions"
+      ],
       "provider_default": [
         "--sandbox",
         "--mode",

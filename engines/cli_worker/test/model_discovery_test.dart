@@ -5,6 +5,38 @@ import 'package:conclave_cli_worker_engine/src/model_discovery.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('AGY template groups all reviewed native effort variants', () {
+    final profile =
+        jsonDecode(
+              File(
+                '../../docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json',
+              ).readAsStringSync(),
+            )
+            as Map;
+    final mapping = profile['model']['selectionMapping'];
+    final models = parseDiscoveredModels(
+      'claude-opus-5-5-low\tClaude Opus 5.5 (Low)\n'
+          'claude-opus-5-5-high\tClaude Opus 5.5 (High)\n'
+          'claude-sonnet-5-5-medium\tClaude Sonnet 5.5 (Medium)\n'
+          'gpt-oss-120b-medium\tGPT-OSS 120B (Medium)\n',
+      '',
+    );
+    final grouped = normalizeCombinedModels(models, mapping, '1.3.3');
+    expect(grouped.map((m) => m.id), [
+      'claude-opus-5-5',
+      'claude-sonnet-5-5',
+      'gpt-oss-120b',
+    ]);
+    expect(grouped.first.supportedReasoningEfforts, ['low', 'high']);
+    for (final model in grouped) {
+      for (final effort in model.supportedReasoningEfforts) {
+        expect(
+          models.map((m) => m.id),
+          contains(resolveNativeSelection(model, effort, mapping, '1.3.3')),
+        );
+      }
+    }
+  });
   test(
     'TSV discovery preserves exact Gemini IDs and filters other providers',
     () {

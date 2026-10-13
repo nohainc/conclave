@@ -21,15 +21,11 @@ const canonical = (value: any): string =>
   );
 const digest = (text: string) =>
   createHash("sha256").update(text).digest("hex");
-const template = (version: number) =>
+// Applied migrations use frozen historical input, not mutable authoring templates.
+const template = (_version: number) =>
   JSON.parse(
     readFileSync(
-      fileURLToPath(
-        new URL(
-          `../../../docs/profile-templates/gemini-antigravity-runtime-catalog.live-activity-v${version}.json`,
-          import.meta.url,
-        ),
-      ),
+      new URL("./fixtures/agy-live-activity-pre-0051.json", import.meta.url),
       "utf8",
     ),
   );

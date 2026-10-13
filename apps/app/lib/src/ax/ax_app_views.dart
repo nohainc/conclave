@@ -637,13 +637,19 @@ class _HomeThreadCollectionState extends State<_HomeThreadCollection> {
 
   void _watchAndEnsure() {
     _cancelCache = widget.spaceThreads.engine.watchCache(_cacheChanged);
-    for (final space in widget.spaces) {
-      if (space.archived) continue;
-      unawaited(widget.spaceThreads.ensure(space.id).then<void>(
-            (_) {},
-            onError: (Object _, StackTrace __) {},
-          ));
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Timer.run(() {
+        if (!mounted) return;
+        for (final space in widget.spaces) {
+          if (space.archived) continue;
+          unawaited(widget.spaceThreads.ensure(space.id).then<void>(
+                (_) {},
+                onError: (Object _, StackTrace __) {},
+              ));
+        }
+      });
+    });
   }
 
   List<AxContinueWorkItem> _items() {
