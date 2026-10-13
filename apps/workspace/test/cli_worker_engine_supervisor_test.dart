@@ -75,6 +75,28 @@ void main() {
     expect((await first).output, 'first');
   });
 
+  test('cancelling a queued assignment does not release the active slot',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final first = _execute(setup, 'first', prompt: 'slow');
+    await _waitFor(File('${setup.state.path}/active').existsSync);
+    final cancelled = _execute(setup, 'cancelled');
+    final cancelledExpectation = expectLater(
+      cancelled,
+      throwsA(isA<WorkerAssignmentCancelledException>()),
+    );
+    final waiting = _execute(setup, 'waiting');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(await setup.supervisor.cancel('cancelled'), isTrue);
+    await cancelledExpectation;
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    expect(File('${setup.state.path}/active').readAsStringSync(), 'first');
+    expect((await first).output, 'slow');
+    expect((await waiting).output, 'waiting');
+    expect(File('${setup.state.path}/max-active').existsSync(), isFalse);
+  });
+
   test('times out while waiting for the Worker concurrency slot', () async {
     final setup = await _setup();
     addTearDown(() => setup.root.delete(recursive: true));

@@ -422,8 +422,10 @@ final class CliWorkerEngineSupervisor {
     if (queued != null) {
       final workerId = queued.workerId;
       _waitersByWorker[workerId]?.remove(queued);
-      _cancelledAssignments.add(assignmentId);
-      if (!queued.permit.isCompleted) queued.permit.complete();
+      // A cancelled waiter never received a slot, so it must not release one.
+      if (!queued.permit.isCompleted) {
+        queued.permit.completeError(const WorkerAssignmentCancelledException());
+      }
       return true;
     }
     final process = _activeAssignments[assignmentId];
