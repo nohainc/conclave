@@ -237,7 +237,16 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
           children: [
             if (c.definitionsError != null)
               ErrorState(message: c.definitionsError!),
-            FilledButton(
+            if (const {'chatgpt', 'gemini', 'claude'}.contains(
+                c.selectedCloudWorker?['workerTypeId'])) ...[
+              FilledButton.icon(
+                onPressed: _loadSourceProfile,
+                icon: const Icon(Icons.description_outlined),
+                label: const Text('Load source Profile'),
+              ),
+              const SizedBox(height: 8),
+            ],
+            OutlinedButton(
               onPressed: c.canCreateInitialDraft
                   ? () async {
                       try {
