@@ -645,23 +645,25 @@ export async function recordAssignmentResult(
       status: string;
       task_id: string;
     }>();
-  if (!existing || existing.status === "completed") return;
-  if (existing.status === "failed" || existing.status === "cancelled") return;
+  if (!existing) return;
 
-  // 1. Update assignment
-  await db
-    .prepare(
-      `UPDATE worker_assignments SET status = 'completed', output_json = ?1, updated_at = ?2 WHERE id = ?3`,
-    )
-    .bind(JSON.stringify(result), now, assignmentId)
-    .run();
-
-  await db
-    .prepare(
-      "UPDATE workflow_tasks SET status = 'completed', output_json = ?1, finished_at = ?2, updated_at = ?2 WHERE id = ?3",
-    )
-    .bind(JSON.stringify(result), now, existing.task_id)
-    .run();
+  await runTerminalTransition(db, [
+    db
+      .prepare(
+        `UPDATE worker_assignments SET status = 'completed', output_json = ?1, updated_at = ?2
+         WHERE id = ?3 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+      )
+      .bind(JSON.stringify(result), now, assignmentId),
+    db
+      .prepare(
+        `UPDATE workflow_tasks SET status = 'completed', output_json = ?1,
+                finished_at = ?2, updated_at = ?2
+         WHERE id = ?3 AND status IN ('queued', 'waiting', 'running')
+           AND EXISTS (SELECT 1 FROM worker_assignments
+                       WHERE id = ?4 AND status = 'completed')`,
+      )
+      .bind(JSON.stringify(result), now, existing.task_id, assignmentId),
+  ]);
 }
 
 /**
@@ -692,26 +694,30 @@ export async function recordAssignmentError(
       status: string;
       task_id: string;
     }>();
-  if (
-    !existing ||
-    ["completed", "failed", "cancelled"].includes(existing.status)
-  ) {
-    return;
-  }
+  if (!existing) return;
 
-  await db
-    .prepare(
-      `UPDATE worker_assignments SET status = 'failed', error_json = ?1, updated_at = ?2 WHERE id = ?3`,
-    )
-    .bind(JSON.stringify(normalizedFailure), now, assignmentId)
-    .run();
-
-  await db
-    .prepare(
-      "UPDATE workflow_tasks SET status = 'failed', error = ?1, finished_at = ?2, updated_at = ?2 WHERE id = ?3",
-    )
-    .bind(normalizedFailure.error.message, now, existing.task_id)
-    .run();
+  await runTerminalTransition(db, [
+    db
+      .prepare(
+        `UPDATE worker_assignments SET status = 'failed', error_json = ?1, updated_at = ?2
+         WHERE id = ?3 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+      )
+      .bind(JSON.stringify(normalizedFailure), now, assignmentId),
+    db
+      .prepare(
+        `UPDATE workflow_tasks SET status = 'failed', error = ?1,
+                finished_at = ?2, updated_at = ?2
+         WHERE id = ?3 AND status IN ('queued', 'waiting', 'running')
+           AND EXISTS (SELECT 1 FROM worker_assignments
+                       WHERE id = ?4 AND status = 'failed')`,
+      )
+      .bind(
+        normalizedFailure.error.message,
+        now,
+        existing.task_id,
+        assignmentId,
+      ),
+  ]);
 }
 
 export async function recordAssignmentCancelled(
@@ -727,24 +733,131 @@ export async function recordAssignmentCancelled(
       status: string;
       task_id: string;
     }>();
-  if (
-    !existing ||
-    ["completed", "failed", "cancelled"].includes(existing.status)
-  ) {
+  if (!existing) return;
+  await runTerminalTransition(db, [
+    db
+      .prepare(
+        `UPDATE worker_assignments SET status = 'cancelled', error_json = ?1, updated_at = ?2
+         WHERE id = ?3 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+      )
+      .bind(JSON.stringify(cancellation), now, assignmentId),
+    db
+      .prepare(
+        `UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1,
+                updated_at = ?1
+         WHERE id = ?2 AND status IN ('queued', 'waiting', 'running')
+           AND EXISTS (SELECT 1 FROM worker_assignments
+                       WHERE id = ?3 AND status = 'cancelled')`,
+      )
+      .bind(now, existing.task_id, assignmentId),
+  ]);
+}
+
+async function runTerminalTransition(
+  db: D1Database,
+  statements: D1PreparedStatement[],
+): Promise<void> {
+  if (typeof db.batch === "function") {
+    await db.batch(statements);
     return;
   }
-  await db
+  for (const statement of statements) await statement.run();
+}
+
+/**
+ * Closes assignments whose Workspace can no longer be expected to report a
+ * terminal result. This is intentionally Cloud-owned recovery: a transport
+ * heartbeat proves only that the Workspace service is reachable, not that the
+ * Engine/provider process is still alive.
+ */
+export async function recoverStaleAssignments(
+  db: D1Database,
+  now = new Date(),
+): Promise<number> {
+  const nowMs = now.getTime();
+  const rows = await db
     .prepare(
-      "UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE id = ?2",
+      `SELECT wa.id, wa.status, wa.created_at AS createdAt,
+              wa.updated_at AS updatedAt, wa.timeout_ms AS timeoutMs,
+              ew.status AS workspaceStatus, ew.updated_at AS workspaceUpdatedAt,
+              g.expires_at AS grantExpiresAt,
+              wr.status AS workRequestStatus
+         FROM worker_assignments wa
+         JOIN execution_workspaces ew ON ew.id = wa.execution_workspace_id
+         LEFT JOIN workspace_space_grants g ON g.id = wa.workspace_space_grant_id
+         LEFT JOIN workflow_tasks wt ON wt.id = wa.task_id
+         LEFT JOIN work_requests wr ON wr.id = wt.work_request_id
+        WHERE wa.status IN ('created', 'dispatched', 'acknowledged', 'running')`,
     )
-    .bind(now, existing.task_id)
-    .run();
-  await db
-    .prepare(
-      `UPDATE worker_assignments SET status = 'cancelled', error_json = ?1, updated_at = ?2 WHERE id = ?3`,
-    )
-    .bind(JSON.stringify(cancellation), now, assignmentId)
-    .run();
+    .all<{
+      id: string;
+      status: string;
+      createdAt: string;
+      updatedAt: string;
+      timeoutMs: number | null;
+      workspaceStatus: string;
+      workspaceUpdatedAt: string;
+      grantExpiresAt: string | null;
+      workRequestStatus: string | null;
+    }>();
+
+  let recovered = 0;
+  for (const row of rows.results ?? []) {
+    if (row.workRequestStatus === "cancelled") {
+      await recordAssignmentCancelled(db, row.id, {
+        status: "cancelled",
+        reason: "The owning Work Request was cancelled.",
+      });
+      recovered += 1;
+      continue;
+    }
+    const grantExpired =
+      row.grantExpiresAt != null && Date.parse(row.grantExpiresAt) <= nowMs;
+    const workspaceDisconnected =
+      row.workspaceStatus !== "online" &&
+      nowMs -
+        Math.max(
+          Date.parse(row.updatedAt),
+          Date.parse(row.workspaceUpdatedAt),
+        ) >=
+        30_000;
+    const executionExpired =
+      row.timeoutMs != null &&
+      Number.isFinite(row.timeoutMs) &&
+      nowMs - Date.parse(row.createdAt) >= row.timeoutMs;
+    if (!grantExpired && !workspaceDisconnected && !executionExpired) {
+      continue;
+    }
+    const code = grantExpired
+      ? "provider_unavailable"
+      : workspaceDisconnected
+        ? "provider_unavailable"
+        : "timeout";
+    const message = grantExpired
+      ? "The Workspace execution lease expired before the assignment completed."
+      : workspaceDisconnected
+        ? "The Workspace disconnected before the assignment completed."
+        : "The assignment exceeded its execution deadline.";
+    await recordAssignmentError(db, row.id, {
+      error: {
+        code,
+        message,
+        retryable: true,
+        details: cloudFailureDiagnostic(
+          grantExpired
+            ? "workspace_lease"
+            : workspaceDisconnected
+              ? "workspace_disconnect"
+              : "execution_timeout",
+          code,
+          message,
+        ),
+      },
+      failedAt: now.toISOString(),
+    });
+    recovered += 1;
+  }
+  return recovered;
 }
 
 /**
@@ -794,7 +907,14 @@ export async function cancelTaskAssignment(
     });
     if (!response.ok) return { cancelled: false };
     const acknowledgement = (await response.json()) as { cancelled?: unknown };
-    return { cancelled: acknowledgement.cancelled === true };
+    if (acknowledgement.cancelled !== true) return { cancelled: false };
+    // A confirmed process stop must release Cloud capacity even if the
+    // independently delivered terminal message is delayed or lost.
+    await recordAssignmentCancelled(env.CONCLAVE_DB, assignmentId, {
+      status: "cancelled",
+      reason,
+    });
+    return { cancelled: true };
   } catch {
     return { cancelled: false };
   }

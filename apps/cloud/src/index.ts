@@ -47,6 +47,7 @@ import {
 } from "./observability.js";
 import { pruneExpiredRealtimeEvents } from "./realtime-retention.js";
 import { pruneWorkerActivityHistory } from "./worker-activity-history.js";
+import { recoverStaleAssignments } from "./assignment-dispatcher.js";
 import { pruneExpiredIssueReports } from "./issue-report-retention.js";
 import {
   handleCreateIssueReport,
@@ -180,7 +181,17 @@ const routeDependencies = {
 } as unknown as WorkerRouteDependencies;
 
 export default {
-  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    const recoveredAssignments = await recoverStaleAssignments(env.CONCLAVE_DB);
+    if (controller.cron !== "17 3 * * *") {
+      console.log(
+        JSON.stringify({
+          event: "assignment_recovery_complete",
+          recoveredAssignments,
+        }),
+      );
+      return;
+    }
     const deleted = await pruneExpiredRealtimeEvents(env.CONCLAVE_DB);
     const deletedWorkerActivity = await pruneWorkerActivityHistory(
       env.CONCLAVE_DB,
@@ -195,6 +206,7 @@ export default {
         deleted,
         deletedWorkerActivity,
         deletedIssueReports,
+        recoveredAssignments,
       }),
     );
   },

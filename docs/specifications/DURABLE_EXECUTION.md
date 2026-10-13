@@ -18,6 +18,31 @@ Workflow replay must not depend on module-level mutable state, wall-clock
 values, or an in-memory task cursor. Side effects occur inside named durable
 steps, with bounded retry and timeout policies.
 
+## Terminal reconciliation
+
+Assignment lifecycle is authoritative independently of Worker activity events.
+Workspace journals the assignment before execution, records a terminal result
+before sending it, and retains that result until Cloud acknowledges the
+terminal delivery. Terminal messages are correlation-checked and idempotent;
+replayed results cannot reopen or rewrite a terminal assignment. A Workspace
+restart reclassifies in-flight local records as outcome-unknown and reports a
+normalized failure during the next synchronization.
+
+Cloud recovery closes active assignments whose execution deadline, Workspace
+lease, or disconnected-runtime grace period has elapsed. Recovery runs every
+five minutes while the heavier retention work remains daily.
+Recovery also cancels active assignments owned by cancelled Work Requests,
+releasing their scheduling capacity without waiting for an execution deadline.
+When Workspace confirms a cancellation stopped the process tree, Cloud records
+the assignment cancellation before acknowledging the cancellation API call;
+it does not depend on a separate terminal transport message to release capacity.
+Workspace sync also includes a bounded recent terminal window, allowing a reconnect to
+reconcile a locally pending journal entry even when the terminal
+acknowledgement itself was lost. The recovery path updates the assignment and
+workflow task together, allowing the durable Workflow to retry or fail the
+Work Request through its normal state machine. Activity events remain
+observational and may be missing without keeping an assignment in `running`.
+
 ## Identity and recovery
 
 Workflow instances use deterministic identifiers derived from validated
