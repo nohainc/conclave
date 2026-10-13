@@ -491,6 +491,8 @@ class _WorkComposer extends StatelessWidget {
                 !submitting &&
                 !loadingWorkflows &&
                 workflowCatalogError == null,
+            showMarkdownControlsInSuffix: false,
+            showSendInSuffix: false,
             additionalControlsBuilder: (inputKey) =>
                 _additionalControls(context, inputKey),
           ),

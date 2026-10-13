@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:conclave_design/conclave_design.dart';
 
 import 'conclave_markdown_body.dart';
 
@@ -99,7 +100,9 @@ class MarkdownComposer extends StatefulWidget {
       this.labelText,
       this.hintText,
       this.minLines = 2,
-      this.maxLines = 8});
+      this.maxLines = 8,
+      this.showMarkdownControlsInSuffix = true,
+      this.showSendInSuffix = true});
 
   final TextEditingController controller;
   final VoidCallback? onSend;
@@ -117,6 +120,8 @@ class MarkdownComposer extends StatefulWidget {
   final String? hintText;
   final int minLines;
   final int maxLines;
+  final bool showMarkdownControlsInSuffix;
+  final bool showSendInSuffix;
 
   @override
   State<MarkdownComposer> createState() => _MarkdownComposerState();
@@ -210,16 +215,33 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
             onPressed: () => setState(() => _preview = !_preview),
             child: Text(_preview ? 'Write' : 'Preview'),
           ),
+        if (widget.chatStyle && !widget.showMarkdownControlsInSuffix)
+          IconButton(
+            tooltip: _showFormatting
+                ? 'Hide Markdown controls'
+                : 'Show Markdown controls',
+            icon: Icon(
+              Icons.text_format,
+              size: 18,
+              color: _showFormatting
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+            onPressed: () => setState(() => _showFormatting = !_showFormatting),
+          ),
         if (widget.chatStyle &&
-            _preview &&
+            !widget.showSendInSuffix &&
             widget.onSend != null &&
             !widget.sendInToolbar)
           Tooltip(
               message: widget.sendTooltip,
-              child: TextButton(
-                onPressed:
-                    widget.enabled && widget.sendEnabled ? widget.onSend : null,
-                child: const Text('Send'),
+              child: IconButton(
+                tooltip: widget.sendTooltip,
+                onPressed: widget.enabled && widget.sendEnabled
+                    ? widget.onSend
+                    : null,
+                color: Theme.of(context).colorScheme.primary,
+                icon: const Icon(Icons.send_rounded, size: 18),
               )),
       ]);
 
@@ -274,24 +296,31 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                 contentPadding: widget.chatStyle
                     ? const EdgeInsets.fromLTRB(14, 12, 10, 12)
                     : null,
-                suffixIcon: widget.chatStyle
+                suffixIcon: widget.chatStyle &&
+                        (widget.showMarkdownControlsInSuffix ||
+                            (widget.onSend != null &&
+                                !widget.sendInToolbar &&
+                                widget.showSendInSuffix))
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            tooltip: _showFormatting
-                                ? 'Hide Markdown controls'
-                                : 'Show Markdown controls',
-                            icon: Icon(
-                              Icons.text_format,
-                              size: 18,
-                              color:
-                                  _showFormatting ? colorScheme.primary : null,
+                          if (widget.showMarkdownControlsInSuffix)
+                            IconButton(
+                              tooltip: _showFormatting
+                                  ? 'Hide Markdown controls'
+                                  : 'Show Markdown controls',
+                              icon: Icon(
+                                Icons.text_format,
+                                size: 18,
+                                color:
+                                    _showFormatting ? colorScheme.primary : null,
+                              ),
+                              onPressed: () => setState(
+                                  () => _showFormatting = !_showFormatting),
                             ),
-                            onPressed: () => setState(
-                                () => _showFormatting = !_showFormatting),
-                          ),
-                          if (widget.onSend != null && !widget.sendInToolbar)
+                          if (widget.onSend != null &&
+                              !widget.sendInToolbar &&
+                              widget.showSendInSuffix)
                             IconButton(
                               tooltip: widget.sendTooltip,
                               onPressed: widget.enabled && widget.sendEnabled
@@ -338,7 +367,9 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
       ],
     );
 
-    final backgroundColor = colorScheme.surfaceContainerLow;
+    final backgroundColor = ConclaveColors.composerBackground(
+      Theme.of(context).brightness == Brightness.dark,
+    );
 
     return Container(
       clipBehavior: Clip.antiAlias,

@@ -721,8 +721,8 @@ class _ThreadPageState extends State<ThreadPage>
       _terminalActivityChecks.remove(assignmentId);
       if (!mounted || widget.thread.id != threadId) return;
       final request = _workTimeline
-          .where((r) => AxWorkActivityStore.assignmentIdsFor(r)
-              .contains(assignmentId))
+          .where((r) =>
+              AxWorkActivityStore.assignmentIdsFor(r).contains(assignmentId))
           .firstOrNull;
       if (request == null ||
           request.id.startsWith('local-') ||
@@ -771,7 +771,8 @@ class _ThreadPageState extends State<ThreadPage>
               .synchronize(widget.thread.id, reconcileNewest: true)
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
         } else if (type == 'thread.clearWork') {
-          // Work was cleared, refresh work history
+          // Discard retained pages before reconciling the remote clear.
+          _workHistoryCache.resetHistory(widget.thread.id);
           unawaited(_refreshWorkTimeline()
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
         }
@@ -1104,6 +1105,8 @@ class _ThreadPageState extends State<ThreadPage>
           chatStyle: true,
           enabled: widget.space.effectivePermissions.chat,
           onSend: _sendDiscussion,
+          showMarkdownControlsInSuffix: false,
+          showSendInSuffix: false,
           additionalControlsBuilder: alignWithWork
               ? (_) => ValueListenableBuilder<double>(
                   valueListenable: _chatComposerSpaceChanges,
