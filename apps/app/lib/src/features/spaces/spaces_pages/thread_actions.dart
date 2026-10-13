@@ -466,4 +466,143 @@ extension _ThreadActions on _ThreadPageState {
       _loadingOlderChat = false;
     }
   }
+
+  Future<void> _showThreadMenu() async {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final menuColor = isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface;
+    final textColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(screenWidth - 40, 60, 20, 0),
+      items: [
+        PopupMenuItem<String>(
+          value: 'rename',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.edit_outlined, size: 18, color: textColor),
+              const SizedBox(width: 12),
+              const Text('Rename Thread'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'archive',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.archive_outlined, size: 18, color: textColor),
+              const SizedBox(width: 12),
+              const Text('Archive Thread'),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) async {
+      if (value == null || !mounted) return;
+      if (value == 'rename') {
+        await _showRenameDialog();
+      } else if (value == 'archive') {
+        await _showArchiveDialog();
+      }
+    });
+  }
+
+  Future<void> _showRenameDialog() async {
+    final currentName = widget.thread.title;
+    final controller = TextEditingController(text: currentName);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rename Thread'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 1,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (value) => Navigator.pop(dialogContext, value),
+          decoration: const InputDecoration(
+            labelText: 'Thread name',
+            hintText: 'Enter new thread name',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, null),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: controller.text.trim().isEmpty
+                ? null
+                : () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+
+    if (newName != null && newName.trim().isNotEmpty && newName != currentName) {
+      try {
+        await widget.onRename?.call(newName.trim());
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Thread renamed.')),
+          );
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to rename thread: $error'),
+              backgroundColor: ConclaveColors.error,
+            ),
+          );
+        }
+      }
+    }
+    controller.dispose();
+  }
+
+  Future<void> _showArchiveDialog() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Archive Thread'),
+        content: const Text(
+          'This Thread and all its history will be moved to archived Threads. '
+          'You can unarchive it later.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Archive'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        widget.onArchive();
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to archive thread: $error'),
+              backgroundColor: ConclaveColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
 }

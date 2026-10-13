@@ -810,6 +810,32 @@ class _ThreadPageState extends State<ThreadPage>
     _workComposerChanges.value++;
   }
 
+  Widget _threadHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              widget.thread.title,
+              style: Theme.of(context).textTheme.titleLarge,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.more_vert),
+            onPressed: _showThreadMenu,
+            tooltip: 'Thread menu',
+            splashRadius: 20,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: _tabController,
@@ -861,21 +887,30 @@ class _ThreadPageState extends State<ThreadPage>
             content = Center(
                 child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1681),
-              child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                        child: pane(
-                            'Chat', _discuss(context, alignWithWork: true))),
-                    VerticalDivider(
-                      width: 1,
-                      thickness: 1,
-                      indent: 20,
-                      endIndent: 20,
-                      color: Theme.of(context).dividerColor,
-                    ),
-                    Expanded(child: pane('Work', _work(context))),
-                  ]),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _threadHeader(),
+                  const Divider(height: 1, thickness: 1),
+                  Expanded(
+                    child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                              child: pane(
+                                  'Chat', _discuss(context, alignWithWork: true))),
+                          VerticalDivider(
+                            width: 1,
+                            thickness: 1,
+                            indent: 20,
+                            endIndent: 20,
+                            color: Theme.of(context).dividerColor,
+                          ),
+                          Expanded(child: pane('Work', _work(context))),
+                        ]),
+                  ),
+                ],
+              ),
             ));
           } else {
             content = Center(
@@ -883,15 +918,27 @@ class _ThreadPageState extends State<ThreadPage>
               constraints: const BoxConstraints(maxWidth: 840),
               child: Padding(
                   key: const ValueKey('thread-tab-padding'),
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  padding: EdgeInsets.zero,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      tabHeader(['Chat', 'Work'], controller: _tabController),
+                      _threadHeader(),
+                      const Divider(height: 1, thickness: 1),
                       Expanded(
-                          child: _tabController.index == 0
-                              ? _discuss(context)
-                              : _work(context)),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              tabHeader(['Chat', 'Work'], controller: _tabController),
+                              Expanded(
+                                  child: _tabController.index == 0
+                                      ? _discuss(context)
+                                      : _work(context)),
+                            ],
+                          ),
+                        ),
+                      ),
                     ],
                   )),
             ));
