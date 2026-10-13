@@ -124,17 +124,33 @@ class AxDeferredListenableBuilder extends StatefulWidget {
 class _AxDeferredListenableBuilderState
     extends State<AxDeferredListenableBuilder> {
   bool _rebuildScheduled = false;
+  bool _listening = false;
 
   @override
   void initState() {
     super.initState();
-    widget.listenable.addListener(_scheduleRebuild);
+    _attachAfterFirstFrame();
+  }
+
+  void _attachAfterFirstFrame() {
+    final binding = WidgetsBinding.instance;
+    binding.addPostFrameCallback((_) {
+      Timer.run(() {
+        if (!mounted || _listening) return;
+        widget.listenable.addListener(_scheduleRebuild);
+        _listening = true;
+        setState(() {});
+      });
+    });
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
+      binding.scheduleFrame();
+    }
   }
 
   @override
   void didUpdateWidget(covariant AxDeferredListenableBuilder oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.listenable != widget.listenable) {
+    if (_listening && oldWidget.listenable != widget.listenable) {
       oldWidget.listenable.removeListener(_scheduleRebuild);
       widget.listenable.addListener(_scheduleRebuild);
     }
@@ -160,7 +176,7 @@ class _AxDeferredListenableBuilderState
 
   @override
   void dispose() {
-    widget.listenable.removeListener(_scheduleRebuild);
+    if (_listening) widget.listenable.removeListener(_scheduleRebuild);
     super.dispose();
   }
 

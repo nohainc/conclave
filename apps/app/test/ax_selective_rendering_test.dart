@@ -137,9 +137,14 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
+    expect(builds, greaterThanOrEqualTo(2));
+
+    source.value = 2;
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(builds, greaterThanOrEqualTo(2));
+    expect(builds, greaterThanOrEqualTo(3));
   });
 
   final builds = <String, int>{};
