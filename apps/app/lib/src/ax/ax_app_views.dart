@@ -603,6 +603,17 @@ class _HomeThreadCollection extends StatefulWidget {
 
 class _HomeThreadCollectionState extends State<_HomeThreadCollection> {
   VoidCallback? _cancelCache;
+  bool _cacheRebuildPending = false;
+
+  void _cacheChanged() {
+    if (!mounted || _cacheRebuildPending) return;
+    _cacheRebuildPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cacheRebuildPending = false;
+      if (mounted) setState(() {});
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
 
   @override
   void initState() {
@@ -625,9 +636,7 @@ class _HomeThreadCollectionState extends State<_HomeThreadCollection> {
   }
 
   void _watchAndEnsure() {
-    _cancelCache = widget.spaceThreads.engine.watchCache(() {
-      if (mounted) setState(() {});
-    });
+    _cancelCache = widget.spaceThreads.engine.watchCache(_cacheChanged);
     for (final space in widget.spaces) {
       if (space.archived) continue;
       unawaited(widget.spaceThreads.ensure(space.id).then<void>(
