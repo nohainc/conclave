@@ -794,6 +794,26 @@ class AxWorkHistoryCache {
     }
   }
 
+  Future<void> clearHistory(String threadId) async {
+    final context = _contexts[threadId];
+    if (context == null) return;
+
+    for (final key in context.pageKeys) {
+      engine.remove(key);
+    }
+
+    engine.update(
+      query(threadId),
+      (_) => AxWorkHistory(
+        requests: const [],
+        initialLoaded: true,
+      ),
+    );
+
+    engine.invalidate(AxQueryKey(['thread', threadId, 'work-requests']),
+        prefix: true);
+  }
+
   void clear() {
     _attempts.clear();
     for (final entry in _contexts.entries) {

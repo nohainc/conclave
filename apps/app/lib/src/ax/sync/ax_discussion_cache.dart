@@ -578,6 +578,25 @@ class AxDiscussionCache {
         .then<void>((_) {});
   }
 
+  Future<void> clearHistory(String id) async {
+    final history = _history(id);
+    final messageIds = history.messages.map((m) => m.id).toList();
+    if (messageIds.isEmpty) return;
+
+    final context = _context(id);
+    final deletedIds = {...history.deletedMessageIds, ...messageIds};
+
+    engine.update(
+      query(id),
+      (_) => AxDiscussionHistory(
+        deletedMessageIds: deletedIds,
+        initialLoaded: true,
+      ),
+    );
+
+    _emit(context);
+  }
+
   /// Session boundary only; never call from widget disposal.
   void clear() {
     _attempts.clear();

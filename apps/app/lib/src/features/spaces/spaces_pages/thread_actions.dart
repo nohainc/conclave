@@ -470,8 +470,11 @@ extension _ThreadActions on _ThreadPageState {
   Future<void> _showThreadMenu() async {
     final screenWidth = MediaQuery.of(context).size.width;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final menuColor = isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface;
     final textColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
+    final errorColor = ConclaveColors.error;
+    final hasActiveWork = _workTimeline
+        .any((w) => !w.id.startsWith('local-') &&
+            const {'queued', 'running', 'waiting'}.contains(w.status));
 
     showMenu<String>(
       context: context,
@@ -499,6 +502,46 @@ extension _ThreadActions on _ThreadPageState {
             ],
           ),
         ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'clearChat',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.delete_outline, size: 18, color: textColor),
+              const SizedBox(width: 12),
+              const Text('Clear Chat History'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          enabled: !hasActiveWork,
+          value: 'clearWork',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.delete_outline, size: 18,
+                color: hasActiveWork ? Colors.grey : textColor),
+              const SizedBox(width: 12),
+              Text('Clear Work History',
+                style: TextStyle(
+                  color: hasActiveWork ? Colors.grey : textColor,
+                )),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'delete',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.delete_rounded, size: 18, color: errorColor),
+              const SizedBox(width: 12),
+              Text('Delete Thread', style: TextStyle(color: errorColor)),
+            ],
+          ),
+        ),
       ],
     ).then((value) async {
       if (value == null || !mounted) return;
@@ -506,6 +549,12 @@ extension _ThreadActions on _ThreadPageState {
         await _showRenameDialog();
       } else if (value == 'archive') {
         await _showArchiveDialog();
+      } else if (value == 'clearChat') {
+        await _showClearChatDialog();
+      } else if (value == 'clearWork') {
+        await _showClearWorkDialog();
+      } else if (value == 'delete') {
+        await _showDeleteThreadDialog();
       }
     });
   }
@@ -598,6 +647,139 @@ extension _ThreadActions on _ThreadPageState {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Failed to archive thread: $error'),
+              backgroundColor: ConclaveColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showClearChatDialog() async {
+    final messageCount = _discussionCache.peek(widget.thread.id).messages.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear Chat History'),
+        content: Text(
+          messageCount == 0
+              ? 'No chat messages to clear.'
+              : 'Delete all $messageCount chat messages? This action cannot be undone. Work history will not be affected.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          if (messageCount > 0)
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Clear Chat'),
+            ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _discussionCache.clearHistory(widget.thread.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Chat history cleared.')),
+          );
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to clear chat history: $error'),
+              backgroundColor: ConclaveColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showClearWorkDialog() async {
+    final requestCount = _workTimeline.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear Work History'),
+        content: Text(
+          requestCount == 0
+              ? 'No work requests to clear.'
+              : 'Delete all $requestCount work requests and reset Work context? '
+                'This action cannot be undone. Chat history will not be affected.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          if (requestCount > 0)
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Clear Work'),
+            ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _workHistoryCache.clearHistory(widget.thread.id);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Work history cleared.')),
+          );
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to clear work history: $error'),
+              backgroundColor: ConclaveColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showDeleteThreadDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Thread'),
+        content: const Text(
+          'Permanently delete this Thread and all its history? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: ConclaveColors.error,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        widget.onArchive();
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete thread: $error'),
               backgroundColor: ConclaveColors.error,
             ),
           );
