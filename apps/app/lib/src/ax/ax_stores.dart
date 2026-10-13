@@ -145,8 +145,13 @@ class _AxDeferredListenableBuilderState
     _rebuildScheduled = true;
     final binding = WidgetsBinding.instance;
     binding.addPostFrameCallback((_) {
-      _rebuildScheduled = false;
-      if (mounted) setState(() {});
+      // Flutter Web can begin the next layout pass before a post-frame
+      // callback has fully unwound. Cross one event-loop turn before marking
+      // this element dirty so refresh/startup ordering cannot re-enter build.
+      Timer.run(() {
+        _rebuildScheduled = false;
+        if (mounted) setState(() {});
+      });
     });
     if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
       binding.scheduleFrame();

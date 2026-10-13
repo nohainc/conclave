@@ -120,6 +120,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('deferred listener crosses the post-frame event boundary',
+      (tester) async {
+    final source = ValueNotifier<int>(0);
+    addTearDown(source.dispose);
+    var builds = 0;
+
+    await tester.pumpWidget(MaterialApp(
+      home: AxDeferredListenableBuilder(
+        listenable: source,
+        builder: (context, child) {
+          builds++;
+          if (builds == 1) source.value = 1;
+          return Text('deferred-$builds');
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(builds, greaterThanOrEqualTo(2));
+  });
+
   final builds = <String, int>{};
   void observe() {
     final previous = debugOnRebuildDirtyWidget;
