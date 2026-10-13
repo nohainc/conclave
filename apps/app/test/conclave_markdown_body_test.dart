@@ -1,6 +1,9 @@
 import 'package:conclave_app/src/brand.dart';
+import 'package:conclave_app/src/features/common/conclave_code_block.dart';
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -117,6 +120,108 @@ void main() {
     expect(copied, 'First message.');
   });
 
+  testWidgets('mouse drag selection spans rich Markdown and code',
+      (tester) async {
+    SelectedContent? selected;
+    const data =
+        'First paragraph.\n\n```dart\nfinal value = 1;\n```\n\nLast paragraph.';
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ConclaveMarkdownBody(
+          data: data,
+          onSelectionChanged: (value) => selected = value,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final gesture = await tester.startGesture(
+      tester.getTopLeft(find.text('First paragraph.')),
+      kind: PointerDeviceKind.mouse,
+    );
+    addTearDown(gesture.removePointer);
+    await tester.pump();
+    await gesture.moveTo(tester.getBottomRight(find.text('Last paragraph.')));
+    await gesture.up();
+    await tester.pump();
+
+    expect(selected?.plainText, contains('First paragraph.'));
+    expect(selected?.plainText, contains('final value = 1;'));
+    expect(selected?.plainText, contains('Last paragraph.'));
+  });
+
+  testWidgets('selection is refreshed when a live message is replaced',
+      (tester) async {
+    String data = 'Old response';
+    final selections = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) => Scaffold(
+            body: ConclaveMarkdownBody(
+              data: data,
+              onSelectionChanged: (value) {
+                if (value != null) selections.add(value.plainText);
+              },
+            ),
+            floatingActionButton: FloatingActionButton(
+              onPressed: () => setState(() => data = 'New response'),
+              child: const Icon(Icons.refresh),
+            ),
+          ),
+        ),
+      ),
+    );
+    final first =
+        tester.state<SelectableRegionState>(find.byType(SelectableRegion));
+    first.selectAll();
+    await tester.pump();
+    expect(selections.last, 'Old response');
+
+    await tester.tap(find.byIcon(Icons.refresh));
+    await tester.pumpAndSettle();
+    final second =
+        tester.state<SelectableRegionState>(find.byType(SelectableRegion));
+    expect(identical(first, second), isFalse);
+    second.selectAll();
+    await tester.pump();
+    expect(selections.last, 'New response');
+  });
+
+  testWidgets('long responses retain rich rendering and selection',
+      (tester) async {
+    final paragraphs = List<String>.generate(
+        220, (index) => 'Paragraph $index with **bold** and `inline code`.');
+    final data = [
+      '# Long response',
+      '| Name | State |\n| --- | --- |\n| Worker | Ready |',
+      '```json\n{"status":"ready","items":[1,2,3]}\n```',
+      ...paragraphs,
+    ].join('\n\n');
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ConclaveMarkdownBody(data: data),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final region =
+        tester.state<SelectableRegionState>(find.byType(SelectableRegion));
+    region.selectAll();
+    await tester.pump();
+    expect(find.byType(Table), findsOneWidget);
+    expect(find.byType(ConclaveCodeBlock), findsOneWidget);
+    expect(
+        find.byWidgetPredicate((widget) =>
+            widget is SingleChildScrollView &&
+            widget.scrollDirection == Axis.horizontal),
+        findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
   for (final content in [
     '<script>alert("unsafe")</script>',
     '<iframe src="https://example.com"></iframe>',
@@ -187,6 +292,11 @@ void main() {
     ));
     final renderer = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
     renderer.onTapLink!('Docs', 'https://example.com/docs', '');
+    expect(destination, 'https://example.com/docs');
+
+    destination = null;
+    await tester.tap(find.text('Docs'));
+    await tester.pump();
     expect(destination, 'https://example.com/docs');
   });
 

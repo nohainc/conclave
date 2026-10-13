@@ -4,6 +4,7 @@ import 'sync/ax_workflow_configurations.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import 'sync/persistence/ax_persistent_read_cache.dart';
 import 'sync/persistence/ax_thread_view_state_store.dart';
 import '../notifications/notification_models.dart';
@@ -45,15 +46,26 @@ class AxCoalescedListenable extends ChangeNotifier {
       if (!_disposed) notifyListeners();
     }
 
+    final scheduler = SchedulerBinding.instance;
+    final isBuilding =
+        WidgetsBinding.instance.buildOwner?.debugBuilding ?? false;
+
     // A microtask is sufficient when a source changes outside a frame and
-    // preserves synchronous coalescing for callers. During build/layout,
+    // preserves synchronous coalescing for callers. During a build/layout,
     // however, a microtask can run before Flutter has finished rebuilding the
-    // current element. Deferring that notification to the frame boundary
-    // prevents ListenableBuilder from being marked dirty re-entrantly.
-    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
+    // current element. schedulerPhase can still be idle during a manually
+    // entered BuildOwner scope, so check both signals before notifying.
+    if (!isBuilding && scheduler.schedulerPhase == SchedulerPhase.idle) {
       scheduleMicrotask(flush);
     } else {
-      SchedulerBinding.instance.addPostFrameCallback((_) => flush());
+      scheduler.addPostFrameCallback((_) => flush());
+      // addPostFrameCallback does not request a frame. This matters when a
+      // callback is queued from an idle/manual build scope or from another
+      // post-frame callback; ensure the deferred notification is delivered.
+      if (scheduler.schedulerPhase == SchedulerPhase.idle ||
+          scheduler.schedulerPhase == SchedulerPhase.postFrameCallbacks) {
+        scheduler.scheduleFrame();
+      }
     }
   }
 

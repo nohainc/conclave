@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
@@ -48,10 +49,17 @@ class ConclaveMarkdownBody extends StatelessWidget {
     required this.data,
     this.openLink = _launchMarkdownLink,
     this.fitContent = false,
+    this.onSelectionChanged,
   });
 
   final String data;
   final bool fitContent;
+
+  /// Reports the plain text selected inside this message boundary.
+  ///
+  /// The callback is intentionally scoped to this message. It does not expose
+  /// Markdown source or selection from neighboring messages or shell UI.
+  final ValueChanged<SelectedContent?>? onSelectionChanged;
 
   /// Receives only validated web URLs; injectable for deterministic testing.
   final Future<bool> Function(Uri uri) openLink;
@@ -103,7 +111,13 @@ class ConclaveMarkdownBody extends StatelessWidget {
     // region can join paragraphs, lists, tables and custom code blocks. Keep
     // the region at the message boundary: an ancestor SelectionArea could
     // otherwise make Select All include neighboring messages or shell UI.
-    return SelectionArea(child: body);
+    return SelectionArea(
+      // A live response replaces its source over time. Recreate the boundary
+      // when that source changes so stale handles cannot point at old text.
+      key: ValueKey<String>(data),
+      onSelectionChanged: onSelectionChanged,
+      child: body,
+    );
   }
 }
 
@@ -155,6 +169,10 @@ abstract final class ConclaveMarkdownStyleSheet {
       checkbox: body.copyWith(color: ConclaveColors.primary),
       tableHead: body.copyWith(fontWeight: FontWeight.w600),
       tableBody: body,
+      // Intrinsic columns let flutter_markdown_plus place wide tables in its
+      // horizontal scroll container instead of forcing them into the message
+      // width and causing overflow.
+      tableColumnWidth: const IntrinsicColumnWidth(),
       tableBorder: TableBorder.all(color: ConclaveColors.border(isDark)),
       tableCellsPadding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
