@@ -235,7 +235,10 @@
         "name": "Claude Haiku",
         "badge": "Fast",
         "description": "Latest Haiku model for quick, lightweight tasks",
-        "supportedReasoningEfforts": []
+        "supportedReasoningEfforts": [
+          "low",
+          "medium"
+        ]
       }
     ]
   },
