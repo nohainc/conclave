@@ -131,6 +131,10 @@ enum ServiceConnectionState {
 /// instead of inferring it.
 const serviceReadinessCapability = 'workspace.readiness.v1';
 
+/// Capability Cloud announces in `hello.ack` when it accepts
+/// `assignment.startup` progress for accepted, not-yet-running assignments.
+const assignmentStartupCapability = 'assignment.startup.v1';
+
 class WorkspaceConnectionPreflightException implements Exception {
   const WorkspaceConnectionPreflightException(this.message);
 
@@ -522,6 +526,10 @@ class WorkspaceCloudConnection {
   /// announcement; the heartbeat carries readiness either way.
   bool _cloudAcceptsReadiness = false;
 
+  /// Whether this Cloud announced `assignment.startup.v1`. Startup progress is
+  /// only sent after the announcement; an older Cloud would reject it.
+  bool _cloudAcceptsStartup = false;
+
   /// The Service-level state Cloud should schedule against. `ready` is the
   /// only state that accepts assignments, and it requires the current
   /// synchronization to be complete and new work to be accepted.
@@ -834,6 +842,7 @@ class WorkspaceCloudConnection {
     try {
       final mark = traceRecorder.mark(context.assignmentId, stage);
       if (mark == null) return;
+      _publishAssignmentStartup(context, stage, extra);
       final traceContext = _traceContext();
       runDetachedTelemetry(() => recordAssignmentDiagnostic(
             context,
@@ -849,6 +858,66 @@ class WorkspaceCloudConnection {
           ));
     } on Object {
       // Telemetry must never affect command handling.
+    }
+  }
+
+  static const _startupWireStages = <String, String>{
+    'worker_resolved': 'worker_resolved',
+    'profile_ready': 'profile_ready',
+    'waiting_for_space': 'waiting_for_space',
+    'queued_for_slot': 'queued_for_slot',
+    'slot_reserved': 'slot_reserved',
+    'engine_process_created': 'engine_spawned',
+    'engine_initialized': 'engine_initialized',
+  };
+
+  /// Publishes a pre-start milestone to Cloud so a queued or starting
+  /// assignment is visible. Best effort: dropped when the transport is down or
+  /// Cloud did not announce [assignmentStartupCapability]; never throws.
+  void _publishAssignmentStartup(
+    WorkspaceAssignmentContext context,
+    String traceStage,
+    Map<String, Object?> detail,
+  ) {
+    try {
+      final wireStage = _startupWireStages[traceStage];
+      final socket = _transport;
+      if (wireStage == null ||
+          socket == null ||
+          sessionId == null ||
+          !_cloudAcceptsStartup) {
+        return;
+      }
+      int? integer(String key, {int min = 0}) {
+        final value = detail[key];
+        return value is int && value >= min ? value : null;
+      }
+
+      final digest = detail['profileDigest'];
+      final payload = <String, Object?>{
+        'stage': wireStage,
+        'at': DateTime.now().toUtc().toIso8601String(),
+        if (integer('queuePosition', min: 1) case final value?)
+          'queuePosition': value,
+        if (integer('activeAssignments') case final value?)
+          'activeSlots': value,
+        if (integer('slotLimit', min: 1) case final value?) 'slotLimit': value,
+        if (detail['waitingForSession'] is bool)
+          'waitingForSession': detail['waitingForSession'],
+        if (integer('queueWaitTimeoutMs') case final value?)
+          'queueWaitTimeoutMs': value,
+        if (digest is String && RegExp(r'^[a-f0-9]{64}$').hasMatch(digest))
+          'profileDigest': digest,
+        if (integer('profileReleaseVersion') case final value?)
+          'profileRevision': value,
+      };
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.startup',
+        _assignmentCorrelationForContext(context),
+        payload,
+      )));
+    } on Object {
+      // Progress reporting must never affect command handling.
     }
   }
 
@@ -1366,6 +1435,7 @@ class WorkspaceCloudConnection {
     _syncRequested = false;
     _helloAcknowledged = false;
     _cloudAcceptsReadiness = false;
+    _cloudAcceptsStartup = false;
     _readyCallbackSessionId = null;
     late final WorkspaceTransport socket;
     var selectedWebSocket = false;
@@ -1608,6 +1678,8 @@ class WorkspaceCloudConnection {
         final cloudCapabilities = payload['cloudCapabilities'];
         _cloudAcceptsReadiness = cloudCapabilities is List &&
             cloudCapabilities.contains(serviceReadinessCapability);
+        _cloudAcceptsStartup = cloudCapabilities is List &&
+            cloudCapabilities.contains(assignmentStartupCapability);
         connectionStage = WorkspaceConnectionStage.synchronizing;
         sessionId = payload['sessionId'] as String;
         unawaited(_drainActivityEvents());

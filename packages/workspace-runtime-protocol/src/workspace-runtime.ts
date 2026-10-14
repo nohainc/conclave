@@ -30,6 +30,7 @@ export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "thread.status",
   "assignment.start",
   "assignment.start.ack",
+  "assignment.startup",
   "assignment.start.permit.request",
   "assignment.start.permit.grant",
   "assignment.ack",
@@ -94,6 +95,64 @@ export const serviceReadinessPayload = z
   });
 
 export type ServiceReadinessPayload = z.infer<typeof serviceReadinessPayload>;
+
+/** Capability Cloud announces when it understands `assignment.startup`. */
+export const ASSIGNMENT_STARTUP_CAPABILITY = "assignment.startup.v1";
+
+/**
+ * Milestones of starting an accepted assignment locally, in order. Provider
+ * start is reported by `assignment.start.ack`, not by this message.
+ * `waiting_for_space` and `queued_for_slot` are waiting stages; the others
+ * mean the Service is making progress.
+ */
+export const ASSIGNMENT_STARTUP_STAGES = [
+  "worker_resolved",
+  "profile_ready",
+  "waiting_for_space",
+  "queued_for_slot",
+  "slot_reserved",
+  "engine_spawned",
+  "engine_initialized",
+] as const;
+export type AssignmentStartupStage = (typeof ASSIGNMENT_STARTUP_STAGES)[number];
+
+/** Ordering used to ignore a late startup report that moves backwards. */
+export const ASSIGNMENT_STARTUP_STAGE_RANK: Record<
+  AssignmentStartupStage,
+  number
+> = {
+  worker_resolved: 1,
+  profile_ready: 2,
+  waiting_for_space: 3,
+  queued_for_slot: 4,
+  slot_reserved: 5,
+  engine_spawned: 6,
+  engine_initialized: 7,
+};
+
+/**
+ * Startup progress published by the Service for an accepted assignment. It is
+ * evidence for observability only: it never grants, extends or shortens any
+ * deadline and never changes the assignment status.
+ */
+export const assignmentStartupPayload = z
+  .object({
+    stage: z.enum(ASSIGNMENT_STARTUP_STAGES),
+    at: timestamp.optional(),
+    queuePosition: z.number().int().min(1).max(100_000).optional(),
+    activeSlots: z.number().int().min(0).max(100_000).optional(),
+    slotLimit: z.number().int().min(1).max(100_000).optional(),
+    waitingForSession: z.boolean().optional(),
+    queueWaitTimeoutMs: z.number().int().min(0).max(2_147_483_647).optional(),
+    profileDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    profileRevision: z.number().int().min(0).max(2_147_483_647).optional(),
+  })
+  .strict();
+
+export type AssignmentStartupPayload = z.infer<typeof assignmentStartupPayload>;
 const executionErrorCode = z.enum(EXECUTION_ERROR_CODES);
 
 /** Canonical execution permissions carried from Cloud to Workspace. */
@@ -605,6 +664,18 @@ export const workspaceRuntimeEnvelopeSchema = z
           }
         })
         .safeParse(message.payload);
+      if (!payload.success) {
+        for (const issue of payload.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payload", ...issue.path],
+            message: issue.message,
+          });
+        }
+      }
+    }
+    if (message.type === "assignment.startup") {
+      const payload = assignmentStartupPayload.safeParse(message.payload);
       if (!payload.success) {
         for (const issue of payload.error.issues) {
           ctx.addIssue({

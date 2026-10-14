@@ -42,6 +42,13 @@ export const AUXILIARY_TRACE_STAGES = [
   "workflow_observed_terminal",
   "probe_sent",
   "probe_acknowledged",
+  // Local startup milestones between Service admission and provider start.
+  // Auxiliary so the T1-T12 numbering is unchanged.
+  "worker_resolved",
+  "profile_ready",
+  "waiting_for_space",
+  "queued_for_slot",
+  "engine_initialized",
 ] as const;
 export type AuxiliaryTraceStage = (typeof AUXILIARY_TRACE_STAGES)[number];
 
@@ -106,6 +113,19 @@ export const DiagnosticContextSchema = z
     localQueueLength: z.number().int().nonnegative().max(100_000).optional(),
     activeAssignments: z.number().int().nonnegative().max(100_000).optional(),
     probeId: boundedToken.optional(),
+    /** One-based position in the Worker's local queue. */
+    queuePosition: z.number().int().min(1).max(100_000).optional(),
+    /** Effective local concurrency limit of the Worker. */
+    slotLimit: z.number().int().min(1).max(100_000).optional(),
+    /** The local queue allowance granted to the assignment. */
+    queueWaitTimeoutMs: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(2_147_483_647)
+      .optional(),
+    /** Whether a busy native provider session is also holding it back. */
+    waitingForSession: z.boolean().optional(),
   })
   .strict();
 

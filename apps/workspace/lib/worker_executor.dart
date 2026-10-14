@@ -6,9 +6,11 @@ import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'cloud_connection.dart';
+import 'assignment_startup.dart';
 import 'runtime_capabilities.dart';
 import 'space_directory.dart';
 import 'thread_directory.dart';
+import 'worker_launch_plan.dart';
 
 /// Translate assignment policy without consulting names or providers.
 ///
@@ -194,6 +196,7 @@ class AssignmentLogicalWorker {
     required this.localConcurrencyLimit,
     this.fullLocalAccessAuthorized = false,
     this.providerCliVersion,
+    this.notReadyReason,
   });
 
   final String id;
@@ -204,6 +207,10 @@ class AssignmentLogicalWorker {
   final int localConcurrencyLimit;
   final bool fullLocalAccessAuthorized;
   final String? providerCliVersion;
+
+  /// Why the Worker is not ready when that is known locally without any
+  /// network call (for example `catalog_not_synchronized`). Diagnostic only.
+  final String? notReadyReason;
 }
 
 class WorkerAssignmentScope {
@@ -234,6 +241,8 @@ class WorkerAssignmentHandler {
     this.authorizeExecutionStart,
     this.onEngineProcessStarted,
     this.cancelToolProfileAssignment,
+    this.resolveLaunchPlan,
+    this.onStartupStage,
   })  : spaceMutationCoordinator = spaceMutationCoordinator ??
             (spaceDirectoryLifecycle == null
                 ? null
@@ -264,7 +273,28 @@ class WorkerAssignmentHandler {
   final WorkerExecutionStartAuthorizer? authorizeExecutionStart;
   final WorkerEngineProcessStartedRelay? onEngineProcessStarted;
   final Future<bool> Function(String assignmentId)? cancelToolProfileAssignment;
+
+  /// Resolves the prepared launch plan for an admitted assignment. It must
+  /// answer from local state only; it throws [AssignmentExecutionFailure] with
+  /// a specific diagnostic when no compatible Profile is available.
+  final Future<WorkerLaunchPlan> Function(AssignmentLogicalWorker worker)?
+      resolveLaunchPlan;
+
+  /// Receives local startup milestones (worker resolved, profile ready,
+  /// waiting for Space, ...). Observation only.
+  final AssignmentStartupRelay? onStartupStage;
   final _cancellationRequests = <String>{};
+
+  /// Wake-ups for assignments waiting on the Space/Thread mutation lock, so
+  /// a cancellation or an exhausted queue allowance ends the wait at once.
+  final _spaceWaitCancels = <String, void Function()>{};
+  final _pinnedLaunchPlans = <String, WorkerLaunchPlan>{};
+
+  /// The launch plan this assignment was admitted with. Later Profile
+  /// activations, rollbacks and refreshes never change it, including while the
+  /// assignment waits for a Space lock or a Worker slot.
+  WorkerLaunchPlan? pinnedLaunchPlan(String assignmentId) =>
+      _pinnedLaunchPlans[assignmentId];
 
   /// Resolves the local Logical Worker and Workspace-owned execution directory.
   Future<WorkerAssignmentScope> prepareAssignmentScope(
@@ -282,9 +312,19 @@ class WorkerAssignmentHandler {
         worker.workerTypeId != expectedWorkerTypeId ||
         !worker.enabled ||
         !worker.ready) {
-      throw const AssignmentExecutionFailure(
+      throw AssignmentExecutionFailure(
         code: 'worker_not_ready',
         message: 'Worker is not ready for assignments.',
+        localDiagnostic: worker?.notReadyReason == null
+            ? null
+            : jsonEncode({
+                'schemaVersion': 1,
+                'component': 'workspace_service',
+                'stage': 'worker_resolution',
+                'errorCode': 'worker_not_ready',
+                'providerStarted': false,
+                'reason': worker!.notReadyReason,
+              }),
       );
     }
     if (worker.localConcurrencyLimit < 1) {
@@ -331,6 +371,15 @@ class WorkerAssignmentHandler {
 
   Future<WorkspaceAssignmentResult> call(
       WorkspaceAssignmentContext context) async {
+    try {
+      return await _call(context);
+    } finally {
+      _pinnedLaunchPlans.remove(context.assignmentId);
+    }
+  }
+
+  Future<WorkspaceAssignmentResult> _call(
+      WorkspaceAssignmentContext context) async {
     if (_cancellationRequests.remove(context.assignmentId)) {
       throw const AssignmentExecutionFailure(
         code: 'cancelled',
@@ -340,6 +389,7 @@ class WorkerAssignmentHandler {
     final scope = await prepareAssignmentScope(context);
     final worker = scope.worker;
     final workerId = worker.id;
+    _startup(context, AssignmentStartupStage.workerResolved);
     // Validate the policy before any provider process is started. This keeps
     // Cloud payloads from elevating a local Worker by themselves.
     assignmentExecutionPolicy(
@@ -384,6 +434,21 @@ class WorkerAssignmentHandler {
         );
       }
     }
+    // Pin the prepared Profile now, at admission: the assignment keeps this
+    // exact identity through any Space-lock or Worker-slot wait.
+    final planResolver = resolveLaunchPlan;
+    if (planResolver != null) {
+      final plan = await planResolver(worker);
+      _pinnedLaunchPlans[context.assignmentId] = plan;
+      _startup(context, AssignmentStartupStage.profileReady, {
+        'profileReleaseVersion': plan.profileRevision,
+        'profileDigest': plan.profileDigest,
+        'profileResolutionSource': plan.source.name,
+      });
+    }
+    // Local queue allowance still available to the Engine supervisor after
+    // any wait for the Space lock; set once the lock is acquired.
+    Duration? queueAllowanceRemaining;
     Future<WorkspaceAssignmentResult> execute() async {
       if (_cancellationRequests.remove(context.assignmentId)) {
         throw const AssignmentExecutionFailure(
@@ -391,7 +456,11 @@ class WorkerAssignmentHandler {
           message: 'The assignment was cancelled before Engine launch.',
         );
       }
-      final workerPayload = _withCorrelation(context.payload, context);
+      final workerPayload = <String, Object?>{
+        ..._withCorrelation(context.payload, context),
+        if (queueAllowanceRemaining != null)
+          'queueWaitTimeoutMs': queueAllowanceRemaining!.inMilliseconds,
+      };
       final profileExecutor = executeWithToolProfile;
       final activityProfileExecutor = executeWithActivity;
       if (profileExecutor == null && activityProfileExecutor == null) {
@@ -483,13 +552,20 @@ class WorkerAssignmentHandler {
     }
     final spaceCoordinator = spaceMutationCoordinator;
     if (spaceCoordinator != null) {
-      return spaceCoordinator.withMutation(
-        spaceId: spaceId,
-        threadId: threadId,
-        spaceName: _spaceName(context.payload),
-        leaseId: leaseId,
-        fencingToken: fencingToken,
-        action: (_) => execute(),
+      return _awaitMutation(
+        context,
+        (acquired) => spaceCoordinator.withMutation(
+          spaceId: spaceId,
+          threadId: threadId,
+          spaceName: _spaceName(context.payload),
+          leaseId: leaseId,
+          fencingToken: fencingToken,
+          action: (_) {
+            acquired();
+            return execute();
+          },
+        ),
+        (remaining) => queueAllowanceRemaining = remaining,
       );
     }
     final legacyCoordinator = threadMutationCoordinator;
@@ -497,13 +573,105 @@ class WorkerAssignmentHandler {
       throw const RuntimeViolation(
           'Space mutation coordinator is required for stateful execution');
     }
-    return legacyCoordinator.withMutation(
-      spaceId: spaceId,
-      threadId: threadId,
-      leaseId: leaseId,
-      fencingToken: fencingToken,
-      action: (_) => execute(),
+    return _awaitMutation(
+      context,
+      (acquired) => legacyCoordinator.withMutation(
+        spaceId: spaceId,
+        threadId: threadId,
+        leaseId: leaseId,
+        fencingToken: fencingToken,
+        action: (_) {
+          acquired();
+          return execute();
+        },
+      ),
+      (remaining) => queueAllowanceRemaining = remaining,
     );
+  }
+
+  /// Waits for the Space/Thread mutation lock as a visible, cancellable and
+  /// bounded queue stage. The wait happens before a Worker slot is reserved
+  /// (so it never holds capacity other assignments could use), counts against
+  /// the same local queue allowance as the slot wait, and ends immediately on
+  /// cancellation instead of when the lock finally frees.
+  Future<WorkspaceAssignmentResult> _awaitMutation(
+    WorkspaceAssignmentContext context,
+    Future<WorkspaceAssignmentResult> Function(void Function() acquired) start,
+    void Function(Duration remaining) onAcquiredRemaining,
+  ) async {
+    final id = context.assignmentId;
+    final allowanceValue = context.payload['queueWaitTimeoutMs'];
+    final allowance = allowanceValue is int && allowanceValue > 0
+        ? Duration(milliseconds: allowanceValue)
+        : defaultAssignmentQueueAllowance;
+    final waited = Stopwatch()..start();
+    final abandoned = Completer<WorkspaceAssignmentResult>();
+    Object? giveUpReason;
+    Timer? timer;
+    void giveUp(Object reason) {
+      if (giveUpReason != null) return;
+      giveUpReason = reason;
+      timer?.cancel();
+      _spaceWaitCancels.remove(id);
+      abandoned.completeError(reason);
+    }
+
+    _spaceWaitCancels[id] = () => giveUp(const AssignmentExecutionFailure(
+          code: 'cancelled',
+          message: 'The assignment was cancelled while waiting for its Space.',
+        ));
+    timer = Timer(
+      allowance,
+      () => giveUp(AssignmentExecutionFailure(
+        code: 'timeout',
+        message: executionErrorMessage('timeout'),
+        retryable: true,
+        localDiagnostic: jsonEncode({
+          'schemaVersion': 1,
+          'component': 'workspace_service',
+          'stage': 'space_wait',
+          'errorCode': 'deadline_exceeded',
+          'providerStarted': false,
+          'queueWaitTimeoutMs': allowance.inMilliseconds,
+        }),
+      )),
+    );
+    _startup(context, AssignmentStartupStage.waitingForSpace, {
+      'queueWaitTimeoutMs': allowance.inMilliseconds,
+    });
+    final mutation = start(() {
+      final reason = giveUpReason;
+      // The wait was abandoned (cancelled or out of allowance) before the
+      // lock freed: release it untouched without launching anything.
+      if (reason != null) throw reason;
+      timer?.cancel();
+      _spaceWaitCancels.remove(id);
+      final remaining = allowance - waited.elapsed;
+      onAcquiredRemaining(remaining < const Duration(milliseconds: 100)
+          ? const Duration(milliseconds: 100)
+          : remaining);
+    });
+    try {
+      return await Future.any<WorkspaceAssignmentResult>(
+          [mutation, abandoned.future]);
+    } finally {
+      timer.cancel();
+      _spaceWaitCancels.remove(id);
+    }
+  }
+
+  void _startup(
+    WorkspaceAssignmentContext context,
+    AssignmentStartupStage stage, [
+    Map<String, Object?> detail = const {},
+  ]) {
+    final relay = onStartupStage;
+    if (relay == null) return;
+    try {
+      relay(context, stage, detail);
+    } on Object {
+      // Observation must never affect assignment execution.
+    }
   }
 
   String _spaceName(Map<String, Object?> payload) {
@@ -522,6 +690,13 @@ class WorkerAssignmentHandler {
   }
 
   Future<bool> cancel(String assignmentId, String reason) async {
+    final stopWaiting = _spaceWaitCancels.remove(assignmentId);
+    if (stopWaiting != null) {
+      // Still waiting for the Space lock: nothing was launched, so ending the
+      // wait is the whole cancellation.
+      stopWaiting();
+      return true;
+    }
     _cancellationRequests.add(assignmentId);
     final cancel = cancelToolProfileAssignment;
     if (cancel == null) return true;

@@ -48,6 +48,7 @@ const workspaceRuntimeProtocolSchemaMessageTypes = <String>{
   'thread.status',
   'assignment.start',
   'assignment.start.ack',
+  'assignment.startup',
   'assignment.start.permit.request',
   'assignment.start.permit.grant',
   'assignment.ack',

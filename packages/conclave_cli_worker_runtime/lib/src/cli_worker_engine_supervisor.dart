@@ -42,8 +42,28 @@ final class CliWorkerEngineSupervisor {
   final Set<String> _reservedAssignmentIds = {};
   final Set<String> _cancelledAssignments = {};
 
+  /// The effective concurrency limit most recently applied to each Worker.
+  /// Every admission restates it and every state change re-evaluates the
+  /// queue against it, so lowering or raising a limit takes effect at once.
+  final Map<String, int> _limitByWorker = {};
+
+  /// Native-session gates: at most one reserved or running assignment may use
+  /// a given durable provider session at a time. A gate is held from slot
+  /// reservation to teardown and is part of queue admission, so an
+  /// assignment waiting for a busy session never holds a Worker slot.
+  final Set<String> _busySessionGates = {};
+  final Map<String, String> _sessionGateByAssignment = {};
+
   /// Assignments waiting for a local Worker slot. Telemetry only.
   int get queuedAssignmentCount => _queuedAssignments.length;
+
+  /// Assignments of [workerId] waiting for a slot or session. Telemetry only.
+  int queuedAssignmentCountFor(String workerId) =>
+      _waitersByWorker[workerId]?.length ?? 0;
+
+  /// Slots of [workerId] currently reserved or running. Telemetry only.
+  int activeAssignmentCountFor(String workerId) =>
+      _activeByWorker[workerId] ?? 0;
 
   /// Reaps Engine processes left behind if the owning Workspace Service died.
   /// A PID is acted on only when its command line still identifies this exact
@@ -284,6 +304,14 @@ final class CliWorkerEngineSupervisor {
     /// Called synchronously once the Engine OS process exists, before the
     /// initialize handshake. Observation only; it is never awaited.
     void Function()? onProcessStarted,
+
+    /// Called synchronously when the assignment must wait for a Worker slot
+    /// or a busy provider session, with its queue position. Observation only.
+    void Function(WorkerQueueSnapshot queue)? onQueued,
+
+    /// Called once the Engine answered the initialize handshake with a
+    /// matching identity. Observation only; it is never awaited.
+    void Function()? onInitialized,
     void Function(WorkerProgress progress)? onProgress,
     FutureOr<void> Function(WorkerActivity activity)? onActivity,
   }) async {
@@ -320,9 +348,13 @@ final class CliWorkerEngineSupervisor {
         'assignment timeout is too short',
       );
     }
-    await stateDirectory.create(recursive: true);
-    await workingDirectory.create(recursive: true);
-
+    if (maxConcurrentAssignments < 1) {
+      throw ArgumentError.value(
+        maxConcurrentAssignments,
+        'maxConcurrentAssignments',
+        'effective Worker concurrency limit must be positive',
+      );
+    }
     if (_activeAssignments.containsKey(assignmentId) ||
         _reservedAssignmentIds.contains(assignmentId) ||
         _queuedAssignments.containsKey(assignmentId)) {
@@ -330,13 +362,12 @@ final class CliWorkerEngineSupervisor {
         'Assignment already has an active or queued Engine execution',
       );
     }
-    final existingRecord = _processRecordFile(assignmentId);
-    if (existingRecord != null && await existingRecord.exists()) {
-      throw const FormatException(
-        'Assignment already has a durable Engine ownership record',
-      );
-    }
 
+    // Queue insertion is synchronous: nothing above awaits and _acquireSlot
+    // registers the assignment before it first yields. A cancellation issued
+    // at any point after this call finds the assignment and prevents process
+    // creation.
+    //
     // Queueing is admission time, not provider execution time. A request
     // must not lose its provider deadline while waiting for another
     // assignment to release a Worker slot.
@@ -344,16 +375,38 @@ final class CliWorkerEngineSupervisor {
       workerId,
       assignmentId,
       maxConcurrentAssignments,
+      sessionGate:
+          sessionPolicy == WorkerSessionPolicy.durableSession &&
+              sessionKey != null
+          ? '$workerId|$sessionKey'
+          : null,
       timeout: boundedQueueWaitTimeout,
+      onQueued: onQueued,
     );
-    await onSlotReserved?.call();
     final timer = Stopwatch()..start();
     Process? process;
     File? processRecord;
     CliEngineChannel? channel;
     var stopped = false;
+    // Where launch currently is, for precise failure classification:
+    // slot_reserved → engine_spawn → engine_initialize → provider_execution.
+    var launchStage = 'slot_reserved';
+    var providerStarted = false;
     var processObservation = Future<void>.value();
+    Future<File?>? pendingProcessRecord;
     try {
+      // The slot is held from here, so every failure below releases it.
+      await stateDirectory.create(recursive: true);
+      await workingDirectory.create(recursive: true);
+      final existingRecord = _processRecordFile(assignmentId);
+      if (existingRecord != null && await existingRecord.exists()) {
+        throw const FormatException(
+          'Assignment already has a durable Engine ownership record',
+        );
+      }
+      // Slot reservation is observation: a failing or slow callback must
+      // neither leak the slot nor delay the launch.
+      _observe(onSlotReserved);
       if (_cancelledAssignments.remove(assignmentId)) {
         throw const WorkerAssignmentCancelledException();
       }
@@ -363,6 +416,7 @@ final class CliWorkerEngineSupervisor {
       if (_cancelledAssignments.remove(assignmentId)) {
         throw const WorkerAssignmentCancelledException();
       }
+      launchStage = 'engine_spawn';
       process = await _platformRuntime.startIsolatedProcess(
         engineExecutable,
         [
@@ -378,12 +432,22 @@ final class CliWorkerEngineSupervisor {
         environment: _engineEnvironment(),
         includeParentEnvironment: false,
       );
+      launchStage = 'engine_initialize';
       try {
         onProcessStarted?.call();
       } on Object {
         // Observation must never affect Engine launch.
       }
-      processRecord = await _writeProcessRecord(
+      // Own the process immediately so cancel() can stop it while the
+      // ownership record is still being written.
+      _activeAssignments[assignmentId] = process;
+      _activeWorkerByAssignment[assignmentId] = workerId;
+      _reservedAssignmentIds.remove(assignmentId);
+      _reservedWorkerByAssignment.remove(assignmentId);
+      // The durable ownership record (which identifies the process with a
+      // `ps` call) is written concurrently with the initialize handshake and
+      // awaited before the provider can be asked to start.
+      final recordWrite = pendingProcessRecord = _writeProcessRecord(
         process,
         assignmentId: assignmentId,
         stateDirectory: stateDirectory,
@@ -396,10 +460,9 @@ final class CliWorkerEngineSupervisor {
             .add(_remaining(boundedTimeout, timer))
             .toIso8601String(),
       );
-      _activeAssignments[assignmentId] = process;
-      _activeWorkerByAssignment[assignmentId] = workerId;
-      _reservedAssignmentIds.remove(assignmentId);
-      _reservedWorkerByAssignment.remove(assignmentId);
+      // Errors surface when the record is awaited (before the provider
+      // starts, or in teardown); until then they are not "unhandled".
+      recordWrite.ignore();
       if (_cancelledAssignments.remove(assignmentId)) {
         await _platformRuntime.terminateProcessTree(process, force: true);
         throw const WorkerAssignmentCancelledException();
@@ -429,6 +492,10 @@ final class CliWorkerEngineSupervisor {
               release.profile['schemaVersion']) {
         throw const FormatException('CLI Worker Engine initialize mismatch');
       }
+      _observe(onInitialized);
+      launchStage = 'provider_execution';
+      processRecord = await pendingProcessRecord;
+      pendingProcessRecord = null;
       final result = await channel.exchangeUntilTerminal(
         ExecuteRequest(
           requestId: 'engine-exec-${DateTime.now().microsecondsSinceEpoch}',
@@ -448,6 +515,7 @@ final class CliWorkerEngineSupervisor {
         _remaining(boundedTimeout, timer),
         onProgress: (progress) {
           if (progress.message == workerProviderExecutionStartedMessage) {
+            providerStarted = true;
             onExecutionStarted?.call();
             final record = processRecord;
             if (record != null) {
@@ -502,9 +570,20 @@ final class CliWorkerEngineSupervisor {
       if (_cancelledAssignments.remove(assignmentId)) {
         throw const WorkerAssignmentCancelledException();
       }
-      throw const CliWorkerEngineProbeException(
+      // A deadline that elapses before the provider began executing is a
+      // local startup timeout, not a provider execution timeout. Neither is a
+      // Cloud command-delivery timeout, which ends at acknowledgement.
+      throw CliWorkerEngineProbeException(
         WorkerIssueCode.deadlineExceeded,
         'Assignment execution exceeded its deadline.',
+        localDiagnostics: jsonEncode({
+          'stage': launchStage,
+          'failureLayer': providerStarted
+              ? 'provider_execution'
+              : 'local_startup',
+          if (!providerStarted) 'reason': 'startup_timeout',
+          'providerStarted': providerStarted,
+        }),
       );
     } on ProcessException catch (error) {
       if (_cancelledAssignments.remove(assignmentId)) {
@@ -515,6 +594,8 @@ final class CliWorkerEngineSupervisor {
         'CLI Worker Engine could not be started.',
         localDiagnostics: jsonEncode({
           'stage': 'engine_process_start',
+          'failureLayer': 'local_startup',
+          'providerStarted': false,
           'errorCode': error.errorCode,
           'message': error.message,
         }),
@@ -529,19 +610,35 @@ final class CliWorkerEngineSupervisor {
       _activeWorkerByAssignment.remove(assignmentId);
       _reservedAssignmentIds.remove(assignmentId);
       _reservedWorkerByAssignment.remove(assignmentId);
-      _releaseSlot(workerId, assignmentId);
-      if (process != null && !stopped) {
-        await _platformRuntime.terminateProcessTree(process, force: true);
+      try {
+        // Tear the process down before the slot is handed to the next
+        // assignment of this Worker: both would otherwise share one state
+        // directory. Bounded so a stuck teardown cannot hold the slot.
+        if (process != null && !stopped) {
+          await _platformRuntime
+              .terminateProcessTree(process, force: true)
+              .timeout(const Duration(seconds: 10), onTimeout: () {});
+        }
+        final pending = pendingProcessRecord;
+        if (pending != null) {
+          try {
+            processRecord = await pending;
+          } on Object {
+            // A record that could not be written has nothing to delete.
+          }
+        }
+        if (processRecord != null) {
+          await _updateProcessRecord(
+            processRecord,
+            engineState: 'terminated',
+            providerState: 'terminated',
+          );
+        }
+        await _deleteProcessRecord(processRecord);
+        await channel?.dispose();
+      } finally {
+        _releaseSlot(workerId, assignmentId);
       }
-      if (processRecord != null) {
-        await _updateProcessRecord(
-          processRecord,
-          engineState: 'terminated',
-          providerState: 'terminated',
-        );
-      }
-      await _deleteProcessRecord(processRecord);
-      await channel?.dispose();
     }
   }
 
@@ -549,7 +646,7 @@ final class CliWorkerEngineSupervisor {
     final queued = _queuedAssignments.remove(assignmentId);
     if (queued != null) {
       final workerId = queued.workerId;
-      _waitersByWorker[workerId]?.remove(queued);
+      _removeWaiter(workerId, queued);
       // A cancelled waiter never received a slot, so it must not release one.
       if (!queued.permit.isCompleted) {
         queued.permit.completeError(const WorkerAssignmentCancelledException());
@@ -597,56 +694,143 @@ final class CliWorkerEngineSupervisor {
     String workerId,
     String assignmentId,
     int maxConcurrentAssignments, {
+    String? sessionGate,
     required Duration timeout,
+    void Function(WorkerQueueSnapshot queue)? onQueued,
   }) async {
-    final active = _activeByWorker[workerId] ?? 0;
-    if (active < maxConcurrentAssignments) {
-      _activeByWorker[workerId] = active + 1;
-      _reservedAssignmentIds.add(assignmentId);
-      _reservedWorkerByAssignment[assignmentId] = workerId;
+    // Everything up to the first `await` below is synchronous and atomic:
+    // the check, the reservation or the queue insertion cannot interleave
+    // with another assignment's admission, release or cancellation.
+    _limitByWorker[workerId] = maxConcurrentAssignments;
+    // A raised limit admits earlier waiters before a new arrival, so a later
+    // request can never overtake the queue.
+    _promoteWaiters(workerId);
+    final sessionFree =
+        sessionGate == null || !_busySessionGates.contains(sessionGate);
+    if ((_activeByWorker[workerId] ?? 0) < maxConcurrentAssignments &&
+        sessionFree) {
+      _reserve(workerId, assignmentId, sessionGate);
       return;
     }
-    final queued = _QueuedEngineAssignment(workerId, assignmentId);
+    final queued = _QueuedEngineAssignment(workerId, assignmentId, sessionGate);
     _queuedAssignments[assignmentId] = queued;
     _waitersByWorker.putIfAbsent(workerId, () => []).add(queued);
+    // A raised limit may already admit earlier waiters (and this one).
+    _promoteWaiters(workerId);
+    if (!queued.permit.isCompleted) {
+      final waiters = _waitersByWorker[workerId] ?? const [];
+      _observe(
+        () => onQueued?.call(
+          WorkerQueueSnapshot(
+            workerId: workerId,
+            assignmentId: assignmentId,
+            position: waiters.indexOf(queued) + 1,
+            active: _activeByWorker[workerId] ?? 0,
+            limit: maxConcurrentAssignments,
+            waitingForSession:
+                sessionGate != null && _busySessionGates.contains(sessionGate),
+            queueWaitTimeout: timeout,
+          ),
+        ),
+      );
+    }
     try {
       await queued.permit.future.timeout(timeout);
     } on TimeoutException {
-      _queuedAssignments.remove(assignmentId);
-      _waitersByWorker[workerId]?.remove(queued);
-      if (_waitersByWorker[workerId]?.isEmpty == true) {
-        _waitersByWorker.remove(workerId);
+      // The reservation may have been transferred in the same turn the timer
+      // fired; if so the assignment owns a slot and must proceed to use and
+      // release it.
+      if (queued.permit.isCompleted &&
+          _reservedAssignmentIds.contains(assignmentId)) {
+        return;
       }
-      throw const CliWorkerEngineProbeException(
+      _removeWaiter(workerId, queued);
+      throw CliWorkerEngineProbeException(
         WorkerIssueCode.deadlineExceeded,
         'Assignment execution exceeded its deadline while waiting for a Worker slot.',
+        localDiagnostics: jsonEncode({
+          'stage': 'queue_wait',
+          'failureLayer': 'local_startup',
+          'reason': 'queue_allowance_exhausted',
+          'providerStarted': false,
+          'queueWaitTimeoutMs': timeout.inMilliseconds,
+        }),
       );
     }
-    _reservedAssignmentIds.add(assignmentId);
-    _reservedWorkerByAssignment[assignmentId] = workerId;
   }
 
-  void _releaseSlot(String workerId, String assignmentId) {
+  /// Takes one slot of [workerId] for [assignmentId] and its session gate.
+  void _reserve(String workerId, String assignmentId, String? sessionGate) {
+    _activeByWorker[workerId] = (_activeByWorker[workerId] ?? 0) + 1;
+    _reservedAssignmentIds.add(assignmentId);
+    _reservedWorkerByAssignment[assignmentId] = workerId;
+    if (sessionGate != null) {
+      _busySessionGates.add(sessionGate);
+      _sessionGateByAssignment[assignmentId] = sessionGate;
+    }
+  }
+
+  void _removeWaiter(String workerId, _QueuedEngineAssignment queued) {
+    _queuedAssignments.remove(queued.assignmentId);
     final waiters = _waitersByWorker[workerId];
-    if (waiters != null && waiters.isNotEmpty) {
-      final next = waiters.removeAt(0);
+    if (waiters == null) return;
+    waiters.remove(queued);
+    if (waiters.isEmpty) _waitersByWorker.remove(workerId);
+  }
+
+  /// Hands free capacity to waiting assignments, oldest first. A waiter whose
+  /// provider session is busy is skipped rather than blocking the ones behind
+  /// it, so one busy session never stalls unrelated work of the same Worker.
+  /// The reservation is transferred before the waiter's future completes, so
+  /// a cancellation that races the wake-up still finds a reservation to
+  /// cancel and stops before a process is created.
+  void _promoteWaiters(String workerId) {
+    final waiters = _waitersByWorker[workerId];
+    if (waiters == null) return;
+    final limit = _limitByWorker[workerId] ?? 1;
+    var index = 0;
+    while (index < waiters.length && (_activeByWorker[workerId] ?? 0) < limit) {
+      final next = waiters[index];
+      final gate = next.sessionGate;
+      if (gate != null && _busySessionGates.contains(gate)) {
+        index += 1;
+        continue;
+      }
+      waiters.removeAt(index);
       _queuedAssignments.remove(next.assignmentId);
-      // Transfer the reservation before completing the waiter. This closes
-      // the cancellation race between dequeue and the waiting future's
-      // continuation: cancel() can now mark the transferred reservation and
-      // the continuation will stop before launching a process.
-      _reservedAssignmentIds.add(next.assignmentId);
-      _reservedWorkerByAssignment[next.assignmentId] = workerId;
+      _reserve(workerId, next.assignmentId, gate);
       if (!next.permit.isCompleted) {
         next.permit.complete();
       }
-      return;
     }
+    if (waiters.isEmpty) _waitersByWorker.remove(workerId);
+  }
+
+  void _releaseSlot(String workerId, String assignmentId) {
     final active = _activeByWorker[workerId] ?? 0;
     if (active <= 1) {
       _activeByWorker.remove(workerId);
     } else {
       _activeByWorker[workerId] = active - 1;
+    }
+    final gate = _sessionGateByAssignment.remove(assignmentId);
+    if (gate != null) _busySessionGates.remove(gate);
+    _promoteWaiters(workerId);
+    if ((_activeByWorker[workerId] ?? 0) == 0 &&
+        !_waitersByWorker.containsKey(workerId)) {
+      _limitByWorker.remove(workerId);
+    }
+  }
+
+  /// Runs an observation callback without awaiting it and without letting it
+  /// throw into (or delay) the launch path.
+  void _observe(FutureOr<void> Function()? callback) {
+    if (callback == null) return;
+    try {
+      final result = callback();
+      if (result is Future<void>) result.ignore();
+    } on Object {
+      // Observation must never affect Engine launch or slot accounting.
     }
   }
 
@@ -798,11 +982,41 @@ final class CliWorkerEngineSupervisor {
 }
 
 final class _QueuedEngineAssignment {
-  _QueuedEngineAssignment(this.workerId, this.assignmentId);
+  _QueuedEngineAssignment(this.workerId, this.assignmentId, this.sessionGate);
 
   final String workerId;
   final String assignmentId;
+  final String? sessionGate;
   final Completer<void> permit = Completer<void>();
+}
+
+/// Where an assignment stands when it has to wait before launch.
+final class WorkerQueueSnapshot {
+  const WorkerQueueSnapshot({
+    required this.workerId,
+    required this.assignmentId,
+    required this.position,
+    required this.active,
+    required this.limit,
+    required this.waitingForSession,
+    required this.queueWaitTimeout,
+  });
+
+  final String workerId;
+  final String assignmentId;
+
+  /// One-based position among this Worker's waiting assignments.
+  final int position;
+
+  /// Slots of the Worker in use when the assignment queued.
+  final int active;
+
+  /// The Worker's effective concurrency limit.
+  final int limit;
+
+  /// Whether the assignment is also blocked by a busy provider session.
+  final bool waitingForSession;
+  final Duration queueWaitTimeout;
 }
 
 final class CliWorkerEngineProbeException implements Exception {

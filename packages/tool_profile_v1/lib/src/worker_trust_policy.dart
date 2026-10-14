@@ -27,6 +27,12 @@ class WorkerTrustPolicy {
   Set<String> _revokedPublishers;
   Set<String> _revokedKeyIds;
   Set<String> _revokedReleaseIds;
+  int _revocationRevision = 0;
+
+  /// Increments every time the revocation sets are replaced. Caches of
+  /// verified Profile state compare it to notice a revocation without
+  /// re-verifying anything.
+  int get revocationRevision => _revocationRevision;
 
   Set<String> get revokedDigests => Set.unmodifiable(_revokedDigests);
   Set<String> get revokedPublishers => Set.unmodifiable(_revokedPublishers);
@@ -43,6 +49,7 @@ class WorkerTrustPolicy {
     _revokedPublishers = Set.of(publishers);
     _revokedKeyIds = Set.of(keyIds);
     _revokedReleaseIds = Set.of(releaseIds);
+    _revocationRevision += 1;
   }
 
   Future<bool> verify({

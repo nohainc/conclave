@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  ASSIGNMENT_STARTUP_STAGE_RANK,
+  ASSIGNMENT_STARTUP_STAGES,
   parseWorkspaceRuntimeMessage,
   WORKSPACE_RUNTIME_PROTOCOL_NAME,
   WORKSPACE_RUNTIME_PROTOCOL_VERSION,
@@ -131,6 +133,48 @@ describe("Workspace Runtime protocol", () => {
           providerStarted: false,
         },
       }),
+    ).toThrow();
+  });
+
+  it("validates assignment startup progress payloads", () => {
+    const parse = (payload: unknown) =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "assignment.startup",
+        executionWorkspaceId: "workspace-a",
+        workspaceRuntimeId: "runtime-a",
+        workerId: "worker-a",
+        runId: "run-a",
+        taskId: "task-a",
+        attemptId: "attempt-a",
+        assignmentId: "assignment-a",
+        idempotencyKey: "idem-a",
+        payload,
+      });
+    expect(parse({ stage: "profile_ready" }).type).toBe("assignment.startup");
+    expect(
+      parse({
+        stage: "queued_for_slot",
+        queuePosition: 2,
+        activeSlots: 1,
+        slotLimit: 1,
+        waitingForSession: true,
+        queueWaitTimeoutMs: 120000,
+        profileDigest: "a".repeat(64),
+        profileRevision: 3,
+      }).type,
+    ).toBe("assignment.startup");
+    expect(ASSIGNMENT_STARTUP_STAGES).not.toContain("provider_started");
+    expect(ASSIGNMENT_STARTUP_STAGE_RANK.slot_reserved).toBeGreaterThan(
+      ASSIGNMENT_STARTUP_STAGE_RANK.queued_for_slot,
+    );
+    expect(() => parse({ stage: "bogus" })).toThrow();
+    expect(() => parse({ stage: "slot_reserved", extra: 1 })).toThrow();
+    expect(() =>
+      parse({ stage: "profile_ready", profileDigest: "xyz" }),
+    ).toThrow();
+    expect(() =>
+      parse({ stage: "queued_for_slot", queuePosition: 0 }),
     ).toThrow();
   });
 

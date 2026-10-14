@@ -72,6 +72,7 @@ export function sqliteD1() {
     "0057_assignment_start_permit.sql",
     "0058_assignment_phase_timestamps.sql",
     "0059_service_readiness.sql",
+    "0060_assignment_startup_progress.sql",
   ]) {
     sqlite.exec(
       readFileSync(

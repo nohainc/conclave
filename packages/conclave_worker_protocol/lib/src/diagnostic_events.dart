@@ -21,6 +21,12 @@ const List<String> diagnosticAuxiliaryTraceStages = [
   'workflow_observed_terminal',
   'probe_sent',
   'probe_acknowledged',
+  // Local startup milestones between Service admission and provider start.
+  'worker_resolved',
+  'profile_ready',
+  'waiting_for_space',
+  'queued_for_slot',
+  'engine_initialized',
 ];
 
 /// Versioned, provider-neutral evidence emitted by the execution pipeline.
@@ -233,6 +239,10 @@ final class DiagnosticEvent {
       'localQueueLength',
       'activeAssignments',
       'probeId',
+      'queuePosition',
+      'slotLimit',
+      'queueWaitTimeoutMs',
+      'waitingForSession',
     };
     final result = <String, Object?>{};
     for (final entry in input.entries) {

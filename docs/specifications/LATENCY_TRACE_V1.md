@@ -107,3 +107,7 @@ The report lists p50/p95/p99/max per stage interval, the phase holding the
 largest interval for each trace (before delivery, transport, Service
 admission, queueing, after Engine launch, result delivery), and warnings for
 traces that had to use an uncorrected Service clock.
+
+## Phase 5 addendum
+
+Auxiliary startup milestones (worker_resolved, profile_ready, waiting_for_space, queued_for_slot, engine_initialized) are recorded without renumbering T1-T12. T7 is stamped after any Space wait. See SERVICE_STARTUP_V9.md.

@@ -5,4 +5,5 @@ export 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
         WorkerAssignmentCancelledException,
         cliWorkerEngineVersion,
         PlatformProcessSupervisor,
-        CliEngineChannel;
+        CliEngineChannel,
+        WorkerQueueSnapshot;

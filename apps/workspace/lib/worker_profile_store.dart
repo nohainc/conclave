@@ -16,6 +16,12 @@ abstract interface class WorkerProfileStorePort {
   DevelopmentToolProfiles? get developmentProfiles;
 
   Future<File> executionProfileFile(ToolProfileCandidate candidate);
+
+  /// A cheap, synchronous fingerprint of everything that decides which
+  /// verified snapshot [workerTypeId] resolves to: the current and
+  /// last-known-good snapshot files and the revocation state. A cache of
+  /// verified snapshots stays valid exactly while this value is unchanged.
+  String profileStateFingerprint(String workerTypeId);
   File stagedWorkerProfileFile(WorkerProfileSnapshotAdmission candidate);
   Future<bool> hasWorkerProfileCache(String workerTypeId);
   Future<WorkerProfileSnapshotAdmission> stageWorkerProfile(
@@ -113,6 +119,20 @@ class WorkerProfileStore implements WorkerProfileStorePort {
 
   File _trustStateFile() =>
       File('${profilesRoot.path}${Platform.pathSeparator}trust-state.json');
+
+  @override
+  String profileStateFingerprint(String workerTypeId) {
+    String describe(File file) {
+      final stat = file.statSync();
+      return stat.type == FileSystemEntityType.notFound
+          ? '-'
+          : '${stat.modified.microsecondsSinceEpoch}:${stat.size}';
+    }
+
+    return '${describe(_snapshotFile(workerTypeId))}|'
+        '${describe(_snapshotFile(workerTypeId, lastKnownGood: true))}|'
+        'r${trustPolicy.revocationRevision}';
+  }
 
   @override
   Future<File> executionProfileFile(ToolProfileCandidate candidate) async {

@@ -9,7 +9,9 @@ import 'package:conclave_workspace/workspace.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/assignment_journal.dart';
 import 'package:conclave_workspace/cloud_connection.dart';
+import 'package:conclave_workspace/assignment_startup.dart';
 import 'package:conclave_workspace/worker_executor.dart';
+import 'package:conclave_workspace/worker_launch_plan.dart';
 import 'package:conclave_workspace/self_update.dart';
 import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:conclave_workspace/workspace_registration.dart';
@@ -18,7 +20,6 @@ import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:conclave_workspace/bundled_cli_worker_engine_loader.dart';
 import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
 import 'package:conclave_workspace/worker_diagnostic_store.dart';
-import 'package:conclave_workspace/tool_profile_resolver.dart';
 
 String _runtimeFailureDiagnostic(
   String stage,
@@ -107,6 +108,10 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     trustPolicy: workerTrustPolicy,
     developmentProfiles: developmentProfiles,
   );
+  final launchPlans = WorkerLaunchPlanCache(
+    store: toolProfileReleaseStore,
+    engineVersion: cliWorkerEngineVersion,
+  );
   final bundledEngine = await loadBundledCliWorkerEngine(
     enginesDirectory: workspacePaths.enginesDirectory,
   );
@@ -174,6 +179,36 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
   } else {
     workerCatalogCoordinator = null;
   }
+  // Prepare each enabled Worker's launch plan ahead of any assignment, at
+  // startup and whenever the catalog or a Profile resolution changes. The
+  // cache validates itself against the store, so a repeated warm is cheap.
+  var warmingLaunchPlans = false;
+  Future<void> warmLaunchPlans() async {
+    final coordinator = workerCatalogCoordinator;
+    if (coordinator == null || warmingLaunchPlans) return;
+    warmingLaunchPlans = true;
+    try {
+      for (final worker in await localWorkerRegistry.list()) {
+        if (worker.activationState != LocalWorkerActivationState.enabled) {
+          continue;
+        }
+        final descriptor = coordinator.entryForWorker(worker.workerTypeId);
+        if (descriptor == null) continue;
+        await launchPlans.warm(
+          workerTypeId: worker.workerTypeId,
+          profileDefinitionId: descriptor.profileDefinitionId,
+          providerCliVersion: worker.toolVersion,
+        );
+      }
+    } on Object {
+      // Warming is best effort; the hot path reports real problems.
+    } finally {
+      warmingLaunchPlans = false;
+    }
+  }
+
+  workerCatalogCoordinator?.addListener(() => unawaited(warmLaunchPlans()));
+  unawaited(warmLaunchPlans());
   final activeWorkerIds = (await localWorkerRegistry.list())
       .where((worker) => worker.status == LocalWorkerStatus.ready)
       .map((worker) => worker.id)
@@ -193,10 +228,20 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       if (worker == null) {
         return null;
       }
-      final catalogEntry = await workerCatalogCoordinator
-          ?.ensureCatalogEntry(worker.workerTypeId);
+      // The assignment hot path never waits for the network. The locally known
+      // catalog entry decides eligibility; when it is unknown because the
+      // catalog has never synchronized, the assignment fails promptly with a
+      // specific reason and a background refresh repairs the next attempt.
+      final catalogCoordinator = workerCatalogCoordinator;
+      final catalogEntry =
+          catalogCoordinator?.entryForWorker(worker.workerTypeId);
       final catalogAvailable =
-          workerCatalogCoordinator == null || catalogEntry != null;
+          catalogCoordinator == null || catalogEntry != null;
+      final catalogConfirmed =
+          catalogCoordinator?.snapshot.catalogConfirmed ?? true;
+      if (!catalogAvailable && !catalogConfirmed) {
+        unawaited(catalogCoordinator.refresh().catchError((_) {}));
+      }
       return AssignmentLogicalWorker(
         id: worker.id,
         workerTypeId: worker.workerTypeId,
@@ -207,6 +252,57 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
         localConcurrencyLimit: worker.localConcurrencyLimit,
         fullLocalAccessAuthorized: worker.fullLocalAccessAuthorized,
         providerCliVersion: worker.toolVersion,
+        notReadyReason: catalogAvailable
+            ? null
+            : catalogConfirmed
+                ? 'worker_type_not_in_catalog'
+                : 'catalog_not_synchronized',
+      );
+    },
+    resolveLaunchPlan: (worker) async {
+      final coordinator = workerCatalogCoordinator;
+      final descriptor = coordinator?.entryForWorker(worker.workerTypeId);
+      if (descriptor == null) {
+        throw AssignmentExecutionFailure(
+          code: 'worker_not_ready',
+          message: executionErrorMessage('worker_not_ready'),
+          localDiagnostic: _runtimeFailureDiagnostic(
+            'profile_resolution',
+            'worker_not_ready',
+            detail: 'The Worker type is not in the local catalog',
+            context: {'reason': 'catalog_entry_missing'},
+          ),
+        );
+      }
+      final result = await launchPlans.resolve(
+        workerTypeId: worker.workerTypeId,
+        profileDefinitionId: descriptor.profileDefinitionId,
+        providerCliVersion: worker.providerCliVersion,
+      );
+      final plan = result.plan;
+      if (plan != null) return plan;
+      // Nothing is fetched here. Repair the local Profile in the background
+      // so the next assignment can start, and fail this one promptly.
+      if (coordinator != null &&
+          result.unavailable == WorkerLaunchUnavailable.noProfile) {
+        unawaited(coordinator
+            .ensureWorkerProfileAvailable(worker.workerTypeId)
+            .catchError((_) {}));
+      }
+      final unsupported = result.unavailable ==
+          WorkerLaunchUnavailable.unsupportedProviderVersion;
+      final code = unsupported
+          ? 'unsupported_provider_tool_version'
+          : 'worker_not_ready';
+      throw AssignmentExecutionFailure(
+        code: code,
+        message: executionErrorMessage(code),
+        localDiagnostic: _runtimeFailureDiagnostic(
+          'profile_resolution',
+          code,
+          detail: 'No compatible launch plan was available locally',
+          context: {'reason': result.unavailable!.name},
+        ),
       );
     },
     defaultWorkingDirectory: workRoot,
@@ -215,6 +311,8 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     onActivity: (context, activity) async {
       await connection?.reportWorkerActivity(context, activity);
     },
+    onStartupStage: (context, stage, detail) => connection
+        ?.traceAssignmentStage(context, stage.wireName, extra: detail),
     onExecutionStarted: (context) async {
       await connection?.reportWorkerStarted(context);
     },
@@ -252,34 +350,39 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           ),
         );
       }
-      final resolution = await coordinator.resolveProfileForWorker(
-        workerTypeId: worker.workerTypeId,
-        engineVersion: cliWorkerEngineVersion,
-        providerCliVersion: worker.providerCliVersion,
-      );
-      final release = resolution.release;
-      if (release == null) {
+      // Use the plan pinned at admission so a Profile activated while this
+      // assignment waited cannot change what it launches. A direct caller
+      // without a pinned plan resolves from the local cache; no network.
+      Future<WorkerLaunchPlan> unpinnedPlan() async {
+        final descriptor = coordinator.entryForWorker(worker.workerTypeId);
+        final prepared = descriptor == null
+            ? null
+            : await launchPlans.resolve(
+                workerTypeId: worker.workerTypeId,
+                profileDefinitionId: descriptor.profileDefinitionId,
+                providerCliVersion: worker.providerCliVersion,
+              );
+        final prepare = prepared?.plan;
+        if (prepare != null) return prepare;
+        final unsupported = prepared?.unavailable ==
+            WorkerLaunchUnavailable.unsupportedProviderVersion;
+        final code = unsupported
+            ? 'unsupported_provider_tool_version'
+            : 'worker_not_ready';
         throw AssignmentExecutionFailure(
-          code: resolution.reason ==
-                  ToolProfileUnavailableReason.unsupportedProviderVersion
-              ? 'unsupported_provider_tool_version'
-              : 'worker_not_ready',
-          message: executionErrorMessage(
-            resolution.reason ==
-                    ToolProfileUnavailableReason.unsupportedProviderVersion
-                ? 'unsupported_provider_tool_version'
-                : 'worker_not_ready',
-          ),
+          code: code,
+          message: executionErrorMessage(code),
           localDiagnostic: _runtimeFailureDiagnostic(
             'profile_resolution',
-            resolution.reason ==
-                    ToolProfileUnavailableReason.unsupportedProviderVersion
-                ? 'unsupported_provider_tool_version'
-                : 'worker_not_ready',
+            code,
             detail: 'No admitted Tool Profile release was available',
           ),
         );
       }
+
+      final plan = workerHandler.pinnedLaunchPlan(context.assignmentId) ??
+          await unpinnedPlan();
+      final release = plan.release;
       final workerSessionValue = payload['workerSession'];
       final workerSession = workerSessionValue == null
           ? null
@@ -353,8 +456,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           ),
         );
       }
-      final profileFile =
-          await toolProfileReleaseStore.executionProfileFile(release);
+      final profileFile = plan.profileFile;
       // T7: Profile resolved and its execution file located.
       connection?.traceAssignmentStage(context, 'profile_resolved');
       try {
@@ -408,6 +510,21 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           onSlotReserved: onSlotReserved,
           authorizeStart: authorizeStart,
           onProcessStarted: onEngineProcessStarted,
+          onQueued: (queue) => connection?.traceAssignmentStage(
+            context,
+            AssignmentStartupStage.queuedForSlot.wireName,
+            extra: {
+              'queuePosition': queue.position,
+              'activeAssignments': queue.active,
+              'slotLimit': queue.limit,
+              'waitingForSession': queue.waitingForSession,
+              'queueWaitTimeoutMs': queue.queueWaitTimeout.inMilliseconds,
+            },
+          ),
+          onInitialized: () => connection?.traceAssignmentStage(
+            context,
+            AssignmentStartupStage.engineInitialized.wireName,
+          ),
           onActivity: onActivity,
         );
       } finally {
@@ -423,13 +540,17 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             final catalog = DiscoveredModelCatalog.fromJson(
                 Map<String, Object?>.from(
                     jsonDecode(await file.readAsString()) as Map));
-            final currentResolution = await coordinator.resolveProfileForWorker(
-                workerTypeId: worker.workerTypeId,
-                engineVersion: cliWorkerEngineVersion,
-                providerCliVersion: catalog.providerToolVersion,
-                synchronizeIfUnavailable: false);
+            final currentDescriptor =
+                coordinator.entryForWorker(worker.workerTypeId);
+            final currentResolution = currentDescriptor == null
+                ? null
+                : await launchPlans.resolve(
+                    workerTypeId: worker.workerTypeId,
+                    profileDefinitionId: currentDescriptor.profileDefinitionId,
+                    providerCliVersion: catalog.providerToolVersion,
+                  );
             if (catalog.profileDigest == release.payloadDigest &&
-                currentResolution.release?.payloadDigest ==
+                currentResolution?.plan?.profileDigest ==
                     catalog.profileDigest) {
               await localWorkerRegistry.update(
                   worker.id,

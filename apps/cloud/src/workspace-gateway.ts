@@ -3,7 +3,9 @@ import {
   serializeWorkspaceRuntimeMessage,
   WORKSPACE_RUNTIME_PROTOCOL_NAME,
   WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+  ASSIGNMENT_STARTUP_CAPABILITY,
   SERVICE_READINESS_CAPABILITY,
+  assignmentStartupPayload,
   serviceReadinessPayload,
   type AssignmentCancelPayload,
   type WorkspaceRuntimeMessage,
@@ -24,6 +26,7 @@ import {
   RealtimeEventPayloadSchema,
   normalizeActivityPayload,
 } from "@conclave/protocol";
+import { recordAssignmentStartup } from "./assignment-startup.js";
 import { createEventPublisher } from "./event-publisher.js";
 import {
   ASSIGNMENT_REVOCATION_CONFIRMATION_MS,
@@ -969,8 +972,12 @@ export class WorkspaceGateway implements DurableObject {
             sessionId,
             heartbeatIntervalMs: 15000,
             serverTime: now,
-            // Lets a Service know it may publish `workspace.readiness`.
-            cloudCapabilities: [SERVICE_READINESS_CAPABILITY],
+            // Lets a Service know it may publish `workspace.readiness` and
+            // `assignment.startup`.
+            cloudCapabilities: [
+              SERVICE_READINESS_CAPABILITY,
+              ASSIGNMENT_STARTUP_CAPABILITY,
+            ],
           },
         });
         logStructured(
@@ -1235,6 +1242,36 @@ export class WorkspaceGateway implements DurableObject {
       case "assignment.start.permit.grant":
         // Cloud originates grants; a Service never sends one.
         return;
+      case "assignment.startup": {
+        // Observability only: the furthest local startup stage, never a
+        // status or deadline change.
+        if (!(await this.assignmentContextMatches(message))) return;
+        const report = assignmentStartupPayload.safeParse(message.payload);
+        if (!report.success) return;
+        const outcome = await recordAssignmentStartup(this.env.CONCLAVE_DB, {
+          assignmentId: message.assignmentId!,
+          attemptId: message.attemptId!,
+          payload: report.data,
+          now,
+        });
+        if (!outcome.applied) return;
+        tryLogDiagnosticEvent({
+          assignmentId: message.assignmentId,
+          workspaceId: message.executionWorkspaceId,
+          workspaceRuntimeId: message.workspaceRuntimeId,
+          workerId: message.workerId,
+          runId: message.runId,
+          taskId: message.taskId,
+          attemptId: message.attemptId,
+          component: "cloud",
+          operation: "assignment",
+          stage: "startup_progress",
+          severity: "info",
+          retryable: false,
+          context: { status: report.data.stage },
+        });
+        return;
+      }
       case "assignment.activity": {
         const payload = message.payload as Record<string, unknown>;
         const workspaceId =

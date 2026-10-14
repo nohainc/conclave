@@ -194,3 +194,7 @@ deadline.
 | Late start acknowledgement after cancellation | Ignored; assignment stays `cancelled` |
 | Service replays an acknowledged assignment | Evidence is re-asserted; no rejection, no state change in Cloud |
 
+
+## Phase 5 addendum
+
+Before provider start an accepted assignment reports startup stages via `assignment.startup` (capability `assignment.startup.v1`). Pre-start stages never change assignment status. See SERVICE_STARTUP_V9.md.

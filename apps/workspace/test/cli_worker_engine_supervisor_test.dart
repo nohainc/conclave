@@ -109,7 +109,10 @@ void main() {
         timeout: const Duration(seconds: 1),
         queueWaitTimeout: const Duration(seconds: 1),
       ),
-      throwsA(isA<CliWorkerEngineProbeException>()),
+      throwsA(isA<CliWorkerEngineProbeException>().having(
+          (error) => error.localDiagnostics,
+          'diagnostics',
+          allOf(contains('queue_wait'), contains('local_startup')))),
     );
     expect((await first).output, 'slow');
   });
@@ -208,6 +211,170 @@ void main() {
     await expectLater(execution, throwsA(isA<Object>()));
   });
 
+  test('a cancellation issued right after execute() prevents process creation',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final execution = _execute(setup, 'immediate');
+    final expectation = expectLater(
+      execution,
+      throwsA(isA<WorkerAssignmentCancelledException>()),
+    );
+    // No await between execute() and cancel(): the assignment must already be
+    // visible to cancellation.
+    expect(await setup.supervisor.cancel('immediate'), isTrue);
+    await expectation;
+    expect(File('${setup.state.path}/active').existsSync(), isFalse);
+    expect(setup.supervisor.activeAssignmentCountFor('worker-1'), 0);
+    expect((await _execute(setup, 'after')).output, 'after');
+  });
+
+  test('a failing slot-reserved callback neither leaks the slot nor blocks',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    expect(
+      (await _execute(setup, 'throws',
+              onSlotReserved: () => throw StateError('diagnostic failed')))
+          .output,
+      'throws',
+    );
+    expect(
+      (await _execute(setup, 'async-throws',
+              onSlotReserved: () async => throw StateError('write failed')))
+          .output,
+      'async-throws',
+    );
+    expect(setup.supervisor.activeAssignmentCountFor('worker-1'), 0);
+  });
+
+  test('a slow slot-reserved callback does not delay the Engine launch',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final blocker = Completer<void>();
+    addTearDown(() {
+      if (!blocker.isCompleted) blocker.complete();
+    });
+    final result =
+        await _execute(setup, 'fast', onSlotReserved: () => blocker.future)
+            .timeout(const Duration(seconds: 5));
+    expect(result.output, 'fast');
+  });
+
+  test('an Engine that cannot start releases capacity and is classified',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final broken = CliWorkerEngineSupervisor(
+      engineExecutable: '${setup.root.path}/missing-engine',
+      processRegistryDirectory: setup.registry,
+    );
+    for (final id in ['first', 'second']) {
+      await expectLater(
+        _execute(setup, id, supervisor: broken)
+            .timeout(const Duration(seconds: 3)),
+        throwsA(isA<CliWorkerEngineProbeException>()),
+      );
+      expect(broken.activeAssignmentCountFor('worker-1'), 0);
+    }
+    expect(broken.queuedAssignmentCount, 0);
+    expect(
+      setup.registry
+          .listSync()
+          .where((entity) => entity.path.endsWith('.worker-process.json')),
+      isEmpty,
+    );
+  });
+
+  test('reports the queue position when an assignment has to wait', () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final first = _execute(setup, 'first', prompt: 'slow');
+    await _waitFor(File('${setup.state.path}/active').existsSync);
+    WorkerQueueSnapshot? snapshot;
+    final second = _execute(setup, 'second', onQueued: (queue) {
+      snapshot = queue;
+    });
+    expect(snapshot?.position, 1);
+    expect(snapshot?.active, 1);
+    expect(snapshot?.limit, 1);
+    expect(snapshot?.waitingForSession, isFalse);
+    expect(setup.supervisor.queuedAssignmentCountFor('worker-1'), 1);
+    await setup.supervisor.cancel('first');
+    await expectLater(first, throwsA(isA<Object>()));
+    expect((await second).output, 'second');
+    expect(setup.supervisor.queuedAssignmentCountFor('worker-1'), 0);
+  });
+
+  test('raising the Worker limit admits waiting assignments before newcomers',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final first = _execute(setup, 'first', prompt: 'slow');
+    await _waitFor(File('${setup.state.path}/active').existsSync);
+    final started = <String>[];
+    final second = _execute(setup, 'second', onSlotReserved: () {
+      started.add('second');
+    });
+    expect(setup.supervisor.queuedAssignmentCountFor('worker-1'), 1);
+    final third = _execute(setup, 'third', maxConcurrentAssignments: 2,
+        onSlotReserved: () {
+      started.add('third');
+    });
+    await Future.wait([second, third]);
+    expect(started.first, 'second');
+    await setup.supervisor.cancel('first');
+    await expectLater(first, throwsA(isA<Object>()));
+  });
+
+  test('never runs two assignments on the same native session at once',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final first = _execute(setup, 'first',
+        prompt: 'slow', sessionKey: 'native-1', maxConcurrentAssignments: 2);
+    await _waitFor(File('${setup.state.path}/active').existsSync);
+    WorkerQueueSnapshot? snapshot;
+    final sameSession = _execute(setup, 'same-session',
+        sessionKey: 'native-1',
+        maxConcurrentAssignments: 2,
+        onQueued: (queue) => snapshot = queue);
+    expect(snapshot?.waitingForSession, isTrue);
+    expect(setup.supervisor.activeAssignmentCountFor('worker-1'), 1);
+    // An unrelated session of the same Worker is not blocked by that wait.
+    expect(
+      (await _execute(setup, 'other-session',
+              sessionKey: 'native-2', maxConcurrentAssignments: 2))
+          .output,
+      'other-session',
+    );
+    expect(setup.supervisor.queuedAssignmentCountFor('worker-1'), 1);
+    // Once the first assignment ends, the waiting one runs.
+    await setup.supervisor.cancel('first');
+    await expectLater(first, throwsA(isA<Object>()));
+    expect((await sameSession).output, 'same-session');
+    expect(setup.supervisor.activeAssignmentCountFor('worker-1'), 0);
+  });
+
+  test('the ownership record is durable before the provider is asked to start',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final execution = _execute(setup, 'record-first', prompt: 'slow');
+    // The fake Engine creates `active` when it receives execute.request, so
+    // by then the record must already exist.
+    await _waitFor(File('${setup.state.path}/active').existsSync);
+    expect(
+      setup.registry
+          .listSync()
+          .where((entity) => entity.path.endsWith('.worker-process.json')),
+      hasLength(1),
+    );
+    await setup.supervisor.cancel('record-first');
+    await expectLater(execution, throwsA(isA<Object>()));
+  });
+
   test('rejects duplicate local execution for the same assignment', () async {
     final setup = await _setup();
     addTearDown(() => setup.root.delete(recursive: true));
@@ -229,8 +396,12 @@ Future<WorkerResult> _execute(
   Duration timeout = const Duration(seconds: 10),
   Duration? queueWaitTimeout,
   int maxConcurrentAssignments = 1,
+  String? sessionKey,
+  FutureOr<void> Function()? onSlotReserved,
+  void Function(WorkerQueueSnapshot queue)? onQueued,
+  CliWorkerEngineSupervisor? supervisor,
 }) =>
-    setup.supervisor.execute(
+    (supervisor ?? setup.supervisor).execute(
       setup.admission,
       profileFile: setup.profileFile,
       stateDirectory: setup.state,
@@ -242,6 +413,12 @@ Future<WorkerResult> _execute(
       prompt: prompt ?? assignmentId,
       timeout: timeout,
       queueWaitTimeout: queueWaitTimeout,
+      sessionPolicy: sessionKey == null
+          ? WorkerSessionPolicy.stateless
+          : WorkerSessionPolicy.durableSession,
+      sessionKey: sessionKey,
+      onSlotReserved: onSlotReserved,
+      onQueued: onQueued,
     );
 
 Future<_Setup> _setup() async {

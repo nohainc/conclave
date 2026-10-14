@@ -48,6 +48,37 @@ describe("execution diagnostics", () => {
     expect(new Set(ALL_TRACE_STAGES).size).toBe(ALL_TRACE_STAGES.length);
   });
 
+  it("accepts local startup milestones without renumbering T1-T12", () => {
+    for (const stage of [
+      "worker_resolved",
+      "profile_ready",
+      "waiting_for_space",
+      "queued_for_slot",
+      "engine_initialized",
+    ]) {
+      expect(ALL_TRACE_STAGES).toContain(stage);
+      expect(traceStageNumber(stage)).toBeUndefined();
+    }
+    expect(TRACE_STAGES).toHaveLength(12);
+    const event = createDiagnosticEvent({
+      assignmentId: "assignment-1",
+      component: "workspace_service",
+      operation: "assignment",
+      stage: "trace",
+      severity: "info",
+      retryable: false,
+      context: {
+        traceStage: "queued_for_slot",
+        queuePosition: 2,
+        slotLimit: 1,
+        activeAssignments: 1,
+        waitingForSession: false,
+        queueWaitTimeoutMs: 120000,
+      } as never,
+    });
+    expect(parseDiagnosticEvent(event)).toEqual(event);
+  });
+
   it("carries bounded timing context and rejects unknown stages", () => {
     const event = createDiagnosticEvent({
       assignmentId: "assignment-1",
