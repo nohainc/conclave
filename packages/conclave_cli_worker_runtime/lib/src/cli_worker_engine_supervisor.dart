@@ -1155,7 +1155,10 @@ final class CliEngineChannel {
   }
 
   bool _isDartVmServiceBanner(String line) =>
-      line.startsWith('The Dart VM service is listening on ');
+      line.startsWith('The Dart VM service is listening on ') ||
+      line.startsWith(
+        'The Dart DevTools debugger and profiler is available at: ',
+      );
 
   Future<void> _drainStderr() async {
     await for (final bytes in process.stderr) {

@@ -62,3 +62,12 @@ the sync result, and explicitly rejected if the connection ends first.
 Legacy Service + new Cloud: inferred readiness. New Service + legacy Cloud: no
 dedicated message, Service behaves as before. Offline dispatch now queues (202)
 instead of 503.
+
+Phase 9 adds a separate execution-safety gate: inferred readiness does not
+authorize unfenced execution. New start commands require
+`assignment.start_permit.v1` advertised by the current authenticated
+session/runtime. An older Service remains connected for recovery but new
+assignments stay queued with `deliveryState: service_upgrade_required` until
+upgrade or the readiness-wait deadline. Reconnect with a fresh hello is required
+when the existing session predates session-bound capability storage. See the
+[rollout runbook](../rollouts/EXECUTION_RELIABILITY_V9.md).

@@ -48,12 +48,10 @@ class _AxQueryBuilderState<T> extends State<AxQueryBuilder<T>> {
       // the current build stack before marking this consumer dirty.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        Timer.run(() {
-          _stateUpdateScheduled = false;
-          final next = _pendingState;
-          _pendingState = null;
-          if (mounted && next != null) setState(() => state = next);
-        });
+        _stateUpdateScheduled = false;
+        final next = _pendingState;
+        _pendingState = null;
+        if (mounted && next != null) setState(() => state = next);
       });
     }, fireImmediately: false);
     // Attach query state/error handling locally, never to the complete shell.
@@ -61,12 +59,10 @@ class _AxQueryBuilderState<T> extends State<AxQueryBuilder<T>> {
       final engine = widget.engine;
       final query = widget.query;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        Timer.run(() {
-          if (!mounted || generation != _subscriptionGeneration) return;
-          unawaited(engine
-              .ensure(query)
-              .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-        });
+        if (!mounted || generation != _subscriptionGeneration) return;
+        unawaited(engine
+            .ensure(query)
+            .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       });
     }
   }

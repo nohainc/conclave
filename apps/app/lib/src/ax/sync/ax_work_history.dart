@@ -710,7 +710,8 @@ class AxWorkHistoryCache {
               steps: List.unmodifiable(detail.steps),
               finalText: detail.text,
               error: detail.error ?? detail.errorMessage,
-              activityHistory: detail.activityHistory);
+              activityHistory: detail.activityHistory,
+              executionPhase: detail.executionPhase);
           context.detailErrors.remove(requestId);
           context.revisions[requestId] =
               (context.revisions[requestId] ?? 0) + 1;

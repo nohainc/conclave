@@ -98,6 +98,129 @@ void main() {
   }
 
   Future<void> drain() => Future<void>.delayed(Duration.zero);
+  AxWorkRequest phased(String id, String phase) => work(id).copyWith(steps: [
+        AxWorkRequestStep(
+            kind: 'implement',
+            status: 'running',
+            workerId: 'worker',
+            assignmentId: 'assignment-$id',
+            executionPhase: phase)
+      ]);
+  Map<String, dynamic> phaseEvent(String id, String phase,
+          {String? assignment}) =>
+      {
+        ...event('step.phase', id: id, status: phase),
+        'assignmentId': assignment ?? 'assignment-$id',
+      };
+
+  test('phase events advance only their own assignment and request', () async {
+    source.records = [phased('r', 'queued'), phased('other', 'delivered')];
+    await seed();
+    await sync.handle(phaseEvent('r', 'starting'));
+    await sync.handle(phaseEvent('r', 'running'));
+    await sync.handle(phaseEvent('r', 'delivered'));
+    expect(cache.request('w', 'r')!.steps.single.effectivePhase, 'running');
+    expect(
+        cache.request('w', 'other')!.steps.single.effectivePhase, 'delivered');
+    expect(source.gets, isEmpty);
+    await sync.handle(phaseEvent('r', 'running', assignment: 'old-attempt'));
+    expect(source.gets, ['r']);
+    expect(cache.request('w', 'r')!.status, 'completed');
+  });
+
+  test('uncertain and terminal phase events re-read authoritative detail',
+      () async {
+    for (final phase in ['uncertain', 'failed', 'completed', 'cancelled']) {
+      cache.patchRequest('w', phased('r', 'starting'));
+      await sync.handle(phaseEvent('r', phase));
+      expect(cache.request('w', 'r')!.status, 'completed');
+    }
+    expect(source.gets, List.filled(4, 'r'));
+  });
+
+  test('late phase and complete payload cannot revive a terminal request',
+      () async {
+    source.records = [work('r', status: 'completed')];
+    await seed();
+    await sync.handle(phaseEvent('r', 'running'));
+    final stale = event('work_request.started', status: 'running');
+    (stale['payload'] as Map)['workRequest'] = {
+      'id': 'r',
+      'createdAt': '2026-10-06T00:00:00Z',
+      'workflowId': 'direct',
+      'workflowVersion': 2,
+      'prompt': 'p',
+      'requestedByName': 'You',
+      'status': 'running',
+      'steps': [],
+    };
+    await sync.handle(stale);
+    expect(cache.request('w', 'r')!.status, 'completed');
+    expect(source.gets, ['r', 'r']);
+  });
+
+  test('late legacy queue events cannot regress running work', () async {
+    source.records = [phased('r', 'running')];
+    await seed();
+    await sync.handle(event('step.queued', status: 'queued'));
+    expect(cache.request('w', 'r')!.status, 'completed');
+    cache.patchRequest('w', phased('r', 'running'));
+    await sync.handle(event('work_request.created', status: 'queued'));
+    expect(cache.request('w', 'r')!.status, 'completed');
+  });
+
+  test('a stale full payload cannot regress a running assignment', () async {
+    source.records = [phased('r', 'running')];
+    await seed();
+    final stale = event('step.phase', status: 'starting');
+    (stale['payload'] as Map)['workRequest'] = {
+      'id': 'r',
+      'createdAt': '2026-10-06T00:00:00Z',
+      'workflowId': 'direct',
+      'workflowVersion': 2,
+      'prompt': 'p',
+      'requestedByName': 'You',
+      'status': 'running',
+      'steps': [
+        {
+          'kind': 'implement',
+          'status': 'running',
+          'assignmentId': 'assignment-r',
+          'executionPhase': 'starting'
+        }
+      ],
+    };
+    await sync.handle(stale);
+    expect(source.gets, ['r']);
+    expect(cache.request('w', 'r')!.status, 'completed');
+  });
+
+  test('full payload cannot revive a terminal step in an active request',
+      () async {
+    source.records = [phased('r', 'failed')];
+    await seed();
+    final stale = event('step.phase', status: 'running');
+    (stale['payload'] as Map)['workRequest'] = {
+      'id': 'r',
+      'createdAt': '2026-10-06T00:00:00Z',
+      'workflowId': 'direct',
+      'workflowVersion': 2,
+      'prompt': 'p',
+      'requestedByName': 'You',
+      'status': 'running',
+      'steps': [
+        {
+          'kind': 'implement',
+          'status': 'running',
+          'assignmentId': 'assignment-r',
+          'executionPhase': 'running'
+        }
+      ],
+    };
+    await sync.handle(stale);
+    expect(source.gets, ['r']);
+    expect(cache.request('w', 'r')!.status, 'completed');
+  });
   test('Thread gap recovers its retained active entities only', () async {
     await seed();
     await cache.refresh('other');

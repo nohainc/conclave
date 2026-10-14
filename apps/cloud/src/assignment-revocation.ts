@@ -42,6 +42,7 @@ export type RevocationSource =
   | "manual_cancel"
   | "workspace_disconnected"
   | "grant_expired"
+  | "grant_revoked"
   | "dispatch_failed";
 
 export interface RevocationIntent {
@@ -138,6 +139,7 @@ async function applyIntent(
   assignmentId: string,
   attemptId: string | null | undefined,
   intent: RevocationIntent,
+  onlyFrom?: readonly AssignmentLifecycleStatus[],
 ): Promise<boolean> {
   if (intent.status === "cancelled") {
     return recordAssignmentCancelled(
@@ -145,6 +147,7 @@ async function applyIntent(
       assignmentId,
       { status: "cancelled", reason: intent.reason },
       attemptId ?? undefined,
+      { onlyFrom },
     );
   }
   const failure = failureFor(intent);
@@ -155,6 +158,7 @@ async function applyIntent(
     assignmentId,
     { ...failure, error: { ...failure.error, code } },
     attemptId ?? undefined,
+    { onlyFrom },
   );
 }
 
@@ -219,7 +223,9 @@ export async function beginAssignmentRevocation(
       return { outcome: "superseded", currentStatus: status };
     }
     if (status === "created") {
-      if (await applyIntent(db, assignmentId, row.attempt_id, intent)) {
+      if (
+        await applyIntent(db, assignmentId, row.attempt_id, intent, ["created"])
+      ) {
         return { outcome: "finalized", observedStatus: status };
       }
       continue;

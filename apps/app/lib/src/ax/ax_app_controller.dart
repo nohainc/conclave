@@ -219,7 +219,7 @@ extension _AxAppController on _AxAppStateMixin {
                   color: ConclaveColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
@@ -227,7 +227,7 @@ extension _AxAppController on _AxAppStateMixin {
                       size: 14,
                       color: ConclaveColors.primaryForegroundDark,
                     ),
-                    const SizedBox(width: 6),
+                    SizedBox(width: 6),
                     Flexible(
                       child: Text(
                         'Conclave AX v0.4.0 • Provider-Independent Core',
@@ -503,7 +503,7 @@ extension _AxAppController on _AxAppStateMixin {
                         children: [
                           if (pendingInvitations.isNotEmpty) ...[
                             Padding(
-                              padding: EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.only(bottom: 8),
                               child: Text(
                                 'Pending invitations',
                                 style: TextStyle(
@@ -619,7 +619,7 @@ extension _AxAppController on _AxAppStateMixin {
                           if (notifications.isNotEmpty) ...[
                             if (pendingInvitations.isNotEmpty)
                               Padding(
-                                padding: EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.only(bottom: 8),
                                 child: Text(
                                   'Activity',
                                   style: TextStyle(

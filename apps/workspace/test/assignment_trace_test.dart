@@ -4,6 +4,64 @@ import 'package:conclave_workspace/assignment_trace.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('trace epoch is bounded and stable across recorder instances', () {
+    final epoch = processTraceEpochId();
+    expect(epoch, matches(RegExp(r'^[A-Za-z0-9._:-]{1,128}$')));
+    for (var iteration = 0; iteration < 20; iteration++) {
+      final recorder = AssignmentTraceRecorder();
+      recorder.begin('assignment-$iteration');
+      recorder.mark('assignment-$iteration', 'slot_reserved');
+      recorder.finish('assignment-$iteration');
+      expect(processTraceEpochId(), epoch);
+    }
+  });
+
+  group('MonotonicCloudClock', () {
+    test('advances server upper bound using elapsed time, not wall time', () {
+      var elapsed = Duration.zero;
+      final clock = MonotonicCloudClock(monotonicNow: () => elapsed);
+      final server = DateTime.utc(2000);
+      expect(clock.latestServerTime, isNull);
+      clock.addSample(
+          serverTimeUtc: server, roundTrip: const Duration(milliseconds: 100));
+      elapsed = const Duration(seconds: 10);
+      expect(clock.latestServerTime,
+          server.add(const Duration(seconds: 10, milliseconds: 101)));
+    });
+
+    test('rejects aged, regressed and excessively delayed samples', () {
+      var elapsed = Duration.zero;
+      final clock = MonotonicCloudClock(monotonicNow: () => elapsed);
+      final server = DateTime.utc(2000);
+      clock.addSample(serverTimeUtc: server, roundTrip: Duration.zero);
+      elapsed = MonotonicCloudClock.maxSampleAge;
+      expect(clock.latestServerTime, isNull);
+      clock.addSample(serverTimeUtc: server, roundTrip: Duration.zero);
+      elapsed = Duration.zero;
+      expect(clock.latestServerTime, isNull);
+      clock.addSample(
+          serverTimeUtc: server, roundTrip: MonotonicCloudClock.maxSampleAge);
+      expect(clock.latestServerTime, isNull);
+    });
+
+    test('new sample replaces old low-RTT anchor and reset removes authority',
+        () {
+      var elapsed = Duration.zero;
+      final clock = MonotonicCloudClock(monotonicNow: () => elapsed);
+      final server = DateTime.utc(2000);
+      clock.addSample(serverTimeUtc: server, roundTrip: Duration.zero);
+      elapsed = const Duration(seconds: 20);
+      clock.addSample(
+          serverTimeUtc: server.add(elapsed),
+          roundTrip: const Duration(milliseconds: 100));
+      elapsed = const Duration(seconds: 40);
+      expect(clock.latestServerTime,
+          server.add(const Duration(seconds: 40, milliseconds: 101)));
+      clock.reset();
+      expect(clock.latestServerTime, isNull);
+    });
+  });
+
   group('ClockOffsetEstimator', () {
     test('has no estimate before the first sample', () {
       final estimator = ClockOffsetEstimator();

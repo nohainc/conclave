@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { conversationFixture } from "./helpers/conversation.js";
 import {
   conversationWorkerSessionReference,
@@ -88,12 +89,235 @@ it("records start acknowledgement, exact terminal evidence, and prevents complet
     completedAt: "later",
   });
   expect((await f.turns())[0]).toEqual(before);
-  expect(() =>
-    f.sqlite.exec(
-      "UPDATE worker_assignments SET status='running' WHERE id='A'",
-    ),
-  ).toThrow("lifecycle");
+  f.sqlite.exec("UPDATE worker_assignments SET status='running' WHERE id='A'");
+  expect((await f.turns())[0]).toEqual(before);
   f.sqlite.close();
+});
+
+it("keeps admission queued and records provider start only from explicit evidence", async () => {
+  const f = await conversationFixture();
+  try {
+    f.assign("A");
+    f.sqlite.exec(
+      "UPDATE worker_assignments SET status='acknowledged', acknowledged_at='admitted', updated_at='admitted' WHERE id='A'",
+    );
+    expect((await f.turns())[0]).toMatchObject({
+      status: "queued",
+      startedAt: null,
+    });
+    f.sqlite.exec(
+      "UPDATE worker_assignments SET status='running', running_at='provider-start', updated_at='later' WHERE id='A'",
+    );
+    expect((await f.turns())[0]).toMatchObject({
+      status: "running",
+      startedAt: "provider-start",
+    });
+  } finally {
+    f.sqlite.close();
+  }
+});
+
+it.each(["completed", "failed", "cancelled", "timed_out", "lost"])(
+  "projects terminal %s without inventing a provider start and ignores late evidence",
+  async (status) => {
+    const f = await conversationFixture();
+    try {
+      f.assign("A");
+      f.sqlite
+        .prepare(
+          "UPDATE worker_assignments SET status=?, updated_at='terminal', output_json=? WHERE id='A'",
+        )
+        .run(status, JSON.stringify({ output: { text: "**exact**" } }));
+      const turn = (await f.turns())[0]!;
+      expect(turn).toMatchObject({
+        status: ["timed_out", "lost"].includes(status) ? "failed" : status,
+        startedAt: null,
+        completedAt: "terminal",
+        resultText: status === "completed" ? "**exact**" : null,
+      });
+      f.sqlite.exec(
+        "UPDATE worker_assignments SET status='acknowledged',updated_at='late' WHERE id='A'",
+      );
+      expect((await f.turns())[0]).toEqual(turn);
+      expect(() =>
+        f.sqlite.exec(
+          "UPDATE conversation_turns SET result_text='rewrite' WHERE assignment_id='A'",
+        ),
+      ).toThrow("lifecycle");
+    } finally {
+      f.sqlite.close();
+    }
+  },
+);
+
+it.each(["revocation_pending", "reconciling"])(
+  "0062 repairs admission-only Running during %s without guessing ambiguous starts",
+  async (status) => {
+    const f = await conversationFixture({ beforeTurnLifecycleRepair: true });
+    try {
+      f.assign("known");
+      f.assign("ambiguous");
+      f.sqlite.exec(`
+        UPDATE worker_assignments SET status='acknowledged', acknowledged_at='2026-10-14T10:00:00Z', updated_at='2026-10-14T10:00:00Z';
+        UPDATE worker_assignments SET acknowledged_at=NULL WHERE id='ambiguous';
+      `);
+      f.sqlite
+        .prepare(
+          "UPDATE worker_assignments SET status=?, updated_at='2026-10-14T10:02:00Z'",
+        )
+        .run(status);
+      f.sqlite.exec(
+        readFileSync(
+          new URL(
+            "../migrations-v8/0062_conversation_turn_lifecycle.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      const turns = await f.turns();
+      expect(turns.find((t) => t.assignmentId === "known")).toMatchObject({
+        status: "queued",
+        startedAt: null,
+        completedAt: null,
+      });
+      expect(turns.find((t) => t.assignmentId === "ambiguous")).toMatchObject({
+        status: "running",
+        startedAt: "2026-10-14T10:00:00Z",
+        completedAt: null,
+      });
+      expect(
+        f.sqlite
+          .prepare("SELECT status FROM worker_assignments WHERE id='known'")
+          .get()?.status,
+      ).toBe(status);
+    } finally {
+      f.sqlite.close();
+    }
+  },
+);
+
+it.each(["running", "revocation_pending", "reconciling"])(
+  "0062 advances a proven admission-derived start to provider time while %s",
+  async (status) => {
+    const f = await conversationFixture({ beforeTurnLifecycleRepair: true });
+    try {
+      for (const id of ["known", "ambiguous", "terminal"]) f.assign(id);
+      f.sqlite.exec(`
+        UPDATE worker_assignments SET status='acknowledged', acknowledged_at='2026-10-14T10:00:00Z', updated_at='2026-10-14T10:00:00Z';
+        UPDATE worker_assignments SET acknowledged_at=NULL WHERE id='ambiguous';
+        UPDATE worker_assignments SET status='running', running_at='2026-10-14T10:01:00Z', updated_at='2026-10-14T10:01:00Z';
+        UPDATE worker_assignments SET status='completed', updated_at='2026-10-14T10:02:00Z', output_json='{"output":{"text":"original"}}' WHERE id='terminal';
+      `);
+      const terminal = f.sqlite
+        .prepare(
+          "SELECT * FROM conversation_turns WHERE assignment_id='terminal'",
+        )
+        .get();
+      f.sqlite
+        .prepare(
+          "UPDATE worker_assignments SET status=?, updated_at='2026-10-14T10:03:00Z' WHERE id != 'terminal'",
+        )
+        .run(status);
+      f.sqlite.exec(
+        readFileSync(
+          new URL(
+            "../migrations-v8/0062_conversation_turn_lifecycle.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      const turns = await f.turns();
+      expect(turns.find((t) => t.assignmentId === "known")).toMatchObject({
+        status: "running",
+        startedAt: "2026-10-14T10:01:00Z",
+        completedAt: null,
+      });
+      expect(turns.find((t) => t.assignmentId === "ambiguous")).toMatchObject({
+        status: "running",
+        startedAt: "2026-10-14T10:00:00Z",
+        completedAt: null,
+      });
+      expect(
+        f.sqlite
+          .prepare(
+            "SELECT * FROM conversation_turns WHERE assignment_id='terminal'",
+          )
+          .get(),
+      ).toEqual(terminal);
+    } finally {
+      f.sqlite.close();
+    }
+  },
+);
+
+it("0062 repairs only nonterminal projections and preserves terminal history and attribution", async () => {
+  const f = await conversationFixture({ beforeTurnLifecycleRepair: true });
+  try {
+    for (const id of ["admission", "timeout", "lost", "complete", "unknown"])
+      f.assign(id);
+    f.sqlite.exec(`
+      UPDATE worker_assignments SET status='acknowledged', acknowledged_at='admission', updated_at='admission';
+      UPDATE worker_assignments SET status='timed_out', updated_at='timeout-end' WHERE id='timeout';
+      UPDATE worker_assignments SET status='lost', updated_at='lost-end' WHERE id='lost';
+      UPDATE worker_assignments SET status='completed', updated_at='complete-end', output_json='{"output":{"text":"original"}}' WHERE id='complete';
+      UPDATE worker_assignments SET status='timed_out', updated_at='later' WHERE id='complete';
+      UPDATE worker_assignments SET acknowledged_at=NULL, updated_at='different' WHERE id='unknown';
+    `);
+    const before = f.sqlite
+      .prepare(
+        "SELECT * FROM conversation_turns WHERE assignment_id='complete'",
+      )
+      .get();
+    const attribution = f.sqlite
+      .prepare(
+        "SELECT id, assignment_id, worker_id, profile_id, model_id, created_at FROM conversation_turns ORDER BY id",
+      )
+      .all();
+    f.sqlite.exec(
+      readFileSync(
+        new URL(
+          "../migrations-v8/0062_conversation_turn_lifecycle.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    const turns = await f.turns();
+    expect(turns.find((t) => t.assignmentId === "admission")).toMatchObject({
+      status: "queued",
+      startedAt: null,
+    });
+    expect(turns.find((t) => t.assignmentId === "timeout")).toMatchObject({
+      status: "failed",
+      completedAt: "timeout-end",
+    });
+    expect(turns.find((t) => t.assignmentId === "lost")).toMatchObject({
+      status: "failed",
+      completedAt: "lost-end",
+    });
+    expect(turns.find((t) => t.assignmentId === "unknown")).toMatchObject({
+      status: "running",
+      startedAt: "admission",
+    });
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT * FROM conversation_turns WHERE assignment_id='complete'",
+        )
+        .get(),
+    ).toEqual(before);
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT id, assignment_id, worker_id, profile_id, model_id, created_at FROM conversation_turns ORDER BY id",
+        )
+        .all(),
+    ).toEqual(attribution);
+  } finally {
+    f.sqlite.close();
+  }
 });
 
 it.each(["failed", "cancelled"] as const)(

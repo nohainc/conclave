@@ -1,11 +1,61 @@
 import 'dart:async';
+import 'dart:io';
 
 /// Process-wide monotonic clock. Readings are comparable only within one
 /// Service process; they are never compared with Cloud timestamps.
 final Stopwatch _processClock = Stopwatch()..start();
 
+/// Identifies the process epoch behind monotonic readings. Never compare
+/// monotonic timestamps from different epochs after merging diagnostic files.
+final String _traceEpochId =
+    'trace-${DateTime.now().toUtc().microsecondsSinceEpoch}-$pid';
+
+String processTraceEpochId() => _traceEpochId;
+
 /// Milliseconds since this Service process loaded the tracing library.
 int processMonotonicMs() => _processClock.elapsedMilliseconds;
+
+/// Safety clock for startup permits, independent of telemetry wall offsets.
+/// A server timestamp was generated somewhere inside the measured round trip;
+/// adding the entire trip gives a conservative upper bound at receipt.
+final class MonotonicCloudClock {
+  MonotonicCloudClock({Duration Function()? monotonicNow})
+      : _monotonicNow = monotonicNow ?? (() => _processClock.elapsed);
+
+  // Two normal heartbeat intervals. Older samples cannot authorize launch.
+  static const maxSampleAge = Duration(seconds: 30);
+  final Duration Function() _monotonicNow;
+  DateTime? _serverUpperBound;
+  Duration? _receivedAt;
+
+  void addSample(
+      {required DateTime serverTimeUtc, required Duration roundTrip}) {
+    if (roundTrip.isNegative || roundTrip >= maxSampleAge) {
+      reset();
+      return;
+    }
+    _receivedAt = _monotonicNow();
+    _serverUpperBound = serverTimeUtc.toUtc().add(roundTrip);
+  }
+
+  DateTime? get latestServerTime {
+    final received = _receivedAt;
+    final upper = _serverUpperBound;
+    if (received == null || upper == null) return null;
+    final age = _monotonicNow() - received;
+    if (age.isNegative || age >= maxSampleAge) {
+      reset();
+      return null;
+    }
+    // Cover sub-millisecond precision lost when Cloud serializes timestamps.
+    return upper.add(age).add(const Duration(milliseconds: 1));
+  }
+
+  void reset() {
+    _serverUpperBound = null;
+    _receivedAt = null;
+  }
+}
 
 /// Estimates `Cloud clock - local clock` from request/response samples, in the
 /// style of NTP: the Cloud timestamp is assumed to lie at the midpoint of the

@@ -353,12 +353,14 @@ class WorkspaceCloudConnection {
     this.webSocketProbeMaxInterval = const Duration(hours: 1),
     this.webSocketFailureLimit = 3,
     this.credentialAvailable = true,
+    MonotonicCloudClock? startPermitClock,
   })  : authorizedWorkspaceIds = {
           workspaceId,
           ...?authorizedWorkspaceIds,
         },
         hostname = hostname ?? Platform.localHostname,
-        capabilities = capabilities ?? _defaultCapabilities();
+        capabilities = capabilities ?? _defaultCapabilities(),
+        startPermitClock = startPermitClock ?? MonotonicCloudClock();
 
   final Uri uri;
   final String workspaceRuntimeId;
@@ -388,6 +390,7 @@ class WorkspaceCloudConnection {
   /// assignment decision reads these values.
   final AssignmentTraceRecorder traceRecorder = AssignmentTraceRecorder();
   final ClockOffsetEstimator clockOffset = ClockOffsetEstimator();
+  final MonotonicCloudClock startPermitClock;
   final Map<String, _ClockProbe> _clockProbes = {};
   final Future<List<Map<String, Object?>>> Function()? workerInventoryProvider;
   final Future<void> Function()? onSessionReady;
@@ -614,7 +617,7 @@ class WorkspaceCloudConnection {
   static const _startPermitTimeout = Duration(seconds: 15);
   static const _startPermitResendInterval = Duration(seconds: 3);
   final _pendingStartPermits = <String, Completer<bool>>{};
-  final _startPermitAttempts = <String, String>{};
+  final _startPermitContexts = <String, WorkspaceAssignmentContext>{};
   final _pendingAssignmentsDuringSync = <Map<String, dynamic>>[];
   static const _maxPendingActivityEvents = 256;
   final _pendingActivityEvents = <_PendingWorkerActivity>[];
@@ -726,6 +729,10 @@ class WorkspaceCloudConnection {
       if (type != 'workspace.hello.ack' && type != 'workspace.heartbeat.ack') {
         return;
       }
+      if (decoded['workspaceRuntimeId'] != workspaceRuntimeId ||
+          decoded['executionWorkspaceId'] != workspaceId) {
+        return;
+      }
       final correlationId = decoded['correlationId'];
       final probe =
           correlationId is String ? _clockProbes.remove(correlationId) : null;
@@ -734,13 +741,16 @@ class WorkspaceCloudConnection {
       if (probe == null || serverTime is! String) return;
       final parsed = DateTime.tryParse(serverTime);
       if (parsed == null) return;
+      final roundTrip = probe.timer.elapsed;
       clockOffset.addSample(
         sentAtUtc: probe.sentAt,
-        roundTrip: probe.timer.elapsed,
+        roundTrip: roundTrip,
         serverTimeUtc: parsed.toUtc(),
       );
+      startPermitClock.addSample(serverTimeUtc: parsed, roundTrip: roundTrip);
     } on Object {
-      // Clock estimation is telemetry only.
+      // Invalid samples must not disrupt transport. Permit expiry fails
+      // closed until a usable clock estimate is available.
     }
   }
 
@@ -755,6 +765,7 @@ class WorkspaceCloudConnection {
     final offset = clockOffset.offsetMs;
     final rtt = clockOffset.roundTripMs;
     return {
+      'traceEpochId': processTraceEpochId(),
       'transport': activeTransportMode ?? _pendingTransportMode ?? 'offline',
       'syncState': connectionStage.name,
       'activeAssignments': _activeAssignments.length,
@@ -771,6 +782,7 @@ class WorkspaceCloudConnection {
     final context = _traceContext();
     return {
       for (final key in const [
+        'traceEpochId',
         'syncState',
         'activeAssignments',
         'localQueueLength',
@@ -990,10 +1002,18 @@ class WorkspaceCloudConnection {
     if (startPermit is! Map || startPermit['required'] != true) return true;
     final assignmentId = context.assignmentId;
     final existing = _pendingStartPermits[assignmentId];
-    if (existing != null) return existing.future;
+    if (existing != null) {
+      final pending = _startPermitContexts[assignmentId];
+      if (pending?.attemptId != context.attemptId ||
+          pending?.workspaceRuntimeId != context.workspaceRuntimeId ||
+          pending?.idempotencyKey != context.idempotencyKey) {
+        return false;
+      }
+      return existing.future;
+    }
     final completer = Completer<bool>();
     _pendingStartPermits[assignmentId] = completer;
-    _startPermitAttempts[assignmentId] = context.attemptId;
+    _startPermitContexts[assignmentId] = context;
     final deadline = DateTime.now().add(_startPermitTimeout);
     Timer? resend;
     void send() {
@@ -1031,7 +1051,7 @@ class WorkspaceCloudConnection {
     } finally {
       resend?.cancel();
       _pendingStartPermits.remove(assignmentId);
-      _startPermitAttempts.remove(assignmentId);
+      _startPermitContexts.remove(assignmentId);
     }
   }
 
@@ -1043,11 +1063,30 @@ class WorkspaceCloudConnection {
     if (completer == null || completer.isCompleted) return;
     // Bind the grant to the exact attempt that asked for it; a grant for a
     // previous attempt of the same assignment must never start this one.
-    final pendingAttempt = _startPermitAttempts[assignmentId];
-    if (pendingAttempt != null && decoded['attemptId'] != pendingAttempt) {
-      return;
+    final context = _startPermitContexts[assignmentId];
+    if (context == null) return;
+    final correlation = _assignmentCorrelationForContext(context);
+    for (final field in const [
+      'executionWorkspaceId',
+      'workspaceRuntimeId',
+      'workerId',
+      'runId',
+      'taskId',
+      'attemptId',
+      'idempotencyKey',
+    ]) {
+      if (decoded[field] != correlation[field]) return;
     }
-    completer.complete(payload['granted'] == true);
+    final expiry = payload['expiresAt'];
+    final expiresAt = expiry is String ? DateTime.tryParse(expiry) : null;
+    final permitId = payload['permitId'];
+    final latestCloudNow = startPermitClock.latestServerTime;
+    completer.complete(payload['granted'] == true &&
+        permitId is String &&
+        permitId.isNotEmpty &&
+        expiresAt != null &&
+        latestCloudNow != null &&
+        expiresAt.isAfter(latestCloudNow));
   }
 
   /// Records and reports the first evidence that the Engine and provider
@@ -1355,6 +1394,8 @@ class WorkspaceCloudConnection {
   }
 
   Future<void> _cleanCurrentTransport() async {
+    startPermitClock.reset();
+    _clockProbes.clear();
     _rejectPendingAssignmentsDuringSync('service_connection_ended');
     _transportGeneration++;
     _heartbeatTimer?.cancel();
@@ -1814,6 +1855,7 @@ class WorkspaceCloudConnection {
           'receivedAt': receivedAt.toIso8601String(),
           'ackedAt': DateTime.now().toUtc().toIso8601String(),
           for (final key in const [
+            'traceEpochId',
             'transport',
             'syncState',
             'localQueueLength',
@@ -2263,6 +2305,8 @@ class WorkspaceCloudConnection {
   }
 
   void _handleTransportEnd() {
+    startPermitClock.reset();
+    _clockProbes.clear();
     if ((_pendingTransportMode ?? activeTransportMode) == 'websocket' &&
         fallbackFactory != null) {
       if (_pendingTransportMode == 'websocket') _webSocketProbeFailures++;

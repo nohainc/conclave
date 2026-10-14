@@ -152,7 +152,7 @@ if (
   );
 }
 if (
-  !workspaceConfig.includes("CONCLAVE_WORKSPACE_RUNTIME_ID") ||
+  !workspaceRegistration.includes("CONCLAVE_WORKSPACE_RUNTIME_ID") ||
   !workspaceRegistration.includes("workspace-registration.json")
 ) {
   failures.push(

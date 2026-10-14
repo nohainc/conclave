@@ -28,6 +28,7 @@ import {
   normalizeActivityPayload,
 } from "@conclave/protocol";
 import { recordAssignmentStartup } from "./assignment-startup.js";
+import { publishAssignmentPhase } from "./assignment-phase-events.js";
 import { createEventPublisher } from "./event-publisher.js";
 import {
   ASSIGNMENT_REVOCATION_CONFIRMATION_MS,
@@ -936,6 +937,13 @@ export class WorkspaceGateway implements DurableObject {
             protocolMessageId: message.messageId,
           });
           const facts = runtimeFacts(message.payload);
+          // Safety capabilities belong to this authenticated session, not to
+          // the last installation that happened to publish Workspace facts.
+          await this.state.storage.put("execution-capabilities", {
+            sessionId,
+            runtimeId: message.workspaceRuntimeId,
+            capabilities: facts.capabilities,
+          });
           await this.env.CONCLAVE_DB.prepare(
             `INSERT INTO workspace_runtime_facts
              (workspace_id, platform, architecture, hostname, app_version,
@@ -1115,6 +1123,8 @@ export class WorkspaceGateway implements DurableObject {
             },
           });
           this.traceTransitionOutcome(message, "admission", transition);
+          if (transition.applied && message.assignmentId)
+            await publishAssignmentPhase(this.env, message.assignmentId);
         } else if (
           message.assignmentId &&
           (await this.terminalAssignmentMatches(message))
@@ -1171,6 +1181,8 @@ export class WorkspaceGateway implements DurableObject {
         });
         this.traceTransitionOutcome(message, "provider_start", transition);
         if (!transition.applied) return;
+        if (message.assignmentId)
+          await publishAssignmentPhase(this.env, message.assignmentId);
         tryLogDiagnosticEvent({
           assignmentId: message.assignmentId,
           workspaceId: message.executionWorkspaceId,
@@ -1238,6 +1250,8 @@ export class WorkspaceGateway implements DurableObject {
               }
             : { granted: false, reason: decision.reason },
         });
+        if (decision.granted && message.assignmentId)
+          await publishAssignmentPhase(this.env, message.assignmentId);
         return;
       }
       case "assignment.start.permit.grant":
@@ -1256,6 +1270,7 @@ export class WorkspaceGateway implements DurableObject {
           now,
         });
         if (!outcome.applied) return;
+        await publishAssignmentPhase(this.env, message.assignmentId!);
         tryLogDiagnosticEvent({
           assignmentId: message.assignmentId,
           workspaceId: message.executionWorkspaceId,
@@ -1530,7 +1545,7 @@ export class WorkspaceGateway implements DurableObject {
         // Runtime readiness is logical-only. Never persist or relay a local
         // absolute path or repository clone path.
         return;
-      case "assignment.result":
+      case "assignment.result": {
         if (!(await this.terminalAssignmentMatches(message))) return;
         tryLogDiagnosticEvent({
           assignmentId: message.assignmentId,
@@ -1556,7 +1571,8 @@ export class WorkspaceGateway implements DurableObject {
         if (completed) this.traceTerminalPersisted(message, "completed");
         await this.sendTerminalAcknowledgement(message, "completed");
         return;
-      case "assignment.error":
+      }
+      case "assignment.error": {
         {
           if (!(await this.terminalAssignmentMatches(message))) return;
           const payload = message.payload as Record<string, unknown>;
@@ -1591,7 +1607,8 @@ export class WorkspaceGateway implements DurableObject {
         if (failed) this.traceTerminalPersisted(message, "failed");
         await this.sendTerminalAcknowledgement(message, "failed");
         return;
-      case "assignment.cancelled":
+      }
+      case "assignment.cancelled": {
         if (!(await this.terminalAssignmentMatches(message))) return;
         const cancelled = await this.recordCancellationEvidence(
           message,
@@ -1615,6 +1632,7 @@ export class WorkspaceGateway implements DurableObject {
         });
         await this.sendTerminalAcknowledgement(message, "cancelled");
         return;
+      }
       case "assignment.cancel.ack": {
         const payload = message.payload as Record<string, unknown>;
         if (payload.cancelled === true) {
@@ -2064,8 +2082,17 @@ export class WorkspaceGateway implements DurableObject {
   }
 
   /** Whether the connected Service advertised the start-permit capability. */
-  private serviceSupportsStartPermit(): Promise<boolean> {
-    return this.serviceHasCapability(START_PERMIT_CAPABILITY);
+  private async serviceSupportsStartPermit(): Promise<boolean> {
+    const advertised = await this.state.storage.get<{
+      sessionId: string;
+      runtimeId: string;
+      capabilities: string[];
+    }>("execution-capabilities");
+    return (
+      advertised?.sessionId === this.sessionId &&
+      advertised?.runtimeId === this.workspaceRuntimeId &&
+      advertised?.capabilities.includes(START_PERMIT_CAPABILITY) === true
+    );
   }
 
   /**
@@ -2413,11 +2440,6 @@ export class WorkspaceGateway implements DurableObject {
     }
     const currentStatus = String(row.status);
     const disposition = assignmentCommandDisposition(currentStatus);
-    // A Service that can request a start permit is told to. Once required for
-    // an assignment it stays required, including on redelivery.
-    const startPermitRequired =
-      Number(row.start_permit_required ?? 0) === 1 ||
-      (disposition.shouldSend && (await this.serviceSupportsStartPermit()));
     if (!disposition.shouldSend && disposition.duplicate) {
       return Response.json({
         delivered: false,
@@ -2441,9 +2463,7 @@ export class WorkspaceGateway implements DurableObject {
         timestamp: new Date().toISOString(),
         type: "assignment.start",
         ...body,
-        payload: startPermitRequired
-          ? withStartPermitRequirement(body.payload)
-          : body.payload,
+        payload: withStartPermitRequirement(body.payload),
       });
     } catch {
       return Response.json(
@@ -2457,6 +2477,20 @@ export class WorkspaceGateway implements DurableObject {
         duplicate: true,
         status: currentStatus,
       });
+    }
+    const deliverySessionId = this.sessionId;
+    if (!(await this.serviceSupportsStartPermit())) {
+      return Response.json(
+        {
+          delivered: false,
+          queued: true,
+          deliveryState: "service_upgrade_required",
+          acceptance: "none",
+          requiredCapability: START_PERMIT_CAPABILITY,
+          status: currentStatus,
+        },
+        { status: 202 },
+      );
     }
     // A command is written only to a Service that is ready to handle it
     // immediately. Otherwise the assignment stays `created` with its payload
@@ -2500,7 +2534,7 @@ export class WorkspaceGateway implements DurableObject {
         status: persisted.currentStatus ?? currentStatus,
       });
     }
-    if (startPermitRequired && persisted.applied) {
+    if (persisted.applied) {
       await this.env.CONCLAVE_DB.prepare(
         `UPDATE worker_assignments SET start_permit_required = 1
           WHERE id = ?1 AND start_permit_required = 0 AND status = 'dispatched'`,
@@ -2519,6 +2553,19 @@ export class WorkspaceGateway implements DurableObject {
       );
     }
     const queueStartedAt = performance.now();
+    if (this.sessionId !== deliverySessionId) {
+      // Delivery persistence raced a connection replacement. Keep the durable
+      // assignment for reconciliation; the new session must prove capability.
+      return Response.json(
+        {
+          delivered: false,
+          queued: true,
+          deliveryState: "waiting_for_service_ready",
+          acceptance: "none",
+        },
+        { status: 202 },
+      );
+    }
     try {
       await this.send({ ...assignmentMessage });
       // T4: the command is written to the WebSocket, or appended to the

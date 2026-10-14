@@ -98,23 +98,30 @@ Cloud stopped an assignment the provider had already started. A confirmed stop
 of work that never started, and failures the Service reported itself, keep
 their previous retry behavior.
 
-## Known limits of Slice A
+## Recovery limits and Phase 9 corrections
 
 - A Workspace that never returns leaves its revoked assignments `reconciling`
   and holding capacity. An explicit operator reconciliation action (to a
   terminal `lost`) is not part of this phase.
-- Grant revocation (`routes/workspaces-grants.ts`) still cancels
-  `created`/`dispatched` assignments directly, by product decision.
-- `timed_out` is not mapped by the conversation-turn trigger
-  (`0011_conversation_turns.sql`), so a timed-out turn is not marked terminal
-  there. Pre-existing; unchanged.
+- Grant revocation (`routes/workspaces-grants.ts`) now uses canonical revocation
+  for every active assignment. Only never-delivered work can be finalized
+  immediately; outstanding execution retains ownership. Recovery handles a
+  crash between revoking the grant and requesting assignment cancellation, and
+  permit issuance rechecks the grant in the same conditional write.
+- Forward migration `0062_conversation_turn_lifecycle.sql` replaces the old
+  conversation-turn trigger: admission remains queued, provider-start evidence
+  marks running, and `timed_out`/`lost` project to failed. Its narrow repair
+  preserves terminal history and ambiguous historical start timestamps.
 
 ## Slice B: Service start fencing
 
 **Capability.** The Service advertises `assignment.start_permit.v1` in the
 hello `capabilities.customCapabilities`. Cloud reads it from the runtime facts.
-Protocol version stays 5.1; the messages are additive and capability-gated, so
-an older Service keeps the Slice A confirmation-wait behavior.
+Protocol version stays 5.1; the messages are additive and capability-gated.
+Phase 9 requires this capability from the current authenticated session before
+any new delivery. An older Service receives no new start command; existing
+assignments can still reconcile and deliver terminal outcomes. Historical
+unfenced rows retain the confirmation-wait behavior during recovery.
 
 **Dispatch.** For a capable Service Cloud sets
 `worker_assignments.start_permit_required = 1` before writing the command and
@@ -127,8 +134,10 @@ existing Gateway socket (re-sent every 3 s, 15 s limit). The Gateway answers
 
 - `granted: true` with `permitId` and a 30 s `expiresAt` only through the
   conditional `UPDATE ... WHERE status='acknowledged' AND attempt_id=?
-  RETURNING id`, which stamps `start_permit_issued_at`. A repeat request while
-  the assignment is still `acknowledged` is re-granted. A request that
+  RETURNING id`, which stamps `start_permit_issued_at` once. A repeat request while
+  the assignment is still `acknowledged` receives the same permit/expiry, never
+  a renewed startup window. The conditional write also fences Workspace/runtime
+  identity and active grant status. A request that
   overtakes `assignment.ack` advances `dispatched -> acknowledged`.
 - `granted: false` with a reason (`revoked`, `terminal`, `already_started`,
   `stale`, `not_found`) otherwise.

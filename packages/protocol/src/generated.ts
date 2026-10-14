@@ -81,6 +81,7 @@ export const DURABLE_REALTIME_EVENT_TYPES = [
   "step.completed",
   "step.failed",
   "step.cancelled",
+  "step.phase",
   "run.started",
   "run.paused",
   "run.resumed",

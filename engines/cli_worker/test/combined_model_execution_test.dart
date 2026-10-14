@@ -35,7 +35,7 @@ Future<void> main(List<String> args) async {
       final profile =
           jsonDecode(
                 await File(
-                  '$repository/docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json',
+                  '$repository/apps/profile_lab/assets/profiles/gemini.json',
                 ).readAsString(),
               )
               as Map;
@@ -111,7 +111,7 @@ Future<void> main(List<String> args) async {
             workerTypeId: 'gemini',
             expectedEngineVersion: '1.2.0',
             profileDefinitionId: 'gemini-antigravity',
-            profileReleaseVersion: '1',
+            profileReleaseVersion: '${profile['releaseVersion']}',
             profileDigest: sha256.convert(bytes).toString(),
           ),
         ),

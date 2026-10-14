@@ -88,21 +88,31 @@ export async function grantStartPermit(
   const issuedAt = now.toISOString();
   const row = await db
     .prepare(
-      `UPDATE worker_assignments SET start_permit_issued_at = ?1
+      `UPDATE worker_assignments SET start_permit_issued_at = COALESCE(start_permit_issued_at, ?1)
         WHERE id = ?2 AND attempt_id = ?3 AND status = 'acknowledged'
-        RETURNING id`,
+          AND (?4 IS NULL OR execution_workspace_id = ?4)
+          AND (?5 IS NULL OR runtime_identity_id = ?5)
+          AND (workspace_space_grant_id IS NULL OR EXISTS (
+            SELECT 1 FROM workspace_space_grants g
+             WHERE g.id = worker_assignments.workspace_space_grant_id
+               AND g.status = 'active'
+               AND (g.expires_at IS NULL OR g.expires_at > ?1)))
+        RETURNING id, start_permit_issued_at`,
     )
-    .bind(issuedAt, fence.assignmentId, fence.attemptId)
-    .first<{ id: string }>();
+    .bind(
+      issuedAt,
+      fence.assignmentId,
+      fence.attemptId,
+      fence.executionWorkspaceId ?? null,
+      fence.runtimeIdentityId ?? null,
+    )
+    .first<{ id: string; start_permit_issued_at: string }>();
   if (row?.id === fence.assignmentId) {
+    const issuedAtMs = Date.parse(row.start_permit_issued_at);
     return {
       granted: true,
-      permitId: startPermitId(
-        fence.assignmentId,
-        fence.attemptId,
-        now.getTime(),
-      ),
-      expiresAt: new Date(now.getTime() + START_PERMIT_TTL_MS).toISOString(),
+      permitId: startPermitId(fence.assignmentId, fence.attemptId, issuedAtMs),
+      expiresAt: new Date(issuedAtMs + START_PERMIT_TTL_MS).toISOString(),
     };
   }
   // Lost the race: re-read to report why.

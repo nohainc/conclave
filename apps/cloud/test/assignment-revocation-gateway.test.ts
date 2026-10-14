@@ -1,4 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { handleRevokeWorkspaceSpaceGrant } from "../src/routes/workspaces-grants.js";
+import type { SecurityEnv } from "../src/routes/handlers.js";
+import { grantStartPermit } from "../src/assignment-start-permit.js";
+import {
+  recoverStaleAssignments,
+  recordAssignmentResult,
+} from "../src/assignment-dispatcher.js";
 import { beginAssignmentRevocation } from "../src/assignment-revocation.js";
 import { gatewayFixture } from "./helpers/assignment-gateway.js";
 import { START_PERMIT_CAPABILITY } from "../src/workspace-gateway/contracts.js";
@@ -20,6 +27,222 @@ const timeoutIntent = {
 const started = { started: true, engineStarted: true, providerStarted: true };
 const types = (messages: Array<{ type: string }>) =>
   messages.map((message) => message.type);
+
+function grantEnv(
+  f: Awaited<ReturnType<typeof gatewayFixture>>,
+  confirmed = false,
+) {
+  const commands: Record<string, unknown>[] = [];
+  const env = {
+    CONCLAVE_DB: f.db,
+    CONCLAVE_ENVIRONMENT: "development",
+    TEST_AUTHENTICATION: async () => ({
+      userId: "U",
+      user: { id: "U", email: "u@test", displayName: "User", status: "active" },
+      spaceRoles: {},
+      sessionId: "test",
+      clientType: "web",
+    }),
+    CONCLAVE_WORKSPACE_GATEWAY: {
+      idFromName: (name: string) => name,
+      get: () => ({
+        fetch: async (_url: string, init: RequestInit) => {
+          commands.push(JSON.parse(String(init.body)));
+          return Response.json({ cancelled: confirmed });
+        },
+      }),
+    },
+  } as unknown as SecurityEnv;
+  const revoke = () =>
+    handleRevokeWorkspaceSpaceGrant(
+      new Request("https://test/grant", { method: "DELETE" }),
+      env,
+      "G",
+    );
+  return { env, revoke, commands };
+}
+
+describe("grant revocation ownership", () => {
+  it("keeps a completion that wins while the grant's stop request is outstanding", async () => {
+    const f = await gatewayFixture("running");
+    try {
+      const g = grantEnv(f);
+      const env = {
+        ...g.env,
+        CONCLAVE_WORKSPACE_GATEWAY: {
+          idFromName: (name: string) => name,
+          get: () => ({
+            fetch: async () => {
+              await recordAssignmentResult(
+                f.db,
+                "A1",
+                {
+                  assignmentId: "A1",
+                  status: "completed",
+                  output: { text: "finished before stop" },
+                  artifactIds: [],
+                  completedAt: "provider-time",
+                },
+                "ATT1",
+              );
+              return Response.json({ cancelled: true });
+            },
+          }),
+        },
+      } as unknown as SecurityEnv;
+      await handleRevokeWorkspaceSpaceGrant(
+        new Request("https://test/grant", { method: "DELETE" }),
+        env,
+        "G",
+      );
+      expect(f.status().status).toBe("completed");
+      expect((await f.turns())[0]).toMatchObject({
+        status: "completed",
+        resultText: "finished before stop",
+      });
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it("retains ownership when a permit was issued, but finalizes safely when none was issued", async () => {
+    for (const issued of [true, false]) {
+      const f = await gatewayFixture("acknowledged");
+      try {
+        f.sqlite
+          .prepare(
+            "UPDATE worker_assignments SET start_permit_required=1, start_permit_issued_at=? WHERE id='A1'",
+          )
+          .run(issued ? "issued" : null);
+        await grantEnv(f).revoke();
+        expect(f.status().status).toBe(
+          issued ? "revocation_pending" : "cancelled",
+        );
+      } finally {
+        f.sqlite.close();
+      }
+    }
+  });
+  it.each([
+    "created",
+    "dispatched",
+    "acknowledged",
+    "running",
+    "revocation_pending",
+    "reconciling",
+  ])(
+    "revokes %s through the canonical path and retains unresolved ownership",
+    async (initial) => {
+      const f = await gatewayFixture(initial);
+      try {
+        const g = grantEnv(f);
+        expect((await g.revoke()).status).toBe(200);
+        expect(f.status().status).toBe(
+          initial === "created"
+            ? "cancelled"
+            : ["revocation_pending", "reconciling"].includes(initial)
+              ? "reconciling"
+              : "revocation_pending",
+        );
+        if (initial !== "created") {
+          expect(g.commands).toHaveLength(1);
+          expect(g.commands[0]?.payload).toMatchObject({
+            commandId: "revoke:A1:ATT1",
+          });
+          const old = f.status();
+          await g.revoke();
+          expect(f.status()).toEqual(old);
+          expect(g.commands).toHaveLength(2);
+        }
+      } finally {
+        f.sqlite.close();
+      }
+    },
+  );
+
+  it("finalizes a potentially running assignment only after Service confirmation", async () => {
+    const f = await gatewayFixture("running");
+    try {
+      const g = grantEnv(f, true);
+      await g.revoke();
+      expect(g.commands).toHaveLength(1);
+      expect(f.status().status).toBe("cancelled");
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it("does not finalize as never-delivered if dispatch wins the created cancellation race", async () => {
+    for (let i = 0; i < 10; i += 1) {
+      const f = await gatewayFixture("created");
+      const prepare = f.db.prepare.bind(f.db);
+      let dispatched = false;
+      const spy = vi.spyOn(f.db, "prepare").mockImplementation((sql) => {
+        if (
+          !dispatched &&
+          sql.includes("UPDATE worker_assignments SET status = 'cancelled'")
+        ) {
+          dispatched = true;
+          f.sqlite.exec(
+            "UPDATE worker_assignments SET status='dispatched' WHERE id='A1'",
+          );
+        }
+        return prepare(sql);
+      });
+      try {
+        const g = grantEnv(f);
+        await g.revoke();
+        expect(dispatched).toBe(true);
+        expect(f.status().status).toBe("revocation_pending");
+        expect(g.commands).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+        f.sqlite.close();
+      }
+    }
+  });
+
+  it("denies startup after the grant commit and recovers a crash before assignment revocation", async () => {
+    const f = await gatewayFixture("acknowledged");
+    try {
+      f.sqlite.exec(
+        "UPDATE workspace_space_grants SET status='revoked' WHERE id='G'",
+      );
+      expect(
+        await grantStartPermit(f.db, {
+          assignmentId: "A1",
+          attemptId: "ATT1",
+          executionWorkspaceId: "WS",
+          runtimeIdentityId: "RT",
+        }),
+      ).toMatchObject({ granted: false });
+      expect(f.status().status).toBe("acknowledged");
+      const g = grantEnv(f);
+      await recoverStaleAssignments(f.db, new Date(), g.env);
+      expect(f.status().status).toBe("revocation_pending");
+      expect(g.commands).toHaveLength(1);
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it("preserves terminal outcomes and assignments backed by a different grant", async () => {
+    const f = await gatewayFixture("completed");
+    try {
+      f.assign("other");
+      const before = f.status();
+      await grantEnv(f).revoke();
+      expect(f.status()).toEqual(before);
+      expect(
+        f.sqlite
+          .prepare("SELECT status FROM worker_assignments WHERE id='other'")
+          .get()?.status,
+      ).toBe("created");
+    } finally {
+      f.sqlite.close();
+    }
+  });
+});
 
 async function revoked(initial: string) {
   const f = await gatewayFixture(initial);
@@ -165,17 +388,14 @@ describe("Gateway delivery and revocation", () => {
 });
 
 describe("Gateway start fencing", () => {
-  function advertise(
+  async function advertise(
     f: Awaited<ReturnType<typeof gatewayFixture>>,
     caps: string[],
   ) {
-    f.sqlite
-      .prepare(
-        `INSERT INTO workspace_runtime_facts(workspace_id, runtime_capabilities_json, updated_at)
-         VALUES('WS', ?, 'now')
-         ON CONFLICT(workspace_id) DO UPDATE SET runtime_capabilities_json = excluded.runtime_capabilities_json`,
-      )
-      .run(JSON.stringify(caps));
+    await f.send("workspace.hello", {
+      capabilities: { customCapabilities: caps },
+    });
+    await f.outbound();
   }
   const required = (f: Awaited<ReturnType<typeof gatewayFixture>>) =>
     (
@@ -188,7 +408,7 @@ describe("Gateway start fencing", () => {
 
   it("tells a permit-capable Service to request a permit, and remembers it", async () => {
     const f = await gatewayFixture("created");
-    advertise(f, ["dart", START_PERMIT_CAPABILITY]);
+    await advertise(f, ["dart", START_PERMIT_CAPABILITY]);
     expect((await f.dispatch()).status).toBe(200);
     const start = (await f.outbound()).find(
       (m) => m.type === "assignment.start",
@@ -210,17 +430,21 @@ describe("Gateway start fencing", () => {
     ).toEqual({ required: true });
   });
 
-  it("does not require a permit from a Service that cannot request one", async () => {
+  it("excludes a Service that cannot request a permit without dispatching work", async () => {
     const f = await gatewayFixture("created");
-    advertise(f, ["dart"]);
-    expect((await f.dispatch()).status).toBe(200);
+    await advertise(f, ["dart"]);
+    const response = await f.dispatch();
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({
+      delivered: false,
+      acceptance: "none",
+      deliveryState: "service_upgrade_required",
+    });
     const start = (await f.outbound()).find(
       (m) => m.type === "assignment.start",
     );
-    expect(
-      (start!.payload as { snapshot: Record<string, unknown> }).snapshot
-        .startPermit,
-    ).toBeUndefined();
+    expect(start).toBeUndefined();
+    expect(f.status().status).toBe("created");
     expect(required(f)).toBe(0);
   });
 

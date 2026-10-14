@@ -127,8 +127,7 @@ void main() {
         findsNothing);
     expect(find.byTooltip('Show Markdown controls'), findsOneWidget);
     expect(find.byTooltip('Send message'), findsOneWidget);
-    expect(
-        tester.getCenter(find.byTooltip('Show Markdown controls')).dy,
+    expect(tester.getCenter(find.byTooltip('Show Markdown controls')).dy,
         closeTo(tester.getCenter(find.byTooltip('Send message')).dy, 1));
   });
 

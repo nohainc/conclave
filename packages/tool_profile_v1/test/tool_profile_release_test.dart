@@ -220,6 +220,5 @@ void main() {
         throwsA(isA<FormatException>()),
       );
     });
-
   });
 }

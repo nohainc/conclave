@@ -82,6 +82,7 @@ Widget page(PermissionSource source, {AxSpace space = ownerSpace}) =>
         home: Scaffold(
             body: SingleChildScrollView(
                 child: SpacePage(
+                    section: SpacePageSection.members,
                     space: space,
                     dataSource: source,
                     onOpenThread: (_) {},
@@ -97,9 +98,7 @@ void main() {
     final source = PermissionSource();
     await tester.pumpWidget(page(source));
     await tester.pumpAndSettle();
-    expect(find.text('Created by member@example.test'), findsOneWidget);
-    await tester.tap(find.text('Members'));
-    await tester.pumpAndSettle();
+    expect(find.text('Created by member@example.test'), findsNothing);
     expect(find.text('Owner'), findsOneWidget);
     expect(find.text('Add workspace'), findsNothing);
     expect(find.text('Invite members'), findsNothing);
@@ -140,8 +139,6 @@ void main() {
     expect(find.byTooltip('Create Thread'), findsNothing);
     expect(find.text('Workspaces'), findsNothing);
     expect(find.byType(Switch), findsNothing);
-    await tester.tap(find.text('Members'));
-    await tester.pumpAndSettle();
     expect(find.byTooltip('Share Space'), findsNothing);
     expect(
         tester

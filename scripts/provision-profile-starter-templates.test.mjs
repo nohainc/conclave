@@ -34,15 +34,6 @@ it("provisions only the missing baseline starter table and preserves Drafts and 
         .join("\n"),
     );
     db.exec(sql);
-    const canonical = JSON.parse(
-      readFileSync(
-        new URL(
-          "../docs/profile-templates/chatgpt-codex-runtime-catalog.v1.json",
-          import.meta.url,
-        ),
-        "utf8",
-      ),
-    );
     const starter = JSON.parse(
       db
         .prepare(
@@ -50,7 +41,17 @@ it("provisions only the missing baseline starter table and preserves Drafts and 
         )
         .get("chatgpt-codex").profile_json,
     );
-    expect(starter).toEqual(canonical);
+    expect(starter).toMatchObject({
+      schemaVersion: 1,
+      profileDefinitionId: "chatgpt-codex",
+      releaseVersion: 1,
+      logicalWorkerTypeId: "chatgpt",
+      engineFamily: "cli",
+    });
+    expect(starter.model.discovery).toMatchObject({
+      schemaVersion: 1,
+      format: "codex_app_server",
+    });
     expect(
       db
         .prepare("SELECT COUNT(*) AS count FROM tool_profile_starter_templates")

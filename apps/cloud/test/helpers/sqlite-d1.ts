@@ -33,7 +33,9 @@ class Statement {
   }
 }
 
-export function sqliteD1() {
+export function sqliteD1(
+  options: { beforeTurnLifecycleRepair?: boolean } = {},
+) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(
     readFileSync(
@@ -74,6 +76,9 @@ export function sqliteD1() {
     "0059_service_readiness.sql",
     "0060_assignment_startup_progress.sql",
     "0061_assignment_workflow_signal.sql",
+    ...(options.beforeTurnLifecycleRepair
+      ? []
+      : ["0062_conversation_turn_lifecycle.sql"]),
   ]) {
     sqlite.exec(
       readFileSync(

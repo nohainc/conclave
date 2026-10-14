@@ -881,9 +881,9 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             (task.step.timeoutMs + 2 * DEFAULT_QUEUE_WAIT_TIMEOUT_MS) /
               ASSIGNMENT_RECONCILIATION_INTERVAL_MS,
           ) + WAKEUP_SLACK;
-        for (let poll = 0; poll < maxWakeups; poll += 1) {
+        for (let wakeup = 0; wakeup < maxWakeups; wakeup += 1) {
           terminal = await workflowStep.do(
-            `workflow:${task.step.kind}:assignment-status:${attempt}:${poll}`,
+            `workflow:${task.step.kind}:assignment-status:${attempt}:${wakeup}`,
             { ...stepConfig, timeout: "30 seconds" },
             async () => {
               const row = await readAssignment();
@@ -905,7 +905,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
               terminal.status,
             )
           ) {
-            // Lag between the terminal row being written and this poll seeing
+            // Lag between the terminal row being written and this wake-up seeing
             // it. Both timestamps originate in Cloud, so the difference is
             // valid without clock-offset correction.
             const persistedAt = Date.parse(terminal.updatedAt);
@@ -925,7 +925,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             break;
           }
           // Each phase measures from its own event. Provider execution is
-          // bounded by the poll budget and the final-timeout path below.
+          // bounded by the wake-up budget and the final-timeout path below.
           const violation = terminal
             ? assignmentDeadlineViolation({
                 status: terminal.status,
@@ -947,8 +947,8 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           ) {
             const phaseMessage = PHASE_FAILURE_MESSAGE[violation.phase];
             // Expiry was decided from this status. If an acknowledgement
-            // moved the assignment on since the poll, the conditional write
-            // below leaves it alone and the next poll observes the new state.
+            // moved the assignment on since the read, the conditional write
+            // below leaves it alone and the next wake-up observes the new state.
             const observedStatus = terminal.status as AssignmentLifecycleStatus;
             await workflowStep.do(
               `workflow:${task.step.kind}:delivery-timeout:${attempt}`,
@@ -987,7 +987,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           if (providerOverrun) break;
           await waitForTerminalEvent(
             workflowStep,
-            `workflow:${task.step.kind}:assignment-wait:${attempt}:${poll}`,
+            `workflow:${task.step.kind}:assignment-wait:${attempt}:${wakeup}`,
             nextWakeupMs(terminal, task.step.timeoutMs),
           );
         }

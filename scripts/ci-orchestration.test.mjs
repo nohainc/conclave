@@ -88,6 +88,29 @@ describe("CI acceptance orchestration", () => {
       mkdirSync(join(root, "scripts"), { recursive: true });
       mkdirSync(join(app, ".dart_tool"), { recursive: true });
       mkdirSync(join(app, "assets", "engines"), { recursive: true });
+      if (name === "workspace") {
+        mkdirSync(join(app, "macos", "Runner", "LaunchAgents"), {
+          recursive: true,
+        });
+        writeFileSync(
+          join(
+            app,
+            "macos",
+            "Runner",
+            "LaunchAgents",
+            "com.conclaveax.workspace.service.plist",
+          ),
+          `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>Label</key><string>com.conclaveax.workspace.service</string>
+<key>AssociatedBundleIdentifiers</key><array><string>com.conclaveax.workspace</string></array>
+<key>BundleProgram</key><string>Contents/Helpers/conclave-service</string>
+<key>ProgramArguments</key><array><string>Contents/Helpers/conclave-service</string></array>
+<key>RunAtLoad</key><false/>
+</dict></plist>
+`,
+        );
+      }
       mkdirSync(bin);
       writeFileSync(join(app, "pubspec.yaml"), "version: 1.0.0\n");
       writeFileSync(join(app, ".dart_tool", "package_config.json"), "{}\n");
@@ -99,15 +122,29 @@ describe("CI acceptance orchestration", () => {
       );
       writeFileSync(engine, "#!/bin/sh\nexit 0\n");
       chmodSync(engine, 0o755);
-      for (const command of ["uname", "node", "flutter", "ditto"]) {
+      for (const command of [
+        "uname",
+        "node",
+        "flutter",
+        "dart",
+        "ditto",
+        "security",
+        "codesign",
+      ]) {
         const script =
           command === "uname"
             ? "echo Darwin"
             : command === "node"
               ? "echo '{}'"
-              : command === "flutter"
-                ? `echo "flutter $*" >> "$CI_TEST_LOG"\nif [ "$1" = build ]; then mkdir -p 'build/macos/Build/Products/Release/Conclave ${name === "workspace" ? "Workspace" : "Profile Lab"}.app'; fi`
-                : "exit 0";
+              : command === "security"
+                ? 'echo "1) ABC Apple Development: vitalii@nohainc.com (7X62W6499P)"'
+                : command === "dart"
+                  ? 'while [ "$1" != "-o" ] && [ "$#" -gt 0 ]; do shift; done; if [ "$1" = "-o" ]; then shift; mkdir -p "$(dirname "$1")"; touch "$1"; fi'
+                  : command === "codesign"
+                    ? 'if [ "$1" = "-dv" ] || [ "$1" = "-d" ]; then exit 1; fi; exit 0'
+                    : command === "flutter"
+                      ? `echo "flutter $*" >> "$CI_TEST_LOG"\nif [ "$1" = build ]; then app='build/macos/Build/Products/Release/Conclave ${name === "workspace" ? "Workspace" : "Profile Lab"}.app'; mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks"; printf '%s' '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Conclave</string></dict></plist>' > "$app/Contents/Info.plist"; touch "$app/Contents/MacOS/Conclave"; chmod 755 "$app/Contents/MacOS/Conclave"; fi`
+                      : "exit 0";
         writeFileSync(join(bin, command), `#!/bin/sh\n${script}\n`);
         chmodSync(join(bin, command), 0o755);
       }
@@ -115,6 +152,15 @@ describe("CI acceptance orchestration", () => {
         join(root, "scripts", "build-cli-worker-engine.sh"),
         'echo engine >> "$CI_TEST_LOG"\n',
       );
+      if (name === "workspace") {
+        copyFileSync(
+          new URL(
+            "../scripts/verify-workspace-service-bundle.sh",
+            import.meta.url,
+          ),
+          join(root, "scripts", "verify-workspace-service-bundle.sh"),
+        );
+      }
       const script = join(root, "scripts", `build-${name}-macos.sh`);
       copyFileSync(
         new URL(`../scripts/build-${name}-macos.sh`, import.meta.url),
@@ -134,9 +180,9 @@ describe("CI acceptance orchestration", () => {
         expect(readFileSync(log, "utf8")).toBe(
           "flutter build macos --release --dart-define=" +
             (name === "workspace"
-              ? "CONCLAVE_WORKSPACE_VERSION"
-              : "CONCLAVE_PROFILE_LAB_VERSION") +
-            "=1.0.0 --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON={}\n",
+              ? "CONCLAVE_WORKSPACE_VERSION=1.0.0 --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON={}"
+              : "CONCLAVE_PROFILE_LAB_VERSION=1.0.0") +
+            "\n",
         );
         writeFileSync(log, "");
         expect(run([]).status).toBe(0);

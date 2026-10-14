@@ -132,6 +132,7 @@ const durableRealtimeEventTypes = <String>{
   'step.completed',
   'step.failed',
   'step.cancelled',
+  'step.phase',
   'run.started',
   'run.paused',
   'run.resumed',

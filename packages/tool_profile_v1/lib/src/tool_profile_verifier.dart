@@ -54,7 +54,8 @@ abstract final class ToolProfileReleaseVerifier {
         profile['providerTool'] is! Map ||
         (profile['providerTool'] as Map)['name'] != providerToolName ||
         !_sameJson(profile['engineCompatibility'], engineCompatibility)) {
-      throw const FormatException('Profile release identity or metadata mismatch');
+      throw const FormatException(
+          'Profile release identity or metadata mismatch');
     }
     final providerCompatibility =
         (profile['providerTool'] as Map)['supportedVersions'];

@@ -104,6 +104,8 @@ export const DiagnosticContextSchema = z
     traceStage: z.enum(ALL_TRACE_STAGES).optional(),
     /** Emitter-local monotonic milliseconds (not comparable across hosts). */
     monotonicMs: z.number().int().nonnegative().max(2_147_483_647).optional(),
+    /** Process epoch owning the monotonic clock; changes on Service restart. */
+    traceEpochId: boundedToken.optional(),
     /** Estimated (Cloud clock - emitter clock) in ms, from heartbeat samples. */
     clockOffsetMs: z.number().int().min(-86_400_000).max(86_400_000).optional(),
     /** Round-trip time of the heartbeat sample behind clockOffsetMs. */

@@ -163,21 +163,35 @@ void main() {
     };
 
     final started = adapter.normalizeEvent(
-      step({'step_index': 2, 'state': 'ACTIVE', 'step_type': 'tool',
-        'tool_name': 'run_command'}),
+      step({
+        'step_index': 2,
+        'state': 'ACTIVE',
+        'step_type': 'tool',
+        'tool_name': 'run_command',
+      }),
       declarativeMatched: false,
     );
     final completed = adapter.normalizeEvent(
-      step({'step_index': 2, 'state': 'DONE', 'step_type': 'tool',
+      step({
+        'step_index': 2,
+        'state': 'DONE',
+        'step_type': 'tool',
         'tool_name': 'run_command',
-        'tool_info': {'name': 'run_command', 'output': 'ok'}}),
+        'tool_info': {'name': 'run_command', 'output': 'ok'},
+      }),
       declarativeMatched: false,
     );
     final failed = adapter.normalizeEvent(
-      step({'step_index': 3, 'state': 'DONE', 'step_type': 'tool',
+      step({
+        'step_index': 3,
+        'state': 'DONE',
+        'step_type': 'tool',
         'tool_name': 'run_command',
-        'tool_info': {'name': 'run_command',
-          'error': {'type': 'permission', 'message': 'denied'}}}),
+        'tool_info': {
+          'name': 'run_command',
+          'error': {'type': 'permission', 'message': 'denied'},
+        },
+      }),
       declarativeMatched: false,
     );
 

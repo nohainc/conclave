@@ -34,6 +34,11 @@ import { createOrGetRun } from "./work-creation.js";
 import { MutationIdempotency } from "./mutation-idempotency.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "../assignment-transitions.js";
+import {
+  deriveRequestExecutionPhase,
+  presentExecution,
+  type ExecutionPhase,
+} from "../execution-phase.js";
 
 function historicalWorkflowName(
   snapshot: { readonly name?: unknown },
@@ -177,21 +182,54 @@ export async function handleRetryWorkRequest(
   const step = workflow.steps?.find((candidate) => candidate.kind === stepKind);
   if (!step) throw new HttpError(400, "Step is not part of this Workflow");
   const failedTask = await env.CONCLAVE_DB.prepare(
-    `SELECT wt.status, wt.error,
-            (SELECT wa.error_json FROM worker_assignments wa
-              WHERE wa.task_id = wt.id ORDER BY wa.created_at DESC, wa.id DESC LIMIT 1)
-              AS assignmentErrorJson
+    `SELECT wt.status, wt.error, wa.error_json AS assignmentErrorJson,
+            wa.status AS assignmentStatus, wa.dispatched_at AS dispatchedAt,
+            wa.acknowledged_at AS acknowledgedAt,
+            wa.start_permit_issued_at AS startPermitIssuedAt,
+            wa.start_permit_required AS startPermitRequired,
+            wa.running_at AS runningAt, wa.startup_stage AS startupStage
        FROM workflow_tasks wt
+       LEFT JOIN worker_assignments wa ON wa.id = (
+         SELECT wa2.id FROM worker_assignments wa2
+          WHERE wa2.task_id = wt.id
+          ORDER BY wa2.created_at DESC, wa2.id DESC LIMIT 1
+       )
       WHERE wt.work_request_id = ?1 AND wt.step_kind = ?2`,
   )
     .bind(workRequestId, stepKind)
-    .first<{
-      status: string;
-      error: string | null;
-      assignmentErrorJson: string | null;
-    }>();
+    .first<
+      Record<string, unknown> & {
+        status: string;
+        error: string | null;
+        assignmentErrorJson: string | null;
+      }
+    >();
   if (failedTask?.status !== "failed")
     throw new HttpError(409, "Only a failed Step can be retried");
+
+  // Retry safety is decided by Cloud from assignment evidence, not by the
+  // client: an unconfirmed stop can never be retried, and a step whose
+  // provider may already have acted needs an explicit confirmation.
+  const retryAdvice = stepExecutionFields(
+    failedTask,
+    typeof failedTask.error === "string"
+      ? canonicalExecutionErrorCode(failedTask.error)
+      : null,
+  ).retry;
+  if (retryAdvice && !retryAdvice.allowed)
+    throw new HttpError(
+      409,
+      "This Step cannot be retried until the Worker is confirmed stopped",
+    );
+  if (retryAdvice?.requiresConfirmation && body.confirmSideEffects !== true)
+    return json(
+      {
+        error: "retry_confirmation_required",
+        message:
+          "The previous execution may already have made changes. Confirm to retry anyway.",
+      },
+      { status: 409 },
+    );
 
   const retrySessionStrategy = body.sessionStrategy;
   if (
@@ -266,11 +304,14 @@ export async function handleRetryWorkRequest(
     },
   };
   const reservation = await env.CONCLAVE_DB.prepare(
-    "UPDATE work_requests SET status = 'queued', updated_at = ?1 WHERE id = ?2 AND status = 'failed'",
+    "UPDATE work_requests SET status = 'queued', updated_at = ?1 WHERE id = ?2 AND status = 'failed' RETURNING id",
   )
     .bind(now, workRequestId)
-    .run();
-  if (reservation.meta.changes !== 1)
+    .first<{ id: string }>();
+  // Updating a Work Request also fires history and Workflow projection
+  // triggers. D1's meta.changes includes those writes, so only the returned
+  // identity proves that this retry won the failed-row reservation.
+  if (reservation?.id !== workRequestId)
     throw new HttpError(409, "This Work Request is already being retried");
   try {
     await env.CONCLAVE_DB.batch([
@@ -431,6 +472,11 @@ export async function handleGetWorkRequest(
             json_extract(wa.permission_snapshot_json, '$.executionSelection.catalogRevision') AS catalogRevision,
             wa.permission_snapshot_json AS permissionSnapshotJson,
             wa.error_json AS assignmentErrorJson,
+            wa.status AS assignmentStatus, wa.dispatched_at AS dispatchedAt,
+            wa.acknowledged_at AS acknowledgedAt,
+            wa.start_permit_issued_at AS startPermitIssuedAt,
+            wa.start_permit_required AS startPermitRequired,
+            wa.running_at AS runningAt, wa.startup_stage AS startupStage,
             wi.worker_type_id AS inventoryWorkerTypeId,
             wi.provider_tool_name AS configuredProviderToolName,
             wi.provider_tool_version AS configuredProviderToolVersion,
@@ -607,6 +653,7 @@ export async function handleGetWorkRequest(
             typeof task?.sessionPolicy === "string" ? task.sessionPolicy : null,
           errorCode,
           errorMessage: errorCode ? executionErrorMessage(errorCode) : null,
+          ...stepExecutionFields(task, errorCode),
           ...(manualRetry.stepKind === kind &&
           (manualRetry.sessionStrategy === "resume" ||
             manualRetry.sessionStrategy === "fresh")
@@ -652,6 +699,7 @@ export async function handleGetWorkRequest(
       createdAt: String(row.createdAt),
       updatedAt: String(row.updatedAt),
       activities,
+      ...requestExecutionFields(String(row.status), steps),
     },
     workflowSnapshot: workflow,
     steps,
@@ -659,6 +707,38 @@ export async function handleGetWorkRequest(
     errorCode,
     errorMessage: errorCode ? executionErrorMessage(errorCode) : null,
   });
+}
+
+/** Cloud-derived execution state for one step; see execution-phase.ts. */
+function stepExecutionFields(
+  task: Record<string, unknown> | undefined,
+  errorCode: string | null,
+) {
+  const text = (value: unknown) => (typeof value === "string" ? value : null);
+  return presentExecution({
+    assignmentStatus: text(task?.assignmentStatus),
+    taskStatus: text(task?.status),
+    dispatchedAt: text(task?.dispatchedAt),
+    acknowledgedAt: text(task?.acknowledgedAt),
+    startPermitIssuedAt: text(task?.startPermitIssuedAt),
+    startPermitRequired: Number(task?.startPermitRequired ?? 0) === 1,
+    runningAt: text(task?.runningAt),
+    startupStage: text(task?.startupStage),
+    errorJson: text(task?.assignmentErrorJson),
+    errorCode,
+  });
+}
+
+function requestExecutionFields(
+  requestStatus: string,
+  steps: ReadonlyArray<{ executionPhase: ExecutionPhase }>,
+) {
+  return {
+    executionPhase: deriveRequestExecutionPhase(
+      requestStatus,
+      steps.map((step) => step.executionPhase),
+    ),
+  };
 }
 
 export async function handleListWorkRequests(
@@ -766,6 +846,11 @@ export async function handleListWorkRequests(
             COALESCE(wt.started_at, wt.created_at) AS startedAt,
             COALESCE(wt.finished_at, wt.updated_at) AS updatedAt,
             wa.error_json AS assignmentErrorJson,
+            wa.status AS assignmentStatus, wa.dispatched_at AS dispatchedAt,
+            wa.acknowledged_at AS acknowledgedAt,
+            wa.start_permit_issued_at AS startPermitIssuedAt,
+            wa.start_permit_required AS startPermitRequired,
+            wa.running_at AS runningAt, wa.startup_stage AS startupStage,
             wa.id AS assignmentId, wa.workspace_worker_id AS workerId,
             wa.worker_type_id AS logicalWorkerTypeId,
             wa.model AS assignedModel,
@@ -963,6 +1048,7 @@ export async function handleListWorkRequests(
               ? executionErrorMessage(stableErrorCode)
               : null,
             error: typeof task?.error === "string" ? task.error : null,
+            ...stepExecutionFields(task, stableErrorCode),
           },
         ];
       })
@@ -997,6 +1083,7 @@ export async function handleListWorkRequests(
       status: String(row.status),
       createdAt: String(row.createdAt),
       updatedAt: String(row.updatedAt),
+      ...requestExecutionFields(String(row.status), steps),
       steps: steps.map(({ finalText: _text, error: _error, ...step }) => step),
       ...(finalText ? { finalText } : {}),
       ...(errorCode

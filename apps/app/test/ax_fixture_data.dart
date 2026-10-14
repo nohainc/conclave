@@ -103,6 +103,7 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
     required String workRequestId,
     required String stepKind,
     String? sessionStrategy,
+    bool confirmSideEffects = false,
   }) async {}
 
   @override

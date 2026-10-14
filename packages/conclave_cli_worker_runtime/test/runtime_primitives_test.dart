@@ -2,9 +2,48 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('channel skips both VM banners but rejects unrelated stdout', () async {
+    if (Platform.isWindows) return;
+    final frame = WorkerResult(
+      requestId: 'banner-request',
+      assignmentId: 'banner-assignment',
+      output: 'ok',
+    );
+    for (final banner in [
+      'The Dart VM service is listening on http://127.0.0.1:1234/token/',
+      'The Dart DevTools debugger and profiler is available at: http://127.0.0.1:1234/token/devtools/',
+      'unrelated stdout must remain a protocol error',
+    ]) {
+      final process = await Process.start('/bin/sh', [
+        '-c',
+        r'''read request; printf '%s\n' "$1" "$2"''',
+        'banner-fixture',
+        banner,
+        frame.encode(),
+      ]);
+      final channel = CliEngineChannel(
+        process,
+        maxFrameBytes: 1024 * 1024,
+        maxStderrBytes: 1024,
+      );
+      try {
+        final reply = channel.exchange(frame, const Duration(seconds: 2));
+        if (banner.startsWith('unrelated')) {
+          await expectLater(reply, throwsFormatException);
+        } else {
+          expect((await reply as WorkerResult).output, 'ok');
+        }
+      } finally {
+        await channel.dispose();
+        await process.exitCode;
+      }
+    }
+  });
+
   test(
     'environment construction includes only explicitly allowed parent keys',
     () {

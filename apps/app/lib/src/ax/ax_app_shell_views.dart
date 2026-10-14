@@ -658,7 +658,6 @@ class _FloatingRealtimeStatusBanner extends StatefulWidget {
 class _FloatingRealtimeStatusBannerState
     extends State<_FloatingRealtimeStatusBanner> {
   static const _connectionWarningDelay = Duration(seconds: 3);
-  static const _noticeDelay = Duration(seconds: 3);
   Timer? _dismissTimer;
   Timer? _pendingConnectionWarning;
   Timer? _pendingNotice;
@@ -849,7 +848,7 @@ class _FloatingRealtimeStatusBannerState
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.cloud_off_outlined,
                         size: 16,
                         color: ConclaveColors.warning,
@@ -858,7 +857,7 @@ class _FloatingRealtimeStatusBannerState
                       Flexible(
                         child: Text(
                           noticeText,
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: ConclaveColors.warning,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
@@ -867,7 +866,7 @@ class _FloatingRealtimeStatusBannerState
                         ),
                       ),
                       const SizedBox(width: 8),
-                      SizedBox(
+                      const SizedBox(
                         width: 12,
                         height: 12,
                         child: CircularProgressIndicator(
