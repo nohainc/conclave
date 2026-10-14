@@ -1,8 +1,25 @@
 /**
  * Provider-independent lifecycle rules shared by Cloud transition code and
- * tests. `created` is the persisted representation of the public Queued state;
- * `acknowledged` is the persisted Accepted/Starting window until the explicit
- * provider-start acknowledgement arrives.
+ * tests. This is the single source of truth for assignment status changes:
+ * every Cloud writer derives its conditional-UPDATE source set from
+ * `assignmentSourceStatuses(target)` instead of spelling status lists inline.
+ *
+ * Persisted statuses and the public lifecycle vocabulary:
+ *
+ * | Public state | Persisted `status`           | Evidence that causes it               |
+ * | ------------ | ---------------------------- | ------------------------------------- |
+ * | Created      | `created`                    | assignment row inserted               |
+ * | Dispatched   | `dispatched`                 | Gateway queued `assignment.start`     |
+ * | Acknowledged | `acknowledged`               | `assignment.ack` accepted (admission) |
+ * | Queued       | `acknowledged` (projection)  | Service-local, no Cloud signal        |
+ * | Starting     | `acknowledged` (projection)  | Service-local, no Cloud signal        |
+ * | Running      | `running`                    | `assignment.start.ack` (provider)     |
+ * | Terminal     | completed/failed/cancelled/  | result, error, cancellation, timeout  |
+ * |              | timed_out/lost               |                                       |
+ *
+ * Queued and Starting happen inside the Service between admission and the
+ * provider-start acknowledgement. Cloud has no protocol signal for them, so
+ * they project onto `acknowledged`; no duplicate state is stored for display.
  */
 
 export const ASSIGNMENT_LIFECYCLE_STATUSES = [
@@ -66,13 +83,35 @@ const terminalAssignmentStatuses = new Set<AssignmentLifecycleStatus>([
   "lost",
 ]);
 
+/**
+ * Evidence reaching Cloud is deliberately independent of ordering. A later
+ * milestone implies every earlier one: a provider-start acknowledgement proves
+ * the Service admitted the assignment, and a result proves the provider ran.
+ * Transitions may therefore skip forward but never backward, and terminal
+ * statuses have no outgoing edges.
+ */
 const assignmentTransitions: Record<
   AssignmentLifecycleStatus,
   readonly AssignmentLifecycleStatus[]
 > = {
-  created: ["dispatched", "failed", "cancelled", "timed_out"],
-  dispatched: ["acknowledged", "failed", "cancelled", "timed_out"],
-  acknowledged: ["running", "failed", "cancelled", "timed_out"],
+  created: [
+    "dispatched",
+    "acknowledged",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+    "timed_out",
+  ],
+  dispatched: [
+    "acknowledged",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+    "timed_out",
+  ],
+  acknowledged: ["running", "completed", "failed", "cancelled", "timed_out"],
   running: ["completed", "failed", "cancelled", "timed_out", "lost"],
   completed: [],
   failed: [],
@@ -116,6 +155,61 @@ const workRequestTransitions: Record<
   failed: ["queued", "cancelled"],
   cancelled: [],
 };
+
+/**
+ * Kinds of acknowledgement that reach Cloud. They are distinct on purpose:
+ *
+ * - `delivery`: the transport accepted the command (WebSocket write or
+ *   long-poll queue). It never changes `status` beyond `dispatched`.
+ * - `admission`: the Service durably accepted the assignment
+ *   (`assignment.ack` with `accepted: true`).
+ * - `provider_start`: the provider process is confirmed running
+ *   (`assignment.start.ack`).
+ */
+export const ASSIGNMENT_EVIDENCE_KINDS = [
+  "delivery",
+  "admission",
+  "provider_start",
+] as const;
+export type AssignmentEvidenceKind = (typeof ASSIGNMENT_EVIDENCE_KINDS)[number];
+
+const evidenceTargets: Record<
+  AssignmentEvidenceKind,
+  AssignmentLifecycleStatus
+> = {
+  delivery: "dispatched",
+  admission: "acknowledged",
+  provider_start: "running",
+};
+
+/** The status an acknowledgement of [kind] moves an assignment toward. */
+export function assignmentStatusForEvidence(
+  kind: AssignmentEvidenceKind,
+): AssignmentLifecycleStatus {
+  return evidenceTargets[kind];
+}
+
+/**
+ * Statuses a conditional UPDATE may move *from* when targeting [target]. The
+ * target itself is excluded, so replaying the same evidence matches no row
+ * and cannot refresh `updated_at` (which drives startup deadlines).
+ */
+export function assignmentSourceStatuses(
+  target: AssignmentLifecycleStatus,
+): readonly AssignmentLifecycleStatus[] {
+  return ASSIGNMENT_LIFECYCLE_STATUSES.filter(
+    (from) => from !== target && assignmentTransitions[from].includes(target),
+  );
+}
+
+/** Statuses that admit no further transition (terminal and immutable). */
+export const ASSIGNMENT_TERMINAL_STATUSES = [
+  "completed",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "lost",
+] as const satisfies readonly AssignmentLifecycleStatus[];
 
 export function canTransitionAssignment(
   from: AssignmentLifecycleStatus,
@@ -163,4 +257,3 @@ export function isActiveAssignmentStatus(
 ): boolean {
   return !isTerminalAssignmentStatus(status);
 }
-

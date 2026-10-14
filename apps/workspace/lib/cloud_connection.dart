@@ -1726,6 +1726,17 @@ class WorkspaceCloudConnection {
         }
         continue;
       }
+      if (_activeAssignments.contains(record.assignmentId)) {
+        final liveCorrelation = _recordCorrelation(record);
+        if (liveCorrelation.values.every((value) => value is String)) {
+          _reassertLiveAssignment(
+            liveCorrelation,
+            record.status,
+            cloudStatus: cloudStatus,
+          );
+        }
+        continue;
+      }
       if (!const {
         AssignmentStatus.completed,
         AssignmentStatus.failed,
@@ -1798,6 +1809,46 @@ class WorkspaceCloudConnection {
       }
       // Keep terminal evidence pending until Cloud acknowledges it. This is
       // what makes delivery independently retryable across transport loss.
+    }
+  }
+
+  /// Idempotently re-sends admission and provider-start evidence for an
+  /// assignment that is still live in this process. Cloud may have missed the
+  /// originals (socket dropped, HTTP fallback replay), and without them it
+  /// would keep the assignment Dispatched/Acknowledged until a startup
+  /// deadline fails work the Service is actually running. Cloud treats the
+  /// messages as no-ops when it already holds the evidence, so re-sending is
+  /// always safe; it never downgrades a newer Cloud state.
+  void _reassertLiveAssignment(
+    Map<String, Object?> correlation,
+    AssignmentStatus localStatus, {
+    String? cloudStatus,
+  }) {
+    final socket = _transport;
+    if (socket == null || sessionId == null) return;
+    final cloudBehind = cloudStatus == null ||
+        const {'created', 'dispatched', 'acknowledged'}.contains(cloudStatus);
+    if (!cloudBehind) return;
+    final needsAdmission = cloudStatus == null ||
+        cloudStatus == 'created' ||
+        cloudStatus == 'dispatched';
+    if (needsAdmission) {
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.ack',
+        correlation,
+        {'accepted': true, 'estimatedStartMs': 0},
+      )));
+    }
+    if (localStatus == AssignmentStatus.running) {
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.start.ack',
+        correlation,
+        {
+          'started': true,
+          'engineStarted': true,
+          'providerStarted': true,
+        },
+      )));
     }
   }
 

@@ -25,7 +25,10 @@ import {
   recordAssignmentError,
   type AssignmentDispatcherEnv,
 } from "./assignment-dispatcher.js";
-import type { ThreadBindingId } from "@conclave/core";
+import type {
+  AssignmentLifecycleStatus,
+  ThreadBindingId,
+} from "@conclave/core";
 import {
   prepareWorkerStepExecution,
   completeWorkerStepExecution,
@@ -696,6 +699,20 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             error: "Work assignment was cancelled",
           };
         }
+        const readAssignment = () =>
+          db
+            .prepare(
+              `SELECT wa.id AS assignmentId, wa.status, wa.output_json AS outputJson,
+                      wa.error_json AS errorJson, wa.workspace_worker_id AS workerId,
+                      wa.worker_type_id AS workerTypeId, wa.engine_version AS engineVersion,
+                      wa.model, wa.permission_snapshot_json AS permissionSnapshotJson,
+                      wa.attempt_id AS attemptId,
+                      wa.created_at AS createdAt, wa.updated_at AS updatedAt,
+                      wa.queue_wait_timeout_ms AS queueWaitTimeoutMs
+                 FROM worker_assignments wa WHERE wa.id = ?1`,
+            )
+            .bind(assignment.assignmentId)
+            .first<AssignmentRow>();
         let terminal: AssignmentRow | null = null;
         const pollCount = Math.max(
           1,
@@ -707,20 +724,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           terminal = await workflowStep.do(
             `workflow:${task.step.kind}:assignment-status:${attempt}:${poll}`,
             { ...stepConfig, timeout: "30 seconds" },
-            async () =>
-              db
-                .prepare(
-                  `SELECT wa.id AS assignmentId, wa.status, wa.output_json AS outputJson,
-                      wa.error_json AS errorJson, wa.workspace_worker_id AS workerId,
-                      wa.worker_type_id AS workerTypeId, wa.engine_version AS engineVersion,
-                      wa.model, wa.permission_snapshot_json AS permissionSnapshotJson,
-                      wa.attempt_id AS attemptId,
-                      wa.created_at AS createdAt, wa.updated_at AS updatedAt,
-                      wa.queue_wait_timeout_ms AS queueWaitTimeoutMs
-                 FROM worker_assignments wa WHERE wa.id = ?1`,
-                )
-                .bind(assignment.assignmentId)
-                .first<AssignmentRow>(),
+            async () => readAssignment(),
           );
           if (
             terminal &&
@@ -758,6 +762,10 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
               terminal.queueWaitTimeoutMs ?? DEFAULT_QUEUE_WAIT_TIMEOUT_MS,
             )
           ) {
+            // Expiry was decided from this status. If an acknowledgement
+            // moved the assignment on since the poll, the conditional write
+            // below leaves it alone and the next poll observes the new state.
+            const observedStatus = terminal.status as AssignmentLifecycleStatus;
             await workflowStep.do(
               `workflow:${task.step.kind}:delivery-timeout:${attempt}`,
               stepConfig,
@@ -775,6 +783,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                     failedAt: new Date().toISOString(),
                   },
                   assignment.attemptId,
+                  { onlyFrom: [observedStatus] },
                 );
               },
             );
@@ -802,7 +811,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           );
         }
         if (terminal?.status !== "completed" || !terminal.outputJson) {
-          await recordAssignmentError(
+          const timedOut = await recordAssignmentError(
             db,
             assignment.assignmentId,
             {
@@ -815,7 +824,24 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             },
             assignment.attemptId,
           );
-          throw new Error("Work Step assignment timed out");
+          if (timedOut) throw new Error("Work Step assignment timed out");
+          // The timeout lost a race: another handler made the assignment
+          // terminal after the last poll. That outcome is authoritative.
+          terminal = await workflowStep.do(
+            `workflow:${task.step.kind}:assignment-final:${attempt}`,
+            { ...stepConfig, timeout: "30 seconds" },
+            async () => readAssignment(),
+          );
+          if (terminal?.status === "cancelled") {
+            return {
+              task,
+              status: "cancelled",
+              error: "Work assignment was cancelled",
+            };
+          }
+          if (terminal?.status !== "completed" || !terminal.outputJson) {
+            throw new Error("Work Step assignment timed out");
+          }
         }
         const stepResult = completeWorkerStepExecution({
           output: parseJsonRecord(terminal.outputJson),

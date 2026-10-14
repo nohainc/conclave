@@ -22,6 +22,7 @@ import {
 import { recordExecutionWorkspaceAudit } from "./workspace-audit.js";
 import { tryLogDiagnosticEvent } from "./observability.js";
 import { DEFAULT_QUEUE_WAIT_TIMEOUT_MS } from "./assignment-delivery.js";
+import { assignmentSourceStatusList } from "./assignment-transitions.js";
 
 const MAX_FAILURE_DIAGNOSTIC_LENGTH = 2048;
 
@@ -581,7 +582,8 @@ async function dispatchWorkspaceWorkerAssignment(
         (await response.text()) || `Gateway returned HTTP ${response.status}`,
       );
     await env.CONCLAVE_DB.prepare(
-      "UPDATE worker_assignments SET status = 'dispatched', updated_at = ?1 WHERE id = ?2 AND status = 'created'",
+      `UPDATE worker_assignments SET status = 'dispatched', updated_at = ?1
+        WHERE id = ?2 AND status IN (${assignmentSourceStatusList("dispatched")})`,
     )
       .bind(new Date().toISOString(), assignmentId)
       .run();
@@ -721,7 +723,7 @@ export async function recordAssignmentResult(
   assignmentId: string,
   result: AssignmentResultPayload,
   expectedAttemptId?: string,
-): Promise<void> {
+): Promise<boolean> {
   const now = new Date().toISOString();
 
   const existing = await db
@@ -734,8 +736,9 @@ export async function recordAssignmentResult(
       task_id: string;
       attempt_id: string | null;
     }>();
-  if (!existing) return;
-  if (expectedAttemptId && existing.attempt_id !== expectedAttemptId) return;
+  if (!existing) return false;
+  if (expectedAttemptId && existing.attempt_id !== expectedAttemptId)
+    return false;
   if (
     !isKnownAssignmentStatus(existing.status) ||
     isTerminalAssignmentStatus(existing.status as AssignmentLifecycleStatus) ||
@@ -744,14 +747,15 @@ export async function recordAssignmentResult(
       "completed",
     )
   ) {
-    return;
+    return false;
   }
 
-  await runTerminalTransition(db, [
+  return runTerminalTransition(db, [
     db
       .prepare(
         `UPDATE worker_assignments SET status = 'completed', output_json = ?1, updated_at = ?2
-         WHERE id = ?3 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+         WHERE id = ?3 AND status IN (${assignmentSourceStatusList("completed")})
+         RETURNING id`,
       )
       .bind(JSON.stringify(result), now, assignmentId),
     db
@@ -774,7 +778,8 @@ export async function recordAssignmentError(
   assignmentId: string,
   failure: AssignmentFailurePayload,
   expectedAttemptId?: string,
-): Promise<void> {
+  options?: { onlyFrom?: readonly AssignmentLifecycleStatus[] },
+): Promise<boolean> {
   const now = new Date().toISOString();
   const details = safeFailureDetails(failure.error?.details);
   const code = canonicalExecutionErrorCode(failure.error?.code);
@@ -798,8 +803,9 @@ export async function recordAssignmentError(
       task_id: string;
       attempt_id: string | null;
     }>();
-  if (!existing) return;
-  if (expectedAttemptId && existing.attempt_id !== expectedAttemptId) return;
+  if (!existing) return false;
+  if (expectedAttemptId && existing.attempt_id !== expectedAttemptId)
+    return false;
   const terminalStatus =
     normalizedFailure.error.code === "timeout" ? "timed_out" : "failed";
   if (
@@ -808,16 +814,19 @@ export async function recordAssignmentError(
     !canTransitionAssignment(
       existing.status as AssignmentLifecycleStatus,
       terminalStatus,
-    )
+    ) ||
+    (options?.onlyFrom &&
+      !options.onlyFrom.includes(existing.status as AssignmentLifecycleStatus))
   ) {
-    return;
+    return false;
   }
 
-  await runTerminalTransition(db, [
+  return runTerminalTransition(db, [
     db
       .prepare(
         `UPDATE worker_assignments SET status = ?1, error_json = ?2, updated_at = ?3
-         WHERE id = ?4 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+         WHERE id = ?4 AND status IN (${sourceList(terminalStatus, options?.onlyFrom)})
+         RETURNING id`,
       )
       .bind(
         terminalStatus,
@@ -848,7 +857,7 @@ export async function recordAssignmentCancelled(
   assignmentId: string,
   cancellation: { status: "cancelled"; reason: string },
   expectedAttemptId?: string,
-): Promise<void> {
+): Promise<boolean> {
   const now = new Date().toISOString();
   const existing = await db
     .prepare(
@@ -860,8 +869,9 @@ export async function recordAssignmentCancelled(
       task_id: string;
       attempt_id: string | null;
     }>();
-  if (!existing) return;
-  if (expectedAttemptId && existing.attempt_id !== expectedAttemptId) return;
+  if (!existing) return false;
+  if (expectedAttemptId && existing.attempt_id !== expectedAttemptId)
+    return false;
   if (
     !isKnownAssignmentStatus(existing.status) ||
     isTerminalAssignmentStatus(existing.status as AssignmentLifecycleStatus) ||
@@ -870,13 +880,14 @@ export async function recordAssignmentCancelled(
       "cancelled",
     )
   ) {
-    return;
+    return false;
   }
-  await runTerminalTransition(db, [
+  return runTerminalTransition(db, [
     db
       .prepare(
         `UPDATE worker_assignments SET status = 'cancelled', error_json = ?1, updated_at = ?2
-         WHERE id = ?3 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+         WHERE id = ?3 AND status IN (${assignmentSourceStatusList("cancelled")})
+         RETURNING id`,
       )
       .bind(JSON.stringify(cancellation), now, assignmentId),
     db
@@ -889,6 +900,19 @@ export async function recordAssignmentCancelled(
       )
       .bind(now, existing.task_id, assignmentId),
   ]);
+}
+
+function sourceList(
+  target: AssignmentLifecycleStatus,
+  onlyFrom?: readonly AssignmentLifecycleStatus[],
+): string {
+  const all = assignmentSourceStatusList(target);
+  if (!onlyFrom) return all;
+  const allowed = new Set<string>(onlyFrom);
+  return all
+    .split(", ")
+    .filter((quoted) => allowed.has(quoted.slice(1, -1)))
+    .join(", ");
 }
 
 function isKnownAssignmentStatus(
@@ -910,12 +934,24 @@ function isKnownAssignmentStatus(
 async function runTerminalTransition(
   db: D1Database,
   statements: D1PreparedStatement[],
-): Promise<void> {
+): Promise<boolean> {
+  // The first statement is the assignment update ending in RETURNING id. D1
+  // `meta.changes` counts trigger writes, so only a returned row proves that
+  // this call (and not a concurrent handler) made the terminal transition.
   if (typeof db.batch === "function") {
-    await db.batch(statements);
-    return;
+    const results = await db.batch(statements);
+    return (results[0]?.results?.length ?? 0) === 1;
   }
-  for (const statement of statements) await statement.run();
+  // Sequential fallback for stores without batch support. Without a
+  // RETURNING result to inspect, a completed statement counts as applied.
+  let applied = true;
+  for (const [index, statement] of statements.entries()) {
+    const result = (await statement.run()) as
+      { results?: unknown[] } | undefined;
+    if (index === 0 && Array.isArray(result?.results))
+      applied = result.results.length === 1;
+  }
+  return applied;
 }
 
 /**
@@ -1000,23 +1036,32 @@ export async function recoverStaleAssignments(
       : workspaceDisconnected
         ? "The Workspace disconnected before the assignment completed."
         : "The assignment exceeded its execution deadline.";
-    await recordAssignmentError(db, row.id, {
-      error: {
-        code,
-        message,
-        retryable: true,
-        details: cloudFailureDiagnostic(
-          grantExpired
-            ? "workspace_lease"
-            : workspaceDisconnected
-              ? "workspace_disconnect"
-              : "execution_timeout",
+    await recordAssignmentError(
+      db,
+      row.id,
+      {
+        error: {
           code,
           message,
-        ),
+          retryable: true,
+          details: cloudFailureDiagnostic(
+            grantExpired
+              ? "workspace_lease"
+              : workspaceDisconnected
+                ? "workspace_disconnect"
+                : "execution_timeout",
+            code,
+            message,
+          ),
+        },
+        failedAt: now.toISOString(),
       },
-      failedAt: now.toISOString(),
-    });
+      undefined,
+      // The decision above was made from this status. If the assignment has
+      // since advanced (for example a provider-start acknowledgement arrived),
+      // the stale decision must not fail it.
+      { onlyFrom: isKnownAssignmentStatus(row.status) ? [row.status] : [] },
+    );
     recovered += 1;
   }
   return recovered;

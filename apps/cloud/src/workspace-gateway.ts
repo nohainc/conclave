@@ -11,6 +11,11 @@ import {
 } from "@conclave/protocol";
 import { createEventPublisher } from "./event-publisher.js";
 import { assignmentCommandDisposition } from "./assignment-delivery.js";
+import {
+  transitionAssignment,
+  type AssignmentTransitionResult,
+} from "./assignment-transitions.js";
+import { assignmentStatusForEvidence } from "@conclave/core";
 import { shouldPersistWorkerActivity } from "./worker-activity-history.js";
 import {
   recordAssignmentCancelled,
@@ -928,19 +933,21 @@ export class WorkspaceGateway implements DurableObject {
         });
         this.traceCommandAcknowledged(message, payload, accepted === true);
         if (accepted === true) {
-          await this.env.CONCLAVE_DB.prepare(
-            `UPDATE worker_assignments SET status = 'acknowledged', updated_at = ?1
-             WHERE id = ?2 AND execution_workspace_id = ?3
-               AND runtime_identity_id = ?4
-               AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
-          )
-            .bind(
-              now,
-              message.assignmentId,
-              this.executionWorkspaceId,
-              this.workspaceRuntimeId,
-            )
-            .run();
+          // Admission evidence only moves created/dispatched forward. If the
+          // provider-start acknowledgement or a terminal outcome got here
+          // first, this late acknowledgement is recorded and ignored; it
+          // must never refresh updated_at or downgrade the assignment.
+          const transition = await transitionAssignment(this.env.CONCLAVE_DB, {
+            to: assignmentStatusForEvidence("admission"),
+            now,
+            fence: {
+              assignmentId: message.assignmentId!,
+              attemptId: message.attemptId,
+              executionWorkspaceId: this.executionWorkspaceId ?? undefined,
+              runtimeIdentityId: this.workspaceRuntimeId ?? undefined,
+            },
+          });
+          this.traceTransitionOutcome(message, "admission", transition);
         } else if (
           message.assignmentId &&
           (await this.terminalAssignmentMatches(message))
@@ -957,6 +964,10 @@ export class WorkspaceGateway implements DurableObject {
               },
               failedAt: now,
             },
+            message.attemptId,
+            // A rejection is only meaningful before admission. A stale or
+            // replayed one must not fail an accepted or running assignment.
+            { onlyFrom: ["created", "dispatched"] },
           );
         }
         return;
@@ -976,21 +987,23 @@ export class WorkspaceGateway implements DurableObject {
         // Cloud originates probes; a Service never sends one.
         return;
       case "assignment.start.ack": {
-        if (!(await this.activeAssignmentMatches(message))) return;
-        const transition = await this.env.CONCLAVE_DB.prepare(
-          `UPDATE worker_assignments SET status = 'running', updated_at = ?1
-             WHERE id = ?2 AND status = 'acknowledged'`,
-        )
-          .bind(now, message.assignmentId)
-          .run();
-        if (Number(transition.meta.changes ?? 0) !== 1) return;
-        await this.env.CONCLAVE_DB.prepare(
-          `UPDATE workflow_tasks SET status = 'running',
-                  started_at = COALESCE(started_at, ?1), updated_at = ?1
-             WHERE id = ?2 AND status IN ('queued', 'waiting')`,
-        )
-          .bind(now, message.taskId)
-          .run();
+        // Provider-start evidence implies admission, so it is honoured from
+        // created, dispatched or acknowledged. That keeps the evidence when
+        // it overtakes the acceptance acknowledgement (HTTP fallback, replay).
+        if (!(await this.assignmentContextMatches(message))) return;
+        const transition = await transitionAssignment(this.env.CONCLAVE_DB, {
+          to: assignmentStatusForEvidence("provider_start"),
+          now,
+          startTaskId: message.taskId,
+          fence: {
+            assignmentId: message.assignmentId!,
+            attemptId: message.attemptId,
+            executionWorkspaceId: this.executionWorkspaceId ?? undefined,
+            runtimeIdentityId: this.workspaceRuntimeId ?? undefined,
+          },
+        });
+        this.traceTransitionOutcome(message, "provider_start", transition);
+        if (!transition.applied) return;
         tryLogDiagnosticEvent({
           assignmentId: message.assignmentId,
           workspaceId: message.executionWorkspaceId,
@@ -1282,13 +1295,13 @@ export class WorkspaceGateway implements DurableObject {
           retryable: false,
           context: { status: "completed" },
         });
-        await recordAssignmentResult(
+        const completed = await recordAssignmentResult(
           this.env.CONCLAVE_DB,
           message.assignmentId!,
           message.payload as never,
           message.attemptId,
         );
-        this.traceTerminalPersisted(message, "completed");
+        if (completed) this.traceTerminalPersisted(message, "completed");
         await this.sendTerminalAcknowledgement(message, "completed");
         return;
       case "assignment.error":
@@ -1317,24 +1330,24 @@ export class WorkspaceGateway implements DurableObject {
             context: { status: "failed" },
           });
         }
-        await recordAssignmentError(
+        const failed = await recordAssignmentError(
           this.env.CONCLAVE_DB,
           message.assignmentId!,
           message.payload as never,
           message.attemptId,
         );
-        this.traceTerminalPersisted(message, "failed");
+        if (failed) this.traceTerminalPersisted(message, "failed");
         await this.sendTerminalAcknowledgement(message, "failed");
         return;
       case "assignment.cancelled":
         if (!(await this.terminalAssignmentMatches(message))) return;
-        await recordAssignmentCancelled(
+        const cancelled = await recordAssignmentCancelled(
           this.env.CONCLAVE_DB,
           message.assignmentId!,
           message.payload as never,
           message.attemptId,
         );
-        this.traceTerminalPersisted(message, "cancelled");
+        if (cancelled) this.traceTerminalPersisted(message, "cancelled");
         tryLogDiagnosticEvent({
           assignmentId: message.assignmentId,
           workspaceId: message.executionWorkspaceId,
@@ -1504,6 +1517,36 @@ export class WorkspaceGateway implements DurableObject {
     } catch {
       // Telemetry boundary.
     }
+  }
+
+  /**
+   * Records what an acknowledgement did. Ignored outcomes (`duplicate`,
+   * `superseded`, `terminal`, `stale`) are the evidence of reordering and
+   * replay, so they are logged instead of silently dropped. Never throws.
+   */
+  private traceTransitionOutcome(
+    message: WorkspaceRuntimeMessage,
+    evidence: "admission" | "provider_start",
+    transition: AssignmentTransitionResult,
+  ): void {
+    if (transition.applied) return;
+    tryLogDiagnosticEvent({
+      assignmentId: message.assignmentId,
+      workspaceId: message.executionWorkspaceId,
+      workspaceRuntimeId: message.workspaceRuntimeId,
+      workerId: message.workerId,
+      runId: message.runId,
+      taskId: message.taskId,
+      attemptId: message.attemptId,
+      component: "cloud",
+      operation: "assignment",
+      stage: "transition_ignored",
+      severity: transition.outcome === "stale" ? "warning" : "info",
+      retryable: false,
+      context: {
+        status: `${evidence}_${transition.outcome}`,
+      },
+    });
   }
 
   /** T11: emitted after the terminal outcome is durably written to D1. */

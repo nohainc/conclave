@@ -153,6 +153,16 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
           correlation,
           {'cancelled': true, 'alreadyTerminated': true},
         )));
+      } else if (_activeAssignments.contains(context.assignmentId) &&
+          const {
+            AssignmentStatus.received,
+            AssignmentStatus.accepted,
+            AssignmentStatus.running,
+          }.contains(previous.status)) {
+        // A duplicate command for an assignment this process is already
+        // running means Cloud missed our earlier acknowledgements. Re-assert
+        // them; rejecting would make Cloud fail work that is in progress.
+        _reassertLiveAssignment(correlation, previous.status);
       } else {
         socket.send(jsonEncode(_assignmentEnvelope(
           'assignment.ack',

@@ -13,21 +13,30 @@ it("persists confirmed cancellation without waiting for terminal delivery", asyn
       return {
         bind: () => ({
           first: async () => ({ status: "acknowledged", task_id: "task-1" }),
-          run: async () => { writes.push(sql); },
+          run: async () => {
+            writes.push(sql);
+          },
         }),
       };
     },
   };
-  const result = await cancelTaskAssignment({
-    CONCLAVE_DB: db,
-    CONCLAVE_WORKSPACE_GATEWAY: {
-      idFromName: () => "workspace-1",
-      get: () => ({ fetch: async () => Response.json({ cancelled: true }) }),
-    },
-  } as never, "workspace-1", "assignment-1", "User cancelled");
+  const result = await cancelTaskAssignment(
+    {
+      CONCLAVE_DB: db,
+      CONCLAVE_WORKSPACE_GATEWAY: {
+        idFromName: () => "workspace-1",
+        get: () => ({ fetch: async () => Response.json({ cancelled: true }) }),
+      },
+    } as never,
+    "workspace-1",
+    "assignment-1",
+    "User cancelled",
+  );
   expect(result.cancelled).toBe(true);
   expect(writes).toHaveLength(2);
-  expect(writes[0]).toContain("UPDATE worker_assignments SET status = 'cancelled'");
+  expect(writes[0]).toContain(
+    "UPDATE worker_assignments SET status = 'cancelled'",
+  );
   expect(writes[1]).toContain("UPDATE workflow_tasks SET status = 'cancelled'");
 });
 
@@ -82,7 +91,11 @@ it("fails disconnected, expired, and leased assignments idempotently", async () 
       return {
         all: async () => ({ results: rows }),
         bind: (...values: unknown[]) => ({
-          first: async () => ({ status: "running", task_id: "task-1" }),
+          first: async () => ({
+            status:
+              rows.find((row) => row.id === values[0])?.status ?? "running",
+            task_id: "task-1",
+          }),
           run: async () => {
             if (sql.includes("UPDATE")) updates.push(values);
             return { meta: { changes: 1 } };
@@ -173,4 +186,37 @@ it("persists timeout as a terminal Cloud outcome", async () => {
     "attempt-1",
   );
   expect(updates[0]?.[0]).toBe("timed_out");
+});
+
+it("does not fail an assignment that advanced after the recovery decision", async () => {
+  const now = new Date("2026-10-13T12:00:00.000Z");
+  const expired = {
+    id: "assignment-late-start",
+    status: "acknowledged",
+    createdAt: "2026-10-13T11:30:00.000Z",
+    updatedAt: "2026-10-13T11:30:00.000Z",
+    timeoutMs: null,
+    queueWaitTimeoutMs: 60_000,
+    workspaceStatus: "online",
+    workspaceUpdatedAt: now.toISOString(),
+    grantExpiresAt: null,
+  };
+  const writes: string[] = [];
+  const db = {
+    prepare(sql: string) {
+      return {
+        all: async () => ({ results: [expired] }),
+        bind: () => ({
+          // The provider-start acknowledgement landed after the scan.
+          first: async () => ({ status: "running", task_id: "task-1" }),
+          run: async () => {
+            if (sql.includes("UPDATE")) writes.push(sql);
+            return { meta: { changes: 1 } };
+          },
+        }),
+      };
+    },
+  };
+  await recoverStaleAssignments(db as never, now);
+  expect(writes).toHaveLength(0);
 });

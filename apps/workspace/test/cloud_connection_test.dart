@@ -1836,7 +1836,8 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('does not rerun a non-terminal assignment on duplicate delivery',
+  test(
+      'does not rerun a non-terminal assignment on duplicate delivery and re-asserts admission',
       () async {
     final socket = FakeSocket();
     final directory =
@@ -1891,20 +1892,19 @@ void main() {
     await waitFor(() => executions == 1);
     socket.controller
         .add(jsonEncode({...assignment, 'messageId': 'server-running-2'}));
-    await waitFor(() => socket.sent.any((message) {
-          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
-          return decoded['type'] == 'assignment.ack' &&
-              (decoded['payload'] as Map<String, dynamic>)['accepted'] == false;
-        }));
+    List<Map<String, dynamic>> acks() => socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .where((message) => message['type'] == 'assignment.ack')
+        .toList();
+    // A duplicate for a live assignment re-asserts admission evidence (a
+    // second accepted ack) instead of being rejected, and never re-executes.
+    await waitFor(() => acks().length >= 2);
 
     expect(executions, 1);
-    final duplicateAck = socket.sent
-        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
-        .firstWhere((message) =>
-            message['type'] == 'assignment.ack' &&
-            (message['payload'] as Map<String, dynamic>)['accepted'] == false);
-    expect((duplicateAck['payload'] as Map<String, dynamic>)['reason'],
-        contains('already exists'));
+    expect(
+      acks().every((ack) => (ack['payload'] as Map)['accepted'] == true),
+      isTrue,
+    );
     release.complete();
     await waitFor(() => socket.sent.any((message) {
           final decoded = jsonDecode(message as String) as Map<String, dynamic>;
@@ -2340,5 +2340,170 @@ void main() {
     await waitFor(() => connection.clockOffset.hasEstimate);
     expect(connection.clockOffset.offsetMs, inInclusiveRange(1900, 2100));
     await connection.close();
+  });
+
+  group('live assignment convergence', () {
+    Map<String, dynamic> assignmentStart() => {
+          'protocol': 'conclave.workspace-runtime-protocol',
+          'protocolVersion': workspaceRuntimeProtocolVersion,
+          'messageId': 'server-assignment-live',
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+          'type': 'assignment.start',
+          'workspaceId': 'workspace-1',
+          'workspaceRuntimeId': 'workspace-1',
+          'workerId': 'worker-1',
+          'runId': 'run-1',
+          'taskId': 'task-1',
+          'attemptId': 'attempt-1',
+          'assignmentId': 'assignment-live-1',
+          'idempotencyKey': 'idem-live-1',
+          'payload': {
+            'objective': 'inspect',
+            'role': 'research',
+            'workerId': 'conclave.echo',
+            'engineVersion': '1.0.0',
+            'profileDefinitionId': 'chatgpt-codex',
+            'profileReleaseVersion': 1,
+            'input': {},
+            'contextArtifactIds': [],
+            'timeoutMs': 1000,
+          },
+        };
+
+    List<Map<String, dynamic>> sentOfType(FakeSocket socket, String type) =>
+        socket.sent
+            .map((message) =>
+                jsonDecode(message as String) as Map<String, dynamic>)
+            .where((message) => message['type'] == type)
+            .toList();
+
+    Map<String, dynamic> syncStates(String syncRequestId, String status) => {
+          'protocol': 'conclave.workspace-runtime-protocol',
+          'protocolVersion': workspaceRuntimeProtocolVersion,
+          'messageId': 'server-sync-$status',
+          'correlationId': syncRequestId,
+          'workspaceRuntimeId': 'workspace-1',
+          'executionWorkspaceId': 'workspace-1',
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+          'type': 'workspace.sync.result',
+          'payload': {
+            'desiredWorkers': [],
+            'activeAssignmentIds': ['assignment-live-1'],
+            'assignmentStates': [
+              {'assignmentId': 'assignment-live-1', 'status': status},
+            ],
+          },
+        };
+
+    Future<
+        ({
+          WorkspaceCloudConnection connection,
+          FakeSocket socket,
+          Completer<void> finish,
+          String syncRequestId,
+        })> liveAssignment() async {
+      final socket = FakeSocket();
+      final directory =
+          await Directory.systemTemp.createTemp('workspace-live-');
+      final journal =
+          AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+      final finish = Completer<void>();
+      late WorkspaceCloudConnection connection;
+      connection = WorkspaceCloudConnection(
+        uri: Uri.parse(
+            'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+        workspaceRuntimeId: 'workspace-1',
+        workspaceId: 'workspace-1',
+        factory: (_) async => socket,
+        assignmentJournal: journal,
+        heartbeat: const Duration(hours: 1),
+        assignmentHandler: (context) async {
+          await connection.reportWorkerStarted(context);
+          await finish.future;
+          return const WorkspaceAssignmentResult(
+            summary: 'done',
+            output: {'text': 'ok'},
+          );
+        },
+      );
+      await connection.connect();
+      await completeHandshake(connection, socket);
+      socket.controller.add(jsonEncode(assignmentStart()));
+      await waitFor(
+          () => sentOfType(socket, 'assignment.start.ack').isNotEmpty);
+      final syncRequestId = sentOfType(socket, 'workspace.sync.request')
+          .first['messageId'] as String;
+      return (
+        connection: connection,
+        socket: socket,
+        finish: finish,
+        syncRequestId: syncRequestId,
+      );
+    }
+
+    test(
+        'a replayed command for a running assignment re-asserts evidence '
+        'instead of rejecting it', () async {
+      final live = await liveAssignment();
+      live.socket.sent.clear();
+
+      live.socket.controller.add(jsonEncode(assignmentStart()));
+      await waitFor(
+          () => sentOfType(live.socket, 'assignment.start.ack').isNotEmpty);
+
+      final acks = sentOfType(live.socket, 'assignment.ack');
+      expect(acks, hasLength(1));
+      expect((acks.single['payload'] as Map)['accepted'], isTrue);
+      expect(
+        sentOfType(live.socket, 'assignment.start.ack').single['payload'],
+        containsPair('providerStarted', true),
+      );
+      live.finish.complete();
+      await live.connection.close();
+    });
+
+    test('sync shows Cloud behind: Dispatched needs admission and start',
+        () async {
+      final live = await liveAssignment();
+      live.socket.sent.clear();
+
+      live.socket.controller
+          .add(jsonEncode(syncStates(live.syncRequestId, 'dispatched')));
+      await waitFor(
+          () => sentOfType(live.socket, 'assignment.start.ack').isNotEmpty);
+
+      expect(sentOfType(live.socket, 'assignment.ack'), hasLength(1));
+      live.finish.complete();
+      await live.connection.close();
+    });
+
+    test('sync shows Cloud Acknowledged: only the start evidence is re-sent',
+        () async {
+      final live = await liveAssignment();
+      live.socket.sent.clear();
+
+      live.socket.controller
+          .add(jsonEncode(syncStates(live.syncRequestId, 'acknowledged')));
+      await waitFor(
+          () => sentOfType(live.socket, 'assignment.start.ack').isNotEmpty);
+
+      expect(sentOfType(live.socket, 'assignment.ack'), isEmpty);
+      live.finish.complete();
+      await live.connection.close();
+    });
+
+    test('sync never re-asserts when Cloud is already Running', () async {
+      final live = await liveAssignment();
+      live.socket.sent.clear();
+
+      live.socket.controller
+          .add(jsonEncode(syncStates(live.syncRequestId, 'running')));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(sentOfType(live.socket, 'assignment.ack'), isEmpty);
+      expect(sentOfType(live.socket, 'assignment.start.ack'), isEmpty);
+      live.finish.complete();
+      await live.connection.close();
+    });
   });
 }
