@@ -327,8 +327,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   Future<void> _createSpace() async {
     var name = '';
     var description = '';
-    var instructions = '';
-    final values = await showDialog<(String, String?, String?)>(
+    final values = await showDialog<(String, String?)>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) {
         void submit() {
@@ -337,7 +336,6 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
             (
               name.isEmpty ? 'My first space' : name,
               description.trim().isEmpty ? null : description.trim(),
-              instructions.trim().isEmpty ? null : instructions.trim(),
             ),
           );
         }
@@ -363,14 +361,6 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
                   ),
                   maxLines: 2,
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  onChanged: (value) => instructions = value,
-                  decoration: const InputDecoration(
-                    labelText: 'Space instructions (optional)',
-                  ),
-                  maxLines: 2,
-                ),
               ],
             ),
           ),
@@ -389,8 +379,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     );
     if (values == null) return;
     try {
-      final space = await store.collaboration.createSpace(
-          name: values.$1, description: values.$2, instructions: values.$3);
+      final space = await store.collaboration
+          .createSpace(name: values.$1, description: values.$2);
       if (!mounted) return;
       _navigateTo(AxNavigation.space(space.id), replace: true);
       _showSnackBar('Space created. Create a Thread to get started.');
@@ -526,9 +516,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   Future<void> _editSpace(AxSpace space) async {
     var name = space.name;
     var description = space.description;
-    var instructions = space.instructions;
     String? errorText;
-    final values = await showDialog<(String, String, String)?>(
+    final values = await showDialog<(String, String)?>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -542,7 +531,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
             }
             Navigator.pop(
               dialogContext,
-              (trimmedName, description.trim(), instructions.trim()),
+              (trimmedName, description.trim()),
             );
           }
 
@@ -577,14 +566,6 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
                           const InputDecoration(labelText: 'Description'),
                       maxLines: 2,
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      initialValue: space.instructions,
-                      onChanged: (value) => instructions = value,
-                      decoration:
-                          const InputDecoration(labelText: 'Instructions'),
-                      maxLines: 4,
-                    ),
                   ],
                 ),
               ),
@@ -609,7 +590,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         space,
         name: values.$1,
         description: values.$2,
-        instructions: values.$3,
+        // Instructions are no longer part of the Space UI; preserve any
+        // legacy value until a dedicated data migration removes it.
+        instructions: space.instructions,
       );
       if (!mounted) return;
       _showSnackBar('Space updated.');

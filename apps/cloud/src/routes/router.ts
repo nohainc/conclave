@@ -815,6 +815,17 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    const clearWorkHistoryMatch = url.pathname.match(
+      /^\/api\/threads\/([^/]+)\/work-history\/clear$/,
+    );
+    if (request.method === "POST" && clearWorkHistoryMatch?.[1]) {
+      return await handlers.handleClearWorkHistory!(
+        request,
+        env,
+        clearWorkHistoryMatch[1],
+        ctx,
+      );
+    }
     const validateWorkRequestMatch = url.pathname.match(
       /^\/api\/threads\/([^/]+)\/work-requests\/validate$/,
     );

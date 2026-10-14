@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1177,8 +1178,7 @@ void main() {
     expect(diagnostic.style?.fontSize, body.fontSize);
     expect(diagnostic.style?.height, body.height);
   });
-  testWidgets(
-      'Space page exposes 3-dots popup menu, Archive/Delete, and 3 tabs',
+  testWidgets('Space page exposes actions and only the Threads resource',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     var edited = false;
@@ -1208,7 +1208,7 @@ void main() {
     // Verify Header items
     expect(find.text('Space One'), findsOneWidget);
     expect(find.text('Shared space for Space One'), findsOneWidget);
-    expect(find.text('Follow standard engineering practices.'), findsOneWidget);
+    expect(find.text('Follow standard engineering practices.'), findsNothing);
     expect(find.byIcon(Icons.edit_outlined), findsNothing);
     expect(find.byTooltip('Space actions'), findsOneWidget);
 
@@ -1223,35 +1223,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(edited, isTrue);
 
-    // Verify 3 Tabs
-    expect(find.text('Threads'), findsOneWidget);
-    expect(find.text('Workspaces'), findsNothing);
-    expect(find.text('Workflows'), findsOneWidget);
-    expect(find.text('Members'), findsOneWidget);
-    expect(
-      tester
-          .widget<TabBar>(find.byType(TabBar))
-          .tabs
-          .map((tab) => (tab as Tab).text)
-          .toList(),
-      ['Threads', 'Workflows', 'Members'],
-    );
-
-    // Verify Threads Tab contents
+    expect(find.byType(TabBar), findsNothing);
     expect(find.text('Each Thread is one focused area of team work.'),
         findsOneWidget);
     expect(find.byTooltip('Create Thread'), findsOneWidget);
-
-    // Switch to Members Tab
-    await tester.tap(find.text('Members'));
-    await tester.pumpAndSettle();
-    expect(find.text('Choose what each member can do in this Space.'),
-        findsOneWidget);
-    expect(find.text('Permissions'), findsNothing);
-    expect(find.text('Chat workflows'), findsOneWidget);
-    expect(find.text('Work workflows'), findsOneWidget);
-    expect(find.text('Own threads'), findsOneWidget);
-    expect(find.byTooltip('Share Space'), findsOneWidget);
 
     await tester.binding.setSurfaceSize(null);
   });
@@ -1429,6 +1404,7 @@ void main() {
     await tester.pumpAndSettle();
     const markdownPrompt =
         '  ## Implementation\n\n- **Add tests**\n\n```dart\nfinal ready = true;\n```\n';
+    expect(find.byTooltip('Show Markdown controls'), findsNothing);
     expect(find.byTooltip('Bold'), findsNothing);
     expect(
         tester
@@ -1437,16 +1413,13 @@ void main() {
             ?.hintText,
         isNull);
     await tester.enterText(find.byType(TextField).first, markdownPrompt);
-    await tester.tap(find.byTooltip('Show Markdown controls'));
-    await tester.pump();
-    expect(tester.getCenter(find.byTooltip('Bold')).dy,
-        lessThan(tester.getTopLeft(find.byTooltip('Add attachments')).dy));
     expect(
-        tester.getTopLeft(find.byTooltip('Bold')).dy,
+        tester.getTopLeft(find.byTooltip('Send request')).dy,
         greaterThanOrEqualTo(
             tester.getBottomLeft(find.byType(TextField).first).dy));
-    await tester.tap(find.text('Preview'));
-    await tester.pumpAndSettle();
+    expect(
+        tester.getCenter(find.byTooltip('Send request')).dy,
+        closeTo(tester.getCenter(find.byTooltip('Choose workflow')).dy, 1));
     expect(submittedWork, isNull);
     await tester.ensureVisible(find.byTooltip('Send request'));
     await tester.tap(find.byTooltip('Send request'));
@@ -1739,7 +1712,10 @@ void main() {
       final decoration = bubble.decoration as BoxDecoration;
       expect(decoration.border, isNull);
       expect(
-          decoration.color, own ? const Color(0xffdedcf4) : Colors.transparent);
+          decoration.color,
+          own
+              ? ConclaveColors.ownMessageBackground(false)
+              : Colors.transparent);
       if (own) {
         final deleteX = tester.getTopLeft(find.byTooltip('Delete message')).dx;
         expect(dateX, lessThan(deleteX));
@@ -1932,8 +1908,7 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets(
-      'Space instructions can be edited and saved via 3-dots Edit dialog',
+  testWidgets('Space instructions are not rendered or editable',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     AxSpace? updatedSpace;
@@ -1961,12 +1936,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Initial instructions'), findsOneWidget);
+    expect(find.text('Initial instructions'), findsNothing);
     expect(find.text('Space Instructions'), findsNothing);
-    expect(
-      tester.widget<Text>(find.text('Initial instructions')).textAlign,
-      TextAlign.left,
-    );
 
     // Tap 3-dots popup menu -> Edit
     await tester.tap(find.byTooltip('Space actions'));
@@ -1976,11 +1947,7 @@ void main() {
 
     expect(find.text('Edit Space'), findsOneWidget);
 
-    // Find the instructions text field in the edit dialog
-    final instructionsField =
-        find.widgetWithText(TextFormField, 'Initial instructions');
-    expect(instructionsField, findsOneWidget);
-    await tester.enterText(instructionsField, 'Updated engineering guidelines');
+    expect(find.text('Instructions'), findsNothing);
 
     // Click Save
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
@@ -1989,7 +1956,7 @@ void main() {
     // Verify update occurred
     expect(find.text('Space updated.'), findsOneWidget);
     expect(updatedSpace, isNotNull);
-    expect(updatedSpace!.instructions, 'Updated engineering guidelines');
+    expect(updatedSpace!.instructions, 'Initial instructions');
 
     await tester.pumpAndSettle(const Duration(seconds: 5));
     await tester.binding.setSurfaceSize(null);
@@ -2108,6 +2075,7 @@ void main() {
       home: Scaffold(
         body: SingleChildScrollView(
           child: SpacePage(
+            section: SpacePageSection.members,
             space: const AxSpace(
               id: 'p-1',
               name: 'Test Space',
@@ -2123,10 +2091,6 @@ void main() {
         ),
       ),
     ));
-    await tester.pumpAndSettle();
-
-    // Switch to Members Tab
-    await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
 
     // Tap Share Space button
@@ -2185,6 +2149,7 @@ void main() {
       home: Scaffold(
         body: SingleChildScrollView(
           child: SpacePage(
+            section: SpacePageSection.members,
             space: const AxSpace(
               id: 'p-1',
               name: 'Test Space',
@@ -2200,10 +2165,6 @@ void main() {
         ),
       ),
     ));
-    await tester.pumpAndSettle();
-
-    // Switch to Members Tab
-    await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
 
     // Verify distinct sections

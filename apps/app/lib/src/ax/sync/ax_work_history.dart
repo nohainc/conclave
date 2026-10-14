@@ -333,9 +333,7 @@ class AxWorkHistoryCache {
       engine.update(query(threadId), (state) {
         final current = state.data ?? AxWorkHistory();
         return AxWorkHistory(
-            requests: current.requests
-                .where((r) => r.id != localId)
-                .toList(),
+            requests: current.requests.where((r) => r.id != localId).toList(),
             olderCursor: current.olderCursor,
             initialLoaded: current.initialLoaded,
             newestPageRequest: current.newestPageRequest,
@@ -795,23 +793,18 @@ class AxWorkHistoryCache {
   }
 
   Future<void> clearHistory(String threadId) async {
-    final context = _contexts[threadId];
-    if (context == null) return;
+    // Remote success is the boundary: failures must preserve visible history.
+    await source?.clearThreadWorkHistory(threadId: threadId);
+    resetHistory(threadId);
+  }
 
-    for (final key in context.pageKeys) {
-      engine.remove(key);
-    }
-
+  /// Apply a confirmed remote clear and fence all pre-clear reads.
+  void resetHistory(String threadId) {
+    invalidate(threadId);
     engine.update(
       query(threadId),
-      (_) => AxWorkHistory(
-        requests: const [],
-        initialLoaded: true,
-      ),
+      (_) => AxWorkHistory(initialLoaded: true),
     );
-
-    engine.invalidate(AxQueryKey(['thread', threadId, 'work-requests']),
-        prefix: true);
   }
 
   void clear() {

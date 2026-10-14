@@ -21,10 +21,9 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
   Future<void> _editSpaceDialog() async {
     var name = widget.space.name;
     var description = widget.space.description;
-    var instructions = widget.space.instructions;
     String? errorText;
 
-    final result = await showDialog<(String, String, String)>(
+    final result = await showDialog<(String, String)>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -38,7 +37,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
             }
             Navigator.pop(
               dialogContext,
-              (trimmedName, description.trim(), instructions.trim()),
+              (trimmedName, description.trim()),
             );
           }
 
@@ -75,15 +74,6 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
                       maxLines: 2,
                       onChanged: (value) => description = value,
                     ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      initialValue: instructions,
-                      decoration: const InputDecoration(
-                        labelText: 'Instructions',
-                      ),
-                      maxLines: 4,
-                      onChanged: (value) => instructions = value,
-                    ),
                   ],
                 ),
               ),
@@ -109,7 +99,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
         widget.space,
         name: result.$1,
         description: result.$2,
-        instructions: result.$3,
+        instructions: widget.space.instructions,
         settings: widget.space.settings,
       );
       if (!mounted) return;

@@ -2,6 +2,8 @@ enum AxRouteKind {
   home,
   spaces,
   space,
+  spaceWorkflows,
+  spaceMembers,
   thread,
   run,
   people,
@@ -32,6 +34,12 @@ class AxNavigation {
 
   const AxNavigation.space(String spaceId)
       : this._(kind: AxRouteKind.space, spaceId: spaceId);
+
+  const AxNavigation.spaceWorkflows(String spaceId)
+      : this._(kind: AxRouteKind.spaceWorkflows, spaceId: spaceId);
+
+  const AxNavigation.spaceMembers(String spaceId)
+      : this._(kind: AxRouteKind.spaceMembers, spaceId: spaceId);
 
   const AxNavigation.thread(String spaceId, String threadId)
       : this._(kind: AxRouteKind.thread, spaceId: spaceId, threadId: threadId);
@@ -101,6 +109,14 @@ class AxNavigation {
       return const AxNavigation.archivedSpaces();
     }
     if (parts case ['workflows']) return const AxNavigation.workflows();
+    if (parts.length == 3 && parts[0] == 'spaces') {
+      if (parts[2] == 'workflows') {
+        return AxNavigation.spaceWorkflows(parts[1]);
+      }
+      if (parts[2] == 'members') {
+        return AxNavigation.spaceMembers(parts[1]);
+      }
+    }
     if (parts.length == 1 && parts[0] == 'workspaces') {
       return const AxNavigation.workspaces();
     }
@@ -136,6 +152,8 @@ class AxNavigation {
       AxRouteKind.home => Uri(path: '/'),
       AxRouteKind.spaces => Uri(path: '/spaces'),
       AxRouteKind.space => Uri(path: '/spaces/$spaceId'),
+      AxRouteKind.spaceWorkflows => Uri(path: '/spaces/$spaceId/workflows'),
+      AxRouteKind.spaceMembers => Uri(path: '/spaces/$spaceId/members'),
       AxRouteKind.thread => Uri(path: '/spaces/$spaceId/threads/$threadId'),
       AxRouteKind.run => threadId != null
           ? Uri(path: '/spaces/$spaceId/threads/$threadId/runs/$runId')

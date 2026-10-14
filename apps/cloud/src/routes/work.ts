@@ -8,4 +8,5 @@ export {
   handleGetWorkRequest,
   handleListWorkRequests,
   handleCancelWorkRequest,
+  handleClearWorkHistory,
 } from "./work-lifecycle.js";

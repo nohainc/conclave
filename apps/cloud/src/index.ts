@@ -156,6 +156,7 @@ export const routeHandlers = {
   handleRetryWorkRequest: handlers.handleRetryWorkRequest,
   handleValidateWorkRequest: handlers.handleValidateWorkRequest,
   handleCancelWorkRequest: handlers.handleCancelWorkRequest,
+  handleClearWorkHistory: handlers.handleClearWorkHistory,
   handleGetWorkRequest: handlers.handleGetWorkRequest,
   handleListWorkRequests: handlers.handleListWorkRequests,
   handleListConversations: handlers.handleListConversations,

@@ -49,6 +49,19 @@ class _ApiResponseClient extends http.BaseClient {
 }
 
 void main() {
+  test('clear history preserves the server error detail', () async {
+    final client = _JsonClient({'error': 'Cancel active Work Requests first'},
+        statusCode: 409);
+    final api = AxApiClient(baseUrl: 'https://cloud.test/api', client: client);
+    await expectLater(
+      api.clearThreadWorkHistory(threadId: 'thread-1'),
+      throwsA(isA<AxApiException>().having((error) => error.toString(),
+          'message', contains('Cancel active Work Requests first'))),
+    );
+    expect(client.lastRequest!.url.path,
+        '/api/threads/thread-1/work-history/clear');
+  });
+
   test('preserves the current account session identity for profile security',
       () {
     final session = AxSession.fromJson({

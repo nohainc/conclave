@@ -770,7 +770,7 @@ class _ThreadPageState extends State<ThreadPage>
           unawaited(_discussionCache
               .synchronize(widget.thread.id, reconcileNewest: true)
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-        } else if (type == 'thread.clearWork') {
+        } else if (type == 'thread.work_cleared') {
           // Discard retained pages before reconciling the remote clear.
           _workHistoryCache.resetHistory(widget.thread.id);
           unawaited(_refreshWorkTimeline()
@@ -1105,7 +1105,9 @@ class _ThreadPageState extends State<ThreadPage>
           chatStyle: true,
           enabled: widget.space.effectivePermissions.chat,
           onSend: _sendDiscussion,
-          sendInToolbar: true,
+          showMarkdownControlsInSuffix: !alignWithWork,
+          showSendInSuffix: !alignWithWork,
+          sendInToolbar: false,
           executionControlsBuilder: alignWithWork
               ? (_) => ValueListenableBuilder<double>(
                   valueListenable: _chatComposerSpaceChanges,

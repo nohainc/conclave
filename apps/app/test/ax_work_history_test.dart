@@ -33,6 +33,14 @@ class HistorySource extends AxFixtureDataSource {
           ]
         })
       ];
+  final clearCalls = <String>[];
+  Object? clearError;
+  @override
+  Future<void> clearThreadWorkHistory({required String threadId}) async {
+    clearCalls.add(threadId);
+    if (clearError != null) throw clearError!;
+  }
+
   final calls = <({String id, int limit, String? before, bool active})>[];
   final pending = <Completer<AxWorkRequestPage>>[];
   final detailPending = <Completer<AxWorkRequestStatus>>[];
@@ -71,6 +79,52 @@ void main() {
         requests: [request('30', status: status)], nextCursor: older));
     await load;
   }
+
+  test('clear deletes remotely even when history was never opened', () async {
+    await cache.clearHistory('unopened');
+    expect(source.clearCalls, ['unopened']);
+    expect(cache.peek('unopened').requests, isEmpty);
+  });
+
+  test('failed remote clear preserves history', () async {
+    await seed();
+    source.clearError = const AxApiException('Clear failed');
+    await expectLater(cache.clearHistory('w'), throwsA(isA<AxApiException>()));
+    expect(cache.peek('w').requests.single.id, '30');
+  });
+
+  test('remote clear fences an outstanding head read and future refresh',
+      () async {
+    await seed();
+    final stale = cache.refresh('w');
+    final pending = source.pending.last;
+    await cache.clearHistory('w');
+    expect(source.clearCalls, ['w']);
+    pending.complete(AxWorkRequestPage(requests: [request('30')]));
+    await stale;
+    expect(cache.peek('w').requests, isEmpty);
+    final fresh = cache.refresh('w');
+    source.pending.last.complete(AxWorkRequestPage(requests: []));
+    await fresh;
+    expect(cache.peek('w').requests, isEmpty);
+  });
+
+  test('confirmed remote clear fences older pages and preserves listeners',
+      () async {
+    await seed();
+    var notifications = 0;
+    final cancel = cache.watch('w', () => notifications++);
+    final stale = cache.loadOlder('w');
+    final pending = source.pending.last;
+    cache.resetHistory('w');
+    pending.complete(AxWorkRequestPage(requests: [request('10')]));
+    await stale;
+    expect(cache.peek('w').requests, isEmpty);
+    expect(cache.peek('w').olderCursor, isNull);
+    expect(notifications, greaterThan(0));
+    expect(source.clearCalls, isEmpty);
+    cancel();
+  });
 
   for (final loseResponse in [false, true]) {
     test(

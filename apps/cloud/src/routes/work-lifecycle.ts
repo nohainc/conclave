@@ -31,6 +31,8 @@ import {
 import type { SecurityEnv } from "./handlers.js";
 
 import { createOrGetRun } from "./work-creation.js";
+import { MutationIdempotency } from "./mutation-idempotency.js";
+import { publishCollaborationEvent } from "../collaboration-events.js";
 
 function historicalWorkflowName(
   snapshot: { readonly name?: unknown },
@@ -965,8 +967,7 @@ export async function handleListWorkRequests(
       [...steps]
         .reverse()
         .map((step) => step.errorCode)
-        .find((code) => typeof code === "string" && code.length > 0) ??
-      null;
+        .find((code) => typeof code === "string" && code.length > 0) ?? null;
     return {
       id,
       conversationId: row.conversationId ?? null,
@@ -1151,4 +1152,80 @@ export async function handleCancelWorkRequest(
     }
   }
   return json({ workRequestId, status: "cancelled" });
+}
+
+export async function handleClearWorkHistory(
+  request: Request,
+  env: SecurityEnv,
+  threadId: string,
+  context?: ExecutionContext,
+): Promise<Response> {
+  await authorizeThreadAccess(request, env, threadId, "manage", context);
+
+  const receipt = await MutationIdempotency.from(
+    request,
+    env.CONCLAVE_DB,
+    (context as any)?.userId ?? "",
+    `thread:${threadId}:clear-work-history`,
+    {},
+  );
+  const replay = await receipt?.replay();
+  if (replay) return replay;
+
+  const thread = await env.CONCLAVE_DB.prepare(
+    "SELECT space_id AS spaceId FROM threads WHERE id = ?1",
+  )
+    .bind(threadId)
+    .first<{ spaceId: string }>();
+  if (!thread) throw new HttpError(404, "Thread not found");
+
+  const active = await env.CONCLAVE_DB.prepare(
+    "SELECT COUNT(*) as count FROM work_requests WHERE thread_id = ?1 AND status IN ('queued', 'running', 'waiting')",
+  )
+    .bind(threadId)
+    .first<{ count: number }>();
+
+  if (active && active.count > 0) {
+    throw new HttpError(
+      409,
+      `Cannot clear history with ${active.count} active Work Request(s). Cancel first.`,
+    );
+  }
+
+  const now = new Date().toISOString();
+
+  const statements = [
+    // Delete the owning conversations so canonical history cascades legally.
+    env.CONCLAVE_DB.prepare(
+      "DELETE FROM conversations WHERE thread_id = ?1",
+    ).bind(threadId),
+    env.CONCLAVE_DB.prepare(
+      "DELETE FROM work_requests WHERE thread_id = ?1",
+    ).bind(threadId),
+    env.CONCLAVE_DB.prepare(
+      "UPDATE threads SET work_session_generation = work_session_generation + 1, updated_at = ?1 WHERE id = ?2",
+    ).bind(now, threadId),
+  ];
+  const reply = receipt
+    ? await receipt.commit(
+        { threadId, cleared: true },
+        200,
+        (receiptStatements) =>
+          env.CONCLAVE_DB.batch([...statements, ...receiptStatements]),
+      )
+    : (await env.CONCLAVE_DB.batch(statements), null);
+
+  if (reply) return reply;
+
+  await publishCollaborationEvent(
+    env,
+    "thread.work_cleared",
+    thread.spaceId,
+    threadId,
+    {
+      threadId,
+    },
+  );
+
+  return json({ threadId, cleared: true });
 }

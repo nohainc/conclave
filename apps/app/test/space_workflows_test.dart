@@ -32,6 +32,7 @@ void main() {
         home: Scaffold(
             body: SpacePage(
                 key: ValueKey(id),
+                section: SpacePageSection.workflows,
                 space: AxSpace(
                     id: id,
                     name: 'Space',
@@ -45,9 +46,8 @@ void main() {
                 onDelete: () {})));
     await tester.pumpWidget(page('s'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Workflows'));
-    await tester.pumpAndSettle();
-    expect(find.text('Workflows'), findsOneWidget);
+    expect(
+        find.textContaining('All Threads use these workflows'), findsOneWidget);
     expect(find.byTooltip('Refresh workflows'), findsOneWidget);
     expect(find.text('Workspaces'), findsNothing);
     expect(find.text('First'), findsOneWidget);
@@ -70,10 +70,6 @@ void main() {
     await cache.reset('direct');
     await tester.pumpAndSettle();
     expect(find.text('First'), findsOneWidget);
-    await tester.tap(find.text('Threads'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Workflows'));
-    await tester.pumpAndSettle();
     expect(source.spaceReads, 1);
 
     await tester.tap(find.byKey(const ValueKey('workflow-workspace')));
@@ -110,8 +106,6 @@ void main() {
         isNotNull);
     final spaceReads = source.spaceReads;
     await tester.pumpWidget(page('other', role: 'collaborator'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Workflows'));
     await tester.pumpAndSettle();
     expect(source.spaceReads, spaceReads + 1);
     expect(

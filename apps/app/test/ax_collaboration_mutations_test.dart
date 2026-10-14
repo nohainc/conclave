@@ -77,6 +77,9 @@ class CollaborationSource extends AxFixtureDataSource {
     deletes.add(response);
     return response.future;
   }
+
+  @override
+  Future<void> clearThreadWorkHistory({required String threadId}) async {}
 }
 
 void main() {

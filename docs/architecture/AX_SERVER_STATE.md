@@ -944,3 +944,25 @@ People is one session-global `['people']` cache shared by the read-only People p
 People list search is local to the hydrated session query. Shared Space names and authorized invitation destinations arrive together in the People response; details and invitation pickers observe the same query without another load. Add to Space refreshes People and registered target invitation/audit queries after success and fences refreshes at session boundaries. Transport reconnect status uses the existing shell banner; failed reads preserve cached details and disable invitation submission until recovery.
 
 The Space picker and reverse People flow use one `SpaceInvitationDialog` and `AxSpaceInvitations` writer. Open dialogs observe People and existing registered Space member/invitation queries without fetching on opening. `pendingInvitationSpaceIds` carries authorized per-Person status by stable identity. Successful invitations refresh People and target invitation/audit caches; partial failures preserve only unsent selections. All write outcomes are fenced at session changes. Cached private search remains local, including the invitation picker.
+
+### Confirmed Work history clearing
+
+Work history clearing calls the Cloud deletion endpoint before clearing local
+state. Rejected deletion preserves the displayed history. A successful deletion
+replaces the history context, discards retained pages, and fences outstanding
+head, detail, discovery, and older-page reads. Remote `thread.work_cleared` events
+apply the same cache reset before refresh so retained rows cannot reappear.
+The action also works for Threads whose history has not been opened locally.
+
+Cloud clears the owning Conversations and their cascading canonical history,
+then the Thread's Work Requests, in one transaction with the provider session
+generation increment. Discussion Chat messages remain separate and untouched.
+The clear endpoint returns a JSON Response on both receipt and non-receipt paths.
+AX includes Cloud's error detail when deletion is rejected. The existing
+`0054_thread_work_session_generation.sql` baseline must be applied before this
+endpoint is deployed; this correction adds no migration.
+
+The Work history clear handler is exported through `routes/handlers.ts` and
+registered in the Cloud entrypoint's production route map. Regression coverage
+executes the clear endpoint through that map against the migrated SQLite schema,
+so a direct-handler test cannot hide missing production registration.

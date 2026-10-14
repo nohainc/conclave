@@ -93,3 +93,27 @@ it.each(["research", "plan", "implement", "test", "verify"])(
     );
   },
 );
+
+it("uses work session generation to create fresh sessions for direct Work, with gen 0 as legacy", () => {
+  const baseKey = `work-session-${createHash("sha256").update("thread:thread-1:direct:work-conversation").digest("hex")}`;
+  const params = {
+    workBindingId: "direct" as const,
+    threadId: "thread-1",
+    workRequestId: "request-1",
+    stepKind: "implement",
+  };
+  expect(workStepSessionKey(params)).toBe(baseKey);
+  expect(workStepSessionKey({ ...params, workSessionGeneration: 0 })).toBe(
+    baseKey,
+  );
+  const gen1Key = workStepSessionKey({ ...params, workSessionGeneration: 1 });
+  expect(gen1Key).not.toBe(baseKey);
+  expect(gen1Key).toBe(
+    `work-session-${createHash("sha256").update("thread:thread-1:direct:work-conversation:gen-1").digest("hex")}`,
+  );
+  const gen2Key = workStepSessionKey({ ...params, workSessionGeneration: 2 });
+  expect(gen2Key).not.toBe(gen1Key);
+  expect(gen2Key).toBe(
+    `work-session-${createHash("sha256").update("thread:thread-1:direct:work-conversation:gen-2").digest("hex")}`,
+  );
+});

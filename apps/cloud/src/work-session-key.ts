@@ -9,10 +9,11 @@ export function workStepSessionKey(params: {
   readonly retryStepKind?: unknown;
   readonly retrySessionStrategy?: unknown;
   readonly retryNumber?: unknown;
+  readonly workSessionGeneration?: number;
 }): string {
   const base =
     params.workBindingId === "direct"
-      ? `thread:${params.threadId}:direct:work-conversation`
+      ? `thread:${params.threadId}:direct:work-conversation${params.workSessionGeneration && params.workSessionGeneration > 0 ? `:gen-${params.workSessionGeneration}` : ""}`
       : params.workBindingId === "chat"
         ? `thread:${params.threadId}:chat:conversation`
         : `work-request:${params.workRequestId}:${params.stepKind}`;

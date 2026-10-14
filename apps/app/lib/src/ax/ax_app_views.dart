@@ -170,6 +170,25 @@ extension _AxAppViews on _AxAppStateMixin {
     );
   }
 
+  Widget _spaceResourceView(SpacePageSection section) {
+    final space = selectedSpace;
+    if (space == null) return _homeView();
+    return SpacePage(
+      key: ValueKey('space-${section.name}-page-${space.id}'),
+      section: section,
+      spaceThreads: store.spaceThreads,
+      tabQueries: store.spaceTabs,
+      mutations: store.collaboration,
+      space: space,
+      dataSource: widget.dataSource,
+      viewerEmail: store.auth.viewer?.email,
+      onOpenThread: (threadId) => _openThread(space.id, threadId),
+      onEdit: () => _editSpace(space),
+      onArchive: () => _archiveSpace(space),
+      onDelete: () => _deleteSpace(space.id),
+    );
+  }
+
   void _openThread(String spaceId, String threadId) {
     _navigateTo(AxNavigation.thread(spaceId, threadId));
   }

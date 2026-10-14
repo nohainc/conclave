@@ -119,7 +119,7 @@ abstract final class ConclaveBrand {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: ConclaveColors.surfaceLight,
+        fillColor: ConclaveColors.composerBackgroundLight,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(ConclaveRadius.md),
           borderSide: const BorderSide(color: ConclaveColors.borderLight),

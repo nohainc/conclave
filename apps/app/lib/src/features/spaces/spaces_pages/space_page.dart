@@ -1,5 +1,7 @@
 part of '../spaces_pages.dart';
 
+enum SpacePageSection { threads, workflows, members }
+
 class SpacePage extends StatelessWidget {
   const SpacePage({
     super.key,
@@ -10,6 +12,7 @@ class SpacePage extends StatelessWidget {
     required this.onArchive,
     required this.onDelete,
     this.onSpaceUpdated,
+    this.section = SpacePageSection.threads,
     this.spaceThreads,
     this.tabQueries,
     this.mutations,
@@ -23,6 +26,7 @@ class SpacePage extends StatelessWidget {
   final VoidCallback onArchive;
   final VoidCallback onDelete;
   final ValueChanged<AxSpace>? onSpaceUpdated;
+  final SpacePageSection section;
   final AxSpaceThreads? spaceThreads;
   final AxSpaceTabQueries? tabQueries;
   final AxCollaborationMutations? mutations;
@@ -38,6 +42,7 @@ class SpacePage extends StatelessWidget {
         onArchive: onArchive,
         onDelete: onDelete,
         onSpaceUpdated: onSpaceUpdated,
+        section: section,
         spaceThreads: spaceThreads,
         tabQueries: tabQueries,
         mutations: mutations,
@@ -55,6 +60,7 @@ class _SpaceWorkspace extends StatefulWidget {
     required this.onArchive,
     required this.onDelete,
     this.onSpaceUpdated,
+    this.section = SpacePageSection.threads,
     this.spaceThreads,
     this.tabQueries,
     this.mutations,
@@ -68,6 +74,7 @@ class _SpaceWorkspace extends StatefulWidget {
   final VoidCallback onArchive;
   final VoidCallback onDelete;
   final ValueChanged<AxSpace>? onSpaceUpdated;
+  final SpacePageSection section;
   final AxSpaceThreads? spaceThreads;
   final AxSpaceTabQueries? tabQueries;
   final AxCollaborationMutations? mutations;
@@ -77,9 +84,7 @@ class _SpaceWorkspace extends StatefulWidget {
   State<_SpaceWorkspace> createState() => _SpaceWorkspaceState();
 }
 
-class _SpaceWorkspaceState extends State<_SpaceWorkspace>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
   late List<AxThread> threads;
   List<AxSpaceMember> members = const [];
   List<AxSpaceInvitation> invitations = const [];
@@ -93,7 +98,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   late AxSpaceThreads _streams;
   late AxCollaborationMutations _collaboration;
   final _tabCancels = <void Function()>[];
-  int _activeTab = -1;
   bool get canManage => widget.space.effectivePermissions.manageOwnThreads;
   bool get canInvite => widget.space.role == 'owner';
   final _savingMembers = <String>{};
@@ -102,10 +106,8 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _configureQueries();
-    _tabController.addListener(_onTabChanged);
-    _onTabChanged();
+    _bindActiveSection();
   }
 
   void _configureQueries() {
@@ -125,12 +127,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
     threads = _streams.peek(widget.space.id);
   }
 
-  void _onTabChanged() {
-    if (_activeTab == _tabController.index) return;
-    _activeTab = _tabController.index;
-    _bindActiveTab();
-  }
-
   void _cancelTab() {
     for (final cancel in _tabCancels) {
       cancel();
@@ -144,10 +140,10 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
         .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
   }
 
-  void _bindActiveTab() {
+  void _bindActiveSection() {
     _cancelTab();
     final id = widget.space.id;
-    if (_activeTab == 0) {
+    if (widget.section == SpacePageSection.threads) {
       final query = _streams.query(id);
       void apply(AxQueryState<List<AxThread>> state) {
         threads = state.data ?? const [];
@@ -160,7 +156,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
         if (mounted) _updateState(() => apply(state));
       }, fireImmediately: false));
       _ensure(_streams.engine, query);
-    } else if (_activeTab == 2) {
+    } else if (widget.section == SpacePageSection.members) {
       final membersQuery = _queries.members(id);
       final invitationsQuery = _queries.invitations(id);
       void apply() {
@@ -197,18 +193,17 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
         oldWidget.dataSource != widget.dataSource ||
         oldWidget.spaceThreads != widget.spaceThreads ||
         oldWidget.tabQueries != widget.tabQueries ||
-        oldWidget.mutations != widget.mutations) {
+        oldWidget.mutations != widget.mutations ||
+        oldWidget.section != widget.section) {
       _cancelTab();
       _configureQueries();
-      _bindActiveTab();
+      _bindActiveSection();
     }
   }
 
   @override
   void dispose() {
     _cancelTab();
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -329,55 +324,20 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace>
                             ),
                           ],
                         ),
-                        if (widget.space.instructions.trim().isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 24),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                widget.space.instructions.trim(),
-                                textAlign: TextAlign.left,
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
-
-                  // Space resource tabs share session caches.
-                  AnimatedBuilder(
-                    animation: _tabController,
-                    builder: (context, _) => Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Center(
-                          child: TabBar(
-                            controller: _tabController,
-                            isScrollable: true,
-                            tabAlignment: TabAlignment.center,
-                            tabs: const [
-                              Tab(text: 'Threads'),
-                              Tab(text: 'Workflows'),
-                              Tab(text: 'Members'),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        if (_tabController.index == 0)
-                          _threadsTab()
-                        else if (_tabController.index == 1)
-                          WorkflowsPage(
-                              catalogs: AxSessionCatalogs.forSource(
-                                  widget.dataSource),
-                              configurations: _workflowConfigurations,
-                              viewerEmail: widget.viewerEmail,
-                              canEdit: widget.space.role == 'owner')
-                        else
-                          _membersTab(),
-                      ],
-                    ),
-                  ),
+                  if (widget.section == SpacePageSection.workflows)
+                    WorkflowsPage(
+                        catalogs:
+                            AxSessionCatalogs.forSource(widget.dataSource),
+                        configurations: _workflowConfigurations,
+                        viewerEmail: widget.viewerEmail,
+                        canEdit: widget.space.role == 'owner')
+                  else if (widget.section == SpacePageSection.members)
+                    _membersTab()
+                  else
+                    _threadsTab(),
                 ],
               ),
             ),

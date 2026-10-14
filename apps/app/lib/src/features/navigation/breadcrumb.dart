@@ -36,6 +36,26 @@ class AppBreadcrumb extends StatelessWidget {
       AxRouteKind.space => [
           _breadcrumbText(space?.name ?? 'Space', isCurrent: true),
         ],
+      AxRouteKind.spaceWorkflows => [
+          if (space != null) ...[
+            _breadcrumbLink(
+              space.name,
+              () => onNavigateTo(AxNavigation.space(space.id)),
+            ),
+            _divider(),
+          ],
+          _breadcrumbText('Workflows', isCurrent: true),
+        ],
+      AxRouteKind.spaceMembers => [
+          if (space != null) ...[
+            _breadcrumbLink(
+              space.name,
+              () => onNavigateTo(AxNavigation.space(space.id)),
+            ),
+            _divider(),
+          ],
+          _breadcrumbText('Members', isCurrent: true),
+        ],
       AxRouteKind.thread => [
           if (space != null) ...[
             _breadcrumbLink(

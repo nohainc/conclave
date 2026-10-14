@@ -227,6 +227,17 @@ void main() {
           isFalse);
       expect(spaceContext.isNavActive(const AxNavigation.spaces()), isTrue);
 
+      const workflowsContext = AxShellContext(
+        navigation: AxNavigation.spaceWorkflows('space-1'),
+        spaces: [],
+      );
+      expect(workflowsContext.isNavActive(const AxNavigation.space('space-1')),
+          isTrue);
+      expect(
+          workflowsContext
+              .isNavActive(const AxNavigation.spaceWorkflows('space-1')),
+          isTrue);
+
       const threadContext = AxShellContext(
         navigation: AxNavigation.thread('space-1', 'ws-1'),
         spaces: [],
@@ -238,11 +249,50 @@ void main() {
       expect(threadContext.isNavActive(const AxNavigation.spaces()), isTrue);
     });
 
+    testWidgets('active Space menu exposes actions and resource destinations',
+        (tester) async {
+      AxNavigation? navigatedTo;
+      const space = AxSpace(
+        id: 'space-1',
+        name: 'Space One',
+        role: 'owner',
+        branch: '',
+        lastActivity: '',
+      );
+      await tester.pumpWidget(MaterialApp(
+        theme: ConclaveBrand.darkTheme(),
+        home: Scaffold(
+          body: SpaceTree(
+            shellContext: const AxShellContext(
+              navigation: AxNavigation.space('space-1'),
+              spaces: [space],
+            ),
+            onNavigateTo: (route) => navigatedTo = route,
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Space menu'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit Space'), findsOneWidget);
+      expect(find.text('Archive Space'), findsOneWidget);
+      expect(find.text('Delete Space'), findsOneWidget);
+      expect(find.text('Workflows'), findsOneWidget);
+      expect(find.text('Members'), findsOneWidget);
+
+      await tester.tap(find.text('Workflows'));
+      await tester.pumpAndSettle();
+      expect(navigatedTo, const AxNavigation.spaceWorkflows('space-1'));
+    });
+
     test('isNavActive covers every route kind accurately', () {
-      // Spaces section active for spaces, space, thread, and run
+      // Spaces section active for spaces, space resources, thread, and run
       const routesInSpaces = [
         AxNavigation.spaces(),
         AxNavigation.space('p-1'),
+        AxNavigation.spaceWorkflows('p-1'),
+        AxNavigation.spaceMembers('p-1'),
         AxNavigation.thread('p-1', 'ws-1'),
         AxNavigation.run('p-1', 'r-1'),
         AxNavigation.thread('p-1', 'ws-2'),

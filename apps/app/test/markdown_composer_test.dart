@@ -82,15 +82,14 @@ void main() {
     expect(find.text('Write'), findsOneWidget);
     expect(tester.getCenter(find.text('Write')).dy,
         closeTo(tester.getCenter(find.byTooltip('Task list')).dy, 1));
-    expect(find.byIcon(Icons.send_rounded), findsNothing);
-    expect(find.text('Send'), findsOneWidget);
-    expect(tester.getCenter(find.text('Send')).dy,
+    expect(find.byIcon(Icons.send_rounded), findsOneWidget);
+    expect(tester.getCenter(find.byTooltip('Send message')).dy,
         closeTo(tester.getCenter(find.text('Write')).dy, 1));
-    expect(tester.getTopLeft(find.text('Send')).dx,
+    expect(tester.getTopLeft(find.byTooltip('Send message')).dx,
         greaterThan(tester.getTopLeft(find.text('Write')).dx));
     controller.text = 'Ready to send';
     await tester.pump();
-    await tester.tap(find.text('Send'));
+    await tester.tap(find.byTooltip('Send message'));
     await tester.pump();
     expect(controller.text, isEmpty);
     expect(find.text('Preview'), findsOneWidget);
@@ -101,6 +100,38 @@ void main() {
     expect(find.byTooltip('Bold'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('two-pane Chat puts Markdown and Send in the secondary row',
+      (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: MarkdownComposer(
+      controller: controller,
+      chatStyle: true,
+      onSend: () {},
+      showMarkdownControlsInSuffix: false,
+      showSendInSuffix: false,
+    ))));
+
+    expect(
+        find.descendant(
+            of: find.byType(TextField),
+            matching: find.byTooltip('Show Markdown controls')),
+        findsNothing);
+    expect(
+        find.descendant(
+            of: find.byType(TextField),
+            matching: find.byTooltip('Send message')),
+        findsNothing);
+    expect(find.byTooltip('Show Markdown controls'), findsOneWidget);
+    expect(find.byTooltip('Send message'), findsOneWidget);
+    expect(
+        tester.getCenter(find.byTooltip('Show Markdown controls')).dy,
+        closeTo(tester.getCenter(find.byTooltip('Send message')).dy, 1));
+  });
+
   test('empty selections, multiline prefixes and quote toggle', () {
     for (final format in MarkdownFormat.values) {
       final controller = TextEditingController();

@@ -101,6 +101,7 @@ class MarkdownComposer extends StatefulWidget {
       this.hintText,
       this.minLines = 2,
       this.maxLines = 8,
+      this.showMarkdownControls = true,
       this.showMarkdownControlsInSuffix = true,
       this.showSendInSuffix = true});
 
@@ -120,6 +121,7 @@ class MarkdownComposer extends StatefulWidget {
   final String? hintText;
   final int minLines;
   final int maxLines;
+  final bool showMarkdownControls;
   final bool showMarkdownControlsInSuffix;
   final bool showSendInSuffix;
 
@@ -181,6 +183,10 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
     _focus.requestFocus();
   }
 
+  bool get _secondaryToolbarVisible =>
+      widget.chatStyle &&
+      (_showFormatting || _preview || !widget.showMarkdownControlsInSuffix);
+
   Widget _formattingToolbar() =>
       Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
         for (final (format, label, icon) in const [
@@ -215,7 +221,9 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
             onPressed: () => setState(() => _preview = !_preview),
             child: Text(_preview ? 'Write' : 'Preview'),
           ),
-        if (widget.chatStyle && !widget.showMarkdownControlsInSuffix)
+        if (widget.chatStyle &&
+            widget.showMarkdownControls &&
+            !widget.showMarkdownControlsInSuffix)
           IconButton(
             tooltip: _showFormatting
                 ? 'Hide Markdown controls'
@@ -230,19 +238,16 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
             onPressed: () => setState(() => _showFormatting = !_showFormatting),
           ),
         if (widget.chatStyle &&
-            !widget.showSendInSuffix &&
             widget.onSend != null &&
-            !widget.sendInToolbar)
-          Tooltip(
-              message: widget.sendTooltip,
-              child: IconButton(
-                tooltip: widget.sendTooltip,
-                onPressed: widget.enabled && widget.sendEnabled
-                    ? widget.onSend
-                    : null,
-                color: Theme.of(context).colorScheme.primary,
-                icon: const Icon(Icons.send_rounded, size: 18),
-              )),
+            !widget.sendInToolbar &&
+            (!widget.showSendInSuffix || _preview))
+          IconButton(
+            tooltip: widget.sendTooltip,
+            onPressed:
+                widget.enabled && widget.sendEnabled ? widget.onSend : null,
+            color: Theme.of(context).colorScheme.primary,
+            icon: const Icon(Icons.send_rounded, size: 18),
+          ),
       ]);
 
   @override
@@ -297,14 +302,16 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                     ? const EdgeInsets.fromLTRB(14, 12, 10, 12)
                     : null,
                 suffixIcon: widget.chatStyle &&
-                        (widget.showMarkdownControlsInSuffix ||
+                        ((widget.showMarkdownControls &&
+                                widget.showMarkdownControlsInSuffix) ||
                             (widget.onSend != null &&
                                 !widget.sendInToolbar &&
                                 widget.showSendInSuffix))
                     ? Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          if (widget.showMarkdownControlsInSuffix)
+                          if (widget.showMarkdownControls &&
+                              widget.showMarkdownControlsInSuffix)
                             IconButton(
                               tooltip: _showFormatting
                                   ? 'Hide Markdown controls'
@@ -312,8 +319,9 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                               icon: Icon(
                                 Icons.text_format,
                                 size: 18,
-                                color:
-                                    _showFormatting ? colorScheme.primary : null,
+                                color: _showFormatting
+                                    ? colorScheme.primary
+                                    : null,
                               ),
                               onPressed: () => setState(
                                   () => _showFormatting = !_showFormatting),
@@ -417,7 +425,11 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
               widget.executionControlsBuilder != null &&
               widget.additionalControlsBuilder != null)
             widget.additionalControlsBuilder!(_inputKey),
-          if (widget.chatStyle && widget.sendInToolbar)
+          if (widget.chatStyle &&
+              widget.sendInToolbar &&
+              (widget.executionControlsBuilder != null ||
+                  widget.additionalControlsBuilder != null ||
+                  !_secondaryToolbarVisible))
             Row(children: [
               if (widget.executionControlsBuilder != null)
                 Expanded(child: widget.executionControlsBuilder!(_inputKey))

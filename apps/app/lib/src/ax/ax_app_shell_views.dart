@@ -45,6 +45,9 @@ extension _AxAppShellViews on _AxAppStateMixin {
                               onToggleSpaceExpanded: _toggleSpaceExpanded,
                               onCreateSpace: _createSpace,
                               onCreateThread: _createThread,
+                              onEditSpace: _editSpace,
+                              onArchiveSpace: _archiveSpace,
+                              onDeleteSpace: (space) => _deleteSpace(space.id),
                               onRenameThread: _renameThreadFromSidebar,
                               onSetThreadArchived:
                                   _setThreadArchivedFromSidebar,
@@ -104,6 +107,10 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                     onToggleSpaceExpanded: _toggleSpaceExpanded,
                                     onCreateSpace: _createSpace,
                                     onCreateThread: _createThread,
+                                    onEditSpace: _editSpace,
+                                    onArchiveSpace: _archiveSpace,
+                                    onDeleteSpace: (space) =>
+                                        _deleteSpace(space.id),
                                     onRenameThread: _renameThreadFromSidebar,
                                     onSetThreadArchived:
                                         _setThreadArchivedFromSidebar,
@@ -580,13 +587,39 @@ extension _AxAppShellViews on _AxAppStateMixin {
                         padding: EdgeInsets.zero,
                         child: _threadView(),
                       )
-                    : SingleChildScrollView(
-                        padding: EdgeInsets.fromLTRB(
-                            compact ? 18 : 34, 26, compact ? 18 : 34, 40),
-                        child: showRunDetails
-                            ? _runDetailsView(compact)
-                            : _homeView(),
-                      ),
+                    : navigation.kind == AxRouteKind.space
+                        ? SingleChildScrollView(
+                            padding: EdgeInsets.fromLTRB(
+                                compact ? 18 : 34, 26, compact ? 18 : 34, 40),
+                            child: _spaceOverviewView(),
+                          )
+                        : navigation.kind == AxRouteKind.spaceWorkflows
+                            ? SingleChildScrollView(
+                                padding: EdgeInsets.fromLTRB(compact ? 18 : 34,
+                                    26, compact ? 18 : 34, 40),
+                                child: _spaceResourceView(
+                                    SpacePageSection.workflows),
+                              )
+                            : navigation.kind == AxRouteKind.spaceMembers
+                                ? SingleChildScrollView(
+                                    padding: EdgeInsets.fromLTRB(
+                                        compact ? 18 : 34,
+                                        26,
+                                        compact ? 18 : 34,
+                                        40),
+                                    child: _spaceResourceView(
+                                        SpacePageSection.members),
+                                  )
+                                : SingleChildScrollView(
+                                    padding: EdgeInsets.fromLTRB(
+                                        compact ? 18 : 34,
+                                        26,
+                                        compact ? 18 : 34,
+                                        40),
+                                    child: showRunDetails
+                                        ? _runDetailsView(compact)
+                                        : _homeView(),
+                                  ),
               ),
             ]),
             Positioned(
@@ -807,7 +840,11 @@ class _FloatingRealtimeStatusBannerState
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5)),
+                    border: Border.all(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withValues(alpha: 0.5)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -835,8 +872,8 @@ class _FloatingRealtimeStatusBannerState
                         height: 12,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(ConclaveColors.warning),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              ConclaveColors.warning),
                         ),
                       ),
                     ],

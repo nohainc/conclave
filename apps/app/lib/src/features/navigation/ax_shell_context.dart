@@ -260,12 +260,21 @@ class AxShellContext {
       case AxRouteKind.spaces:
         return navigation.kind == AxRouteKind.spaces ||
             navigation.kind == AxRouteKind.space ||
+            navigation.kind == AxRouteKind.spaceWorkflows ||
+            navigation.kind == AxRouteKind.spaceMembers ||
             navigation.kind == AxRouteKind.thread ||
             navigation.kind == AxRouteKind.run;
       case AxRouteKind.space:
         return (navigation.kind == AxRouteKind.space ||
+                navigation.kind == AxRouteKind.spaceWorkflows ||
+                navigation.kind == AxRouteKind.spaceMembers ||
                 navigation.kind == AxRouteKind.thread ||
                 navigation.kind == AxRouteKind.run) &&
+            target.spaceId != null &&
+            navigation.spaceId == target.spaceId;
+      case AxRouteKind.spaceWorkflows:
+      case AxRouteKind.spaceMembers:
+        return navigation.kind == target.kind &&
             target.spaceId != null &&
             navigation.spaceId == target.spaceId;
       case AxRouteKind.thread:

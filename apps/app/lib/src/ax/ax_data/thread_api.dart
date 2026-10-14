@@ -105,6 +105,29 @@ mixin _ThreadApi on _AxApiClientCore {
   }
 
   @override
+  Future<void> clearThreadWorkHistory({required String threadId}) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/threads/$threadId/work-history/clear'),
+      headers: _headers(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final errorBody = jsonDecode(response.body);
+        if (errorBody is Map && errorBody['error'] is String) {
+          detail = ': ${errorBody['error']}';
+        }
+      } on Object {
+        // Keep the status-only message for non-JSON responses.
+      }
+      throw AxApiException(
+        'Clear work history failed (${response.statusCode})$detail',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  @override
   Future<String> createWorkRequest({
     required String threadId,
     required String workflowId,

@@ -464,6 +464,9 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
   Future<void> deleteThread({required String threadId}) async {}
 
   @override
+  Future<void> clearThreadWorkHistory({required String threadId}) async {}
+
+  @override
   Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => const [];
 
   @override

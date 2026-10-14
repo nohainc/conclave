@@ -17,6 +17,9 @@ class SpaceTree extends StatelessWidget {
     this.onToggleSpaceExpanded,
     this.onCreateSpace,
     this.onCreateThread,
+    this.onEditSpace,
+    this.onArchiveSpace,
+    this.onDeleteSpace,
     this.onRenameThread,
     this.onSetThreadArchived,
     this.onClearChatHistory,
@@ -30,6 +33,9 @@ class SpaceTree extends StatelessWidget {
   final ValueChanged<String>? onToggleSpaceExpanded;
   final VoidCallback? onCreateSpace;
   final ValueChanged<AxSpace>? onCreateThread;
+  final Future<void> Function(AxSpace space)? onEditSpace;
+  final Future<void> Function(AxSpace space)? onArchiveSpace;
+  final Future<void> Function(AxSpace space)? onDeleteSpace;
   final Future<void> Function(AxThread thread, String name)? onRenameThread;
   final Future<void> Function(AxThread thread, bool archived)?
       onSetThreadArchived;
@@ -161,7 +167,11 @@ class SpaceTree extends StatelessWidget {
   Widget _spaceItem(BuildContext context, AxSpace space, List<AxThread> threads,
       {bool loading = false, Object? error}) {
     final isSpaceFocused = shellContext.navigation.spaceId == space.id &&
-        shellContext.navigation.kind == AxRouteKind.space;
+        const {
+          AxRouteKind.space,
+          AxRouteKind.spaceWorkflows,
+          AxRouteKind.spaceMembers,
+        }.contains(shellContext.navigation.kind);
     final isExpanded = shellContext.isSpaceExpanded(space.id);
     final visibleThreads =
         threads.where((t) => t.status.toLowerCase() != 'archived').toList();
@@ -215,6 +225,7 @@ class SpaceTree extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (isSpaceFocused) _spaceMenu(context, space),
                 ],
               ),
             ),
@@ -513,6 +524,140 @@ class SpaceTree extends StatelessWidget {
                 color: ConclaveColors.error,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _spaceMenu(BuildContext context, AxSpace space) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final menuStyle = MenuStyle(
+      backgroundColor: WidgetStatePropertyAll(
+        ConclaveColors.navigationRaised(isDark),
+      ),
+      surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+      elevation: const WidgetStatePropertyAll(12),
+      shadowColor: WidgetStatePropertyAll(
+        Colors.black.withValues(alpha: isDark ? 0.7 : 0.18),
+      ),
+      shape: WidgetStatePropertyAll(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: ConclaveColors.navigationBorder(isDark),
+            width: 1,
+          ),
+        ),
+      ),
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+      ),
+    );
+
+    ButtonStyle itemStyle({bool isDestructive = false}) => ButtonStyle(
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          ),
+          minimumSize: const WidgetStatePropertyAll(Size(196, 36)),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.hovered) ||
+                states.contains(WidgetState.focused)) {
+              return isDestructive
+                  ? ConclaveColors.error.withValues(alpha: 0.12)
+                  : ConclaveColors.navigationHover(isDark);
+            }
+            return null;
+          }),
+        );
+
+    Widget divider() => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+          child: Divider(
+            height: 1,
+            color: ConclaveColors.navigationBorder(isDark),
+          ),
+        );
+
+    final iconColor = isDark ? Colors.white70 : Colors.black87;
+    void select(String action) {
+      switch (action) {
+        case 'edit':
+          unawaited(onEditSpace?.call(space));
+          break;
+        case 'archive':
+          unawaited(onArchiveSpace?.call(space));
+          break;
+        case 'delete':
+          unawaited(onDeleteSpace?.call(space));
+          break;
+        case 'workflows':
+          onNavigateTo(AxNavigation.spaceWorkflows(space.id));
+          break;
+        case 'members':
+          onNavigateTo(AxNavigation.spaceMembers(space.id));
+          break;
+      }
+    }
+
+    return SizedBox(
+      width: 28,
+      height: 28,
+      child: MenuAnchor(
+        style: menuStyle,
+        builder: (context, controller, child) => IconButton(
+          tooltip: 'Space menu',
+          icon: const Icon(Icons.more_vert, color: Colors.white60, size: 18),
+          splashRadius: 14,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          onPressed: () {
+            if (controller.isOpen) {
+              controller.close();
+            } else {
+              controller.open();
+            }
+          },
+        ),
+        menuChildren: [
+          MenuItemButton(
+            style: itemStyle(),
+            leadingIcon: Icon(Icons.edit_outlined, size: 16, color: iconColor),
+            onPressed: () => select('edit'),
+            child: const Text('Edit Space'),
+          ),
+          MenuItemButton(
+            style: itemStyle(),
+            leadingIcon:
+                Icon(Icons.archive_outlined, size: 16, color: iconColor),
+            onPressed: () => select('archive'),
+            child: const Text('Archive Space'),
+          ),
+          divider(),
+          MenuItemButton(
+            style: itemStyle(),
+            leadingIcon:
+                Icon(Icons.account_tree_outlined, size: 16, color: iconColor),
+            onPressed: () => select('workflows'),
+            child: const Text('Workflows'),
+          ),
+          MenuItemButton(
+            style: itemStyle(),
+            leadingIcon: Icon(Icons.people_outline, size: 16, color: iconColor),
+            onPressed: () => select('members'),
+            child: const Text('Members'),
+          ),
+          divider(),
+          MenuItemButton(
+            style: itemStyle(isDestructive: true),
+            leadingIcon: const Icon(Icons.delete_rounded,
+                size: 16, color: ConclaveColors.error),
+            onPressed: () => select('delete'),
+            child: const Text('Delete Space',
+                style: TextStyle(color: ConclaveColors.error)),
           ),
         ],
       ),

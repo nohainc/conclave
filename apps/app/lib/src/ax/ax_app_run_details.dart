@@ -23,6 +23,10 @@ extension _AxAppRunDetails on _AxAppStateMixin {
         return _homeView();
       case AxRouteKind.space:
         return _spaceOverviewView();
+      case AxRouteKind.spaceWorkflows:
+        return _spaceResourceView(SpacePageSection.workflows);
+      case AxRouteKind.spaceMembers:
+        return _spaceResourceView(SpacePageSection.members);
       case AxRouteKind.thread:
         return _threadView();
       case AxRouteKind.search:
@@ -47,7 +51,10 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                       children: [
                         Text(selectedSpace?.name ?? 'Space',
                             style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                                fontSize: 12)),
                         const SizedBox(height: 7),
                         Text('Run details',
                             style: TextStyle(
@@ -59,7 +66,10 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                         Text(
                             'Follow execution, results, verification, and diagnostics.',
                             style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13)),
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                                fontSize: 13)),
                       ]),
                 ],
               ),
@@ -213,7 +223,10 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                                 ? 'Select New work request to begin'
                                 : 'Work Request ${run.id}',
                             style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11))
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                                fontSize: 11))
                       ]),
                   _statusChip(_statusLabel(status), _runStatusColor(status)),
                   const SizedBox(width: 5),
@@ -221,7 +234,9 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                     Text(
                         '${run?.verifiedCriterionCount ?? 0} / ${run?.criterionCount ?? 0} criteria verified',
                         style: TextStyle(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontSize: 11)),
                   OutlinedButton.icon(
                       onPressed: canControl
                           ? () => _controlRun(paused ? 'resume' : 'pause')
@@ -242,7 +257,11 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                       label: const Text('Cancel'),
                       style: OutlinedButton.styleFrom(
                           foregroundColor: Theme.of(context).colorScheme.error,
-                          side: BorderSide(color: Theme.of(context).colorScheme.error.withValues(alpha: 0.3)),
+                          side: BorderSide(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .error
+                                  .withValues(alpha: 0.3)),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 9))),
                 ])));
@@ -304,14 +323,16 @@ extension _AxAppRunDetails on _AxAppStateMixin {
   Widget _contextLine(IconData icon, String label, String value) => SizedBox(
         width: 190,
         child: Row(children: [
-          Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          Icon(icon,
+              size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
           Expanded(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(label,
-                  style:
-                      TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 11)),
               Text(value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -361,8 +382,9 @@ extension _AxAppRunDetails on _AxAppStateMixin {
             else
               Text(
                   'Correlation IDs: ${executionSnapshot.events.where((event) => event.correlationId != null).map((event) => event.correlationId).toSet().join(', ')}',
-                  style:
-                      TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
           ],
         ),
       );
@@ -437,10 +459,14 @@ extension _AxAppRunDetails on _AxAppStateMixin {
             ]),
             const SizedBox(height: 6),
             Text(decision.summary,
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 11)),
             const SizedBox(height: 4),
             Text('${decision.worker} · ${decision.evidence}',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 11)),
           ],
         ],
       ),
@@ -496,7 +522,9 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                     const SizedBox(height: 3),
                     Text('${task.worker}  ·  ${task.status.name}',
                         style: TextStyle(
-                            fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant))
+                            fontSize: 11,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant))
                   ])),
               if (task.status == TaskStatus.running)
                 SizedBox(
@@ -510,7 +538,8 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                             ConclaveColors.primarySoftColor(isDark))),
               const SizedBox(width: 5),
               Icon(Icons.chevron_right_rounded,
-                  size: 17, color: Theme.of(context).colorScheme.onSurfaceVariant)
+                  size: 17,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)
             ])));
   }
 
@@ -539,7 +568,9 @@ extension _AxAppRunDetails on _AxAppStateMixin {
           const SizedBox(height: 8),
           Text(task.detail,
               style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12, height: 1.45)),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 12,
+                  height: 1.45)),
           if (task.errorCode != null) ...[
             const SizedBox(height: 8),
             Text(task.errorMessage ?? 'The assignment could not be completed.',
@@ -590,13 +621,15 @@ extension _AxAppRunDetails on _AxAppStateMixin {
   Widget _detailLine(IconData icon, String label, String value) => Padding(
       padding: const EdgeInsets.only(bottom: 11),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        Icon(icon,
+            size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
         const SizedBox(width: 9),
         SizedBox(
             width: 82,
             child: Text(label,
-                style:
-                    TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11))),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 11))),
         Expanded(
             child: Text(value,
                 style: TextStyle(
@@ -623,7 +656,10 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                           width: 42,
                           child: Text(event.time,
                               style: TextStyle(
-                                  fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant))),
+                                  fontSize: 11,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant))),
                       Container(
                           width: 8,
                           height: 8,
@@ -641,7 +677,10 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                             const SizedBox(height: 3),
                             Text(event.detail,
                                 style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    fontSize: 11)),
                           ],
                         ),
                       ),

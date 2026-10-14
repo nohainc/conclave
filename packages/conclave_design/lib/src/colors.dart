@@ -48,8 +48,8 @@ abstract final class ConclaveColors {
   static const composerBackgroundLight = Color(0xfffaf9f5);
 
   // Own Message Background Token (matches composer input area)
-  static const ownMessageBackgroundDark = Color(0xff2c2939);
-  static const ownMessageBackgroundLight = Color(0xfffaf9f5);
+  static const ownMessageBackgroundDark = composerBackgroundDark;
+  static const ownMessageBackgroundLight = composerBackgroundLight;
 
   // Contextual Getters
   static Color primaryForeground(bool isDark) =>

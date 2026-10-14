@@ -40,6 +40,17 @@ void main() {
     expect(profile.toUri().path, '/settings/profile');
   });
 
+  test('parses and serializes space resource pages', () {
+    final workflows =
+        AxNavigation.fromUri(Uri.parse('/spaces/space-1/workflows'));
+    final members = AxNavigation.fromUri(Uri.parse('/spaces/space-1/members'));
+
+    expect(workflows, const AxNavigation.spaceWorkflows('space-1'));
+    expect(workflows.toUri().path, '/spaces/space-1/workflows');
+    expect(members, const AxNavigation.spaceMembers('space-1'));
+    expect(members.toUri().path, '/spaces/space-1/members');
+  });
+
   test('has stable routes for every major application section', () {
     final routes = <AxNavigation>[
       const AxNavigation.home(),

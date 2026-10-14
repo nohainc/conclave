@@ -21,6 +21,7 @@ export interface WorkerStepExecutionInput {
     readonly requesterUserId: string;
     readonly threadId: string;
     readonly workRequestId: string;
+    readonly workSessionGeneration?: number;
   };
   readonly retry: {
     readonly stepKind?: unknown;
@@ -65,6 +66,7 @@ export function prepareWorkerStepExecution(
         retryStepKind: input.retry.stepKind,
         retrySessionStrategy: input.retry.sessionStrategy,
         retryNumber: input.retry.number,
+        workSessionGeneration: scope.workSessionGeneration,
       }),
       spaceId: scope.spaceId,
       ...(scope.spaceName ? { spaceName: scope.spaceName } : {}),

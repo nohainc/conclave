@@ -42,6 +42,10 @@ const env = {
 } as unknown as Env;
 
 describe("Worker smoke tests", () => {
+  it("registers the Work history clear handler", () => {
+    expect(typeof routeHandlers.handleClearWorkHistory).toBe("function");
+  });
+
   it("registers authenticated Workspace ownership lifecycle handlers", () => {
     expect(typeof routeHandlers.handleCheckWorkspaceOwnership).toBe("function");
     expect(typeof routeHandlers.handleDisconnectDesktopWorkspace).toBe(
