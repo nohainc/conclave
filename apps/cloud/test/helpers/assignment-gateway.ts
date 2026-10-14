@@ -14,6 +14,7 @@ export async function gatewayFixture(
   initialStatus: string,
   options: {
     readonly ready?: boolean;
+    readonly capabilities?: string[];
     /** Extra bindings for the Gateway's environment (e.g. a Workflow). */
     readonly env?: Record<string, unknown>;
   } = {},
@@ -80,10 +81,11 @@ export async function gatewayFixture(
     type: string,
     payload: Record<string, unknown>,
     overrides: Record<string, unknown> = {},
+    target: WorkspaceGateway = gateway,
   ) => {
     counter += 1;
     const at = new Date().toISOString();
-    const response = await gateway.fetch(
+    const response = await target.fetch(
       new Request("https://gateway.internal/runtime/events", {
         method: "POST",
         headers,
@@ -127,8 +129,8 @@ export async function gatewayFixture(
       .get() as { status: string; updated_at: string };
   let pollCursor = 0;
   /** Messages the Gateway has queued for the Service since the last call. */
-  const outbound = async () => {
-    const response = await gateway.fetch(
+  const outbound = async (target: WorkspaceGateway = gateway) => {
+    const response = await target.fetch(
       new Request("https://gateway.internal/runtime/poll", {
         method: "POST",
         headers,
@@ -195,6 +197,14 @@ export async function gatewayFixture(
       serviceState: string;
       syncGeneration: number;
     };
+  await send("workspace.hello", {
+    capabilities: {
+      customCapabilities: options.capabilities ?? [
+        "assignment.start_permit.v1",
+      ],
+    },
+  });
+  await outbound();
   if (options.ready !== false) {
     await becomeReady();
     // Discard the sync result so tests see only the messages they trigger.
@@ -208,6 +218,7 @@ export async function gatewayFixture(
     /** Cursor after everything already read via outbound(). */
     cursor: () => String(pollCursor),
     dispatch,
+    dispatchBody,
     gateway,
     cancelBody,
     becomeReady,

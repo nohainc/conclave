@@ -5,10 +5,46 @@ import {
   traceStageNumber,
   EXECUTION_TRACE_STAGES,
   createDiagnosticEvent,
+  DiagnosticContextSchema,
   parseDiagnosticEvent,
 } from "../src/index.js";
 
 describe("execution diagnostics", () => {
+  it("accepts an optional process epoch and preserves it in trace events", () => {
+    expect(DiagnosticContextSchema.parse({ monotonicMs: 1 })).toEqual({
+      monotonicMs: 1,
+    });
+    for (const traceEpochId of ["service-epoch:123_ABC.def", "a".repeat(128)]) {
+      const event = createDiagnosticEvent({
+        component: "workspace_service",
+        operation: "assignment",
+        stage: "trace",
+        severity: "info",
+        retryable: false,
+        context: {
+          traceStage: "service_received",
+          monotonicMs: 1204,
+          traceEpochId,
+        },
+      });
+      expect(parseDiagnosticEvent(event).context?.traceEpochId).toBe(
+        traceEpochId,
+      );
+    }
+  });
+
+  it.each([
+    "",
+    "a".repeat(129),
+    "epoch with spaces",
+    "epoch/newline\n",
+    123,
+    null,
+  ])("rejects invalid process epochs (%j)", (traceEpochId) => {
+    expect(DiagnosticContextSchema.safeParse({ traceEpochId }).success).toBe(
+      false,
+    );
+  });
   it("defines one ordered cross-component trace", () => {
     expect(EXECUTION_TRACE_STAGES).toEqual([
       "dispatch",

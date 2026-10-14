@@ -2,8 +2,10 @@ import { CONVERSATION_WORKFLOWS } from "@conclave/core";
 import { sqliteD1 } from "./sqlite-d1.js";
 import { conversationSubmissionStatements } from "../../src/routes/conversations.js";
 import { loadConversationTurns } from "../../src/routes/conversation-turns.js";
-export async function conversationFixture() {
-  const { sqlite, db } = sqliteD1();
+export async function conversationFixture(
+  options: { beforeTurnLifecycleRepair?: boolean } = {},
+) {
+  const { sqlite, db } = sqliteD1(options);
   sqlite.exec(`
  INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('U','u@test','User','now','now');
  INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES('P','U','Space','now','now');

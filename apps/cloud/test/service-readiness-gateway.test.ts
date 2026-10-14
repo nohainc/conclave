@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { gatewayFixture } from "./helpers/assignment-gateway.js";
 
 const types = (messages: Array<{ type: string }>) =>
@@ -20,6 +20,163 @@ async function queued(initial = "created") {
 }
 
 describe("Gateway Service readiness", () => {
+  it("does not hand a persisted command to a replacement session during dispatch", async () => {
+    const f = await gatewayFixture("created");
+    const prepare = f.db.prepare.bind(f.db);
+    let replaced = false;
+    const spy = vi.spyOn(f.db, "prepare").mockImplementation((sql) => {
+      const statement = prepare(sql);
+      if (!sql.includes("SET start_permit_required = 1")) return statement;
+      return {
+        bind(...values: unknown[]) {
+          const bound = statement.bind(...values);
+          return {
+            async run() {
+              const result = await bound.run();
+              replaced = true;
+              await f.gateway.fetch(
+                new Request("https://gateway.internal/runtime/sessions", {
+                  method: "POST",
+                  headers: f.headers,
+                  body: JSON.stringify({
+                    workspaceRuntimeId: "RT",
+                    contractVersion: "1.0",
+                  }),
+                }),
+              );
+              return result;
+            },
+          };
+        },
+      } as D1PreparedStatement;
+    });
+    try {
+      const response = await f.dispatch();
+      expect(replaced).toBe(true);
+      expect(response.status).toBe(202);
+      expect(await response.json()).toMatchObject({
+        delivered: false,
+        acceptance: "none",
+      });
+      expect(f.status().status).toBe("dispatched");
+      expect(
+        f.sqlite
+          .prepare(
+            "SELECT start_permit_required FROM worker_assignments WHERE id='A1'",
+          )
+          .get()?.start_permit_required,
+      ).toBe(1);
+      // The replacement session's durable transport contains no executable command.
+      const status = (await f.gatewayStatus()) as { sessionId?: string };
+      const polled = await f.gateway.fetch(
+        new Request("https://gateway.internal/runtime/poll", {
+          method: "POST",
+          headers: f.headers,
+          body: JSON.stringify({
+            sessionId: status.sessionId,
+            cursor: "0",
+            waitMs: 0,
+          }),
+        }),
+      );
+      const body = (await polled.json()) as {
+        events: Array<{ message: { type: string } }>;
+      };
+      expect(body.events.map((event) => event.message.type)).not.toContain(
+        "assignment.start",
+      );
+    } finally {
+      spy.mockRestore();
+      f.sqlite.close();
+    }
+  });
+  it("keeps legacy Services excluded on queued flush, including after a Cloud restart", async () => {
+    const f = await gatewayFixture("created", {
+      ready: false,
+      capabilities: [],
+    });
+    try {
+      f.sqlite
+        .prepare(
+          "UPDATE worker_assignments SET command_payload_json = ? WHERE id='A1'",
+        )
+        .run(JSON.stringify(queuedPayload));
+      await f.becomeReady();
+      const restarted = f.restart();
+      for (let i = 0; i < 10; i += 1) {
+        await restarted.fetch(
+          new Request("https://gateway.internal/flush-queued", {
+            method: "POST",
+          }),
+        );
+      }
+      expect(f.status().status).toBe("created");
+      expect(types(await f.outbound())).not.toContain("assignment.start");
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it("does not inherit a previous session's safety capability from Workspace facts", async () => {
+    const f = await gatewayFixture("created");
+    try {
+      await f.gateway.fetch(
+        new Request("https://gateway.internal/runtime/sessions", {
+          method: "POST",
+          headers: f.headers,
+          body: JSON.stringify({
+            workspaceRuntimeId: "RT",
+            contractVersion: "1.0",
+          }),
+        }),
+      );
+      const response = await f.restart().fetch(
+        new Request("https://gateway.internal/dispatch-assignment", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(f.dispatchBody),
+        }),
+      );
+      expect(await response.json()).toMatchObject({
+        deliveryState: "service_upgrade_required",
+        acceptance: "none",
+      });
+      expect(f.status().status).toBe("created");
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it("preserves a capable session and delivers a burst of identical nudges once across restart", async () => {
+    const f = await gatewayFixture("created");
+    try {
+      f.sqlite
+        .prepare(
+          "UPDATE worker_assignments SET command_payload_json = ? WHERE id='A1'",
+        )
+        .run(JSON.stringify(queuedPayload));
+      const restarted = f.restart();
+      await Promise.all(
+        Array.from({ length: 20 }, () =>
+          restarted.fetch(
+            new Request("https://gateway.internal/flush-queued", {
+              method: "POST",
+            }),
+          ),
+        ),
+      );
+      const starts = (await f.outbound()).filter(
+        (m) => m.type === "assignment.start",
+      );
+      expect(starts).toHaveLength(1);
+      expect(starts[0]!.payload).toMatchObject({
+        snapshot: { startPermit: { required: true } },
+      });
+      expect(f.status().status).toBe("dispatched");
+    } finally {
+      f.sqlite.close();
+    }
+  });
   it("separates liveness from readiness for a connected, unsynchronized Service", async () => {
     const f = await queued();
     expect(await f.gatewayStatus()).toMatchObject({

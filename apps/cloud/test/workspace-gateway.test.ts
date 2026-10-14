@@ -27,6 +27,10 @@ async function publishReady(
     "content-type": "application/json",
   };
   const messages: Array<[string, Record<string, unknown>]> = [
+    [
+      "workspace.hello",
+      { capabilities: { customCapabilities: ["assignment.start_permit.v1"] } },
+    ],
     ["workspace.sync.request", {}],
     [
       "workspace.readiness",

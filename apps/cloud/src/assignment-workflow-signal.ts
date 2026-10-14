@@ -95,10 +95,11 @@ export async function signalAssignmentTerminal(
         .bind(now().toISOString(), assignmentId)
         .run();
     };
-    if (!row.workflow_instance_id || !env.CONCLAVE_RUN_WORKFLOW) {
+    if (!row.workflow_instance_id) {
       await stamp();
       return "no_instance";
     }
+    if (!env.CONCLAVE_RUN_WORKFLOW) return "failed";
     try {
       const instance = await env.CONCLAVE_RUN_WORKFLOW.get(
         row.workflow_instance_id,

@@ -37,6 +37,11 @@ async function fixture(status: string, options: { failFirst?: number } = {}) {
   f.sqlite
     .prepare("UPDATE runs SET workflow_instance_id = 'wf-1' WHERE id = 'RUN'")
     .run();
+  // The shared fixture stamps a fixed historic updated_at; the sweep only
+  // considers recently terminal rows, so make this one recent.
+  f.sqlite
+    .prepare("UPDATE worker_assignments SET updated_at = ? WHERE id = 'A1'")
+    .run(new Date().toISOString());
   // The shared fixture uses historical timestamps. Keep outbox age tests
   // independent of the wall clock without weakening the production cutoff.
   f.sqlite
@@ -56,6 +61,44 @@ async function fixture(status: string, options: { failFirst?: number } = {}) {
 }
 
 describe("assignment terminal workflow signal", () => {
+  it("retains the durable outbox when the Workflow binding is temporarily absent", async () => {
+    const { env, row, sent } = await fixture("completed");
+    expect(
+      await signalAssignmentTerminal({ CONCLAVE_DB: env.CONCLAVE_DB }, "A1"),
+    ).toBe("failed");
+    expect(row().at).toBeNull();
+    expect(await sweepUnsignaledTerminals(env, { now: sweepNow })).toEqual({
+      attempted: 1,
+      signaled: 1,
+    });
+    expect(sent).toHaveLength(1);
+  });
+
+  it("recovers after event delivery succeeds but persisting its receipt fails", async () => {
+    const { env, f, row, sent } = await fixture("completed");
+    const prepare = f.db.prepare.bind(f.db);
+    const interrupted = {
+      ...env,
+      CONCLAVE_DB: {
+        prepare(sql: string) {
+          if (sql.includes("SET workflow_signaled_at"))
+            throw new Error("simulated restart before receipt");
+          return prepare(sql);
+        },
+      } as unknown as D1Database,
+    };
+    expect(await signalAssignmentTerminal(interrupted, "A1")).toBe("failed");
+    expect(sent).toHaveLength(1);
+    expect(row().at).toBeNull();
+    expect(await sweepUnsignaledTerminals(env, { now: sweepNow })).toEqual({
+      attempted: 1,
+      signaled: 1,
+    });
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toEqual(sent[0]);
+    expect(f.status().status).toBe("completed");
+    expect(row().at).not.toBeNull();
+  });
   it("uses an event type Workflows accepts (no dots)", () => {
     expect(ASSIGNMENT_TERMINAL_EVENT_TYPE).toBe("assignment-terminal");
     expect(ASSIGNMENT_TERMINAL_EVENT_TYPE).not.toContain(".");
@@ -170,6 +213,34 @@ describe("Gateway terminal handling", () => {
     output: { text: "finished" },
     artifactIds: [],
   };
+
+  it("re-acknowledges a lost terminal acknowledgement after Cloud restart without rewriting the outcome", async () => {
+    const { f, sent } = await fixture("running");
+    await f.send("assignment.result", result);
+    const terminal = f.status();
+    await f.outbound(); // First acknowledgement was lost at the Service.
+    const restarted = f.restart();
+    await f.send(
+      "assignment.result",
+      { ...result, output: { text: "replayed" } },
+      {},
+      restarted,
+    );
+    expect(f.status()).toEqual(terminal);
+    expect(
+      (await f.outbound(restarted)).filter((m) => m.type === "assignment.ack"),
+    ).toHaveLength(1);
+    expect(sent).toHaveLength(1);
+    expect(
+      JSON.parse(
+        String(
+          f.sqlite
+            .prepare("SELECT output_json FROM worker_assignments WHERE id='A1'")
+            .get()?.output_json,
+        ),
+      ),
+    ).toMatchObject({ output: { text: "finished" } });
+  });
 
   it("acknowledges the Service, then signals the Workflow", async () => {
     const { f, sent, row } = await fixture("running");

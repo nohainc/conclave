@@ -485,6 +485,7 @@ final class WorkerDiagnosticStore {
       'httpStatusCode',
       'recovered',
       'traceStage',
+      'traceEpochId',
       'monotonicMs',
       'clockOffsetMs',
       'clockRttMs',

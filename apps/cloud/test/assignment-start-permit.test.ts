@@ -74,6 +74,61 @@ async function seed(status: string, permitRequired = true) {
 }
 
 describe("start permit", () => {
+  it("replays the original grant without extending the startup deadline", async () => {
+    const f = await seed("acknowledged");
+    try {
+      const first = await f.permit();
+      const replay = await grantStartPermit(
+        f.db as never,
+        f.fence,
+        new Date(NOW.getTime() + 60_000),
+      );
+      expect(replay).toEqual(first);
+      expect(f.row().issued).toBe(NOW.toISOString());
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
+  it.each(["revoke", "replace-runtime"])(
+    "denies a grant when %s wins between admission and the permit write",
+    async (interruption) => {
+      for (let iteration = 0; iteration < 20; iteration += 1) {
+        const f = await seed("acknowledged");
+        const original = f.db.prepare.bind(f.db);
+        let interrupted = false;
+        const db = {
+          prepare(sql: string) {
+            if (sql.includes("SET start_permit_issued_at") && !interrupted) {
+              interrupted = true;
+              if (interruption === "replace-runtime") {
+                f.sqlite.exec(
+                  "INSERT INTO workspace_runtime_identities(id,workspace_id,credential_token_hash,installation_id,created_at) VALUES('replacement','WS','replacement-hash','replacement-installation','now')",
+                );
+                f.sqlite.exec(
+                  "UPDATE worker_assignments SET runtime_identity_id = 'replacement' WHERE id='A1'",
+                );
+              } else {
+                f.sqlite.exec(
+                  "UPDATE worker_assignments SET status = 'revocation_pending' WHERE id='A1'",
+                );
+              }
+            }
+            return original(sql);
+          },
+        };
+        try {
+          expect(
+            await grantStartPermit(db as never, f.fence, NOW),
+          ).toMatchObject({ granted: false });
+          expect(interrupted).toBe(true);
+          expect(f.row().issued).toBeNull();
+        } finally {
+          f.sqlite.close();
+        }
+      }
+    },
+  );
   it("grants a short-lived permit while the assignment is Acknowledged", async () => {
     const f = await seed("acknowledged");
     const decision = await f.permit();

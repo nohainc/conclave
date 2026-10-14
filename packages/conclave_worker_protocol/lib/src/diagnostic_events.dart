@@ -232,6 +232,7 @@ final class DiagnosticEvent {
       'httpStatusCode',
       'recovered',
       'traceStage',
+      'traceEpochId',
       'monotonicMs',
       'clockOffsetMs',
       'clockRttMs',

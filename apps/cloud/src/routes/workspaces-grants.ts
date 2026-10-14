@@ -1,4 +1,6 @@
 import { publishCollaborationEvent } from "../collaboration-events.js";
+import { revokeAssignment } from "../assignment-revocation.js";
+import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "../assignment-transitions.js";
 import {
   canTransitionWorkspaceSpaceGrantStatus,
   isWorkspaceSpaceGrantStatus,
@@ -170,27 +172,25 @@ export async function handleRevokeWorkspaceSpaceGrant(
     throw new HttpError(409, "Workspace Grant has an invalid stored status");
   }
   if (existing.status === "revoked") {
+    await revokeGrantAssignments(env, grantId);
     return json({ ok: true, revokedAt: existing.updated_at });
   }
   if (!canTransitionWorkspaceSpaceGrantStatus(existing.status, "revoked")) {
     throw new HttpError(409, "Terminal Workspace Grants cannot be revoked");
   }
   const now = new Date().toISOString();
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
-      "UPDATE workspace_space_grants SET status = 'revoked', updated_at = ?1 WHERE id = ?2 AND status = ?3",
-    ).bind(now, grantId, existing.status),
-    env.CONCLAVE_DB.prepare(
-      "UPDATE worker_assignments SET status = 'cancelled', error_json = ?1, updated_at = ?2 WHERE workspace_space_grant_id = ?3 AND status IN ('created', 'dispatched')",
-    ).bind(
-      JSON.stringify({
-        code: "workspace_space_grant_revoked",
-        cancelledAt: now,
-      }),
-      now,
-      grantId,
-    ),
-  ]);
+  const revoked = await env.CONCLAVE_DB.prepare(
+    "UPDATE workspace_space_grants SET status = 'revoked', updated_at = ?1 WHERE id = ?2 AND status = ?3",
+  )
+    .bind(now, grantId, existing.status)
+    .run();
+  if (revoked.meta?.changes === 0) {
+    const current = await loadWorkspaceSpaceGrant(env, grantId);
+    if (current?.status !== "revoked") {
+      throw new HttpError(409, "Workspace Grant changed concurrently");
+    }
+  }
+  await revokeGrantAssignments(env, grantId);
   await recordAudit(
     env,
     context,
@@ -207,4 +207,29 @@ export async function handleRevokeWorkspaceSpaceGrant(
     { additionalRecipientUserIds: [context.userId] },
   );
   return json({ ok: true, revokedAt: now });
+}
+
+async function revokeGrantAssignments(
+  env: SecurityEnv,
+  grantId: string,
+): Promise<void> {
+  const { results } = await env.CONCLAVE_DB.prepare(
+    `SELECT id, attempt_id FROM worker_assignments
+      WHERE workspace_space_grant_id = ?1 AND status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})`,
+  )
+    .bind(grantId)
+    .all<{ id: string; attempt_id: string | null }>();
+  await Promise.all(
+    (results ?? []).map((row) =>
+      revokeAssignment(env, {
+        assignmentId: row.id,
+        attemptId: row.attempt_id ?? undefined,
+        intent: {
+          status: "cancelled",
+          source: "grant_revoked",
+          reason: "Workspace Space Grant revoked",
+        },
+      }),
+    ),
+  );
 }

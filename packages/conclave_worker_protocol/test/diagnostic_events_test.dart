@@ -19,6 +19,7 @@ void main() {
       context: {
         'providerToolVersion': '1.2.3',
         'processExitCode': 7,
+        'traceEpochId': 'trace-12345-42',
         'prompt': 'must not be retained',
         'nested': {'secret': 'must not be retained'},
       },
@@ -30,6 +31,7 @@ void main() {
     expect(decoded.context, {
       'providerToolVersion': '1.2.3',
       'processExitCode': 7,
+      'traceEpochId': 'trace-12345-42',
     });
     expect(decoded.toJson(), isNot(contains('prompt')));
   });

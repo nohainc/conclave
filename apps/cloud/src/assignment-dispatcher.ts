@@ -22,6 +22,7 @@ import {
 } from "./scheduler.js";
 import { recordExecutionWorkspaceAudit } from "./workspace-audit.js";
 import { tryLogDiagnosticEvent } from "./observability.js";
+import { publishAssignmentPhase } from "./assignment-phase-events.js";
 import {
   ASSIGNMENT_REVOCATION_CONFIRMATION_MS,
   DEFAULT_QUEUE_WAIT_TIMEOUT_MS,
@@ -50,6 +51,7 @@ function safeFailureDiagnostic(value: unknown): string | null {
       /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|cookie|authorization|secret)\s*[:=]\s*)[^\s,;]+/gi,
       "$1[REDACTED]",
     )
+    // eslint-disable-next-line no-control-regex -- Remove control bytes from diagnostic text.
     .replace(/[\u0000-\u001f\u007f]+/g, " ")
     .replace(
       /(?<![A-Za-z0-9])(?:\/Users|\/home|\/private\/var|\/tmp)\/[^\s,;]+/g,
@@ -674,6 +676,7 @@ async function dispatchWorkspaceWorkerAssignment(
       retryable: true,
       context: { status: "dispatched" },
     });
+    await publishAssignmentPhase(env, assignmentId);
   } catch {
     const code = "provider_unavailable";
     const message = executionErrorMessage(code);
@@ -990,6 +993,7 @@ export async function recordAssignmentCancelled(
   assignmentId: string,
   cancellation: { status: "cancelled"; reason: string },
   expectedAttemptId?: string,
+  options?: { onlyFrom?: readonly AssignmentLifecycleStatus[] },
 ): Promise<boolean> {
   const now = new Date().toISOString();
   const existing = await db
@@ -1019,10 +1023,16 @@ export async function recordAssignmentCancelled(
     db
       .prepare(
         `UPDATE worker_assignments SET status = 'cancelled', error_json = ?1, updated_at = ?2
-         WHERE id = ?3 AND status IN (${assignmentSourceStatusList("cancelled")})
+         WHERE id = ?3 AND status IN (${sourceList("cancelled", options?.onlyFrom)})
+           AND (?4 IS NULL OR attempt_id = ?4)
          RETURNING id`,
       )
-      .bind(JSON.stringify(cancellation), now, assignmentId),
+      .bind(
+        JSON.stringify(cancellation),
+        now,
+        assignmentId,
+        expectedAttemptId ?? null,
+      ),
     db
       .prepare(
         `UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1,
@@ -1111,7 +1121,7 @@ export async function recoverStaleAssignments(
               wa.start_permit_issued_at AS permitIssuedAt,
               wa.start_permit_required AS permitRequired,
               ew.status AS workspaceStatus, ew.updated_at AS workspaceUpdatedAt,
-              g.expires_at AS grantExpiresAt,
+              g.expires_at AS grantExpiresAt, g.status AS grantStatus,
               wr.status AS workRequestStatus
          FROM worker_assignments wa
          JOIN execution_workspaces ew ON ew.id = wa.execution_workspace_id
@@ -1136,6 +1146,7 @@ export async function recoverStaleAssignments(
       workspaceStatus: string;
       workspaceUpdatedAt: string;
       grantExpiresAt: string | null;
+      grantStatus: string | null;
       workRequestStatus: string | null;
     }>();
 
@@ -1173,6 +1184,19 @@ export async function recoverStaleAssignments(
           status: "cancelled",
           reason: "The owning Work Request was cancelled.",
           source: "work_cancelled",
+        })
+      )
+        recovered += 1;
+      continue;
+    }
+    // Recovers a crash after the grant commit but before its assignments
+    // received durable revocation intents. Grant removal never proves a stop.
+    if (row.grantStatus === "revoked") {
+      if (
+        await revoke(row, {
+          status: "cancelled",
+          source: "grant_revoked",
+          reason: "Workspace Space Grant revoked",
         })
       )
         recovered += 1;
