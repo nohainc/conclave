@@ -341,7 +341,8 @@ async function dispatchWorkspaceWorkerAssignment(
         session_policy, idempotency_key, status,
         input_json, created_at, updated_at)
      SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-            ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, 'created', ?21, ?22, ?22`,
+            ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, 'created', ?21, ?22, ?22
+     RETURNING id`,
   )
     .bind(
       assignmentId,
@@ -367,11 +368,10 @@ async function dispatchWorkspaceWorkerAssignment(
       JSON.stringify(assignmentInput),
       now,
     )
-    .run();
-  // Some focused tests use a minimal D1 double that does not expose result
-  // metadata. A real D1 INSERT always reports `changes`; the fallback keeps
-  // those doubles representative without weakening the production guard.
-  if (Number(insertion?.meta?.changes ?? 1) !== 1) {
+    .first<{ id: string }>();
+  // D1 meta.changes includes writes made by triggers. Only the row returned
+  // by this INSERT proves admission; an ignored/rejected insert returns none.
+  if (insertion?.id !== assignmentId) {
     tryLogDiagnosticEvent({
       requestId: task.workRequestId,
       assignmentId,

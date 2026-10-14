@@ -57,6 +57,8 @@ it.each([null, "low"])(
             return this;
           },
           async first() {
+            if (sql.includes("INSERT INTO worker_assignments"))
+              return { id: persisted[0] };
             return null;
           },
           async run() {

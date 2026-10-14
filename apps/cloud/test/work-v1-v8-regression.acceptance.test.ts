@@ -85,6 +85,10 @@ function createAcceptanceRun(
           return statement;
         },
         async first<T>() {
+          if (sql.includes("INSERT INTO worker_assignments")) {
+            await statement.run();
+            return { id: values[0] } as T;
+          }
           if (sql.includes("SELECT wr.input_json")) {
             return {
               inputJson: JSON.stringify({ originalRequest: requestText }),
