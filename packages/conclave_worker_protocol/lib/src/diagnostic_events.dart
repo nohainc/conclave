@@ -1,5 +1,28 @@
 import 'dart:math';
 
+/// Latency trace stages, mirroring `TRACE_STAGES` in `@conclave/protocol`.
+/// The first twelve are numbered T1-T12 in order; the rest are auxiliary.
+const List<String> diagnosticTraceStages = [
+  'web_submitted',
+  'cloud_accepted',
+  'workflow_dispatch_started',
+  'gateway_queued',
+  'service_received',
+  'service_accepted',
+  'profile_resolved',
+  'slot_reserved',
+  'engine_process_created',
+  'provider_started',
+  'terminal_persisted',
+  'web_received',
+];
+const List<String> diagnosticAuxiliaryTraceStages = [
+  'cloud_ack_received',
+  'workflow_observed_terminal',
+  'probe_sent',
+  'probe_acknowledged',
+];
+
 /// Versioned, provider-neutral evidence emitted by the execution pipeline.
 ///
 /// The event is deliberately small and allowlisted. It is suitable for local
@@ -202,6 +225,14 @@ final class DiagnosticEvent {
       'lineBytes',
       'httpStatusCode',
       'recovered',
+      'traceStage',
+      'monotonicMs',
+      'clockOffsetMs',
+      'clockRttMs',
+      'syncState',
+      'localQueueLength',
+      'activeAssignments',
+      'probeId',
     };
     final result = <String, Object?>{};
     for (final entry in input.entries) {

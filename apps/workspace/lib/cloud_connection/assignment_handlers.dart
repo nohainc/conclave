@@ -52,13 +52,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       return;
     }
 
-    final assignmentPayload = payload['snapshot'] is Map
-        ? <String, dynamic>{
-            ...(payload['snapshot'] as Map).cast<String, dynamic>(),
-            if (payload['input'] is Map)
-              'input': (payload['input'] as Map).cast<String, dynamic>(),
-          }
-        : payload;
+    final assignmentPayload = _flattenAssignmentPayload(payload);
     final payloadError = _validateAssignmentPayload(assignmentPayload);
     if (payloadError != null) {
       await _sendAssignmentError(
@@ -231,6 +225,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         result: const {'reason': 'Cancelled before Worker launch'},
       );
       _activeAssignments.remove(context.assignmentId);
+      traceRecorder.finish(context.assignmentId);
       _notifyStateChanged();
       socket.send(jsonEncode(_assignmentEnvelope(
         'assignment.cancelled',
@@ -242,11 +237,18 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       )));
       return;
     }
+    final serviceTrace = _serviceTracePayload(context.assignmentId);
     socket.send(jsonEncode(_assignmentEnvelope(
       'assignment.ack',
       correlation,
-      {'accepted': true, 'estimatedStartMs': 0},
+      {
+        'accepted': true,
+        'estimatedStartMs': 0,
+        if (serviceTrace.isNotEmpty) 'serviceTrace': serviceTrace,
+      },
     )));
+    // T6: admission acknowledgement written to the transport.
+    traceAssignmentStage(context, 'service_accepted');
     await recordAssignmentDiagnostic(
       context,
       event: 'assignment.launching',
@@ -361,6 +363,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         );
       } finally {
         _activeAssignments.remove(context.assignmentId);
+        traceRecorder.finish(context.assignmentId);
         _notifyStateChanged();
       }
       return;
@@ -398,6 +401,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       );
     } finally {
       _activeAssignments.remove(context.assignmentId);
+      traceRecorder.finish(context.assignmentId);
       _notifyStateChanged();
     }
   }

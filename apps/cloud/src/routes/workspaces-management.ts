@@ -273,3 +273,35 @@ export async function handleExportWorkspaceAudit(
     })),
   });
 }
+
+/**
+ * Owner-only latency diagnostic: sends a Cloud-to-Service probe over the
+ * Workspace's live transport and returns the measured round trip. It never
+ * starts a Worker or touches assignments.
+ */
+export async function handleWorkspaceDeliveryProbe(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  await workspaceOwnerContext(
+    request,
+    env,
+    workspaceId,
+    "workspace:manage",
+    accessContext,
+  );
+  if (!env.CONCLAVE_WORKSPACE_GATEWAY)
+    return json(
+      { error: "Workspace Gateway is not configured" },
+      { status: 503 },
+    );
+  const response = await env.CONCLAVE_WORKSPACE_GATEWAY.getByName(
+    workspaceId,
+  ).fetch("https://workspace-gateway/diagnostic-probe", { method: "POST" });
+  const body = await response.json().catch(() => ({
+    error: "Delivery probe returned an unreadable response",
+  }));
+  return json(body, { status: response.status });
+}

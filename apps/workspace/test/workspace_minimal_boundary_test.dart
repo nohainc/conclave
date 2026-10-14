@@ -101,9 +101,7 @@ void main() {
           equals(LocalWorkerActivationState.disabled));
     });
 
-    test(
-        'Workspace validates Worker Profile admissions before execution',
-        () {
+    test('Workspace validates Worker Profile admissions before execution', () {
       final admission = const ToolProfileReleaseAdmission(
         profile: {
           'schemaVersion': 1,

@@ -363,6 +363,9 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
       'reconnectCount': connection?.reconnectCount ?? 0,
       'activeAssignmentIds': connection?.activeAssignmentIds ?? const [],
       'activeAssignmentCount': connection?.activeAssignmentCount ?? 0,
+      // Transport, load and p50/p95/p99 per assignment stage interval. Only
+      // numeric durations and bounded labels are exported.
+      'latency': connection?.latencySummary(),
       'lastInventorySyncAt': connection?.lastInventorySyncAt?.toIso8601String(),
       'acceptingNewWork': connection?.acceptingNewWork ?? false,
       'draining': connection?.isDraining ?? false,

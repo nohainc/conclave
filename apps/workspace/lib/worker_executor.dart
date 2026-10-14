@@ -167,12 +167,16 @@ typedef ToolProfileActivityAssignmentExecutor = Future<WorkerResult> Function(
   Map<String, Object?> payload, {
   void Function(WorkerProgress progress)? onProgress,
   FutureOr<void> Function()? onSlotReserved,
+  void Function()? onEngineProcessStarted,
   FutureOr<void> Function(WorkerActivity activity)? onActivity,
 });
 typedef WorkerExecutionStartedRelay = FutureOr<void> Function(
   WorkspaceAssignmentContext context,
 );
 typedef WorkerExecutionSlotReservedRelay = FutureOr<void> Function(
+  WorkspaceAssignmentContext context,
+);
+typedef WorkerEngineProcessStartedRelay = void Function(
   WorkspaceAssignmentContext context,
 );
 
@@ -223,6 +227,7 @@ class WorkerAssignmentHandler {
     this.onActivity,
     this.onExecutionStarted,
     this.onExecutionSlotReserved,
+    this.onEngineProcessStarted,
     this.cancelToolProfileAssignment,
   })  : spaceMutationCoordinator = spaceMutationCoordinator ??
             (spaceDirectoryLifecycle == null
@@ -251,6 +256,7 @@ class WorkerAssignmentHandler {
   final WorkerActivityRelay? onActivity;
   final WorkerExecutionStartedRelay? onExecutionStarted;
   final WorkerExecutionSlotReservedRelay? onExecutionSlotReserved;
+  final WorkerEngineProcessStartedRelay? onEngineProcessStarted;
   final Future<bool> Function(String assignmentId)? cancelToolProfileAssignment;
   final _cancellationRequests = <String>{};
 
@@ -409,6 +415,9 @@ class WorkerAssignmentHandler {
               onSlotReserved: onExecutionSlotReserved == null
                   ? null
                   : () => onExecutionSlotReserved!(context),
+              onEngineProcessStarted: onEngineProcessStarted == null
+                  ? null
+                  : () => onEngineProcessStarted!(context),
               onActivity: onActivity == null
                   ? null
                   : (activity) => onActivity!(context, activity),

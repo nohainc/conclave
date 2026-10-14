@@ -519,6 +519,18 @@ export async function routeWorkerRequest(
       );
     }
 
+    const workspaceProbeMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/delivery-probe$/,
+    );
+    if (request.method === "POST" && workspaceProbeMatch?.[1]) {
+      return await handlers.handleWorkspaceDeliveryProbe!(
+        request,
+        env,
+        workspaceProbeMatch[1],
+        ctx,
+      );
+    }
+
     const workspaceMatch = url.pathname.match(/^\/api\/workspaces\/([^/]+)$/);
     if (request.method === "DELETE" && workspaceMatch?.[1]) {
       return await handlers.handleRevokeWorkspace!(

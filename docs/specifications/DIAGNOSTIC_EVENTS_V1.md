@@ -26,7 +26,10 @@ The public TypeScript contract is
 profile identifiers and release numbers, provider tool name/version, protocol
 stage, failure layer, process exit code, duration, transport state, status,
 model/effort identifiers, catalog revision, selection source, HTTP status,
-line byte count, and a recovery flag. Unknown keys, nested objects, prompts,
+line byte count, a recovery flag, and the bounded latency-trace fields
+(`traceStage`, `monotonicMs`, `clockOffsetMs`, `clockRttMs`, `syncState`,
+`localQueueLength`, `activeAssignments`, `probeId`) defined in
+[Latency Trace v1](LATENCY_TRACE_V1.md). Unknown keys, nested objects, prompts,
 responses, file contents, credentials, environment variables, and local
 filesystem paths are rejected or dropped at the boundary.
 

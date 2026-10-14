@@ -11,6 +11,7 @@ import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'assignment_journal.dart';
+import 'assignment_trace.dart';
 import 'worker_diagnostic_store.dart';
 import 'workspace_registration.dart';
 import 'workspace_transport.dart';
@@ -278,6 +279,24 @@ Future<WorkspaceTransport> connectWebSocketWorkspaceTransport(
   return WebSocketWorkspaceTransport(socket);
 }
 
+/// Flattens an `assignment.start` payload exactly as the handler does.
+Map<String, dynamic> _flattenAssignmentPayload(Map<String, dynamic> payload) =>
+    payload['snapshot'] is Map
+        ? <String, dynamic>{
+            ...(payload['snapshot'] as Map).cast<String, dynamic>(),
+            if (payload['input'] is Map)
+              'input': (payload['input'] as Map).cast<String, dynamic>(),
+          }
+        : payload;
+
+/// Local send time of a message whose acknowledgement carries Cloud time.
+final class _ClockProbe {
+  _ClockProbe() : sentAt = DateTime.now().toUtc();
+
+  final DateTime sentAt;
+  final Stopwatch timer = Stopwatch()..start();
+}
+
 class WorkspaceCloudConnection {
   WorkspaceCloudConnection({
     required this.uri,
@@ -296,6 +315,7 @@ class WorkspaceCloudConnection {
     this.assignmentCancellationHandler,
     this.assignmentJournal,
     this.diagnosticStoreForWorkerType,
+    this.localQueueLengthProvider,
     this.workerInventoryProvider,
     this.onSessionReady,
     this.workspaceUpdateAvailableHandler,
@@ -335,6 +355,15 @@ class WorkspaceCloudConnection {
   /// optional so connection tests and offline-only runtimes need no logger.
   final WorkerDiagnosticStore Function(String workerTypeId)?
       diagnosticStoreForWorkerType;
+
+  /// Number of assignments waiting for a local execution slot. Telemetry only.
+  final int Function()? localQueueLengthProvider;
+
+  /// Latency tracing state (see assignment_trace.dart). Telemetry only: no
+  /// assignment decision reads these values.
+  final AssignmentTraceRecorder traceRecorder = AssignmentTraceRecorder();
+  final ClockOffsetEstimator clockOffset = ClockOffsetEstimator();
+  final Map<String, _ClockProbe> _clockProbes = {};
   final Future<List<Map<String, Object?>>> Function()? workerInventoryProvider;
   final Future<void> Function()? onSessionReady;
   final WorkspaceUpdateAvailableHandler? workspaceUpdateAvailableHandler;
@@ -573,6 +602,162 @@ class WorkspaceCloudConnection {
     return values;
   }
 
+  void _rememberClockProbe(String messageId) {
+    while (_clockProbes.length >= 8) {
+      _clockProbes.remove(_clockProbes.keys.first);
+    }
+    _clockProbes[messageId] = _ClockProbe();
+  }
+
+  /// Feeds hello/heartbeat acknowledgements into the clock-offset estimate.
+  void _recordClockSample(Map<String, dynamic> decoded) {
+    try {
+      final type = decoded['type'];
+      if (type != 'workspace.hello.ack' && type != 'workspace.heartbeat.ack') {
+        return;
+      }
+      final correlationId = decoded['correlationId'];
+      final probe =
+          correlationId is String ? _clockProbes.remove(correlationId) : null;
+      final payload = decoded['payload'];
+      final serverTime = payload is Map ? payload['serverTime'] : null;
+      if (probe == null || serverTime is! String) return;
+      final parsed = DateTime.tryParse(serverTime);
+      if (parsed == null) return;
+      clockOffset.addSample(
+        sentAtUtc: probe.sentAt,
+        roundTrip: probe.timer.elapsed,
+        serverTimeUtc: parsed.toUtc(),
+      );
+    } on Object {
+      // Clock estimation is telemetry only.
+    }
+  }
+
+  /// Point-in-time transport and load facts attached to every trace event.
+  Map<String, Object?> _traceContext() {
+    int? queueLength;
+    try {
+      queueLength = localQueueLengthProvider?.call();
+    } on Object {
+      queueLength = null;
+    }
+    final offset = clockOffset.offsetMs;
+    final rtt = clockOffset.roundTripMs;
+    return {
+      'transport': activeTransportMode ?? _pendingTransportMode ?? 'offline',
+      'syncState': connectionStage.name,
+      'activeAssignments': _activeAssignments.length,
+      if (queueLength != null && queueLength >= 0)
+        'localQueueLength': queueLength,
+      if (offset != null) 'clockOffsetMs': offset,
+      if (rtt != null) 'clockRttMs': rtt,
+    };
+  }
+
+  /// Additive, bounded facts sent to Cloud in the `assignment.ack` payload so
+  /// Cloud-side logs can place Service timings on the Cloud clock.
+  Map<String, Object?> _serviceTracePayload(String assignmentId) {
+    final context = _traceContext();
+    return {
+      for (final key in const [
+        'syncState',
+        'activeAssignments',
+        'localQueueLength',
+        'clockOffsetMs',
+        'clockRttMs',
+      ])
+        if (context[key] != null) key: context[key],
+      if (traceRecorder.elapsedMs(assignmentId) != null)
+        'receiveToAckMs': traceRecorder.elapsedMs(assignmentId),
+    };
+  }
+
+  /// Starts the Service-side trace (T5) the moment the command comes off the
+  /// transport, before any synchronization deferral or validation, so time
+  /// spent waiting is attributed correctly. Detached and non-throwing.
+  void _traceAssignmentReceived(Map<String, dynamic> decoded) {
+    try {
+      final id = decoded['assignmentId'];
+      if (id is! String || id.isEmpty || id.length > 128) return;
+      final first = traceRecorder.begin(id, note: connectionStage.name);
+      if (first == null) return;
+      final payload = decoded['payload'];
+      if (payload is! Map<String, dynamic>) return;
+      const requiredFields = [
+        'executionWorkspaceId',
+        'workspaceRuntimeId',
+        'workerId',
+        'runId',
+        'taskId',
+        'attemptId',
+        'idempotencyKey',
+      ];
+      if (requiredFields.any((field) => decoded[field] is! String)) return;
+      final context = WorkspaceAssignmentContext(
+        workspaceId: decoded['executionWorkspaceId'] as String,
+        workspaceRuntimeId: decoded['workspaceRuntimeId'] as String,
+        workerId: decoded['workerId'] as String,
+        runId: decoded['runId'] as String,
+        taskId: decoded['taskId'] as String,
+        attemptId: decoded['attemptId'] as String,
+        assignmentId: id,
+        idempotencyKey: decoded['idempotencyKey'] as String,
+        payload: Map<String, Object?>.from(_flattenAssignmentPayload(payload)),
+      );
+      final traceContext = _traceContext();
+      runDetachedTelemetry(() => recordAssignmentDiagnostic(
+            context,
+            event: 'assignment.trace',
+            stage: 'trace',
+            contextData: {
+              ...traceContext,
+              'traceStage': 'service_received',
+              'monotonicMs': first.monotonicMs,
+              'durationMs': 0,
+            },
+          ));
+    } on Object {
+      // Telemetry must never affect command handling.
+    }
+  }
+
+  /// Records a Service-side latency stage for [context]. Synchronous and
+  /// non-throwing; the diagnostic write is detached from the caller.
+  void traceAssignmentStage(
+    WorkspaceAssignmentContext context,
+    String stage, {
+    Map<String, Object?> extra = const {},
+  }) {
+    try {
+      final mark = traceRecorder.mark(context.assignmentId, stage);
+      if (mark == null) return;
+      final traceContext = _traceContext();
+      runDetachedTelemetry(() => recordAssignmentDiagnostic(
+            context,
+            event: 'assignment.trace',
+            stage: 'trace',
+            contextData: {
+              ...traceContext,
+              ...extra,
+              'traceStage': stage,
+              'monotonicMs': mark.monotonicMs,
+              'durationMs': mark.sinceLastMs,
+            },
+          ));
+    } on Object {
+      // Telemetry must never affect command handling.
+    }
+  }
+
+  /// Bounded latency summary for diagnostics exports: transport and load
+  /// facts plus p50/p95/p99 per stage interval.
+  Map<String, Object?> latencySummary() => {
+        ..._traceContext(),
+        'openTraces': traceRecorder.activeTraceCount,
+        'intervals': traceRecorder.summaryJson(),
+      };
+
   /// Sends the Workspace-owned inventory projection. Secrets, credential
   /// references, and local paths must not be included by the caller.
   void reportWorkerInventory(List<Map<String, Object?>> workers) {
@@ -623,6 +808,7 @@ class WorkspaceCloudConnection {
   /// process have actually started. Admission acknowledgement alone is not a
   /// running signal.
   Future<void> reportWorkerStarted(WorkspaceAssignmentContext context) async {
+    traceAssignmentStage(context, 'provider_started');
     await recordAssignmentDiagnostic(
       context,
       event: 'assignment.executing',
@@ -1079,6 +1265,7 @@ class WorkspaceCloudConnection {
       'capabilities': capabilities,
     });
     _helloMessageId = hello['messageId'] as String;
+    _rememberClockProbe(_helloMessageId!);
     socket.send(jsonEncode(hello));
     lastHelloSentAt = DateTime.now().toUtc();
     _protocolHandshakeTimer?.cancel();
@@ -1111,16 +1298,16 @@ class WorkspaceCloudConnection {
         connectionStage = WorkspaceConnectionStage.reconnecting;
         _handleTransportEnd();
       });
-      socket.send(jsonEncode({
-        ..._envelope('workspace.heartbeat', {
-          'workspaceRuntimeId': workspaceRuntimeId,
-          'executionWorkspaceId': workspaceId,
-          'sessionId': currentSessionId,
-          'status': 'online',
-          'activeWorkers': activeWorkerIds.length,
-          'activeAssignments': _activeAssignments.length,
-        }),
-      }));
+      final heartbeatMessage = _envelope('workspace.heartbeat', {
+        'workspaceRuntimeId': workspaceRuntimeId,
+        'executionWorkspaceId': workspaceId,
+        'sessionId': currentSessionId,
+        'status': 'online',
+        'activeWorkers': activeWorkerIds.length,
+        'activeAssignments': _activeAssignments.length,
+      });
+      _rememberClockProbe(heartbeatMessage['messageId'] as String);
+      socket.send(jsonEncode(heartbeatMessage));
       _heartbeatCount++;
       if (_heartbeatCount >= 4) {
         _heartbeatCount = 0;
@@ -1158,6 +1345,7 @@ class WorkspaceCloudConnection {
     } on ProtocolException {
       return;
     }
+    _recordClockSample(decoded);
     if (decoded['type'] == 'workspace.hello.ack') {
       final payload = decoded['payload'];
       final runtimeId = decoded['workspaceRuntimeId'];
@@ -1254,6 +1442,7 @@ class WorkspaceCloudConnection {
         unawaited(_handleTerminalAcknowledgement(decoded, payload));
       }
     } else if (decoded['type'] == 'assignment.start') {
+      _traceAssignmentReceived(decoded);
       if (connectionStage != WorkspaceConnectionStage.ready) {
         final assignmentId = decoded['assignmentId'];
         if (assignmentId is! String ||
@@ -1287,6 +1476,44 @@ class WorkspaceCloudConnection {
       }
     } else if (decoded['type'] == 'assignment.cancel') {
       unawaited(_handleAssignmentCancel(decoded));
+    } else if (decoded['type'] == 'diagnostic.probe') {
+      _handleDeliveryProbe(decoded);
+    }
+  }
+
+  /// Acknowledges a Cloud delivery probe immediately from the message loop.
+  /// The probe involves no assignment, Worker or Engine process, so its round
+  /// trip isolates transport and Service message-handling latency.
+  void _handleDeliveryProbe(Map<String, dynamic> decoded) {
+    try {
+      final receivedAt = DateTime.now().toUtc();
+      final socket = _transport;
+      final payload = decoded['payload'];
+      if (socket == null || sessionId == null || payload is! Map) return;
+      final probeId = payload['probeId'];
+      if (probeId is! String || probeId.isEmpty || probeId.length > 128) {
+        return;
+      }
+      final context = _traceContext();
+      socket.send(jsonEncode({
+        ..._envelope('diagnostic.probe.ack', {
+          'probeId': probeId,
+          'receivedAt': receivedAt.toIso8601String(),
+          'ackedAt': DateTime.now().toUtc().toIso8601String(),
+          for (final key in const [
+            'transport',
+            'syncState',
+            'localQueueLength',
+            'activeAssignments',
+            'clockOffsetMs',
+            'clockRttMs',
+          ])
+            if (context[key] != null) key: context[key],
+        }),
+        'correlationId': decoded['messageId'],
+      }));
+    } on Object {
+      // A probe is diagnostic only; never disturb the connection for it.
     }
   }
 

@@ -52,10 +52,9 @@ Future<void> main(List<String> args) async {
         trustPolicy: signing.trustPolicy);
     final profiles = <String, WorkerProfileSnapshotAdmission>{};
     for (final type in ['chatgpt', 'gemini']) {
-      final descriptor = logicalWorkerCatalogFixture(type);
-      final profile = jsonDecode(await File(
-              '../../docs/profile-templates/${descriptor.profileDefinitionId}-runtime-catalog.v1.json')
-          .readAsString()) as Map<String, Object?>;
+      final profile = jsonDecode(
+          await File('../../apps/profile_lab/assets/profiles/$type.json')
+              .readAsString()) as Map<String, Object?>;
       final tool = profile['providerTool'] as Map;
       // Signed candidates use command names, not absolute paths. Locate Dart through PATH.
       tool['executableCandidates'] = ['dart'];

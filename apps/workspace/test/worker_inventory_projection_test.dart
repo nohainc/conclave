@@ -82,9 +82,8 @@ void main() {
       'schemaVersion': profile['schemaVersion'],
       'engineFamily': profile['engineFamily'],
       'engineCompatibility': profile['engineCompatibility'],
-      'payloadDigest': sha256
-          .convert(utf8.encode(canonicalJson(profile)))
-          .toString(),
+      'payloadDigest':
+          sha256.convert(utf8.encode(canonicalJson(profile))).toString(),
     };
     final eligibleProfile = await ToolProfileReleaseVerifier.verify(
       input: release,

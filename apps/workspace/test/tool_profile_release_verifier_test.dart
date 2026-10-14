@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
-    show ToolProfileReleaseVerifier, WorkerProfileSnapshotVerifier, canonicalJson;
+    show
+        ToolProfileReleaseVerifier,
+        WorkerProfileSnapshotVerifier,
+        canonicalJson;
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
@@ -27,9 +30,8 @@ void main() {
       'engineFamily': profile['engineFamily'],
       'engineCompatibility': profile['engineCompatibility'],
       'profile': profile,
-      'payloadDigest': sha256
-          .convert(utf8.encode(canonicalJson(profile)))
-          .toString(),
+      'payloadDigest':
+          sha256.convert(utf8.encode(canonicalJson(profile))).toString(),
     };
   });
 

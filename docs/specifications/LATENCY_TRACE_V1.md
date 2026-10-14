@@ -1,0 +1,77 @@
+# Latency Trace v1
+
+Latency Trace extends [Diagnostic Events v1](DIAGNOSTIC_EVENTS_V1.md) so one
+Work request can be followed from Web submission to Web receipt of the outcome
+and any delay attributed to a single stage. It adds no logging system: trace
+points are ordinary diagnostic events with `stage: "trace"` and a closed
+`context.traceStage`.
+
+## Stages
+
+| Stage | `traceStage`                 | Emitted by                         | Meaning                                              |
+| ----- | ---------------------------- | ---------------------------------- | ---------------------------------------------------- |
+| T1    | `web_submitted`              | Web (Slice C)                      | User submits the Work request                        |
+| T2    | `cloud_accepted`             | `routes/work-creation.ts`          | Submission durably persisted                         |
+| T3    | `workflow_dispatch_started`  | `workflow.ts`                      | Workflow step begins dispatching the task            |
+| T4    | `gateway_queued`             | `workspace-gateway.ts`             | `assignment.start` written to WebSocket or HTTP queue |
+| T5    | `service_received`           | `cloud_connection.dart`            | Service reads the command off the transport          |
+| T6    | `service_accepted`           | `cloud_connection.dart`            | Admission `assignment.ack` written                   |
+| T7    | `profile_resolved`           | `workspace_runtime.dart`           | Tool Profile resolved and its execution file located |
+| T8    | `slot_reserved`              | `workspace_runtime.dart`           | Local Worker execution slot reserved                 |
+| T9    | `engine_process_created`     | `cli_worker_engine_supervisor.dart` | Engine OS process exists                            |
+| T10   | `provider_started`           | `cloud_connection.dart`            | Provider CLI start evidence                          |
+| T11   | `terminal_persisted`         | `workspace-gateway.ts`             | Terminal outcome written to D1                       |
+| T12   | `web_received`               | Web (Slice C)                      | Web receives the final update                        |
+
+Auxiliary stages are not numbered: `cloud_ack_received` (command round trip
+and the Service's reported load), `workflow_observed_terminal` (lag between
+the terminal row and the Workflow poll noticing it), and `probe_sent` /
+`probe_acknowledged`.
+
+T5 is stamped when the message is read from the transport, before any
+synchronization deferral, so time spent waiting for the Service to reach
+`ready` is attributed to T5→T6 rather than hidden.
+
+## Timing rules
+
+- Durations within one component use a monotonic timer (`durationMs`,
+  `monotonicMs`). Cloudflare Workers freeze `performance.now()` between I/O, so
+  Cloud-side durations are coarse; rely on wall-clock timestamps taken at I/O
+  boundaries for Cloud intervals.
+- Cross-machine intervals use event `timestamp` values corrected by
+  `clockOffsetMs` (Cloud minus Service). The Service estimates it NTP-style
+  from `workspace.hello` and `workspace.heartbeat` acknowledgements
+  (`serverTime`), keeping the lowest-round-trip sample of the last eight.
+  `clockRttMs` bounds the error at half its value. Never subtract Mac and
+  Cloud timestamps directly.
+- Trace emission is synchronous at the call site and detached from the work it
+  measures. Failures are swallowed. Existing awaited diagnostics on the
+  acknowledgement and spawn paths are deliberately unchanged until the
+  baseline is captured.
+
+## Delivery probe
+
+`POST /api/workspaces/:workspaceId/delivery-probe` (requires
+`workspace:manage`) sends `diagnostic.probe` over the Workspace's live
+transport and waits up to 5 s for `diagnostic.probe.ack`. No assignment,
+Worker, Engine or provider process is involved. The response reports the
+transport, round trip, Service receive/acknowledge times, clock offset, sync
+state, local queue length and active assignment count. A Service that does not
+implement probes never answers and the route returns `outcome: "timeout"`.
+
+Both message types are additive within Workspace protocol 5.1: an older Cloud
+never sends a probe, and a newer Service only answers one.
+
+## Histograms and privacy
+
+The Service keeps fixed-bucket histograms per stage interval
+(`from->to` and `since_received:stage`) and exports p50/p95/p99/max/mean under
+`cloud.latency` in the Workspace diagnostics report. Percentiles are bucket
+upper bounds clamped to the observed maximum. Only numeric durations, closed
+stage names and bounded labels are retained; no prompts, output, paths or
+credentials.
+
+## Baseline gate
+
+Capture a baseline with the current system before changing delivery or
+startup behavior, and record it with the build under test.

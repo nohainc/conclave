@@ -2156,4 +2156,189 @@ void main() {
     expect(connection.isConnected, isTrue);
     await connection.close();
   });
+
+  test('acknowledges a Cloud delivery probe without any assignment', () async {
+    final socket = FakeSocket();
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      localQueueLengthProvider: () => 3,
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'cloud-probe-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'diagnostic.probe',
+      'workspaceRuntimeId': 'workspace-1',
+      'executionWorkspaceId': 'workspace-1',
+      'payload': {
+        'probeId': 'probe-1',
+        'sentAt': DateTime.now().toUtc().toIso8601String(),
+      },
+    }));
+    await waitFor(() => socket.sent.any((message) =>
+        (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+        'diagnostic.probe.ack'));
+
+    final ack = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'diagnostic.probe.ack');
+    final payload = ack['payload'] as Map<String, dynamic>;
+    expect(ack['correlationId'], 'cloud-probe-1');
+    expect(payload['probeId'], 'probe-1');
+    expect(DateTime.parse(payload['receivedAt'] as String).isUtc, isTrue);
+    expect(
+      DateTime.parse(payload['ackedAt'] as String)
+          .isBefore(DateTime.parse(payload['receivedAt'] as String)),
+      isFalse,
+    );
+    expect(payload['syncState'], 'ready');
+    expect(payload['localQueueLength'], 3);
+    expect(payload['activeAssignments'], 0);
+    expect(connection.activeAssignmentCount, 0);
+    await connection.close();
+  });
+
+  test('ignores a probe that has no usable probe ID', () async {
+    final socket = FakeSocket();
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'cloud-probe-bad',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'diagnostic.probe',
+      'payload': {'sentAt': DateTime.now().toUtc().toIso8601String()},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(
+      socket.sent.any((message) =>
+          (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+          'diagnostic.probe.ack'),
+      isFalse,
+    );
+    await connection.close();
+  });
+
+  test('traces admission and attaches Service facts to assignment.ack',
+      () async {
+    final socket = FakeSocket();
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentHandler: (context) async => const WorkspaceAssignmentResult(
+        summary: 'done',
+        output: {'text': 'ok'},
+      ),
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'server-assignment-trace',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'workspace-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-trace-1',
+      'idempotencyKey': 'idem-trace-1',
+      'payload': {
+        'objective': 'inspect',
+        'role': 'research',
+        'workerId': 'conclave.echo',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
+        'input': {},
+        'contextArtifactIds': [],
+        'timeoutMs': 1000,
+      },
+    }));
+    await waitFor(() => socket.sent.any((message) =>
+        (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+        'assignment.result'));
+
+    final ack = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'assignment.ack');
+    final payload = ack['payload'] as Map<String, dynamic>;
+    expect(payload['accepted'], isTrue);
+    final serviceTrace = payload['serviceTrace'] as Map<String, dynamic>;
+    expect(serviceTrace['syncState'], 'ready');
+    expect(serviceTrace['activeAssignments'], 1);
+    expect(serviceTrace['receiveToAckMs'], isA<int>());
+
+    final intervals = connection.latencySummary()['intervals'] as Map;
+    expect(intervals.keys, contains('service_received->service_accepted'));
+    // The terminal path releases the open trace.
+    expect(connection.traceRecorder.isTracking('assignment-trace-1'), isFalse);
+    await connection.close();
+  });
+
+  test('records a heartbeat acknowledgement as a clock-offset sample',
+      () async {
+    final socket = FakeSocket();
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      heartbeat: const Duration(milliseconds: 100),
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+    await waitFor(() => socket.sent.any((message) =>
+        (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+        'workspace.heartbeat'));
+    final heartbeat = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'workspace.heartbeat');
+
+    // Cloud clock runs 2 seconds ahead of this machine.
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'cloud-heartbeat-ack',
+      'correlationId': heartbeat['messageId'],
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'workspace.heartbeat.ack',
+      'workspaceRuntimeId': 'workspace-1',
+      'executionWorkspaceId': 'workspace-1',
+      'payload': {
+        'acknowledged': true,
+        'serverTime': DateTime.now()
+            .toUtc()
+            .add(const Duration(seconds: 2))
+            .toIso8601String(),
+      },
+    }));
+    await waitFor(() => connection.clockOffset.hasEstimate);
+    expect(connection.clockOffset.offsetMs, inInclusiveRange(1900, 2100));
+    await connection.close();
+  });
 }

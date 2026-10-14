@@ -19,6 +19,7 @@ import {
   workStepPromptInputs,
 } from "./workflow-prompts.js";
 import { createEventPublisher } from "./event-publisher.js";
+import { tryLogTraceEvent } from "./observability.js";
 import {
   dispatchTaskAssignment,
   recordAssignmentError,
@@ -564,6 +565,15 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             timeout: "1 minute",
           },
           async () => {
+            // T3: the Workflow step that hands the task to the dispatcher.
+            tryLogTraceEvent({
+              traceStage: "workflow_dispatch_started",
+              requestId: params.workRequestId,
+              workspaceId: params.organizationId,
+              runId: params.runId,
+              taskId: task.id,
+              context: { status: `attempt_${attempt}` },
+            });
             const promptInputs = workStepPromptInputs(
               { ...promptInput, workRequestId: params.workRequestId },
               stepResults,
@@ -717,8 +727,26 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             ["completed", "failed", "cancelled", "timed_out"].includes(
               terminal.status,
             )
-          )
+          ) {
+            // Lag between the terminal row being written and this poll seeing
+            // it. Both timestamps originate in Cloud, so the difference is
+            // valid without clock-offset correction.
+            const persistedAt = Date.parse(terminal.updatedAt);
+            tryLogTraceEvent({
+              traceStage: "workflow_observed_terminal",
+              requestId: params.workRequestId,
+              workspaceId: params.organizationId,
+              runId: params.runId,
+              taskId: task.id,
+              assignmentId: terminal.assignmentId,
+              attemptId: terminal.attemptId,
+              ...(Number.isFinite(persistedAt)
+                ? { durationMs: Math.max(0, Date.now() - persistedAt) }
+                : {}),
+              context: { status: terminal.status },
+            });
             break;
+          }
           if (
             terminal &&
             assignmentDeliveryExpired(

@@ -139,8 +139,8 @@ class WorkspaceReleaseClient {
       }
       final digests = <String>{};
       final releases = <String>{};
-      for (final row in (decoded['revokedWorkspaceReleases'] as List)
-          .whereType<Map>()) {
+      for (final row
+          in (decoded['revokedWorkspaceReleases'] as List).whereType<Map>()) {
         if (row['packageDigest'] is String) {
           digests.add(row['packageDigest'] as String);
         } else if (row['payloadDigest'] is String) {

@@ -54,5 +54,4 @@ class Ed25519ReleaseFixture {
     );
     return base64.encode(signature.bytes);
   }
-
 }

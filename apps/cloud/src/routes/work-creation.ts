@@ -23,6 +23,7 @@ import {
 } from "@conclave/core";
 
 import { createEventPublisher } from "../event-publisher.js";
+import { tryLogTraceEvent } from "../observability.js";
 import {
   HttpError,
   authorizeThreadAccess,
@@ -141,6 +142,7 @@ export async function handleCreateWorkRequest(
   threadId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
+  const handlerStartedAt = performance.now();
   const { context, spaceId } = await authorizeThreadAccess(
     request,
     env,
@@ -598,6 +600,16 @@ export async function handleCreateWorkRequest(
     ? await receipt.commit(responseBody, 202, write)
     : (await write([]), null);
   if (concurrentReplay) return resumeSubmission(env, concurrentReplay);
+  // T2: the submission is durably accepted. durationMs is the handler's own
+  // elapsed time (coarse in Workers; I/O advances the clock).
+  tryLogTraceEvent({
+    traceStage: "cloud_accepted",
+    requestId: workRequest.id,
+    workspaceId: workRequest.primaryWorkspaceId ?? undefined,
+    runId,
+    durationMs: performance.now() - handlerStartedAt,
+    context: { status: "persisted" },
+  });
   try {
     await createEventPublisher(env).publish({
       type: "work_request.created",

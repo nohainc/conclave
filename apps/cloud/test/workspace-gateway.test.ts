@@ -651,6 +651,195 @@ describe("Workspace runtime Gateway", () => {
     ).resolves.toBeNull();
   });
 
+  describe("delivery probe", () => {
+    async function connectedHttpGateway(workspaceId: string, token: string) {
+      const credentialTokenHash = await hashToken(token);
+      const db = {
+        prepare(_sql: string) {
+          return {
+            bind: () => ({
+              first: async () => ({
+                executionWorkspaceId: workspaceId,
+                credentialTokenHash,
+              }),
+              run: async () => ({ success: true }),
+            }),
+          };
+        },
+      };
+      const storage = new Map<string, unknown>();
+      const state = {
+        id: { name: workspaceId },
+        storage: {
+          get: async (key: string) => storage.get(key),
+          put: async (key: string, value: unknown) => {
+            storage.set(key, value);
+          },
+          delete: async (key: string) => storage.delete(key),
+        },
+      };
+      const gateway = new WorkspaceGateway(state as never, {
+        CONCLAVE_DB: db as never,
+      });
+      const create = await gateway.fetch(
+        new Request("https://gateway.internal/runtime/sessions", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            workspaceRuntimeId: "runtime-probe",
+            contractVersion: "1.0",
+          }),
+        }),
+      );
+      expect(create.status).toBe(200);
+      const session = (await create.json()) as {
+        sessionId: string;
+        cursor: string;
+      };
+      const poll = async () => {
+        const response = await gateway.fetch(
+          new Request("https://gateway.internal/runtime/poll", {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              sessionId: session.sessionId,
+              cursor: session.cursor,
+              waitMs: 0,
+            }),
+          }),
+        );
+        return (await response.json()) as {
+          events: Array<{ message: Record<string, unknown> }>;
+        };
+      };
+      return { gateway, session, poll };
+    }
+
+    const probeRequest = () =>
+      new Request("https://gateway.internal/diagnostic-probe", {
+        method: "POST",
+      });
+
+    it("rejects a probe when no Workspace runtime is connected", async () => {
+      const gateway = new WorkspaceGateway(
+        {
+          id: { name: "workspace-offline" },
+          storage: {
+            get: async () => undefined,
+            put: async () => undefined,
+            delete: async () => false,
+          },
+        } as never,
+        { CONCLAVE_DB: {} as never },
+      );
+      const response = await gateway.fetch(probeRequest());
+      expect(response.status).toBe(503);
+    });
+
+    it("queues a probe on the live transport and reports its acknowledgement", async () => {
+      const token = "runtime-secret-probe-ack";
+      const { gateway, session, poll } = await connectedHttpGateway(
+        "workspace-probe-ack",
+        token,
+      );
+      const outcome = gateway.fetch(probeRequest());
+      let queued: Record<string, unknown> | undefined;
+      for (let attempt = 0; attempt < 50 && !queued; attempt += 1) {
+        const polled = await poll();
+        queued = polled.events
+          .map((event) => event.message)
+          .find((message) => message.type === "diagnostic.probe");
+        if (!queued) await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      expect(queued).toBeDefined();
+      const payload = queued!.payload as { probeId: string; sentAt: string };
+      expect(payload.probeId).toMatch(/^probe-/);
+
+      const receivedAt = new Date().toISOString();
+      const acknowledged = await gateway.fetch(
+        new Request("https://gateway.internal/runtime/events", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            sessionId: session.sessionId,
+            events: [
+              {
+                contract: "conclave.desktop-auth-transport",
+                version: "1.0",
+                eventId: "probe-ack-event",
+                occurredAt: receivedAt,
+                message: {
+                  protocol: "conclave.workspace-runtime-protocol",
+                  protocolVersion: "5.1",
+                  messageId: "probe-ack-message",
+                  correlationId: queued!.messageId,
+                  timestamp: receivedAt,
+                  type: "diagnostic.probe.ack",
+                  executionWorkspaceId: "workspace-probe-ack",
+                  workspaceRuntimeId: "runtime-probe",
+                  payload: {
+                    probeId: payload.probeId,
+                    receivedAt,
+                    ackedAt: receivedAt,
+                    syncState: "ready",
+                    localQueueLength: 2,
+                    activeAssignments: 1,
+                    clockOffsetMs: -12,
+                    clockRttMs: 30,
+                  },
+                },
+              },
+            ],
+          }),
+        }),
+      );
+      expect(acknowledged.status).toBe(200);
+
+      const response = await outcome;
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        probeId: payload.probeId,
+        transport: "http_long_poll",
+        outcome: "acknowledged",
+        syncState: "ready",
+        localQueueLength: 2,
+        activeAssignments: 1,
+        clockOffsetMs: -12,
+        clockRttMs: 30,
+      });
+    });
+
+    it("reports a timeout when an older Service never acknowledges", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const { gateway } = await connectedHttpGateway(
+          "workspace-probe-timeout",
+          "runtime-secret-probe-timeout",
+        );
+        const outcome = gateway.fetch(probeRequest());
+        await vi.advanceTimersByTimeAsync(5_001);
+        const response = await outcome;
+        expect(response.status).toBe(504);
+        expect(await response.json()).toMatchObject({
+          transport: "http_long_poll",
+          outcome: "timeout",
+          timeoutMs: 5000,
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it("fences stale socket close events after reconnect", () => {
     const current = {} as WebSocket;
     const stale = {} as WebSocket;

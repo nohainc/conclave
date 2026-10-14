@@ -42,6 +42,9 @@ final class CliWorkerEngineSupervisor {
   final Set<String> _reservedAssignmentIds = {};
   final Set<String> _cancelledAssignments = {};
 
+  /// Assignments waiting for a local Worker slot. Telemetry only.
+  int get queuedAssignmentCount => _queuedAssignments.length;
+
   /// Reaps Engine processes left behind if the owning Workspace Service died.
   /// A PID is acted on only when its command line still identifies this exact
   /// bundled Engine and its private state directory.
@@ -271,6 +274,10 @@ final class CliWorkerEngineSupervisor {
     String? executionId,
     FutureOr<void> Function()? onSlotReserved,
     void Function()? onExecutionStarted,
+
+    /// Called synchronously once the Engine OS process exists, before the
+    /// initialize handshake. Observation only; it is never awaited.
+    void Function()? onProcessStarted,
     void Function(WorkerProgress progress)? onProgress,
     FutureOr<void> Function(WorkerActivity activity)? onActivity,
   }) async {
@@ -359,6 +366,11 @@ final class CliWorkerEngineSupervisor {
         environment: _engineEnvironment(),
         includeParentEnvironment: false,
       );
+      try {
+        onProcessStarted?.call();
+      } on Object {
+        // Observation must never affect Engine launch.
+      }
       processRecord = await _writeProcessRecord(
         process,
         assignmentId: assignmentId,

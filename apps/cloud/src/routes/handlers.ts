@@ -60,6 +60,7 @@ export {
   handleRegisterWorkspaceFromDesktop,
   handleGetWorkspace,
   handleUpdateWorkspace,
+  handleWorkspaceDeliveryProbe,
   handleRevokeWorkspace,
   handleExportWorkspaceAudit,
   handleUploadArtifact,

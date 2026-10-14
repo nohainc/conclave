@@ -52,7 +52,9 @@
       "assignment.error",
       "assignment.cancel",
       "assignment.cancel.ack",
-      "assignment.cancelled"
+      "assignment.cancelled",
+      "diagnostic.probe",
+      "diagnostic.probe.ack"
     ],
     "baseEnvelopeFields": [
       "protocol",

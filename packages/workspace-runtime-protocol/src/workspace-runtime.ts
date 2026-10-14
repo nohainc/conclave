@@ -36,6 +36,8 @@ export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "assignment.cancel",
   "assignment.cancel.ack",
   "assignment.cancelled",
+  "diagnostic.probe",
+  "diagnostic.probe.ack",
 ] as const;
 
 export type WorkspaceRuntimeMessageType =
@@ -437,6 +439,53 @@ export const workspaceRuntimeEnvelopeSchema = z
         })
         .passthrough()
         .safeParse(message.payload);
+      if (!payload.success) {
+        for (const issue of payload.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payload", ...issue.path],
+            message: issue.message,
+          });
+        }
+      }
+    }
+    if (
+      message.type === "diagnostic.probe" ||
+      message.type === "diagnostic.probe.ack"
+    ) {
+      const probeId = nonEmptyString.max(128).regex(/^[A-Za-z0-9._:-]+$/);
+      const schema =
+        message.type === "diagnostic.probe"
+          ? z.object({ probeId, sentAt: timestamp }).strict()
+          : z
+              .object({
+                probeId,
+                receivedAt: timestamp,
+                ackedAt: timestamp,
+                transport: probeId.optional(),
+                syncState: probeId.optional(),
+                localQueueLength: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .max(100_000)
+                  .optional(),
+                activeAssignments: z
+                  .number()
+                  .int()
+                  .min(0)
+                  .max(100_000)
+                  .optional(),
+                clockOffsetMs: z
+                  .number()
+                  .int()
+                  .min(-86_400_000)
+                  .max(86_400_000)
+                  .optional(),
+                clockRttMs: z.number().int().min(0).max(600_000).optional(),
+              })
+              .strict();
+      const payload = schema.safeParse(message.payload);
       if (!payload.success) {
         for (const issue of payload.error.issues) {
           ctx.addIssue({

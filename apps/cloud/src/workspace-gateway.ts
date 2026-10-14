@@ -20,6 +20,7 @@ import {
 import { extractBearerToken } from "../../../packages/security/src/index.js";
 import {
   tryLogDiagnosticEvent,
+  tryLogTraceEvent,
   logStructured,
   requestIdFor,
 } from "./observability.js";
@@ -54,9 +55,31 @@ export {
   type WorkspaceGatewayEnv,
 } from "./workspace-gateway/contracts.js";
 
+/** Work Request ID carried in an assignment payload, for trace correlation. */
+function workRequestIdOf(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const snapshot = (payload as { snapshot?: unknown }).snapshot;
+  const value =
+    snapshot && typeof snapshot === "object"
+      ? (snapshot as { workRequestId?: unknown }).workRequestId
+      : undefined;
+  return typeof value === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(value)
+    ? value
+    : undefined;
+}
+
 export class WorkspaceGateway implements DurableObject {
   private readonly runtimeAuthenticator: WorkspaceRuntimeAuthenticator;
   private readonly sessionStore: WorkspaceRuntimeSessionStore;
+  private readonly pendingProbes = new Map<
+    string,
+    {
+      resolve: (payload: Record<string, unknown>) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  private static readonly PROBE_TIMEOUT_MS = 5_000;
+  private static readonly MAX_PENDING_PROBES = 4;
   private readonly pendingCancelAcks = new Map<
     string,
     {
@@ -64,6 +87,13 @@ export class WorkspaceGateway implements DurableObject {
       timer: ReturnType<typeof setTimeout>;
     }
   >();
+  /**
+   * Wall-clock time each assignment.start was handed to the transport, used
+   * only to report command round-trip time. Bounded and best-effort: a
+   * hibernated Durable Object simply loses the entry.
+   */
+  private readonly commandQueuedAt = new Map<string, number>();
+  private static readonly MAX_TRACKED_COMMANDS = 256;
   private socket: WebSocket | null = null;
   private socketConnectedAt: string | null = null;
   private executionWorkspaceId: string | null = null;
@@ -116,6 +146,9 @@ export class WorkspaceGateway implements DurableObject {
     }
     if (request.method === "POST" && url.pathname === "/disconnect-runtime") {
       return this.disconnectRuntime(request);
+    }
+    if (request.method === "POST" && url.pathname === "/diagnostic-probe") {
+      return this.diagnosticProbe();
     }
     if (request.method === "POST" && url.pathname === "/dispatch-assignment") {
       return this.dispatchAssignment(request);
@@ -893,6 +926,7 @@ export class WorkspaceGateway implements DurableObject {
             status: accepted ? "accepted" : "rejected",
           },
         });
+        this.traceCommandAcknowledged(message, payload, accepted === true);
         if (accepted === true) {
           await this.env.CONCLAVE_DB.prepare(
             `UPDATE worker_assignments SET status = 'acknowledged', updated_at = ?1
@@ -927,6 +961,20 @@ export class WorkspaceGateway implements DurableObject {
         }
         return;
       }
+      case "diagnostic.probe.ack": {
+        const payload = message.payload as Record<string, unknown>;
+        const probeId =
+          typeof payload.probeId === "string" ? payload.probeId : "";
+        const pending = this.pendingProbes.get(probeId);
+        if (!pending) return;
+        clearTimeout(pending.timer);
+        this.pendingProbes.delete(probeId);
+        pending.resolve(payload);
+        return;
+      }
+      case "diagnostic.probe":
+        // Cloud originates probes; a Service never sends one.
+        return;
       case "assignment.start.ack": {
         if (!(await this.activeAssignmentMatches(message))) return;
         const transition = await this.env.CONCLAVE_DB.prepare(
@@ -1240,6 +1288,7 @@ export class WorkspaceGateway implements DurableObject {
           message.payload as never,
           message.attemptId,
         );
+        this.traceTerminalPersisted(message, "completed");
         await this.sendTerminalAcknowledgement(message, "completed");
         return;
       case "assignment.error":
@@ -1274,6 +1323,7 @@ export class WorkspaceGateway implements DurableObject {
           message.payload as never,
           message.attemptId,
         );
+        this.traceTerminalPersisted(message, "failed");
         await this.sendTerminalAcknowledgement(message, "failed");
         return;
       case "assignment.cancelled":
@@ -1284,6 +1334,7 @@ export class WorkspaceGateway implements DurableObject {
           message.payload as never,
           message.attemptId,
         );
+        this.traceTerminalPersisted(message, "cancelled");
         tryLogDiagnosticEvent({
           assignmentId: message.assignmentId,
           workspaceId: message.executionWorkspaceId,
@@ -1373,6 +1424,103 @@ export class WorkspaceGateway implements DurableObject {
           status: String(row.status),
         })),
       },
+    });
+  }
+
+  private rememberCommandQueued(assignmentId: string | undefined): void {
+    if (!assignmentId) return;
+    if (this.commandQueuedAt.size >= WorkspaceGateway.MAX_TRACKED_COMMANDS) {
+      const oldest = this.commandQueuedAt.keys().next().value;
+      if (oldest !== undefined) this.commandQueuedAt.delete(oldest);
+    }
+    this.commandQueuedAt.set(assignmentId, Date.now());
+  }
+
+  /**
+   * Traces receipt of `assignment.ack`. The Service may attach `serviceTrace`
+   * (wall-clock receipt/acceptance times plus its clock-offset estimate); only
+   * bounded numbers are forwarded. Never throws.
+   */
+  private traceCommandAcknowledged(
+    message: WorkspaceRuntimeMessage,
+    payload: Record<string, unknown>,
+    accepted: boolean,
+  ): void {
+    try {
+      const queuedAt = message.assignmentId
+        ? this.commandQueuedAt.get(message.assignmentId)
+        : undefined;
+      if (message.assignmentId)
+        this.commandQueuedAt.delete(message.assignmentId);
+      const serviceTrace =
+        payload.serviceTrace && typeof payload.serviceTrace === "object"
+          ? (payload.serviceTrace as Record<string, unknown>)
+          : {};
+      const integer = (value: unknown): number | undefined =>
+        typeof value === "number" && Number.isInteger(value)
+          ? value
+          : undefined;
+      const offset = integer(serviceTrace.clockOffsetMs);
+      const rtt = integer(serviceTrace.clockRttMs);
+      const queue = integer(serviceTrace.localQueueLength);
+      const active = integer(serviceTrace.activeAssignments);
+      const syncState =
+        typeof serviceTrace.syncState === "string" &&
+        /^[A-Za-z0-9._:-]{1,128}$/.test(serviceTrace.syncState)
+          ? serviceTrace.syncState
+          : undefined;
+      tryLogTraceEvent({
+        traceStage: "cloud_ack_received",
+        assignmentId: message.assignmentId,
+        workspaceId: message.executionWorkspaceId,
+        workspaceRuntimeId: message.workspaceRuntimeId,
+        workerId: message.workerId,
+        runId: message.runId,
+        taskId: message.taskId,
+        attemptId: message.attemptId,
+        ...(queuedAt !== undefined
+          ? { durationMs: Math.max(0, Date.now() - queuedAt) }
+          : {}),
+        context: {
+          status: accepted ? "accepted" : "rejected",
+          transport: this.socket ? "websocket" : "http_long_poll",
+          ...(offset !== undefined &&
+          offset >= -86_400_000 &&
+          offset <= 86_400_000
+            ? { clockOffsetMs: offset }
+            : {}),
+          ...(rtt !== undefined && rtt >= 0 && rtt <= 600_000
+            ? { clockRttMs: rtt }
+            : {}),
+          ...(queue !== undefined && queue >= 0 && queue <= 100_000
+            ? { localQueueLength: queue }
+            : {}),
+          ...(active !== undefined && active >= 0 && active <= 100_000
+            ? { activeAssignments: active }
+            : {}),
+          ...(syncState ? { syncState } : {}),
+        },
+      });
+    } catch {
+      // Telemetry boundary.
+    }
+  }
+
+  /** T11: emitted after the terminal outcome is durably written to D1. */
+  private traceTerminalPersisted(
+    message: WorkspaceRuntimeMessage,
+    status: "completed" | "failed" | "cancelled",
+  ): void {
+    tryLogTraceEvent({
+      traceStage: "terminal_persisted",
+      assignmentId: message.assignmentId,
+      workspaceId: message.executionWorkspaceId,
+      workspaceRuntimeId: message.workspaceRuntimeId,
+      workerId: message.workerId,
+      runId: message.runId,
+      taskId: message.taskId,
+      attemptId: message.attemptId,
+      context: { status },
     });
   }
 
@@ -1578,8 +1726,25 @@ export class WorkspaceGateway implements DurableObject {
         { status: 400 },
       );
     }
+    const queueStartedAt = performance.now();
     try {
       await this.send({ ...assignmentMessage });
+      // T4: the command is written to the WebSocket, or appended to the
+      // durable long-poll queue (whose persistence cost is included).
+      this.rememberCommandQueued(body.assignmentId);
+      tryLogTraceEvent({
+        traceStage: "gateway_queued",
+        requestId: workRequestIdOf(body.payload),
+        assignmentId: body.assignmentId,
+        workspaceId: body.executionWorkspaceId,
+        workspaceRuntimeId: body.workspaceRuntimeId,
+        workerId: body.workerId,
+        runId: body.runId,
+        taskId: body.taskId,
+        attemptId: body.attemptId,
+        durationMs: performance.now() - queueStartedAt,
+        context: { transport: this.socket ? "websocket" : "http_long_poll" },
+      });
     } catch (error) {
       return Response.json(
         {
@@ -1601,6 +1766,108 @@ export class WorkspaceGateway implements DurableObject {
       deliveryState: "queued",
       acceptance: "pending",
     });
+  }
+
+  /**
+   * Sends a Cloud-to-Service probe over the live Workspace transport and waits
+   * for its acknowledgement. No assignment, Worker or provider process is
+   * involved, so the result isolates transport and Service message-loop
+   * latency. A Service that predates probes simply never answers; the probe
+   * then reports `timeout` rather than failing the Workspace.
+   */
+  private async diagnosticProbe(): Promise<Response> {
+    if (!(await this.isRuntimeLive()))
+      return Response.json({ error: "Workspace is offline" }, { status: 503 });
+    if (this.pendingProbes.size >= WorkspaceGateway.MAX_PENDING_PROBES)
+      return Response.json(
+        { error: "Too many delivery probes are in progress" },
+        { status: 429 },
+      );
+    const probeId = `probe-${crypto.randomUUID()}`;
+    const transport = this.socket ? "websocket" : "http_long_poll";
+    const sentAt = new Date().toISOString();
+    const startedAt = Date.now();
+    const acknowledgement = new Promise<Record<string, unknown>>(
+      (resolve, reject) => {
+        const timer = setTimeout(() => {
+          this.pendingProbes.delete(probeId);
+          reject(new Error("probe timeout"));
+        }, WorkspaceGateway.PROBE_TIMEOUT_MS);
+        this.pendingProbes.set(probeId, { resolve, timer });
+      },
+    );
+    // A rejected promise nobody awaits (queueing failed first) must not
+    // surface as an unhandled rejection.
+    acknowledgement.catch(() => undefined);
+    try {
+      await this.send({
+        protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
+        protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+        messageId: `message-${crypto.randomUUID()}`,
+        timestamp: sentAt,
+        type: "diagnostic.probe",
+        executionWorkspaceId: this.executionWorkspaceId ?? undefined,
+        workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
+        payload: { probeId, sentAt },
+      });
+    } catch (error) {
+      const pending = this.pendingProbes.get(probeId);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingProbes.delete(probeId);
+      }
+      return Response.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Delivery probe could not be queued",
+        },
+        { status: 503 },
+      );
+    }
+    tryLogTraceEvent({
+      traceStage: "probe_sent",
+      workspaceId: this.executionWorkspaceId ?? undefined,
+      workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
+      context: { transport, probeId },
+    });
+    try {
+      const ack = await acknowledgement;
+      const roundTripMs = Date.now() - startedAt;
+      tryLogTraceEvent({
+        traceStage: "probe_acknowledged",
+        workspaceId: this.executionWorkspaceId ?? undefined,
+        workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
+        durationMs: roundTripMs,
+        context: { transport, probeId },
+      });
+      return Response.json({
+        probeId,
+        transport,
+        outcome: "acknowledged",
+        roundTripMs,
+        sentAt,
+        serviceReceivedAt: ack.receivedAt,
+        serviceAcknowledgedAt: ack.ackedAt,
+        clockOffsetMs: ack.clockOffsetMs ?? null,
+        clockRttMs: ack.clockRttMs ?? null,
+        syncState: ack.syncState ?? null,
+        localQueueLength: ack.localQueueLength ?? null,
+        activeAssignments: ack.activeAssignments ?? null,
+      });
+    } catch {
+      return Response.json(
+        {
+          probeId,
+          transport,
+          outcome: "timeout",
+          timeoutMs: WorkspaceGateway.PROBE_TIMEOUT_MS,
+          note: "No acknowledgement arrived. The Workspace Service may predate delivery probes or may not be reading its connection.",
+        },
+        { status: 504 },
+      );
+    }
   }
 
   private async cancelAssignment(request: Request): Promise<Response> {

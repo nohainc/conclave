@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   isTrustedRealtimeOrigin,
   logDiagnosticEvent,
@@ -6,6 +6,7 @@ import {
   sanitizeDiagnostics,
   structuredLogRecord,
   tryLogDiagnosticEvent,
+  tryLogTraceEvent,
 } from "../src/observability.js";
 import { parseDiagnosticEvent } from "@conclave/protocol";
 
@@ -144,5 +145,51 @@ describe("observability", () => {
         ["https://app.conclave.test"],
       ),
     ).toBe(true);
+  });
+
+  it("emits a correlated latency-trace stage with bounded timing context", () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      tryLogTraceEvent({
+        traceStage: "gateway_queued",
+        requestId: "work-request-1",
+        assignmentId: "assignment-1",
+        runId: "run-1",
+        taskId: "task-1",
+        attemptId: "attempt-1",
+        durationMs: 12.6,
+        context: { transport: "websocket" },
+      });
+      expect(log).toHaveBeenCalledTimes(1);
+      const record = JSON.parse(String(log.mock.calls[0]?.[0])) as {
+        message: string;
+        details: { event: unknown };
+      };
+      const event = parseDiagnosticEvent(record.details.event);
+      expect(record.message).toBe("diagnostic.event");
+      expect(event.stage).toBe("trace");
+      expect(event.assignmentId).toBe("assignment-1");
+      expect(event.context?.traceStage).toBe("gateway_queued");
+      expect(event.context?.durationMs).toBe(13);
+      expect(event.context?.transport).toBe("websocket");
+      expect(event.context?.monotonicMs).toBeGreaterThanOrEqual(0);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("never lets a malformed trace event throw into the dispatch path", () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(() =>
+        tryLogTraceEvent({
+          traceStage: "gateway_queued",
+          assignmentId: "not a safe token!",
+        }),
+      ).not.toThrow();
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
   });
 });

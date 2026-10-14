@@ -15,6 +15,47 @@ export const EXECUTION_TRACE_STAGES = [
 ] as const;
 export type ExecutionTraceStage = (typeof EXECUTION_TRACE_STAGES)[number];
 
+/**
+ * Ordered latency stages from Web submission to Web receipt of the outcome.
+ * `TRACE_STAGE_NUMBERS` maps the first twelve to the T1-T12 labels used in
+ * the latency baseline. Auxiliary stages are not numbered: they measure
+ * delivery acknowledgement and Workflow outcome observation lag.
+ */
+export const TRACE_STAGES = [
+  "web_submitted",
+  "cloud_accepted",
+  "workflow_dispatch_started",
+  "gateway_queued",
+  "service_received",
+  "service_accepted",
+  "profile_resolved",
+  "slot_reserved",
+  "engine_process_created",
+  "provider_started",
+  "terminal_persisted",
+  "web_received",
+] as const;
+export type TraceStage = (typeof TRACE_STAGES)[number];
+
+export const AUXILIARY_TRACE_STAGES = [
+  "cloud_ack_received",
+  "workflow_observed_terminal",
+  "probe_sent",
+  "probe_acknowledged",
+] as const;
+export type AuxiliaryTraceStage = (typeof AUXILIARY_TRACE_STAGES)[number];
+
+export const ALL_TRACE_STAGES = [
+  ...TRACE_STAGES,
+  ...AUXILIARY_TRACE_STAGES,
+] as const;
+
+/** T1..T12 label for a numbered stage; undefined for auxiliary stages. */
+export function traceStageNumber(stage: string): number | undefined {
+  const index = (TRACE_STAGES as readonly string[]).indexOf(stage);
+  return index < 0 ? undefined : index + 1;
+}
+
 const boundedToken = z
   .string()
   .min(1)
@@ -52,6 +93,19 @@ export const DiagnosticContextSchema = z
     lineBytes: z.number().int().nonnegative().max(4_194_304).optional(),
     httpStatusCode: z.number().int().min(100).max(599).optional(),
     recovered: z.boolean().optional(),
+    /** Latency stage; see TRACE_STAGES. */
+    traceStage: z.enum(ALL_TRACE_STAGES).optional(),
+    /** Emitter-local monotonic milliseconds (not comparable across hosts). */
+    monotonicMs: z.number().int().nonnegative().max(2_147_483_647).optional(),
+    /** Estimated (Cloud clock - emitter clock) in ms, from heartbeat samples. */
+    clockOffsetMs: z.number().int().min(-86_400_000).max(86_400_000).optional(),
+    /** Round-trip time of the heartbeat sample behind clockOffsetMs. */
+    clockRttMs: z.number().int().nonnegative().max(600_000).optional(),
+    /** Service connection stage, e.g. ready or synchronizing. */
+    syncState: boundedToken.optional(),
+    localQueueLength: z.number().int().nonnegative().max(100_000).optional(),
+    activeAssignments: z.number().int().nonnegative().max(100_000).optional(),
+    probeId: boundedToken.optional(),
   })
   .strict();
 

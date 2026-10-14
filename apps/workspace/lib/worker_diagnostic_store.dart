@@ -484,6 +484,14 @@ final class WorkerDiagnosticStore {
       'lineBytes',
       'httpStatusCode',
       'recovered',
+      'traceStage',
+      'monotonicMs',
+      'clockOffsetMs',
+      'clockRttMs',
+      'syncState',
+      'localQueueLength',
+      'activeAssignments',
+      'probeId',
     };
     return {
       for (final entry in context.entries)

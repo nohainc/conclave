@@ -103,13 +103,11 @@ void main() {
     final legacy = <String, Object?>{
       'profileDefinitionId': 'fixture-cli',
       'workerTypeId': 'fixture-worker',
-      'providerToolName':
-          (legacyProfile['providerTool'] as Map)['name'],
+      'providerToolName': (legacyProfile['providerTool'] as Map)['name'],
       'channel': 'stable',
       'releaseVersion': 1,
-      'payloadDigest': sha256
-          .convert(utf8.encode(canonicalJson(legacyProfile)))
-          .toString(),
+      'payloadDigest':
+          sha256.convert(utf8.encode(canonicalJson(legacyProfile))).toString(),
       'schemaVersion': profile['schemaVersion'],
       'engineFamily': profile['engineFamily'],
       'engineCompatibility': profile['engineCompatibility'],

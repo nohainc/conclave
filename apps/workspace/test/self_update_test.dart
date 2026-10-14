@@ -527,7 +527,9 @@ void main() {
         ..headers.contentType = ContentType.json
         ..write(jsonEncode({
           'revokedKeyIds': ['key-1'],
-          'revokedWorkspaceReleases': [],
+          'revokedWorkspaceReleases': [
+            {'packageDigest': 'revoked-profile-digest'},
+          ],
         }));
       await request.response.close();
     });

@@ -415,7 +415,8 @@ class WorkerProfileStore implements WorkerProfileStorePort {
     final snapshot = Map<String, Object?>.from(decoded);
     final revision = snapshot['revision'];
     final digest = snapshot['digest'];
-    if (revision is int && digest is String &&
+    if (revision is int &&
+        digest is String &&
         trustPolicy.revokedDigests.contains(digest)) {
       if (!lastKnownGood && !staging && !allowRevokedCurrent) {
         throw WorkerProfileRevokedException(workerTypeId);

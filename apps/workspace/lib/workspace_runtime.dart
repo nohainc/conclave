@@ -219,15 +219,23 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       await connection?.reportWorkerStarted(context);
     },
     onExecutionSlotReserved: (context) async {
+      // Stamp T8 first (synchronous); the awaited diagnostic below is the
+      // pre-existing write that precedes Engine spawn and is measured as-is.
+      connection?.traceAssignmentStage(context, 'slot_reserved');
       await connection?.recordAssignmentDiagnostic(
         context,
         event: 'assignment.slot_reserved',
         stage: 'slot_reservation',
       );
     },
+    onEngineProcessStarted: (context) =>
+        connection?.traceAssignmentStage(context, 'engine_process_created'),
     cancelToolProfileAssignment: cliWorkerEngineSupervisor?.cancel,
     executeWithActivity: (worker, workingDirectory, context, payload,
-        {onProgress, onSlotReserved, onActivity}) async {
+        {onProgress,
+        onSlotReserved,
+        onEngineProcessStarted,
+        onActivity}) async {
       final supervisor = cliWorkerEngineSupervisor;
       final coordinator = workerCatalogCoordinator;
       if (coordinator == null || supervisor == null) {
@@ -344,6 +352,8 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       }
       final profileFile =
           await toolProfileReleaseStore.executionProfileFile(release);
+      // T7: Profile resolved and its execution file located.
+      connection?.traceAssignmentStage(context, 'profile_resolved');
       try {
         if (workerHandler.isCancellationRequested(context.assignmentId)) {
           throw const AssignmentExecutionFailure(
@@ -393,6 +403,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           ),
           onProgress: onProgress,
           onSlotReserved: onSlotReserved,
+          onProcessStarted: onEngineProcessStarted,
           onActivity: onActivity,
         );
       } finally {
@@ -477,6 +488,8 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           assignmentCancellationHandler: (assignmentId, reason) =>
               workerSubsystem.cancel(assignmentId, reason),
           diagnosticStoreForWorkerType: diagnosticStoreForWorkerType,
+          localQueueLengthProvider: () =>
+              cliWorkerEngineSupervisor?.queuedAssignmentCount ?? 0,
           workerInventoryProvider: () async {
             final localWorkers = await localWorkerRegistry.list();
             return workerCatalogCoordinator?.inventoryForWorkers(

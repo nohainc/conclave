@@ -25,6 +25,8 @@ export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_MESSAGE_TYPES = [
   "assignment.cancel",
   "assignment.cancel.ack",
   "assignment.cancelled",
+  "diagnostic.probe",
+  "diagnostic.probe.ack",
 ] as const;
 export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_BASE_ENVELOPE_FIELDS = [
   "protocol",

@@ -26,6 +26,8 @@ const workspaceRuntimeMessageTypes = <String>{
   'assignment.cancel',
   'assignment.cancel.ack',
   'assignment.cancelled',
+  'diagnostic.probe',
+  'diagnostic.probe.ack',
 };
 
 class WorkspaceRuntimeMessage {

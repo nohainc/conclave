@@ -1,5 +1,6 @@
 import {
   createDiagnosticEvent,
+  type DiagnosticContext,
   type DiagnosticEvent,
 } from "@conclave/protocol";
 
@@ -159,6 +160,59 @@ export function tryLogDiagnosticEvent(
     return logDiagnosticEvent(input);
   } catch {
     return null;
+  }
+}
+
+export interface TraceEventInput {
+  traceStage: NonNullable<DiagnosticContext["traceStage"]>;
+  requestId?: string;
+  workspaceId?: string;
+  workspaceRuntimeId?: string;
+  runId?: string;
+  taskId?: string;
+  attemptId?: string;
+  assignmentId?: string;
+  workerId?: string;
+  workerTypeId?: string;
+  severity?: DiagnosticEvent["severity"];
+  errorCode?: string;
+  /** Elapsed time of the measured step, from a monotonic timer when possible. */
+  durationMs?: number;
+  context?: Omit<DiagnosticContext, "traceStage" | "monotonicMs">;
+}
+
+/**
+ * Emits one latency-trace stage. Each event carries the wall-clock timestamp
+ * (comparable across hosts after clock-offset correction) and an emitter-local
+ * monotonic reading (comparable only within this isolate; Workers freeze
+ * `performance.now()` between I/O, so treat it as coarse).
+ *
+ * Synchronous, allocation-light and never throws: trace failures must not
+ * delay or alter command delivery.
+ */
+export function tryLogTraceEvent(input: TraceEventInput): void {
+  try {
+    const { traceStage, context, durationMs, severity, errorCode, ...ids } =
+      input;
+    tryLogDiagnosticEvent({
+      ...ids,
+      component: "cloud",
+      operation: "assignment",
+      stage: "trace",
+      severity: severity ?? "info",
+      ...(errorCode ? { errorCode } : {}),
+      retryable: false,
+      context: {
+        ...context,
+        traceStage,
+        monotonicMs: Math.max(0, Math.round(performance.now())),
+        ...(durationMs !== undefined
+          ? { durationMs: Math.max(0, Math.round(durationMs)) }
+          : {}),
+      },
+    });
+  } catch {
+    // Telemetry boundary.
   }
 }
 
