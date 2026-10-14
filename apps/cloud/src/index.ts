@@ -31,6 +31,7 @@ type StaticAssetEnvironment = {
   };
 };
 
+import { sweepUnsignaledTerminals } from "./assignment-workflow-signal.js";
 import * as handlers from "./routes/handlers.js";
 import { handleBetterAuthRequest, identityService } from "./auth/index.js";
 import {
@@ -189,11 +190,18 @@ export default {
       new Date(),
       env,
     );
+    // Outbox: terminal assignments whose Workflow notification was not
+    // delivered. Independent of the recovery pass above and best effort.
+    const workflowSignals = await sweepUnsignaledTerminals(env).catch(() => ({
+      attempted: 0,
+      signaled: 0,
+    }));
     if (controller.cron !== "17 3 * * *") {
       console.log(
         JSON.stringify({
           event: "assignment_recovery_complete",
           recoveredAssignments,
+          workflowSignals,
         }),
       );
       return;

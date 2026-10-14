@@ -18,6 +18,7 @@ import {
   renderWorkStepPrompt,
   workStepPromptInputs,
 } from "./workflow-prompts.js";
+import { ASSIGNMENT_TERMINAL_EVENT_TYPE } from "./assignment-workflow-signal.js";
 import { createEventPublisher } from "./event-publisher.js";
 import { tryLogTraceEvent } from "./observability.js";
 import {
@@ -41,16 +42,112 @@ import {
 import {
   assignmentDeadlineViolation,
   classifyStepAssignmentOutcome,
+  currentAssignmentDeadline,
   DEFAULT_QUEUE_WAIT_TIMEOUT_MS,
   type AssignmentDeadlinePhase,
 } from "./assignment-delivery.js";
 
 /**
- * Number of 2-second polls the Workflow waits for the Service to confirm a
- * revocation before it gives up *waiting*. Giving up never means the process
+ * Number of wait rounds (10 s each) the Workflow waits for the Service to
+ * confirm a revocation before it gives up *waiting*. Giving up never means the process
  * stopped: the assignment stays `reconciling` and the step fails without retry.
  */
-const REVOCATION_CONFIRMATION_POLLS = 15;
+const REVOCATION_CONFIRMATION_ROUNDS = 3;
+const REVOCATION_CONFIRMATION_ROUND_MS = 10_000;
+
+/**
+ * Longest the Workflow waits for a terminal notification before re-reading the
+ * assignment in D1. Bounds the delay caused by a lost event.
+ */
+export const ASSIGNMENT_RECONCILIATION_INTERVAL_MS = 30_000;
+const WAKEUP_SLACK = 20;
+
+interface WakeupRow {
+  readonly status: string;
+  readonly createdAt: string;
+  readonly updatedAt?: string | null;
+  readonly dispatchedAt?: string | null;
+  readonly acknowledgedAt?: string | null;
+  readonly permitIssuedAt?: string | null;
+  readonly permitRequired?: number | null;
+  readonly runningAt?: string | null;
+  readonly queueWaitTimeoutMs?: number | null;
+}
+
+function phaseDeadline(row: WakeupRow, timeoutMs: number) {
+  return currentAssignmentDeadline({
+    status: row.status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    dispatchedAt: row.dispatchedAt,
+    acknowledgedAt: row.acknowledgedAt,
+    startPermitIssuedAt: row.permitIssuedAt,
+    startPermitRequired: row.permitRequired === 1,
+    runningAt: row.runningAt,
+    queueWaitTimeoutMs: row.queueWaitTimeoutMs ?? DEFAULT_QUEUE_WAIT_TIMEOUT_MS,
+    timeoutMs,
+  });
+}
+
+/**
+ * How long to wait for the terminal event before looking at D1 again: the
+ * time left in the current phase, never more than the reconciliation interval
+ * and never less than a second.
+ */
+export function nextWakeupMs(
+  row: WakeupRow | null,
+  timeoutMs: number,
+  now = Date.now(),
+): number {
+  let wait = ASSIGNMENT_RECONCILIATION_INTERVAL_MS;
+  const deadline = row ? phaseDeadline(row, timeoutMs) : null;
+  if (deadline) {
+    const started = Date.parse(deadline.startedAt);
+    if (Number.isFinite(started)) {
+      wait = Math.min(wait, started + deadline.limitMs - now);
+    }
+  }
+  return Math.max(1_000, Math.ceil(wait / 1_000) * 1_000);
+}
+
+/**
+ * True once a running assignment is past its provider time limit plus the
+ * grace the Service needs to report its own timeout first.
+ */
+export function providerExecutionOverrun(
+  row: WakeupRow,
+  timeoutMs: number,
+  now = Date.now(),
+): boolean {
+  const started = Date.parse(row.runningAt ?? row.updatedAt ?? row.createdAt);
+  return (
+    Number.isFinite(started) &&
+    now - started >= timeoutMs + DEFAULT_QUEUE_WAIT_TIMEOUT_MS
+  );
+}
+
+/**
+ * Suspends the Workflow until an `assignment-terminal` event arrives or
+ * [timeoutMs] passes. Both outcomes are the same to the caller: it re-reads
+ * the assignment from D1, which is the only authority. An event sent before
+ * this wait started is buffered by Workflows and returns immediately.
+ */
+async function waitForTerminalEvent(
+  step: WorkflowStep,
+  name: string,
+  timeoutMs: number,
+): Promise<"event" | "timeout"> {
+  try {
+    await step.waitForEvent(name, {
+      type: ASSIGNMENT_TERMINAL_EVENT_TYPE,
+      timeout: `${Math.max(1, Math.ceil(timeoutMs / 1_000))} seconds`,
+    });
+    return "event";
+  } catch {
+    // Timing out is the reconciliation path, not a failure.
+    return "timeout";
+  }
+}
 
 /**
  * An ambiguous failure: the work may have run (or may still be running). The
@@ -774,13 +871,17 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           ["completed", "failed", "cancelled", "timed_out"].includes(
             row.status,
           );
-        const pollCount = Math.max(
-          1,
+        // The Workflow sleeps until a terminal notification arrives. Each
+        // wake-up (an event, a phase deadline or the reconciliation interval)
+        // re-reads the authoritative row, so a lost, early, duplicated or
+        // stale event can only cost one extra read. The cap below is a safety
+        // valve; the time bound is the D1-derived provider deadline.
+        const maxWakeups =
           Math.ceil(
-            (task.step.timeoutMs + DEFAULT_QUEUE_WAIT_TIMEOUT_MS) / 2_000,
-          ),
-        );
-        for (let poll = 0; poll < pollCount; poll += 1) {
+            (task.step.timeoutMs + 2 * DEFAULT_QUEUE_WAIT_TIMEOUT_MS) /
+              ASSIGNMENT_RECONCILIATION_INTERVAL_MS,
+          ) + WAKEUP_SLACK;
+        for (let poll = 0; poll < maxWakeups; poll += 1) {
           terminal = await workflowStep.do(
             `workflow:${task.step.kind}:assignment-status:${attempt}:${poll}`,
             { ...stepConfig, timeout: "30 seconds" },
@@ -879,9 +980,15 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             revokedAfter = observedStatus;
             continue;
           }
-          await workflowStep.sleep(
+          const providerOverrun =
+            !!terminal &&
+            terminal.status === "running" &&
+            providerExecutionOverrun(terminal, task.step.timeoutMs);
+          if (providerOverrun) break;
+          await waitForTerminalEvent(
+            workflowStep,
             `workflow:${task.step.kind}:assignment-wait:${attempt}:${poll}`,
-            "2 seconds",
+            nextWakeupMs(terminal, task.step.timeoutMs),
           );
         }
         if (!isTerminalRow(terminal)) {
@@ -914,15 +1021,19 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             },
           );
           revokedAfter ??= observed;
-          for (let poll = 0; poll < REVOCATION_CONFIRMATION_POLLS; poll += 1) {
+          for (
+            let round = 0;
+            round < REVOCATION_CONFIRMATION_ROUNDS;
+            round += 1
+          ) {
             terminal = await workflowStep.do(
-              `workflow:${task.step.kind}:revocation-status:${attempt}:${poll}`,
+              `workflow:${task.step.kind}:revocation-status:${attempt}:${round}`,
               { ...stepConfig, timeout: "30 seconds" },
               async () => {
                 const row = await readAssignment();
                 // Re-send the cancel while waiting; the Service may have
                 // been offline when revocation began.
-                if (row && !isTerminalRow(row) && poll % 3 === 2) {
+                if (row && !isTerminalRow(row) && round > 0) {
                   await deliverRevocation(
                     this.env as unknown as RevocationEnv,
                     assignment.assignmentId,
@@ -932,9 +1043,19 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
               },
             );
             if (isTerminalRow(terminal)) break;
-            await workflowStep.sleep(
-              `workflow:${task.step.kind}:revocation-wait:${attempt}:${poll}`,
-              "2 seconds",
+            await waitForTerminalEvent(
+              workflowStep,
+              `workflow:${task.step.kind}:revocation-wait:${attempt}:${round}`,
+              REVOCATION_CONFIRMATION_ROUND_MS,
+            );
+          }
+          if (!isTerminalRow(terminal)) {
+            // Final look after the last wait, so a confirmation that arrived
+            // during it is not reported as unconfirmed.
+            terminal = await workflowStep.do(
+              `workflow:${task.step.kind}:revocation-status:${attempt}:final`,
+              { ...stepConfig, timeout: "30 seconds" },
+              async () => readAssignment(),
             );
           }
         }

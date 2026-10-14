@@ -1,3 +1,4 @@
+import type { WorkflowSignalEnv } from "../assignment-workflow-signal.js";
 import { WorkspaceRuntimeAuthenticator } from "./runtime-authenticator.js";
 
 const jsonArray = (value: unknown): string[] => {
@@ -99,6 +100,8 @@ export function normalizeWorkspaceWorkerInstallationStatus(
 export interface WorkspaceGatewayEnv {
   CONCLAVE_DB: D1Database;
   CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
+  /** Used to wake the Workflow that waits for a terminal assignment. */
+  CONCLAVE_RUN_WORKFLOW?: WorkflowSignalEnv["CONCLAVE_RUN_WORKFLOW"];
 }
 
 export interface WorkspaceAssignmentCorrelation {

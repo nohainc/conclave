@@ -69,8 +69,21 @@ type FixtureAssignment = {
 
 function createAcceptanceRun(
   definition: BuiltinWorkflowDefinition,
-  options: { cancelAfterFirstStep?: boolean } = {},
+  options: {
+    cancelAfterFirstStep?: boolean;
+    /**
+     * When the Service's result reaches Cloud: `during_dispatch` (before the
+     * Workflow looks), `event` (the Workflow suspends and the terminal event
+     * wakes it) or `lost_event` (the wake-up is lost and the reconciliation
+     * timeout finds the durable state).
+     */
+    completion?: "during_dispatch" | "event" | "lost_event";
+  } = {},
 ) {
+  const completion = options.completion ?? "during_dispatch";
+  const pendingCompletions: Array<() => Promise<void>> = [];
+  const waits: { name: string; options: unknown }[] = [];
+  const sleeps: string[] = [];
   selectionCalls.length = 0;
   const gatewayCalls: Record<string, unknown>[] = [];
   const taskWrites: { sql: string; values: unknown[] }[] = [];
@@ -223,9 +236,12 @@ function createAcceptanceRun(
       // a dispatch alone.
       const row = assignments.get(assignmentId);
       if (row) row.status = "running";
-      await recordAssignmentResult(database, assignmentId, {
-        text: `completed ${String(snapshot.role)}`,
-      } as never);
+      const finish = () =>
+        recordAssignmentResult(database, assignmentId, {
+          text: `completed ${String(snapshot.role)}`,
+        } as never).then(() => undefined);
+      if (completion === "during_dispatch") await finish();
+      else pendingCompletions.push(finish);
       return Response.json({ accepted: true });
     },
   };
@@ -243,9 +259,23 @@ function createAcceptanceRun(
       _config: unknown,
       callback: () => Promise<T>,
     ) => callback(),
-    sleep: async () => undefined,
+    sleep: async (name: string) => {
+      sleeps.push(name);
+    },
+    waitForEvent: async (name: string, config: unknown) => {
+      waits.push({ name, options: config });
+      await pendingCompletions.shift()?.();
+      // A lost event: the result is durable in D1 but the wake-up never
+      // arrives, so the wait ends by timeout, which Workflows throws.
+      if (completion === "lost_event") throw new Error("Execution timed out");
+      return {
+        type: "assignment-terminal",
+        payload: {},
+        timestamp: new Date(),
+      };
+    },
   } as unknown as import("cloudflare:workers").WorkflowStep;
-  return { instance, step, taskWrites, gatewayCalls };
+  return { instance, step, taskWrites, gatewayCalls, waits, sleeps };
 }
 
 const workflowCases = Object.values(BUILTIN_WORKFLOW_CATALOG);
@@ -358,4 +388,37 @@ describe("Work v1 acceptance through the shared assignment dispatcher", () => {
     expect(result.status).toBe("cancelled");
     expect(gatewayCalls).toHaveLength(1);
   });
+  it.each(["event", "lost_event"] as const)(
+    "waits for a terminal notification instead of polling (%s)",
+    async (completion) => {
+      const definition = BUILTIN_WORKFLOWS.plan_implement;
+      const { instance, step, waits, sleeps } = createAcceptanceRun(
+        definition,
+        { completion },
+      );
+      const result = await instance.run(
+        {
+          payload: {
+            runId: "run-v8-acceptance",
+            goalId: "goal-v8-acceptance",
+            idempotencyKey: `key-${completion}`,
+            workRequestId: "request-v8-acceptance",
+            organizationId: "workspace-fixture",
+            builtinWorkflow: definition,
+          },
+        } as never,
+        step,
+      );
+      expect(result.status).toBe("completed");
+      // One suspension per step; no two-second status sleeps at all.
+      expect(waits).toHaveLength(definition.steps.length);
+      expect(sleeps).toEqual([]);
+      for (const wait of waits) {
+        expect(wait.options).toMatchObject({
+          type: "assignment-terminal",
+          timeout: expect.stringMatching(/^\d+ seconds$/),
+        });
+      }
+    },
+  );
 });

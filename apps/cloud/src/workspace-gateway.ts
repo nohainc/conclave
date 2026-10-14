@@ -1,3 +1,4 @@
+import { signalAssignmentTerminal } from "./assignment-workflow-signal.js";
 import {
   parseWorkspaceRuntimeMessage,
   serializeWorkspaceRuntimeMessage,
@@ -1617,13 +1618,16 @@ export class WorkspaceGateway implements DurableObject {
       case "assignment.cancel.ack": {
         const payload = message.payload as Record<string, unknown>;
         if (payload.cancelled === true) {
-          await this.recordCancellationEvidence(message, {
+          const recorded = await this.recordCancellationEvidence(message, {
             status: "cancelled",
             reason:
               typeof payload.reason === "string"
                 ? payload.reason
                 : "Cancelled by Workspace runtime",
           });
+          if (recorded) {
+            await signalAssignmentTerminal(this.env, message.assignmentId!);
+          }
         }
         const pending = this.pendingCancelAcks.get(message.assignmentId!);
         if (pending) {
@@ -1954,6 +1958,12 @@ export class WorkspaceGateway implements DurableObject {
         status: authoritativeStatus,
       },
     });
+    // Notify the Workflow only after the result is durable and acknowledged.
+    // A failed signal is recovered by the outbox sweep and the waiter's own
+    // reconciliation; it must never delay or fail the acknowledgement above.
+    if (message.assignmentId) {
+      await signalAssignmentTerminal(this.env, message.assignmentId);
+    }
   }
 
   private async terminalAssignmentMatches(

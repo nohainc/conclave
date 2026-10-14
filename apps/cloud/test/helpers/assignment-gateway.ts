@@ -12,7 +12,11 @@ const token = "runtime-secret-assignment-lifecycle";
  */
 export async function gatewayFixture(
   initialStatus: string,
-  options: { readonly ready?: boolean } = {},
+  options: {
+    readonly ready?: boolean;
+    /** Extra bindings for the Gateway's environment (e.g. a Workflow). */
+    readonly env?: Record<string, unknown>;
+  } = {},
 ) {
   const f = await conversationFixture();
   f.sqlite.exec(
@@ -51,7 +55,7 @@ export async function gatewayFixture(
           delete: async (key: string) => storage.delete(key),
         },
       } as never,
-      { CONCLAVE_DB: f.db as never },
+      { CONCLAVE_DB: f.db as never, ...options.env } as never,
     );
   const gateway = makeGateway();
   const headers = {
