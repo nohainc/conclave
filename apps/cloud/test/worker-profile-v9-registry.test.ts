@@ -164,7 +164,7 @@ describe("V9 Worker Profile registry", () => {
         .prepare(
           "UPDATE worker_profile_history SET digest = ? WHERE worker_type_id = ? AND revision = ?",
         )
-        .run("tampered-digest", "fixture-worker", 1);
+        .run("f".repeat(64), "fixture-worker", 1);
       await expect(
         restoreWorkerProfile({
           env,

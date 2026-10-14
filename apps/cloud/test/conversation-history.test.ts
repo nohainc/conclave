@@ -15,11 +15,9 @@ import type { SecurityEnv } from "../src/routes/handlers.js";
 it("records all six canonical fact kinds atomically and preserves exact response text once", async () => {
   const f = await conversationFixture();
   f.assign("A");
+  f.start("A");
   const conversation = String(
     f.sqlite.prepare("SELECT id FROM conversations").get()!.id,
-  );
-  f.sqlite.exec(
-    "UPDATE worker_assignments SET status='acknowledged' WHERE id='A'",
   );
   const reply = "**Full reply**\n" + "x".repeat(26000);
   await recordAssignmentResult(f.db as unknown as D1Database, "A", {
@@ -91,6 +89,7 @@ it("records all six canonical fact kinds atomically and preserves exact response
 it("scopes reads before history access and paginates against a stable high-water mark", async () => {
   const f = await conversationFixture();
   f.assign("A");
+  f.start("A");
   const conversation = String(
     f.sqlite.prepare("SELECT id FROM conversations").get()!.id,
   );
@@ -172,6 +171,7 @@ it("rolls canonical events back with failed source mutations", async () => {
 it("imports existing facts without inventing prior transitions or modifying source records", async () => {
   const f = await conversationFixture();
   f.assign("A");
+  f.start("A");
   await recordAssignmentResult(f.db as unknown as D1Database, "A", {
     assignmentId: "A",
     status: "completed",

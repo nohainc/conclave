@@ -274,14 +274,35 @@ Future<_Setup> _setup() async {
     state: state,
     thread: thread,
     supervisor: CliWorkerEngineSupervisor(
-      engineExecutable: Platform.environment['DART_EXECUTABLE'] ??
-          Platform.resolvedExecutable,
+      engineExecutable: _testDartExecutable(),
       engineArgumentsPrefix: [script.path],
       processRegistryDirectory: registry,
     ),
     registry: registry,
     attemptId: 'attempt-metadata',
   );
+}
+
+String _testDartExecutable() {
+  final configured = Platform.environment['DART_EXECUTABLE'];
+  if (configured != null && configured.isNotEmpty) return configured;
+  try {
+    final lookup = Process.runSync(
+      Platform.isWindows ? 'where' : 'which',
+      ['dart'],
+    );
+    if (lookup.exitCode == 0) {
+      final executable = lookup.stdout
+          .toString()
+          .split(RegExp(r'\r?\n'))
+          .map((line) => line.trim())
+          .firstWhere((line) => line.isNotEmpty, orElse: () => '');
+      if (executable.isNotEmpty) return executable;
+    }
+  } on Object {
+    // Fall back to the current runtime when the Dart executable is not on PATH.
+  }
+  return Platform.resolvedExecutable;
 }
 
 Future<void> _waitFor(bool Function() condition) async {

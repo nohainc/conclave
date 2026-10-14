@@ -921,7 +921,7 @@ it("requires a pin-capable Engine and freezes the normalized Gemini selection be
   const profile = JSON.parse(
     readFileSync(
       new URL(
-        "../../../docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json",
+        "../../profile_lab/assets/profiles/gemini.json",
         import.meta.url,
       ),
       "utf8",

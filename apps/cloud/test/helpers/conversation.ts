@@ -57,5 +57,11 @@ export async function conversationFixture() {
     (await loadConversationTurns(db as unknown as D1Database, ["R"])).get(
       "R",
     ) ?? [];
-  return { sqlite, db, assign, turns };
+  const start = (id: string, updatedAt = "now") =>
+    sqlite
+      .prepare(
+        "UPDATE worker_assignments SET status='running', updated_at=? WHERE id=?",
+      )
+      .run(updatedAt, id);
+  return { sqlite, db, assign, start, turns };
 }

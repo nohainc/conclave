@@ -398,7 +398,7 @@ it("validates the additive signed selection mode and current authoring candidate
   const candidate = JSON.parse(
     readFileSync(
       new URL(
-        "../../../docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json",
+        "../../profile_lab/assets/profiles/gemini.json",
         import.meta.url,
       ),
       "utf8",
@@ -454,7 +454,7 @@ it("normalizes retained installed Codex and AGY evidence into the same public co
   ] as const) {
     const payload = readFileSync(
       new URL(
-        `../../../docs/profile-templates/${candidate}-runtime-catalog.v1.json`,
+        `../../profile_lab/assets/profiles/${candidate === "chatgpt-codex" ? "chatgpt" : "gemini"}.json`,
         import.meta.url,
       ),
       "utf8",
@@ -511,7 +511,7 @@ it("publishes seven signed AGY families and rejects invented effort combinations
   const candidate = JSON.parse(
     readFileSync(
       new URL(
-        "../../../docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json",
+        "../../profile_lab/assets/profiles/gemini.json",
         import.meta.url,
       ),
       "utf8",

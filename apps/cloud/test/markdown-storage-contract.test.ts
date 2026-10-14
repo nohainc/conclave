@@ -63,10 +63,17 @@ it.each(
       input_json TEXT, status TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE workflow_tasks(id TEXT, work_request_id TEXT, step_kind TEXT, status TEXT,
       output_json TEXT, error TEXT, started_at TEXT, created_at TEXT, finished_at TEXT, updated_at TEXT);
-    CREATE TABLE worker_assignments(run_id TEXT, id TEXT, task_id TEXT, created_at TEXT, error_json TEXT,
+    CREATE TABLE worker_assignments(run_id TEXT, id TEXT, task_id TEXT, work_request_id TEXT, created_at TEXT, error_json TEXT,
       workspace_worker_id TEXT, worker_type_id TEXT, model TEXT, engine_version TEXT, permission_snapshot_json TEXT);
     CREATE TABLE workspace_worker_inventory(worker_id TEXT, worker_type_id TEXT,
       provider_tool_name TEXT, provider_tool_version TEXT);
+    CREATE TABLE worker_activity_history(
+      history_id TEXT, assignment_id TEXT, workspace_id TEXT, attempt_id TEXT,
+      execution_id TEXT, worker_id TEXT, source_event_id TEXT,
+      provider_sequence INTEGER, event_type TEXT, status TEXT, activity_id TEXT,
+      title TEXT, details_json TEXT, occurred_at TEXT, duration_ms INTEGER,
+      tool_id TEXT, tool_name TEXT
+    );
     INSERT INTO users VALUES('user-owner', 'Owner');
   `);
     sqlite.exec(`ALTER TABLE workflow_tasks ADD COLUMN attempt INTEGER;

@@ -837,10 +837,7 @@ final class CliEngineChannel {
   Future<WorkerFrame> exchange(WorkerFrame request, Duration timeout) async {
     process.stdin.writeln(request.encode());
     await process.stdin.flush();
-    if (!await _lines.moveNext().timeout(timeout)) {
-      throw await _processExited('engine_initialize');
-    }
-    final line = _lines.current;
+    final line = await _nextProtocolLine(timeout, 'engine_initialize');
     if (utf8.encode(line).length > maxFrameBytes) {
       throw const FormatException('CLI Worker Engine frame exceeds the limit');
     }
@@ -865,10 +862,7 @@ final class CliEngineChannel {
       if (remaining <= Duration.zero) {
         throw TimeoutException('deadline elapsed');
       }
-      if (!await _lines.moveNext().timeout(remaining)) {
-        throw await _processExited('engine_execute');
-      }
-      final line = _lines.current;
+      final line = await _nextProtocolLine(remaining, 'engine_execute');
       if (utf8.encode(line).length > maxFrameBytes) {
         throw const FormatException(
           'CLI Worker Engine frame exceeds the limit',
@@ -915,6 +909,27 @@ final class CliEngineChannel {
       );
     }
   }
+
+  Future<String> _nextProtocolLine(Duration timeout, String stage) async {
+    final timer = Stopwatch()..start();
+    while (true) {
+      final remaining = timeout - timer.elapsed;
+      if (remaining <= Duration.zero) {
+        throw TimeoutException('deadline elapsed');
+      }
+      if (!await _lines.moveNext().timeout(remaining)) {
+        throw await _processExited(stage);
+      }
+      final line = _lines.current;
+      if (_isDartVmServiceBanner(line)) {
+        continue;
+      }
+      return line;
+    }
+  }
+
+  bool _isDartVmServiceBanner(String line) =>
+      line.startsWith('The Dart VM service is listening on ');
 
   Future<void> _drainStderr() async {
     await for (final bytes in process.stderr) {

@@ -59,9 +59,7 @@ it("snapshots every actual invocation and links retries to the immutable origina
 it("records start acknowledgement, exact terminal evidence, and prevents completion replay rewrites", async () => {
   const f = await conversationFixture();
   f.assign("A", null, null);
-  f.sqlite.exec(
-    "UPDATE worker_assignments SET status='acknowledged', updated_at='2026-10-07T10:02:00Z' WHERE id='A'",
-  );
+  f.start("A", "2026-10-07T10:02:00Z");
   expect((await f.turns())[0]).toMatchObject({
     status: "running",
     startedAt: "2026-10-07T10:02:00Z",
@@ -254,6 +252,7 @@ it("next-request defaults do not rewrite completed turn attribution or create ex
   const f = await conversationFixture();
   try {
     f.assign("original", "model-x", "medium");
+    f.start("original");
     await recordAssignmentResult(f.db as unknown as D1Database, "original", {
       assignmentId: "original",
       status: "completed",
@@ -323,6 +322,7 @@ it("freezes friendly selection labels and catalog identity despite later invento
     undefined,
     snapshot,
   );
+  f.start("FROZEN");
   const original = (await f.turns())[0]!;
   expect(original).toMatchObject({
     modelName: "Original Model",

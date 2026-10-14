@@ -127,6 +127,7 @@ it("retries retain one StepRun and first-start evidence while clearing stale ter
     expect(queued.completedAt).toBeNull();
     expect(queued.stepRuns[0]?.result).toBeNull();
     f.assign("B", "model-y", "high");
+    f.start("B");
     f.sqlite.exec(
       "UPDATE work_requests SET status='running',updated_at='second-start' WHERE id='R'",
     );
@@ -225,6 +226,7 @@ it("StepRun and immutable turns retain their accepted context boundary as the Co
         .get(),
     ).toEqual({ n: 0 });
     f.assign("frozen-revision", "model-x", "medium", "durable_session", 0);
+    f.start("frozen-revision");
     await recordAssignmentResult(
       f.db as unknown as D1Database,
       "frozen-revision",

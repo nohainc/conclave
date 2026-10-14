@@ -24,7 +24,7 @@ const template = (name: string): Record<string, any> =>
     readFileSync(
       fileURLToPath(
         new URL(
-          `../../../docs/profile-templates/${name}.json`,
+          `../../../apps/profile_lab/assets/profiles/${name.startsWith("chatgpt") ? "chatgpt" : "gemini"}.json`,
           import.meta.url,
         ),
       ),

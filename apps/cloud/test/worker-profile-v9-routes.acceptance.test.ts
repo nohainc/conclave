@@ -57,6 +57,15 @@ function setup() {
       "utf8",
     ),
   );
+  sqlite.exec(
+    readFileSync(
+      new URL(
+        "../migrations-v8/0047_remove_worker_profile_signatures.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
   const now = new Date().toISOString();
   sqlite
     .prepare(

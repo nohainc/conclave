@@ -9,6 +9,7 @@ it("includes late prior replies while excluding the current request", async () =
   const f = await conversationFixture();
   try {
     f.assign("A");
+    f.start("A");
     f.sqlite
       .exec(`INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,input_json,created_at,updated_at)
       VALUES('R2','W','U','stateless','chat',1,'{}','running','{"originalRequest":"Current request"}','now','now')`);
@@ -251,6 +252,7 @@ it("parallel worker steps preserve one base and never acquire a sibling's respon
       0,
       evidence(first),
     );
+    f.start("PARALLEL-A");
     f.sqlite
       .prepare(
         `INSERT INTO worker_assignments
@@ -266,6 +268,9 @@ it("parallel worker steps preserve one base and never acquire a sibling's respon
           contextSnapshot: evidence(second),
         }),
       );
+    f.sqlite.exec(
+      "UPDATE worker_assignments SET status='running' WHERE id='PARALLEL-B'",
+    );
     await recordAssignmentResult(f.db as unknown as D1Database, "PARALLEL-B", {
       assignmentId: "PARALLEL-B",
       status: "completed",

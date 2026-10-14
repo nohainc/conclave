@@ -1,24 +1,24 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
 import { expect, it } from "vitest";
 import { parseProfile } from "../src/tool-profile-validation.js";
 import { spaceModelOptions } from "../src/worker-execution-options.js";
 
-const templates = new URL("../../../docs/profile-templates/", import.meta.url);
+const templates = new URL("../../profile_lab/assets/profiles/", import.meta.url);
 const migrations = new URL("../migrations-v8/", import.meta.url);
 const read = (url: URL) => readFileSync(url, "utf8");
 
 it("publishes Claude effort choices with a matching invocation slot", () => {
   const payload = read(
-    new URL("claude-code-runtime-catalog.v1.json", templates),
+    new URL("claude.json", templates),
   );
   const profile = parseProfile(JSON.parse(payload)).profile;
   const options = spaceModelOptions(payload, "2.1.287")!;
   expect(options.catalog.map((m) => m.supportedReasoningEfforts)).toEqual([
     ["low", "medium", "high", "xhigh", "max"],
     ["low", "medium", "high", "xhigh", "max"],
-    [],
+    ["low", "medium"],
   ]);
   expect(profile.execution.arguments).toContainEqual({
     ifPresent: "reasoningEffort",
@@ -27,10 +27,7 @@ it("publishes Claude effort choices with a matching invocation slot", () => {
 });
 
 it("all Gemini authoring templates classify the observed non-Gemini variants", () => {
-  for (const name of readdirSync(templates).filter(
-    (n) =>
-      n.startsWith("gemini-antigravity-runtime-catalog") && n.endsWith(".json"),
-  )) {
+  for (const name of ["gemini.json"]) {
     const profile = parseProfile(
       JSON.parse(read(new URL(name, templates))),
     ).profile;
