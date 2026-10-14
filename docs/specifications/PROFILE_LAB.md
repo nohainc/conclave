@@ -104,6 +104,14 @@ The `ProfileLabController` remains the UI-facing façade, with draft editing and
 
 ### Draft & Test workbench
 
+For first-party Workers, selecting a Worker loads the bundled source Profile from
+`apps/profile_lab/assets/profiles/<workerTypeId>.json` into the local candidate.
+The current Cloud Profile remains available as comparison and publication
+revision state; it is not silently copied over the source candidate. The
+**Load source Profile** action explicitly refreshes the candidate after
+confirmation. Any saved local edits remain the candidate until the operator
+chooses to load a newer source file.
+
 The selected Worker defines the workbench context; there is no separate local
 Draft selector. A single header shows Draft version, local save status and Cloud
 sync status. **Save** persists unsaved edits locally, then **Sync to Cloud** is

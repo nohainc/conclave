@@ -1,34 +1,52 @@
 part of 'profile_lab_controller.dart';
 
+const _bundledSourceWorkerTypes = {'chatgpt', 'gemini', 'claude'};
+
+Future<Map<String, Object?>?> _readBundledSourceProfile(
+  String workerTypeId,
+) async {
+  if (!_bundledSourceWorkerTypes.contains(workerTypeId)) return null;
+  final raw = await rootBundle.loadString('assets/profiles/$workerTypeId.json');
+  final decoded = jsonDecode(raw);
+  if (decoded is! Map<String, dynamic>) {
+    throw const FormatException('Source Profile must be a JSON object.');
+  }
+  final source = Map<String, Object?>.from(decoded);
+  if (source['logicalWorkerTypeId'] != workerTypeId) {
+    throw const FormatException('Source Profile Worker identity mismatch.');
+  }
+  EngineProfile.parse(utf8.encode(canonicalJson(source)));
+  final profileDefinitionId = source['profileDefinitionId'];
+  if (profileDefinitionId is! String || profileDefinitionId.isEmpty) {
+    throw const FormatException('Source Profile definition ID is missing.');
+  }
+  return source;
+}
+
 mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
   /// Loads the one bundled source Profile for the selected logical Worker into
   /// a local candidate. Never alters Cloud's published Profile.
   /// The UI must confirm before replacing an existing local candidate.
   Future<void> loadSourceProfileCandidate() async {
     final workerTypeId = selectedCloudWorker?['workerTypeId'] as String?;
-    if (workerTypeId == null ||
-        !const {'chatgpt', 'gemini', 'claude'}.contains(workerTypeId)) {
+    if (workerTypeId == null) {
       throw StateError('No bundled source Profile for this Worker.');
     }
-    final raw =
-        await rootBundle.loadString('assets/profiles/$workerTypeId.json');
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map<String, dynamic>) {
-      throw const FormatException('Source Profile must be a JSON object.');
+    final source = await _readBundledSourceProfile(workerTypeId);
+    if (source == null) {
+      throw StateError('No bundled source Profile for this Worker.');
     }
-    final source = Map<String, Object?>.from(decoded);
-    if (source['logicalWorkerTypeId'] != workerTypeId) {
-      throw const FormatException('Source Profile Worker identity mismatch.');
-    }
-    EngineProfile.parse(utf8.encode(canonicalJson(source)));
-    final profileDefinitionId = source['profileDefinitionId'];
-    if (profileDefinitionId is! String || profileDefinitionId.isEmpty) {
-      throw const FormatException('Source Profile definition ID is missing.');
-    }
+    final profileDefinitionId = source['profileDefinitionId'] as String;
+    final sourceCandidate = LocalDraftProfileCandidate.fromProfileMap(source);
     await store.saveDraft(
       profileDefinitionId: profileDefinitionId,
       profileJson: source,
       notes: 'Loaded from bundled source Profile',
+      provenance: {
+        'kind': 'bundled_source',
+        'workerTypeId': workerTypeId,
+        'sourceDigest': sourceCandidate.payloadDigest,
+      },
     );
     selectedDefinitionId = profileDefinitionId;
     draftDefinitionIds = await store.listDraftDefinitionIds();
@@ -223,7 +241,8 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       profileJson: decoded,
       author: author,
       notes: notes,
-      provenance: pendingAiProvenance,
+      provenance: pendingAiProvenance ??
+          const <String, Object?>{'kind': 'local_candidate'},
     );
     currentMetadata = await store.loadDraftMetadata(selectedDefinitionId!);
     pendingAiProvenance = null;

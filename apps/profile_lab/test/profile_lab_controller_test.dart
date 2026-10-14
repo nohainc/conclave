@@ -102,6 +102,46 @@ void main() {
     expect(noProfileController.currentDraft!.providerToolName, 'codex');
   });
 
+  test(
+      'selecting Gemini loads the bundled source instead of the stale Cloud Profile',
+      () async {
+    final source = jsonDecode(
+      await rootBundle.loadString('assets/profiles/gemini.json'),
+    ) as Map<String, dynamic>;
+    final published = jsonDecode(jsonEncode(source)) as Map<String, dynamic>;
+    final provider = published['providerTool'] as Map<String, dynamic>;
+    final ranges = provider['supportedVersions'] as List<dynamic>;
+    (ranges[2] as Map<String, dynamic>)['maxExclusive'] = '1.3.5';
+
+    final sourceController = ProfileLabController(
+      paths: paths,
+      sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths),
+      apiClientOverride: _PublishedProfileApi(published),
+    );
+    addTearDown(sourceController.dispose);
+
+    await sourceController.selectWorker({
+      'workerTypeId': 'gemini',
+      'displayName': 'Gemini',
+      'profileDefinitionId': 'gemini-antigravity',
+      'providerToolName': 'agy',
+    });
+
+    final sourceRanges = (sourceController.currentDraft!.profile['providerTool']
+        as Map<String, dynamic>)['supportedVersions'] as List;
+    final publishedRanges =
+        (sourceController.currentCloudProfileSnapshot!['profile']
+            as Map<String, dynamic>)['providerTool'] as Map;
+    expect((sourceRanges[2] as Map)['maxExclusive'], '1.3.6');
+    expect(
+      ((publishedRanges['supportedVersions'] as List)[2]
+          as Map)['maxExclusive'],
+      '1.3.5',
+    );
+    expect(sourceController.currentMetadata!.notes,
+        'Loaded from bundled source Profile');
+  });
+
   test('invalid JSON reports a location and supports local recovery', () async {
     await controller.createNewDraft(
       profileDefinitionId: 'recovery-profile',
@@ -200,5 +240,23 @@ class _NoPublishedProfileApi extends ProfileAdminApiClient {
     throw ProfileAdminNotFoundException(
       'The Worker does not have a published Profile',
     );
+  }
+}
+
+class _PublishedProfileApi extends ProfileAdminApiClient {
+  _PublishedProfileApi(this.profile) : super(baseUrl: 'http://localhost');
+
+  final Map<String, dynamic> profile;
+
+  @override
+  Future<Map<String, dynamic>> fetchCurrentWorkerProfile(
+    String workerTypeId,
+  ) async {
+    return {
+      'workerTypeId': workerTypeId,
+      'revision': 4,
+      'digest': 'stale-published-profile',
+      'profile': profile,
+    };
   }
 }

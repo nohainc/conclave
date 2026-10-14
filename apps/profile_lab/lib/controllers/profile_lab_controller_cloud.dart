@@ -93,16 +93,45 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
           'providerToolName': provider is Map ? provider['name'] : null,
           'status': 'current',
         };
-        if (selectedDefinitionId != null &&
-            draftDefinitionIds.contains(selectedDefinitionId)) {
-          await selectDraft(selectedDefinitionId!);
-        } else if (selectedDefinitionId != null) {
-          await store.saveDraft(
-            profileDefinitionId: selectedDefinitionId!,
-            profileJson: profileMap,
-            notes: 'Created from current Worker Profile',
-          );
-          draftDefinitionIds = await store.listDraftDefinitionIds();
+        if (selectedDefinitionId != null) {
+          final existingDraft = await store.loadDraft(selectedDefinitionId!);
+          final existingMetadata =
+              await store.loadDraftMetadata(selectedDefinitionId!);
+          final source = await _readBundledSourceProfile(workerTypeId);
+          final sourceCandidate = source == null
+              ? null
+              : LocalDraftProfileCandidate.fromProfileMap(source);
+          final provenance = existingMetadata?.provenance;
+          final sourceWasLoaded = provenance?['kind'] == 'bundled_source';
+          final sourceDigest = provenance?['sourceDigest'];
+          final shouldLoadSource = source != null &&
+              (existingDraft == null ||
+                  existingMetadata == null ||
+                  existingMetadata.notes ==
+                      'Created from current Worker Profile' ||
+                  (sourceWasLoaded &&
+                      sourceDigest != sourceCandidate!.payloadDigest));
+
+          if (shouldLoadSource) {
+            await store.saveDraft(
+              profileDefinitionId: selectedDefinitionId!,
+              profileJson: source!,
+              notes: 'Loaded from bundled source Profile',
+              provenance: {
+                'kind': 'bundled_source',
+                'workerTypeId': workerTypeId,
+                'sourceDigest': sourceCandidate!.payloadDigest,
+              },
+            );
+            draftDefinitionIds = await store.listDraftDefinitionIds();
+          } else if (existingDraft == null) {
+            await store.saveDraft(
+              profileDefinitionId: selectedDefinitionId!,
+              profileJson: profileMap,
+              notes: 'Created from current Worker Profile',
+            );
+            draftDefinitionIds = await store.listDraftDefinitionIds();
+          }
           await selectDraft(selectedDefinitionId!);
         }
       }
