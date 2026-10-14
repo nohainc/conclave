@@ -28,7 +28,8 @@ abstract final class WorkerProfileSnapshotVerifier {
       'updatedAt',
     };
     if (snapshot.keys.any((key) => !allowedKeys.contains(key))) {
-      throw const FormatException('Worker Profile snapshot metadata is invalid');
+      throw const FormatException(
+          'Worker Profile snapshot metadata is invalid');
     }
     final workerTypeId = _string(snapshot, 'workerTypeId');
     final schemaVersion = _integer(snapshot, 'schemaVersion');
@@ -38,8 +39,11 @@ abstract final class WorkerProfileSnapshotVerifier {
     }
     final profile = Map<String, Object?>.from(profileValue);
     final revision = _integer(snapshot, 'revision');
-    if (revision < 1 || schemaVersion < 1 || workerTypeId != expectedWorkerTypeId) {
-      throw const FormatException('Worker Profile snapshot identity is invalid');
+    if (revision < 1 ||
+        schemaVersion < 1 ||
+        workerTypeId != expectedWorkerTypeId) {
+      throw const FormatException(
+          'Worker Profile snapshot identity is invalid');
     }
     final digest = _string(snapshot, 'digest');
     if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(digest)) {
@@ -53,7 +57,8 @@ abstract final class WorkerProfileSnapshotVerifier {
     if (engineProfile.workerTypeId != workerTypeId ||
         engineProfile.schemaVersion != schemaVersion ||
         sha256.convert(utf8.encode(canonical)).toString() != digest) {
-      throw const FormatException('Worker Profile snapshot digest or identity mismatch');
+      throw const FormatException(
+          'Worker Profile snapshot digest or identity mismatch');
     }
     return WorkerProfileSnapshotAdmission(
       profile: freezeJson(profile) as Map<String, Object?>,

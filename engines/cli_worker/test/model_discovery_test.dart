@@ -9,7 +9,7 @@ void main() {
     final profile =
         jsonDecode(
               File(
-                '../../docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json',
+                '../../apps/profile_lab/assets/profiles/gemini.json',
               ).readAsStringSync(),
             )
             as Map;
@@ -322,7 +322,7 @@ Future<void> main() async {
       final profile =
           jsonDecode(
                 await File(
-                  '../../docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json',
+                  '../../apps/profile_lab/assets/profiles/gemini.json',
                 ).readAsString(),
               )
               as Map;

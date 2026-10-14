@@ -43,12 +43,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Authentication'), findsOneWidget);
-    expect(find.text('Threads'), findsOneWidget);
-    expect(find.text('Workspaces'), findsNothing);
-    expect(find.text('Workflows'), findsOneWidget);
-    expect(find.text('Members'), findsOneWidget);
     expect(find.text('Each Thread is one focused area of team work.'),
         findsOneWidget);
+    expect(find.text('Workspaces'), findsNothing);
+    expect(find.text('Workflows'), findsNothing);
+    expect(find.text('Members'), findsNothing);
     expect(find.byTooltip('Create Thread'), findsOneWidget);
     expect(find.text('Overview'), findsNothing);
     expect(find.text('Runs'), findsNothing);

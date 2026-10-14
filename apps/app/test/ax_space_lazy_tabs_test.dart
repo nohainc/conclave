@@ -63,11 +63,14 @@ class TabSource extends AxFixtureDataSource {
 }
 
 Widget page(TabSource source, AxSpaceTabQueries queries,
-        {String role = 'owner', String instructions = ''}) =>
+        {String role = 'owner',
+        String instructions = '',
+        SpacePageSection section = SpacePageSection.threads}) =>
     MaterialApp(
         home: Scaffold(
       body: SingleChildScrollView(
           child: SpacePage(
+        section: section,
         space: AxSpace(
             id: 'P',
             name: 'Space',
@@ -127,7 +130,7 @@ void main() {
   }
 
   testWidgets(
-      'shared Space hides empty instructions but displays supplied instructions',
+      'shared Space omits instructions in the route-based Threads section',
       (tester) async {
     final source = TabSource();
     final queries = AxSpaceTabQueries(source);
@@ -137,7 +140,7 @@ void main() {
     await tester.pumpWidget(page(source, queries,
         role: 'collaborator', instructions: 'Use our conventions'));
     await tester.pumpAndSettle();
-    expect(find.text('Use our conventions'), findsOneWidget);
+    expect(find.text('Use our conventions'), findsNothing);
   });
 
   testWidgets(
@@ -151,17 +154,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(source.calls, {'streams': 1});
     expect(find.text('Workspaces'), findsNothing);
-    await tester.tap(find.text('Members'));
+    await tester
+        .pumpWidget(page(source, queries, section: SpacePageSection.members));
     await tester.pumpAndSettle();
     expect(source.calls, {'streams': 1, 'members': 1, 'invitations': 1});
     expect(queries.engine.isObserved(queries.members('P').key), isTrue);
-    await tester.tap(find.text('Threads'));
+    await tester.pumpWidget(page(source, queries));
     await tester.pumpAndSettle();
     expect(queries.engine.isObserved(queries.members('P').key), isFalse);
     await tester.pumpWidget(const SizedBox());
     await tester.pumpWidget(page(source, queries));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Members'));
+    await tester
+        .pumpWidget(page(source, queries, section: SpacePageSection.members));
     await tester.pumpAndSettle();
     expect(source.calls['members'], 1);
     expect(source.calls['invitations'], 1);
@@ -181,25 +186,28 @@ void main() {
         AxSpaceTabQueries(source, engine: AxSyncEngine(clock: () => now));
     await tester.pumpWidget(page(source, queries));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Members'));
+    await tester
+        .pumpWidget(page(source, queries, section: SpacePageSection.members));
     await tester.pumpAndSettle();
     expect(find.text('Cached member'), findsOneWidget);
-    await tester.tap(find.text('Threads'));
+    await tester.pumpWidget(page(source, queries));
     await tester.pumpAndSettle();
     now = now.add(const Duration(minutes: 2));
     source.pending = Completer();
-    await tester.tap(find.text('Members'));
+    await tester
+        .pumpWidget(page(source, queries, section: SpacePageSection.members));
     await tester.pumpAndSettle();
     expect(source.calls['members'], 2);
     expect(find.text('Cached member'), findsOneWidget);
-    await tester.tap(find.text('Threads'));
+    await tester.pumpWidget(page(source, queries));
     await tester.pumpAndSettle();
     source.pending!.complete([
       AxSpaceMember.fromJson(
           {'userId': 'u2', 'displayName': 'New member', 'role': 'collaborator'})
     ]);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Members'));
+    await tester
+        .pumpWidget(page(source, queries, section: SpacePageSection.members));
     await tester.pumpAndSettle();
     expect(find.text('New member'), findsOneWidget);
     expect(source.calls['members'], 2);
@@ -213,7 +221,8 @@ void main() {
     final queries = AxSpaceTabQueries(source);
     await tester.pumpWidget(page(source, queries));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Members'));
+    await tester
+        .pumpWidget(page(source, queries, section: SpacePageSection.members));
     await tester.pumpAndSettle();
     source.failMembers = true;
     await expectLater(queries.refreshMembers('P'), throwsStateError);
@@ -224,9 +233,10 @@ void main() {
         find.text('Members could not be loaded. Reopen this tab to try again.'),
         findsOneWidget);
     source.failMembers = false;
-    await tester.tap(find.text('Threads'));
+    await tester.pumpWidget(page(source, queries));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Members'));
+    await tester
+        .pumpWidget(page(source, queries, section: SpacePageSection.members));
     await tester.pumpAndSettle();
     expect(find.text('Retry Members'), findsNothing);
     expect(source.calls['streams'], 1);

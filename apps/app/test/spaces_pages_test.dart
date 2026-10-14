@@ -2201,7 +2201,7 @@ void main() {
   });
 
   testWidgets(
-      'Work tab dynamically displays Conclave system events with current logo and Worker responses with official icon',
+      'Work tab shows Worker identity and configuration before and after execution',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1000));
     final dataSource = _WorkHistoryDataSource([
@@ -2218,6 +2218,7 @@ void main() {
           AxWorkRequestStep(
             kind: 'implement',
             status: 'waiting',
+            executionPhase: 'delivered',
             workerId: 'w-1',
             workerTypeId: 'chatgpt',
             workerDisplayName: 'ChatGPT',
@@ -2298,10 +2299,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Conclave progress keeps workflow/timing without Worker configuration.
-    expect(find.text('Conclave'), findsOneWidget);
+    // Delivered work shows the selected Worker before provider startup.
+    expect(find.text('ChatGPT'), findsNWidgets(2));
     expect(find.textContaining('Direct Execution · 5s'), findsOneWidget);
-    expect(find.byTooltip('gpt-4o'), findsNothing);
+    expect(find.byTooltip('gpt-4o'), findsOneWidget);
 
     // Worker identity stays visible; its model is available on demand.
     expect(find.text('Claude 3.7 Sonnet'), findsOneWidget);
@@ -2309,7 +2310,6 @@ void main() {
     expect(find.byTooltip('claude-3-7-sonnet'), findsOneWidget);
     expect(find.textContaining('claude-3-7-sonnet'), findsNothing);
     // A running response has worker attribution before any result text exists.
-    expect(find.text('ChatGPT'), findsOneWidget);
     final assetImages = tester
         .widgetList<Image>(find.byType(Image))
         .map((image) => image.image)
@@ -2317,7 +2317,6 @@ void main() {
         .map((asset) => asset.assetName);
     expect(assetImages, contains('assets/worker_icons/chatgpt.png'));
     expect(assetImages, contains('assets/worker_icons/claude.png'));
-    expect(assetImages, contains('assets/branding/conclave_logo_32.png'));
 
     await tester.binding.setSurfaceSize(null);
   });

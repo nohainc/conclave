@@ -640,7 +640,7 @@ class WorkspaceManagerService {
         return {
           ...await sampleWorkspaceProcessMetrics(),
           'activeAssignments': connection?.activeAssignmentCount ?? 0,
-          'configuredWorkers': (await registry?.list())?.length ?? 0,
+          'workerCount': (await registry?.list())?.length ?? 0,
           'cloudConnected': connection?.isConnected ?? false,
           'reconnectCount': connection?.reconnectCount ?? 0,
         };

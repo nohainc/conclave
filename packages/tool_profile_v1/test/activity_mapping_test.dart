@@ -77,14 +77,13 @@ void main() {
     );
   });
 
-  test('ChatGPT Codex starter v2 maps live Codex events', () {
+  test('ChatGPT Codex authoring Profile maps live Codex events', () {
     final file = File(
-      '${Directory.current.path}/../../docs/profile-templates/'
-      'chatgpt-codex-runtime-catalog.v2.json',
+      '${Directory.current.path}/../../apps/profile_lab/assets/profiles/'
+      'chatgpt.json',
     );
-    final profile =
-        jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
-    // The published document must still parse as a valid Tool Profile.
+    final profile = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+    // The authoring document must still parse as a valid Tool Profile.
     EngineProfile.parse(utf8.encode(canonicalJson(profile)));
 
     List<String> types(Map<String, Object?> event) => mapProfileActivityEvents(
@@ -122,7 +121,8 @@ void main() {
         'item': {'id': 'd', 'type': 'command_execution', 'status': 'failed'},
       },
     ]);
-    expect(failed.map((result) => result.type), ['tool.completed', 'tool.failed']);
+    expect(
+        failed.map((result) => result.type), ['tool.completed', 'tool.failed']);
     expect(failed.map((result) => result.activityId), ['d', 'd']);
     expect(
       types({
@@ -141,13 +141,13 @@ void main() {
     expect(types({'type': 'unknown.provider.event'}), isEmpty);
   });
 
-  test('Antigravity live-activity starter maps documented agy step updates', () {
+  test('Antigravity live-activity starter maps documented agy step updates',
+      () {
     final file = File(
-      '${Directory.current.path}/../../docs/profile-templates/'
-      'gemini-antigravity-runtime-catalog.live-activity-v4.json',
+      '${Directory.current.path}/../../apps/profile_lab/assets/profiles/'
+      'gemini.json',
     );
-    final profile =
-        jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+    final profile = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
     EngineProfile.parse(utf8.encode(canonicalJson(profile)));
 
     List<String> types(Map<String, Object?> event) => mapProfileActivityEvents(
@@ -155,7 +155,8 @@ void main() {
           [event],
         ).map((result) => '${result.type}:${result.title}').toList();
 
-    Map<String, Object?> step(int index, String state, Map<String, Object?> extra) =>
+    Map<String, Object?> step(
+            int index, String state, Map<String, Object?> extra) =>
         {
           'event': 'step_update',
           'step_update': {
@@ -171,21 +172,31 @@ void main() {
     expect(types({'event': 'init'}), ['model.started:Thinking']);
     expect(types(step(2, 'ACTIVE', {})), ['tool.started:Running a tool']);
     expect(
-      types(step(2, 'DONE', {'tool_info': {'name': 'run_command', 'output': 'x'}})),
+      types(step(2, 'DONE', {
+        'tool_info': {'name': 'run_command', 'output': 'x'}
+      })),
       ['tool.completed:Tool completed'],
     );
     expect(
       types(step(2, 'DONE', {
-        'tool_info': {'name': 'run_command', 'error': {'message': 'denied'}},
+        'tool_info': {
+          'name': 'run_command',
+          'error': {'message': 'denied'}
+        },
       })),
       ['tool.failed:Tool failed'],
     );
 
     // Started and completed events for one step pair by step_index.
-    final started = mapProfileActivityEvents(profile, [step(2, 'ACTIVE', {})]).single;
+    final started =
+        mapProfileActivityEvents(profile, [step(2, 'ACTIVE', {})]).single;
     final completed = mapProfileActivityEvents(
       profile,
-      [step(2, 'DONE', {'tool_info': {'name': 'run_command'}})],
+      [
+        step(2, 'DONE', {
+          'tool_info': {'name': 'run_command'}
+        })
+      ],
     ).single;
     expect(started.activityId, '2');
     expect(completed.activityId, '2');

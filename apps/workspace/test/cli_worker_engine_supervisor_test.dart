@@ -9,6 +9,12 @@ import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('Engine VM service banners do not corrupt protocol framing', () async {
+    final setup = await _setup(enableVmService: true);
+    addTearDown(() => setup.root.delete(recursive: true));
+    expect((await _execute(setup, 'vm-banner')).output, 'vm-banner');
+  });
+
   test('reaps only registered Engine processes after restart', () async {
     if (Platform.isWindows) return;
     final root = await Directory.systemTemp.createTemp('engine-recovery-');
@@ -140,23 +146,32 @@ void main() {
     final first = _execute(
       setup,
       'first',
-      prompt: 'slow',
+      prompt: 'barrier',
       maxConcurrentAssignments: 2,
     );
     final second = _execute(
       setup,
       'second',
-      prompt: 'slow',
+      prompt: 'barrier',
       maxConcurrentAssignments: 2,
     );
-    await _waitFor(File('${setup.state.path}/max-active').existsSync);
+    await _waitFor(() =>
+        File('${setup.state.path}/started-first').existsSync() &&
+        File('${setup.state.path}/started-second').existsSync());
+    final queued = Completer<void>();
     final third = _execute(
       setup,
       'third',
       maxConcurrentAssignments: 2,
+      onQueued: (_) {
+        if (!queued.isCompleted) queued.complete();
+      },
     );
-    expect((await first).output, 'slow');
-    expect((await second).output, 'slow');
+    await queued.future;
+    expect(File('${setup.state.path}/started-third').existsSync(), isFalse);
+    await File('${setup.state.path}/release-barrier').writeAsString('release');
+    expect((await first).output, 'barrier');
+    expect((await second).output, 'barrier');
     expect((await third).output, 'third');
   });
 
@@ -387,6 +402,50 @@ void main() {
     await setup.supervisor.cancel('duplicate');
     await expectLater(first, throwsA(isA<Object>()));
   });
+  test('repeated cancellation at transferred slot prevents process creation',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    for (var iteration = 0; iteration < 20; iteration++) {
+      final fenceEntered = Completer<void>();
+      final grant = Completer<bool>();
+      var spawned = false;
+      final first = _execute(setup, 'owner-$iteration', authorizeStart: () {
+        fenceEntered.complete();
+        return grant.future;
+      });
+      final firstDone = expectLater(
+          first, throwsA(isA<WorkerAssignmentCancelledException>()));
+      await fenceEntered.future;
+      final queued = Completer<void>();
+      final nextFence = Completer<void>();
+      final nextGrant = Completer<bool>();
+      final nextId = 'handoff-$iteration';
+      final next = _execute(setup, nextId,
+          onQueued: (_) {
+            if (!queued.isCompleted) queued.complete();
+          },
+          authorizeStart: () {
+            nextFence.complete();
+            return nextGrant.future;
+          },
+          onProcessStarted: () => spawned = true);
+      final nextDone =
+          expectLater(next, throwsA(isA<WorkerAssignmentCancelledException>()));
+      await queued.future;
+      expect(await setup.supervisor.cancel('owner-$iteration'), isTrue);
+      grant.complete(true);
+      await firstDone;
+      await nextFence.future;
+      expect(await setup.supervisor.cancel(nextId), isTrue);
+      nextGrant.complete(true);
+      await nextDone;
+      expect(spawned, isFalse, reason: 'iteration $iteration');
+      expect(setup.registry.listSync(), isEmpty);
+    }
+    expect((await _execute(setup, 'capacity-restored')).output,
+        'capacity-restored');
+  });
 }
 
 Future<WorkerResult> _execute(
@@ -400,6 +459,8 @@ Future<WorkerResult> _execute(
   FutureOr<void> Function()? onSlotReserved,
   void Function(WorkerQueueSnapshot queue)? onQueued,
   CliWorkerEngineSupervisor? supervisor,
+  FutureOr<bool> Function()? authorizeStart,
+  void Function()? onProcessStarted,
 }) =>
     (supervisor ?? setup.supervisor).execute(
       setup.admission,
@@ -419,9 +480,11 @@ Future<WorkerResult> _execute(
       sessionKey: sessionKey,
       onSlotReserved: onSlotReserved,
       onQueued: onQueued,
+      authorizeStart: authorizeStart,
+      onProcessStarted: onProcessStarted,
     );
 
-Future<_Setup> _setup() async {
+Future<_Setup> _setup({bool enableVmService = false}) async {
   final root = await Directory.systemTemp.createTemp('engine-supervisor-');
   final profileFile = File(
     '${Directory.current.parent.parent.path}/packages/tool-profile/test/fixtures/fixture-cli.v1.json',
@@ -452,7 +515,10 @@ Future<_Setup> _setup() async {
     thread: thread,
     supervisor: CliWorkerEngineSupervisor(
       engineExecutable: _testDartExecutable(),
-      engineArgumentsPrefix: [script.path],
+      engineArgumentsPrefix: [
+        if (enableVmService) '--enable-vm-service=0',
+        script.path,
+      ],
       processRegistryDirectory: registry,
     ),
     registry: registry,
@@ -541,6 +607,12 @@ Future<void> main(List<String> args) async {
         }));
       case 'execute.request':
         if (request['prompt'] == 'exit') exit(17);
+        File('${state.path}/started-${request['assignmentId']}').writeAsStringSync('started');
+        if (request['prompt'] == 'barrier') {
+          while (!File('${state.path}/release-barrier').existsSync()) {
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+          }
+        }
         final activeFile = File('${state.path}/active');
         if (activeFile.existsSync()) {
           File('${state.path}/max-active').writeAsStringSync('2');

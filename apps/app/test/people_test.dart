@@ -215,6 +215,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: SpacePage(
+      section: SpacePageSection.members,
       space: const AxSpace(
           id: 'S', name: 'Space', branch: '', lastActivity: 'now'),
       dataSource: source,
@@ -222,8 +223,6 @@ void main() {
       onArchive: () {},
       onDelete: () {},
     ))));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
     final loads = source.loads;
     await tester.tap(find.byTooltip('Share Space'));
@@ -691,14 +690,13 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: SpacePage(
+                section: SpacePageSection.members,
                 space: const AxSpace(
                     id: 'S', name: 'Space', branch: '', lastActivity: 'now'),
                 dataSource: source,
                 onOpenThread: (_) {},
                 onArchive: () {},
                 onDelete: () {}))));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Members'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Resend invitation'));
     await tester.pumpAndSettle();

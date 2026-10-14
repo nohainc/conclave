@@ -724,7 +724,8 @@ void main() {
       expect(logoutTriggered, isTrue);
     });
 
-    testWidgets('excludes archived threads from sidebar list', (tester) async {
+    testWidgets('groups archived threads beneath active sidebar threads',
+        (tester) async {
       const spaceWithArchived = AxSpace(
         id: 'space-2',
         name: 'Conclave Core',
@@ -780,7 +781,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Active Thread'), findsOneWidget);
-      expect(find.text('Old Archived Thread'), findsNothing);
+      expect(find.text('Old Archived Thread'), findsOneWidget);
+      expect(find.text('Archived (1)'), findsOneWidget);
     });
   });
 

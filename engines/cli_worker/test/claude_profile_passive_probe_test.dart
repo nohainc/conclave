@@ -13,7 +13,7 @@ void main() {
     final profile =
         jsonDecode(
               await File(
-                '$repository/docs/profile-templates/claude-code-runtime-catalog.v1.json',
+                '$repository/apps/profile_lab/assets/profiles/claude.json',
               ).readAsString(),
             )
             as Map<String, Object?>;
@@ -83,7 +83,7 @@ void main(List<String> args) {
         workerTypeId: 'claude',
         expectedEngineVersion: '1.0.0',
         profileDefinitionId: 'claude-code',
-        profileReleaseVersion: '1',
+        profileReleaseVersion: '${profile['releaseVersion']}',
         profileDigest: sha256.convert(bytes).toString(),
       ).encode(),
     );

@@ -79,9 +79,9 @@ class WorkspacePaths {
     }
   }
 
-  File installationLockFile(String? installationId) {
+  File installationLockFile(String? installationIdentity) {
     final identity =
-        installationId?.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_') ??
+        installationIdentity?.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_') ??
             'unidentified';
     return File('${stateDirectory.path}/installation-$identity.lock');
   }
