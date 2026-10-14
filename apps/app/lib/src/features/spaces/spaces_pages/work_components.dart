@@ -492,8 +492,9 @@ class _WorkComposer extends StatelessWidget {
                 !loadingWorkflows &&
                 workflowCatalogError == null,
             showMarkdownControlsInSuffix: false,
-            showSendInSuffix: false,
-            additionalControlsBuilder: (inputKey) =>
+            showSendInSuffix: true,
+            sendInToolbar: true,
+            executionControlsBuilder: (inputKey) =>
                 _additionalControls(context, inputKey),
           ),
           if (attachments.isNotEmpty) ...[

@@ -1105,9 +1105,8 @@ class _ThreadPageState extends State<ThreadPage>
           chatStyle: true,
           enabled: widget.space.effectivePermissions.chat,
           onSend: _sendDiscussion,
-          showMarkdownControlsInSuffix: false,
-          showSendInSuffix: false,
-          additionalControlsBuilder: alignWithWork
+          sendInToolbar: true,
+          executionControlsBuilder: alignWithWork
               ? (_) => ValueListenableBuilder<double>(
                   valueListenable: _chatComposerSpaceChanges,
                   builder: (context, space, _) => SizedBox(height: space))

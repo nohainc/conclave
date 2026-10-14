@@ -353,7 +353,10 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                     ),
             ),
           ),
-        if (widget.chatStyle && (_showFormatting || _preview)) ...[
+        if (widget.chatStyle &&
+            (_showFormatting ||
+                _preview ||
+                !widget.showMarkdownControlsInSuffix)) ...[
           Divider(
             height: 1,
             thickness: 1,
