@@ -49,6 +49,17 @@ class _ApiResponseClient extends http.BaseClient {
 }
 
 void main() {
+  test('retry sends side-effect confirmation only after explicit approval',
+      () async {
+    final client = _JsonClient({});
+    final api = AxApiClient(baseUrl: 'https://cloud.test/api', client: client);
+    await api.retryWorkRequestStep(workRequestId: 'r', stepKind: 'verify');
+    expect(jsonDecode(client.lastBody!), {'stepKind': 'verify'});
+    await api.retryWorkRequestStep(
+        workRequestId: 'r', stepKind: 'verify', confirmSideEffects: true);
+    expect(jsonDecode(client.lastBody!),
+        {'stepKind': 'verify', 'confirmSideEffects': true});
+  });
   test('clear history preserves the server error detail', () async {
     final client = _JsonClient({'error': 'Cancel active Work Requests first'},
         statusCode: 409);

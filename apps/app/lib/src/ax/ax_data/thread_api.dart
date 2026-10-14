@@ -441,6 +441,7 @@ mixin _ThreadApi on _AxApiClientCore {
       createdAt: requestMap['createdAt']?.toString(),
       steps: steps,
       activityHistory: activityHistory,
+      executionPhase: requestMap['executionPhase']?.toString(),
     );
   }
 
@@ -449,6 +450,7 @@ mixin _ThreadApi on _AxApiClientCore {
     required String workRequestId,
     required String stepKind,
     String? sessionStrategy,
+    bool confirmSideEffects = false,
   }) async {
     final response = await client.post(
       Uri.parse('$baseUrl/work-requests/$workRequestId/retry'),
@@ -456,6 +458,7 @@ mixin _ThreadApi on _AxApiClientCore {
       body: jsonEncode({
         'stepKind': stepKind,
         if (sessionStrategy != null) 'sessionStrategy': sessionStrategy,
+        if (confirmSideEffects) 'confirmSideEffects': true,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {

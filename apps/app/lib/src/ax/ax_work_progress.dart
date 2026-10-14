@@ -1,3 +1,4 @@
+import 'ax_execution_phase.dart';
 import 'ax_work_activity.dart';
 
 /// Presentation-ready live progress for one Worker response.
@@ -89,8 +90,15 @@ class AxWorkProgress {
     int? serverElapsedMs,
     Duration clockOffset = Duration.zero,
     Duration staleAfter = defaultStaleAfter,
+    String? executionPhase,
   }) {
     final terminal = terminalStatuses.contains(requestStatus);
+    // Cloud's phase decides whether the provider has actually started. The
+    // Work Request status turns `running` when the Workflow starts, which is
+    // before any Worker has accepted the command, so it must not drive this.
+    final phaseKnown = !terminal && AxExecutionPhase.isKnown(executionPhase);
+    final beforeProviderStart =
+        phaseKnown && !AxExecutionPhase.isExecuting(executionPhase);
 
     // Only the latest attempt describes the current execution. A retry must
     // not inherit the failed attempt's action or start time.
@@ -131,11 +139,14 @@ class AxWorkProgress {
     // retry is queued. It must not make the new attempt look like it is
     // wrapping up; only an already-started authoritative request can do that.
     final wrappingUp = !terminal &&
+        !beforeProviderStart &&
         terminalExecution != null &&
         !const {'queued', 'starting', 'acknowledged'}.contains(requestStatus);
     String? action;
     if (!terminal) {
-      if (wrappingUp) {
+      if (beforeProviderStart) {
+        action = AxExecutionPhase.detail(executionPhase!) ?? 'Starting worker…';
+      } else if (wrappingUp) {
         action = 'Wrapping up…';
       } else if (unfinished != null) {
         action = unfinished.title;
@@ -150,6 +161,7 @@ class AxWorkProgress {
     }
 
     final stale = !terminal &&
+        !beforeProviderStart &&
         status == 'running' &&
         !wrappingUp &&
         lastSignalAt != null &&
@@ -157,7 +169,8 @@ class AxWorkProgress {
 
     return AxWorkProgress._(
       status: status,
-      statusLabel: _label(status),
+      statusLabel:
+          phaseKnown ? AxExecutionPhase.label(executionPhase!) : _label(status),
       currentAction: action,
       startedAt: startedAt,
       endedAt: endedAt,
@@ -165,7 +178,9 @@ class AxWorkProgress {
           ? null
           : Duration(milliseconds: serverElapsedMs),
       isTerminal: terminal,
-      isExecuting: !terminal && attempt.isNotEmpty,
+      isExecuting: !terminal &&
+          !beforeProviderStart &&
+          (phaseKnown || attempt.isNotEmpty),
       isOptimistic: optimistic,
       isStale: stale,
       lastSignalAt: lastSignalAt,

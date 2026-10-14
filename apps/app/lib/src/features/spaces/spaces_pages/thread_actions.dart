@@ -281,6 +281,35 @@ extension _ThreadActions on _ThreadPageState {
       String workRequestId, AxWorkRequestStep step) async {
     final dataSource = widget.dataSource;
     if (dataSource == null) return;
+    var confirmSideEffects = false;
+    if (!step.retryAllowed) return;
+    if (step.retryRequiresConfirmation) {
+      // Cloud saw evidence the provider may already have acted, so repeating
+      // the step can repeat its changes. Require an explicit decision.
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Retry anyway?'),
+          content: const Text(
+            'The previous execution may already have made changes. '
+            'Retrying can repeat them.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Retry anyway'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      confirmSideEffects = true;
+    }
+    if (!mounted) return;
     String? sessionStrategy;
     if (step.kind == 'implement') {
       final resumeRecommended = const {
@@ -328,6 +357,7 @@ extension _ThreadActions on _ThreadPageState {
         workRequestId: workRequestId,
         stepKind: step.kind,
         sessionStrategy: sessionStrategy,
+        confirmSideEffects: confirmSideEffects,
       );
       if (!mounted) return;
       unawaited(_workHistoryCache
@@ -471,373 +501,6 @@ extension _ThreadActions on _ThreadPageState {
     }
   }
 
-  Future<void> _showThreadMenu() async {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
-    final errorColor = ConclaveColors.error;
-    final hasActiveWork = _workTimeline
-        .any((w) => !w.id.startsWith('local-') &&
-            const {'queued', 'running', 'waiting'}.contains(w.status));
-    final isArchived = widget.thread.archived;
-
-    showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(screenWidth - 40, 60, 20, 0),
-      items: [
-        PopupMenuItem<String>(
-          value: 'rename',
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.edit_outlined, size: 18, color: textColor),
-              const SizedBox(width: 12),
-              const Text('Rename Thread'),
-            ],
-          ),
-        ),
-        PopupMenuItem<String>(
-          value: isArchived ? 'unarchive' : 'archive',
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(isArchived ? Icons.unarchive_outlined : Icons.archive_outlined,
-                size: 18, color: textColor),
-              const SizedBox(width: 12),
-              Text(isArchived ? 'Unarchive Thread' : 'Archive Thread'),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        PopupMenuItem<String>(
-          value: 'clearChat',
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.delete_outline, size: 18, color: textColor),
-              const SizedBox(width: 12),
-              const Text('Clear Chat History'),
-            ],
-          ),
-        ),
-        PopupMenuItem<String>(
-          enabled: !hasActiveWork,
-          value: 'clearWork',
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.delete_outline, size: 18,
-                color: hasActiveWork ? Colors.grey : textColor),
-              const SizedBox(width: 12),
-              Text('Clear Work History',
-                style: TextStyle(
-                  color: hasActiveWork ? Colors.grey : textColor,
-                )),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        PopupMenuItem<String>(
-          value: 'delete',
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.delete_rounded, size: 18, color: errorColor),
-              const SizedBox(width: 12),
-              Text('Delete Thread', style: TextStyle(color: errorColor)),
-            ],
-          ),
-        ),
-      ],
-    ).then((value) async {
-      if (value == null || !mounted) return;
-      if (value == 'rename') {
-        await _showRenameDialog();
-      } else if (value == 'archive') {
-        await _showArchiveDialog();
-      } else if (value == 'unarchive') {
-        await _showUnarchiveDialog();
-      } else if (value == 'clearChat') {
-        await _showClearChatDialog();
-      } else if (value == 'clearWork') {
-        await _showClearWorkDialog();
-      } else if (value == 'delete') {
-        await _showDeleteThreadDialog();
-      }
-    });
-  }
-
-  Future<void> _showRenameDialog() async {
-    final currentName = widget.thread.title;
-    final controller = TextEditingController(text: currentName);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Rename Thread'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 1,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (value) => Navigator.pop(dialogContext, value),
-          decoration: const InputDecoration(
-            labelText: 'Thread name',
-            hintText: 'Enter new thread name',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, null),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: controller.text.trim().isEmpty
-                ? null
-                : () => Navigator.pop(dialogContext, controller.text),
-            child: const Text('Rename'),
-          ),
-        ],
-      ),
-    );
-
-    if (newName != null && newName.trim().isNotEmpty && newName != currentName) {
-      try {
-        await widget.onRename?.call(newName.trim());
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Thread renamed.')),
-          );
-        }
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to rename thread: $error'),
-              backgroundColor: ConclaveColors.error,
-            ),
-          );
-        }
-      }
-    }
-    controller.dispose();
-  }
-
-  Future<void> _showArchiveDialog() async {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Archive Thread'),
-        content: const Text(
-          'This Thread and all its history will be moved to archived Threads. '
-          'You can unarchive it later.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Archive'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        widget.onArchive();
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to archive thread: $error'),
-              backgroundColor: ConclaveColors.error,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _showUnarchiveDialog() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Unarchive Thread'),
-        content: const Text(
-          'This Thread will be moved back to your active Threads.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Unarchive'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        await widget.onRename?.call(widget.thread.title);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Thread unarchived.')),
-          );
-        }
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to unarchive thread: $error'),
-              backgroundColor: ConclaveColors.error,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _showClearChatDialog() async {
-    final messageCount = _discussionCache.peek(widget.thread.id).messages.length;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Clear Chat History'),
-        content: Text(
-          messageCount == 0
-              ? 'No chat messages to clear.'
-              : 'Delete all $messageCount chat messages? This action cannot be undone. Work history will not be affected.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          if (messageCount > 0)
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Clear Chat'),
-            ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        await _discussionCache.clearHistory(widget.thread.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Chat history cleared.')),
-          );
-        }
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to clear chat history: $error'),
-              backgroundColor: ConclaveColors.error,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _showClearWorkDialog() async {
-    final requestCount = _workTimeline.length;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Clear Work History'),
-        content: Text(
-          requestCount == 0
-              ? 'No work requests to clear.'
-              : 'Delete all $requestCount work requests and reset Work context? '
-                'This action cannot be undone. Chat history will not be affected.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          if (requestCount > 0)
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Clear Work'),
-            ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        await _workHistoryCache.clearHistory(widget.thread.id);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Work history cleared.')),
-          );
-        }
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to clear work history: $error'),
-              backgroundColor: ConclaveColors.error,
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _showDeleteThreadDialog() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Thread'),
-        content: const Text(
-          'Permanently delete this Thread and all its history? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: ConclaveColors.error,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      try {
-        widget.onArchive();
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to delete thread: $error'),
-              backgroundColor: ConclaveColors.error,
-            ),
-          );
-        }
-      }
-    }
-  }
-
   void _handleThreadArchived(Map<String, dynamic> payload) {
     if (!mounted) return;
     final isArchived = payload['archived'] == true;
@@ -846,9 +509,9 @@ extension _ThreadActions on _ThreadPageState {
 
     if (isArchived && byAnother) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('This Thread was archived.'),
-          duration: const Duration(seconds: 3),
+        const SnackBar(
+          content: Text('This Thread was archived.'),
+          duration: Duration(seconds: 3),
         ),
       );
     }

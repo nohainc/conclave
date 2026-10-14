@@ -1,3 +1,4 @@
+import 'ax_execution_phase.dart';
 import 'ax_models.dart';
 
 class AxTurnExecutionConfig {
@@ -328,6 +329,7 @@ class AxWorkRequestStatus {
     this.createdAt,
     this.steps = const [],
     this.activityHistory = const [],
+    this.executionPhase,
   });
 
   final String? id;
@@ -350,6 +352,7 @@ class AxWorkRequestStatus {
   final String? createdAt;
   final List<AxWorkRequestStep> steps;
   final List<Map<String, dynamic>> activityHistory;
+  final String? executionPhase;
 }
 
 class AxWorkRequestStep {
@@ -379,6 +382,12 @@ class AxWorkRequestStep {
     this.errorCode,
     this.errorMessage,
     this.retrySessionStrategy,
+    this.executionPhase,
+    this.executionPhaseDetail,
+    this.failureCategory,
+    this.failureCategoryMessage,
+    this.retryAllowed = false,
+    this.retryRequiresConfirmation = false,
   });
 
   final String kind;
@@ -406,32 +415,87 @@ class AxWorkRequestStep {
   final String? errorMessage;
   final String? retrySessionStrategy;
 
-  AxWorkRequestStep withStatus(String value) => AxWorkRequestStep(
-      kind: kind,
-      status: value,
-      workerId: workerId,
-      workerTypeId: workerTypeId,
-      workerDisplayName: workerDisplayName,
-      engineVersion: engineVersion,
-      profileDefinitionId: profileDefinitionId,
-      profileReleaseVersion: profileReleaseVersion,
-      providerToolName: providerToolName,
-      providerToolVersion: providerToolVersion,
-      model: model,
-      modelName: modelName,
-      catalogRevision: catalogRevision,
-      reasoningEffort: reasoningEffort,
-      testSummary: testSummary,
-      startedAt: startedAt,
-      updatedAt: updatedAt,
-      elapsedMs: elapsedMs,
-      completedAt: completedAt,
-      resultText: resultText,
-      assignmentId: assignmentId,
-      sessionPolicy: sessionPolicy,
-      errorCode: errorCode,
-      errorMessage: errorMessage,
-      retrySessionStrategy: retrySessionStrategy);
+  /// Cloud-derived execution state; see [AxExecutionPhase]. Null only for
+  /// responses from a Cloud that predates Phase 7.
+  final String? executionPhase;
+  final String? executionPhaseDetail;
+
+  /// Fixed public failure category and message; never provider text.
+  final String? failureCategory;
+  final String? failureCategoryMessage;
+
+  /// Cloud's retry advice for a failed step.
+  final bool retryAllowed;
+  final bool retryRequiresConfirmation;
+
+  /// The phase to render: Cloud's, or a status-derived fallback that never
+  /// claims Running.
+  String get effectivePhase {
+    if (AxExecutionPhase.isTerminal(status)) return status;
+    final phase = executionPhase;
+    if (AxExecutionPhase.isKnown(phase)) return phase!;
+    return switch (status) {
+      'running' => AxExecutionPhase.submitted,
+      'completed' => AxExecutionPhase.completed,
+      'failed' => AxExecutionPhase.failed,
+      'cancelled' => AxExecutionPhase.cancelled,
+      _ => AxExecutionPhase.queued,
+    };
+  }
+
+  AxWorkRequestStep withExecutionPhase(String phase) => _copy(
+        status: status,
+        executionPhase: phase,
+        executionPhaseDetail: AxExecutionPhase.detail(phase),
+      );
+
+  /// A terminal status always carries its terminal phase, so a step moved to
+  /// `completed` can never keep rendering a stale `running` phase.
+  AxWorkRequestStep withStatus(String value) => _copy(
+        status: value,
+        executionPhase:
+            AxExecutionPhase.isTerminal(value) ? value : executionPhase,
+        executionPhaseDetail:
+            AxExecutionPhase.isTerminal(value) ? null : executionPhaseDetail,
+      );
+
+  AxWorkRequestStep _copy({
+    required String status,
+    required String? executionPhase,
+    required String? executionPhaseDetail,
+  }) =>
+      AxWorkRequestStep(
+          kind: kind,
+          status: status,
+          workerId: workerId,
+          workerTypeId: workerTypeId,
+          workerDisplayName: workerDisplayName,
+          engineVersion: engineVersion,
+          profileDefinitionId: profileDefinitionId,
+          profileReleaseVersion: profileReleaseVersion,
+          providerToolName: providerToolName,
+          providerToolVersion: providerToolVersion,
+          model: model,
+          modelName: modelName,
+          catalogRevision: catalogRevision,
+          reasoningEffort: reasoningEffort,
+          testSummary: testSummary,
+          startedAt: startedAt,
+          updatedAt: updatedAt,
+          elapsedMs: elapsedMs,
+          completedAt: completedAt,
+          resultText: resultText,
+          assignmentId: assignmentId,
+          sessionPolicy: sessionPolicy,
+          errorCode: errorCode,
+          errorMessage: errorMessage,
+          retrySessionStrategy: retrySessionStrategy,
+          executionPhase: executionPhase,
+          executionPhaseDetail: executionPhaseDetail,
+          failureCategory: failureCategory,
+          failureCategoryMessage: failureCategoryMessage,
+          retryAllowed: retryAllowed,
+          retryRequiresConfirmation: retryRequiresConfirmation);
 
   factory AxWorkRequestStep.fromJson(Map<String, dynamic> json) =>
       AxWorkRequestStep(
@@ -460,6 +524,14 @@ class AxWorkRequestStep {
         errorCode: json['errorCode']?.toString(),
         errorMessage: json['errorMessage']?.toString(),
         retrySessionStrategy: json['retrySessionStrategy']?.toString(),
+        executionPhase: json['executionPhase']?.toString(),
+        executionPhaseDetail: json['executionPhaseDetail']?.toString(),
+        failureCategory: json['failureCategory']?.toString(),
+        failureCategoryMessage: json['failureCategoryMessage']?.toString(),
+        retryAllowed:
+            (json['retry'] is Map) && (json['retry'] as Map)['allowed'] == true,
+        retryRequiresConfirmation: (json['retry'] is Map) &&
+            (json['retry'] as Map)['requiresConfirmation'] == true,
       );
 }
 
@@ -482,6 +554,7 @@ class AxWorkRequest {
     this.finalText,
     this.error,
     this.activityHistory = const [],
+    this.executionPhase,
   });
 
   final String id;
@@ -501,6 +574,10 @@ class AxWorkRequest {
   final String? finalText;
   final String? error;
   final List<Map<String, dynamic>> activityHistory;
+
+  /// Cloud-derived phase of the request as a whole. Null for a Cloud that
+  /// predates Phase 7.
+  final String? executionPhase;
 
   AxWorkRequest copyWith({
     String? status,
@@ -524,7 +601,12 @@ class AxWorkRequest {
           steps: steps ?? this.steps,
           finalText: finalText,
           error: error,
-          activityHistory: activityHistory ?? this.activityHistory);
+          activityHistory: activityHistory ?? this.activityHistory,
+          // A terminal status forces the terminal phase so a request that
+          // finished can never render as still executing.
+          executionPhase: status != null && AxExecutionPhase.isTerminal(status)
+              ? status
+              : executionPhase);
 
   String? get testSummary {
     for (final step in steps) {
@@ -591,6 +673,7 @@ class AxWorkRequest {
       finalText: json['finalText']?.toString(),
       error: json['error']?.toString(),
       activityHistory: activityHistory,
+      executionPhase: json['executionPhase']?.toString(),
     );
   }
 }
@@ -850,6 +933,7 @@ abstract interface class AxDataSource {
     required String workRequestId,
     required String stepKind,
     String? sessionStrategy,
+    bool confirmSideEffects = false,
   }) async =>
       throw UnimplementedError('Work Request retry is not available');
   Future<void> cancelWorkRequest({

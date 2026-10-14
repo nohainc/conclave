@@ -1,3 +1,4 @@
+import '../ax_execution_phase.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../ax_data.dart';
@@ -301,7 +302,8 @@ class AxWorkRealtimeSync extends ChangeNotifier {
           'step.running',
           'step.completed',
           'step.failed',
-          'step.cancelled'
+          'step.cancelled',
+          'step.phase'
         }.contains(type)) {
       return;
     }
@@ -332,6 +334,7 @@ class AxWorkRealtimeSync extends ChangeNotifier {
     if (type == 'work_request.created' && submissionId is String) {
       cache.acceptSubmission(threadId, submissionId, id);
     }
+    final current = cache.request(threadId, id);
     final full = payload['workRequest'];
     if (full is Map &&
         full['id'] == id &&
@@ -349,30 +352,81 @@ class AxWorkRealtimeSync extends ChangeNotifier {
         (full['steps'] as List).every((v) => v is Map) &&
         (full['status'] != 'completed' || full.containsKey('finalText'))) {
       try {
-        cache.patchRequest(
-            threadId, AxWorkRequest.fromJson(Map<String, dynamic>.from(full)));
+        final incoming =
+            AxWorkRequest.fromJson(Map<String, dynamic>.from(full));
+        final regressesStep = current?.steps.any((previous) => incoming.steps
+                .any((next) =>
+                    next.kind == previous.kind &&
+                    next.assignmentId == previous.assignmentId &&
+                    next.effectivePhase != previous.effectivePhase &&
+                    (AxExecutionPhase.isTerminal(previous.effectivePhase) ||
+                        previous.effectivePhase == AxExecutionPhase.uncertain ||
+                        AxExecutionPhase.advances(
+                            next.effectivePhase, previous.effectivePhase)))) ??
+            false;
+        if (current != null &&
+            ((AxExecutionPhase.isTerminal(current.status) &&
+                    !AxExecutionPhase.isTerminal(incoming.status)) ||
+                (current.status == 'running' && incoming.status == 'queued') ||
+                regressesStep)) {
+          await cache.refreshRequest(threadId, id, supersede: true);
+          return;
+        }
+        cache.patchRequest(threadId, incoming);
         return;
       } catch (_) {
         // Incomplete optional metadata falls back to the authoritative detail.
       }
     }
-    final current = cache.request(threadId, id);
     final status = payload['status'];
     if (current != null &&
         status is String &&
         const {'queued', 'running', 'waiting'}.contains(current.status)) {
       if ((type == 'work_request.started' && status == 'running') ||
-          (type == 'work_request.created' && status == 'queued')) {
+          (type == 'work_request.created' &&
+              status == 'queued' &&
+              current.status == 'queued')) {
         cache.patchRequest(threadId, current.copyWith(status: status));
         return;
       }
       final kind = payload['stepKind'];
-      if ((type == 'step.queued' && status == 'queued' ||
+      if (type == 'step.phase' && kind is String) {
+        // Phase events are notifications. Apply only a strictly forward move
+        // on the same assignment; anything else (a delayed older phase, a
+        // terminal or uncertain outcome, a different assignment) must not
+        // rewrite state from the event, so it is dropped or re-read.
+        final step = current.steps.where((s) => s.kind == kind).firstOrNull;
+        final eventAssignment = event['assignmentId'];
+        final sameAssignment = step != null &&
+            step.assignmentId != null &&
+            eventAssignment is String &&
+            step.assignmentId == eventAssignment;
+        if (step != null &&
+            sameAssignment &&
+            !AxExecutionPhase.advances(step.effectivePhase, status) &&
+            AxExecutionPhase.isKnown(status) &&
+            !AxExecutionPhase.isTerminal(status) &&
+            status != AxExecutionPhase.uncertain) {
+          return;
+        }
+        if (step != null &&
+            sameAssignment &&
+            AxExecutionPhase.advances(step.effectivePhase, status)) {
+          cache.patchRequest(
+              threadId,
+              current.copyWith(steps: [
+                for (final s in current.steps)
+                  s.kind == kind ? s.withExecutionPhase(status) : s
+              ]));
+          return;
+        }
+      } else if ((type == 'step.queued' && status == 'queued' ||
               type == 'step.running' && status == 'running') &&
           kind is String &&
           current.steps.any((s) =>
               s.kind == kind &&
-              const {'queued', 'running', 'waiting'}.contains(s.status))) {
+              const {'queued', 'running', 'waiting'}.contains(s.status) &&
+              !(s.status == 'running' && status == 'queued'))) {
         cache.patchRequest(
             threadId,
             current.copyWith(steps: [

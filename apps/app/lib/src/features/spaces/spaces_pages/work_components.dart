@@ -41,6 +41,18 @@ String _executionFailureMessage(String? code, {String? validationMessage}) =>
       _ => 'Your request could not be completed. Please retry.',
     };
 
+/// Cloud's fixed public failure category, with the code-specific guidance
+/// appended only when the code says more than the category already does.
+String _publicFailureMessage(AxWorkRequestStep? step, String guidance) {
+  final headline = step?.failureCategoryMessage?.trim();
+  if (headline == null || headline.isEmpty) return guidance;
+  final code = step?.errorCode;
+  if (code == null || code == 'execution_failed' || code == 'timeout') {
+    return headline;
+  }
+  return '$headline. $guidance';
+}
+
 Future<T?> _showAnchoredMenu<T>({
   required BuildContext buttonContext,
   required GlobalKey inputKey,
@@ -743,13 +755,36 @@ class _WorkTimelineCard extends StatelessWidget {
                 .whereType<String>()
                 .where((text) => text.trim().isNotEmpty)
                 .firstOrNull;
+    // Cloud's phase of the step that currently matters. A terminal request
+    // always wins, so a delayed step event can never show it as running.
+    final requestIsTerminal =
+        AxWorkProgress.terminalStatuses.contains(request.status);
+    final activeSteps = request.steps
+        .where((step) => !AxExecutionPhase.isTerminal(step.effectivePhase))
+        .toList();
+    final phaseStep = activeSteps
+            .where((step) => step.effectivePhase == AxExecutionPhase.uncertain)
+            .firstOrNull ??
+        activeSteps
+            .where((step) => step.effectivePhase == AxExecutionPhase.running)
+            .firstOrNull ??
+        activeSteps
+            .where((step) => step.effectivePhase == AxExecutionPhase.starting)
+            .firstOrNull ??
+        activeSteps.firstOrNull;
+    final executionPhase = requestIsTerminal
+        ? request.status
+        : (phaseStep?.effectivePhase ?? request.executionPhase);
     final rawError = request.error?.trim().isNotEmpty == true
         ? request.error!
         : failedStep?.errorMessage;
     final error = request.status == 'failed' || rawError?.isNotEmpty == true
-        ? _executionFailureMessage(
-            failedStep?.errorCode,
-            validationMessage: failedStep == null ? rawError : null,
+        ? _publicFailureMessage(
+            failedStep,
+            _executionFailureMessage(
+              failedStep?.errorCode,
+              validationMessage: failedStep == null ? rawError : null,
+            ),
           )
         : null;
     final isError = error?.isNotEmpty == true;
@@ -769,6 +804,7 @@ class _WorkTimelineCard extends StatelessWidget {
           stepStartedAt: stepStartedAt,
           serverElapsedMs: _totalElapsedMs == 0 ? null : _totalElapsedMs,
           clockOffset: clockOffset,
+          executionPhase: executionPhase,
         );
     final progress = resolveProgress(DateTime.now());
     final senderTurn = request.turns
@@ -791,7 +827,10 @@ class _WorkTimelineCard extends StatelessWidget {
     final hasWorkerIdentity =
         workerDisplayName?.isNotEmpty == true || workerType?.isNotEmpty == true;
     final isPreStart =
-        const {'queued', 'starting', 'acknowledged'}.contains(request.status);
+        const {'queued', 'starting', 'acknowledged'}.contains(request.status) ||
+            (!requestIsTerminal &&
+                AxExecutionPhase.isKnown(executionPhase) &&
+                !AxExecutionPhase.isExecuting(executionPhase));
     final isWorkerResponse = !isError &&
         hasWorkerIdentity &&
         (isPreStart ||
@@ -1104,10 +1143,14 @@ class _WorkTimelineCard extends StatelessWidget {
                                 builder: (context, now) {
                                   final live = resolveProgress(now);
                                   final text = live.currentAction ?? '';
+                                  final labelled =
+                                      AxExecutionPhase.isKnown(executionPhase)
+                                          ? '${live.statusLabel} · $text'
+                                          : text;
                                   return Text(
                                     live.isStale
-                                        ? '$text · no recent updates'
-                                        : text,
+                                        ? '$labelled · no recent updates'
+                                        : labelled,
                                     key: const ValueKey('work-live-status'),
                                     style: ConclaveMessageTypography.fromTheme(
                                             Theme.of(context))
@@ -1159,6 +1202,19 @@ class _WorkTimelineCard extends StatelessWidget {
                                     tooltip: 'Cancel request',
                                     icon: Icons.cancel_outlined,
                                     onPressed: () => onCancelRun!(request.id),
+                                  ),
+                                if (request.status == 'failed' &&
+                                    failedStep != null &&
+                                    failedStep.retryAllowed &&
+                                    onRetryStep != null)
+                                  compactAction(
+                                    tooltip: failedStep
+                                            .retryRequiresConfirmation
+                                        ? 'Retry anyway — the previous execution may already have made changes'
+                                        : 'Retry',
+                                    icon: Icons.refresh_rounded,
+                                    onPressed: () =>
+                                        onRetryStep!(request.id, failedStep),
                                   ),
                                 if (request.status == 'failed' &&
                                     onReportIssue != null)
