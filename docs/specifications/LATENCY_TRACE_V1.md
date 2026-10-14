@@ -10,7 +10,7 @@ points are ordinary diagnostic events with `stage: "trace"` and a closed
 
 | Stage | `traceStage`                 | Emitted by                         | Meaning                                              |
 | ----- | ---------------------------- | ---------------------------------- | ---------------------------------------------------- |
-| T1    | `web_submitted`              | Web (Slice C)                      | User submits the Work request                        |
+| T1    | `web_submitted`              | Web `ax_work_latency_trace.dart`   | User submits the Work request                        |
 | T2    | `cloud_accepted`             | `routes/work-creation.ts`          | Submission durably persisted                         |
 | T3    | `workflow_dispatch_started`  | `workflow.ts`                      | Workflow step begins dispatching the task            |
 | T4    | `gateway_queued`             | `workspace-gateway.ts`             | `assignment.start` written to WebSocket or HTTP queue |
@@ -21,7 +21,7 @@ points are ordinary diagnostic events with `stage: "trace"` and a closed
 | T9    | `engine_process_created`     | `cli_worker_engine_supervisor.dart` | Engine OS process exists                            |
 | T10   | `provider_started`           | `cloud_connection.dart`            | Provider CLI start evidence                          |
 | T11   | `terminal_persisted`         | `workspace-gateway.ts`             | Terminal outcome written to D1                       |
-| T12   | `web_received`               | Web (Slice C)                      | Web receives the final update                        |
+| T12   | `web_received`               | Web `ax_work_latency_trace.dart`   | Web receives the final update                        |
 
 Auxiliary stages are not numbered: `cloud_ack_received` (command round trip
 and the Service's reported load), `workflow_observed_terminal` (lag between
@@ -71,7 +71,36 @@ upper bounds clamped to the observed maximum. Only numeric durations, closed
 stage names and bounded labels are retained; no prompts, output, paths or
 credentials.
 
+## Web trace (T1 / T12)
+
+The Web client keeps a bounded (128) in-memory record per Work request:
+T1 is stamped before the submit `POST`, the submit response and the realtime
+`work_request.created` / `started` events are auxiliary marks, and T12 is
+stamped when the terminal `work_request.completed|failed|cancelled` event
+arrives, before the cache is patched, so UI work is excluded. Marks are
+milliseconds from a monotonic stopwatch on the device; the wall-clock submit
+time is used for ordering only. One line per finished request is printed to
+the browser console as `[conclave.latency] {json}`. Prompts, attachments and
+Idempotency-Keys are never recorded. A request whose terminal state is only
+seen through the polling fallback has no T12.
+
+Web and Cloud clocks are never subtracted. The report instead shows the Web
+monotonic submit round trip, the Web-observed total, and an approximate
+residual (`web total - submit response - Cloud T2->T11`) for result delivery.
+
 ## Baseline gate
 
 Capture a baseline with the current system before changing delivery or
 startup behavior, and record it with the build under test.
+
+1. Run 20-30 Work requests: a mix against an idle Service and against one with
+   an active assignment, plus a few `delivery-probe` calls.
+2. Collect Cloud logs (`wrangler tail --format json > cloud.log`), the
+   Service `worker.jsonl*` files, and the browser console lines.
+3. Run `pnpm latency:baseline -- --cloud cloud.log --service worker.jsonl
+   --web console.txt --json baseline.json`.
+
+The report lists p50/p95/p99/max per stage interval, the phase holding the
+largest interval for each trace (before delivery, transport, Service
+admission, queueing, after Engine launch, result delivery), and warnings for
+traces that had to use an uncorrected Service clock.

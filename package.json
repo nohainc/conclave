@@ -3,6 +3,8 @@
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "scripts": {
+    "latency:baseline": "node scripts/latency-baseline.mjs",
+    "test:latency-baseline": "vitest run scripts/latency-baseline.test.mjs",
     "test:assignment-schema": "vitest run scripts/align-worker-assignment-schema.test.mjs",
     "build": "tsc -p packages/protocol/tsconfig.json && tsc -p packages/workspace-runtime-protocol/tsconfig.json && tsc -p packages/security/tsconfig.json && tsc -p packages/core/tsconfig.json && tsc -p packages/tool-profile/tsconfig.json && tsc -p apps/cloud/tsconfig.json",
     "format": "prettier --write .",

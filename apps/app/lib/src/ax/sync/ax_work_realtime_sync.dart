@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../ax_data.dart';
 import '../ax_render_diagnostics.dart';
+import '../ax_work_latency_trace.dart';
 import 'ax_work_history.dart';
 import 'ax_sync_scope.dart';
 
@@ -326,6 +327,7 @@ class AxWorkRealtimeSync extends ChangeNotifier {
       if (!_eventIds.add(eventId)) return;
       if (_eventIds.length > 1000) _eventIds.remove(_eventIds.first);
     }
+    if (type is String) AxWorkLatencyTrace.instance.realtimeEvent(type, id);
     final submissionId = payload['submissionId'];
     if (type == 'work_request.created' && submissionId is String) {
       cache.acceptSubmission(threadId, submissionId, id);

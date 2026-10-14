@@ -135,11 +135,13 @@ mixin _ThreadApi on _AxApiClientCore {
     List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
   }) async {
+    final submissionId = idempotencyKey ?? newAxIdempotencyKey();
+    AxWorkLatencyTrace.instance.submitted(submissionId);
     final response = await client.post(
       Uri.parse('$baseUrl/threads/$threadId/work-requests'),
       headers: {
         ..._headers(contentType: 'application/json'),
-        'Idempotency-Key': idempotencyKey ?? newAxIdempotencyKey()
+        'Idempotency-Key': submissionId
       },
       body: jsonEncode({
         'workflowId': workflowId,
@@ -147,6 +149,7 @@ mixin _ThreadApi on _AxApiClientCore {
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      AxWorkLatencyTrace.instance.failed(submissionId);
       if (response.statusCode == 422) {
         try {
           final body = jsonDecode(response.body);
@@ -189,6 +192,7 @@ mixin _ThreadApi on _AxApiClientCore {
     if (request is! Map || request['id'] is! String) {
       throw const AxApiException('Work request response is malformed');
     }
+    AxWorkLatencyTrace.instance.accepted(submissionId, request['id'] as String);
     return request['id'] as String;
   }
 
@@ -201,11 +205,13 @@ mixin _ThreadApi on _AxApiClientCore {
     Map<String, dynamic> executionSelection = const {},
     String? idempotencyKey,
   }) async {
+    final submissionId = idempotencyKey ?? newAxIdempotencyKey();
+    AxWorkLatencyTrace.instance.submitted(submissionId);
     final response = await client.post(
       Uri.parse('$baseUrl/threads/$threadId/work-requests'),
       headers: {
         ..._headers(contentType: 'application/json'),
-        'Idempotency-Key': idempotencyKey ?? newAxIdempotencyKey()
+        'Idempotency-Key': submissionId
       },
       body: jsonEncode({
         'workflowId': workflowId,
@@ -215,6 +221,7 @@ mixin _ThreadApi on _AxApiClientCore {
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      AxWorkLatencyTrace.instance.failed(submissionId);
       var detail = '';
       try {
         final body = jsonDecode(response.body);
@@ -234,6 +241,7 @@ mixin _ThreadApi on _AxApiClientCore {
     if (request is! Map || request['id'] is! String) {
       throw const AxApiException('Work request response is malformed');
     }
+    AxWorkLatencyTrace.instance.accepted(submissionId, request['id'] as String);
     return request['id'] as String;
   }
 

@@ -11,6 +11,7 @@ import '../platform/http_client_stub.dart'
     if (dart.library.html) '../platform/http_client_web.dart' as platform;
 import 'ax_models.dart';
 import 'ax_work_models.dart';
+import 'ax_work_latency_trace.dart';
 
 export 'ax_work_models.dart';
 
