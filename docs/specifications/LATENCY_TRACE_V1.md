@@ -38,6 +38,9 @@ synchronization deferral, so time spent waiting for the Service to reach
   `monotonicMs`). Cloudflare Workers freeze `performance.now()` between I/O, so
   Cloud-side durations are coarse; rely on wall-clock timestamps taken at I/O
   boundaries for Cloud intervals.
+  Workers use the Unix epoch as `performance.timeOrigin`; absolute readings
+  beyond the bounded `monotonicMs` field are omitted without dropping the
+  event. Elapsed `durationMs` and wall-clock `timestamp` remain available.
 - Cross-machine intervals use event `timestamp` values corrected by
   `clockOffsetMs` (Cloud minus Service). The Service estimates it NTP-style
   from `workspace.hello` and `workspace.heartbeat` acknowledgements

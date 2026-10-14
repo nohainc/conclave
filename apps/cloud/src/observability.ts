@@ -194,6 +194,9 @@ export function tryLogTraceEvent(input: TraceEventInput): void {
   try {
     const { traceStage, context, durationMs, severity, errorCode, ...ids } =
       input;
+    // Workers use the Unix epoch as performance.timeOrigin. Keep the bounded
+    // optional reading only where it fits; elapsed durations remain valid.
+    const monotonicMs = Math.max(0, Math.round(performance.now()));
     tryLogDiagnosticEvent({
       ...ids,
       component: "cloud",
@@ -205,7 +208,9 @@ export function tryLogTraceEvent(input: TraceEventInput): void {
       context: {
         ...context,
         traceStage,
-        monotonicMs: Math.max(0, Math.round(performance.now())),
+        ...(Number.isFinite(monotonicMs) && monotonicMs <= 2_147_483_647
+          ? { monotonicMs }
+          : {}),
         ...(durationMs !== undefined
           ? { durationMs: Math.max(0, Math.round(durationMs)) }
           : {}),

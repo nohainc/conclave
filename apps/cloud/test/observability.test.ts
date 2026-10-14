@@ -178,6 +178,30 @@ describe("observability", () => {
     }
   });
 
+  it("emits traces with the epoch-based Workers performance clock", () => {
+    const clock = vi
+      .spyOn(performance, "now")
+      .mockReturnValue(1_791_982_359_278);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      tryLogTraceEvent({
+        traceStage: "cloud_accepted",
+        requestId: "r1",
+        durationMs: 12,
+      });
+      expect(log).toHaveBeenCalledTimes(1);
+      const event = parseDiagnosticEvent(
+        JSON.parse(String(log.mock.calls[0]?.[0])).details.event,
+      );
+      expect(event.context?.traceStage).toBe("cloud_accepted");
+      expect(event.context?.durationMs).toBe(12);
+      expect(event.context?.monotonicMs).toBeUndefined();
+    } finally {
+      clock.mockRestore();
+      log.mockRestore();
+    }
+  });
+
   it("never lets a malformed trace event throw into the dispatch path", () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     try {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildTraces,
   eventsFromLine,
+  eventsFromText,
   intervalsOf,
   percentile,
   report,
@@ -26,11 +27,47 @@ describe("latency baseline", () => {
     expect(eventsFromLine(JSON.stringify(e))).toHaveLength(1);
     expect(
       eventsFromLine(
+        JSON.stringify({
+          logs: [
+            {
+              message: [
+                JSON.stringify({
+                  message: "diagnostic.event",
+                  details: { event: e },
+                }),
+              ],
+            },
+          ],
+        }),
+      ),
+    ).toHaveLength(1);
+    expect(
+      eventsFromLine(
         JSON.stringify({ logs: [{ message: [JSON.stringify(e)] }] }),
       ),
     ).toHaveLength(1);
     expect(eventsFromLine("not json")).toEqual([]);
     expect(eventsFromLine(JSON.stringify({ stage: "other" }))).toEqual([]);
+  });
+
+  it("reads real structured Cloud logs inside pretty-printed tail output", () => {
+    const e = ev("cloud", "cloud_accepted", "2026-10-14T10:00:00.000Z", {
+      requestId: "r1",
+    });
+    const wrapped = {
+      logs: [
+        {
+          message: [
+            JSON.stringify({
+              message: "diagnostic.event",
+              details: { event: e },
+            }),
+          ],
+        },
+      ],
+    };
+    const text = `Wrangler connected\n${JSON.stringify(wrapped, null, 2)}\n${JSON.stringify(e)}\n`;
+    expect(eventsFromText(text)).toEqual([e, e]);
   });
 
   it("applies the clock offset to Service events and attributes the delay", () => {

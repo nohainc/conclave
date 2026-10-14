@@ -60,7 +60,7 @@ export function eventsFromLine(line) {
   if (!text) return [];
   const out = [];
   const visit = (value, depth = 0) => {
-    if (depth > 8 || value == null) return;
+    if (depth > 16 || value == null) return;
     if (typeof value === "string") {
       const start = value.indexOf("{");
       if (start < 0) return;
@@ -77,12 +77,41 @@ export function eventsFromLine(line) {
       out.push(value);
       return;
     }
-    for (const key of ["logs", "message", "event", "data"]) {
+    for (const key of ["logs", "message", "event", "data", "details"]) {
       if (key in value) visit(value[key], depth + 1);
     }
   };
   visit(text);
   return out;
+}
+
+/** Read JSONL and concatenated pretty-printed Wrangler JSON objects. */
+export function eventsFromText(content) {
+  const events = [];
+  let start = -1;
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let i = 0; i < content.length; i++) {
+    const c = content[i];
+    if (start < 0) {
+      if (c !== "{") continue;
+      start = i;
+      depth = 1;
+      continue;
+    }
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === '"') quoted = false;
+    } else if (c === '"') quoted = true;
+    else if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) {
+      events.push(...eventsFromLine(content.slice(start, i + 1)));
+      start = -1;
+    }
+  }
+  return events;
 }
 
 export function webRecordsFromText(content) {
@@ -174,7 +203,9 @@ export function buildTraces(events, webRecords = []) {
     if (e.assignmentId) g.assignmentIds.add(e.assignmentId);
     const stage = e.context.traceStage;
     const runtime = e.workspaceRuntimeId ?? "";
-    const isService = e.component === "service" || e.component === "workspace";
+    const isService = ["service", "workspace", "workspace_service"].includes(
+      e.component,
+    );
     let ts = Date.parse(e.timestamp);
     if (!Number.isFinite(ts)) continue;
     if (isService) {
@@ -318,7 +349,7 @@ function parseArgs(argv) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = parseArgs(process.argv.slice(2));
   const events = [...args.cloud, ...args.service].flatMap((file) =>
-    readFileSync(file, "utf8").split(/\r?\n/).flatMap(eventsFromLine),
+    eventsFromText(readFileSync(file, "utf8")),
   );
   const web = args.web.flatMap((file) =>
     webRecordsFromText(readFileSync(file, "utf8")),
