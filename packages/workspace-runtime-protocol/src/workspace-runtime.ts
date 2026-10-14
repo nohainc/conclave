@@ -24,6 +24,7 @@ export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "workspace.sync.request",
   "workspace.sync.result",
   "workspace.status",
+  "workspace.readiness",
   "workspace.update",
   "worker.inventory",
   "thread.status",
@@ -47,6 +48,52 @@ export type WorkspaceRuntimeMessageType =
 
 const nonEmptyString = z.string().trim().min(1);
 const timestamp = z.string().datetime();
+
+/**
+ * Service-level connection states. They describe the Service as a transport
+ * endpoint, never an individual Worker: Worker eligibility is published
+ * separately through inventory. Only `ready` may receive new assignments.
+ */
+export const SERVICE_CONNECTION_STATES = [
+  "disconnected",
+  "connecting",
+  "authenticated",
+  "synchronizing",
+  "ready",
+  "paused",
+  "draining",
+  "reconnecting",
+] as const;
+
+export type ServiceConnectionState = (typeof SERVICE_CONNECTION_STATES)[number];
+
+/** Capability a Service advertises when it publishes `workspace.readiness`. */
+export const SERVICE_READINESS_CAPABILITY = "workspace.readiness.v1";
+
+/**
+ * Readiness published by the Service. `syncGeneration` increases every time
+ * the Service completes a (re)synchronization with Cloud, so Cloud can ignore
+ * a late readiness report from before the latest sync.
+ */
+export const serviceReadinessPayload = z
+  .object({
+    state: z.enum(SERVICE_CONNECTION_STATES),
+    readyForAssignments: z.boolean(),
+    syncGeneration: z.number().int().min(0).max(2_147_483_647),
+    reason: nonEmptyString.max(200).optional(),
+    pendingAssignments: z.number().int().min(0).max(100_000).optional(),
+  })
+  .strict()
+  .superRefine((readiness, readinessCtx) => {
+    if (readiness.readyForAssignments && readiness.state !== "ready") {
+      readinessCtx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "only the ready state may accept assignments",
+      });
+    }
+  });
+
+export type ServiceReadinessPayload = z.infer<typeof serviceReadinessPayload>;
 const executionErrorCode = z.enum(EXECUTION_ERROR_CODES);
 
 /** Canonical execution permissions carried from Cloud to Workspace. */
@@ -488,6 +535,18 @@ export const workspaceRuntimeEnvelopeSchema = z
               })
               .strict();
       const payload = schema.safeParse(message.payload);
+      if (!payload.success) {
+        for (const issue of payload.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payload", ...issue.path],
+            message: issue.message,
+          });
+        }
+      }
+    }
+    if (message.type === "workspace.readiness") {
+      const payload = serviceReadinessPayload.safeParse(message.payload);
       if (!payload.success) {
         for (const issue of payload.error.issues) {
           ctx.addIssue({

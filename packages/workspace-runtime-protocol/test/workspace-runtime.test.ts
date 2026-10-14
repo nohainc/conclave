@@ -134,6 +134,47 @@ describe("Workspace Runtime protocol", () => {
     ).toThrow();
   });
 
+  it("validates Service readiness payloads", () => {
+    const parse = (payload: unknown) =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "workspace.readiness",
+        executionWorkspaceId: "workspace-a",
+        workspaceRuntimeId: "runtime-a",
+        payload,
+      });
+    expect(
+      parse({ state: "ready", readyForAssignments: true, syncGeneration: 3 })
+        .type,
+    ).toBe("workspace.readiness");
+    expect(
+      parse({
+        state: "draining",
+        readyForAssignments: false,
+        syncGeneration: 3,
+        reason: "shutdown",
+      }).type,
+    ).toBe("workspace.readiness");
+    // Only the ready state may accept assignments.
+    expect(() =>
+      parse({ state: "paused", readyForAssignments: true, syncGeneration: 1 }),
+    ).toThrow();
+    expect(() =>
+      parse({ state: "bogus", readyForAssignments: false, syncGeneration: 1 }),
+    ).toThrow();
+    expect(() =>
+      parse({ state: "ready", readyForAssignments: true, syncGeneration: -1 }),
+    ).toThrow();
+    expect(() =>
+      parse({
+        state: "ready",
+        readyForAssignments: true,
+        syncGeneration: 1,
+        extra: true,
+      }),
+    ).toThrow();
+  });
+
   it("validates start permit request and grant payloads", () => {
     const correlation = {
       executionWorkspaceId: "workspace-a",

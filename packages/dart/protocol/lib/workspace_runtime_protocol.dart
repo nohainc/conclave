@@ -14,6 +14,7 @@ const workspaceRuntimeMessageTypes = <String>{
   'workspace.sync.request',
   'workspace.sync.result',
   'workspace.status',
+  'workspace.readiness',
   'workspace.update',
   'worker.inventory',
   'thread.status',

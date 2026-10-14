@@ -70,10 +70,18 @@ export interface ExecutionTarget {
   readonly fencingToken?: number;
 }
 
+/**
+ * Service availability as the scheduler needs it. `ready` (or `true`) means
+ * the Service will handle a command immediately; `connected` means the
+ * transport is live but the Service is still synchronizing, paused or
+ * draining, so work may only be queued; `false` means disconnected.
+ */
+export type WorkspaceLiveState = boolean | "connected" | "ready";
+
 export type WorkspaceLiveCheck = (
   workspaceId: string,
   runtimeIdentityId: string,
-) => Promise<boolean>;
+) => Promise<WorkspaceLiveState>;
 
 type Row = Record<string, unknown>;
 
@@ -326,7 +334,10 @@ export async function selectSpaceExecutionTarget(
 
   const excluded = new Set(request.excludeIndependenceKeys ?? []);
   const rejected: Array<Record<string, unknown>> = [];
-  const liveWorkspaceChecks = new Map<string, Promise<boolean>>();
+  const liveWorkspaceChecks = new Map<string, Promise<WorkspaceLiveState>>();
+  // A ready Service always wins. A connected-but-unready one is used only
+  // when no ready candidate qualifies, and then the work is queued durably.
+  let sawUnreadyService = false;
   const bindingFor = (row: Row): Record<string, unknown> => {
     const snapshot = object(row.work_request_snapshot_json);
     const snapshotBindings =
@@ -359,415 +370,433 @@ export async function selectSpaceExecutionTarget(
       String(left.workspace_id).localeCompare(String(right.workspace_id))
     );
   });
-  for (const row of candidates) {
-    const workspaceId = String(row.workspace_id);
-    const workerId = String(row.worker_id);
-    const workerTypeId = String(row.worker_type_id);
-    const binding = bindingFor(row);
-    const acceptedSnapshot = object(row.work_request_snapshot_json);
-    const stepConfigs = acceptedSnapshot.stepExecutionConfigs as
-      Record<string, unknown> | undefined;
-    const turnConfig = request.workRequestId
-      ? ((stepConfigs?.[request.role] ??
-          acceptedSnapshot.turnExecutionConfig) as
-          Record<string, unknown> | undefined)
-      : undefined;
-    if (stepConfigs && !stepConfigs[request.role]) {
-      rejected.push({
-        workspaceId,
-        workerId,
-        reason: "step_configuration_unavailable",
-      });
-      continue;
-    }
-    if (
-      turnConfig &&
-      (turnConfig.schemaVersion !== 1 ||
-        turnConfig.workerId !== workerId ||
-        turnConfig.profileId !== row.profile_definition_id ||
-        turnConfig.profileReleaseVersion !==
-          Number(row.profile_release_version))
-    ) {
-      rejected.push({
-        workspaceId,
-        workerId,
-        reason: "turn_configuration_unavailable",
-      });
-      continue;
-    }
-    const hasBinding = Object.keys(binding).length > 0;
-    const preferredWorkerIds = [
-      ...(typeof binding.workerId === "string" ? [binding.workerId] : []),
-    ];
-    // Worker/Profile capability metadata is legacy and is deliberately not
-    // consulted for scheduling. Cloud workflow policy and explicit grant
-    // permissions determine the effective execution scope.
-    let selectedModel = turnConfig
-      ? typeof turnConfig.modelId === "string"
-        ? turnConfig.modelId
-        : null
-      : request.threadId &&
-          typeof binding.model === "string" &&
-          binding.model.trim().length > 0
-        ? binding.model
-        : (request.model ??
-          (typeof binding.model === "string" ? binding.model : undefined));
-    let selectedReasoningEffort = turnConfig
-      ? typeof turnConfig.effort === "string"
-        ? turnConfig.effort
-        : null
-      : request.threadId &&
-          typeof binding.reasoningEffort === "string" &&
-          binding.reasoningEffort.trim().length > 0
-        ? binding.reasoningEffort
-        : (request.reasoningEffort ??
-          (typeof binding.reasoningEffort === "string"
-            ? binding.reasoningEffort
-            : undefined));
-    const independenceKey = workerTypeId;
-    const grantWorkerIds = parsedGrantJson(
-      row.allowed_worker_ids_json,
-      validateWorkspaceGrantWorkerIds,
-    );
-    const grantPermissions = parsedGrantJson(
-      row.allowed_permissions_json,
-      validateWorkspaceGrantPermissions,
-    );
-    const networkPolicy = parsedGrantJson(
-      row.network_policy_json,
-      validateWorkspaceNetworkPolicy,
-    );
-    const concurrency = parsedGrantJson(
-      row.concurrency_json,
-      validateWorkspaceConcurrencyPolicy,
-    );
-    const grantPolicyValid =
-      isWorkspaceSpaceGrantStatus(row.grant_status) &&
-      row.grant_status === "active" &&
-      grantWorkerIds !== null &&
-      grantPermissions !== null &&
-      networkPolicy !== null &&
-      concurrency !== null;
-    const maxConcurrent = grantPolicyValid
-      ? Math.min(
-          number(row.local_concurrency_limit, 0),
-          row.cloud_concurrency_limit == null
-            ? 1024
-            : number(row.cloud_concurrency_limit, 0),
-          concurrency.maxConcurrentAssignments,
-        )
-      : 0;
-
-    const reject = (reason: string) =>
-      rejected.push({ workspaceId, workerId, reason });
-    if (
-      row.worker_catalog_lifecycle_state !== "active" ||
-      row.worker_catalog_visibility_state !== "visible"
-    ) {
-      reject("worker_catalog_unavailable");
-      continue;
-    }
-    if (!grantPolicyValid) {
-      reject("workspace_grant_policy_invalid");
-      continue;
-    }
-    if (statefulLease && workspaceId !== statefulLease.workspaceId) {
-      reject("stateful_primary_workspace_required");
-      continue;
-    }
-    if (!isWorkspaceLive && String(row.workspace_status) !== "online") {
-      reject("workspace_offline");
-      continue;
-    }
-    if (String(row.grant_status) !== "active") {
-      reject("grant_inactive");
-      continue;
-    }
-    if (row.cloud_scheduling_state === "draining") {
-      reject("cloud_scheduling_draining");
-      continue;
-    }
-    if (row.cloud_scheduling_state !== "enabled") {
-      reject("cloud_scheduling_disabled");
-      continue;
-    }
-    if (String(row.local_worker_activation_state) !== "enabled") {
-      reject("local_worker_disabled");
-      continue;
-    }
-    if (String(row.local_worker_readiness_state) !== "ready") {
-      reject("local_worker_not_ready");
-      continue;
-    }
-    if (
-      typeof row.engine_version !== "string" ||
-      !row.engine_version ||
-      typeof row.profile_definition_id !== "string" ||
-      !row.profile_definition_id ||
-      !Number.isSafeInteger(Number(row.profile_release_version)) ||
-      Number(row.profile_release_version) < 1
-    ) {
-      reject("engine_profile_unavailable");
-      continue;
-    }
-    const executionOptions = spaceWorkerExecutionOptions(
-      row.execution_profile_json,
-      row.provider_tool_version,
-      row.model_catalog_json,
-      row.execution_profile_digest,
-    );
-    const expectedRevision =
-      typeof binding.catalogRevision === "string"
-        ? binding.catalogRevision
-        : request.catalogRevision;
-    const selectionError = executionOptions
-      ? validateWorkerExecutionSelection(
-          executionOptions,
-          selectedModel ?? null,
-          selectedReasoningEffort ?? null,
-          expectedRevision,
-        )
-      : "Worker capabilities are unavailable";
-    if (selectionError) {
-      reject(`profile_execution_option_unavailable: ${selectionError}`);
-      continue;
-    }
-    if (
-      executionOptions?.schemaVersion === 2 &&
-      executionOptions.models.discovery === "provider_catalog" &&
-      !supportsExecutionCatalogPin(row.engine_version)
-    ) {
-      reject(
-        "worker_engine_update_required: catalog-pinned execution requires Engine 1.3.0 or newer",
-      );
-      continue;
-    }
-    let executionSelection;
-    try {
-      executionSelection = resolveExecutionSelectionSnapshot(
-        executionOptions!,
-        {
-          modelId: selectedModel ?? null,
-          effort: selectedReasoningEffort ?? null,
-          catalogRevision: expectedRevision,
-        },
-        {
-          workerTypeId,
-          workerDisplayName: String(row.worker_display_name ?? workerTypeId),
-          profileReleaseVersion: Number(row.profile_release_version),
-        },
-      );
-      selectedModel = executionSelection.modelId;
-      selectedReasoningEffort = executionSelection.effort;
-    } catch (error) {
-      reject(`profile_execution_option_unavailable: ${String(error)}`);
-      continue;
-    }
-    if (request.threadId && !hasBinding) {
-      reject("thread_step_binding_missing");
-      continue;
-    }
-    if (request.workspaceId && request.workspaceId !== workspaceId) {
-      reject("explicit_workspace_mismatch");
-      continue;
-    }
-    if (
-      request.threadId &&
-      (preferredWorkerIds.length === 0 ||
-        !preferredWorkerIds.includes(workerId))
-    ) {
-      reject(
-        preferredWorkerIds.length === 0
-          ? "no_worker_selected_for_step"
-          : "worker_not_selected_for_step",
-      );
-      continue;
-    }
-    if (request.workerId && request.workerId !== workerId) {
-      reject("explicit_worker_mismatch");
-      continue;
-    }
-    if (grantWorkerIds.length > 0 && !grantWorkerIds.includes(workerId)) {
-      reject("worker_not_allowed_by_grant");
-      continue;
-    }
-    if (!allowedByJson(row, "allowed_worker_type_ids_json", workerTypeId)) {
-      reject("worker_type_not_allowed_by_thread");
-      continue;
-    }
-    const allowedModels = strings(row.allowed_models_json);
-    if (
-      allowedModels.length > 0 &&
-      (!selectedModel || !allowedModels.includes(selectedModel))
-    ) {
-      reject("model_not_allowed_by_thread");
-      continue;
-    }
-    if (excluded.has(independenceKey)) {
-      reject("provider_independence_conflict");
-      continue;
-    }
-    if (
-      !request.allowQueue &&
-      number(row.active_assignments) >= maxConcurrent
-    ) {
-      reject("worker_concurrency_limit");
-      continue;
-    }
-
-    const resolvedPermissions = resolveExecutionPermissions(
-      rights.work ? [...EXECUTION_PERMISSIONS] : ["repository:read"],
-      grantPermissions,
-    );
-    // Read-only steps may keep the active Thread lease so they inspect its
-    // current filesystem, while dropping repository writes. Test alone retains
-    // shell execution so it can run validation commands inside the read-only
-    // provider sandbox.
-    const canRunTestCommands = request.capabilities.includes("test_execution");
-    const permissions =
-      executionClass === "stateless_read" || request.readOnly === true
-        ? resolvedPermissions.filter(
-            (permission) =>
-              permission !== "repository:write" &&
-              (permission !== "shell:execute" || canRunTestCommands),
-          )
-        : resolvedPermissions;
-    if (permissions.length === 0) {
-      reject("effective_permission_intersection_empty");
-      continue;
-    }
-    let workspaceIsLive = false;
-    if (isWorkspaceLive) {
-      const runtimeIdentityId = String(row.runtime_identity_id);
-      const key = `${workspaceId}:${runtimeIdentityId}`;
-      let liveCheck = liveWorkspaceChecks.get(key);
-      if (!liveCheck) {
-        liveCheck = isWorkspaceLive(workspaceId, runtimeIdentityId).catch(
-          () => false,
-        );
-        liveWorkspaceChecks.set(key, liveCheck);
+  for (const allowUnready of [false, true]) {
+    if (allowUnready && !sawUnreadyService) break;
+    if (allowUnready) rejected.length = 0;
+    for (const row of candidates) {
+      const workspaceId = String(row.workspace_id);
+      const workerId = String(row.worker_id);
+      const workerTypeId = String(row.worker_type_id);
+      const binding = bindingFor(row);
+      const acceptedSnapshot = object(row.work_request_snapshot_json);
+      const stepConfigs = acceptedSnapshot.stepExecutionConfigs as
+        Record<string, unknown> | undefined;
+      const turnConfig = request.workRequestId
+        ? ((stepConfigs?.[request.role] ??
+            acceptedSnapshot.turnExecutionConfig) as
+            Record<string, unknown> | undefined)
+        : undefined;
+      if (stepConfigs && !stepConfigs[request.role]) {
+        rejected.push({
+          workspaceId,
+          workerId,
+          reason: "step_configuration_unavailable",
+        });
+        continue;
       }
-      workspaceIsLive = await liveCheck;
-      if (!workspaceIsLive) {
+      if (
+        turnConfig &&
+        (turnConfig.schemaVersion !== 1 ||
+          turnConfig.workerId !== workerId ||
+          turnConfig.profileId !== row.profile_definition_id ||
+          turnConfig.profileReleaseVersion !==
+            Number(row.profile_release_version))
+      ) {
+        rejected.push({
+          workspaceId,
+          workerId,
+          reason: "turn_configuration_unavailable",
+        });
+        continue;
+      }
+      const hasBinding = Object.keys(binding).length > 0;
+      const preferredWorkerIds = [
+        ...(typeof binding.workerId === "string" ? [binding.workerId] : []),
+      ];
+      // Worker/Profile capability metadata is legacy and is deliberately not
+      // consulted for scheduling. Cloud workflow policy and explicit grant
+      // permissions determine the effective execution scope.
+      let selectedModel = turnConfig
+        ? typeof turnConfig.modelId === "string"
+          ? turnConfig.modelId
+          : null
+        : request.threadId &&
+            typeof binding.model === "string" &&
+            binding.model.trim().length > 0
+          ? binding.model
+          : (request.model ??
+            (typeof binding.model === "string" ? binding.model : undefined));
+      let selectedReasoningEffort = turnConfig
+        ? typeof turnConfig.effort === "string"
+          ? turnConfig.effort
+          : null
+        : request.threadId &&
+            typeof binding.reasoningEffort === "string" &&
+            binding.reasoningEffort.trim().length > 0
+          ? binding.reasoningEffort
+          : (request.reasoningEffort ??
+            (typeof binding.reasoningEffort === "string"
+              ? binding.reasoningEffort
+              : undefined));
+      const independenceKey = workerTypeId;
+      const grantWorkerIds = parsedGrantJson(
+        row.allowed_worker_ids_json,
+        validateWorkspaceGrantWorkerIds,
+      );
+      const grantPermissions = parsedGrantJson(
+        row.allowed_permissions_json,
+        validateWorkspaceGrantPermissions,
+      );
+      const networkPolicy = parsedGrantJson(
+        row.network_policy_json,
+        validateWorkspaceNetworkPolicy,
+      );
+      const concurrency = parsedGrantJson(
+        row.concurrency_json,
+        validateWorkspaceConcurrencyPolicy,
+      );
+      const grantPolicyValid =
+        isWorkspaceSpaceGrantStatus(row.grant_status) &&
+        row.grant_status === "active" &&
+        grantWorkerIds !== null &&
+        grantPermissions !== null &&
+        networkPolicy !== null &&
+        concurrency !== null;
+      const maxConcurrent = grantPolicyValid
+        ? Math.min(
+            number(row.local_concurrency_limit, 0),
+            row.cloud_concurrency_limit == null
+              ? 1024
+              : number(row.cloud_concurrency_limit, 0),
+            concurrency.maxConcurrentAssignments,
+          )
+        : 0;
+
+      const reject = (reason: string) =>
+        rejected.push({ workspaceId, workerId, reason });
+      if (
+        row.worker_catalog_lifecycle_state !== "active" ||
+        row.worker_catalog_visibility_state !== "visible"
+      ) {
+        reject("worker_catalog_unavailable");
+        continue;
+      }
+      if (!grantPolicyValid) {
+        reject("workspace_grant_policy_invalid");
+        continue;
+      }
+      if (statefulLease && workspaceId !== statefulLease.workspaceId) {
+        reject("stateful_primary_workspace_required");
+        continue;
+      }
+      if (!isWorkspaceLive && String(row.workspace_status) !== "online") {
         reject("workspace_offline");
         continue;
       }
+      if (String(row.grant_status) !== "active") {
+        reject("grant_inactive");
+        continue;
+      }
+      if (row.cloud_scheduling_state === "draining") {
+        reject("cloud_scheduling_draining");
+        continue;
+      }
+      if (row.cloud_scheduling_state !== "enabled") {
+        reject("cloud_scheduling_disabled");
+        continue;
+      }
+      if (String(row.local_worker_activation_state) !== "enabled") {
+        reject("local_worker_disabled");
+        continue;
+      }
+      if (String(row.local_worker_readiness_state) !== "ready") {
+        reject("local_worker_not_ready");
+        continue;
+      }
+      if (
+        typeof row.engine_version !== "string" ||
+        !row.engine_version ||
+        typeof row.profile_definition_id !== "string" ||
+        !row.profile_definition_id ||
+        !Number.isSafeInteger(Number(row.profile_release_version)) ||
+        Number(row.profile_release_version) < 1
+      ) {
+        reject("engine_profile_unavailable");
+        continue;
+      }
+      const executionOptions = spaceWorkerExecutionOptions(
+        row.execution_profile_json,
+        row.provider_tool_version,
+        row.model_catalog_json,
+        row.execution_profile_digest,
+      );
+      const expectedRevision =
+        typeof binding.catalogRevision === "string"
+          ? binding.catalogRevision
+          : request.catalogRevision;
+      const selectionError = executionOptions
+        ? validateWorkerExecutionSelection(
+            executionOptions,
+            selectedModel ?? null,
+            selectedReasoningEffort ?? null,
+            expectedRevision,
+          )
+        : "Worker capabilities are unavailable";
+      if (selectionError) {
+        reject(`profile_execution_option_unavailable: ${selectionError}`);
+        continue;
+      }
+      if (
+        executionOptions?.schemaVersion === 2 &&
+        executionOptions.models.discovery === "provider_catalog" &&
+        !supportsExecutionCatalogPin(row.engine_version)
+      ) {
+        reject(
+          "worker_engine_update_required: catalog-pinned execution requires Engine 1.3.0 or newer",
+        );
+        continue;
+      }
+      let executionSelection;
+      try {
+        executionSelection = resolveExecutionSelectionSnapshot(
+          executionOptions!,
+          {
+            modelId: selectedModel ?? null,
+            effort: selectedReasoningEffort ?? null,
+            catalogRevision: expectedRevision,
+          },
+          {
+            workerTypeId,
+            workerDisplayName: String(row.worker_display_name ?? workerTypeId),
+            profileReleaseVersion: Number(row.profile_release_version),
+          },
+        );
+        selectedModel = executionSelection.modelId;
+        selectedReasoningEffort = executionSelection.effort;
+      } catch (error) {
+        reject(`profile_execution_option_unavailable: ${String(error)}`);
+        continue;
+      }
+      if (request.threadId && !hasBinding) {
+        reject("thread_step_binding_missing");
+        continue;
+      }
+      if (request.workspaceId && request.workspaceId !== workspaceId) {
+        reject("explicit_workspace_mismatch");
+        continue;
+      }
+      if (
+        request.threadId &&
+        (preferredWorkerIds.length === 0 ||
+          !preferredWorkerIds.includes(workerId))
+      ) {
+        reject(
+          preferredWorkerIds.length === 0
+            ? "no_worker_selected_for_step"
+            : "worker_not_selected_for_step",
+        );
+        continue;
+      }
+      if (request.workerId && request.workerId !== workerId) {
+        reject("explicit_worker_mismatch");
+        continue;
+      }
+      if (grantWorkerIds.length > 0 && !grantWorkerIds.includes(workerId)) {
+        reject("worker_not_allowed_by_grant");
+        continue;
+      }
+      if (!allowedByJson(row, "allowed_worker_type_ids_json", workerTypeId)) {
+        reject("worker_type_not_allowed_by_thread");
+        continue;
+      }
+      const allowedModels = strings(row.allowed_models_json);
+      if (
+        allowedModels.length > 0 &&
+        (!selectedModel || !allowedModels.includes(selectedModel))
+      ) {
+        reject("model_not_allowed_by_thread");
+        continue;
+      }
+      if (excluded.has(independenceKey)) {
+        reject("provider_independence_conflict");
+        continue;
+      }
+      if (
+        !request.allowQueue &&
+        number(row.active_assignments) >= maxConcurrent
+      ) {
+        reject("worker_concurrency_limit");
+        continue;
+      }
+
+      const resolvedPermissions = resolveExecutionPermissions(
+        rights.work ? [...EXECUTION_PERMISSIONS] : ["repository:read"],
+        grantPermissions,
+      );
+      // Read-only steps may keep the active Thread lease so they inspect its
+      // current filesystem, while dropping repository writes. Test alone retains
+      // shell execution so it can run validation commands inside the read-only
+      // provider sandbox.
+      const canRunTestCommands =
+        request.capabilities.includes("test_execution");
+      const permissions =
+        executionClass === "stateless_read" || request.readOnly === true
+          ? resolvedPermissions.filter(
+              (permission) =>
+                permission !== "repository:write" &&
+                (permission !== "shell:execute" || canRunTestCommands),
+            )
+          : resolvedPermissions;
+      if (permissions.length === 0) {
+        reject("effective_permission_intersection_empty");
+        continue;
+      }
+      let workspaceIsLive = false;
+      let workspaceReadiness: "ready" | "connected" = "ready";
+      if (isWorkspaceLive) {
+        const runtimeIdentityId = String(row.runtime_identity_id);
+        const key = `${workspaceId}:${runtimeIdentityId}`;
+        let liveCheck = liveWorkspaceChecks.get(key);
+        if (!liveCheck) {
+          liveCheck = isWorkspaceLive(workspaceId, runtimeIdentityId).catch(
+            () => false,
+          );
+          liveWorkspaceChecks.set(key, liveCheck);
+        }
+        const liveState = await liveCheck;
+        workspaceIsLive = liveState !== false;
+        if (!workspaceIsLive) {
+          reject("workspace_offline");
+          continue;
+        }
+        if (liveState === "connected") {
+          if (!allowUnready) {
+            sawUnreadyService = true;
+            reject("workspace_not_ready");
+            continue;
+          }
+          workspaceReadiness = "connected";
+        }
+      }
+      const snapshotAt = now.toISOString();
+      const permissionSnapshot = {
+        executionSelection,
+        spaceId: request.spaceId,
+        workspaceId,
+        workerId,
+        workerTypeId,
+        grantId: String(row.grant_id),
+        workerDisplayName: String(row.worker_display_name ?? workerTypeId),
+        engineVersion: String(row.engine_version),
+        profileDefinitionId: String(row.profile_definition_id),
+        profileReleaseVersion: Number(row.profile_release_version),
+        model: selectedModel ?? null,
+        reasoningEffort: selectedReasoningEffort ?? null,
+        providerToolName:
+          typeof row.provider_tool_name === "string"
+            ? row.provider_tool_name
+            : null,
+        providerToolVersion:
+          typeof row.provider_tool_version === "string"
+            ? row.provider_tool_version
+            : null,
+        requesterUserId: request.requesterUserId,
+        permissions,
+        networkPolicy,
+        concurrency,
+        threadPolicy: {
+          allowedWorkerTypeIds: strings(row.allowed_worker_type_ids_json),
+          allowedModels,
+        },
+        snapshotAt,
+      };
+      return {
+        spaceId: request.spaceId,
+        workspaceId,
+        workspaceRuntimeIdentityId: String(row.runtime_identity_id),
+        workspaceSpaceGrantId: String(row.grant_id),
+        workerId,
+        workerTypeId,
+        engineVersion: String(row.engine_version),
+        profileDefinitionId: String(row.profile_definition_id),
+        profileReleaseVersion: Number(row.profile_release_version),
+        providerToolName:
+          typeof row.provider_tool_name === "string"
+            ? row.provider_tool_name
+            : null,
+        providerToolVersion:
+          typeof row.provider_tool_version === "string"
+            ? row.provider_tool_version
+            : null,
+        model: selectedModel ?? null,
+        reasoningEffort: selectedReasoningEffort ?? null,
+        effectivePermissions: permissions,
+        maxConcurrentAssignments: maxConcurrent,
+        permissionSnapshot,
+        selectionExplanation: {
+          spaceMembership: membership.role,
+          workspace: {
+            id: workspaceId,
+            status: isWorkspaceLive ? "online" : row.workspace_status,
+            readiness: workspaceReadiness,
+            connectionSource: isWorkspaceLive
+              ? "workspace_gateway"
+              : "database",
+            grantId: row.grant_id,
+          },
+          worker: {
+            id: workerId,
+            workerTypeId,
+            engineVersion: row.engine_version,
+            profileDefinitionId: row.profile_definition_id,
+            profileReleaseVersion: row.profile_release_version,
+            providerToolName:
+              typeof row.provider_tool_name === "string"
+                ? row.provider_tool_name
+                : null,
+            providerToolVersion:
+              typeof row.provider_tool_version === "string"
+                ? row.provider_tool_version
+                : null,
+            activationState: row.local_worker_activation_state,
+            readinessState: row.local_worker_readiness_state,
+            workBindingId: request.workBindingId ?? null,
+            selection: preferredWorkerIds.includes(workerId)
+              ? "configured_preference"
+              : "eligible_fallback",
+          },
+          filters: [
+            "space_authorized",
+            "grant_active",
+            "workspace_online",
+            "workspace_worker_owned",
+            "local_worker_ready",
+            "cloud_scheduling_enabled",
+            "permissions_intersected",
+            "capacity_available",
+            ...(statefulLease ? ["primary_workspace", "lease_active"] : []),
+          ],
+          rejectedAlternatives: rejected,
+        },
+        ...(typeof row.conversation_id === "string"
+          ? {
+              conversationId: row.conversation_id,
+              baseContextRevision: number(row.base_context_revision),
+            }
+          : {}),
+        executionClass,
+        readOnly:
+          executionClass === "stateless_read" || request.readOnly === true,
+        ...(statefulLease
+          ? {
+              threadId: statefulLease.threadId,
+              workRequestId: statefulLease.workRequestId,
+              leaseId: statefulLease.leaseId,
+              fencingToken: statefulLease.fencingToken,
+            }
+          : {}),
+      };
     }
-    const snapshotAt = now.toISOString();
-    const permissionSnapshot = {
-      executionSelection,
-      spaceId: request.spaceId,
-      workspaceId,
-      workerId,
-      workerTypeId,
-      grantId: String(row.grant_id),
-      workerDisplayName: String(row.worker_display_name ?? workerTypeId),
-      engineVersion: String(row.engine_version),
-      profileDefinitionId: String(row.profile_definition_id),
-      profileReleaseVersion: Number(row.profile_release_version),
-      model: selectedModel ?? null,
-      reasoningEffort: selectedReasoningEffort ?? null,
-      providerToolName:
-        typeof row.provider_tool_name === "string"
-          ? row.provider_tool_name
-          : null,
-      providerToolVersion:
-        typeof row.provider_tool_version === "string"
-          ? row.provider_tool_version
-          : null,
-      requesterUserId: request.requesterUserId,
-      permissions,
-      networkPolicy,
-      concurrency,
-      threadPolicy: {
-        allowedWorkerTypeIds: strings(row.allowed_worker_type_ids_json),
-        allowedModels,
-      },
-      snapshotAt,
-    };
-    return {
-      spaceId: request.spaceId,
-      workspaceId,
-      workspaceRuntimeIdentityId: String(row.runtime_identity_id),
-      workspaceSpaceGrantId: String(row.grant_id),
-      workerId,
-      workerTypeId,
-      engineVersion: String(row.engine_version),
-      profileDefinitionId: String(row.profile_definition_id),
-      profileReleaseVersion: Number(row.profile_release_version),
-      providerToolName:
-        typeof row.provider_tool_name === "string"
-          ? row.provider_tool_name
-          : null,
-      providerToolVersion:
-        typeof row.provider_tool_version === "string"
-          ? row.provider_tool_version
-          : null,
-      model: selectedModel ?? null,
-      reasoningEffort: selectedReasoningEffort ?? null,
-      effectivePermissions: permissions,
-      maxConcurrentAssignments: maxConcurrent,
-      permissionSnapshot,
-      selectionExplanation: {
-        spaceMembership: membership.role,
-        workspace: {
-          id: workspaceId,
-          status: isWorkspaceLive ? "online" : row.workspace_status,
-          connectionSource: isWorkspaceLive ? "workspace_gateway" : "database",
-          grantId: row.grant_id,
-        },
-        worker: {
-          id: workerId,
-          workerTypeId,
-          engineVersion: row.engine_version,
-          profileDefinitionId: row.profile_definition_id,
-          profileReleaseVersion: row.profile_release_version,
-          providerToolName:
-            typeof row.provider_tool_name === "string"
-              ? row.provider_tool_name
-              : null,
-          providerToolVersion:
-            typeof row.provider_tool_version === "string"
-              ? row.provider_tool_version
-              : null,
-          activationState: row.local_worker_activation_state,
-          readinessState: row.local_worker_readiness_state,
-          workBindingId: request.workBindingId ?? null,
-          selection: preferredWorkerIds.includes(workerId)
-            ? "configured_preference"
-            : "eligible_fallback",
-        },
-        filters: [
-          "space_authorized",
-          "grant_active",
-          "workspace_online",
-          "workspace_worker_owned",
-          "local_worker_ready",
-          "cloud_scheduling_enabled",
-          "permissions_intersected",
-          "capacity_available",
-          ...(statefulLease ? ["primary_workspace", "lease_active"] : []),
-        ],
-        rejectedAlternatives: rejected,
-      },
-      ...(typeof row.conversation_id === "string"
-        ? {
-            conversationId: row.conversation_id,
-            baseContextRevision: number(row.base_context_revision),
-          }
-        : {}),
-      executionClass,
-      readOnly:
-        executionClass === "stateless_read" || request.readOnly === true,
-      ...(statefulLease
-        ? {
-            threadId: statefulLease.threadId,
-            workRequestId: statefulLease.workRequestId,
-            leaseId: statefulLease.leaseId,
-            fencingToken: statefulLease.fencingToken,
-          }
-        : {}),
-    };
   }
   return null;
 }

@@ -22,6 +22,7 @@ import { createEventPublisher } from "./event-publisher.js";
 import { tryLogTraceEvent } from "./observability.js";
 import {
   dispatchTaskAssignment,
+  nudgeQueuedAssignments,
   type AssignmentDispatcherEnv,
 } from "./assignment-dispatcher.js";
 import {
@@ -104,6 +105,7 @@ interface AssignmentRow {
   permissionSnapshotJson: string | null;
   assignmentId: string;
   attemptId: string;
+  workspaceId: string | null;
   createdAt: string;
   updatedAt: string;
   queueWaitTimeoutMs: number | null;
@@ -117,6 +119,8 @@ interface AssignmentRow {
 }
 
 const PHASE_FAILURE_MESSAGE: Record<AssignmentDeadlinePhase, string> = {
+  readiness_wait:
+    "The Workspace Service was not ready to accept the assignment in time. Check that it is running and synchronized, then retry.",
   command_delivery:
     "Workspace did not acknowledge the assignment. Check its connection and retry.",
   queue_wait:
@@ -749,6 +753,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                       wa.worker_type_id AS workerTypeId, wa.engine_version AS engineVersion,
                       wa.model, wa.permission_snapshot_json AS permissionSnapshotJson,
                       wa.attempt_id AS attemptId,
+                      wa.execution_workspace_id AS workspaceId,
                       wa.created_at AS createdAt, wa.updated_at AS updatedAt,
                       wa.queue_wait_timeout_ms AS queueWaitTimeoutMs,
                       wa.start_permit_issued_at AS permitIssuedAt,
@@ -779,7 +784,19 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           terminal = await workflowStep.do(
             `workflow:${task.step.kind}:assignment-status:${attempt}:${poll}`,
             { ...stepConfig, timeout: "30 seconds" },
-            async () => readAssignment(),
+            async () => {
+              const row = await readAssignment();
+              // Work waiting for a Service that was not ready is flushed by
+              // the Gateway when it becomes ready. Nudging here makes a lost
+              // or hibernation-missed readiness event harmless.
+              if (row?.status === "created" && row.workspaceId) {
+                await nudgeQueuedAssignments(
+                  this.env as unknown as AssignmentDispatcherEnv,
+                  row.workspaceId,
+                );
+              }
+              return row;
+            },
           );
           if (
             terminal &&
@@ -822,7 +839,11 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                   terminal.queueWaitTimeoutMs ?? DEFAULT_QUEUE_WAIT_TIMEOUT_MS,
               })
             : null;
-          if (terminal && violation && violation.phase !== "provider_execution") {
+          if (
+            terminal &&
+            violation &&
+            violation.phase !== "provider_execution"
+          ) {
             const phaseMessage = PHASE_FAILURE_MESSAGE[violation.phase];
             // Expiry was decided from this status. If an acknowledgement
             // moved the assignment on since the poll, the conditional write

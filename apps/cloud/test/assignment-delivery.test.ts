@@ -42,10 +42,18 @@ it("measures each deadline from its own event, not from creation", () => {
     phase: "command_delivery",
     startedAt: iso(20_000),
   });
-  // An assignment that was never queued is guarded from creation.
+  // A persisted assignment that was never handed to the transport (the
+  // durable queue for a Service that is not ready) waits up to its queue
+  // wait limit, counted from creation, and is then finalized directly.
   expect(
     assignmentDeadlineViolation({ ...base, status: "created" }, t0 + 30_000),
-  ).toMatchObject({ phase: "command_delivery" });
+  ).toBeNull();
+  expect(
+    assignmentDeadlineViolation(
+      { ...base, status: "created", queueWaitTimeoutMs: 45_000 },
+      t0 + 45_000,
+    ),
+  ).toMatchObject({ phase: "readiness_wait", limitMs: 45_000 });
 
   // Queue wait counts from admission and ignores time spent in delivery.
   const queued = {

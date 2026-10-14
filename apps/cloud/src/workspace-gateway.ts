@@ -3,9 +3,23 @@ import {
   serializeWorkspaceRuntimeMessage,
   WORKSPACE_RUNTIME_PROTOCOL_NAME,
   WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+  SERVICE_READINESS_CAPABILITY,
+  serviceReadinessPayload,
   type AssignmentCancelPayload,
   type WorkspaceRuntimeMessage,
 } from "@conclave/workspace-runtime-protocol";
+import {
+  applyServiceReadiness,
+  authenticatedReadiness,
+  disconnectedReadiness,
+  effectiveReadiness,
+  inferLegacyReadiness,
+  inventoryReceivedReadiness,
+  syncAnsweredReadiness,
+  synchronizingReadiness,
+  type ServiceReadiness,
+  type ServiceReadinessReport,
+} from "./service-readiness.js";
 import {
   RealtimeEventPayloadSchema,
   normalizeActivityPayload,
@@ -140,6 +154,16 @@ export class WorkspaceGateway implements DurableObject {
   private httpEventIds = new Set<string>();
   private httpPersistChain: Promise<void> = Promise.resolve();
   private httpLastActivityAt: string | null = null;
+  /** Service-level readiness of the current session; restored from storage. */
+  private readiness: ServiceReadiness | null = null;
+  private readinessLoaded = false;
+  private readinessChain: Promise<unknown> = Promise.resolve();
+  /** Whether the connected Service publishes `workspace.readiness`. */
+  private readinessCapable: boolean | null = null;
+  /** Assignments being delivered right now; stops a flush double-sending. */
+  private readonly deliveringAssignments = new Set<string>();
+  private flushingQueue = false;
+  private static readonly READINESS_STORAGE_KEY = "service-readiness";
 
   constructor(
     private readonly state: DurableObjectState,
@@ -161,8 +185,17 @@ export class WorkspaceGateway implements DurableObject {
     if (request.method === "GET" && url.pathname === "/status") {
       const lastActivityAt = await this.lastRuntimeActivityAt();
       const live = this.isActivityRecent(lastActivityAt);
+      await this.loadReadiness();
+      const readiness = effectiveReadiness(this.readiness, live);
       return Response.json({
         online: live,
+        // Connection liveness says the socket is alive; readiness says the
+        // Service will handle an assignment immediately. Scheduling uses this.
+        readyForAssignments: readiness.ready,
+        serviceState: readiness.state,
+        syncGeneration: this.readiness?.syncGeneration ?? 0,
+        readinessSource: this.readiness?.source ?? null,
+        readinessUpdatedAt: this.readiness?.updatedAt ?? null,
         activeTransport: live
           ? this.socket
             ? "websocket"
@@ -185,6 +218,14 @@ export class WorkspaceGateway implements DurableObject {
     }
     if (request.method === "POST" && url.pathname === "/cancel-assignment") {
       return this.cancelAssignment(request);
+    }
+    if (request.method === "POST" && url.pathname === "/flush-queued") {
+      await this.loadReadiness();
+      const flushed = await this.flushQueuedAssignments();
+      return Response.json({
+        flushed,
+        readyForAssignments: this.readiness?.readyForAssignments === true,
+      });
     }
     if (request.method === "POST" && url.pathname.startsWith("/runtime/")) {
       return this.handleHttpRuntimeRequest(request, url.pathname);
@@ -273,6 +314,7 @@ export class WorkspaceGateway implements DurableObject {
         .bind(now, this.executionWorkspaceId)
         .run();
       await this.persistHttpRuntime();
+      await this.startReadinessSession(this.sessionId, runtimeId);
       return Response.json({
         sessionId: this.sessionId,
         serverTime: now,
@@ -357,11 +399,12 @@ export class WorkspaceGateway implements DurableObject {
         .filter((entry) => entry.cursor > cursor)
         .slice(0, 100);
       if (!events.length && body.waitMs) {
-        if (this.httpWaiter)
-          return Response.json(
-            { error: "A poll is already active for this session" },
-            { status: 409 },
-          );
+        // A newer poll supersedes an older one (for example after a client
+        // retry or transport hiccup). The older waiter is released and returns
+        // an empty, timed-out page; it must never block command delivery.
+        const previousWaiter = this.httpWaiter;
+        this.httpWaiter = null;
+        previousWaiter?.();
         await new Promise<void>((resolve) => {
           const timer = setTimeout(() => {
             if (this.httpWaiter === wake) this.httpWaiter = null;
@@ -414,6 +457,11 @@ export class WorkspaceGateway implements DurableObject {
           "workspace_offline_projection_failed",
           { workspaceId: this.executionWorkspaceId, runtimeId },
         );
+      await this.mutateReadiness((current) =>
+        current && current.sessionId === sessionId
+          ? disconnectedReadiness(current, now)
+          : current,
+      );
       this.sessionId = null;
       this.httpLastActivityAt = null;
       await this.state.storage.delete("http-runtime");
@@ -664,6 +712,15 @@ export class WorkspaceGateway implements DurableObject {
     this.workspaceRuntimeId = workspaceRuntimeId;
     this.sessionId = sessionId;
     this.correlationId = correlationId;
+    void this.startReadinessSession(sessionId, workspaceRuntimeId).catch(
+      (error: unknown) =>
+        logStructured(
+          "error",
+          "workspace_readiness_session_failed",
+          { workspaceId: runtimeIdentity.executionWorkspaceId },
+          { error: error instanceof Error ? error.message : String(error) },
+        ),
+    );
 
     this.queueProjectionWrite(
       () =>
@@ -719,17 +776,43 @@ export class WorkspaceGateway implements DurableObject {
   }
 
   webSocketClose(socket: WebSocket): void {
-    const attachment = socket.deserializeAttachment() as {
-      sessionId: string;
-    } | null;
-    if (attachment) void this.close(socket, attachment.sessionId);
+    this.handleSocketEnd(socket);
   }
 
   webSocketError(socket: WebSocket): void {
+    this.handleSocketEnd(socket);
+  }
+
+  /**
+   * After hibernation the in-memory socket identity is gone and the closing
+   * socket is no longer OPEN, so restoreAcceptedSocket() cannot find it. Adopt
+   * its attachment first so close() recognises it as the current socket and
+   * marks the workspace offline / readiness disconnected.
+   */
+  private handleSocketEnd(socket: WebSocket): void {
     const attachment = socket.deserializeAttachment() as {
-      sessionId: string;
+      sessionId?: string;
+      executionWorkspaceId?: string;
+      workspaceRuntimeId?: string;
+      correlationId?: string;
+      connectedAt?: string;
     } | null;
-    if (attachment) void this.close(socket, attachment.sessionId);
+    if (!attachment?.sessionId) return;
+    this.restoreAcceptedSocket();
+    if (
+      !this.socket &&
+      this.sessionId === null &&
+      attachment.executionWorkspaceId &&
+      attachment.workspaceRuntimeId
+    ) {
+      this.socket = socket;
+      this.sessionId = attachment.sessionId;
+      this.executionWorkspaceId = attachment.executionWorkspaceId;
+      this.workspaceRuntimeId = attachment.workspaceRuntimeId;
+      this.correlationId = attachment.correlationId ?? null;
+      this.socketConnectedAt = attachment.connectedAt ?? null;
+    }
+    void this.close(socket, attachment.sessionId);
   }
 
   private async close(socket: WebSocket, sessionId: string): Promise<void> {
@@ -741,6 +824,11 @@ export class WorkspaceGateway implements DurableObject {
     this.socket = null;
     this.socketConnectedAt = null;
     const now = new Date().toISOString();
+    await this.mutateReadiness((current) =>
+      current && current.sessionId === sessionId
+        ? disconnectedReadiness(current, now)
+        : current,
+    ).catch(() => undefined);
     if (this.executionWorkspaceId) {
       this.queueProjectionWrite(
         () =>
@@ -877,7 +965,13 @@ export class WorkspaceGateway implements DurableObject {
           type: "workspace.hello.ack",
           executionWorkspaceId: this.executionWorkspaceId ?? undefined,
           workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
-          payload: { sessionId, heartbeatIntervalMs: 15000, serverTime: now },
+          payload: {
+            sessionId,
+            heartbeatIntervalMs: 15000,
+            serverTime: now,
+            // Lets a Service know it may publish `workspace.readiness`.
+            cloudCapabilities: [SERVICE_READINESS_CAPABILITY],
+          },
         });
         logStructured(
           "info",
@@ -892,6 +986,19 @@ export class WorkspaceGateway implements DurableObject {
         return;
       case "workspace.heartbeat":
         if (message.payload && typeof message.payload === "object") {
+          // The heartbeat repeats the Service's readiness so a lost or
+          // reordered `workspace.readiness`, or a Durable Object that lost its
+          // state, heals within one heartbeat interval.
+          const heartbeatReadiness = serviceReadinessPayload.safeParse(
+            (message.payload as Record<string, unknown>).readiness,
+          );
+          if (heartbeatReadiness.success) {
+            await this.applyReadinessReport(
+              heartbeatReadiness.data,
+              sessionId,
+              now,
+            );
+          }
           this.queueProjectionWrite(
             () => this.sessionStore.touch(sessionId, now),
             "session_heartbeat_update_failed",
@@ -915,6 +1022,16 @@ export class WorkspaceGateway implements DurableObject {
         });
         return;
       case "workspace.sync.request":
+        await this.mutateReadiness((current) =>
+          current ? synchronizingReadiness(current, now) : null,
+        );
+        // Mark the sync answered BEFORE the result is sent: the Service may
+        // publish readiness the instant it receives the result, and that
+        // report must find the sync already recorded.
+        await this.mutateReadiness(
+          (current) => (current ? syncAnsweredReadiness(current, now) : null),
+          { publish: false },
+        );
         await this.syncWorkspace(message.messageId);
         // The Service now has its authoritative state; tell it which
         // assignments Cloud has revoked so a replayed or restarted Service
@@ -930,9 +1047,22 @@ export class WorkspaceGateway implements DurableObject {
           },
           { protocolCorrelationId: message.messageId },
         );
+        await this.inferReadinessIfLegacy();
         return;
+      case "workspace.readiness": {
+        const report = serviceReadinessPayload.safeParse(message.payload);
+        if (!report.success) return;
+        await this.applyReadinessReport(report.data, sessionId, now);
+        return;
+      }
       case "worker.inventory":
         await this.recordWorkerInventory(message.payload);
+        await this.mutateReadiness(
+          (current) =>
+            current ? inventoryReceivedReadiness(current, now) : null,
+          { publish: false },
+        );
+        await this.inferReadinessIfLegacy();
         return;
       case "assignment.ack": {
         const payload = message.payload as Record<string, unknown>;
@@ -1867,8 +1997,8 @@ export class WorkspaceGateway implements DurableObject {
     );
   }
 
-  /** Whether the connected Service advertised the start-permit capability. */
-  private async serviceSupportsStartPermit(): Promise<boolean> {
+  /** Whether the connected Service advertised [capability] in its hello. */
+  private async serviceHasCapability(capability: string): Promise<boolean> {
     const workspaceId = this.executionWorkspaceId;
     if (!workspaceId) return false;
     const facts = await this.env.CONCLAVE_DB.prepare(
@@ -1880,21 +2010,334 @@ export class WorkspaceGateway implements DurableObject {
       const capabilities: unknown = JSON.parse(
         facts?.runtime_capabilities_json ?? "[]",
       );
-      return (
-        Array.isArray(capabilities) &&
-        capabilities.includes(START_PERMIT_CAPABILITY)
-      );
+      return Array.isArray(capabilities) && capabilities.includes(capability);
     } catch {
       return false;
     }
   }
 
+  /** Whether the connected Service advertised the start-permit capability. */
+  private serviceSupportsStartPermit(): Promise<boolean> {
+    return this.serviceHasCapability(START_PERMIT_CAPABILITY);
+  }
+
+  /**
+   * Loads the persisted readiness once per Durable Object instance. A record
+   * that belongs to a different session or runtime identity (a replaced
+   * connection) is never trusted: the session restarts as authenticated and
+   * not ready. This is what makes readiness survive hibernation: the session
+   * identity comes from the WebSocket attachment, the state from storage.
+   */
+  private async loadReadiness(): Promise<void> {
+    if (this.readinessLoaded) return;
+    const stored = await this.state.storage.get<ServiceReadiness>(
+      WorkspaceGateway.READINESS_STORAGE_KEY,
+    );
+    if (!this.sessionId || !this.workspaceRuntimeId) {
+      // No session to attach the record to yet. Do not mark as loaded.
+      this.readiness = null;
+      return;
+    }
+    this.readinessLoaded = true;
+    this.readiness =
+      stored &&
+      stored.sessionId === this.sessionId &&
+      stored.workspaceRuntimeId === this.workspaceRuntimeId
+        ? stored
+        : authenticatedReadiness({
+            sessionId: this.sessionId,
+            workspaceRuntimeId: this.workspaceRuntimeId,
+            ...(stored ? { previousGeneration: stored.syncGeneration } : {}),
+            now: new Date().toISOString(),
+          });
+  }
+
+  /**
+   * Serialized readiness mutation. WebSocket messages are handled
+   * concurrently, so every change goes through one chain: it is persisted,
+   * published and, when the Service becomes ready, followed by a flush of the
+   * durable queue.
+   */
+  private async mutateReadiness(
+    change: (current: ServiceReadiness | null) => ServiceReadiness | null,
+    options: { readonly publish?: boolean } = {},
+  ): Promise<ServiceReadiness | null> {
+    const run = this.readinessChain.then(async () => {
+      await this.loadReadiness();
+      const previous = this.readiness;
+      const next = change(previous);
+      if (!next || next === previous) {
+        return { readiness: previous, becameReady: false };
+      }
+      this.readiness = next;
+      this.readinessLoaded = true;
+      await this.state.storage.put(
+        WorkspaceGateway.READINESS_STORAGE_KEY,
+        next,
+      );
+      const changed =
+        !previous ||
+        previous.sessionId !== next.sessionId ||
+        previous.state !== next.state ||
+        previous.readyForAssignments !== next.readyForAssignments ||
+        previous.syncGeneration !== next.syncGeneration;
+      if (changed && options.publish !== false) {
+        await this.publishReadiness(next);
+      }
+      const becameReady =
+        next.readyForAssignments &&
+        !(
+          previous?.readyForAssignments && previous.sessionId === next.sessionId
+        );
+      return { readiness: next, becameReady };
+    });
+    this.readinessChain = run.catch(() => undefined);
+    const result = await run;
+    if (result.becameReady) {
+      await this.flushQueuedAssignments().catch((error: unknown) =>
+        logStructured(
+          "error",
+          "workspace_queue_flush_failed",
+          { workspaceId: this.executionWorkspaceId ?? undefined },
+          { error: error instanceof Error ? error.message : String(error) },
+        ),
+      );
+    }
+    return result.readiness;
+  }
+
+  /** Publishes a readiness change to D1 and realtime subscribers at once. */
+  private async publishReadiness(readiness: ServiceReadiness): Promise<void> {
+    const workspaceId = this.executionWorkspaceId;
+    if (!workspaceId) return;
+    try {
+      await this.env.CONCLAVE_DB.prepare(
+        `INSERT INTO workspace_service_readiness
+           (workspace_id, runtime_identity_id, session_id, sync_generation,
+            state, ready_for_assignments, source, reason, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+         ON CONFLICT(workspace_id) DO UPDATE SET
+           runtime_identity_id = excluded.runtime_identity_id,
+           session_id = excluded.session_id,
+           sync_generation = excluded.sync_generation,
+           state = excluded.state,
+           ready_for_assignments = excluded.ready_for_assignments,
+           source = excluded.source,
+           reason = excluded.reason,
+           updated_at = excluded.updated_at`,
+      )
+        .bind(
+          workspaceId,
+          readiness.workspaceRuntimeId,
+          readiness.sessionId,
+          readiness.syncGeneration,
+          readiness.state,
+          readiness.readyForAssignments ? 1 : 0,
+          readiness.source,
+          readiness.reason ?? null,
+          readiness.updatedAt,
+        )
+        .run();
+    } catch (error) {
+      logStructured(
+        "warn",
+        "workspace_readiness_projection_failed",
+        { workspaceId },
+        { error: error instanceof Error ? error.message : String(error) },
+      );
+    }
+    await createEventPublisher(this.env)
+      .publish({
+        type: "workspace.readiness.updated",
+        workspaceId,
+        payload: {
+          status: readiness.readyForAssignments ? "ready" : readiness.state,
+        },
+        durable: false,
+      })
+      .catch(() => undefined);
+  }
+
+  /** Applies a readiness report received on [sessionId]. */
+  private async applyReadinessReport(
+    report: ServiceReadinessReport,
+    sessionId: string,
+    now: string,
+  ): Promise<void> {
+    this.readinessCapable = true;
+    let outcome = "applied";
+    await this.mutateReadiness((current) => {
+      const decision = applyServiceReadiness(
+        current,
+        report,
+        { sessionId, workspaceRuntimeId: this.workspaceRuntimeId ?? "" },
+        now,
+      );
+      outcome = decision.outcome;
+      return decision.outcome === "applied" ? decision.readiness : null;
+    });
+    if (outcome !== "applied" && outcome !== "unchanged") {
+      logStructured(
+        "warn",
+        "workspace_readiness_ignored",
+        {
+          requestId: this.correlationId ?? undefined,
+          runtimeId: this.workspaceRuntimeId ?? undefined,
+          workspaceId: this.executionWorkspaceId ?? undefined,
+        },
+        { outcome, state: report.state },
+      );
+    }
+  }
+
+  /** Whether the Service can be handed a command right now. */
+  private async serviceIsReady(): Promise<boolean> {
+    await this.loadReadiness();
+    return effectiveReadiness(this.readiness, await this.isRuntimeLive()).ready;
+  }
+
+  /**
+   * A new authenticated session replaces whatever the previous one published.
+   * The in-memory state is cleared synchronously, so no dispatch can observe
+   * the replaced session's readiness while the new state is being persisted.
+   */
+  private startReadinessSession(
+    sessionId: string,
+    runtimeId: string,
+  ): Promise<ServiceReadiness | null> {
+    this.readinessCapable = null;
+    this.readinessLoaded = true;
+    this.readiness = null;
+    return this.mutateReadiness(() =>
+      authenticatedReadiness({
+        sessionId,
+        workspaceRuntimeId: runtimeId,
+        now: new Date().toISOString(),
+      }),
+    );
+  }
+
+  /** A Service that does not publish readiness is inferred ready after sync. */
+  private async inferReadinessIfLegacy(): Promise<void> {
+    if (this.readinessCapable === null) {
+      this.readinessCapable = await this.serviceHasCapability(
+        SERVICE_READINESS_CAPABILITY,
+      );
+    }
+    if (this.readinessCapable) return;
+    await this.mutateReadiness((current) =>
+      current ? inferLegacyReadiness(current, new Date().toISOString()) : null,
+    );
+  }
+
   private async dispatchAssignment(request: Request): Promise<Response> {
-    if (!(await this.isRuntimeLive()))
-      return Response.json({ error: "Workspace is offline" }, { status: 503 });
     const body = (await request.json()) as WorkspaceAssignmentCorrelation & {
       payload: unknown;
     };
+    return this.deliverAssignment(body);
+  }
+
+  /**
+   * Hands every `created` assignment waiting for this Service to the
+   * transport, oldest first. Called when the Service becomes ready, when the
+   * Workflow nudges a waiting assignment, and after a connection replacement.
+   * Each assignment is claimed with a conditional `created -> dispatched`
+   * write, so a flush racing a direct dispatch can never send a command twice.
+   */
+  private async flushQueuedAssignments(): Promise<number> {
+    const workspaceId = this.executionWorkspaceId;
+    const runtimeId = this.workspaceRuntimeId;
+    if (!workspaceId || !runtimeId || this.flushingQueue) return 0;
+    if (!(await this.serviceIsReady())) return 0;
+    this.flushingQueue = true;
+    let flushed = 0;
+    try {
+      for (let pass = 0; pass < 8; pass += 1) {
+        const rows = await this.env.CONCLAVE_DB.prepare(
+          `SELECT id, run_id, task_id, attempt_id, idempotency_key,
+                  workspace_worker_id, command_payload_json
+             FROM worker_assignments
+            WHERE execution_workspace_id = ?1 AND runtime_identity_id = ?2
+              AND status = 'created' AND command_payload_json IS NOT NULL
+            ORDER BY created_at, id
+            LIMIT 25`,
+        )
+          .bind(workspaceId, runtimeId)
+          .all<{
+            id: string;
+            run_id: string;
+            task_id: string;
+            attempt_id: string;
+            idempotency_key: string;
+            workspace_worker_id: string;
+            command_payload_json: string;
+          }>();
+        const queued = rows.results ?? [];
+        if (queued.length === 0) break;
+        let progressed = 0;
+        for (const row of queued) {
+          if (!(await this.serviceIsReady())) return flushed;
+          let payload: unknown;
+          try {
+            payload = JSON.parse(row.command_payload_json);
+          } catch {
+            continue;
+          }
+          const response = await this.deliverAssignment(
+            {
+              executionWorkspaceId: workspaceId,
+              workspaceRuntimeId: runtimeId,
+              workerId: row.workspace_worker_id,
+              runId: row.run_id,
+              taskId: row.task_id,
+              attemptId: row.attempt_id,
+              assignmentId: row.id,
+              idempotencyKey: row.idempotency_key,
+              payload,
+            } as WorkspaceAssignmentCorrelation & { payload: unknown },
+            { claimCreated: true },
+          );
+          const result = (await response.json().catch(() => ({}))) as {
+            delivered?: boolean;
+          };
+          if (result.delivered === true) {
+            flushed += 1;
+            progressed += 1;
+          }
+        }
+        // Rows that could not be claimed or delivered stay queued for the
+        // next trigger; stop rather than spin on them.
+        if (progressed === 0) break;
+      }
+    } finally {
+      this.flushingQueue = false;
+    }
+    return flushed;
+  }
+
+  private async deliverAssignment(
+    body: WorkspaceAssignmentCorrelation & { payload: unknown },
+    options: { readonly claimCreated?: boolean } = {},
+  ): Promise<Response> {
+    if (this.deliveringAssignments.has(body.assignmentId)) {
+      return Response.json({
+        delivered: false,
+        duplicate: true,
+        deliveryState: "in_progress",
+      });
+    }
+    this.deliveringAssignments.add(body.assignmentId);
+    try {
+      return await this.deliverAssignmentOnce(body, options);
+    } finally {
+      this.deliveringAssignments.delete(body.assignmentId);
+    }
+  }
+
+  private async deliverAssignmentOnce(
+    body: WorkspaceAssignmentCorrelation & { payload: unknown },
+    options: { readonly claimCreated?: boolean },
+  ): Promise<Response> {
     const row = await this.env.CONCLAVE_DB.prepare(
       `SELECT wa.id, wa.execution_workspace_id, wa.runtime_identity_id,
               wa.worker_type_id, wa.workspace_worker_id,
@@ -1961,6 +2404,33 @@ export class WorkspaceGateway implements DurableObject {
         { status: 400 },
       );
     }
+    if (options.claimCreated && currentStatus !== "created") {
+      return Response.json({
+        delivered: false,
+        duplicate: true,
+        status: currentStatus,
+      });
+    }
+    // A command is written only to a Service that is ready to handle it
+    // immediately. Otherwise the assignment stays `created` with its payload
+    // persisted: that is a durable Cloud-side queue, never a delivery. It is
+    // flushed when the Service reports ready.
+    if (!(await this.serviceIsReady())) {
+      return Response.json(
+        {
+          delivered: false,
+          queued: true,
+          deliveryState: "waiting_for_service_ready",
+          acceptance: "none",
+          serviceState: effectiveReadiness(
+            this.readiness,
+            await this.isRuntimeLive(),
+          ).state,
+          status: currentStatus,
+        },
+        { status: 202 },
+      );
+    }
     // Persist "possibly delivered" BEFORE the command can exist. From this
     // point Cloud must treat the Service as possibly holding the command, so
     // every later stop goes through revocation instead of a bare terminal
@@ -1973,7 +2443,16 @@ export class WorkspaceGateway implements DurableObject {
         runtimeIdentityId: body.workspaceRuntimeId,
       },
       to: "dispatched",
+      ...(options.claimCreated ? { onlyFrom: ["created"] as const } : {}),
     });
+    if (options.claimCreated && !persisted.applied) {
+      // Another delivery claimed it first; that one sends the command.
+      return Response.json({
+        delivered: false,
+        duplicate: true,
+        status: persisted.currentStatus ?? currentStatus,
+      });
+    }
     if (startPermitRequired && persisted.applied) {
       await this.env.CONCLAVE_DB.prepare(
         `UPDATE worker_assignments SET start_permit_required = 1

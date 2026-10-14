@@ -10,7 +10,10 @@ const token = "runtime-secret-assignment-lifecycle";
  * SQL schema, so the ack handlers, the transition helper, the generated
  * source sets and the conversation-turn triggers are exercised together.
  */
-export async function gatewayFixture(initialStatus: string) {
+export async function gatewayFixture(
+  initialStatus: string,
+  options: { readonly ready?: boolean } = {},
+) {
   const f = await conversationFixture();
   f.sqlite.exec(
     "INSERT INTO runs(id,space_id,status,created_at,updated_at) VALUES('RUN','P','running','now','now')",
@@ -36,19 +39,21 @@ export async function gatewayFixture(initialStatus: string) {
     )
     .run(await hashToken(token));
   const storage = new Map<string, unknown>();
-  const gateway = new WorkspaceGateway(
-    {
-      id: { name: "WS" },
-      storage: {
-        get: async (key: string) => storage.get(key),
-        put: async (key: string, value: unknown) => {
-          storage.set(key, value);
+  const makeGateway = () =>
+    new WorkspaceGateway(
+      {
+        id: { name: "WS" },
+        storage: {
+          get: async (key: string) => storage.get(key),
+          put: async (key: string, value: unknown) => {
+            storage.set(key, value);
+          },
+          delete: async (key: string) => storage.delete(key),
         },
-        delete: async (key: string) => storage.delete(key),
-      },
-    } as never,
-    { CONCLAVE_DB: f.db as never },
-  );
+      } as never,
+      { CONCLAVE_DB: f.db as never },
+    );
+  const gateway = makeGateway();
   const headers = {
     authorization: `Bearer ${token}`,
     "content-type": "application/json",
@@ -168,5 +173,44 @@ export async function gatewayFixture(initialStatus: string) {
     ...dispatchBody,
     payload: { assignmentId: "A1", reason: "test revocation" },
   };
-  return { ...f, send, status, outbound, dispatch, gateway, cancelBody };
+  /** Completes the Service's synchronization and publishes it as ready. */
+  const becomeReady = async (syncGeneration = 1) => {
+    await send("workspace.sync.request", {});
+    await send("workspace.readiness", {
+      state: "ready",
+      readyForAssignments: true,
+      syncGeneration,
+    });
+  };
+  const gatewayStatus = async () =>
+    (await (
+      await gateway.fetch(new Request("https://gateway.internal/status"))
+    ).json()) as {
+      online: boolean;
+      readyForAssignments: boolean;
+      serviceState: string;
+      syncGeneration: number;
+    };
+  if (options.ready !== false) {
+    await becomeReady();
+    // Discard the sync result so tests see only the messages they trigger.
+    await outbound();
+  }
+  return {
+    ...f,
+    send,
+    status,
+    outbound,
+    /** Cursor after everything already read via outbound(). */
+    cursor: () => String(pollCursor),
+    dispatch,
+    gateway,
+    cancelBody,
+    becomeReady,
+    gatewayStatus,
+    headers,
+    sessionId,
+    /** A new instance over the same storage, as after hibernation. */
+    restart: makeGateway,
+  };
 }

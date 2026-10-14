@@ -89,6 +89,9 @@ Future<void> completeHandshake(
   WorkspaceCloudConnection connection,
   FakeSocket socket, {
   String sessionId = 'test-session',
+  bool announceReadiness = false,
+  List<Map<String, Object?>> assignmentStates = const [],
+  Future<void> Function()? beforeSyncResult,
 }) async {
   Map<String, dynamic> sentMessage(String type) => socket.sent
       .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
@@ -114,7 +117,10 @@ Future<void> completeHandshake(
     'type': legacy ? 'workspace.hello.ack' : 'workspace.hello.ack',
     'workspaceRuntimeId': connection.workspaceRuntimeId,
     'executionWorkspaceId': connection.workspaceId,
-    'payload': {'sessionId': sessionId},
+    'payload': {
+      'sessionId': sessionId,
+      if (announceReadiness) 'cloudCapabilities': [serviceReadinessCapability],
+    },
   }));
 
   const syncType = 'workspace.sync.request';
@@ -122,6 +128,7 @@ Future<void> completeHandshake(
       (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
       syncType));
   final sync = sentMessage(syncType);
+  if (beforeSyncResult != null) await beforeSyncResult();
   socket.controller.add(jsonEncode({
     'protocol': protocol,
     'protocolVersion': version,
@@ -131,7 +138,7 @@ Future<void> completeHandshake(
     'type': legacy ? 'workspace.sync.response' : 'workspace.sync.result',
     'workspaceRuntimeId': connection.workspaceRuntimeId,
     'executionWorkspaceId': connection.workspaceId,
-    'payload': {'assignmentStates': []},
+    'payload': {'assignmentStates': assignmentStates},
   }));
   await waitFor(
       () => connection.connectionStage == WorkspaceConnectionStage.ready);
@@ -1960,6 +1967,270 @@ void main() {
     expect(
         (ack['payload'] as Map<String, dynamic>)['alreadyTerminated'], isTrue);
     await connection.close();
+  });
+
+  group('Service readiness', () {
+    List<Map<String, dynamic>> sentOfType(FakeSocket socket, String type) =>
+        socket.sent
+            .map((m) => jsonDecode(m as String) as Map<String, dynamic>)
+            .where((m) => m['type'] == type)
+            .toList();
+
+    WorkspaceCloudConnection newConnection(FakeSocket socket,
+            {Duration heartbeat = const Duration(hours: 1),
+            WorkspaceAssignmentHandler? handler}) =>
+        WorkspaceCloudConnection(
+          uri: Uri.parse(
+              'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
+          workspaceRuntimeId: 'runtime-1',
+          workspaceId: 'workspace-1',
+          factory: (_) async => socket,
+          heartbeat: heartbeat,
+          assignmentHandler: handler,
+        );
+
+    test('is disconnected until connected and advertises the capability',
+        () async {
+      final socket = FakeSocket();
+      final connection = newConnection(socket);
+      expect(connection.serviceState, ServiceConnectionState.disconnected);
+      expect(connection.readyForAssignments, isFalse);
+      await connection.connect();
+      final hello = sentOfType(socket, 'workspace.hello').first;
+      final capabilities =
+          (hello['payload'] as Map)['capabilities'] as Map<String, dynamic>;
+      expect(capabilities['customCapabilities'],
+          contains(serviceReadinessCapability));
+      await connection.close();
+    });
+
+    test(
+        'is not ready while synchronizing, then publishes ready with a generation',
+        () async {
+      final socket = FakeSocket();
+      final connection = newConnection(socket);
+      await connection.connect();
+      await completeHandshake(
+        connection,
+        socket,
+        announceReadiness: true,
+        beforeSyncResult: () async {
+          expect(connection.serviceState, ServiceConnectionState.synchronizing);
+          expect(connection.readyForAssignments, isFalse);
+          // Nothing is published as ready before synchronization completes.
+          expect(
+              sentOfType(socket, 'workspace.readiness').where(
+                  (m) => (m['payload'] as Map)['readyForAssignments'] == true),
+              isEmpty);
+        },
+      );
+      expect(connection.serviceState, ServiceConnectionState.ready);
+      final published = sentOfType(socket, 'workspace.readiness');
+      expect(published, hasLength(1));
+      expect(published.single['payload'], containsPair('state', 'ready'));
+      expect(published.single['payload'],
+          containsPair('readyForAssignments', true));
+      expect(published.single['payload'], containsPair('syncGeneration', 1));
+      expect(published.single['workspaceRuntimeId'], 'runtime-1');
+      await connection.close();
+    });
+
+    test(
+        'does not send the dedicated message to a Cloud that did not announce it',
+        () async {
+      final socket = FakeSocket();
+      final connection = newConnection(socket);
+      await connection.connect();
+      await completeHandshake(connection, socket);
+      connection.pauseNewWork();
+      expect(sentOfType(socket, 'workspace.readiness'), isEmpty);
+      await connection.close();
+    });
+
+    test('publishes immediately when new work is paused, resumed or drained',
+        () async {
+      final socket = FakeSocket();
+      final connection = newConnection(socket);
+      await connection.connect();
+      await completeHandshake(connection, socket, announceReadiness: true);
+      connection.pauseNewWork();
+      expect(connection.serviceState, ServiceConnectionState.paused);
+      expect(connection.readyForAssignments, isFalse);
+      var last =
+          sentOfType(socket, 'workspace.readiness').last['payload'] as Map;
+      expect(last['state'], 'paused');
+      expect(last['readyForAssignments'], isFalse);
+      connection.resumeNewWork();
+      last = sentOfType(socket, 'workspace.readiness').last['payload'] as Map;
+      expect(last['state'], 'ready');
+      expect(last['readyForAssignments'], isTrue);
+      connection.beginDrain();
+      expect(connection.serviceState, ServiceConnectionState.draining);
+      last = sentOfType(socket, 'workspace.readiness').last['payload'] as Map;
+      expect(last['state'], 'draining');
+      expect(last['readyForAssignments'], isFalse);
+      await connection.close();
+    });
+
+    test('announces shutdown before the connection is torn down', () async {
+      final socket = FakeSocket();
+      final connection = newConnection(socket);
+      await connection.connect();
+      await completeHandshake(connection, socket, announceReadiness: true);
+      await connection.close();
+      final last =
+          sentOfType(socket, 'workspace.readiness').last['payload'] as Map;
+      expect(last['state'], 'draining');
+      expect(last['readyForAssignments'], isFalse);
+      expect(last['reason'], 'shutdown');
+    });
+
+    test('repeats readiness on every heartbeat', () async {
+      final socket = FakeSocket();
+      final connection =
+          newConnection(socket, heartbeat: const Duration(milliseconds: 150));
+      await connection.connect();
+      await completeHandshake(connection, socket);
+      await waitFor(() => sentOfType(socket, 'workspace.heartbeat').isNotEmpty);
+      final readiness = (sentOfType(socket, 'workspace.heartbeat')
+          .last['payload'] as Map)['readiness'] as Map;
+      expect(readiness['state'], 'ready');
+      expect(readiness['readyForAssignments'], isTrue);
+      expect(readiness['syncGeneration'], 1);
+      await connection.close();
+    });
+  });
+
+  group('assignments received while synchronizing', () {
+    Map<String, Object?> startMessage(String assignmentId) => {
+          'protocol': 'conclave.workspace-runtime-protocol',
+          'protocolVersion': workspaceRuntimeProtocolVersion,
+          'messageId': 'start-$assignmentId',
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+          'type': 'assignment.start',
+          'executionWorkspaceId': 'workspace-1',
+          'workspaceRuntimeId': 'runtime-1',
+          'workerId': 'worker-1',
+          'runId': 'run-1',
+          'taskId': 'task-1',
+          'attemptId': 'attempt-1',
+          'assignmentId': assignmentId,
+          'idempotencyKey': 'idem-$assignmentId',
+          'payload': {
+            'objective': 'inspect',
+            'role': 'research',
+            'workerId': 'conclave.echo',
+            'engineVersion': '1.0.0',
+            'profileDefinitionId': 'chatgpt-codex',
+            'profileReleaseVersion': 1,
+            'input': {},
+            'contextArtifactIds': [],
+            'timeoutMs': 1000,
+          },
+        };
+
+    WorkspaceCloudConnection newConnection(
+        FakeSocket socket, List<String> executed) {
+      return WorkspaceCloudConnection(
+        uri: Uri.parse(
+            'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
+        workspaceRuntimeId: 'runtime-1',
+        workspaceId: 'workspace-1',
+        factory: (_) async => socket,
+        heartbeat: const Duration(hours: 1),
+        assignmentHandler: (context) async {
+          executed.add(context.assignmentId);
+          return const WorkspaceAssignmentResult(summary: 'done');
+        },
+      );
+    }
+
+    test('runs a buffered command once synchronization completes', () async {
+      final socket = FakeSocket();
+      final executed = <String>[];
+      final connection = newConnection(socket, executed);
+      await connection.connect();
+      await completeHandshake(
+        connection,
+        socket,
+        assignmentStates: [
+          {'assignmentId': 'buffered-ok', 'status': 'dispatched'},
+        ],
+        beforeSyncResult: () async {
+          socket.controller.add(jsonEncode(startMessage('buffered-ok')));
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          expect(executed, isEmpty);
+        },
+      );
+      await waitFor(() => executed.contains('buffered-ok'));
+      expect(executed, ['buffered-ok']);
+      await connection.close();
+    });
+
+    test('drops a buffered command Cloud has already revoked or finished',
+        () async {
+      final socket = FakeSocket();
+      final executed = <String>[];
+      final connection = newConnection(socket, executed);
+      await connection.connect();
+      await completeHandshake(
+        connection,
+        socket,
+        assignmentStates: [
+          {'assignmentId': 'buffered-revoked', 'status': 'revocation_pending'},
+          {'assignmentId': 'buffered-done', 'status': 'timed_out'},
+        ],
+        beforeSyncResult: () async {
+          socket.controller.add(jsonEncode(startMessage('buffered-revoked')));
+          socket.controller.add(jsonEncode(startMessage('buffered-done')));
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        },
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(executed, isEmpty);
+      await connection.close();
+    });
+
+    test('rejects buffered commands explicitly when the connection ends first',
+        () async {
+      final socket = FakeSocket();
+      final executed = <String>[];
+      final connection = newConnection(socket, executed);
+      await connection.connect();
+      // Hello is acknowledged but the sync result never arrives.
+      final hello = () => socket.sent
+          .map((m) => jsonDecode(m as String) as Map<String, dynamic>)
+          .firstWhere((m) => m['type'] == 'workspace.hello');
+      await waitFor(() => socket.sent.any((m) =>
+          (jsonDecode(m as String) as Map<String, dynamic>)['type'] ==
+          'workspace.hello'));
+      socket.controller.add(jsonEncode({
+        'protocol': 'conclave.workspace-runtime-protocol',
+        'protocolVersion': workspaceRuntimeProtocolVersion,
+        'messageId': 'hello-ack',
+        'correlationId': hello()['messageId'],
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+        'type': 'workspace.hello.ack',
+        'workspaceRuntimeId': 'runtime-1',
+        'executionWorkspaceId': 'workspace-1',
+        'payload': {'sessionId': 'session-x'},
+      }));
+      await waitFor(() => socket.sent.any((m) =>
+          (jsonDecode(m as String) as Map<String, dynamic>)['type'] ==
+          'workspace.sync.request'));
+      socket.controller.add(jsonEncode(startMessage('buffered-lost')));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await connection.close();
+      final acks = socket.sent
+          .map((m) => jsonDecode(m as String) as Map<String, dynamic>)
+          .where((m) =>
+              m['type'] == 'assignment.ack' &&
+              m['assignmentId'] == 'buffered-lost')
+          .toList();
+      expect(acks, hasLength(1));
+      expect((acks.single['payload'] as Map)['accepted'], isFalse);
+      expect(executed, isEmpty);
+    });
   });
 
   group('start permit and durable cancellation', () {

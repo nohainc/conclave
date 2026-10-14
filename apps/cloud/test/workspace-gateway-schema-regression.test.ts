@@ -404,6 +404,27 @@ describe("Workspace Gateway active-schema regression", () => {
     );
     expect(logs.join("\n")).not.toContain(failedRuntimeToken);
 
+    // A close delivered to a freshly woken (hibernated) instance arrives with
+    // the socket already CLOSING; it must still be recognised as the current
+    // connection so liveness and readiness are cleared.
+    const wokenGateway = new WorkspaceGateway(failureState as never, {
+      CONCLAVE_DB: new LocalD1(database) as never,
+    });
+    (failureSocket as unknown as { readyState: number }).readyState = 2;
+    wokenGateway.webSocketClose(failureSocket as unknown as WebSocket);
+    let afterClose: TestResponse | undefined;
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      afterClose = (await wokenGateway.fetch(
+        new Request("https://app.conclave.test/status"),
+      )) as unknown as TestResponse;
+      if ((afterClose.value as { online?: boolean }).online === false) break;
+      await Promise.resolve();
+    }
+    expect(afterClose?.value).toMatchObject({
+      online: false,
+      readyForAssignments: false,
+    });
+
     database.close();
   });
 });

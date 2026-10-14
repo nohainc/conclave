@@ -8,6 +8,80 @@ import {
   workspaceAssignmentContextMatches,
 } from "../src/workspace-gateway.js";
 
+/**
+ * Completes a Service's synchronization over the HTTP fallback and publishes
+ * it as ready, then returns the poll cursor after the sync result so a test
+ * sees only the commands it triggers.
+ */
+async function publishReady(
+  gateway: WorkspaceGateway,
+  input: {
+    token: string;
+    sessionId: string;
+    workspaceId: string;
+    runtimeId: string;
+  },
+): Promise<string> {
+  const headers = {
+    authorization: `Bearer ${input.token}`,
+    "content-type": "application/json",
+  };
+  const messages: Array<[string, Record<string, unknown>]> = [
+    ["workspace.sync.request", {}],
+    [
+      "workspace.readiness",
+      { state: "ready", readyForAssignments: true, syncGeneration: 1 },
+    ],
+  ];
+  let counter = 0;
+  for (const [type, payload] of messages) {
+    counter += 1;
+    const at = new Date().toISOString();
+    const response = await gateway.fetch(
+      new Request("https://gateway.internal/runtime/events", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          sessionId: input.sessionId,
+          events: [
+            {
+              contract: "conclave.desktop-auth-transport",
+              version: "1.0",
+              eventId: `ready-${input.sessionId}-${counter}`,
+              occurredAt: at,
+              message: {
+                protocol: "conclave.workspace-runtime-protocol",
+                protocolVersion: "5.1",
+                messageId: `ready-message-${input.sessionId}-${counter}`,
+                timestamp: at,
+                type,
+                executionWorkspaceId: input.workspaceId,
+                workspaceRuntimeId: input.runtimeId,
+                payload,
+              },
+            },
+          ],
+        }),
+      }),
+    );
+    const body = (await response.json()) as { rejected?: unknown[] };
+    expect(response.status).toBe(200);
+    expect(body.rejected ?? []).toEqual([]);
+  }
+  const drained = await gateway.fetch(
+    new Request("https://gateway.internal/runtime/poll", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        sessionId: input.sessionId,
+        cursor: "0",
+        waitMs: 0,
+      }),
+    }),
+  );
+  return ((await drained.json()) as { cursor: string }).cursor;
+}
+
 describe("Workspace runtime Gateway", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -44,6 +118,7 @@ describe("Workspace runtime Gateway", () => {
                       executionWorkspaceId: workspaceId,
                       credentialTokenHash,
                     },
+            all: async () => ({ results: [] }),
             run: async () => {
               values.push(bound);
               return { success: true };
@@ -99,7 +174,8 @@ describe("Workspace runtime Gateway", () => {
       cursor: string;
     };
     expect(created.cursor).toBe("0");
-    expect(values).toHaveLength(3);
+    // closeForRuntime, session open, workspace online, readiness projection.
+    expect(values).toHaveLength(4);
     const status = await gateway.fetch(
       new Request("https://gateway.internal/status"),
     );
@@ -131,6 +207,12 @@ describe("Workspace runtime Gateway", () => {
     );
     expect(invalidProductDispatch.status).toBe(400);
 
+    const readyCursor = await publishReady(gateway, {
+      token,
+      sessionId: created.sessionId,
+      workspaceId,
+      runtimeId: "runtime-http-fallback",
+    });
     const dispatch = await gateway.fetch(
       new Request("https://gateway.internal/dispatch-assignment", {
         method: "POST",
@@ -172,7 +254,7 @@ describe("Workspace runtime Gateway", () => {
         },
         body: JSON.stringify({
           sessionId: created.sessionId,
-          cursor: created.cursor,
+          cursor: readyCursor,
           waitMs: 0,
         }),
       }),
@@ -370,6 +452,7 @@ describe("Workspace runtime Gateway", () => {
                   tokenHashes[runtimeId as keyof typeof tokenHashes],
               };
             },
+            all: async () => ({ results: [] }),
             run: async () => ({ success: true }),
           }),
         };
@@ -407,6 +490,12 @@ describe("Workspace runtime Gateway", () => {
       return (await response.json()) as { sessionId: string; cursor: string };
     };
     const firstSession = await createSession("runtime-a");
+    const readyCursor = await publishReady(gateway, {
+      token: tokens["runtime-a"],
+      sessionId: firstSession.sessionId,
+      workspaceId,
+      runtimeId: "runtime-a",
+    });
     const dispatch = await gateway.fetch(
       new Request("https://gateway.internal/dispatch-assignment", {
         method: "POST",
@@ -437,13 +526,13 @@ describe("Workspace runtime Gateway", () => {
         },
         body: JSON.stringify({
           sessionId: firstSession.sessionId,
-          cursor: firstSession.cursor,
+          cursor: readyCursor,
           waitMs: 0,
         }),
       }),
     );
     const priorRuntimeEvents = (await firstPoll.json()) as { cursor: string };
-    expect(priorRuntimeEvents.cursor).toBe("1");
+    expect(priorRuntimeEvents.cursor).toBe(String(Number(readyCursor) + 1));
 
     const secondSession = await createSession("runtime-b");
     const staleCursor = await gateway.fetch(

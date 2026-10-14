@@ -66,6 +66,7 @@ export function assignmentCommandDisposition(
 }
 
 export type AssignmentDeadlinePhase =
+  | "readiness_wait"
   | "command_delivery"
   | "queue_wait"
   | "startup"
@@ -102,10 +103,12 @@ export interface AssignmentDeadlineViolation {
  * started at. Each phase measures from its own event, never from assignment
  * creation, so time spent in one phase cannot consume another's budget:
  *
+ * - `readiness_wait`: `created` (persisted, nothing sent) -> the Gateway
+ *   hands the command to the transport. This is the durable queue for a
+ *   Service that is connected but not ready.
  * - `command_delivery`: Gateway queued the command -> Service admission ack.
  *   (Service receipt and admission share one acknowledgement message, so
- *   Cloud observes them as one deadline.) An assignment that was never queued
- *   (`created`) is guarded from creation so it cannot wait forever.
+ *   Cloud observes them as one deadline.)
  * - `queue_wait`: Service accepted it -> a valid slot and start permit exist.
  * - `startup`: start permit granted -> provider start evidence. Services
  *   without start permits cannot signal the slot event, so for them queue
@@ -117,14 +120,22 @@ export interface AssignmentDeadlineViolation {
  */
 export function currentAssignmentDeadline(
   input: AssignmentDeadlineInput,
-): { phase: AssignmentDeadlinePhase; startedAt: string; limitMs: number } | null {
+): {
+  phase: AssignmentDeadlinePhase;
+  startedAt: string;
+  limitMs: number;
+} | null {
   const queueWait = input.queueWaitTimeoutMs ?? DEFAULT_QUEUE_WAIT_TIMEOUT_MS;
   switch (input.status) {
     case "created":
+      // Persisted but not handed to the transport: either the Service is not
+      // ready yet (the durable queue) or dispatch never completed. Bounded by
+      // the queue wait limit; nothing was ever sent, so expiry is a direct,
+      // safe finalization.
       return {
-        phase: "command_delivery",
+        phase: "readiness_wait",
         startedAt: input.createdAt,
-        limitMs: ASSIGNMENT_ACCEPTANCE_DEADLINE_MS,
+        limitMs: queueWait,
       };
     case "dispatched":
       return {

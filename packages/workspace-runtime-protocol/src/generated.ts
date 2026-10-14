@@ -13,6 +13,7 @@ export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_MESSAGE_TYPES = [
   "workspace.sync.request",
   "workspace.sync.result",
   "workspace.status",
+  "workspace.readiness",
   "workspace.update",
   "worker.inventory",
   "thread.status",

@@ -110,6 +110,27 @@ enum WorkspaceConnectionStage {
   switchingToWebSocket,
 }
 
+/// Service-level connection state published to Cloud. It describes the Service
+/// as a transport endpoint only; Worker eligibility is reported separately
+/// through inventory. Only [ready] may be handed new assignments.
+enum ServiceConnectionState {
+  disconnected,
+  connecting,
+  authenticated,
+  synchronizing,
+  ready,
+  paused,
+  draining,
+  reconnecting;
+
+  /// The state name used on the wire (`workspace.readiness`).
+  String get wireName => name;
+}
+
+/// Capability advertised in the hello so Cloud trusts published readiness
+/// instead of inferring it.
+const serviceReadinessCapability = 'workspace.readiness.v1';
+
 class WorkspaceConnectionPreflightException implements Exception {
   const WorkspaceConnectionPreflightException(this.message);
 
@@ -475,16 +496,89 @@ class WorkspaceCloudConnection {
   void pauseNewWork() {
     acceptingNewWork = false;
     _draining = false;
+    _publishReadiness(reason: 'paused');
   }
 
   void resumeNewWork() {
     _draining = false;
     acceptingNewWork = true;
+    _publishReadiness(reason: 'resumed');
   }
 
   void beginDrain() {
     acceptingNewWork = false;
     _draining = true;
+    _publishReadiness(reason: 'draining');
+  }
+
+  /// Increases each time this Service completes a synchronization with Cloud.
+  /// Cloud ignores a readiness report from before the latest generation.
+  int _syncGeneration = 0;
+  bool _syncRequested = false;
+  bool _helloAcknowledged = false;
+
+  /// Whether this Cloud announced it understands `workspace.readiness`. An
+  /// older Cloud would reject the message, so it is only sent after the
+  /// announcement; the heartbeat carries readiness either way.
+  bool _cloudAcceptsReadiness = false;
+
+  /// The Service-level state Cloud should schedule against. `ready` is the
+  /// only state that accepts assignments, and it requires the current
+  /// synchronization to be complete and new work to be accepted.
+  ServiceConnectionState get serviceState {
+    if (_closing) return ServiceConnectionState.draining;
+    switch (connectionStage) {
+      case WorkspaceConnectionStage.validating:
+      case WorkspaceConnectionStage.offline:
+        return ServiceConnectionState.disconnected;
+      case WorkspaceConnectionStage.connecting:
+      case WorkspaceConnectionStage.authenticating:
+        return ServiceConnectionState.connecting;
+      case WorkspaceConnectionStage.synchronizing:
+        return _syncRequested
+            ? ServiceConnectionState.synchronizing
+            : (_helloAcknowledged
+                ? ServiceConnectionState.authenticated
+                : ServiceConnectionState.connecting);
+      case WorkspaceConnectionStage.ready:
+        if (_draining) return ServiceConnectionState.draining;
+        if (!acceptingNewWork) return ServiceConnectionState.paused;
+        return ServiceConnectionState.ready;
+      case WorkspaceConnectionStage.reconnecting:
+      case WorkspaceConnectionStage.switchingToWebSocket:
+        return ServiceConnectionState.reconnecting;
+    }
+  }
+
+  /// `readyForAssignments` is derived from [serviceState], never set directly,
+  /// so it cannot disagree with it.
+  bool get readyForAssignments => serviceState == ServiceConnectionState.ready;
+
+  Map<String, Object?> _readinessPayload({String? reason}) => {
+        'state': serviceState.wireName,
+        'readyForAssignments': readyForAssignments,
+        'syncGeneration': _syncGeneration,
+        if (reason != null) 'reason': reason,
+        if (_pendingAssignmentsDuringSync.isNotEmpty)
+          'pendingAssignments': _pendingAssignmentsDuringSync.length,
+      };
+
+  /// Publishes the current readiness to Cloud immediately. Used when sync
+  /// completes, new work is paused or resumed, and shutdown begins. The
+  /// heartbeat repeats it, so a lost message heals within one interval.
+  void _publishReadiness({String? reason}) {
+    final socket = _transport;
+    if (socket == null || sessionId == null || !_cloudAcceptsReadiness) return;
+    try {
+      socket.send(jsonEncode({
+        ..._envelope('workspace.readiness', _readinessPayload(reason: reason)),
+        'executionWorkspaceId': workspaceId,
+        'workspaceRuntimeId': workspaceRuntimeId,
+      }));
+    } on Object {
+      // Readiness is repeated on the next heartbeat; never disturb the
+      // connection for it.
+    }
   }
 
   Future<void> refreshWorkerInventory() => _reportCurrentWorkerInventory();
@@ -1106,7 +1200,10 @@ class WorkspaceCloudConnection {
       'arch': _architecture(),
       'workspaceVersion': conclaveWorkspaceAppVersion,
       'supportedRuntimes': <String>['dart'],
-      'customCapabilities': <String>[startPermitCapability],
+      'customCapabilities': <String>[
+        startPermitCapability,
+        serviceReadinessCapability,
+      ],
       'maxConcurrentWorkers': 1,
     };
   }
@@ -1139,7 +1236,57 @@ class WorkspaceCloudConnection {
 
   /// Fully tears down any existing timers, subscriptions, and socket objects
   /// with a timeout guarantee so reconnects can never hang on dead resources.
+  /// Commands that arrived while this Service was still synchronizing must not
+  /// wait silently for a Cloud deadline when the connection ends first. Each
+  /// gets an explicit, retryable rejection (best effort: the transport may
+  /// already be gone, in which case Cloud's session loss reports it).
+  void _rejectPendingAssignmentsDuringSync(String reason) {
+    if (_pendingAssignmentsDuringSync.isEmpty) return;
+    final pending = List<Map<String, dynamic>>.from(
+      _pendingAssignmentsDuringSync,
+    );
+    _pendingAssignmentsDuringSync.clear();
+    final socket = _transport;
+    if (socket == null || sessionId == null) return;
+    for (final message in pending) {
+      if (!_hasAssignmentCorrelation(message)) continue;
+      try {
+        socket.send(jsonEncode(_assignmentEnvelope(
+          'assignment.ack',
+          _assignmentCorrelation(message),
+          {'accepted': false, 'reason': reason},
+        )));
+      } on Object {
+        // Best effort only.
+      }
+    }
+  }
+
+  /// A command buffered during synchronization is dropped when the Cloud
+  /// state in the sync result shows it is no longer startable (finished, or
+  /// being revoked). Starting it would only be cancelled again.
+  bool _cloudSupersededPendingAssignment(Map<String, dynamic> message) {
+    final assignmentId = message['assignmentId'];
+    final states = syncResponse?['assignmentStates'];
+    if (assignmentId is! String || states is! List) return false;
+    for (final entry in states) {
+      if (entry is Map && entry['assignmentId'] == assignmentId) {
+        return const {
+          'completed',
+          'failed',
+          'cancelled',
+          'timed_out',
+          'lost',
+          'revocation_pending',
+          'reconciling',
+        }.contains(entry['status']);
+      }
+    }
+    return false;
+  }
+
   Future<void> _cleanCurrentTransport() async {
+    _rejectPendingAssignmentsDuringSync('service_connection_ended');
     _transportGeneration++;
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
@@ -1216,6 +1363,9 @@ class WorkspaceCloudConnection {
     _workerInventorySent = workerInventoryProvider == null;
     _syncResultReceived = false;
     _syncReconciliationComplete = false;
+    _syncRequested = false;
+    _helloAcknowledged = false;
+    _cloudAcceptsReadiness = false;
     _readyCallbackSessionId = null;
     late final WorkspaceTransport socket;
     var selectedWebSocket = false;
@@ -1389,6 +1539,7 @@ class WorkspaceCloudConnection {
         'status': 'online',
         'activeWorkers': activeWorkerIds.length,
         'activeAssignments': _activeAssignments.length,
+        'readiness': _readinessPayload(),
       });
       _rememberClockProbe(heartbeatMessage['messageId'] as String);
       socket.send(jsonEncode(heartbeatMessage));
@@ -1453,6 +1604,10 @@ class WorkspaceCloudConnection {
         _protocolHandshakeTimer?.cancel();
         _protocolHandshakeTimer = null;
         lastHelloAcknowledgedAt = DateTime.now().toUtc();
+        _helloAcknowledged = true;
+        final cloudCapabilities = payload['cloudCapabilities'];
+        _cloudAcceptsReadiness = cloudCapabilities is List &&
+            cloudCapabilities.contains(serviceReadinessCapability);
         connectionStage = WorkspaceConnectionStage.synchronizing;
         sessionId = payload['sessionId'] as String;
         unawaited(_drainActivityEvents());
@@ -1612,6 +1767,8 @@ class WorkspaceCloudConnection {
     }
     _syncTimer?.cancel();
     _syncTimer = null;
+    final becameReady = connectionStage != WorkspaceConnectionStage.ready;
+    if (becameReady) _syncGeneration += 1;
     connectionStage = WorkspaceConnectionStage.ready;
     activeTransportMode = _pendingTransportMode ?? activeTransportMode;
     _pendingTransportMode = null;
@@ -1638,9 +1795,13 @@ class WorkspaceCloudConnection {
       );
       _pendingAssignmentsDuringSync.clear();
       for (final message in pending) {
+        if (_cloudSupersededPendingAssignment(message)) continue;
         unawaited(_handleAssignmentStart(message));
       }
     }
+    // Publish after the buffered commands are admitted: from here on a new
+    // command is handled immediately.
+    if (becameReady) _publishReadiness(reason: 'sync_complete');
     _scheduleWebSocketProbe();
   }
 
@@ -1993,6 +2154,7 @@ class WorkspaceCloudConnection {
         'unreconciledAssignmentIds': recoveredAssignmentIds.toList()..sort(),
     });
     _syncRequestMessageId = request['messageId'] as String;
+    _syncRequested = true;
     socket.send(jsonEncode(request));
   }
 
@@ -2056,6 +2218,9 @@ class WorkspaceCloudConnection {
 
   Future<void> close() async {
     _closing = true;
+    // Tell Cloud first, so it stops routing new work here before the
+    // connection goes away.
+    _publishReadiness(reason: 'shutdown');
     final wakeup = _reconnectWakeup;
     if (wakeup != null && !wakeup.isCompleted) wakeup.complete();
     final cancelAssignment = assignmentCancellationHandler;

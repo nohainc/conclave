@@ -768,6 +768,76 @@ describe("Space execution scheduler", () => {
   });
 });
 
+describe("scheduling by Service readiness", () => {
+  const request = {
+    spaceId: "space-a",
+    requesterUserId: "user-requester",
+    role: "implementer",
+    capabilities: ["repository"],
+  };
+  const workspace = (id: string, active = 0) => ({
+    ...candidate(),
+    workspace_id: id,
+    runtime_identity_id: `runtime-${id}`,
+    active_assignments: active,
+  });
+
+  it("prefers a ready Service over a connected one that is still synchronizing", async () => {
+    // The synchronizing Workspace sorts first (less loaded); readiness, not
+    // connection liveness, decides.
+    const states: Record<string, "ready" | "connected"> = {
+      "workspace-syncing": "connected",
+      "workspace-ready": "ready",
+    };
+    const target = await selectSpaceExecutionTarget(
+      db([workspace("workspace-syncing", 0), workspace("workspace-ready", 1)]),
+      request,
+      new Date(),
+      async (workspaceId) => states[workspaceId]!,
+    );
+    expect(target?.workspaceId).toBe("workspace-ready");
+    expect(target?.selectionExplanation).toMatchObject({
+      workspace: { readiness: "ready" },
+    });
+  });
+
+  it("falls back to a connected but unready Service so the work can be queued durably", async () => {
+    const target = await selectSpaceExecutionTarget(
+      db([workspace("workspace-syncing")]),
+      request,
+      new Date(),
+      async () => "connected",
+    );
+    expect(target?.workspaceId).toBe("workspace-syncing");
+    expect(target?.selectionExplanation).toMatchObject({
+      workspace: { readiness: "connected" },
+    });
+  });
+
+  it("never selects a disconnected Service", async () => {
+    await expect(
+      selectSpaceExecutionTarget(
+        db([workspace("workspace-gone")]),
+        request,
+        new Date(),
+        async () => false,
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it("treats a plain true live check as ready", async () => {
+    const target = await selectSpaceExecutionTarget(
+      db([workspace("workspace-legacy")]),
+      request,
+      new Date(),
+      async () => true,
+    );
+    expect(target?.selectionExplanation).toMatchObject({
+      workspace: { readiness: "ready" },
+    });
+  });
+});
+
 it.each(["turn", "step"])(
   "refuses silently replacing an accepted %s Profile release",
   async (kind) => {
@@ -920,10 +990,7 @@ it("revalidates exact model and effort at dispatch without fallback", async () =
 it("requires a pin-capable Engine and freezes the normalized Gemini selection before dispatch", async () => {
   const profile = JSON.parse(
     readFileSync(
-      new URL(
-        "../../profile_lab/assets/profiles/gemini.json",
-        import.meta.url,
-      ),
+      new URL("../../profile_lab/assets/profiles/gemini.json", import.meta.url),
       "utf8",
     ),
   );

@@ -71,6 +71,7 @@ export function sqliteD1() {
     "0055_assignment_queue_deadline.sql",
     "0057_assignment_start_permit.sql",
     "0058_assignment_phase_timestamps.sql",
+    "0059_service_readiness.sql",
   ]) {
     sqlite.exec(
       readFileSync(

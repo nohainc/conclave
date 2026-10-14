@@ -177,7 +177,11 @@ export interface DispatchAssignmentResult {
   readonly workerId: string;
   readonly workspaceRuntimeId: string;
   readonly workerCatalogId: string;
-  readonly status: "dispatched" | "failed" | "cancelled";
+  /**
+   * `queued`: persisted, but the Service is connected and not ready, so no
+   * command has been sent. The Gateway flushes it when the Service is ready.
+   */
+  readonly status: "dispatched" | "queued" | "failed" | "cancelled";
   readonly accepted: boolean;
   readonly error?: string;
 }
@@ -227,17 +231,23 @@ async function dispatchWorkspaceWorkerAssignment(
       if (!response.ok) return false;
       const status = (await response.json()) as {
         online?: boolean;
+        readyForAssignments?: boolean;
         // `online` describes the logical runtime session. Transport is
         // diagnostic only; both WebSocket and long-poll are dispatchable.
         activeTransport?: "websocket" | "http_long_poll" | null;
         workspaceRuntimeId?: string | null;
         executionWorkspaceId?: string | null;
       };
-      return (
-        status.online === true &&
-        status.workspaceRuntimeId === runtimeIdentityId &&
-        status.executionWorkspaceId === workspaceId
-      );
+      if (
+        status.online !== true ||
+        status.workspaceRuntimeId !== runtimeIdentityId ||
+        status.executionWorkspaceId !== workspaceId
+      ) {
+        return false;
+      }
+      // Liveness is not readiness: a Service that is still synchronizing, or
+      // paused/draining, is connected but must not be handed a command.
+      return status.readyForAssignments === true ? "ready" : "connected";
     },
   );
   if (!target) {
@@ -527,6 +537,15 @@ async function dispatchWorkspaceWorkerAssignment(
     },
     input: assignmentInput,
   };
+  // Persist the complete command before any delivery attempt. Work for a
+  // Service that is not ready yet then waits in this durable queue and is
+  // flushed, unchanged, when the Service reports ready.
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE worker_assignments SET command_payload_json = ?1
+      WHERE id = ?2 AND status = 'created' AND command_payload_json IS NULL`,
+  )
+    .bind(JSON.stringify(payload), assignmentId)
+    .run();
   if (!env.CONCLAVE_WORKSPACE_GATEWAY) {
     const code = "provider_unavailable";
     const error = executionErrorMessage(code);
@@ -597,6 +616,40 @@ async function dispatchWorkspaceWorkerAssignment(
       throw new Error(
         (await response.text()) || `Gateway returned HTTP ${response.status}`,
       );
+    const delivery = (await response
+      .clone()
+      .json()
+      .catch(() => ({}))) as { delivered?: boolean; queued?: boolean };
+    if (delivery.queued === true && delivery.delivered !== true) {
+      // The Service is not ready. Nothing was sent and nothing was accepted:
+      // the assignment stays `created` in the durable queue.
+      tryLogDiagnosticEvent({
+        requestId: task.workRequestId,
+        assignmentId,
+        workspaceId: target.workspaceId,
+        workerId: target.workerId,
+        workerTypeId: target.workerTypeId,
+        runId,
+        taskId,
+        attemptId,
+        workspaceRuntimeId: target.workspaceRuntimeIdentityId,
+        component: "cloud",
+        operation: "assignment",
+        stage: "dispatch",
+        severity: "info",
+        retryable: true,
+        context: { status: "queued_waiting_for_service_ready" },
+      });
+      return {
+        assignmentId,
+        attemptId,
+        workerId: target.workerId,
+        workspaceRuntimeId: target.workspaceRuntimeIdentityId,
+        workerCatalogId: target.workerTypeId,
+        status: "queued",
+        accepted: true,
+      };
+    }
     await env.CONCLAVE_DB.prepare(
       `UPDATE worker_assignments SET status = 'dispatched', updated_at = ?1,
               dispatched_at = COALESCE(dispatched_at, ?1)
@@ -678,6 +731,27 @@ async function dispatchWorkspaceWorkerAssignment(
     status: "dispatched",
     accepted: true,
   };
+}
+
+/**
+ * Asks the Workspace Gateway to hand any durably queued `created` assignments
+ * to a Service that is now ready. Best effort and idempotent: the Gateway
+ * claims each assignment with a conditional write, so it never double-sends.
+ */
+export async function nudgeQueuedAssignments(
+  env: AssignmentDispatcherEnv,
+  workspaceId: string,
+): Promise<void> {
+  const namespace = env.CONCLAVE_WORKSPACE_GATEWAY;
+  if (!namespace) return;
+  try {
+    await namespace
+      .get(namespace.idFromName(workspaceId))
+      .fetch("http://gateway/flush-queued", { method: "POST" });
+  } catch {
+    // The next poll nudges again; the assignment's queue deadline still bounds
+    // the wait.
+  }
 }
 
 /**
@@ -1106,7 +1180,10 @@ export async function recoverStaleAssignments(
     }
     const grantExpired =
       row.grantExpiresAt != null && Date.parse(row.grantExpiresAt) <= nowMs;
+    // A `created` assignment was never sent, so it waits in the durable queue
+    // for the Service to return; its queue deadline bounds the wait.
     const workspaceDisconnected =
+      row.status !== "created" &&
       row.workspaceStatus !== "online" &&
       nowMs -
         Math.max(
@@ -1146,13 +1223,15 @@ export async function recoverStaleAssignments(
       ? "The Workspace execution lease expired before the assignment completed."
       : workspaceDisconnected
         ? "The Workspace disconnected before the assignment completed."
-        : violation?.phase === "queue_wait"
-          ? "The assignment waited in the Workspace queue longer than its queue wait limit."
-          : violation?.phase === "startup"
-            ? "The Workspace was cleared to start the assignment but did not report the provider as started."
-            : violation?.phase === "command_delivery"
-              ? "The Workspace did not acknowledge the assignment in time."
-              : "The assignment exceeded its execution deadline.";
+        : violation?.phase === "readiness_wait"
+          ? "The Workspace Service was not ready to accept the assignment in time."
+          : violation?.phase === "queue_wait"
+            ? "The assignment waited in the Workspace queue longer than its queue wait limit."
+            : violation?.phase === "startup"
+              ? "The Workspace was cleared to start the assignment but did not report the provider as started."
+              : violation?.phase === "command_delivery"
+                ? "The Workspace did not acknowledge the assignment in time."
+                : "The assignment exceeded its execution deadline.";
     if (
       await revoke(row, {
         status: code === "timeout" ? "timed_out" : "failed",
