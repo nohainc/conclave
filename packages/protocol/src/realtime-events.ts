@@ -180,7 +180,11 @@ export const RealtimeEventEnvelopeSchema = z
           });
         }
       }
-      if (!event.assignmentId || !event.attemptId || !event.workspaceRuntimeId) {
+      if (
+        !event.assignmentId ||
+        !event.attemptId ||
+        !event.workspaceRuntimeId
+      ) {
         context.addIssue({
           code: "custom",
           message:

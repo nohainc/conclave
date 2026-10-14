@@ -118,9 +118,7 @@ export interface AssignmentDeadlineViolation {
  * Terminal delivery is owned by the Service (journal-backed retry) and has no
  * Cloud-side deadline.
  */
-export function currentAssignmentDeadline(
-  input: AssignmentDeadlineInput,
-): {
+export function currentAssignmentDeadline(input: AssignmentDeadlineInput): {
   phase: AssignmentDeadlinePhase;
   startedAt: string;
   limitMs: number;
