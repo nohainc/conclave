@@ -184,7 +184,11 @@ const routeDependencies = {
 
 export default {
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
-    const recoveredAssignments = await recoverStaleAssignments(env.CONCLAVE_DB);
+    const recoveredAssignments = await recoverStaleAssignments(
+      env.CONCLAVE_DB,
+      new Date(),
+      env,
+    );
     if (controller.cron !== "17 3 * * *") {
       console.log(
         JSON.stringify({

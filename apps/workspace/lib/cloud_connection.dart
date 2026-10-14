@@ -505,6 +505,14 @@ class WorkspaceCloudConnection {
   Map<String, Object?>? syncResponse;
   final _activeAssignments = <String>{};
   final _cancelledBeforeStart = <String>{};
+
+  /// Capability advertised in the hello so Cloud requires a start permit
+  /// before this Service launches an Engine process for an assignment.
+  static const startPermitCapability = 'assignment.start_permit.v1';
+  static const _startPermitTimeout = Duration(seconds: 15);
+  static const _startPermitResendInterval = Duration(seconds: 3);
+  final _pendingStartPermits = <String, Completer<bool>>{};
+  final _startPermitAttempts = <String, String>{};
   final _pendingAssignmentsDuringSync = <Map<String, dynamic>>[];
   static const _maxPendingActivityEvents = 256;
   final _pendingActivityEvents = <_PendingWorkerActivity>[];
@@ -804,6 +812,81 @@ class WorkspaceCloudConnection {
     });
   }
 
+  /// Asks Cloud for permission to launch the Engine process for [context].
+  ///
+  /// Returns true only when Cloud grants a start permit bound to this
+  /// assignment, attempt and runtime. Cloud denies the permit once the
+  /// assignment has been revoked, so a timed-out or cancelled assignment that
+  /// is still queued here can never launch late. The request fails closed: a
+  /// denial, a missing reply within the timeout, or a lost connection returns
+  /// false. A Cloud that does not require permits (older deployments) is
+  /// signalled by the absence of `startPermit.required` in the assignment
+  /// payload, in which case no round trip is made.
+  Future<bool> requestStartPermit(WorkspaceAssignmentContext context) async {
+    final startPermit = context.payload['startPermit'];
+    if (startPermit is! Map || startPermit['required'] != true) return true;
+    final assignmentId = context.assignmentId;
+    final existing = _pendingStartPermits[assignmentId];
+    if (existing != null) return existing.future;
+    final completer = Completer<bool>();
+    _pendingStartPermits[assignmentId] = completer;
+    _startPermitAttempts[assignmentId] = context.attemptId;
+    final deadline = DateTime.now().add(_startPermitTimeout);
+    Timer? resend;
+    void send() {
+      final socket = _transport;
+      if (socket == null || sessionId == null) return;
+      socket.send(jsonEncode(_assignmentEnvelope(
+        'assignment.start.permit.request',
+        _assignmentCorrelationForContext(context),
+        {'requestedAt': DateTime.now().toUtc().toIso8601String()},
+      )));
+    }
+
+    try {
+      send();
+      resend = Timer.periodic(_startPermitResendInterval, (_) {
+        if (completer.isCompleted) return;
+        if (DateTime.now().isAfter(deadline)) return;
+        send();
+      });
+      final granted = await completer.future.timeout(
+        _startPermitTimeout,
+        onTimeout: () => false,
+      );
+      if (!granted) {
+        await recordAssignmentDiagnostic(
+          context,
+          event: 'assignment.start_permit_denied',
+          stage: 'startup',
+          severity: 'warning',
+          errorCode: 'start_permit_denied',
+          retryable: false,
+        );
+      }
+      return granted;
+    } finally {
+      resend?.cancel();
+      _pendingStartPermits.remove(assignmentId);
+      _startPermitAttempts.remove(assignmentId);
+    }
+  }
+
+  void _handleStartPermitGrant(Map<String, dynamic> decoded) {
+    final assignmentId = decoded['assignmentId'];
+    final payload = decoded['payload'];
+    if (assignmentId is! String || payload is! Map) return;
+    final completer = _pendingStartPermits[assignmentId];
+    if (completer == null || completer.isCompleted) return;
+    // Bind the grant to the exact attempt that asked for it; a grant for a
+    // previous attempt of the same assignment must never start this one.
+    final pendingAttempt = _startPermitAttempts[assignmentId];
+    if (pendingAttempt != null && decoded['attemptId'] != pendingAttempt) {
+      return;
+    }
+    completer.complete(payload['granted'] == true);
+  }
+
   /// Records and reports the first evidence that the Engine and provider
   /// process have actually started. Admission acknowledgement alone is not a
   /// running signal.
@@ -1023,6 +1106,7 @@ class WorkspaceCloudConnection {
       'arch': _architecture(),
       'workspaceVersion': conclaveWorkspaceAppVersion,
       'supportedRuntimes': <String>['dart'],
+      'customCapabilities': <String>[startPermitCapability],
       'maxConcurrentWorkers': 1,
     };
   }
@@ -1474,6 +1558,8 @@ class WorkspaceCloudConnection {
       } else {
         unawaited(_handleAssignmentStart(decoded));
       }
+    } else if (decoded['type'] == 'assignment.start.permit.grant') {
+      _handleStartPermitGrant(decoded);
     } else if (decoded['type'] == 'assignment.cancel') {
       unawaited(_handleAssignmentCancel(decoded));
     } else if (decoded['type'] == 'diagnostic.probe') {

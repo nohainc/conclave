@@ -35,5 +35,10 @@ export interface AssignmentFailurePayload {
 export interface AssignmentCancelPayload {
   readonly assignmentId: string;
   readonly reason: string;
+  /**
+   * Stable identity of this revocation. Every re-send of the same cancel
+   * carries the same value so the Service can deduplicate and record it.
+   */
+  readonly commandId?: string;
   readonly deadlineMs?: number;
 }

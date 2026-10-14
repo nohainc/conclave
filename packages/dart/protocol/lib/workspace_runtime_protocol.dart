@@ -19,6 +19,8 @@ const workspaceRuntimeMessageTypes = <String>{
   'thread.status',
   'assignment.start',
   'assignment.start.ack',
+  'assignment.start.permit.request',
+  'assignment.start.permit.grant',
   'assignment.ack',
   'assignment.activity',
   'assignment.result',

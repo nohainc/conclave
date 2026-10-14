@@ -167,6 +167,7 @@ typedef ToolProfileActivityAssignmentExecutor = Future<WorkerResult> Function(
   Map<String, Object?> payload, {
   void Function(WorkerProgress progress)? onProgress,
   FutureOr<void> Function()? onSlotReserved,
+  FutureOr<bool> Function()? authorizeStart,
   void Function()? onEngineProcessStarted,
   FutureOr<void> Function(WorkerActivity activity)? onActivity,
 });
@@ -174,6 +175,9 @@ typedef WorkerExecutionStartedRelay = FutureOr<void> Function(
   WorkspaceAssignmentContext context,
 );
 typedef WorkerExecutionSlotReservedRelay = FutureOr<void> Function(
+  WorkspaceAssignmentContext context,
+);
+typedef WorkerExecutionStartAuthorizer = FutureOr<bool> Function(
   WorkspaceAssignmentContext context,
 );
 typedef WorkerEngineProcessStartedRelay = void Function(
@@ -227,6 +231,7 @@ class WorkerAssignmentHandler {
     this.onActivity,
     this.onExecutionStarted,
     this.onExecutionSlotReserved,
+    this.authorizeExecutionStart,
     this.onEngineProcessStarted,
     this.cancelToolProfileAssignment,
   })  : spaceMutationCoordinator = spaceMutationCoordinator ??
@@ -256,6 +261,7 @@ class WorkerAssignmentHandler {
   final WorkerActivityRelay? onActivity;
   final WorkerExecutionStartedRelay? onExecutionStarted;
   final WorkerExecutionSlotReservedRelay? onExecutionSlotReserved;
+  final WorkerExecutionStartAuthorizer? authorizeExecutionStart;
   final WorkerEngineProcessStartedRelay? onEngineProcessStarted;
   final Future<bool> Function(String assignmentId)? cancelToolProfileAssignment;
   final _cancellationRequests = <String>{};
@@ -415,6 +421,9 @@ class WorkerAssignmentHandler {
               onSlotReserved: onExecutionSlotReserved == null
                   ? null
                   : () => onExecutionSlotReserved!(context),
+              authorizeStart: authorizeExecutionStart == null
+                  ? null
+                  : () => authorizeExecutionStart!(context),
               onEngineProcessStarted: onEngineProcessStarted == null
                   ? null
                   : () => onEngineProcessStarted!(context),

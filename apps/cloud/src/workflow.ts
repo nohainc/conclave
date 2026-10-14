@@ -22,9 +22,13 @@ import { createEventPublisher } from "./event-publisher.js";
 import { tryLogTraceEvent } from "./observability.js";
 import {
   dispatchTaskAssignment,
-  recordAssignmentError,
   type AssignmentDispatcherEnv,
 } from "./assignment-dispatcher.js";
+import {
+  deliverRevocation,
+  revokeAssignment,
+  type RevocationEnv,
+} from "./assignment-revocation.js";
 import type {
   AssignmentLifecycleStatus,
   ThreadBindingId,
@@ -34,9 +38,30 @@ import {
   completeWorkerStepExecution,
 } from "./execution-engine.js";
 import {
-  assignmentDeliveryExpired,
+  assignmentDeadlineViolation,
+  classifyStepAssignmentOutcome,
   DEFAULT_QUEUE_WAIT_TIMEOUT_MS,
+  type AssignmentDeadlinePhase,
 } from "./assignment-delivery.js";
+
+/**
+ * Number of 2-second polls the Workflow waits for the Service to confirm a
+ * revocation before it gives up *waiting*. Giving up never means the process
+ * stopped: the assignment stays `reconciling` and the step fails without retry.
+ */
+const REVOCATION_CONFIRMATION_POLLS = 15;
+
+/**
+ * An ambiguous failure: the work may have run (or may still be running). The
+ * step must fail visibly and must NOT be replayed automatically against the
+ * same repository or provider session.
+ */
+class AssignmentNotRetryableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AssignmentNotRetryableError";
+  }
+}
 
 export interface ConclaveWorkflowParams {
   readonly runId: string;
@@ -82,7 +107,24 @@ interface AssignmentRow {
   createdAt: string;
   updatedAt: string;
   queueWaitTimeoutMs: number | null;
+  /** Set once a start permit was granted: a process may have been launched. */
+  permitIssuedAt: string | null;
+  permitRequired: number | null;
+  /** Events that start the per-phase deadlines. */
+  dispatchedAt: string | null;
+  acknowledgedAt: string | null;
+  runningAt: string | null;
 }
+
+const PHASE_FAILURE_MESSAGE: Record<AssignmentDeadlinePhase, string> = {
+  command_delivery:
+    "Workspace did not acknowledge the assignment. Check its connection and retry.",
+  queue_wait:
+    "The Workspace did not start the assignment before its queue wait limit. Retry when the Workspace is less busy.",
+  startup:
+    "The Workspace was cleared to start the assignment but did not report the provider as started. Retry the step.",
+  provider_execution: "The assignment exceeded its execution deadline.",
+};
 
 function parseJsonRecord(value: unknown): Record<string, unknown> {
   if (typeof value !== "string") return {};
@@ -708,12 +750,25 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                       wa.model, wa.permission_snapshot_json AS permissionSnapshotJson,
                       wa.attempt_id AS attemptId,
                       wa.created_at AS createdAt, wa.updated_at AS updatedAt,
-                      wa.queue_wait_timeout_ms AS queueWaitTimeoutMs
+                      wa.queue_wait_timeout_ms AS queueWaitTimeoutMs,
+                      wa.start_permit_issued_at AS permitIssuedAt,
+                      wa.start_permit_required AS permitRequired,
+                      wa.dispatched_at AS dispatchedAt,
+                      wa.acknowledged_at AS acknowledgedAt,
+                      wa.running_at AS runningAt
                  FROM worker_assignments wa WHERE wa.id = ?1`,
             )
             .bind(assignment.assignmentId)
             .first<AssignmentRow>();
         let terminal: AssignmentRow | null = null;
+        // Status the assignment had when Cloud began revoking it. `running`
+        // means the provider may have acted, so the step is not replayed.
+        let revokedAfter: AssignmentLifecycleStatus | null = null;
+        const isTerminalRow = (row: AssignmentRow | null): boolean =>
+          !!row &&
+          ["completed", "failed", "cancelled", "timed_out"].includes(
+            row.status,
+          );
         const pollCount = Math.max(
           1,
           Math.ceil(
@@ -751,17 +806,24 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             });
             break;
           }
-          if (
-            terminal &&
-            assignmentDeliveryExpired(
-              terminal.status,
-              terminal.status === "acknowledged"
-                ? terminal.updatedAt
-                : terminal.createdAt,
-              Date.now(),
-              terminal.queueWaitTimeoutMs ?? DEFAULT_QUEUE_WAIT_TIMEOUT_MS,
-            )
-          ) {
+          // Each phase measures from its own event. Provider execution is
+          // bounded by the poll budget and the final-timeout path below.
+          const violation = terminal
+            ? assignmentDeadlineViolation({
+                status: terminal.status,
+                createdAt: terminal.createdAt,
+                updatedAt: terminal.updatedAt,
+                dispatchedAt: terminal.dispatchedAt,
+                acknowledgedAt: terminal.acknowledgedAt,
+                startPermitIssuedAt: terminal.permitIssuedAt,
+                startPermitRequired: terminal.permitRequired === 1,
+                runningAt: terminal.runningAt,
+                queueWaitTimeoutMs:
+                  terminal.queueWaitTimeoutMs ?? DEFAULT_QUEUE_WAIT_TIMEOUT_MS,
+              })
+            : null;
+          if (terminal && violation && violation.phase !== "provider_execution") {
+            const phaseMessage = PHASE_FAILURE_MESSAGE[violation.phase];
             // Expiry was decided from this status. If an acknowledgement
             // moved the assignment on since the poll, the conditional write
             // below leaves it alone and the next poll observes the new state.
@@ -770,23 +832,30 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
               `workflow:${task.step.kind}:delivery-timeout:${attempt}`,
               stepConfig,
               async () => {
-                await recordAssignmentError(
-                  db,
-                  assignment.assignmentId,
-                  {
-                    error: {
-                      code: "provider_unavailable",
-                      message:
-                        "Workspace did not acknowledge the assignment. Check its connection and retry.",
-                      retryable: true,
+                // Cloud may not call the work stopped: the command can sit in
+                // the Service queue. Revoke it; the terminal outcome is
+                // written only when the Service confirms.
+                await revokeAssignment(this.env as unknown as RevocationEnv, {
+                  assignmentId: assignment.assignmentId,
+                  attemptId: assignment.attemptId,
+                  onlyFrom: [observedStatus],
+                  intent: {
+                    status: "failed",
+                    reason: phaseMessage,
+                    source: "startup_deadline",
+                    failure: {
+                      error: {
+                        code: "provider_unavailable",
+                        message: phaseMessage,
+                        retryable: true,
+                      },
+                      failedAt: new Date().toISOString(),
                     },
-                    failedAt: new Date().toISOString(),
                   },
-                  assignment.attemptId,
-                  { onlyFrom: [observedStatus] },
-                );
+                });
               },
             );
+            revokedAfter = observedStatus;
             continue;
           }
           await workflowStep.sleep(
@@ -794,55 +863,85 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             "2 seconds",
           );
         }
-        if (terminal?.status === "cancelled") {
+        if (!isTerminalRow(terminal)) {
+          // The deadline passed without a terminal outcome. Start revocation
+          // (idempotent if the delivery timeout already did) and wait a
+          // bounded time for the Service to confirm.
+          const observed = (terminal?.status ??
+            "running") as AssignmentLifecycleStatus;
+          await workflowStep.do(
+            `workflow:${task.step.kind}:timeout-revoke:${attempt}`,
+            stepConfig,
+            async () => {
+              await revokeAssignment(this.env as unknown as RevocationEnv, {
+                assignmentId: assignment.assignmentId,
+                attemptId: assignment.attemptId,
+                intent: {
+                  status: "timed_out",
+                  reason: "The assignment exceeded its time limit.",
+                  source: "execution_deadline",
+                  failure: {
+                    error: {
+                      code: "timeout",
+                      message: "The assignment exceeded its time limit.",
+                      retryable: true,
+                    },
+                    failedAt: new Date().toISOString(),
+                  },
+                },
+              });
+            },
+          );
+          revokedAfter ??= observed;
+          for (let poll = 0; poll < REVOCATION_CONFIRMATION_POLLS; poll += 1) {
+            terminal = await workflowStep.do(
+              `workflow:${task.step.kind}:revocation-status:${attempt}:${poll}`,
+              { ...stepConfig, timeout: "30 seconds" },
+              async () => {
+                const row = await readAssignment();
+                // Re-send the cancel while waiting; the Service may have
+                // been offline when revocation began.
+                if (row && !isTerminalRow(row) && poll % 3 === 2) {
+                  await deliverRevocation(
+                    this.env as unknown as RevocationEnv,
+                    assignment.assignmentId,
+                  );
+                }
+                return row;
+              },
+            );
+            if (isTerminalRow(terminal)) break;
+            await workflowStep.sleep(
+              `workflow:${task.step.kind}:revocation-wait:${attempt}:${poll}`,
+              "2 seconds",
+            );
+          }
+        }
+        const errorRecord = parseJsonRecord(terminal?.errorJson);
+        const errorValue = parseJsonRecord(errorRecord.error);
+        const outcome = classifyStepAssignmentOutcome({
+          status: terminal?.status,
+          hasOutput: !!terminal?.outputJson,
+          ...(typeof errorValue.message === "string"
+            ? { errorMessage: errorValue.message }
+            : {}),
+          // A granted start permit means a process may have been launched
+          // even if the Service never reported it.
+          revokedAfter: terminal?.permitIssuedAt ? "running" : revokedAfter,
+        });
+        if (outcome.kind === "cancelled") {
           return {
             task,
             status: "cancelled",
             error: "Work assignment was cancelled",
           };
         }
-        if (terminal?.status === "failed" || terminal?.status === "timed_out") {
-          const errorRecord = parseJsonRecord(terminal.errorJson);
-          const errorValue = parseJsonRecord(errorRecord.error);
-          throw new Error(
-            typeof errorValue.message === "string"
-              ? errorValue.message
-              : "Worker assignment failed",
-          );
+        if (outcome.kind === "failed") {
+          throw outcome.retryable
+            ? new Error(outcome.message)
+            : new AssignmentNotRetryableError(outcome.message);
         }
-        if (terminal?.status !== "completed" || !terminal.outputJson) {
-          const timedOut = await recordAssignmentError(
-            db,
-            assignment.assignmentId,
-            {
-              error: {
-                code: "timeout",
-                message: "The assignment exceeded its time limit.",
-                retryable: true,
-              },
-              failedAt: new Date().toISOString(),
-            },
-            assignment.attemptId,
-          );
-          if (timedOut) throw new Error("Work Step assignment timed out");
-          // The timeout lost a race: another handler made the assignment
-          // terminal after the last poll. That outcome is authoritative.
-          terminal = await workflowStep.do(
-            `workflow:${task.step.kind}:assignment-final:${attempt}`,
-            { ...stepConfig, timeout: "30 seconds" },
-            async () => readAssignment(),
-          );
-          if (terminal?.status === "cancelled") {
-            return {
-              task,
-              status: "cancelled",
-              error: "Work assignment was cancelled",
-            };
-          }
-          if (terminal?.status !== "completed" || !terminal.outputJson) {
-            throw new Error("Work Step assignment timed out");
-          }
-        }
+        if (!terminal) throw new Error("Work Step assignment timed out");
         const stepResult = completeWorkerStepExecution({
           output: parseJsonRecord(terminal.outputJson),
           evidence: parseJsonRecord(terminal.permissionSnapshotJson),
@@ -869,7 +968,9 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         if (
           definition.id === "direct" ||
           definition.id === "chat" ||
-          attempt >= 3
+          attempt >= 3 ||
+          (error instanceof Error &&
+            error.name === "AssignmentNotRetryableError")
         ) {
           return {
             task,

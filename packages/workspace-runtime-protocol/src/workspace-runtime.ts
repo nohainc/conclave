@@ -29,6 +29,8 @@ export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "thread.status",
   "assignment.start",
   "assignment.start.ack",
+  "assignment.start.permit.request",
+  "assignment.start.permit.grant",
   "assignment.ack",
   "assignment.activity",
   "assignment.result",
@@ -486,6 +488,64 @@ export const workspaceRuntimeEnvelopeSchema = z
               })
               .strict();
       const payload = schema.safeParse(message.payload);
+      if (!payload.success) {
+        for (const issue of payload.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payload", ...issue.path],
+            message: issue.message,
+          });
+        }
+      }
+    }
+    if (message.type === "assignment.start.permit.request") {
+      const payload = z
+        .object({ requestedAt: timestamp.optional() })
+        .strict()
+        .safeParse(message.payload);
+      if (!payload.success) {
+        for (const issue of payload.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payload", ...issue.path],
+            message: issue.message,
+          });
+        }
+      }
+    }
+    if (message.type === "assignment.start.permit.grant") {
+      const payload = z
+        .object({
+          granted: z.boolean(),
+          permitId: nonEmptyString.max(256).optional(),
+          expiresAt: timestamp.optional(),
+          reason: z
+            .enum([
+              "revoked",
+              "terminal",
+              "already_started",
+              "stale",
+              "not_found",
+            ])
+            .optional(),
+        })
+        .strict()
+        .superRefine((grant, grantCtx) => {
+          if (grant.granted && (!grant.permitId || !grant.expiresAt)) {
+            grantCtx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: "a granted permit needs permitId and expiresAt",
+            });
+          }
+          if (!grant.granted && !grant.reason) {
+            grantCtx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["reason"],
+              message: "a denied permit needs a reason",
+            });
+          }
+        })
+        .safeParse(message.payload);
       if (!payload.success) {
         for (const issue of payload.error.issues) {
           ctx.addIssue({

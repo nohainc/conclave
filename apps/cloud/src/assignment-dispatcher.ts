@@ -3,10 +3,11 @@ import { createHash } from "node:crypto";
 import {
   type AssignmentResultPayload,
   type AssignmentFailurePayload,
-  type AssignmentCancelPayload,
 } from "@conclave/workspace-runtime-protocol";
 import {
+  ASSIGNMENT_LIFECYCLE_STATUSES,
   canTransitionAssignment,
+  isRevocationAssignmentStatus,
   isTerminalAssignmentStatus,
   type AssignmentLifecycleStatus,
   type ThreadBindingId,
@@ -21,8 +22,23 @@ import {
 } from "./scheduler.js";
 import { recordExecutionWorkspaceAudit } from "./workspace-audit.js";
 import { tryLogDiagnosticEvent } from "./observability.js";
-import { DEFAULT_QUEUE_WAIT_TIMEOUT_MS } from "./assignment-delivery.js";
-import { assignmentSourceStatusList } from "./assignment-transitions.js";
+import {
+  ASSIGNMENT_REVOCATION_CONFIRMATION_MS,
+  DEFAULT_QUEUE_WAIT_TIMEOUT_MS,
+  assignmentDeadlineViolation,
+} from "./assignment-delivery.js";
+import {
+  beginAssignmentRevocation,
+  deliverRevocation,
+  escalateUnconfirmedRevocations,
+  revokeAssignment,
+  type RevocationEnv,
+  type RevocationIntent,
+} from "./assignment-revocation.js";
+import {
+  ACTIVE_ASSIGNMENT_STATUS_SQL,
+  assignmentSourceStatusList,
+} from "./assignment-transitions.js";
 
 const MAX_FAILURE_DIAGNOSTIC_LENGTH = 2048;
 
@@ -582,7 +598,8 @@ async function dispatchWorkspaceWorkerAssignment(
         (await response.text()) || `Gateway returned HTTP ${response.status}`,
       );
     await env.CONCLAVE_DB.prepare(
-      `UPDATE worker_assignments SET status = 'dispatched', updated_at = ?1
+      `UPDATE worker_assignments SET status = 'dispatched', updated_at = ?1,
+              dispatched_at = COALESCE(dispatched_at, ?1)
         WHERE id = ?2 AND status IN (${assignmentSourceStatusList("dispatched")})`,
     )
       .bind(new Date().toISOString(), assignmentId)
@@ -607,7 +624,10 @@ async function dispatchWorkspaceWorkerAssignment(
   } catch {
     const code = "provider_unavailable";
     const message = executionErrorMessage(code);
-    await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
+    // The Gateway may have written the command before the response was lost,
+    // so a bare failure could leave a live command behind. Revoke instead
+    // unless the assignment provably never left Cloud.
+    await failOrRevokeDispatch(env, assignmentId, attemptId, {
       error: {
         code,
         message,
@@ -658,6 +678,45 @@ async function dispatchWorkspaceWorkerAssignment(
     status: "dispatched",
     accepted: true,
   };
+}
+
+/**
+ * Fails an assignment whose dispatch call did not return success. `created`
+ * means the Gateway never persisted delivery, so nothing can be running and a
+ * direct failure is safe. Any later status means the command may exist, so
+ * the failure becomes a revocation that finalizes only on Service evidence.
+ */
+export async function failOrRevokeDispatch(
+  env: AssignmentDispatcherEnv,
+  assignmentId: string,
+  attemptId: string,
+  failure: AssignmentFailurePayload,
+): Promise<void> {
+  const row = await env.CONCLAVE_DB.prepare(
+    "SELECT status FROM worker_assignments WHERE id = ?1",
+  )
+    .bind(assignmentId)
+    .first<{ status: string }>();
+  if (!row || row.status === "created") {
+    await recordAssignmentError(
+      env.CONCLAVE_DB,
+      assignmentId,
+      failure,
+      attemptId,
+      { onlyFrom: ["created"] },
+    );
+    return;
+  }
+  await revokeAssignment(env, {
+    assignmentId,
+    attemptId,
+    intent: {
+      status: "failed",
+      reason: failure.error.message,
+      source: "dispatch_failed",
+      failure,
+    },
+  });
 }
 
 /**
@@ -918,17 +977,7 @@ function sourceList(
 function isKnownAssignmentStatus(
   status: string,
 ): status is AssignmentLifecycleStatus {
-  return [
-    "created",
-    "dispatched",
-    "acknowledged",
-    "running",
-    "completed",
-    "failed",
-    "cancelled",
-    "timed_out",
-    "lost",
-  ].includes(status as AssignmentLifecycleStatus);
+  return (ASSIGNMENT_LIFECYCLE_STATUSES as readonly string[]).includes(status);
 }
 
 async function runTerminalTransition(
@@ -955,21 +1004,38 @@ async function runTerminalTransition(
 }
 
 /**
- * Closes assignments whose Workspace can no longer be expected to report a
+ * Revokes assignments whose Workspace can no longer be expected to report a
  * terminal result. This is intentionally Cloud-owned recovery: a transport
  * heartbeat proves only that the Workspace service is reachable, not that the
- * Engine/provider process is still alive.
+ * Engine/provider process is still alive, and a Workspace that stopped
+ * answering may still be running the process. So recovery never writes a
+ * terminal outcome for work that may have been delivered; it starts a
+ * revocation (see assignment-revocation.ts) and keeps re-sending the cancel.
+ * Pass [env] to let recovery reach the Gateway; without it the revocation is
+ * recorded and delivered later, on reconnect or the next recovery pass.
  */
 export async function recoverStaleAssignments(
   db: D1Database,
   now = new Date(),
+  env?: RevocationEnv,
 ): Promise<number> {
   const nowMs = now.getTime();
+  await escalateUnconfirmedRevocations(
+    db,
+    ASSIGNMENT_REVOCATION_CONFIRMATION_MS,
+    now,
+  );
   const rows = await db
     .prepare(
-      `SELECT wa.id, wa.status, wa.created_at AS createdAt,
+      `SELECT wa.id, wa.status, wa.attempt_id AS attemptId,
+              wa.created_at AS createdAt,
               wa.updated_at AS updatedAt, wa.timeout_ms AS timeoutMs,
               wa.queue_wait_timeout_ms AS queueWaitTimeoutMs,
+              wa.dispatched_at AS dispatchedAt,
+              wa.acknowledged_at AS acknowledgedAt,
+              wa.running_at AS runningAt,
+              wa.start_permit_issued_at AS permitIssuedAt,
+              wa.start_permit_required AS permitRequired,
               ew.status AS workspaceStatus, ew.updated_at AS workspaceUpdatedAt,
               g.expires_at AS grantExpiresAt,
               wr.status AS workRequestStatus
@@ -978,29 +1044,64 @@ export async function recoverStaleAssignments(
          LEFT JOIN workspace_space_grants g ON g.id = wa.workspace_space_grant_id
          LEFT JOIN workflow_tasks wt ON wt.id = wa.task_id
          LEFT JOIN work_requests wr ON wr.id = wt.work_request_id
-        WHERE wa.status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+        WHERE wa.status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})`,
     )
     .all<{
       id: string;
       status: string;
+      attemptId: string | null;
       createdAt: string;
       updatedAt: string;
       timeoutMs: number | null;
       queueWaitTimeoutMs: number | null;
+      dispatchedAt: string | null;
+      acknowledgedAt: string | null;
+      runningAt: string | null;
+      permitIssuedAt: string | null;
+      permitRequired: number | null;
       workspaceStatus: string;
       workspaceUpdatedAt: string;
       grantExpiresAt: string | null;
       workRequestStatus: string | null;
     }>();
 
+  const revoke = async (
+    row: { id: string; status: string; attemptId: string | null },
+    intent: RevocationIntent,
+  ): Promise<boolean> => {
+    const input = {
+      assignmentId: row.id,
+      ...(row.attemptId ? { attemptId: row.attemptId } : {}),
+      intent,
+      // The decision was made from this status. If the assignment has since
+      // advanced the stale decision must not revoke it.
+      onlyFrom: isKnownAssignmentStatus(row.status) ? [row.status] : [],
+    };
+    const result = env
+      ? await revokeAssignment(env, input)
+      : await beginAssignmentRevocation(db, input);
+    return result.outcome === "finalized" || result.outcome === "pending";
+  };
+
   let recovered = 0;
   for (const row of rows.results ?? []) {
+    if (
+      isKnownAssignmentStatus(row.status) &&
+      isRevocationAssignmentStatus(row.status)
+    ) {
+      // Already revoking: keep trying to reach the Service.
+      if (env) await deliverRevocation(env, row.id);
+      continue;
+    }
     if (row.workRequestStatus === "cancelled") {
-      await recordAssignmentCancelled(db, row.id, {
-        status: "cancelled",
-        reason: "The owning Work Request was cancelled.",
-      });
-      recovered += 1;
+      if (
+        await revoke(row, {
+          status: "cancelled",
+          reason: "The owning Work Request was cancelled.",
+          source: "work_cancelled",
+        })
+      )
+        recovered += 1;
       continue;
     }
     const grantExpired =
@@ -1013,16 +1114,26 @@ export async function recoverStaleAssignments(
           Date.parse(row.workspaceUpdatedAt),
         ) >=
         30_000;
-    const deadlineMs =
-      row.status === "running"
-        ? row.timeoutMs
-        : (row.queueWaitTimeoutMs ?? DEFAULT_QUEUE_WAIT_TIMEOUT_MS);
-    const deadlineOrigin =
-      row.status === "running" ? row.updatedAt : row.createdAt;
-    const executionExpired =
-      deadlineMs != null &&
-      Number.isFinite(deadlineMs) &&
-      nowMs - Date.parse(deadlineOrigin) >= deadlineMs;
+    // Each phase measures from its own event (see currentAssignmentDeadline),
+    // so queue wait and startup no longer inherit time already spent in
+    // delivery, and provider execution counts from provider start rather than
+    // from the last unrelated row update.
+    const violation = assignmentDeadlineViolation(
+      {
+        status: row.status,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        dispatchedAt: row.dispatchedAt,
+        acknowledgedAt: row.acknowledgedAt,
+        startPermitIssuedAt: row.permitIssuedAt,
+        startPermitRequired: row.permitRequired === 1,
+        runningAt: row.runningAt,
+        queueWaitTimeoutMs: row.queueWaitTimeoutMs,
+        timeoutMs: row.timeoutMs,
+      },
+      nowMs,
+    );
+    const executionExpired = violation != null;
     if (!grantExpired && !workspaceDisconnected && !executionExpired) {
       continue;
     }
@@ -1035,40 +1146,52 @@ export async function recoverStaleAssignments(
       ? "The Workspace execution lease expired before the assignment completed."
       : workspaceDisconnected
         ? "The Workspace disconnected before the assignment completed."
-        : "The assignment exceeded its execution deadline.";
-    await recordAssignmentError(
-      db,
-      row.id,
-      {
-        error: {
-          code,
-          message,
-          retryable: true,
-          details: cloudFailureDiagnostic(
-            grantExpired
-              ? "workspace_lease"
-              : workspaceDisconnected
-                ? "workspace_disconnect"
-                : "execution_timeout",
+        : violation?.phase === "queue_wait"
+          ? "The assignment waited in the Workspace queue longer than its queue wait limit."
+          : violation?.phase === "startup"
+            ? "The Workspace was cleared to start the assignment but did not report the provider as started."
+            : violation?.phase === "command_delivery"
+              ? "The Workspace did not acknowledge the assignment in time."
+              : "The assignment exceeded its execution deadline.";
+    if (
+      await revoke(row, {
+        status: code === "timeout" ? "timed_out" : "failed",
+        reason: message,
+        source: grantExpired
+          ? "grant_expired"
+          : workspaceDisconnected
+            ? "workspace_disconnected"
+            : "execution_deadline",
+        failure: {
+          error: {
             code,
             message,
-          ),
+            retryable: true,
+            details: cloudFailureDiagnostic(
+              grantExpired
+                ? "workspace_lease"
+                : workspaceDisconnected
+                  ? "workspace_disconnect"
+                  : "execution_timeout",
+              code,
+              message,
+            ),
+          },
+          failedAt: now.toISOString(),
         },
-        failedAt: now.toISOString(),
-      },
-      undefined,
-      // The decision above was made from this status. If the assignment has
-      // since advanced (for example a provider-start acknowledgement arrived),
-      // the stale decision must not fail it.
-      { onlyFrom: isKnownAssignmentStatus(row.status) ? [row.status] : [] },
-    );
-    recovered += 1;
+      })
+    ) {
+      recovered += 1;
+    }
   }
   return recovered;
 }
 
 /**
- * Cancels a running task assignment across Cloud and Workspace.
+ * Cancels a task assignment across Cloud and Workspace. The assignment becomes
+ * `cancelled` only when the Workspace confirms the process stopped (or never
+ * started); otherwise it stays `revocation_pending`/`reconciling` and the
+ * caller must treat the cancellation as unconfirmed and retry it.
  */
 export async function cancelTaskAssignment(
   env: AssignmentDispatcherEnv,
@@ -1077,52 +1200,20 @@ export async function cancelTaskAssignment(
   reason: string,
 ): Promise<{ cancelled: boolean }> {
   const row = await env.CONCLAVE_DB.prepare(
-    `SELECT execution_workspace_id, runtime_identity_id, run_id, task_id, status,
-            attempt_id, workspace_worker_id, idempotency_key
+    `SELECT status, attempt_id
        FROM worker_assignments
       WHERE id = ?1 AND execution_workspace_id = ?2`,
   )
     .bind(assignmentId, workspaceId)
-    .first<Record<string, unknown>>();
+    .first<{ status: string; attempt_id: string }>();
   if (!row) return { cancelled: false };
   if (row.status === "cancelled") return { cancelled: true };
-  if (["completed", "failed", "timed_out", "lost"].includes(String(row.status)))
+  if (["completed", "failed", "timed_out", "lost"].includes(row.status))
     return { cancelled: false };
-  const gatewayNamespace = env.CONCLAVE_WORKSPACE_GATEWAY;
-  if (!gatewayNamespace) return { cancelled: false };
-  try {
-    const stub = gatewayNamespace.get(gatewayNamespace.idFromName(workspaceId));
-    const cancelPayload: AssignmentCancelPayload = {
-      assignmentId,
-      reason,
-      deadlineMs: Date.now() + 10_000,
-    };
-    const response = await stub.fetch("http://gateway/cancel-assignment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        executionWorkspaceId: String(row.execution_workspace_id),
-        workspaceRuntimeId: String(row.runtime_identity_id),
-        workerId: String(row.workspace_worker_id),
-        runId: String(row.run_id),
-        taskId: String(row.task_id),
-        attemptId: String(row.attempt_id),
-        assignmentId,
-        idempotencyKey: String(row.idempotency_key),
-        payload: cancelPayload,
-      }),
-    });
-    if (!response.ok) return { cancelled: false };
-    const acknowledgement = (await response.json()) as { cancelled?: unknown };
-    if (acknowledgement.cancelled !== true) return { cancelled: false };
-    // A confirmed process stop must release Cloud capacity even if the
-    // independently delivered terminal message is delayed or lost.
-    await recordAssignmentCancelled(env.CONCLAVE_DB, assignmentId, {
-      status: "cancelled",
-      reason,
-    });
-    return { cancelled: true };
-  } catch {
-    return { cancelled: false };
-  }
+  const result = await revokeAssignment(env, {
+    assignmentId,
+    attemptId: row.attempt_id,
+    intent: { status: "cancelled", reason, source: "manual_cancel" },
+  });
+  return { cancelled: result.confirmed };
 }

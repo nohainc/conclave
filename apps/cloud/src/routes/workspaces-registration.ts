@@ -9,6 +9,7 @@ import {
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
 import { hasControlCharacters } from "./workspaces-shared.js";
+import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "../assignment-transitions.js";
 
 type WorkspaceOwnershipRow = {
   runtimeId: string;
@@ -604,7 +605,7 @@ export async function handleDisconnectDesktopWorkspace(
 
   const active = await env.CONCLAVE_DB.prepare(
     `SELECT COUNT(*) AS count FROM worker_assignments
-      WHERE execution_workspace_id = ?1 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+      WHERE execution_workspace_id = ?1 AND status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})`,
   )
     .bind(workspaceId)
     .first<{ count: number }>();
@@ -754,7 +755,7 @@ export async function handleReleaseDesktopWorkspace(
   const active = await env.CONCLAVE_DB.prepare(
     `SELECT COUNT(*) AS count FROM worker_assignments
       WHERE execution_workspace_id = ?1
-        AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+        AND status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})`,
   )
     .bind(workspaceId)
     .first<{ count: number }>();

@@ -3,6 +3,7 @@ import {
   serializeWorkspaceRuntimeMessage,
   WORKSPACE_RUNTIME_PROTOCOL_NAME,
   WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+  type AssignmentCancelPayload,
   type WorkspaceRuntimeMessage,
 } from "@conclave/workspace-runtime-protocol";
 import {
@@ -10,12 +11,24 @@ import {
   normalizeActivityPayload,
 } from "@conclave/protocol";
 import { createEventPublisher } from "./event-publisher.js";
-import { assignmentCommandDisposition } from "./assignment-delivery.js";
 import {
+  ASSIGNMENT_REVOCATION_CONFIRMATION_MS,
+  assignmentCommandDisposition,
+} from "./assignment-delivery.js";
+import { grantStartPermit } from "./assignment-start-permit.js";
+import {
+  escalateUnconfirmedRevocations,
+  finalizeAssignmentRevocation,
+} from "./assignment-revocation.js";
+import {
+  ACTIVE_ASSIGNMENT_STATUS_SQL,
   transitionAssignment,
   type AssignmentTransitionResult,
 } from "./assignment-transitions.js";
-import { assignmentStatusForEvidence } from "@conclave/core";
+import {
+  ASSIGNMENT_ACTIVE_STATUSES,
+  assignmentStatusForEvidence,
+} from "@conclave/core";
 import { shouldPersistWorkerActivity } from "./worker-activity-history.js";
 import {
   recordAssignmentCancelled,
@@ -36,6 +49,7 @@ import { WorkspaceRuntimeSessionStore } from "./workspace-gateway/session-store.
 import {
   isCurrentWorkspaceSocket,
   runtimeFacts,
+  START_PERMIT_CAPABILITY,
   workspaceAssignmentContextMatches,
   workspaceAssignmentIsActive,
   type WorkspaceAssignmentCorrelation,
@@ -59,6 +73,17 @@ export {
   type WorkspaceAssignmentCorrelation,
   type WorkspaceGatewayEnv,
 } from "./workspace-gateway/contracts.js";
+
+/** Marks an `assignment.start` payload as requiring a start permit. */
+function withStartPermitRequirement(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") return payload;
+  const value = payload as { snapshot?: unknown };
+  if (!value.snapshot || typeof value.snapshot !== "object") return payload;
+  return {
+    ...value,
+    snapshot: { ...value.snapshot, startPermit: { required: true } },
+  };
+}
 
 /** Work Request ID carried in an assignment payload, for trace correlation. */
 function workRequestIdOf(payload: unknown): string | undefined {
@@ -891,6 +916,10 @@ export class WorkspaceGateway implements DurableObject {
         return;
       case "workspace.sync.request":
         await this.syncWorkspace(message.messageId);
+        // The Service now has its authoritative state; tell it which
+        // assignments Cloud has revoked so a replayed or restarted Service
+        // cannot launch them.
+        await this.resendPendingRevocations().catch(() => undefined);
         logStructured(
           "info",
           "GW-12 workspace_sync_completed",
@@ -1021,6 +1050,61 @@ export class WorkspaceGateway implements DurableObject {
         });
         return;
       }
+      case "assignment.start.permit.request": {
+        // Fencing: the Service asks to launch the provider. Granted only while
+        // Cloud has not revoked the assignment (see assignment-start-permit).
+        if (!(await this.assignmentContextMatches(message))) return;
+        const decision = await grantStartPermit(this.env.CONCLAVE_DB, {
+          assignmentId: message.assignmentId!,
+          attemptId: message.attemptId!,
+          executionWorkspaceId: this.executionWorkspaceId ?? undefined,
+          runtimeIdentityId: this.workspaceRuntimeId ?? undefined,
+        });
+        tryLogDiagnosticEvent({
+          assignmentId: message.assignmentId,
+          workspaceId: message.executionWorkspaceId,
+          workspaceRuntimeId: message.workspaceRuntimeId,
+          workerId: message.workerId,
+          runId: message.runId,
+          taskId: message.taskId,
+          attemptId: message.attemptId,
+          component: "cloud",
+          operation: "assignment",
+          stage: "start_permit",
+          severity: decision.granted ? "info" : "warning",
+          retryable: false,
+          context: {
+            status: decision.granted ? "granted" : `denied_${decision.reason}`,
+          },
+        });
+        await this.send({
+          protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
+          protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+          messageId: `message-${crypto.randomUUID()}`,
+          correlationId: message.messageId,
+          timestamp: new Date().toISOString(),
+          type: "assignment.start.permit.grant",
+          executionWorkspaceId: message.executionWorkspaceId,
+          workspaceRuntimeId: message.workspaceRuntimeId,
+          workerId: message.workerId,
+          runId: message.runId,
+          taskId: message.taskId,
+          attemptId: message.attemptId,
+          assignmentId: message.assignmentId,
+          idempotencyKey: message.idempotencyKey,
+          payload: decision.granted
+            ? {
+                granted: true,
+                permitId: decision.permitId,
+                expiresAt: decision.expiresAt,
+              }
+            : { granted: false, reason: decision.reason },
+        });
+        return;
+      }
+      case "assignment.start.permit.grant":
+        // Cloud originates grants; a Service never sends one.
+        return;
       case "assignment.activity": {
         const payload = message.payload as Record<string, unknown>;
         const workspaceId =
@@ -1341,11 +1425,9 @@ export class WorkspaceGateway implements DurableObject {
         return;
       case "assignment.cancelled":
         if (!(await this.terminalAssignmentMatches(message))) return;
-        const cancelled = await recordAssignmentCancelled(
-          this.env.CONCLAVE_DB,
-          message.assignmentId!,
+        const cancelled = await this.recordCancellationEvidence(
+          message,
           message.payload as never,
-          message.attemptId,
         );
         if (cancelled) this.traceTerminalPersisted(message, "cancelled");
         tryLogDiagnosticEvent({
@@ -1368,17 +1450,13 @@ export class WorkspaceGateway implements DurableObject {
       case "assignment.cancel.ack": {
         const payload = message.payload as Record<string, unknown>;
         if (payload.cancelled === true) {
-          await recordAssignmentCancelled(
-            this.env.CONCLAVE_DB,
-            message.assignmentId!,
-            {
-              status: "cancelled",
-              reason:
-                typeof payload.reason === "string"
-                  ? payload.reason
-                  : "Cancelled by Workspace runtime",
-            },
-          );
+          await this.recordCancellationEvidence(message, {
+            status: "cancelled",
+            reason:
+              typeof payload.reason === "string"
+                ? payload.reason
+                : "Cancelled by Workspace runtime",
+          });
         }
         const pending = this.pendingCancelAcks.get(message.assignmentId!);
         if (pending) {
@@ -1393,6 +1471,96 @@ export class WorkspaceGateway implements DurableObject {
     }
   }
 
+  /**
+   * Service evidence that an assignment will not run. If Cloud was revoking
+   * the assignment, the outcome Cloud intended (timed_out, failed, cancelled)
+   * is written; otherwise this is an ordinary cancellation.
+   */
+  private async recordCancellationEvidence(
+    message: WorkspaceRuntimeMessage,
+    cancellation: { status: "cancelled"; reason: string },
+  ): Promise<boolean> {
+    const finalized = await finalizeAssignmentRevocation(
+      this.env.CONCLAVE_DB,
+      message.assignmentId!,
+      message.attemptId,
+    );
+    if (finalized === "finalized") return true;
+    if (finalized !== "not_revoking") return false;
+    return recordAssignmentCancelled(
+      this.env.CONCLAVE_DB,
+      message.assignmentId!,
+      cancellation,
+      message.attemptId,
+    );
+  }
+
+  /**
+   * Re-sends `assignment.cancel` for every unconfirmed revocation of this
+   * Workspace. A Service that was offline, restarted or replayed the original
+   * command learns here that the assignment must not run. Unconfirmed
+   * revocations older than the grace period are shown as `reconciling`.
+   */
+  private async resendPendingRevocations(): Promise<void> {
+    const workspaceId = this.executionWorkspaceId;
+    if (!workspaceId) return;
+    await escalateUnconfirmedRevocations(
+      this.env.CONCLAVE_DB,
+      ASSIGNMENT_REVOCATION_CONFIRMATION_MS,
+    );
+    const { results } = await this.env.CONCLAVE_DB.prepare(
+      `SELECT id, execution_workspace_id, runtime_identity_id,
+              workspace_worker_id, run_id, task_id, attempt_id,
+              idempotency_key, error_json
+         FROM worker_assignments
+        WHERE execution_workspace_id = ?1
+          AND status IN ('revocation_pending', 'reconciling')
+        LIMIT 100`,
+    )
+      .bind(workspaceId)
+      .all<Record<string, unknown>>();
+    for (const row of results ?? []) {
+      let reason = "Cloud revoked the assignment";
+      let commandId = `revoke:${String(row.id)}:${String(row.attempt_id)}`;
+      try {
+        const stored = JSON.parse(String(row.error_json ?? "{}")) as {
+          revocation?: { reason?: unknown; commandId?: unknown };
+        };
+        if (typeof stored.revocation?.reason === "string")
+          reason = stored.revocation.reason;
+        if (typeof stored.revocation?.commandId === "string")
+          commandId = stored.revocation.commandId;
+      } catch {
+        // Keep the defaults; the command is still safe to re-send.
+      }
+      try {
+        await this.send({
+          protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
+          protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+          messageId: `message-${crypto.randomUUID()}`,
+          timestamp: new Date().toISOString(),
+          type: "assignment.cancel",
+          executionWorkspaceId: String(row.execution_workspace_id),
+          workspaceRuntimeId: String(row.runtime_identity_id),
+          workerId: String(row.workspace_worker_id),
+          runId: String(row.run_id),
+          taskId: String(row.task_id),
+          attemptId: String(row.attempt_id),
+          assignmentId: String(row.id),
+          idempotencyKey: String(row.idempotency_key),
+          payload: {
+            assignmentId: String(row.id),
+            reason,
+            commandId,
+            deadlineMs: Date.now() + 10_000,
+          } satisfies AssignmentCancelPayload,
+        });
+      } catch {
+        // Transport gone again; the next sync re-sends.
+      }
+    }
+  }
+
   private async syncWorkspace(correlationId: string): Promise<void> {
     const workspaceId = this.executionWorkspaceId;
     if (!workspaceId) return;
@@ -1404,7 +1572,7 @@ export class WorkspaceGateway implements DurableObject {
        FROM worker_assignments
        WHERE execution_workspace_id = ?1
          AND (
-           status IN ('created', 'dispatched', 'acknowledged', 'running')
+           status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})
            OR (status IN ('completed', 'failed', 'cancelled', 'timed_out') AND updated_at >= ?2)
          )
        ORDER BY updated_at DESC
@@ -1412,12 +1580,7 @@ export class WorkspaceGateway implements DurableObject {
     )
       .bind(workspaceId, terminalSince)
       .all<Record<string, unknown>>();
-    const activeStatuses = new Set([
-      "created",
-      "dispatched",
-      "acknowledged",
-      "running",
-    ]);
+    const activeStatuses = new Set<string>(ASSIGNMENT_ACTIVE_STATUSES);
     const assignmentRows = assignments.results ?? [];
     await this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
@@ -1704,6 +1867,28 @@ export class WorkspaceGateway implements DurableObject {
     );
   }
 
+  /** Whether the connected Service advertised the start-permit capability. */
+  private async serviceSupportsStartPermit(): Promise<boolean> {
+    const workspaceId = this.executionWorkspaceId;
+    if (!workspaceId) return false;
+    const facts = await this.env.CONCLAVE_DB.prepare(
+      "SELECT runtime_capabilities_json FROM workspace_runtime_facts WHERE workspace_id = ?1",
+    )
+      .bind(workspaceId)
+      .first<{ runtime_capabilities_json: string | null }>();
+    try {
+      const capabilities: unknown = JSON.parse(
+        facts?.runtime_capabilities_json ?? "[]",
+      );
+      return (
+        Array.isArray(capabilities) &&
+        capabilities.includes(START_PERMIT_CAPABILITY)
+      );
+    } catch {
+      return false;
+    }
+  }
+
   private async dispatchAssignment(request: Request): Promise<Response> {
     if (!(await this.isRuntimeLive()))
       return Response.json({ error: "Workspace is offline" }, { status: 503 });
@@ -1714,7 +1899,7 @@ export class WorkspaceGateway implements DurableObject {
       `SELECT wa.id, wa.execution_workspace_id, wa.runtime_identity_id,
               wa.worker_type_id, wa.workspace_worker_id,
               wa.run_id, wa.task_id, wa.attempt_id,
-              wa.idempotency_key, wa.status
+              wa.idempotency_key, wa.status, wa.start_permit_required
        FROM worker_assignments wa
        JOIN workspace_space_grants g
          ON g.id = wa.workspace_space_grant_id
@@ -1738,6 +1923,11 @@ export class WorkspaceGateway implements DurableObject {
     }
     const currentStatus = String(row.status);
     const disposition = assignmentCommandDisposition(currentStatus);
+    // A Service that can request a start permit is told to. Once required for
+    // an assignment it stays required, including on redelivery.
+    const startPermitRequired =
+      Number(row.start_permit_required ?? 0) === 1 ||
+      (disposition.shouldSend && (await this.serviceSupportsStartPermit()));
     if (!disposition.shouldSend && disposition.duplicate) {
       return Response.json({
         delivered: false,
@@ -1761,12 +1951,45 @@ export class WorkspaceGateway implements DurableObject {
         timestamp: new Date().toISOString(),
         type: "assignment.start",
         ...body,
-        payload: body.payload,
+        payload: startPermitRequired
+          ? withStartPermitRequirement(body.payload)
+          : body.payload,
       });
     } catch {
       return Response.json(
         { error: "Assignment must identify a product Worker Type" },
         { status: 400 },
+      );
+    }
+    // Persist "possibly delivered" BEFORE the command can exist. From this
+    // point Cloud must treat the Service as possibly holding the command, so
+    // every later stop goes through revocation instead of a bare terminal
+    // write. If revocation won the race, the command is never written.
+    const persisted = await transitionAssignment(this.env.CONCLAVE_DB, {
+      fence: {
+        assignmentId: body.assignmentId,
+        attemptId: body.attemptId,
+        executionWorkspaceId: body.executionWorkspaceId,
+        runtimeIdentityId: body.workspaceRuntimeId,
+      },
+      to: "dispatched",
+    });
+    if (startPermitRequired && persisted.applied) {
+      await this.env.CONCLAVE_DB.prepare(
+        `UPDATE worker_assignments SET start_permit_required = 1
+          WHERE id = ?1 AND start_permit_required = 0 AND status = 'dispatched'`,
+      )
+        .bind(body.assignmentId)
+        .run();
+    }
+    if (!persisted.applied && persisted.outcome !== "duplicate") {
+      return Response.json(
+        {
+          delivered: false,
+          error: "Assignment is no longer deliverable",
+          status: persisted.currentStatus ?? currentStatus,
+        },
+        { status: 409 },
       );
     }
     const queueStartedAt = performance.now();
@@ -1789,6 +2012,24 @@ export class WorkspaceGateway implements DurableObject {
         context: { transport: this.socket ? "websocket" : "http_long_poll" },
       });
     } catch (error) {
+      // The write to the transport itself failed, so the Gateway knows no
+      // command exists. That is first-hand evidence (not a guess) and lets
+      // the assignment fail without revocation. Only the `dispatched` status
+      // this call set (or found) may be failed.
+      await recordAssignmentError(
+        this.env.CONCLAVE_DB,
+        body.assignmentId,
+        {
+          error: {
+            code: "provider_unavailable",
+            message: "Workspace command could not be queued",
+            retryable: true,
+          },
+          failedAt: new Date().toISOString(),
+        },
+        body.attemptId,
+        { onlyFrom: ["dispatched"] },
+      );
       return Response.json(
         {
           error:

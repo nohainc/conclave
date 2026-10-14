@@ -15,6 +15,7 @@ import {
   validateWorkspaceNetworkPolicy,
   type ThreadBindingId,
 } from "@conclave/core";
+import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "./assignment-transitions.js";
 
 export interface SpaceExecutionSelectionRequest {
   readonly spaceId: string;
@@ -286,7 +287,7 @@ export async function selectSpaceExecutionTarget(
             (SELECT COUNT(*) FROM worker_assignments wa
              WHERE wa.execution_workspace_id = g.workspace_id
                AND wa.workspace_worker_id = i.worker_id
-               AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS active_assignments
+               AND wa.status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})) AS active_assignments
      FROM workspace_space_grants g
      LEFT JOIN thread_execution_policies ep ON ep.thread_id = ?4
      JOIN execution_workspaces ew ON ew.id = g.workspace_id

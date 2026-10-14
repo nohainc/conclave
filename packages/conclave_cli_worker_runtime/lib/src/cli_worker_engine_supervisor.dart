@@ -273,6 +273,12 @@ final class CliWorkerEngineSupervisor {
     String? attemptId,
     String? executionId,
     FutureOr<void> Function()? onSlotReserved,
+
+    /// Start fence. Called after the slot is reserved and immediately before
+    /// the Engine process is created. Returning false means Cloud did not
+    /// authorize this launch (the assignment was revoked or timed out), and
+    /// no process is started.
+    FutureOr<bool> Function()? authorizeStart,
     void Function()? onExecutionStarted,
 
     /// Called synchronously once the Engine OS process exists, before the
@@ -348,6 +354,12 @@ final class CliWorkerEngineSupervisor {
     var stopped = false;
     var processObservation = Future<void>.value();
     try {
+      if (_cancelledAssignments.remove(assignmentId)) {
+        throw const WorkerAssignmentCancelledException();
+      }
+      if (authorizeStart != null && !await authorizeStart()) {
+        throw const WorkerAssignmentCancelledException();
+      }
       if (_cancelledAssignments.remove(assignmentId)) {
         throw const WorkerAssignmentCancelledException();
       }

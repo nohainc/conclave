@@ -24,23 +24,26 @@ describe("Workspace runtime Gateway", () => {
         return {
           bind: (...bound: unknown[]) => ({
             first: async () =>
-              sql.includes("FROM worker_assignments")
-                ? {
-                    id: "assignment-http-fallback",
-                    execution_workspace_id: workspaceId,
-                    runtime_identity_id: "runtime-http-fallback",
-                    worker_id: "worker-http-fallback",
-                    workspace_worker_id: "worker-http-fallback",
-                    run_id: "run-http-fallback",
-                    task_id: "task-http-fallback",
-                    attempt_id: "attempt-http-fallback",
-                    idempotency_key: "idem-http-fallback",
-                    status: "created",
-                  }
-                : {
-                    executionWorkspaceId: workspaceId,
-                    credentialTokenHash,
-                  },
+              sql.startsWith("UPDATE worker_assignments")
+                ? // The Gateway persists `dispatched` before it sends.
+                  { id: bound[2] }
+                : sql.includes("FROM worker_assignments")
+                  ? {
+                      id: "assignment-http-fallback",
+                      execution_workspace_id: workspaceId,
+                      runtime_identity_id: "runtime-http-fallback",
+                      worker_id: "worker-http-fallback",
+                      workspace_worker_id: "worker-http-fallback",
+                      run_id: "run-http-fallback",
+                      task_id: "task-http-fallback",
+                      attempt_id: "attempt-http-fallback",
+                      idempotency_key: "idem-http-fallback",
+                      status: "created",
+                    }
+                  : {
+                      executionWorkspaceId: workspaceId,
+                      credentialTokenHash,
+                    },
             run: async () => {
               values.push(bound);
               return { success: true };
@@ -345,6 +348,8 @@ describe("Workspace runtime Gateway", () => {
         return {
           bind: (...bound: unknown[]) => ({
             first: async () => {
+              if (sql.startsWith("UPDATE worker_assignments"))
+                return { id: bound[2] };
               if (sql.includes("FROM worker_assignments"))
                 return {
                   id: "assignment-cursor-test",

@@ -179,3 +179,9 @@ export async function findWorkspaceRuntimeIdentity(
       }
     : null;
 }
+
+/**
+ * Hello capability of a Service that requests a start permit before it
+ * launches the provider process (see assignment-start-permit.ts).
+ */
+export const START_PERMIT_CAPABILITY = "assignment.start_permit.v1";

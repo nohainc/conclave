@@ -504,6 +504,20 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
             AssignmentStatus.reconciled,
           }.contains(previous.status);
       if (!terminal) {
+        if (!_activeAssignments.contains(assignmentId)) {
+          // Durable cancel tombstone: the command has not been admitted here
+          // (it may still be in flight, queued behind a slow transport, or
+          // delivered again after a Service restart). Persisting the
+          // cancellation guarantees a later `assignment.start` for this
+          // assignment replays the cancellation instead of launching, and
+          // that the outcome is re-delivered until Cloud acknowledges it.
+          await _recordAssignment(
+            assignmentId,
+            AssignmentStatus.cancelled,
+            correlation: _assignmentCorrelation(message),
+            result: {'reason': reason},
+          );
+        }
         if (_cancelledBeforeStart.length >= 1024) {
           _cancelledBeforeStart.remove(_cancelledBeforeStart.first);
         }
@@ -791,8 +805,9 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       assignmentId: assignmentId,
       status: status,
       updatedAt: DateTime.now().toUtc(),
-      workspaceId:
-          context?.workspaceId ?? correlation?['workspaceId'] as String?,
+      workspaceId: context?.workspaceId ??
+          correlation?['executionWorkspaceId'] as String? ??
+          correlation?['workspaceId'] as String?,
       workspaceRuntimeId: context?.workspaceRuntimeId ??
           correlation?['workspaceRuntimeId'] as String?,
       workerId: context?.workerId ?? correlation?['workerId'] as String?,

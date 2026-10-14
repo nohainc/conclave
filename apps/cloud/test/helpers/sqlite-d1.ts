@@ -68,6 +68,9 @@ export function sqliteD1() {
     "0042_codex_full_access_approval_conflict.sql",
     "0045_worker_activity_history.sql",
     "0046_worker_activity_metadata.sql",
+    "0055_assignment_queue_deadline.sql",
+    "0057_assignment_start_permit.sql",
+    "0058_assignment_phase_timestamps.sql",
   ]) {
     sqlite.exec(
       readFileSync(

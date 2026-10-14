@@ -14,8 +14,12 @@
  * | Queued       | `acknowledged` (projection)  | Service-local, no Cloud signal        |
  * | Starting     | `acknowledged` (projection)  | Service-local, no Cloud signal        |
  * | Running      | `running`                    | `assignment.start.ack` (provider)     |
- * | Terminal     | completed/failed/cancelled/  | result, error, cancellation, timeout  |
- * |              | timed_out/lost               |                                       |
+ * | Stopping     | `revocation_pending`         | Cloud decided the work must not run;  |
+ * |              |                              | `assignment.cancel` is outstanding    |
+ * | Unresolved   | `reconciling`                | revocation unconfirmed; the process   |
+ * |              |                              | may still be alive                    |
+ * | Terminal     | completed/failed/cancelled/  | result, error, cancellation, or       |
+ * |              | timed_out/lost               | confirmed revocation                  |
  *
  * Queued and Starting happen inside the Service between admission and the
  * provider-start acknowledgement. Cloud has no protocol signal for them, so
@@ -27,6 +31,8 @@ export const ASSIGNMENT_LIFECYCLE_STATUSES = [
   "dispatched",
   "acknowledged",
   "running",
+  "revocation_pending",
+  "reconciling",
   "completed",
   "failed",
   "cancelled",
@@ -106,13 +112,40 @@ const assignmentTransitions: Record<
   dispatched: [
     "acknowledged",
     "running",
+    "revocation_pending",
     "completed",
     "failed",
     "cancelled",
     "timed_out",
   ],
-  acknowledged: ["running", "completed", "failed", "cancelled", "timed_out"],
-  running: ["completed", "failed", "cancelled", "timed_out", "lost"],
+  acknowledged: [
+    "running",
+    "revocation_pending",
+    "completed",
+    "failed",
+    "cancelled",
+    "timed_out",
+  ],
+  running: [
+    "revocation_pending",
+    "completed",
+    "failed",
+    "cancelled",
+    "timed_out",
+    "lost",
+  ],
+  // Cloud has decided the work must not run but has no proof the process is
+  // gone. It leaves this state only on Service evidence (a cancellation
+  // confirmation, a terminal report) or by escalating to `reconciling`. A
+  // late result is still accepted: the provider finished before the stop.
+  revocation_pending: [
+    "reconciling",
+    "completed",
+    "failed",
+    "cancelled",
+    "timed_out",
+  ],
+  reconciling: ["completed", "failed", "cancelled", "timed_out"],
   completed: [],
   failed: [],
   cancelled: [],
@@ -210,6 +243,23 @@ export const ASSIGNMENT_TERMINAL_STATUSES = [
   "timed_out",
   "lost",
 ] as const satisfies readonly AssignmentLifecycleStatus[];
+
+/** Statuses in which Cloud has asked the Service to stop but lacks proof. */
+export const ASSIGNMENT_REVOCATION_STATUSES = [
+  "revocation_pending",
+  "reconciling",
+] as const satisfies readonly AssignmentLifecycleStatus[];
+
+/** Every non-terminal status: capacity, sync and recovery treat these as live. */
+export const ASSIGNMENT_ACTIVE_STATUSES = ASSIGNMENT_LIFECYCLE_STATUSES.filter(
+  (status) => !terminalAssignmentStatuses.has(status),
+);
+
+export function isRevocationAssignmentStatus(
+  status: AssignmentLifecycleStatus,
+): boolean {
+  return (ASSIGNMENT_REVOCATION_STATUSES as readonly string[]).includes(status);
+}
 
 export function canTransitionAssignment(
   from: AssignmentLifecycleStatus,

@@ -25,6 +25,8 @@ const REVIEWED_WRITERS = new Set([
   "assignment-transitions.ts",
   // created->dispatched bookkeeping and the terminal result/error/cancel paths.
   "assignment-dispatcher.ts",
+  // Revocation: pending -> reconciling escalation (the only other status writer).
+  "assignment-revocation.ts",
   // Grant revocation cancels only assignments that were never accepted.
   "routes/workspaces-grants.ts",
 ]);

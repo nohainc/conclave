@@ -228,12 +228,15 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
         stage: 'slot_reservation',
       );
     },
+    authorizeExecutionStart: (context) async =>
+        await connection?.requestStartPermit(context) ?? true,
     onEngineProcessStarted: (context) =>
         connection?.traceAssignmentStage(context, 'engine_process_created'),
     cancelToolProfileAssignment: cliWorkerEngineSupervisor?.cancel,
     executeWithActivity: (worker, workingDirectory, context, payload,
         {onProgress,
         onSlotReserved,
+        authorizeStart,
         onEngineProcessStarted,
         onActivity}) async {
       final supervisor = cliWorkerEngineSupervisor;
@@ -403,6 +406,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           ),
           onProgress: onProgress,
           onSlotReserved: onSlotReserved,
+          authorizeStart: authorizeStart,
           onProcessStarted: onEngineProcessStarted,
           onActivity: onActivity,
         );

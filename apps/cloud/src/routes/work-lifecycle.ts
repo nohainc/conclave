@@ -33,6 +33,7 @@ import type { SecurityEnv } from "./handlers.js";
 import { createOrGetRun } from "./work-creation.js";
 import { MutationIdempotency } from "./mutation-idempotency.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
+import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "../assignment-transitions.js";
 
 function historicalWorkflowName(
   snapshot: { readonly name?: unknown },
@@ -1107,7 +1108,7 @@ export async function handleCancelWorkRequest(
        FROM workflow_tasks wt
        JOIN worker_assignments wa ON wa.task_id = wt.id
       WHERE wt.work_request_id = ?1 AND wt.status = 'running'
-        AND wa.status IN ('created', 'dispatched', 'acknowledged', 'running')
+        AND wa.status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})
       ORDER BY wa.created_at DESC LIMIT 1`,
   )
     .bind(workRequestId)

@@ -8,6 +8,7 @@ import {
   workspaceOwnerContext,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
+import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "../assignment-transitions.js";
 
 export async function handleListWorkspaces(
   request: Request,
@@ -24,7 +25,7 @@ export async function handleListWorkspaces(
               WHERE worker.workspace_id = execution_workspaces.id) AS workerCount,
             (SELECT COUNT(*) FROM worker_assignments assignment
               WHERE assignment.execution_workspace_id = execution_workspaces.id
-                AND assignment.status IN ('created', 'dispatched', 'acknowledged', 'running')) AS activeTaskCount,
+                AND assignment.status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})) AS activeTaskCount,
             CASE
               WHEN NOT EXISTS (SELECT 1 FROM workspace_runtime_identities identity
                                WHERE identity.workspace_id = execution_workspaces.id

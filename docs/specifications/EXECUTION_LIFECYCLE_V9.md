@@ -154,9 +154,9 @@ does not infer success.
 
 | Phase | Deadline | Owner and action |
 | --- | --- | --- |
-| Dispatch acceptance | 30 seconds from `created`/`dispatched` update | Workflow/Cloud records retryable failure if Workspace never accepts |
-| Engine/provider startup | 30 seconds from admission acknowledgement | Workflow/Cloud records retryable failure if `assignment.start.ack` is absent |
-| Provider execution | Assignment/task configured timeout | Workspace stops the process tree; Cloud records `timed_out` if no terminal result arrives |
+| Command delivery / admission | 30 seconds from the Gateway queueing the command (`dispatched_at`) | Workflow/Cloud revokes the assignment (see [command delivery and revocation](COMMAND_DELIVERY_AND_REVOCATION_V9.md)); the retryable failure is written only when the Service confirms |
+| Queue wait, then startup | Queue wait from admission (`acknowledged_at`); 30 seconds startup from the start permit | Workflow/Cloud revokes the assignment if `assignment.start.ack` is absent; outcome written on Service confirmation |
+| Provider execution | Assignment/task configured timeout | Workspace stops the process tree; Cloud revokes the assignment and records `timed_out` once the Service confirms the stop |
 | Terminal delivery | 10 seconds per local send attempt | Workspace keeps the journal terminal record and retries after reconnect |
 | Disconnected runtime reconciliation | 30 seconds after the latest assignment/runtime evidence | Cloud leaves recovery evidence, gives sync a chance, then classifies the assignment as provider-unavailable failure if no terminal evidence exists |
 

@@ -134,6 +134,46 @@ describe("Workspace Runtime protocol", () => {
     ).toThrow();
   });
 
+  it("validates start permit request and grant payloads", () => {
+    const correlation = {
+      executionWorkspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      workerId: "worker-a",
+      runId: "run-a",
+      taskId: "task-a",
+      attemptId: "attempt-a",
+      assignmentId: "assignment-a",
+      idempotencyKey: "idem-a",
+    };
+    const parse = (type: string, payload: unknown) =>
+      parseWorkspaceRuntimeMessage({ ...base, type, ...correlation, payload });
+    expect(parse("assignment.start.permit.request", {}).type).toBe(
+      "assignment.start.permit.request",
+    );
+    expect(() =>
+      parse("assignment.start.permit.request", { extra: true }),
+    ).toThrow();
+    expect(
+      parse("assignment.start.permit.grant", {
+        granted: true,
+        permitId: "permit-a",
+        expiresAt: "2026-01-01T00:00:30.000Z",
+      }).type,
+    ).toBe("assignment.start.permit.grant");
+    expect(() =>
+      parse("assignment.start.permit.grant", { granted: true }),
+    ).toThrow();
+    expect(
+      parse("assignment.start.permit.grant", {
+        granted: false,
+        reason: "revoked",
+      }).type,
+    ).toBe("assignment.start.permit.grant");
+    expect(() =>
+      parse("assignment.start.permit.grant", { granted: false }),
+    ).toThrow();
+  });
+
   it("accepts only canonical execution permissions in assignment snapshots", () => {
     const assignment = {
       ...base,

@@ -1962,6 +1962,200 @@ void main() {
     await connection.close();
   });
 
+  group('start permit and durable cancellation', () {
+    Map<String, Object?> envelope(
+            String type, String assignmentId, Map<String, Object?> payload,
+            {String attemptId = 'attempt-1'}) =>
+        {
+          'protocol': 'conclave.workspace-runtime-protocol',
+          'protocolVersion': workspaceRuntimeProtocolVersion,
+          'messageId': 'm-$type-$assignmentId',
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+          'type': type,
+          'executionWorkspaceId': 'workspace-1',
+          'workspaceRuntimeId': 'runtime-1',
+          'workerId': 'worker-1',
+          'runId': 'run-1',
+          'taskId': 'task-1',
+          'attemptId': attemptId,
+          'assignmentId': assignmentId,
+          'idempotencyKey': 'idem-$assignmentId',
+          'payload': payload,
+        };
+
+    WorkspaceAssignmentContext contextFor(String assignmentId,
+            {bool required = true, String attemptId = 'attempt-1'}) =>
+        WorkspaceAssignmentContext(
+          workspaceId: 'workspace-1',
+          workspaceRuntimeId: 'runtime-1',
+          workerId: 'worker-1',
+          runId: 'run-1',
+          taskId: 'task-1',
+          attemptId: attemptId,
+          assignmentId: assignmentId,
+          idempotencyKey: 'idem-$assignmentId',
+          payload: {
+            if (required) 'startPermit': {'required': true},
+          },
+        );
+
+    Future<(WorkspaceCloudConnection, FakeSocket)> connected(
+        {AssignmentJournal? journal,
+        WorkspaceAssignmentHandler? handler}) async {
+      final socket = FakeSocket();
+      final connection = WorkspaceCloudConnection(
+        uri: Uri.parse(
+            'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1'),
+        workspaceRuntimeId: 'runtime-1',
+        workspaceId: 'workspace-1',
+        factory: (_) async => socket,
+        assignmentJournal: journal,
+        assignmentHandler: handler,
+      );
+      await connection.connect();
+      await completeHandshake(connection, socket);
+      return (connection, socket);
+    }
+
+    List<Map<String, dynamic>> sentOfType(FakeSocket socket, String type) =>
+        socket.sent
+            .map((m) => jsonDecode(m as String) as Map<String, dynamic>)
+            .where((m) => m['type'] == type)
+            .toList();
+
+    test('advertises the start permit capability', () async {
+      final (connection, socket) = await connected();
+      final hello = sentOfType(socket, 'workspace.hello').first;
+      final capabilities =
+          (hello['payload'] as Map)['capabilities'] as Map<String, dynamic>;
+      expect(capabilities['customCapabilities'],
+          contains(WorkspaceCloudConnection.startPermitCapability));
+      await connection.close();
+    });
+
+    test('does not request a permit when Cloud does not require one', () async {
+      final (connection, socket) = await connected();
+      expect(
+          await connection
+              .requestStartPermit(contextFor('legacy', required: false)),
+          isTrue);
+      expect(sentOfType(socket, 'assignment.start.permit.request'), isEmpty);
+      await connection.close();
+    });
+
+    test('grants launch only after Cloud returns a matching grant', () async {
+      final (connection, socket) = await connected();
+      final context = contextFor('assignment-permit');
+      final result = connection.requestStartPermit(context);
+      await waitFor(() =>
+          sentOfType(socket, 'assignment.start.permit.request').isNotEmpty);
+      socket.controller.add(jsonEncode(envelope(
+        'assignment.start.permit.grant',
+        'assignment-permit',
+        {
+          'granted': true,
+          'permitId': 'permit-1',
+          'expiresAt': DateTime.now()
+              .toUtc()
+              .add(const Duration(seconds: 30))
+              .toIso8601String(),
+        },
+      )));
+      expect(await result, isTrue);
+      await connection.close();
+    });
+
+    test('a denied permit blocks launch', () async {
+      final (connection, socket) = await connected();
+      final result = connection.requestStartPermit(contextFor('revoked-one'));
+      await waitFor(() =>
+          sentOfType(socket, 'assignment.start.permit.request').isNotEmpty);
+      socket.controller.add(jsonEncode(envelope(
+        'assignment.start.permit.grant',
+        'revoked-one',
+        {'granted': false, 'reason': 'revoked'},
+      )));
+      expect(await result, isFalse);
+      await connection.close();
+    });
+
+    test('ignores a grant issued for a different attempt', () async {
+      final (connection, socket) = await connected();
+      final result = connection.requestStartPermit(contextFor('stale-attempt'));
+      await waitFor(() =>
+          sentOfType(socket, 'assignment.start.permit.request').isNotEmpty);
+      socket.controller.add(jsonEncode(envelope(
+        'assignment.start.permit.grant',
+        'stale-attempt',
+        {
+          'granted': true,
+          'permitId': 'permit-old',
+          'expiresAt': DateTime.now()
+              .toUtc()
+              .add(const Duration(seconds: 30))
+              .toIso8601String(),
+        },
+        attemptId: 'attempt-0',
+      )));
+      socket.controller.add(jsonEncode(envelope(
+        'assignment.start.permit.grant',
+        'stale-attempt',
+        {'granted': false, 'reason': 'stale'},
+      )));
+      expect(await result, isFalse);
+      await connection.close();
+    });
+
+    test('persists a cancel tombstone so a later start never executes',
+        () async {
+      final directory = await Directory.systemTemp.createTemp('tombstone-');
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/assignments.jsonl');
+      var executions = 0;
+      final (connection, socket) = await connected(
+        journal: AssignmentJournal(file),
+        handler: (_) async {
+          executions += 1;
+          return const WorkspaceAssignmentResult(summary: 'must not run');
+        },
+      );
+      socket.controller.add(jsonEncode(envelope(
+        'assignment.cancel',
+        'assignment-early',
+        {'reason': 'startup deadline', 'gracePeriodMs': 1000},
+      )));
+      await waitFor(
+          () => sentOfType(socket, 'assignment.cancel.ack').isNotEmpty);
+      final record =
+          (await AssignmentJournal(file).reconcile())['assignment-early'];
+      expect(record?.status, AssignmentStatus.cancelled);
+      expect(record?.attemptId, 'attempt-1');
+      expect(record?.workspaceId, 'workspace-1');
+
+      socket.controller.add(jsonEncode(envelope(
+        'assignment.start',
+        'assignment-early',
+        {
+          'objective': 'inspect',
+          'role': 'research',
+          'workerId': 'conclave.echo',
+          'engineVersion': '1.0.0',
+          'profileDefinitionId': 'chatgpt-codex',
+          'profileReleaseVersion': 1,
+          'input': {},
+          'contextArtifactIds': [],
+          'timeoutMs': 1000,
+        },
+      )));
+      await waitFor(
+          () => sentOfType(socket, 'assignment.cancel.ack').length >= 2);
+      expect(executions, 0);
+      final replay = sentOfType(socket, 'assignment.cancel.ack').last;
+      expect((replay['payload'] as Map)['cancelled'], isTrue);
+      await connection.close();
+    });
+  });
+
   test('reconnects after a dropped socket', () async {
     final sockets = <FakeSocket>[FakeSocket(), FakeSocket()];
     final first = sockets.first;

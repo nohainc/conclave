@@ -1,4 +1,5 @@
 import {
+  ASSIGNMENT_ACTIVE_STATUSES,
   ASSIGNMENT_LIFECYCLE_STATUSES,
   assignmentSourceStatuses,
   isTerminalAssignmentStatus,
@@ -23,6 +24,15 @@ export function assignmentSourceStatusList(
     .join(", ");
 }
 
+/**
+ * SQL `IN (...)` list of every non-terminal status. Capacity, sync and
+ * recovery queries use this so a revoked-but-unconfirmed assignment keeps
+ * holding its slot until the Service proves the process is gone.
+ */
+export const ACTIVE_ASSIGNMENT_STATUS_SQL = ASSIGNMENT_ACTIVE_STATUSES.map(
+  (status) => `'${status}'`,
+).join(", ");
+
 export interface AssignmentFence {
   assignmentId: string;
   /** Rejects messages from a previous attempt of the same task. */
@@ -43,6 +53,11 @@ export interface AssignmentTransitionInput {
    */
   onlyFrom?: readonly AssignmentLifecycleStatus[];
   now?: string;
+  /**
+   * Replaces `error_json` in the same statement. Used by revocation to store
+   * the intended terminal outcome with the transition that makes it pending.
+   */
+  errorJson?: string;
   /**
    * Moves the Workflow task to `running` once the assignment is Running. The
    * projection is skipped for stale, superseded and terminal outcomes.
@@ -72,6 +87,27 @@ export interface AssignmentTransitionResult {
 
 const KNOWN = new Set<string>(ASSIGNMENT_LIFECYCLE_STATUSES);
 
+/**
+ * SQL fragment recording the event that starts the next deadline. First write
+ * wins (`COALESCE`), so a replayed message can never push a deadline back.
+ * `?2` is the transition time.
+ */
+export function assignmentMilestoneSql(
+  target: AssignmentLifecycleStatus,
+): string {
+  switch (target) {
+    case "dispatched":
+      return ", dispatched_at = COALESCE(dispatched_at, ?2)";
+    case "acknowledged":
+      return ", acknowledged_at = COALESCE(acknowledged_at, ?2)";
+    case "running":
+      // A start ack that overtakes the admission ack still admits the work.
+      return ", acknowledged_at = COALESCE(acknowledged_at, ?2), running_at = COALESCE(running_at, ?2)";
+    default:
+      return "";
+  }
+}
+
 export async function transitionAssignment(
   db: D1Database,
   input: AssignmentTransitionInput,
@@ -86,6 +122,9 @@ export async function transitionAssignment(
   }
 
   const values: unknown[] = [to, now, fence.assignmentId];
+  if (input.errorJson !== undefined) values.push(input.errorJson);
+  const errorSql = input.errorJson !== undefined ? ", error_json = ?4" : "";
+  const milestoneSql = assignmentMilestoneSql(to);
   let fenceSql = "";
   const fenced: Array<[string, string | undefined]> = [
     ["attempt_id", fence.attemptId],
@@ -102,7 +141,7 @@ export async function transitionAssignment(
   // reliable signal that this statement changed the row is RETURNING.
   const returned = await db
     .prepare(
-      `UPDATE worker_assignments SET status = ?1, updated_at = ?2
+      `UPDATE worker_assignments SET status = ?1, updated_at = ?2${errorSql}${milestoneSql}
         WHERE id = ?3 AND status IN (${sourceSql})${fenceSql}
         RETURNING id`,
     )

@@ -1,5 +1,4 @@
 import { expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
 import { dispatchTaskAssignment } from "../src/assignment-dispatcher.js";
 import { conversationFixture } from "./helpers/conversation.js";
 
@@ -8,15 +7,6 @@ vi.mock("../src/scheduler.js", () => scheduler);
 
 async function fixture() {
   const f = await conversationFixture();
-  f.sqlite.exec(
-    readFileSync(
-      new URL(
-        "../migrations-v8/0055_assignment_queue_deadline.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  );
   f.sqlite.exec(
     "INSERT INTO runs(id,space_id,status,created_at,updated_at) VALUES('RUN','P','running','now','now')",
   );

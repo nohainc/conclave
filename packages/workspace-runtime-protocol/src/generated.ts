@@ -18,6 +18,8 @@ export const WORKSPACE_RUNTIME_PROTOCOL_SCHEMA_MESSAGE_TYPES = [
   "thread.status",
   "assignment.start",
   "assignment.start.ack",
+  "assignment.start.permit.request",
+  "assignment.start.permit.grant",
   "assignment.ack",
   "assignment.activity",
   "assignment.result",
