@@ -15,6 +15,8 @@ export * from "./realtime-events.js";
 export * from "./execution-permissions.js";
 export * from "./worker-descriptor.js";
 export * from "./diagnostic-events.js";
+export * from "./execution-events.js";
+export * from "./execution-activity.js";
 
 export type ExecutionErrorCode = (typeof EXECUTION_ERROR_CODES)[number];
 

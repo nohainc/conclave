@@ -13,6 +13,18 @@ run, task, and assignment state. The Workflow advances the request through its
 configured steps and waits for Workspace execution, evidence, approvals, or
 other required outcomes before completing it.
 
+The assignment transition and deadline contract is defined by the
+[authoritative execution lifecycle — V9 Phase 2](EXECUTION_LIFECYCLE_V9.md).
+Dispatch and admission do not establish `running`; Cloud waits for the
+explicit startup acknowledgement before marking the task running.
+
+The Workspace Service supervision and process ownership contract is defined by
+[Conclave Service supervision — V9 Phase 3](SERVICE_SUPERVISION_V9.md).
+
+Cloud command delivery, terminal acknowledgements, WebSocket/long-poll
+fallback, capacity claims, and activity retention are defined by the
+[Cloud execution delivery — V9 Phase 5](CLOUD_DELIVERY_V9.md) contract.
+
 Each checkpoint carries the small validated state needed by the next stage.
 Workflow replay must not depend on module-level mutable state, wall-clock
 values, or an in-memory task cursor. Side effects occur inside named durable

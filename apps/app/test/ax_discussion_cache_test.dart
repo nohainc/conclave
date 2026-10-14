@@ -593,8 +593,7 @@ void main() {
         newestCursor: 'latest'));
     await tester.pumpAndSettle();
     final history = find.byKey(const ValueKey('chat-history-scroll'));
-    final controller =
-        tester.widget<SingleChildScrollView>(history).controller!;
+    final controller = tester.widget<CustomScrollView>(history).controller!;
     expect(controller.offset, greaterThan(0));
     final older = Completer<AxDiscussionPage>();
     source.queuedPages.add(older);

@@ -600,7 +600,13 @@ class AxWorkHistoryCache {
       .requests
       .where((r) =>
           !r.id.startsWith('local-') &&
-          const {'queued', 'running', 'waiting'}.contains(r.status))
+          const {
+            'queued',
+            'starting',
+            'acknowledged',
+            'running',
+            'waiting',
+          }.contains(r.status))
       .map((r) => r.id)
       .toSet();
   Set<String> dirtyIds(String id) =>
@@ -665,11 +671,15 @@ class AxWorkHistoryCache {
               (detail.threadId != null && detail.threadId != id) ||
               !const {
                 'queued',
+                'starting',
+                'acknowledged',
                 'running',
                 'waiting',
                 'completed',
                 'failed',
-                'cancelled'
+                'cancelled',
+                'timed_out',
+                'lost',
               }.contains(detail.status) ||
               (previous == null &&
                   (detail.originalRequest == null ||

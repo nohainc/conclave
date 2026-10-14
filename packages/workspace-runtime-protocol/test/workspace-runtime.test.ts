@@ -97,6 +97,43 @@ describe("Workspace Runtime protocol", () => {
     ).toThrow();
   });
 
+  it("requires explicit Engine and provider startup evidence", () => {
+    const correlation = {
+      executionWorkspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      workerId: "worker-a",
+      runId: "run-a",
+      taskId: "task-a",
+      attemptId: "attempt-a",
+      assignmentId: "assignment-a",
+      idempotencyKey: "idem-a",
+    };
+    expect(
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "assignment.start.ack",
+        ...correlation,
+        payload: {
+          started: true,
+          engineStarted: true,
+          providerStarted: true,
+        },
+      }).type,
+    ).toBe("assignment.start.ack");
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "assignment.start.ack",
+        ...correlation,
+        payload: {
+          started: true,
+          engineStarted: true,
+          providerStarted: false,
+        },
+      }),
+    ).toThrow();
+  });
+
   it("accepts only canonical execution permissions in assignment snapshots", () => {
     const assignment = {
       ...base,

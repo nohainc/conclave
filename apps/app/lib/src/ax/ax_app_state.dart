@@ -19,6 +19,10 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   List<AxNotification> get notifications => store.notifications;
   void _updateNotifications(VoidCallback callback) {
     callback();
+    AxRenderDiagnostics.instance.notifierDispatch(
+      component: 'ConclaveAppShell',
+      operation: 'notifications.changed',
+    );
     store.unreadNotifications.value =
         notifications.where((n) => !n.read).length;
   }
@@ -39,13 +43,25 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   bool authRequired = false;
   bool isReconnecting = false;
   bool get realtimeStale => store.realtimeStatus.value.$1;
-  set realtimeStale(bool value) =>
-      store.realtimeStatus.value = (value, realtimeNotice);
+  set realtimeStale(bool value) {
+    AxRenderDiagnostics.instance.notifierDispatch(
+      component: 'ConclaveAppShell',
+      operation: 'realtime.stale.changed',
+    );
+    store.realtimeStatus.value = (value, realtimeNotice);
+  }
+
   bool _realtimeTransportConnected = false;
   int _realtimeRecoveryGeneration = 0;
   String? get realtimeNotice => store.realtimeStatus.value.$2;
-  set realtimeNotice(String? value) =>
-      store.realtimeStatus.value = (realtimeStale, value);
+  set realtimeNotice(String? value) {
+    AxRenderDiagnostics.instance.notifierDispatch(
+      component: 'ConclaveAppShell',
+      operation: 'realtime.notice.changed',
+    );
+    store.realtimeStatus.value = (realtimeStale, value);
+  }
+
   void _updateLiveState(VoidCallback callback) => callback();
   bool authSignUp = false;
   bool authResetRequest = false;
@@ -68,12 +84,26 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   String _searchQuery = '';
   AxNavigation? _navigationBeforeSearch;
   AxAccountSecurity? get accountSecurity => store.security.value;
-  set accountSecurity(AxAccountSecurity? value) => store.security.value = value;
+  set accountSecurity(AxAccountSecurity? value) {
+    AxRenderDiagnostics.instance.notifierDispatch(
+      component: 'ConclaveAppShell',
+      operation: 'account.security.changed',
+    );
+    store.security.value = value;
+  }
+
   final Set<String> revokingAccountSessionTokens = <String>{};
   bool avatarUploadBusy = false;
   List<int>? viewerAvatarBytes;
   bool get accountSecurityLoading => store.securityLoading.value;
-  set accountSecurityLoading(bool value) => store.securityLoading.value = value;
+  set accountSecurityLoading(bool value) {
+    AxRenderDiagnostics.instance.notifierDispatch(
+      component: 'ConclaveAppShell',
+      operation: 'account.security.loading.changed',
+    );
+    store.securityLoading.value = value;
+  }
+
   void _updateSecurity(VoidCallback callback) => callback();
   bool _isCurrentAccountSession(AxAuthSession session) {
     final currentSessionId = store.auth.session?.sessionId;
@@ -322,7 +352,14 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   }
 
   @override
-  Widget build(BuildContext context) => _buildApp(context);
+  Widget build(BuildContext context) {
+    AxRenderDiagnostics.instance.widgetRebuild(
+      component: 'ConclaveAppShell',
+      threadId: navigation.threadId,
+      tab: navigation.kind.name,
+    );
+    return _buildApp(context);
+  }
 
   Future<void> _createSpace() async {
     var name = '';

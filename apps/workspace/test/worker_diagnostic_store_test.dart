@@ -158,7 +158,7 @@ void main() {
         workerTypeId: 'gemini',
         workerVersion: '2.0.0',
         protocolStage: 'execute',
-        event: 'assignment.progress',
+        event: 'assignment.activity',
         runId: 'run-$index',
         context: {'assignmentId': 'run-$index'},
       );
@@ -211,7 +211,7 @@ void main() {
         workerTypeId: 'gemini',
         workerVersion: '2.0.0',
         protocolStage: 'execute',
-        event: 'assignment.progress',
+        event: 'assignment.activity',
         assignmentId: 'assignment-$index',
         context: {
           'status': 'step-$index',

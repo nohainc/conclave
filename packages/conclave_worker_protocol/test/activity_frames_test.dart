@@ -16,10 +16,16 @@ void main() {
       eventType: 'model.status',
       status: 'updated',
       title: 'Reading files',
+      durationMs: 1200,
+      toolId: 'tool-1',
+      toolName: 'shell',
       details: const {'fileCount': 3, 'safe': true},
     );
     final decoded = decodeWorkerFrame(frame.encode()) as WorkerActivity;
     expect(decoded.percentage, isNull);
+    expect(decoded.durationMs, 1200);
+    expect(decoded.toolId, 'tool-1');
+    expect(decoded.toolName, 'shell');
     expect(decoded.details, {'fileCount': 3, 'safe': true});
   });
 

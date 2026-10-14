@@ -240,10 +240,7 @@ class ProviderActivityAdapter {
       // Documented AGY step types: user_input, agent_response, tool and
       // checkpoint. `tool_execution` is still accepted for older captures.
       if (stepType == 'tool' || stepType == 'tool_execution') {
-        return _normalizeAgyTool(
-          step,
-          declarativeMatched: declarativeMatched,
-        );
+        return _normalizeAgyTool(step, declarativeMatched: declarativeMatched);
       }
       if (const {
         'agent_response',
@@ -300,8 +297,10 @@ class ProviderActivityAdapter {
         : const <Object?, Object?>{};
     final rawId = _safeText(step['tool_id']);
     // A tool line that a declarative mapping already matched is owned by that
-    // mapping. The adapter only fills in tool lines the profile did not map.
-    if (declarativeMatched) return const [];
+    // mapping when it has a provider identifier. If the provider omitted the
+    // identifier, the adapter must still emit the paired fallback identity so
+    // the activity stream cannot leave an unfinishable tool row behind.
+    if (declarativeMatched && rawId != null) return const [];
 
     final state = step['state'];
     final failed =
@@ -327,8 +326,9 @@ class ProviderActivityAdapter {
     } else if (index is int && index >= 0) {
       final conversation = _safeText(step['conversation_id']) ?? 'session';
       final composed = 'agy-step-$conversation-$index';
-      activityId =
-          composed.length > 128 ? composed.substring(0, 128) : composed;
+      activityId = composed.length > 128
+          ? composed.substring(0, 128)
+          : composed;
       identifierSource = 'step_index';
     } else {
       activityId = _activityId(

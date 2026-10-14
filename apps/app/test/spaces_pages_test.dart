@@ -1417,8 +1417,7 @@ void main() {
         tester.getTopLeft(find.byTooltip('Send request')).dy,
         greaterThanOrEqualTo(
             tester.getBottomLeft(find.byType(TextField).first).dy));
-    expect(
-        tester.getCenter(find.byTooltip('Send request')).dy,
+    expect(tester.getCenter(find.byTooltip('Send request')).dy,
         closeTo(tester.getCenter(find.byTooltip('Choose workflow')).dy, 1));
     expect(submittedWork, isNull);
     await tester.ensureVisible(find.byTooltip('Send request'));

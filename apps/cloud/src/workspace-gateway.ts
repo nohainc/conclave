@@ -5,8 +5,12 @@ import {
   WORKSPACE_RUNTIME_PROTOCOL_VERSION,
   type WorkspaceRuntimeMessage,
 } from "@conclave/workspace-runtime-protocol";
-import { RealtimeEventPayloadSchema } from "@conclave/protocol";
+import {
+  RealtimeEventPayloadSchema,
+  normalizeActivityPayload,
+} from "@conclave/protocol";
 import { createEventPublisher } from "./event-publisher.js";
+import { assignmentCommandDisposition } from "./assignment-delivery.js";
 import { shouldPersistWorkerActivity } from "./worker-activity-history.js";
 import {
   recordAssignmentCancelled,
@@ -31,6 +35,15 @@ import {
   type WorkspaceAssignmentCorrelation,
   type WorkspaceGatewayEnv,
 } from "./workspace-gateway/contracts.js";
+
+/**
+ * Bound the fallback transport's pending server-to-Workspace messages. The
+ * queue is persisted, so a dropped poll response can still be replayed, but
+ * accepting unbounded commands would turn a disconnected runtime into a D1 /
+ * Durable Object memory sink. Reaching this limit applies backpressure to
+ * the caller; it never silently drops a command or acknowledgement.
+ */
+export const MAX_WORKSPACE_HTTP_EVENTS = 256;
 export {
   isCurrentWorkspaceSocket,
   isWorkspaceRuntimeAuthorized,
@@ -860,6 +873,7 @@ export class WorkspaceGateway implements DurableObject {
         // delivery confirmation. They must never be interpreted as a fresh
         // admission acknowledgement or move a terminal row back to running.
         if (payload.terminal === true) return;
+        if (!(await this.assignmentContextMatches(message))) return;
         const accepted = payload.accepted ?? payload.status === "accepted";
         tryLogDiagnosticEvent({
           assignmentId: message.assignmentId,
@@ -913,34 +927,36 @@ export class WorkspaceGateway implements DurableObject {
         }
         return;
       }
-      case "assignment.progress": {
-        const payload = message.payload as Record<string, unknown>;
-        const workspaceId =
-          this.executionWorkspaceId ?? message.executionWorkspaceId;
-        if (!workspaceId) return;
-        await createEventPublisher(this.env).publish({
-          type: "assignment.progress",
-          durable: false,
-          workspaceId,
-          workspaceRuntimeId:
-            this.workspaceRuntimeId ?? message.workspaceRuntimeId,
+      case "assignment.start.ack": {
+        if (!(await this.activeAssignmentMatches(message))) return;
+        const transition = await this.env.CONCLAVE_DB.prepare(
+          `UPDATE worker_assignments SET status = 'running', updated_at = ?1
+             WHERE id = ?2 AND status = 'acknowledged'`,
+        )
+          .bind(now, message.assignmentId)
+          .run();
+        if (Number(transition.meta.changes ?? 0) !== 1) return;
+        await this.env.CONCLAVE_DB.prepare(
+          `UPDATE workflow_tasks SET status = 'running',
+                  started_at = COALESCE(started_at, ?1), updated_at = ?1
+             WHERE id = ?2 AND status IN ('queued', 'waiting')`,
+        )
+          .bind(now, message.taskId)
+          .run();
+        tryLogDiagnosticEvent({
+          assignmentId: message.assignmentId,
+          workspaceId: message.executionWorkspaceId,
+          workspaceRuntimeId: message.workspaceRuntimeId,
+          workerId: message.workerId,
           runId: message.runId,
           taskId: message.taskId,
           attemptId: message.attemptId,
-          assignmentId: message.assignmentId,
-          idempotencyKey: `assignment-progress:${message.messageId}`,
-          payload: {
-            entityId: message.assignmentId,
-            workerId: message.workerId,
-            percentage:
-              typeof payload.percentage === "number" ? payload.percentage : 0,
-            message: typeof payload.message === "string" ? payload.message : "",
-            ...(typeof payload.metrics === "object" &&
-            payload.metrics !== null &&
-            !Array.isArray(payload.metrics)
-              ? { summary: JSON.stringify(payload.metrics).slice(0, 32768) }
-              : {}),
-          },
+          component: "cloud",
+          operation: "assignment",
+          stage: "provider_execution",
+          severity: "info",
+          retryable: false,
+          context: { status: "running" },
         });
         return;
       }
@@ -1025,6 +1041,16 @@ export class WorkspaceGateway implements DurableObject {
           });
           return;
         }
+        const normalized = normalizeActivityPayload({
+          title: payload.title,
+          status: payload.status,
+          activityId: payload.activityId,
+          percentage: payload.percentage,
+          durationMs: payload.durationMs,
+          toolId: payload.toolId,
+          toolName: payload.toolName,
+          details: payload.details,
+        });
         const activityPayload = RealtimeEventPayloadSchema.safeParse({
           entityId: message.assignmentId,
           workerId: payload.workerId,
@@ -1033,12 +1059,15 @@ export class WorkspaceGateway implements DurableObject {
           activityId: payload.activityId,
           activitySequence: payload.sequence,
           activityType: payload.eventType,
-          activityStatus: payload.status,
-          title: payload.title,
-          percentage: payload.percentage,
-          details: payload.details,
+          activityStatus: normalized?.status,
+          title: normalized?.title,
+          percentage: normalized?.percentage,
+          durationMs: normalized?.durationMs,
+          toolId: normalized?.toolId,
+          toolName: normalized?.toolName,
+          details: normalized?.details,
         });
-        if (!activityPayload.success) {
+        if (!normalized || !activityPayload.success) {
           tryLogDiagnosticEvent({
             assignmentId: message.assignmentId,
             workspaceId,
@@ -1102,8 +1131,10 @@ export class WorkspaceGateway implements DurableObject {
               `INSERT OR IGNORE INTO worker_activity_history
                (history_id, assignment_id, workspace_id, attempt_id,
                 execution_id, worker_id, source_event_id, provider_sequence,
-                event_type, status, activity_id, title, details_json, occurred_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`,
+               event_type, status, activity_id, title, details_json,
+                duration_ms, tool_id, tool_name, occurred_at)
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
+                       ?13, ?14, ?15, ?16, ?17)`,
             ).bind(
               eventId,
               message.assignmentId,
@@ -1118,6 +1149,9 @@ export class WorkspaceGateway implements DurableObject {
               activityPayload.data.activityId ?? null,
               activityPayload.data.title,
               JSON.stringify(activityPayload.data.details ?? {}),
+              activityPayload.data.durationMs ?? null,
+              activityPayload.data.toolId ?? null,
+              activityPayload.data.toolName ?? null,
               new Date().toISOString(),
             )
           : undefined;
@@ -1141,6 +1175,24 @@ export class WorkspaceGateway implements DurableObject {
             assignmentId: message.assignmentId,
             payload: activityPayload.data,
           });
+          if (replayable) {
+            tryLogDiagnosticEvent({
+              assignmentId: message.assignmentId,
+              workspaceId,
+              workspaceRuntimeId:
+                this.workspaceRuntimeId ?? message.workspaceRuntimeId,
+              workerId: message.workerId,
+              runId: message.runId,
+              taskId: message.taskId,
+              attemptId: message.attemptId,
+              component: "cloud",
+              operation: "assignment.activity",
+              stage: "activity_forwarding",
+              severity: "info",
+              retryable: false,
+              context: { status: "accepted" },
+            });
+          }
         } catch {
           tryLogDiagnosticEvent({
             assignmentId: message.assignmentId,
@@ -1177,7 +1229,7 @@ export class WorkspaceGateway implements DurableObject {
           attemptId: message.attemptId,
           component: "cloud",
           operation: "assignment",
-          stage: "result",
+          stage: "terminal_recorded",
           severity: "info",
           retryable: false,
           context: { status: "completed" },
@@ -1186,6 +1238,7 @@ export class WorkspaceGateway implements DurableObject {
           this.env.CONCLAVE_DB,
           message.assignmentId!,
           message.payload as never,
+          message.attemptId,
         );
         await this.sendTerminalAcknowledgement(message, "completed");
         return;
@@ -1207,7 +1260,7 @@ export class WorkspaceGateway implements DurableObject {
             attemptId: message.attemptId,
             component: "cloud",
             operation: "assignment",
-            stage: "provider_execution",
+            stage: "terminal_recorded",
             severity: "error",
             errorCode:
               typeof error.code === "string" ? error.code : "execution_failed",
@@ -1219,6 +1272,7 @@ export class WorkspaceGateway implements DurableObject {
           this.env.CONCLAVE_DB,
           message.assignmentId!,
           message.payload as never,
+          message.attemptId,
         );
         await this.sendTerminalAcknowledgement(message, "failed");
         return;
@@ -1228,7 +1282,23 @@ export class WorkspaceGateway implements DurableObject {
           this.env.CONCLAVE_DB,
           message.assignmentId!,
           message.payload as never,
+          message.attemptId,
         );
+        tryLogDiagnosticEvent({
+          assignmentId: message.assignmentId,
+          workspaceId: message.executionWorkspaceId,
+          workspaceRuntimeId: message.workspaceRuntimeId,
+          workerId: message.workerId,
+          runId: message.runId,
+          taskId: message.taskId,
+          attemptId: message.attemptId,
+          component: "cloud",
+          operation: "assignment",
+          stage: "terminal_recorded",
+          severity: "info",
+          retryable: false,
+          context: { status: "cancelled" },
+        });
         await this.sendTerminalAcknowledgement(message, "cancelled");
         return;
       case "assignment.cancel.ack": {
@@ -1271,7 +1341,7 @@ export class WorkspaceGateway implements DurableObject {
        WHERE execution_workspace_id = ?1
          AND (
            status IN ('created', 'dispatched', 'acknowledged', 'running')
-           OR (status IN ('completed', 'failed', 'cancelled') AND updated_at >= ?2)
+           OR (status IN ('completed', 'failed', 'cancelled', 'timed_out') AND updated_at >= ?2)
          )
        ORDER BY updated_at DESC
        LIMIT 500`,
@@ -1317,12 +1387,31 @@ export class WorkspaceGateway implements DurableObject {
           .bind(message.assignmentId)
           .first<{ status: string }>()
       : null;
+    // Local Worker Protocol 4.x acknowledges timeout as a failed terminal
+    // delivery; Cloud retains the more precise timed_out assignment outcome.
     const authoritativeStatus =
       row?.status === "completed" ||
       row?.status === "failed" ||
       row?.status === "cancelled"
         ? row.status
-        : status;
+        : row?.status === "timed_out"
+          ? "failed"
+          : status;
+    tryLogDiagnosticEvent({
+      assignmentId: message.assignmentId,
+      workspaceId: message.executionWorkspaceId,
+      workspaceRuntimeId: message.workspaceRuntimeId,
+      workerId: message.workerId,
+      runId: message.runId,
+      taskId: message.taskId,
+      attemptId: message.attemptId,
+      component: "cloud",
+      operation: "assignment",
+      stage: "terminal_acknowledgement",
+      severity: "info",
+      retryable: false,
+      context: { status: authoritativeStatus },
+    });
     await this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
       protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
@@ -1375,6 +1464,47 @@ export class WorkspaceGateway implements DurableObject {
     );
   }
 
+  private async assignmentContextMatches(
+    message: WorkspaceRuntimeMessage,
+  ): Promise<boolean> {
+    if (
+      !message.assignmentId ||
+      !message.executionWorkspaceId ||
+      !message.workspaceRuntimeId
+    ) {
+      return false;
+    }
+    const assignment = await this.env.CONCLAVE_DB.prepare(
+      `SELECT id, execution_workspace_id, runtime_identity_id,
+              worker_type_id, workspace_worker_id, run_id, task_id,
+              attempt_id, idempotency_key
+         FROM worker_assignments WHERE id = ?1`,
+    )
+      .bind(message.assignmentId)
+      .first<Record<string, unknown>>();
+    return (
+      assignment != null &&
+      workspaceAssignmentContextMatches(
+        message as unknown as WorkspaceAssignmentCorrelation,
+        assignment,
+      ) &&
+      message.executionWorkspaceId === this.executionWorkspaceId &&
+      message.workspaceRuntimeId === this.workspaceRuntimeId
+    );
+  }
+
+  private async activeAssignmentMatches(
+    message: WorkspaceRuntimeMessage,
+  ): Promise<boolean> {
+    if (!(await this.assignmentContextMatches(message))) return false;
+    const assignment = await this.env.CONCLAVE_DB.prepare(
+      "SELECT status FROM worker_assignments WHERE id = ?1",
+    )
+      .bind(message.assignmentId)
+      .first<{ status: string }>();
+    return assignment != null && workspaceAssignmentIsActive(assignment);
+  }
+
   private async recordWorkerInventory(payload: unknown): Promise<void> {
     await recordWorkspaceWorkerInventory(
       this.env,
@@ -1415,6 +1545,22 @@ export class WorkspaceGateway implements DurableObject {
         { status: 409 },
       );
     }
+    const currentStatus = String(row.status);
+    const disposition = assignmentCommandDisposition(currentStatus);
+    if (!disposition.shouldSend && disposition.duplicate) {
+      return Response.json({
+        delivered: false,
+        ...disposition,
+        status: currentStatus,
+      });
+    }
+    if (!disposition.shouldSend) {
+      return Response.json({
+        delivered: false,
+        ...disposition,
+        status: currentStatus,
+      });
+    }
     let assignmentMessage: WorkspaceRuntimeMessage;
     try {
       assignmentMessage = parseWorkspaceRuntimeMessage({
@@ -1432,8 +1578,29 @@ export class WorkspaceGateway implements DurableObject {
         { status: 400 },
       );
     }
-    await this.send({ ...assignmentMessage });
-    return Response.json({ delivered: true });
+    try {
+      await this.send({ ...assignmentMessage });
+    } catch (error) {
+      return Response.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Workspace command could not be queued",
+          retryable: true,
+          deliveryState: "blocked",
+          acceptance: "pending",
+        },
+        { status: 503 },
+      );
+    }
+    return Response.json({
+      delivered: true,
+      ...disposition,
+      commandId: assignmentMessage.messageId,
+      deliveryState: "queued",
+      acceptance: "pending",
+    });
   }
 
   private async cancelAssignment(request: Request): Promise<Response> {
@@ -1460,15 +1627,33 @@ export class WorkspaceGateway implements DurableObject {
         this.pendingCancelAcks.set(assignmentId, { resolve, timer });
       },
     );
-    await this.send({
-      protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
-      protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
-      messageId: `message-${crypto.randomUUID()}`,
-      timestamp: new Date().toISOString(),
-      type: "assignment.cancel",
-      ...body,
-      payload: body.payload,
-    });
+    try {
+      await this.send({
+        protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
+        protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+        messageId: `message-${crypto.randomUUID()}`,
+        timestamp: new Date().toISOString(),
+        type: "assignment.cancel",
+        ...body,
+        payload: body.payload,
+      });
+    } catch (error) {
+      const pending = this.pendingCancelAcks.get(assignmentId);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingCancelAcks.delete(assignmentId);
+      }
+      return Response.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Cancellation could not be queued",
+          retryable: true,
+        },
+        { status: 503 },
+      );
+    }
     try {
       const acknowledgement = await ackPromise;
       if (acknowledgement.cancelled !== true)
@@ -1497,6 +1682,9 @@ export class WorkspaceGateway implements DurableObject {
       return;
     }
     if (!this.sessionId || !this.workspaceRuntimeId) return;
+    if (this.httpEvents.length >= MAX_WORKSPACE_HTTP_EVENTS) {
+      throw new Error("Workspace HTTP event queue is full");
+    }
     this.httpLastActivityAt = new Date().toISOString();
     this.httpCursor += 1;
     this.httpEvents.push({

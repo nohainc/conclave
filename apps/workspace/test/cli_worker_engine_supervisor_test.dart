@@ -103,10 +103,58 @@ void main() {
     final first = _execute(setup, 'first', prompt: 'slow');
     await _waitFor(File('${setup.state.path}/active').existsSync);
     await expectLater(
-      _execute(setup, 'queued-timeout', timeout: const Duration(seconds: 1)),
+      _execute(
+        setup,
+        'queued-timeout',
+        timeout: const Duration(seconds: 1),
+        queueWaitTimeout: const Duration(seconds: 1),
+      ),
       throwsA(isA<CliWorkerEngineProbeException>()),
     );
     expect((await first).output, 'slow');
+  });
+
+  test('does not consume execution timeout while queued', () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final first = _execute(setup, 'first', prompt: 'slow');
+    await _waitFor(File('${setup.state.path}/active').existsSync);
+    final queued = _execute(
+      setup,
+      'queued',
+      timeout: const Duration(seconds: 1),
+      queueWaitTimeout: const Duration(seconds: 7),
+    );
+    await Future<void>.delayed(const Duration(seconds: 1));
+    expect(await first, isA<WorkerResult>());
+    expect((await queued).output, 'queued');
+  });
+
+  test('runs independent assignments concurrently up to the effective limit',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final first = _execute(
+      setup,
+      'first',
+      prompt: 'slow',
+      maxConcurrentAssignments: 2,
+    );
+    final second = _execute(
+      setup,
+      'second',
+      prompt: 'slow',
+      maxConcurrentAssignments: 2,
+    );
+    await _waitFor(File('${setup.state.path}/max-active').existsSync);
+    final third = _execute(
+      setup,
+      'third',
+      maxConcurrentAssignments: 2,
+    );
+    expect((await first).output, 'slow');
+    expect((await second).output, 'slow');
+    expect((await third).output, 'third');
   });
 
   test('cancels the active Engine process tree as an assignment failure',
@@ -121,6 +169,57 @@ void main() {
       throwsA(isA<Object>()),
     );
   });
+
+  test('Engine exit before a terminal frame releases the Worker slot',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    await expectLater(
+      _execute(setup, 'exited', prompt: 'exit'),
+      throwsA(isA<CliWorkerEngineProbeException>()),
+    );
+    expect((await _execute(setup, 'after-exit')).output, 'after-exit');
+  });
+
+  test('records durable ownership metadata while an Engine is active',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final execution = _execute(setup, 'metadata', prompt: 'slow');
+    await _waitFor(() => setup.registry
+        .listSync()
+        .whereType<File>()
+        .any((file) => file.path.endsWith('.worker-process.json')));
+    final recordFile = setup.registry
+        .listSync()
+        .whereType<File>()
+        .singleWhere((file) => file.path.endsWith('.worker-process.json'));
+    final record = Map<String, Object?>.from(
+      jsonDecode(await recordFile.readAsString()) as Map,
+    );
+    expect(record['assignmentId'], 'metadata');
+    expect(record['attemptId'], 'attempt-metadata');
+    expect(record['workerId'], 'worker-1');
+    expect(record['enginePid'], isA<int>());
+    expect(record['localExecutionId'], isA<String>());
+    expect(record['deadlineAt'], isA<String>());
+    expect(record['providerState'], 'not_started');
+    await setup.supervisor.cancel('metadata');
+    await expectLater(execution, throwsA(isA<Object>()));
+  });
+
+  test('rejects duplicate local execution for the same assignment', () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final first = _execute(setup, 'duplicate', prompt: 'slow');
+    await _waitFor(File('${setup.state.path}/active').existsSync);
+    await expectLater(
+      _execute(setup, 'duplicate'),
+      throwsA(isA<FormatException>()),
+    );
+    await setup.supervisor.cancel('duplicate');
+    await expectLater(first, throwsA(isA<Object>()));
+  });
 }
 
 Future<WorkerResult> _execute(
@@ -128,6 +227,8 @@ Future<WorkerResult> _execute(
   String assignmentId, {
   String? prompt,
   Duration timeout = const Duration(seconds: 10),
+  Duration? queueWaitTimeout,
+  int maxConcurrentAssignments = 1,
 }) =>
     setup.supervisor.execute(
       setup.admission,
@@ -135,10 +236,12 @@ Future<WorkerResult> _execute(
       stateDirectory: setup.state,
       workingDirectory: setup.thread,
       workerId: 'worker-1',
-      maxConcurrentAssignments: 1,
+      maxConcurrentAssignments: maxConcurrentAssignments,
       assignmentId: assignmentId,
+      attemptId: setup.attemptId,
       prompt: prompt ?? assignmentId,
       timeout: timeout,
+      queueWaitTimeout: queueWaitTimeout,
     );
 
 Future<_Setup> _setup() async {
@@ -161,6 +264,7 @@ Future<_Setup> _setup() async {
   );
   final state = await Directory('${root.path}/state').create();
   final thread = await Directory('${root.path}/thread').create();
+  final registry = await Directory('${root.path}/registry').create();
   final script = File('${root.path}/fake_engine.dart')
     ..writeAsStringSync(_fakeEngineSource);
   return _Setup(
@@ -173,7 +277,10 @@ Future<_Setup> _setup() async {
       engineExecutable: Platform.environment['DART_EXECUTABLE'] ??
           Platform.resolvedExecutable,
       engineArgumentsPrefix: [script.path],
+      processRegistryDirectory: registry,
     ),
+    registry: registry,
+    attemptId: 'attempt-metadata',
   );
 }
 
@@ -195,6 +302,8 @@ final class _Setup {
     required this.state,
     required this.thread,
     required this.supervisor,
+    required this.registry,
+    required this.attemptId,
   });
 
   final Directory root;
@@ -203,6 +312,8 @@ final class _Setup {
   final Directory state;
   final Directory thread;
   final CliWorkerEngineSupervisor supervisor;
+  final Directory registry;
+  final String attemptId;
 }
 
 const _fakeEngineSource = r'''
@@ -231,6 +342,7 @@ Future<void> main(List<String> args) async {
           'capabilities': <String>[],
         }));
       case 'execute.request':
+        if (request['prompt'] == 'exit') exit(17);
         final activeFile = File('${state.path}/active');
         if (activeFile.existsSync()) {
           File('${state.path}/max-active').writeAsStringSync('2');

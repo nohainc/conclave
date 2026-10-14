@@ -188,7 +188,10 @@ describe("Space execution scheduler", () => {
     ["retired", { worker_catalog_lifecycle_state: "retired" }],
     ["hidden", { worker_catalog_visibility_state: "hidden" }],
     ["without its current Profile revision", { profile_release_version: null }],
-    ["without its executable Profile payload", { execution_profile_json: null }],
+    [
+      "without its executable Profile payload",
+      { execution_profile_json: null },
+    ],
   ])("rejects a stale Ready Worker that is %s", async (_case, override) => {
     await expect(
       selectSpaceExecutionTarget(db([candidate(override)]), {
@@ -264,6 +267,21 @@ describe("Space execution scheduler", () => {
       },
     );
     expect(atLimit).toBeNull();
+
+    const queuedAtLimit = await selectSpaceExecutionTarget(
+      db([candidate({ ...configured, active_assignments: 2 })]),
+      {
+        spaceId: "space-a",
+        requesterUserId: "user-a",
+        role: "implementer",
+        capabilities: ["repository"],
+        threadId: "thread-a",
+        workRequestId: "request-a",
+        workBindingId: "implement" as const,
+        allowQueue: true,
+      },
+    );
+    expect(queuedAtLimit?.workerId).toBe("worker-a");
   });
 
   it("schedules a Worker type unknown to application code", async () => {

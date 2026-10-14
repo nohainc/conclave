@@ -149,7 +149,17 @@ describe("Workspace runtime Gateway", () => {
       }),
     );
     expect(dispatch.status).toBe(200);
-    expect(await dispatch.json()).toEqual({ delivered: true });
+    expect(await dispatch.json()).toEqual(
+      expect.objectContaining({
+        delivered: true,
+        shouldSend: true,
+        duplicate: false,
+        terminal: false,
+        accepted: false,
+        deliveryState: "queued",
+        acceptance: "pending",
+      }),
+    );
     const assignmentPoll = await gateway.fetch(
       new Request("https://gateway.internal/runtime/poll", {
         method: "POST",

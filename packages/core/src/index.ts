@@ -11,4 +11,5 @@ export * from "./worker-execution-options.js";
 export * from "./conversation-router.js";
 export * from "./context-engine.js";
 export * from "./workflow-configuration.js";
+export * from "./execution-lifecycle.js";
 export { DomainInvariantError } from "./domain-error.js";

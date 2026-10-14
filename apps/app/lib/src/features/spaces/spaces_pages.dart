@@ -14,12 +14,12 @@ import 'package:flutter/services.dart';
 
 import '../../ax/ax_data.dart';
 import '../../ax/ax_models.dart';
+import '../../ax/ax_render_diagnostics.dart';
 import '../../ax/ax_work_activity.dart';
 import '../../ax/ax_work_progress.dart';
 import '../../ax/worker_presentation.dart';
 import '../../ax/sync/ax_space_threads.dart';
 import '../../ax/sync/ax_discussion_cache.dart';
-import '../../ax/sync/ax_discussion_builder.dart';
 import '../../ax/sync/ax_work_history.dart';
 import '../../ax/sync/ax_work_realtime_sync.dart';
 import '../../ax/sync/ax_session_catalogs.dart';
@@ -34,6 +34,7 @@ import '../workflows/workflows_page.dart';
 import '../workflows/workflow_visibility.dart';
 import '../common/markdown_composer.dart';
 import '../common/conclave_markdown_body.dart';
+import 'thread_presentation_controller.dart';
 import '../../ax/work_request_file_picker_stub.dart'
     if (dart.library.html) '../../ax/work_request_file_picker_web.dart'
     as work_request_files;
@@ -44,6 +45,7 @@ part 'spaces_pages/space_tabs.dart';
 part 'spaces_pages/thread_page.dart';
 part 'spaces_pages/thread_actions.dart';
 part 'spaces_pages/work_components.dart';
+part 'spaces_pages/timeline_container.dart';
 
 List<AxBuiltinWorkflow> _currentWorkflowVersions(
     List<AxBuiltinWorkflow> catalog) {

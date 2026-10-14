@@ -66,7 +66,7 @@ void main() {
     expect(notification?.kind, AxNotificationKind.workflowRunNeedsApproval);
     expect(notification?.message, 'Choose the deployment target.');
     expect(
-      notificationFromRealtimeEvent({'type': 'assignment.progress'}),
+      notificationFromRealtimeEvent({'type': 'assignment.activity'}),
       isNull,
     );
   });

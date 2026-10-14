@@ -102,7 +102,7 @@ if (
     "worker.status",
     "credential.status",
   ].some((message) => workspaceDart.includes(`'${message}'`)) ||
-  !workerPackage.includes("localWorkerProtocolVersion = '4.0'")
+  !workerPackage.includes("localWorkerProtocolVersion = '4.1'")
 ) {
   throw new Error(
     "protocol exports do not use the current schema and Worker Protocol package",

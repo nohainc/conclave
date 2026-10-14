@@ -183,8 +183,12 @@ void main() {
       ),
     );
     expect((stateless.terminal as WorkerResult).output, 'Codex answer');
-    expect(stateless.progress.map((item) => item.percentage), contains(10));
-    expect(stateless.progress.map((item) => item.percentage), contains(45));
+    expect(
+      stateless.activities
+          .where((item) => item.eventType == 'message.updated')
+          .map((item) => item.percentage),
+      containsAll([10, 45]),
+    );
     expect(
       stateless.activities.map((item) => [item.eventType, item.status]),
       containsAll([

@@ -45,8 +45,8 @@
       "worker.inventory",
       "thread.status",
       "assignment.start",
+      "assignment.start.ack",
       "assignment.ack",
-      "assignment.progress",
       "assignment.activity",
       "assignment.result",
       "assignment.error",
@@ -132,7 +132,6 @@
       "people.updated"
     ],
     "ephemeralTypes": [
-      "assignment.progress",
       "assignment.activity",
       "stream.delta",
       "tool.invocation.status",
@@ -154,5 +153,25 @@
       "workspace_space_grant.updated",
       "people.updated"
     ]
+  },
+  "x-execution-events": {
+    "protocol": "conclave.execution-events",
+    "protocolVersion": "1.0",
+    "schemaVersion": 1,
+    "identityFields": [
+      "workspaceId",
+      "workspaceRuntimeId",
+      "threadId",
+      "workRequestId",
+      "runId",
+      "taskId",
+      "assignmentId",
+      "attemptId",
+      "executionId",
+      "workerId"
+    ],
+    "sequenceMeaning": "source execution sequence; Cloud realtime cursors are separate",
+    "categories": ["activity", "lifecycle"],
+    "deliveries": ["ephemeral", "replayable", "terminal"]
   }
 }

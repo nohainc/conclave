@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
@@ -13,6 +14,8 @@ const cliWorkerEngineVersion = '1.3.0';
 /// Runs one isolated generic Engine process for one passive or live probe,
 /// or for normal / sandbox assignment execution.
 final class CliWorkerEngineSupervisor {
+  static const defaultQueueWaitTimeout = Duration(minutes: 2);
+
   CliWorkerEngineSupervisor({
     required this.engineExecutable,
     this.engineArgumentsPrefix = const [],
@@ -61,8 +64,8 @@ final class CliWorkerEngineSupervisor {
         final decoded = jsonDecode(await entity.readAsString());
         if (decoded is! Map) throw const FormatException('invalid record');
         final record = Map<String, Object?>.from(decoded);
-        final pid = record['pid'];
-        final executable = record['executable'];
+        final pid = record['enginePid'] ?? record['pid'];
+        final executable = record['engineExecutable'] ?? record['executable'];
         final stateDirectory = record['stateDirectory'];
         if (pid is! int ||
             pid <= 1 ||
@@ -79,9 +82,25 @@ final class CliWorkerEngineSupervisor {
         final command = processInfo.exitCode == 0
             ? processInfo.stdout.toString().trimLeft()
             : '';
+        final recordedStartIdentity = record['engineStartIdentity'];
+        String? currentStartIdentity;
+        if (recordedStartIdentity is String &&
+            recordedStartIdentity.isNotEmpty) {
+          final startInfo = await Process.run('ps', [
+            '-p',
+            '$pid',
+            '-o',
+            'lstart=',
+          ]);
+          currentStartIdentity = startInfo.exitCode == 0
+              ? startInfo.stdout.toString().trim()
+              : null;
+        }
         if (command.isNotEmpty &&
             command.startsWith('$executable ') &&
-            command.contains(stateDirectory)) {
+            command.contains(stateDirectory) &&
+            (recordedStartIdentity == null ||
+                recordedStartIdentity == currentStartIdentity)) {
           await const WorkerProcessCleanup().terminateOrphanedPid(pid);
           reaped++;
         }
@@ -201,14 +220,26 @@ final class CliWorkerEngineSupervisor {
         WorkerIssueCode.deadlineExceeded,
         'Provider probe exceeded its deadline.',
       );
-    } on ProcessException {
-      throw const CliWorkerEngineProbeException(
+    } on ProcessException catch (error) {
+      throw CliWorkerEngineProbeException(
         WorkerIssueCode.providerToolUnavailable,
         'CLI Worker Engine could not be started.',
+        localDiagnostics: jsonEncode({
+          'stage': 'engine_process_start',
+          'errorCode': error.errorCode,
+          'message': error.message,
+        }),
       );
     } finally {
       if (process != null && !stopped) {
         await _platformRuntime.terminateProcessTree(process, force: true);
+      }
+      if (processRecord != null) {
+        await _updateProcessRecord(
+          processRecord,
+          engineState: 'terminated',
+          providerState: 'terminated',
+        );
       }
       await _deleteProcessRecord(processRecord);
       await channel?.dispose();
@@ -226,6 +257,7 @@ final class CliWorkerEngineSupervisor {
     required String assignmentId,
     required String prompt,
     required Duration timeout,
+    Duration? queueWaitTimeout,
     WorkerSessionPolicy sessionPolicy = WorkerSessionPolicy.stateless,
     String? sessionKey,
     WorkerSessionContext? workerSession,
@@ -235,6 +267,9 @@ final class CliWorkerEngineSupervisor {
     String? catalogRevision,
     WorkerExecutionPolicy executionPolicy = WorkerExecutionPolicy.restricted,
     Duration? engineExecutionTimeout,
+    String? attemptId,
+    String? executionId,
+    FutureOr<void> Function()? onSlotReserved,
     void Function()? onExecutionStarted,
     void Function(WorkerProgress progress)? onProgress,
     FutureOr<void> Function(WorkerActivity activity)? onActivity,
@@ -249,6 +284,13 @@ final class CliWorkerEngineSupervisor {
             const Duration(milliseconds: WorkerProtocolLimits.maxTimeoutMs)
         ? const Duration(milliseconds: WorkerProtocolLimits.maxTimeoutMs)
         : timeout;
+    final requestedQueueWaitTimeout =
+        queueWaitTimeout ?? defaultQueueWaitTimeout;
+    final boundedQueueWaitTimeout =
+        requestedQueueWaitTimeout >
+            const Duration(milliseconds: WorkerProtocolLimits.maxTimeoutMs)
+        ? const Duration(milliseconds: WorkerProtocolLimits.maxTimeoutMs)
+        : requestedQueueWaitTimeout;
     final requestedEngineTimeout = engineExecutionTimeout ?? boundedTimeout;
     final boundedEngineTimeout =
         requestedEngineTimeout >
@@ -257,6 +299,7 @@ final class CliWorkerEngineSupervisor {
         : requestedEngineTimeout;
 
     if (boundedTimeout < const Duration(milliseconds: 100) ||
+        boundedQueueWaitTimeout < const Duration(milliseconds: 100) ||
         boundedEngineTimeout < const Duration(milliseconds: 100)) {
       throw ArgumentError.value(
         engineExecutionTimeout ?? timeout,
@@ -267,17 +310,36 @@ final class CliWorkerEngineSupervisor {
     await stateDirectory.create(recursive: true);
     await workingDirectory.create(recursive: true);
 
-    final timer = Stopwatch()..start();
+    if (_activeAssignments.containsKey(assignmentId) ||
+        _reservedAssignmentIds.contains(assignmentId) ||
+        _queuedAssignments.containsKey(assignmentId)) {
+      throw const FormatException(
+        'Assignment already has an active or queued Engine execution',
+      );
+    }
+    final existingRecord = _processRecordFile(assignmentId);
+    if (existingRecord != null && await existingRecord.exists()) {
+      throw const FormatException(
+        'Assignment already has a durable Engine ownership record',
+      );
+    }
+
+    // Queueing is admission time, not provider execution time. A request
+    // must not lose its provider deadline while waiting for another
+    // assignment to release a Worker slot.
     await _acquireSlot(
       workerId,
       assignmentId,
       maxConcurrentAssignments,
-      timeout: _remaining(boundedTimeout, timer),
+      timeout: boundedQueueWaitTimeout,
     );
+    await onSlotReserved?.call();
+    final timer = Stopwatch()..start();
     Process? process;
     File? processRecord;
     CliEngineChannel? channel;
     var stopped = false;
+    var processObservation = Future<void>.value();
     try {
       if (_cancelledAssignments.remove(assignmentId)) {
         throw const WorkerAssignmentCancelledException();
@@ -301,6 +363,14 @@ final class CliWorkerEngineSupervisor {
         process,
         assignmentId: assignmentId,
         stateDirectory: stateDirectory,
+        workingDirectory: workingDirectory,
+        workerId: workerId,
+        attemptId: attemptId,
+        executionId: executionId,
+        deadlineAt: DateTime.now()
+            .toUtc()
+            .add(_remaining(boundedTimeout, timer))
+            .toIso8601String(),
       );
       _activeAssignments[assignmentId] = process;
       _activeWorkerByAssignment[assignmentId] = workerId;
@@ -355,12 +425,27 @@ final class CliWorkerEngineSupervisor {
         onProgress: (progress) {
           if (progress.message == workerProviderExecutionStartedMessage) {
             onExecutionStarted?.call();
+            final record = processRecord;
+            if (record != null) {
+              processObservation = processObservation.then(
+                (_) => _updateProcessRecord(
+                  record,
+                  engineState: 'running',
+                  providerState: 'running',
+                ),
+              );
+            }
+            // The Workspace handler consumes this internal marker to persist
+            // and relay the explicit startup acknowledgement. It is never
+            // forwarded as user-facing progress.
+            onProgress?.call(progress);
           } else {
             onProgress?.call(progress);
           }
         },
         onActivity: onActivity,
       );
+      await processObservation;
       if (result is WorkerErrorFrame) {
         throw CliWorkerEngineProbeException(
           result.code,
@@ -378,7 +463,14 @@ final class CliWorkerEngineSupervisor {
         const Duration(seconds: 2),
       );
       if (exitCode != 0) {
-        throw const FormatException('CLI Worker Engine exited unsuccessfully');
+        throw CliWorkerEngineProbeException(
+          WorkerIssueCode.providerFailure,
+          'CLI Worker Engine exited unsuccessfully.',
+          localDiagnostics: jsonEncode({
+            'stage': 'engine_process_exit',
+            'processExitCode': exitCode,
+          }),
+        );
       }
       stopped = true;
       return result;
@@ -390,13 +482,18 @@ final class CliWorkerEngineSupervisor {
         WorkerIssueCode.deadlineExceeded,
         'Assignment execution exceeded its deadline.',
       );
-    } on ProcessException {
+    } on ProcessException catch (error) {
       if (_cancelledAssignments.remove(assignmentId)) {
         throw const WorkerAssignmentCancelledException();
       }
-      throw const CliWorkerEngineProbeException(
+      throw CliWorkerEngineProbeException(
         WorkerIssueCode.providerToolUnavailable,
         'CLI Worker Engine could not be started.',
+        localDiagnostics: jsonEncode({
+          'stage': 'engine_process_start',
+          'errorCode': error.errorCode,
+          'message': error.message,
+        }),
       );
     } on Object {
       if (_cancelledAssignments.remove(assignmentId)) {
@@ -411,6 +508,13 @@ final class CliWorkerEngineSupervisor {
       _releaseSlot(workerId, assignmentId);
       if (process != null && !stopped) {
         await _platformRuntime.terminateProcessTree(process, force: true);
+      }
+      if (processRecord != null) {
+        await _updateProcessRecord(
+          processRecord,
+          engineState: 'terminated',
+          providerState: 'terminated',
+        );
       }
       await _deleteProcessRecord(processRecord);
       await channel?.dispose();
@@ -503,6 +607,12 @@ final class CliWorkerEngineSupervisor {
     if (waiters != null && waiters.isNotEmpty) {
       final next = waiters.removeAt(0);
       _queuedAssignments.remove(next.assignmentId);
+      // Transfer the reservation before completing the waiter. This closes
+      // the cancellation race between dequeue and the waiting future's
+      // continuation: cancel() can now mark the transferred reservation and
+      // the continuation will stop before launching a process.
+      _reservedAssignmentIds.add(next.assignmentId);
+      _reservedWorkerByAssignment[next.assignmentId] = workerId;
       if (!next.permit.isCompleted) {
         next.permit.complete();
       }
@@ -528,23 +638,90 @@ final class CliWorkerEngineSupervisor {
     Process process, {
     required String assignmentId,
     required Directory stateDirectory,
+    Directory? workingDirectory,
+    String? workerId,
+    String? attemptId,
+    String? executionId,
+    String? deadlineAt,
   }) async {
     final directory = processRegistryDirectory;
     if (directory == null) return null;
     await directory.create(recursive: true);
-    final safeId = base64Url
-        .encode(utf8.encode(assignmentId))
-        .replaceAll('=', '');
-    final file = File('${directory.path}/$safeId.worker-process.json');
+    final file = _processRecordFile(assignmentId)!;
+    final startedAt = DateTime.now().toUtc();
+    final startIdentity = await _processStartIdentity(process.pid);
+    final localExecutionId = _localExecutionIdentity();
     await file.writeAsString(
       jsonEncode({
+        'schemaVersion': 2,
+        'recordId': localExecutionId,
+        'localExecutionId': localExecutionId,
+        'assignmentId': assignmentId,
+        if (attemptId != null) 'attemptId': attemptId,
+        if (executionId != null) 'executionId': executionId,
+        if (workerId != null) 'workerId': workerId,
         'pid': process.pid,
+        'enginePid': process.pid,
         'executable': File(engineExecutable).absolute.path,
+        'engineExecutable': File(engineExecutable).absolute.path,
         'stateDirectory': stateDirectory.absolute.path,
+        if (workingDirectory != null)
+          'workingDirectory': workingDirectory.absolute.path,
+        'engineStartedAt': startedAt.toIso8601String(),
+        if (startIdentity != null) 'engineStartIdentity': startIdentity,
+        if (deadlineAt != null) 'deadlineAt': deadlineAt,
+        'engineState': 'running',
+        'providerState': 'not_started',
       }),
       flush: true,
     );
     return file;
+  }
+
+  Future<void> _updateProcessRecord(
+    File file, {
+    required String engineState,
+    required String providerState,
+  }) async {
+    try {
+      if (!await file.exists()) return;
+      final decoded = jsonDecode(await file.readAsString());
+      if (decoded is! Map) return;
+      final record = Map<String, Object?>.from(decoded)
+        ..['engineState'] = engineState
+        ..['providerState'] = providerState
+        ..['updatedAt'] = DateTime.now().toUtc().toIso8601String();
+      await file.writeAsString(jsonEncode(record), flush: true);
+    } on Object {
+      // The journal and terminal delivery remain authoritative if diagnostics
+      // cannot update during shutdown.
+    }
+  }
+
+  File? _processRecordFile(String assignmentId) {
+    final directory = processRegistryDirectory;
+    if (directory == null) return null;
+    final safeId = base64Url
+        .encode(utf8.encode(assignmentId))
+        .replaceAll('=', '');
+    return File('${directory.path}/$safeId.worker-process.json');
+  }
+
+  Future<String?> _processStartIdentity(int pid) async {
+    if (Platform.isWindows) return null;
+    try {
+      final result = await Process.run('ps', ['-p', '$pid', '-o', 'lstart=']);
+      if (result.exitCode != 0) return null;
+      final value = result.stdout.toString().trim();
+      return value.isEmpty ? null : value;
+    } on Object {
+      return null;
+    }
+  }
+
+  String _localExecutionIdentity() {
+    final suffix = Random.secure().nextInt(0xFFFFFF).toRadixString(16);
+    return 'exec-${DateTime.now().toUtc().microsecondsSinceEpoch}-$suffix';
   }
 
   Future<void> _deleteProcessRecord(File? file) async {
@@ -649,7 +826,7 @@ final class CliEngineChannel {
     process.stdin.writeln(request.encode());
     await process.stdin.flush();
     if (!await _lines.moveNext().timeout(timeout)) {
-      throw TimeoutException('CLI Worker Engine closed its protocol stream');
+      throw await _processExited('engine_initialize');
     }
     final line = _lines.current;
     if (utf8.encode(line).length > maxFrameBytes) {
@@ -677,7 +854,7 @@ final class CliEngineChannel {
         throw TimeoutException('deadline elapsed');
       }
       if (!await _lines.moveNext().timeout(remaining)) {
-        throw TimeoutException('CLI Worker Engine closed its protocol stream');
+        throw await _processExited('engine_execute');
       }
       final line = _lines.current;
       if (utf8.encode(line).length > maxFrameBytes) {
@@ -738,5 +915,23 @@ final class CliEngineChannel {
   Future<void> dispose() async {
     await _lines.cancel();
     await _stderrTask;
+  }
+
+  Future<Never> _processExited(String stage) async {
+    int? exitCode;
+    try {
+      exitCode = await process.exitCode.timeout(const Duration(seconds: 1));
+    } on Object {
+      // The process may still be unwinding; the closed stream is already
+      // sufficient evidence that this execution cannot produce a result.
+    }
+    throw CliWorkerEngineProbeException(
+      WorkerIssueCode.providerFailure,
+      'CLI Worker Engine exited before producing a terminal result.',
+      localDiagnostics: jsonEncode({
+        'stage': stage,
+        if (exitCode != null) 'processExitCode': exitCode,
+      }),
+    );
   }
 }

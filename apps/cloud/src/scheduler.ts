@@ -33,6 +33,9 @@ export interface SpaceExecutionSelectionRequest {
   readonly threadId?: string;
   readonly workRequestId?: string;
   readonly workBindingId?: ThreadBindingId;
+  /** Dispatchers may admit a durable local queue; the Service still enforces
+   * the returned effective limit before starting a process. */
+  readonly allowQueue?: boolean;
 }
 
 export interface ExecutionTarget {
@@ -52,6 +55,8 @@ export interface ExecutionTarget {
   readonly model: string | null;
   readonly reasoningEffort?: string | null;
   readonly effectivePermissions: readonly string[];
+  /** Immutable effective capacity enforced by the Workspace Service. */
+  readonly maxConcurrentAssignments: number;
   readonly permissionSnapshot: Record<string, unknown>;
   readonly selectionExplanation: Record<string, unknown>;
   readonly executionClass: "stateless_read" | "stateful_thread";
@@ -601,7 +606,10 @@ export async function selectSpaceExecutionTarget(
       reject("provider_independence_conflict");
       continue;
     }
-    if (number(row.active_assignments) >= maxConcurrent) {
+    if (
+      !request.allowQueue &&
+      number(row.active_assignments) >= maxConcurrent
+    ) {
       reject("worker_concurrency_limit");
       continue;
     }
@@ -697,6 +705,7 @@ export async function selectSpaceExecutionTarget(
       model: selectedModel ?? null,
       reasoningEffort: selectedReasoningEffort ?? null,
       effectivePermissions: permissions,
+      maxConcurrentAssignments: maxConcurrent,
       permissionSnapshot,
       selectionExplanation: {
         spaceMembership: membership.role,

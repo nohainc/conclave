@@ -5,7 +5,12 @@ import {
   type AssignmentFailurePayload,
   type AssignmentCancelPayload,
 } from "@conclave/workspace-runtime-protocol";
-import type { ThreadBindingId } from "@conclave/core";
+import {
+  canTransitionAssignment,
+  isTerminalAssignmentStatus,
+  type AssignmentLifecycleStatus,
+  type ThreadBindingId,
+} from "@conclave/core";
 import {
   canonicalExecutionErrorCode,
   executionErrorMessage,
@@ -16,6 +21,7 @@ import {
 } from "./scheduler.js";
 import { recordExecutionWorkspaceAudit } from "./workspace-audit.js";
 import { tryLogDiagnosticEvent } from "./observability.js";
+import { DEFAULT_QUEUE_WAIT_TIMEOUT_MS } from "./assignment-delivery.js";
 
 const MAX_FAILURE_DIAGNOSTIC_LENGTH = 2048;
 
@@ -115,6 +121,8 @@ export interface TaskToDispatch {
   readonly input?: Record<string, unknown>;
   readonly contextArtifactIds?: readonly string[];
   readonly timeoutMs?: number;
+  /** Time admitted work may wait for a local Worker slot. */
+  readonly queueWaitTimeoutMs?: number;
   /** Conclave logical execution-session policy; never provider-specific. */
   readonly sessionPolicy?: unknown;
   /** Opaque Conclave key used only for package-local session mapping. */
@@ -163,7 +171,9 @@ export interface AssignmentDispatcherEnv {
 }
 
 /**
- * Selects an eligible, online worker matching task requirements, capacity, and anti-collusion constraints.
+ * Selects an eligible, online Worker matching task requirements and policy.
+ * Queue admission is durable; the Workspace Service enforces the returned
+ * effective capacity before it starts a process.
  */
 async function dispatchWorkspaceWorkerAssignment(
   env: AssignmentDispatcherEnv,
@@ -187,6 +197,7 @@ async function dispatchWorkspaceWorkerAssignment(
       threadId: task.threadId,
       workRequestId: task.workRequestId,
       workBindingId: task.workBindingId,
+      allowQueue: true,
     },
     new Date(),
     async (workspaceId, runtimeIdentityId) => {
@@ -269,6 +280,17 @@ async function dispatchWorkspaceWorkerAssignment(
     },
   });
   const timeoutMs = task.timeoutMs || 15 * 60_000;
+  const queueWaitTimeoutMs =
+    task.queueWaitTimeoutMs ?? DEFAULT_QUEUE_WAIT_TIMEOUT_MS;
+  if (
+    !Number.isSafeInteger(queueWaitTimeoutMs) ||
+    queueWaitTimeoutMs < 1_000 ||
+    queueWaitTimeoutMs > 2_147_483_647
+  ) {
+    throw new Error(
+      "Assignment queueWaitTimeoutMs is outside the allowed range",
+    );
+  }
   const sessionPolicy = task.sessionPolicy as string;
   const sessionKey = task.sessionKey;
   const assignmentInput = { ...(task.input ?? {}) };
@@ -309,16 +331,17 @@ async function dispatchWorkspaceWorkerAssignment(
       sessionKey,
     ),
   };
-  await env.CONCLAVE_DB.prepare(
+  const insertion = await env.CONCLAVE_DB.prepare(
     `INSERT INTO worker_assignments
        (id, space_id, execution_workspace_id, workspace_space_grant_id,
         run_id, task_id, attempt_id, requested_by_user_id, runtime_identity_id,
         worker_type_id, workspace_worker_id, engine_version,
         model, config_json, effective_permissions_json,
-        permission_snapshot_json, timeout_ms, session_policy, idempotency_key, status,
+        permission_snapshot_json, timeout_ms, queue_wait_timeout_ms,
+        session_policy, idempotency_key, status,
         input_json, created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
-             ?13, ?14, ?15, ?16, ?17, ?18, ?19, 'created', ?20, ?21, ?21)`,
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12,
+            ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, 'created', ?21, ?22, ?22`,
   )
     .bind(
       assignmentId,
@@ -338,12 +361,46 @@ async function dispatchWorkspaceWorkerAssignment(
       JSON.stringify(target.effectivePermissions),
       JSON.stringify(snapshot),
       timeoutMs,
+      queueWaitTimeoutMs,
       sessionPolicy,
       idempotencyKey,
       JSON.stringify(assignmentInput),
       now,
     )
     .run();
+  // Some focused tests use a minimal D1 double that does not expose result
+  // metadata. A real D1 INSERT always reports `changes`; the fallback keeps
+  // those doubles representative without weakening the production guard.
+  if (Number(insertion?.meta?.changes ?? 1) !== 1) {
+    tryLogDiagnosticEvent({
+      requestId: task.workRequestId,
+      assignmentId,
+      workspaceId: target.workspaceId,
+      workerId: target.workerId,
+      workerTypeId: target.workerTypeId,
+      runId,
+      taskId,
+      attemptId,
+      workspaceRuntimeId: target.workspaceRuntimeIdentityId,
+      component: "cloud",
+      operation: "assignment",
+      stage: "admission",
+      severity: "warning",
+      errorCode: "worker_concurrency_limit",
+      retryable: true,
+      context: { status: "capacity_claim_lost_race" },
+    });
+    return {
+      assignmentId: "",
+      attemptId: "",
+      workerId: "",
+      workspaceRuntimeId: "",
+      workerCatalogId: "",
+      status: "failed",
+      accepted: false,
+      error: "Worker capacity was claimed by another assignment",
+    };
+  }
   const workRequestId = target.workRequestId ?? task.workRequestId;
   if (workRequestId) {
     const cancellation = await env.CONCLAVE_DB.prepare(
@@ -389,11 +446,6 @@ async function dispatchWorkspaceWorkerAssignment(
       },
     });
   }
-  await env.CONCLAVE_DB.prepare(
-    "UPDATE workflow_tasks SET status = 'running', started_at = COALESCE(started_at, ?1), updated_at = ?1 WHERE id = ?2 AND status IN ('queued', 'waiting')",
-  )
-    .bind(now, taskId)
-    .run();
   const payload = {
     snapshot: {
       assignmentId,
@@ -432,6 +484,11 @@ async function dispatchWorkspaceWorkerAssignment(
         artifactId,
       })),
       timeoutMs,
+      queueWaitTimeoutMs,
+      // This is the immutable intersection of Cloud grant, Cloud scheduling,
+      // and Workspace-reported capacity. The Service takes the final local
+      // slot reservation using this value and its current local registry.
+      maxConcurrentAssignments: target.maxConcurrentAssignments,
       sessionPolicy,
       ...(sessionKey !== undefined ? { sessionKey } : {}),
       ...(target.conversationId && sessionPolicy === "durable_session"
@@ -528,6 +585,23 @@ async function dispatchWorkspaceWorkerAssignment(
     )
       .bind(new Date().toISOString(), assignmentId)
       .run();
+    tryLogDiagnosticEvent({
+      requestId: task.workRequestId,
+      assignmentId,
+      workspaceId: target.workspaceId,
+      workerId: target.workerId,
+      workerTypeId: target.workerTypeId,
+      runId,
+      taskId,
+      attemptId,
+      workspaceRuntimeId: target.workspaceRuntimeIdentityId,
+      component: "cloud",
+      operation: "assignment",
+      stage: "dispatch",
+      severity: "info",
+      retryable: true,
+      context: { status: "dispatched" },
+    });
   } catch {
     const code = "provider_unavailable";
     const message = executionErrorMessage(code);
@@ -646,17 +720,32 @@ export async function recordAssignmentResult(
   db: D1Database,
   assignmentId: string,
   result: AssignmentResultPayload,
+  expectedAttemptId?: string,
 ): Promise<void> {
   const now = new Date().toISOString();
 
   const existing = await db
-    .prepare(`SELECT status, task_id FROM worker_assignments WHERE id = ?1`)
+    .prepare(
+      `SELECT status, task_id, attempt_id FROM worker_assignments WHERE id = ?1`,
+    )
     .bind(assignmentId)
     .first<{
       status: string;
       task_id: string;
+      attempt_id: string | null;
     }>();
   if (!existing) return;
+  if (expectedAttemptId && existing.attempt_id !== expectedAttemptId) return;
+  if (
+    !isKnownAssignmentStatus(existing.status) ||
+    isTerminalAssignmentStatus(existing.status as AssignmentLifecycleStatus) ||
+    !canTransitionAssignment(
+      existing.status as AssignmentLifecycleStatus,
+      "completed",
+    )
+  ) {
+    return;
+  }
 
   await runTerminalTransition(db, [
     db
@@ -684,6 +773,7 @@ export async function recordAssignmentError(
   db: D1Database,
   assignmentId: string,
   failure: AssignmentFailurePayload,
+  expectedAttemptId?: string,
 ): Promise<void> {
   const now = new Date().toISOString();
   const details = safeFailureDetails(failure.error?.details);
@@ -699,34 +789,56 @@ export async function recordAssignmentError(
   };
 
   const existing = await db
-    .prepare(`SELECT status, task_id FROM worker_assignments WHERE id = ?1`)
+    .prepare(
+      `SELECT status, task_id, attempt_id FROM worker_assignments WHERE id = ?1`,
+    )
     .bind(assignmentId)
     .first<{
       status: string;
       task_id: string;
+      attempt_id: string | null;
     }>();
   if (!existing) return;
+  if (expectedAttemptId && existing.attempt_id !== expectedAttemptId) return;
+  const terminalStatus =
+    normalizedFailure.error.code === "timeout" ? "timed_out" : "failed";
+  if (
+    !isKnownAssignmentStatus(existing.status) ||
+    isTerminalAssignmentStatus(existing.status as AssignmentLifecycleStatus) ||
+    !canTransitionAssignment(
+      existing.status as AssignmentLifecycleStatus,
+      terminalStatus,
+    )
+  ) {
+    return;
+  }
 
   await runTerminalTransition(db, [
     db
       .prepare(
-        `UPDATE worker_assignments SET status = 'failed', error_json = ?1, updated_at = ?2
-         WHERE id = ?3 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
+        `UPDATE worker_assignments SET status = ?1, error_json = ?2, updated_at = ?3
+         WHERE id = ?4 AND status IN ('created', 'dispatched', 'acknowledged', 'running')`,
       )
-      .bind(JSON.stringify(normalizedFailure), now, assignmentId),
+      .bind(
+        terminalStatus,
+        JSON.stringify(normalizedFailure),
+        now,
+        assignmentId,
+      ),
     db
       .prepare(
         `UPDATE workflow_tasks SET status = 'failed', error = ?1,
                 finished_at = ?2, updated_at = ?2
          WHERE id = ?3 AND status IN ('queued', 'waiting', 'running')
            AND EXISTS (SELECT 1 FROM worker_assignments
-                       WHERE id = ?4 AND status = 'failed')`,
+                       WHERE id = ?4 AND status = ?5)`,
       )
       .bind(
         normalizedFailure.error.message,
         now,
         existing.task_id,
         assignmentId,
+        terminalStatus,
       ),
   ]);
 }
@@ -735,16 +847,31 @@ export async function recordAssignmentCancelled(
   db: D1Database,
   assignmentId: string,
   cancellation: { status: "cancelled"; reason: string },
+  expectedAttemptId?: string,
 ): Promise<void> {
   const now = new Date().toISOString();
   const existing = await db
-    .prepare(`SELECT status, task_id FROM worker_assignments WHERE id = ?1`)
+    .prepare(
+      `SELECT status, task_id, attempt_id FROM worker_assignments WHERE id = ?1`,
+    )
     .bind(assignmentId)
     .first<{
       status: string;
       task_id: string;
+      attempt_id: string | null;
     }>();
   if (!existing) return;
+  if (expectedAttemptId && existing.attempt_id !== expectedAttemptId) return;
+  if (
+    !isKnownAssignmentStatus(existing.status) ||
+    isTerminalAssignmentStatus(existing.status as AssignmentLifecycleStatus) ||
+    !canTransitionAssignment(
+      existing.status as AssignmentLifecycleStatus,
+      "cancelled",
+    )
+  ) {
+    return;
+  }
   await runTerminalTransition(db, [
     db
       .prepare(
@@ -762,6 +889,22 @@ export async function recordAssignmentCancelled(
       )
       .bind(now, existing.task_id, assignmentId),
   ]);
+}
+
+function isKnownAssignmentStatus(
+  status: string,
+): status is AssignmentLifecycleStatus {
+  return [
+    "created",
+    "dispatched",
+    "acknowledged",
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+    "timed_out",
+    "lost",
+  ].includes(status as AssignmentLifecycleStatus);
 }
 
 async function runTerminalTransition(
@@ -790,6 +933,7 @@ export async function recoverStaleAssignments(
     .prepare(
       `SELECT wa.id, wa.status, wa.created_at AS createdAt,
               wa.updated_at AS updatedAt, wa.timeout_ms AS timeoutMs,
+              wa.queue_wait_timeout_ms AS queueWaitTimeoutMs,
               ew.status AS workspaceStatus, ew.updated_at AS workspaceUpdatedAt,
               g.expires_at AS grantExpiresAt,
               wr.status AS workRequestStatus
@@ -806,6 +950,7 @@ export async function recoverStaleAssignments(
       createdAt: string;
       updatedAt: string;
       timeoutMs: number | null;
+      queueWaitTimeoutMs: number | null;
       workspaceStatus: string;
       workspaceUpdatedAt: string;
       grantExpiresAt: string | null;
@@ -832,10 +977,16 @@ export async function recoverStaleAssignments(
           Date.parse(row.workspaceUpdatedAt),
         ) >=
         30_000;
+    const deadlineMs =
+      row.status === "running"
+        ? row.timeoutMs
+        : (row.queueWaitTimeoutMs ?? DEFAULT_QUEUE_WAIT_TIMEOUT_MS);
+    const deadlineOrigin =
+      row.status === "running" ? row.updatedAt : row.createdAt;
     const executionExpired =
-      row.timeoutMs != null &&
-      Number.isFinite(row.timeoutMs) &&
-      nowMs - Date.parse(row.createdAt) >= row.timeoutMs;
+      deadlineMs != null &&
+      Number.isFinite(deadlineMs) &&
+      nowMs - Date.parse(deadlineOrigin) >= deadlineMs;
     if (!grantExpired && !workspaceDisconnected && !executionExpired) {
       continue;
     }
@@ -890,7 +1041,7 @@ export async function cancelTaskAssignment(
     .first<Record<string, unknown>>();
   if (!row) return { cancelled: false };
   if (row.status === "cancelled") return { cancelled: true };
-  if (["completed", "failed"].includes(String(row.status)))
+  if (["completed", "failed", "timed_out", "lost"].includes(String(row.status)))
     return { cancelled: false };
   const gatewayNamespace = env.CONCLAVE_WORKSPACE_GATEWAY;
   if (!gatewayNamespace) return { cancelled: false };

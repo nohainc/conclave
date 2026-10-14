@@ -430,8 +430,7 @@ void main() {
         nextCursor: older));
     await tester.pumpAndSettle();
     final history = find.byKey(const ValueKey('work-history-scroll'));
-    final controller =
-        tester.widget<SingleChildScrollView>(history).controller!;
+    final controller = tester.widget<CustomScrollView>(history).controller!;
     await tester.drag(history, const Offset(0, 18000));
     await tester.pump();
     expect(source.calls.last.before, 'older');

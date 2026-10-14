@@ -25,6 +25,7 @@ import '../features/search/search_page.dart';
 import '../features/workspace/workspaces_page.dart';
 import 'ax_models.dart';
 import 'ax_data.dart';
+import 'ax_render_diagnostics.dart';
 import 'avatar_file_picker_stub.dart'
     if (dart.library.html) 'avatar_file_picker_web.dart';
 import 'ax_stores.dart';

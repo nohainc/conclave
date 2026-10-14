@@ -247,7 +247,12 @@ void main() {
         reason: '${stateless.terminal.toJson()} stderr=$engineStderr',
       );
       expect((stateless.terminal as WorkerResult).output, 'Gemini answer');
-      expect(stateless.progress.map((item) => item.percentage), contains(40));
+      expect(
+        stateless.activities
+            .where((item) => item.eventType == 'message.updated')
+            .map((item) => item.percentage),
+        contains(40),
+      );
       expect(
         stateless.activities.map((item) => [item.eventType, item.status]),
         containsAll([
@@ -265,7 +270,9 @@ void main() {
         containsAll(['tool-call-1', 'tool-call-2']),
       );
       expect(
-        stateless.progress.map((item) => item.message),
+        stateless.activities
+            .where((item) => item.eventType == 'message.updated')
+            .map((item) => item.title),
         containsAll(['provider_response_received', 'provider_working']),
       );
 

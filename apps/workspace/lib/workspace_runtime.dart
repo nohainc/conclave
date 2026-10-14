@@ -186,7 +186,8 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       registryDirectory: workspacePaths.spaceDirectoryRegistryDirectory,
     ),
   );
-  final workerHandler = WorkerAssignmentHandler(
+  late final WorkerAssignmentHandler workerHandler;
+  workerHandler = WorkerAssignmentHandler(
     resolveLogicalWorker: (workerId) async {
       final worker = await localWorkerRegistry.find(workerId);
       if (worker == null) {
@@ -211,15 +212,22 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     defaultWorkingDirectory: workRoot,
     applicationStateDirectory: workspacePaths.applicationSupportDirectory,
     spaceDirectoryLifecycle: spaceDirectoryLifecycle,
-    onProgress: (context, progress) {
-      connection?.reportWorkerProgress(context, progress);
-    },
     onActivity: (context, activity) async {
       await connection?.reportWorkerActivity(context, activity);
     },
+    onExecutionStarted: (context) async {
+      await connection?.reportWorkerStarted(context);
+    },
+    onExecutionSlotReserved: (context) async {
+      await connection?.recordAssignmentDiagnostic(
+        context,
+        event: 'assignment.slot_reserved',
+        stage: 'slot_reservation',
+      );
+    },
     cancelToolProfileAssignment: cliWorkerEngineSupervisor?.cancel,
     executeWithActivity: (worker, workingDirectory, context, payload,
-        {onProgress, onActivity}) async {
+        {onProgress, onSlotReserved, onActivity}) async {
       final supervisor = cliWorkerEngineSupervisor;
       final coordinator = workerCatalogCoordinator;
       if (coordinator == null || supervisor == null) {
@@ -313,19 +321,49 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           ),
         );
       }
+      final queueWaitTimeoutValue = payload['queueWaitTimeoutMs'];
+      final queueWaitTimeout = queueWaitTimeoutValue is int
+          ? Duration(milliseconds: queueWaitTimeoutValue)
+          : CliWorkerEngineSupervisor.defaultQueueWaitTimeout;
+      final requestedConcurrency = payload['maxConcurrentAssignments'];
+      final effectiveConcurrency = requestedConcurrency is int
+          ? requestedConcurrency < worker.localConcurrencyLimit
+              ? requestedConcurrency
+              : worker.localConcurrencyLimit
+          : worker.localConcurrencyLimit;
+      if (effectiveConcurrency < 1) {
+        throw AssignmentExecutionFailure(
+          code: 'worker_not_ready',
+          message: executionErrorMessage('worker_not_ready'),
+          localDiagnostic: _runtimeFailureDiagnostic(
+            'assignment_capacity',
+            'worker_not_ready',
+            detail: 'The effective Cloud and local Worker capacity was invalid',
+          ),
+        );
+      }
       final profileFile =
           await toolProfileReleaseStore.executionProfileFile(release);
       try {
+        if (workerHandler.isCancellationRequested(context.assignmentId)) {
+          throw const AssignmentExecutionFailure(
+            code: 'cancelled',
+            message: 'The assignment was cancelled before Engine launch.',
+          );
+        }
         return await supervisor.execute(
           release,
           profileFile: profileFile,
           stateDirectory: workspacePaths.workerStateDirectory(worker.id),
           workingDirectory: workingDirectory,
           workerId: worker.id,
-          maxConcurrentAssignments: worker.localConcurrencyLimit,
+          maxConcurrentAssignments: effectiveConcurrency,
           assignmentId: context.assignmentId,
+          attemptId: context.attemptId,
+          executionId: context.executionId,
           prompt: prompt,
           timeout: Duration(milliseconds: timeoutValue),
+          queueWaitTimeout: queueWaitTimeout,
           sessionPolicy: sessionPolicyValue == 'durable_session'
               ? WorkerSessionPolicy.durableSession
               : WorkerSessionPolicy.stateless,
@@ -354,6 +392,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             fullAccessAuthorized: worker.fullLocalAccessAuthorized,
           ),
           onProgress: onProgress,
+          onSlotReserved: onSlotReserved,
           onActivity: onActivity,
         );
       } finally {

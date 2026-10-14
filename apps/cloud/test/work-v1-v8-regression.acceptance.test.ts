@@ -105,7 +105,11 @@ function createAcceptanceRun(
               spaceId: "space-fixture",
             } as T;
           }
-          if (sql.includes("SELECT status, task_id FROM worker_assignments")) {
+          if (
+            sql.includes(
+              "SELECT status, task_id, attempt_id FROM worker_assignments",
+            )
+          ) {
             const row = assignments.get(String(values[0]));
             return row
               ? ({ status: row.status, task_id: row.task_id } as T)
@@ -210,6 +214,11 @@ function createAcceptanceRun(
       const snapshot = (
         envelope.payload as { snapshot: Record<string, unknown> }
       ).snapshot;
+      // The fixture represents the Service's explicit startup acknowledgement
+      // before the provider result arrives. Cloud must not infer Running from
+      // a dispatch alone.
+      const row = assignments.get(assignmentId);
+      if (row) row.status = "running";
       await recordAssignmentResult(database, assignmentId, {
         text: `completed ${String(snapshot.role)}`,
       } as never);
@@ -320,7 +329,7 @@ describe("Work v1 acceptance through the shared assignment dispatcher", () => {
         taskWrites.filter(({ sql }) =>
           sql.includes("UPDATE workflow_tasks SET status"),
         ),
-      ).toHaveLength(definition.steps.length * 4);
+      ).toHaveLength(definition.steps.length * 3);
     },
   );
 

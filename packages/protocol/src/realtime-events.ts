@@ -6,23 +6,17 @@ import {
   COLLABORATION_REALTIME_EVENT_TYPES,
   EPHEMERAL_REALTIME_EVENT_TYPES,
 } from "./generated.js";
+import {
+  NORMALIZED_ACTIVITY_EVENT_TYPES,
+  NORMALIZED_ACTIVITY_STATUSES,
+  NormalizedActivityDetailsSchema,
+} from "./execution-activity.js";
 
 const realtimeVersionPattern = /^\d+\.\d+$/;
 const id = z.string().trim().min(1);
 const timestamp = z.string().datetime();
 
-export const WORKER_ACTIVITY_EVENT_TYPES = [
-  "execution.started",
-  "model.started",
-  "message.updated",
-  "tool.started",
-  "tool.completed",
-  "tool.failed",
-  "model.status",
-  "execution.completed",
-  "execution.failed",
-  "execution.cancelled",
-] as const;
+export const WORKER_ACTIVITY_EVENT_TYPES = NORMALIZED_ACTIVITY_EVENT_TYPES;
 
 export const REPLAYABLE_WORKER_ACTIVITY_EVENT_TYPES = [
   "execution.started",
@@ -33,16 +27,10 @@ export const REPLAYABLE_WORKER_ACTIVITY_EVENT_TYPES = [
   "execution.completed",
   "execution.failed",
   "execution.cancelled",
-] as const;
+] as const satisfies readonly (typeof NORMALIZED_ACTIVITY_EVENT_TYPES)[number][];
 
 const workerActivityEventType = z.enum(WORKER_ACTIVITY_EVENT_TYPES);
-const workerActivityStatus = z.enum([
-  "running",
-  "updated",
-  "completed",
-  "failed",
-  "cancelled",
-]);
+const workerActivityStatus = z.enum(NORMALIZED_ACTIVITY_STATUSES);
 const MAX_WORKER_ACTIVITY_PAYLOAD_BYTES = 16 * 1024;
 
 export const RealtimeEventPayloadSchema = z
@@ -69,46 +57,10 @@ export const RealtimeEventPayloadSchema = z
     activityType: workerActivityEventType.optional(),
     activityStatus: workerActivityStatus.optional(),
     title: z.string().min(1).max(256).optional(),
-    details: z
-      .record(
-        z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
-        z.union([z.string().max(2048), z.number(), z.boolean(), z.null()]),
-      )
-      .superRefine((details, ctx) => {
-        if (Object.keys(details).length > 32) {
-          ctx.addIssue({
-            code: "custom",
-            message: "Activity details exceed 32 fields",
-          });
-        }
-        const unsafe = new Set([
-          "prompt",
-          "content",
-          "text",
-          "output",
-          "stdout",
-          "stderr",
-          "arguments",
-          "command",
-          "environment",
-          "env",
-          "token",
-          "secret",
-          "password",
-          "api_key",
-        ]);
-        for (const key of Object.keys(details)) {
-          if (unsafe.has(key.toLowerCase())) {
-            ctx.addIssue({
-              code: "custom",
-              path: [key],
-              message: "Activity details cannot contain provider content",
-            });
-          }
-        }
-      })
-      .optional(),
+    details: NormalizedActivityDetailsSchema.optional(),
     durationMs: z.number().int().min(0).optional(),
+    toolId: id.max(128).optional(),
+    toolName: id.max(128).optional(),
     tokenCount: z.number().int().min(0).optional(),
     coalesced: z.boolean().optional(),
   })

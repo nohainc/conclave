@@ -144,7 +144,7 @@ export function isCurrentWorkspaceSocket(
 export function workspaceAssignmentIsActive(
   row: Record<string, unknown>,
 ): boolean {
-  return !["completed", "failed", "cancelled", "timed_out"].includes(
+  return !["completed", "failed", "cancelled", "timed_out", "lost"].includes(
     String(row.status),
   );
 }

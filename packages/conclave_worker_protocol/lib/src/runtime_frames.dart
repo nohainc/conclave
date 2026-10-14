@@ -888,6 +888,9 @@ final class WorkerActivity extends WorkerFrame {
     required this.title,
     this.activityId,
     this.percentage,
+    this.durationMs,
+    this.toolId,
+    this.toolName,
     Map<String, Object?>? details,
   }) : details = details == null ? null : _validatedActivityDetails(details) {
     _validateToken(
@@ -960,6 +963,9 @@ final class WorkerActivity extends WorkerFrame {
   final String title;
   final String? activityId;
   final double? percentage;
+  final int? durationMs;
+  final String? toolId;
+  final String? toolName;
   final Map<String, Object?>? details;
 
   bool get isTerminal => const {
@@ -986,6 +992,9 @@ final class WorkerActivity extends WorkerFrame {
         'title': title,
         if (activityId != null) 'activityId': activityId,
         if (percentage != null) 'percentage': percentage,
+        if (durationMs != null) 'durationMs': durationMs,
+        if (toolId != null) 'toolId': toolId,
+        if (toolName != null) 'toolName': toolName,
         if (details != null) 'details': details,
       };
 
@@ -1004,6 +1013,9 @@ final class WorkerActivity extends WorkerFrame {
       'title',
       'activityId',
       'percentage',
+      'durationMs',
+      'toolId',
+      'toolName',
       'details',
     });
     _expectType(json, 'activity');
@@ -1014,6 +1026,10 @@ final class WorkerActivity extends WorkerFrame {
     final percentage = json['percentage'];
     if (percentage != null && percentage is! num) {
       throw const FormatException('activity percentage must be numeric');
+    }
+    final durationMs = json['durationMs'];
+    if (durationMs != null && durationMs is! int) {
+      throw const FormatException('activity duration must be an integer');
     }
     final details = json['details'];
     if (details != null && details is! Map) {
@@ -1039,6 +1055,9 @@ final class WorkerActivity extends WorkerFrame {
           json, 'title', WorkerProtocolLimits.maxActivityTitleLength),
       activityId: _optionalString(json, 'activityId'),
       percentage: (percentage as num?)?.toDouble(),
+      durationMs: durationMs as int?,
+      toolId: _optionalString(json, 'toolId'),
+      toolName: _optionalString(json, 'toolName'),
       details:
           details == null ? null : Map<String, Object?>.from(details as Map),
     );

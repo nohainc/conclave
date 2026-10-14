@@ -1,5 +1,10 @@
 import { expect, it } from "vitest";
-import { cancelTaskAssignment, recoverStaleAssignments } from "../src/assignment-dispatcher.js";
+import {
+  cancelTaskAssignment,
+  recoverStaleAssignments,
+  recordAssignmentError,
+  recordAssignmentResult,
+} from "../src/assignment-dispatcher.js";
 
 it("persists confirmed cancellation without waiting for terminal delivery", async () => {
   const writes: string[] = [];
@@ -91,12 +96,81 @@ it("fails disconnected, expired, and leased assignments idempotently", async () 
   expect(updates).toHaveLength(8);
   expect(JSON.parse(String(updates[0]?.[0])).status).toBe("cancelled");
   expect(updates[0]?.[2]).toBe("assignment-cancelled-parent");
-  expect(updates.slice(2).map((values) => values[2])).toEqual([
+  expect(
+    updates
+      .slice(2)
+      .filter((values) => values[0] === "failed" || values[0] === "timed_out")
+      .map((values) => values[3]),
+  ).toEqual([
     "assignment-disconnected",
-    "task-1",
     "assignment-timeout",
-    "task-1",
     "assignment-lease",
-    "task-1",
   ]);
+});
+
+it("does not rewrite a terminal assignment or accept a stale attempt", async () => {
+  let writes = 0;
+  const db = {
+    prepare() {
+      return {
+        bind: () => ({
+          first: async () => ({
+            status: "completed",
+            task_id: "task-1",
+            attempt_id: "attempt-2",
+          }),
+          run: async () => {
+            writes += 1;
+          },
+        }),
+      };
+    },
+  };
+  await recordAssignmentResult(
+    db as never,
+    "assignment-1",
+    {
+      assignmentId: "assignment-1",
+      status: "completed",
+      output: { text: "late" },
+      artifactIds: [],
+      completedAt: "2026-10-14T12:00:00.000Z",
+    },
+    "attempt-1",
+  );
+  expect(writes).toBe(0);
+});
+
+it("persists timeout as a terminal Cloud outcome", async () => {
+  const updates: unknown[][] = [];
+  const db = {
+    prepare(sql: string) {
+      return {
+        bind: (...values: unknown[]) => ({
+          first: async () => ({
+            status: "running",
+            task_id: "task-1",
+            attempt_id: "attempt-1",
+          }),
+          run: async () => {
+            if (sql.includes("UPDATE")) updates.push(values);
+          },
+        }),
+      };
+    },
+  };
+  await recordAssignmentError(
+    db as never,
+    "assignment-1",
+    {
+      error: {
+        code: "timeout",
+        message: "The assignment exceeded its time limit.",
+        retryable: true,
+      },
+      failedAt: "2026-10-14T12:00:00.000Z",
+    },
+    "attempt-1",
+  );
+  expect(updates[0]?.[0]).toBe("timed_out");
 });

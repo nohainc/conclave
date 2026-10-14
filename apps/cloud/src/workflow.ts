@@ -21,6 +21,7 @@ import {
 import { createEventPublisher } from "./event-publisher.js";
 import {
   dispatchTaskAssignment,
+  recordAssignmentError,
   type AssignmentDispatcherEnv,
 } from "./assignment-dispatcher.js";
 import type { ThreadBindingId } from "@conclave/core";
@@ -28,7 +29,10 @@ import {
   prepareWorkerStepExecution,
   completeWorkerStepExecution,
 } from "./execution-engine.js";
-import { assignmentDeliveryExpired } from "./assignment-delivery.js";
+import {
+  assignmentDeliveryExpired,
+  DEFAULT_QUEUE_WAIT_TIMEOUT_MS,
+} from "./assignment-delivery.js";
 
 export interface ConclaveWorkflowParams {
   readonly runId: string;
@@ -70,7 +74,10 @@ interface AssignmentRow {
   model: string | null;
   permissionSnapshotJson: string | null;
   assignmentId: string;
-  startedAt: string;
+  attemptId: string;
+  createdAt: string;
+  updatedAt: string;
+  queueWaitTimeoutMs: number | null;
 }
 
 function parseJsonRecord(value: unknown): Record<string, unknown> {
@@ -546,14 +553,9 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         task,
         undefined,
         undefined,
-        "running",
+        "queued",
         attempt,
       );
-      await this.publishWorkEvent(params, "step.running", {
-        stepKind: task.step.kind,
-        attempt,
-        status: "running",
-      });
       try {
         const assignment = await workflowStep.do(
           `workflow:${task.step.kind}:dispatch:${attempt}`,
@@ -660,6 +662,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
               return {
                 status: "cancelled",
                 assignmentId: dispatched.assignmentId,
+                attemptId: dispatched.attemptId,
                 startedAt,
               };
             }
@@ -671,6 +674,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             return {
               status: "dispatched",
               assignmentId: dispatched.assignmentId,
+              attemptId: dispatched.attemptId,
               startedAt,
             };
           },
@@ -683,7 +687,12 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           };
         }
         let terminal: AssignmentRow | null = null;
-        const pollCount = Math.max(1, Math.ceil(task.step.timeoutMs / 2_000));
+        const pollCount = Math.max(
+          1,
+          Math.ceil(
+            (task.step.timeoutMs + DEFAULT_QUEUE_WAIT_TIMEOUT_MS) / 2_000,
+          ),
+        );
         for (let poll = 0; poll < pollCount; poll += 1) {
           terminal = await workflowStep.do(
             `workflow:${task.step.kind}:assignment-status:${attempt}:${poll}`,
@@ -695,7 +704,9 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                       wa.error_json AS errorJson, wa.workspace_worker_id AS workerId,
                       wa.worker_type_id AS workerTypeId, wa.engine_version AS engineVersion,
                       wa.model, wa.permission_snapshot_json AS permissionSnapshotJson,
-                      wa.created_at AS startedAt
+                      wa.attempt_id AS attemptId,
+                      wa.created_at AS createdAt, wa.updated_at AS updatedAt,
+                      wa.queue_wait_timeout_ms AS queueWaitTimeoutMs
                  FROM worker_assignments wa WHERE wa.id = ?1`,
                 )
                 .bind(assignment.assignmentId)
@@ -703,35 +714,40 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           );
           if (
             terminal &&
-            ["completed", "failed", "cancelled"].includes(terminal.status)
+            ["completed", "failed", "cancelled", "timed_out"].includes(
+              terminal.status,
+            )
           )
             break;
           if (
             terminal &&
-            assignmentDeliveryExpired(terminal.status, terminal.startedAt)
+            assignmentDeliveryExpired(
+              terminal.status,
+              terminal.status === "acknowledged"
+                ? terminal.updatedAt
+                : terminal.createdAt,
+              Date.now(),
+              terminal.queueWaitTimeoutMs ?? DEFAULT_QUEUE_WAIT_TIMEOUT_MS,
+            )
           ) {
             await workflowStep.do(
               `workflow:${task.step.kind}:delivery-timeout:${attempt}`,
               stepConfig,
               async () => {
-                await db
-                  .prepare(
-                    `UPDATE worker_assignments SET status = 'failed', error_json = ?1, updated_at = ?2
-                WHERE id = ?3 AND status IN ('created', 'dispatched')`,
-                  )
-                  .bind(
-                    JSON.stringify({
-                      error: {
-                        code: "provider_unavailable",
-                        message:
-                          "Workspace did not acknowledge the assignment. Check its connection and retry.",
-                        retryable: true,
-                      },
-                    }),
-                    new Date().toISOString(),
-                    assignment.assignmentId,
-                  )
-                  .run();
+                await recordAssignmentError(
+                  db,
+                  assignment.assignmentId,
+                  {
+                    error: {
+                      code: "provider_unavailable",
+                      message:
+                        "Workspace did not acknowledge the assignment. Check its connection and retry.",
+                      retryable: true,
+                    },
+                    failedAt: new Date().toISOString(),
+                  },
+                  assignment.attemptId,
+                );
               },
             );
             continue;
@@ -748,7 +764,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             error: "Work assignment was cancelled",
           };
         }
-        if (terminal?.status === "failed") {
+        if (terminal?.status === "failed" || terminal?.status === "timed_out") {
           const errorRecord = parseJsonRecord(terminal.errorJson);
           const errorValue = parseJsonRecord(errorRecord.error);
           throw new Error(
@@ -758,6 +774,19 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           );
         }
         if (terminal?.status !== "completed" || !terminal.outputJson) {
+          await recordAssignmentError(
+            db,
+            assignment.assignmentId,
+            {
+              error: {
+                code: "timeout",
+                message: "The assignment exceeded its time limit.",
+                retryable: true,
+              },
+              failedAt: new Date().toISOString(),
+            },
+            assignment.attemptId,
+          );
           throw new Error("Work Step assignment timed out");
         }
         const stepResult = completeWorkerStepExecution({
@@ -769,7 +798,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             engineVersion: terminal.engineVersion,
             model: terminal.model,
           },
-          startedAt: terminal.startedAt || startedAt,
+          startedAt: terminal.createdAt || startedAt,
           completedAt: new Date().toISOString(),
           configuredEffort: stepBinding.reasoningEffort,
         });

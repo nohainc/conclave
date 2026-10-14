@@ -90,6 +90,7 @@ class _WorkComposer extends StatelessWidget {
     required this.canExecute,
     required this.workTimeline,
     required this.activityStore,
+    required this.realtimeStatus,
     required this.localWorkProgress,
     required this.loadingTimeline,
     required this.timelineError,
@@ -129,6 +130,7 @@ class _WorkComposer extends StatelessWidget {
   final bool canExecute;
   final List<AxWorkRequest> workTimeline;
   final AxWorkActivityStore activityStore;
+  final AxWorkRealtimeStatus realtimeStatus;
   final Map<String, String> localWorkProgress;
   final bool loadingTimeline;
   final String? timelineError;
@@ -164,111 +166,117 @@ class _WorkComposer extends StatelessWidget {
   Widget history(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = Theme.of(context).colorScheme;
-    return SingleChildScrollView(
-        controller: historyController,
-        key: const ValueKey('work-history-scroll'),
-        child:
-            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          if (hasOlder)
-            TextButton(
-                onPressed: loadingOlder ? null : onLoadOlder,
-                child: Text(loadingOlder
-                    ? 'Loading older Work history…'
-                    : 'Load older Work history')),
-          if (timelineError != null && workTimeline.isNotEmpty)
-            TextButton(
-                onPressed: onRefresh, child: const Text('Retry Work sync')),
-          if (loadingTimeline && workTimeline.isEmpty)
-            const Padding(
+    final empty = workTimeline.isEmpty &&
+            !loadingTimeline &&
+            timelineError == null
+        ? Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.chat_bubble_outline_rounded,
+                  size: 42,
+                  color: isDark ? Colors.white24 : Colors.black26,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'No work requests yet',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white60 : Colors.black54,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Ask AI to do something for the team. Nothing runs until you send the request.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDark ? Colors.white38 : Colors.black38,
+                  ),
+                ),
+              ],
+            ),
+          )
+        : null;
+    return AxTimelineContainer(
+      scrollKey: const ValueKey('work-history-scroll'),
+      controller: historyController,
+      headerSlivers: [
+        if (hasOlder)
+          SliverToBoxAdapter(
+            child: TextButton(
+              onPressed: loadingOlder ? null : onLoadOlder,
+              child: Text(loadingOlder
+                  ? 'Loading older Work history…'
+                  : 'Load older Work history'),
+            ),
+          ),
+        if (timelineError != null && workTimeline.isNotEmpty)
+          SliverToBoxAdapter(
+            child: TextButton(
+              onPressed: onRefresh,
+              child: const Text('Retry Work sync'),
+            ),
+          ),
+        if (loadingTimeline && workTimeline.isEmpty)
+          const SliverToBoxAdapter(
+            child: Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: LinearProgressIndicator(),
-            )
-          else if (timelineError != null && workTimeline.isEmpty)
-            Padding(
+            ),
+          )
+        else if (timelineError != null && workTimeline.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
                 'Could not load Work history: $timelineError',
                 style: TextStyle(color: colors.error),
               ),
-            )
-          else if (workTimeline.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 16),
-              alignment: Alignment.center,
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.chat_bubble_outline_rounded,
-                    size: 42,
-                    color: isDark ? Colors.white24 : Colors.black26,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No work requests yet',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: isDark ? Colors.white60 : Colors.black54,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Ask AI to do something for the team. Nothing runs until you send the request.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isDark ? Colors.white38 : Colors.black38,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            // Only the card whose assignment changed rebuilds on Worker
-            // activity; the list itself depends on the Work history alone.
-            ListView.separated(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: workTimeline.length,
-              // Preserve render and selection state by request when entries move.
-              findItemIndexCallback: (key) {
-                if (key is! ValueKey<String>) return null;
-                final index = workTimeline.indexWhere((r) => r.id == key.value);
-                return index < 0 ? null : index;
-              },
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final request = workTimeline[index];
-                return ListenableBuilder(
-                  key: ValueKey(request.id),
-                  listenable: activityStore.listenableForRequest(request),
-                  builder: (context, _) => _WorkTimelineCard(
-                    request: request,
-                    activities: activityStore.forRequest(request),
-                    clockOffset: activityStore.clockOffsetForRequest(request),
-                    progressText: localWorkProgress[request.id],
-                    currentUserId: currentUserId,
-                    currentUserName: currentUserName,
-                    workflowCatalog: workflowCatalog,
-                    onReportIssue: localWorkProgress.containsKey(request.id)
-                        ? null
-                        : onReportIssue,
-                    reportedIssue: reportedIssues[request.id],
-                    reportingIssue: reportingIssueIds.contains(request.id),
-                    issueReportError: issueReportErrors[request.id],
-                    onRetryStep: localWorkProgress.containsKey(request.id)
-                        ? null
-                        : onRetryStep,
-                    onCancelRun: localWorkProgress.containsKey(request.id)
-                        ? null
-                        : onCancelRun,
-                  ),
-                );
-              },
             ),
-        ]));
+          ),
+      ],
+      itemCount: workTimeline.length,
+      empty: empty,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      findChildIndexCallback: (key) {
+        if (key is! ValueKey<String>) return null;
+        final index = workTimeline.indexWhere((r) => r.id == key.value);
+        return index < 0 ? null : index;
+      },
+      itemBuilder: (context, index) {
+        final request = workTimeline[index];
+        return ListenableBuilder(
+          key: ValueKey(request.id),
+          listenable: activityStore.listenableForRequest(request),
+          builder: (context, _) => _WorkTimelineCard(
+            request: request,
+            activities: activityStore.forRequest(request),
+            clockOffset: activityStore.clockOffsetForRequest(request),
+            realtimeStatus: realtimeStatus,
+            progressText: localWorkProgress[request.id],
+            currentUserId: currentUserId,
+            currentUserName: currentUserName,
+            workflowCatalog: workflowCatalog,
+            onReportIssue: localWorkProgress.containsKey(request.id)
+                ? null
+                : onReportIssue,
+            reportedIssue: reportedIssues[request.id],
+            reportingIssue: reportingIssueIds.contains(request.id),
+            issueReportError: issueReportErrors[request.id],
+            onRetryStep:
+                localWorkProgress.containsKey(request.id) ? null : onRetryStep,
+            onCancelRun:
+                localWorkProgress.containsKey(request.id) ? null : onCancelRun,
+          ),
+        );
+      },
+    );
   }
 
   Widget controls(BuildContext context) => _buildComposerInput(
@@ -440,8 +448,7 @@ class _WorkComposer extends StatelessWidget {
             allowWorkerChange: policy.userSelectsWorker,
             allowModelChange: policy.userSelectsModel,
             allowEffortChange: policy.userSelectsEffort,
-            catalog:
-                AxWorkflowSelectionOptions(eligibleWorkers).sharedCatalog,
+            catalog: AxWorkflowSelectionOptions(eligibleWorkers).sharedCatalog,
             value: ExecutionSelection(
                 worker: selectedWorkerId,
                 catalogRevision: (executionSelection['catalogRevision'] ??
@@ -570,11 +577,56 @@ class _WorkComposer extends StatelessWidget {
   }
 }
 
+/// Keeps the parsed Markdown subtree stable while the surrounding Work card
+/// receives activity/status updates. A changed source intentionally replaces
+/// the child so selection handles cannot refer to stale response text.
+class _MemoizedWorkMarkdown extends StatefulWidget {
+  const _MemoizedWorkMarkdown({
+    super.key,
+    required this.data,
+    this.fitContent = false,
+  });
+
+  final String data;
+  final bool fitContent;
+
+  @override
+  State<_MemoizedWorkMarkdown> createState() => _MemoizedWorkMarkdownState();
+}
+
+class _MemoizedWorkMarkdownState extends State<_MemoizedWorkMarkdown> {
+  late Widget _body;
+
+  Widget _createBody() => ConclaveMarkdownBody(
+        key: widget.key,
+        data: widget.data,
+        fitContent: widget.fitContent,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    _body = _createBody();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MemoizedWorkMarkdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data ||
+        oldWidget.fitContent != widget.fitContent) {
+      _body = _createBody();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _body;
+}
+
 class _WorkTimelineCard extends StatelessWidget {
   const _WorkTimelineCard({
-    super.key,
     required this.request,
     required this.activities,
+    required this.realtimeStatus,
     this.clockOffset = Duration.zero,
     this.progressText,
     required this.currentUserId,
@@ -590,6 +642,7 @@ class _WorkTimelineCard extends StatelessWidget {
 
   final AxWorkRequest request;
   final List<AxWorkActivity> activities;
+  final AxWorkRealtimeStatus realtimeStatus;
   final Duration clockOffset;
   final String? progressText;
   final String? currentUserId;
@@ -696,9 +749,7 @@ class _WorkTimelineCard extends StatelessWidget {
     final error = request.status == 'failed' || rawError?.isNotEmpty == true
         ? _executionFailureMessage(
             failedStep?.errorCode,
-            validationMessage: request.steps.isEmpty
-                ? rawError
-                : null,
+            validationMessage: failedStep == null ? rawError : null,
           )
         : null;
     final isError = error?.isNotEmpty == true;
@@ -737,12 +788,16 @@ class _WorkTimelineCard extends StatelessWidget {
     final presentation =
         WorkerPresentation.resolve(workerType, workerDisplayName);
     final workerName = presentation.name;
+    final hasWorkerIdentity =
+        workerDisplayName?.isNotEmpty == true || workerType?.isNotEmpty == true;
+    final isPreStart =
+        const {'queued', 'starting', 'acknowledged'}.contains(request.status);
     final isWorkerResponse = !isError &&
-        (senderStep?.status == 'running' ||
+        hasWorkerIdentity &&
+        (isPreStart ||
             progress.isExecuting ||
-            response?.isNotEmpty == true) &&
-        (workerDisplayName?.isNotEmpty == true ||
-            workerType?.isNotEmpty == true);
+            senderStep?.status == 'running' ||
+            response?.isNotEmpty == true);
     final senderName = isWorkerResponse ? workerName : 'Conclave';
     final workerIcon = presentation.iconAsset;
 
@@ -809,9 +864,7 @@ class _WorkTimelineCard extends StatelessWidget {
                 radius: 11,
                 backgroundColor: ConclaveColors.primarySoftColor(isDark),
                 child: Text(workerName.substring(0, 1).toUpperCase(),
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: metaColor)),
+                    style: TextStyle(fontSize: 12, color: metaColor)),
               ))
         : Opacity(
             opacity: senderIconOpacity,
@@ -886,7 +939,7 @@ class _WorkTimelineCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                       ],
-                      ConclaveMarkdownBody(
+                      _MemoizedWorkMarkdown(
                         data: request.prompt,
                         fitContent: true,
                       ),
@@ -966,7 +1019,9 @@ class _WorkTimelineCard extends StatelessWidget {
                             const SizedBox(width: 6),
                             Expanded(
                               child: AxLiveTicker(
-                                active: progress.isTicking,
+                                active: progress.isTicking &&
+                                    realtimeStatus !=
+                                        AxWorkRealtimeStatus.checking,
                                 builder: (context, now) => Text(
                                   metadataAt(now),
                                   overflow: TextOverflow.ellipsis,
@@ -978,31 +1033,45 @@ class _WorkTimelineCard extends StatelessWidget {
                           ],
                         ],
                       ),
+                      if (activities.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _WorkActivityTrail(
+                          activities: activities,
+                          color: metaColor,
+                          accentColor: colors.primary,
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       Builder(builder: (context) {
                         // The body shows the Worker's live status while the
                         // request is unfinished and the real outcome at the end.
-                        final String? message = error?.isNotEmpty == true
-                            ? error
-                            : response?.isNotEmpty == true
-                                ? response
-                                : request.status == 'cancelled'
-                                    ? 'Request cancelled.'
-                                    : (progress.isExecuting
-                                            ? null
-                                            : progressText) ??
-                                        switch (request.status) {
-                                          'completed' => 'Request completed.',
-                                          'failed' =>
-                                            'Your request could not be completed.',
-                                          'timed_out' =>
-                                            'The worker took too long to respond. Please retry your request.',
-                                          'lost' =>
-                                            'The connection to the worker was lost. Please retry your request.',
-                                          _ => null,
-                                        };
-                        final showLiveStatus =
-                            message == null && !progress.isTerminal;
+                        final String? message = realtimeStatus ==
+                                    AxWorkRealtimeStatus.checking &&
+                                !progress.isTerminal
+                            ? 'Connection interrupted — checking execution status.'
+                            : error?.isNotEmpty == true
+                                ? error
+                                : response?.isNotEmpty == true
+                                    ? response
+                                    : request.status == 'cancelled'
+                                        ? 'Request cancelled.'
+                                        : (progress.isExecuting
+                                                ? null
+                                                : progressText) ??
+                                            switch (request.status) {
+                                              'completed' =>
+                                                'Request completed.',
+                                              'failed' =>
+                                                'Your request could not be completed.',
+                                              'timed_out' =>
+                                                'The worker took too long to respond. Please retry your request.',
+                                              'lost' =>
+                                                'The connection to the worker was lost. Please retry your request.',
+                                              _ => null,
+                                            };
+                        final showLiveStatus = message == null &&
+                            !progress.isTerminal &&
+                            realtimeStatus != AxWorkRealtimeStatus.checking;
                         final isError = error?.isNotEmpty == true;
                         Widget compactAction({
                           required String tooltip,
@@ -1029,7 +1098,9 @@ class _WorkTimelineCard extends StatelessWidget {
                           children: [
                             if (showLiveStatus) ...[
                               AxLiveTicker(
-                                active: progress.isTicking,
+                                active: progress.isTicking &&
+                                    realtimeStatus !=
+                                        AxWorkRealtimeStatus.checking,
                                 builder: (context, now) {
                                   final live = resolveProgress(now);
                                   final text = live.currentAction ?? '';
@@ -1038,8 +1109,8 @@ class _WorkTimelineCard extends StatelessWidget {
                                         ? '$text · no recent updates'
                                         : text,
                                     key: const ValueKey('work-live-status'),
-                                    style: ConclaveMessageTypography
-                                            .fromTheme(Theme.of(context))
+                                    style: ConclaveMessageTypography.fromTheme(
+                                            Theme.of(context))
                                         .copyWith(
                                       color: isDark
                                           ? Colors.white60
@@ -1059,7 +1130,7 @@ class _WorkTimelineCard extends StatelessWidget {
                                       .copyWith(color: colors.error),
                                 )
                               else
-                                ConclaveMarkdownBody(
+                                _MemoizedWorkMarkdown(
                                   key: ValueKey((request.id, message)),
                                   data: message,
                                 ),
@@ -1165,6 +1236,93 @@ class _WorkTimelineCard extends StatelessWidget {
 /// Rebuilds [builder] once a second while [active], handing it the current
 /// time. Used for live elapsed time and stale-progress hints that must keep
 /// moving between Worker events.
+class _WorkActivityTrail extends StatelessWidget {
+  const _WorkActivityTrail({
+    required this.activities,
+    required this.color,
+    required this.accentColor,
+  });
+
+  final List<AxWorkActivity> activities;
+  final Color color;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = activities.where((item) => !item.isFinished).lastOrNull;
+    final completedAll = activities.where((item) => item.isFinished).toList();
+    final completed = completedAll.length <= 4
+        ? completedAll
+        : completedAll.sublist(completedAll.length - 4);
+    if (active == null && completed.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (active != null)
+            Row(
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.8,
+                    color: accentColor,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    active.title,
+                    key: const ValueKey('work-active-activity'),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          if (completed.isNotEmpty) ...[
+            if (active != null) const SizedBox(height: 6),
+            for (final item in completed)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  children: [
+                    Icon(
+                      item.isError
+                          ? Icons.error_outline_rounded
+                          : Icons.check_circle_outline_rounded,
+                      size: 14,
+                      color: item.isError ? Colors.redAccent : color,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        item.title,
+                        key: ValueKey('work-completed-${item.eventId}'),
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11, color: color),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class AxLiveTicker extends StatefulWidget {
   const AxLiveTicker({
     super.key,

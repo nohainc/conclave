@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_app.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/ax/ax_stores.dart';
+import 'package:conclave_app/src/ax/ax_work_models.dart';
 import 'package:conclave_app/src/platform/platform_services.dart';
 import 'ax_fixture_data.dart';
 import 'ax_fixture_snapshot.dart';
@@ -58,7 +59,7 @@ void main() {
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(builds, greaterThanOrEqualTo(2));
     expect(find.text('build-$builds'), findsOneWidget);
@@ -212,7 +213,10 @@ void main() {
             reason: '$type must not rebuild for Worker inventory');
       }
       if (!spacePage) {
-        expect(builds['ListenableBuilder'] ?? 0, greaterThan(0));
+        expect(
+            builds['ValueListenableBuilder<ThreadComposerPresentationSnapshot>'] ??
+                0,
+            greaterThan(0));
       }
       await tester.pumpWidget(const SizedBox());
     });
@@ -226,17 +230,36 @@ void main() {
     final store = await shell(tester, '/spaces/${space.id}/threads/$id');
     observe();
     builds.clear();
-    store.workHistory.replace(id, []);
+    store.workHistory.replace(id, [
+      const AxWorkRequest(
+        id: 'request-1',
+        requestedByName: 'You',
+        prompt: 'A Work request',
+        workflowId: 'direct',
+        workflowVersion: 1,
+        status: 'completed',
+        createdAt: '2026-10-14T12:00:00Z',
+        steps: [],
+      )
+    ]);
     await tester.pumpAndSettle();
-    expect(builds['work-history-scroll'] ?? 0, greaterThan(0));
-    expect(builds['AxDiscussionBuilder'] ?? 0, 0);
+    expect(
+        builds['ValueListenableBuilder<ThreadWorkPresentationSnapshot?>'] ?? 0,
+        greaterThan(0));
+    expect(
+        builds['ValueListenableBuilder<ThreadChatPresentationSnapshot?>'] ?? 0,
+        0);
     expect(builds['ThreadPage'] ?? 0, 0);
     expect(builds['ConclaveAppShell'] ?? 0, 0);
     builds.clear();
     await store.discussion.synchronize(id, reconcileNewest: true);
     await tester.pumpAndSettle();
-    expect(builds['AxDiscussionBuilder'] ?? 0, greaterThan(0));
-    expect(builds['work-history-scroll'] ?? 0, 0);
+    expect(
+        builds['ValueListenableBuilder<ThreadChatPresentationSnapshot?>'] ?? 0,
+        greaterThan(0));
+    expect(
+        builds['ValueListenableBuilder<ThreadWorkPresentationSnapshot?>'] ?? 0,
+        0);
     expect(builds['ThreadPage'] ?? 0, 0);
     await tester.pumpWidget(const SizedBox());
   });
@@ -292,11 +315,14 @@ void main() {
                   {'id': 'direct', 'version': 2, 'name': 'Published workflow'})
             ]);
     await tester.pumpAndSettle();
-    expect(builds['ListenableBuilder'] ?? 0, greaterThan(0));
+    expect(
+        builds['ValueListenableBuilder<ThreadComposerPresentationSnapshot>'] ??
+            0,
+        greaterThan(0));
     for (final type in [
       'ConclaveAppShell',
       'AxSidebar',
-      'AxDiscussionBuilder',
+      'ValueListenableBuilder<ThreadChatPresentationSnapshot?>',
       'ThreadPage',
       'work-history-scroll'
     ]) {

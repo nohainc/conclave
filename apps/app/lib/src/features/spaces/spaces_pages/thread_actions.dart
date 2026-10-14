@@ -249,6 +249,7 @@ extension _ThreadActions on _ThreadPageState {
     final cache = _workHistoryCache;
     final id = widget.thread.id;
     final controller = _workHistoryController;
+    final interactionGeneration = _interactionGeneration;
     final offset = controller.hasClients ? controller.offset : 0.0;
     final extent =
         controller.hasClients ? controller.position.maxScrollExtent : 0.0;
@@ -257,6 +258,7 @@ extension _ThreadActions on _ThreadPageState {
       await cache.loadOlder(id);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted &&
+            interactionGeneration == _interactionGeneration &&
             widget.thread.id == id &&
             identical(cache, _workHistoryCache) &&
             controller.hasClients) {
@@ -438,6 +440,7 @@ extension _ThreadActions on _ThreadPageState {
     final threadId = widget.thread.id;
     final cache = _discussionCache;
     final controller = _chatHistoryController;
+    final interactionGeneration = _interactionGeneration;
     final offset = controller.hasClients ? controller.offset : 0.0;
     final extent =
         controller.hasClients ? controller.position.maxScrollExtent : 0.0;
@@ -446,6 +449,7 @@ extension _ThreadActions on _ThreadPageState {
       await cache.loadOlder(threadId);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted &&
+            interactionGeneration == _interactionGeneration &&
             widget.thread.id == threadId &&
             identical(cache, _discussionCache) &&
             controller.hasClients) {

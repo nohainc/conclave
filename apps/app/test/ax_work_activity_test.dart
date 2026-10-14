@@ -13,6 +13,7 @@ Map<String, dynamic> activityEvent({
   required String status,
   String activityId = 'tool-1',
   String title = 'Running repository checks',
+  String attemptId = 'attempt-1',
 }) =>
     {
       'eventId': eventId,
@@ -23,7 +24,7 @@ Map<String, dynamic> activityEvent({
           .toIso8601String(),
       'workspaceId': 'workspace-1',
       'threadId': 'thread-1',
-      'attemptId': 'attempt-1',
+      'attemptId': attemptId,
       'assignmentId': 'assignment-1',
       'workspaceRuntimeId': 'runtime-1',
       'sequence': streamSequence,
@@ -92,7 +93,8 @@ void main() {
     expect(activities.single.title, 'Repository checks completed');
   });
 
-  test('drops reordered older realtime updates without regressing activity', () {
+  test('drops reordered older realtime updates without regressing activity',
+      () {
     final store = AxWorkActivityStore();
     expect(
       store.handle(
@@ -123,6 +125,56 @@ void main() {
     );
     expect(store.forAssignment('assignment-1'), hasLength(1));
     expect(store.forAssignment('assignment-1').single.status, 'completed');
+  });
+
+  test('fences delayed activity from a previous retry', () {
+    final store = AxWorkActivityStore();
+    expect(
+      store.handle(
+        activityEvent(
+          eventId: 'attempt-1-start',
+          streamSequence: 1,
+          activitySequence: 1,
+          type: 'execution.started',
+          status: 'running',
+          attemptId: 'attempt-1',
+        ),
+        threadId: 'thread-1',
+      ),
+      isTrue,
+    );
+    expect(
+      store.handle(
+        activityEvent(
+          eventId: 'attempt-2-start',
+          streamSequence: 2,
+          activitySequence: 1,
+          type: 'execution.started',
+          status: 'running',
+          attemptId: 'attempt-2',
+          title: 'Retry started',
+        ),
+        threadId: 'thread-1',
+      ),
+      isTrue,
+    );
+    expect(
+      store.handle(
+        activityEvent(
+          eventId: 'late-old-tool',
+          streamSequence: 3,
+          activitySequence: 2,
+          type: 'tool.started',
+          status: 'running',
+          attemptId: 'attempt-1',
+          title: 'Old attempt tool',
+        ),
+        threadId: 'thread-1',
+      ),
+      isFalse,
+    );
+    expect(store.forAssignment('assignment-1').map((item) => item.attemptId),
+        ['attempt-2']);
   });
 
   test('ignores activity from another Thread and keeps a bounded timeline', () {
@@ -276,8 +328,7 @@ void main() {
     expect(second, 0);
   });
 
-  testWidgets('coalesces bursts of replaceable status updates',
-      (tester) async {
+  testWidgets('coalesces bursts of replaceable status updates', (tester) async {
     final store = AxWorkActivityStore();
     var notified = 0;
     store.listenableForRequest(requestFor('assignment-1')).addListener(

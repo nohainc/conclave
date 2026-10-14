@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../ax_data.dart';
+import '../ax_render_diagnostics.dart';
 import 'ax_work_history.dart';
 import 'ax_sync_scope.dart';
 
@@ -20,7 +22,9 @@ class _StreamLease {
 
 /// One event router per session cache. Stream leases prevent shell/page duplicate
 /// delivery; visible scopes own the disconnected fallback, not individual widgets.
-class AxWorkRealtimeSync {
+enum AxWorkRealtimeStatus { available, checking }
+
+class AxWorkRealtimeSync extends ChangeNotifier {
   AxWorkRealtimeSync(this.cache,
       {this.fallbackInterval = const Duration(seconds: 15)});
   final AxWorkHistoryCache cache;
@@ -38,13 +42,27 @@ class AxWorkRealtimeSync {
   bool _needsRecovery = false;
   bool _gapStale = false;
   bool _disposed = false;
+  bool _connectionInterrupted = false;
   int _generation = 0;
   _RecoveryRead? _recovery;
   int _sessionEpoch = 0;
   bool get healthy => _healthy;
+  AxWorkRealtimeStatus get status =>
+      _connectionInterrupted || _gapStale || _recovery != null
+          ? AxWorkRealtimeStatus.checking
+          : AxWorkRealtimeStatus.available;
+  bool get checkingExecution => status == AxWorkRealtimeStatus.checking;
   Future<void> get pendingRecovery =>
       _recovery?.completer.future ?? Future.value();
   bool get polling => _fallback?.isActive == true;
+
+  void _notifyDiagnostics([String? operation]) {
+    AxRenderDiagnostics.instance.notifierDispatch(
+      component: 'AxWorkRealtimeSync',
+      operation: operation,
+    );
+    if (!_disposed) notifyListeners();
+  }
 
   void Function() listen(Stream<Map<String, dynamic>>? events,
       {String? threadId}) {
@@ -111,7 +129,9 @@ class AxWorkRealtimeSync {
     _healthy = false;
     _needsRecovery = true;
     _gapStale = true;
+    _connectionInterrupted = true;
     ++_generation;
+    _notifyDiagnostics('disconnected');
     _scheduleFallback();
   }
 
@@ -171,6 +191,8 @@ class AxWorkRealtimeSync {
             _healthy = true;
             _gapStale = false;
             _needsRecovery = false;
+            _connectionInterrupted = false;
+            _notifyDiagnostics('recovery.complete');
             _scheduleFallback();
           }
         } while (read.again && epoch == _sessionEpoch && !_disposed);
@@ -178,11 +200,15 @@ class AxWorkRealtimeSync {
       } catch (error, stack) {
         if (epoch == _sessionEpoch) {
           _healthy = _transportHealthy && !_gapStale;
+          _notifyDiagnostics('recovery.failed');
           _scheduleFallback();
         }
         read.completer.completeError(error, stack);
       } finally {
-        if (identical(_recovery, read)) _recovery = null;
+        if (identical(_recovery, read)) {
+          _recovery = null;
+          _notifyDiagnostics('recovery.finally');
+        }
       }
     }();
     return read.completer.future;
@@ -191,6 +217,14 @@ class AxWorkRealtimeSync {
   Future<void> handle(Map<String, dynamic> event) async {
     if (_disposed) return;
     final type = event['type'];
+    if (type is String) {
+      AxRenderDiagnostics.instance.cacheMutation(
+        component: 'AxWorkRealtimeSync',
+        operation: type,
+        threadId:
+            event['threadId'] is String ? event['threadId'] as String : null,
+      );
+    }
     if (type == 'realtime.connection') {
       if (event['status'] != 'connected') {
         _disconnected();
@@ -198,7 +232,9 @@ class AxWorkRealtimeSync {
       }
       _transportHealthy = true;
       _healthy = !_gapStale;
+      _connectionInterrupted = true;
       ++_generation;
+      _notifyDiagnostics('connection.connected');
       _scheduleFallback();
       await _resync(discover: _needsRecovery, recent: _needsRecovery);
       return;
@@ -206,6 +242,8 @@ class AxWorkRealtimeSync {
     if (type == 'realtime.ready') {
       _transportHealthy = true;
       _healthy = !_gapStale;
+      _connectionInterrupted = true;
+      _notifyDiagnostics('realtime.ready');
       _scheduleFallback();
       await _resync(discover: _needsRecovery, recent: _needsRecovery);
       return;
@@ -219,13 +257,18 @@ class AxWorkRealtimeSync {
         // A scoped gap is not a transport outage. Recover retained active
         // entities in this Thread without polling unrelated views.
         if (!cache.threadIds.contains(scope.id)) return;
+        _connectionInterrupted = true;
+        _gapStale = true;
+        _notifyDiagnostics('reconnect.required');
         await _resync(discover: true, targets: {scope.id!});
         return;
       }
       _healthy = false;
       _needsRecovery = true;
       _gapStale = true;
+      _connectionInterrupted = true;
       ++_generation;
+      _notifyDiagnostics('realtime.stale');
       _scheduleFallback();
       await _resync(discover: true, recent: true);
       return;
@@ -236,6 +279,7 @@ class AxWorkRealtimeSync {
     }
     final executionChange = type is String &&
         !type.contains('.progress') &&
+        type != 'assignment.activity' &&
         const [
           'run.',
           'task.',
@@ -356,10 +400,13 @@ class AxWorkRealtimeSync {
     _transportHealthy = false;
     _needsRecovery = false;
     _gapStale = false;
+    _connectionInterrupted = false;
     _fallback?.cancel();
     _fallback = null;
+    _notifyDiagnostics('execution.event');
   }
 
+  @override
   void dispose() {
     _disposed = true;
     reset();
@@ -368,5 +415,6 @@ class AxWorkRealtimeSync {
     }
     _streams.clear();
     _scopes.clear();
+    super.dispose();
   }
 }

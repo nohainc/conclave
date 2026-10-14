@@ -227,9 +227,23 @@ describe("Cloud event publisher", () => {
     const harness = createHarness();
     const result = await new CloudEventPublisher(harness.env).publish({
       ...baseEvent,
-      type: "assignment.progress",
+      type: "assignment.activity",
       durable: false,
-      payload: { entityId: "assignment-1", percentage: 50 },
+      workspaceRuntimeId: "runtime-1",
+      runId: "run-1",
+      taskId: "task-1",
+      attemptId: "attempt-1",
+      assignmentId: "assignment-1",
+      payload: {
+        entityId: "assignment-1",
+        workerId: "worker-1",
+        sourceEventId: "source-1",
+        executionId: "execution-1",
+        activitySequence: 1,
+        activityType: "model.status",
+        activityStatus: "running",
+        title: "Working",
+      },
     });
 
     expect(result.persisted).toBe(false);

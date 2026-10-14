@@ -299,12 +299,14 @@ void main() {
     final cancel = sync.listen(null, threadId: 'w');
     await sync.handle({'type': 'realtime.connection', 'status': 'connected'});
     expect(sync.polling, isFalse);
+    expect(sync.checkingExecution, isFalse);
     await tester.pump(const Duration(seconds: 45));
     expect(source.pages, [false]);
     expect(source.gets, ['r']);
     await sync
         .handle({'type': 'realtime.connection', 'status': 'reconnecting'});
     expect(sync.polling, isTrue);
+    expect(sync.checkingExecution, isTrue);
     await tester.pump(const Duration(seconds: 14));
     expect(source.pages.length, 1);
     await tester.pump(const Duration(seconds: 1));
@@ -317,6 +319,7 @@ void main() {
     await sync.handle({'type': 'realtime.connection', 'status': 'connected'});
     expect(sync.healthy, isTrue);
     expect(sync.polling, isFalse);
+    expect(sync.checkingExecution, isFalse);
     expect(cache.request('w', 'missed'), isNotNull);
     final pages = source.pages.length, gets = source.gets.length;
     await tester.pump(const Duration(seconds: 45));
@@ -329,7 +332,7 @@ void main() {
     await seed();
     source.pages.clear();
     for (var i = 0; i < 100; i++) {
-      await sync.handle(event('assignment.progress'));
+      await sync.handle(event('assignment.activity'));
       await sync.handle(event('task.progress'));
     }
     expect(source.gets, isEmpty);

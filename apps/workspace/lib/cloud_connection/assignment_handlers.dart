@@ -3,6 +3,7 @@ part of '../cloud_connection.dart';
 extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
   static const _terminalDeliveryTimeout = Duration(seconds: 10);
   static const _cancellationTimeout = Duration(seconds: 5);
+  static const _defaultQueueWaitTimeout = Duration(minutes: 2);
 
   Future<void> _handleAssignmentStart(Map<String, dynamic> message) async {
     final socket = _transport;
@@ -17,9 +18,22 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       'assignmentId',
       'idempotencyKey',
     ];
-    if (socket == null ||
-        payload is! Map<String, dynamic> ||
+    if (socket == null) return;
+    if (payload is! Map<String, dynamic> ||
         requiredFields.any((field) => message[field] is! String)) {
+      if (_hasAssignmentCorrelation(message)) {
+        await _sendAssignmentError(
+          socket,
+          message,
+          'execution_failed',
+          retryable: false,
+          diagnostic: _assignmentDiagnostic(
+            stage: 'assignment_envelope_validation',
+            detail:
+                'Assignment envelope is missing a required correlation field',
+          ),
+        );
+      }
       return;
     }
 
@@ -70,6 +84,11 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       assignmentId: message['assignmentId'] as String,
       idempotencyKey: message['idempotencyKey'] as String,
       payload: Map<String, Object?>.from(assignmentPayload),
+    );
+    await recordAssignmentDiagnostic(
+      context,
+      event: 'assignment.validated',
+      stage: 'validation',
     );
     await recordAssignmentDiagnostic(
       context,
@@ -194,11 +213,16 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
     _notifyStateChanged();
     await recordAssignmentDiagnostic(
       context,
-      event: 'assignment.started',
-      stage: 'worker_start',
+      event: 'assignment.accepted',
+      stage: 'accepted',
     );
-    await _recordAssignment(context.assignmentId, AssignmentStatus.running,
+    await _recordAssignment(context.assignmentId, AssignmentStatus.accepted,
         context: context);
+    await recordAssignmentDiagnostic(
+      context,
+      event: 'assignment.queued',
+      stage: 'admission',
+    );
     if (_cancelledBeforeStart.remove(context.assignmentId)) {
       await _recordAssignment(
         context.assignmentId,
@@ -223,11 +247,26 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       correlation,
       {'accepted': true, 'estimatedStartMs': 0},
     )));
+    await recordAssignmentDiagnostic(
+      context,
+      event: 'assignment.launching',
+      stage: 'engine_startup',
+    );
     WorkspaceAssignmentResult result;
     try {
       final timeoutMs = context.payload['timeoutMs'];
+      final queueWaitTimeoutMs = context.payload['queueWaitTimeoutMs'];
       final timeout = Duration(milliseconds: timeoutMs as int);
-      result = await assignmentHandler!(context).timeout(timeout);
+      final queueWaitTimeout = Duration(
+        milliseconds: queueWaitTimeoutMs is int
+            ? queueWaitTimeoutMs
+            : _defaultQueueWaitTimeout.inMilliseconds,
+      );
+      // The outer watchdog covers both local queue admission and provider
+      // execution. The supervisor receives the two deadlines separately, so
+      // queue wait cannot consume the provider execution budget.
+      result =
+          await assignmentHandler!(context).timeout(timeout + queueWaitTimeout);
     } catch (error) {
       try {
         final normalizedError = normalizeAssignmentExecutionFailure(
@@ -241,6 +280,36 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
         );
         final processExitCode =
             _processExitCode(normalizedError.localDiagnostic);
+        if (errorCode == 'cancelled') {
+          final cancelledPayload = <String, Object?>{
+            'status': 'cancelled',
+            'executionId': context.executionId,
+            'reason': 'Assignment cancelled before terminal completion.',
+          };
+          await _recordAssignment(
+            context.assignmentId,
+            AssignmentStatus.cancelled,
+            context: context,
+            result: cancelledPayload,
+          );
+          await recordAssignmentDiagnostic(
+            context,
+            event: 'assignment.cancelled',
+            stage: 'terminal_recorded',
+            contextData: {
+              'transport': 'assignment_cancelled',
+              if (diagnostic != null) 'diagnostic': diagnostic,
+            },
+          );
+          await _sendTerminal(
+            socket,
+            context,
+            'assignment.cancelled',
+            correlation,
+            cancelledPayload,
+          );
+          return;
+        }
         final errorPayload = <String, Object?>{
           'status': 'failed',
           'executionId': context.executionId,
@@ -272,7 +341,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
           context,
           event: 'assignment.failed',
           stage: assignmentDiagnosticStage(normalizedError.localDiagnostic) ??
-              'worker_execution',
+              'terminal_recorded',
           severity: 'error',
           errorCode: errorCode,
           retryable: normalizedError.retryable,
@@ -318,7 +387,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       await recordAssignmentDiagnostic(
         context,
         event: 'assignment.completed',
-        stage: 'result',
+        stage: 'terminal_recorded',
       );
       await _sendTerminal(
         socket,
@@ -525,6 +594,20 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
           (rawPayload['timeoutMs'] as int) > 2147483647) {
         return 'Assignment snapshot fields are invalid';
       }
+      final queueWaitTimeoutMs = rawPayload['queueWaitTimeoutMs'];
+      final maxConcurrentAssignments = rawPayload['maxConcurrentAssignments'];
+      if (queueWaitTimeoutMs != null &&
+          (queueWaitTimeoutMs is! int ||
+              queueWaitTimeoutMs < 1000 ||
+              queueWaitTimeoutMs > 2147483647)) {
+        return 'Assignment queueWaitTimeoutMs is invalid';
+      }
+      if (maxConcurrentAssignments != null &&
+          (maxConcurrentAssignments is! int ||
+              maxConcurrentAssignments < 1 ||
+              maxConcurrentAssignments > 1024)) {
+        return 'Assignment maxConcurrentAssignments is invalid';
+      }
       return null;
     }
     for (final field in [
@@ -554,6 +637,20 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
     if (timeoutMs is! int || timeoutMs < 1000 || timeoutMs > 2147483647) {
       return 'Assignment timeoutMs must be between 1000 and 2147483647 milliseconds';
     }
+    final queueWaitTimeoutMs = rawPayload['queueWaitTimeoutMs'];
+    if (queueWaitTimeoutMs != null &&
+        (queueWaitTimeoutMs is! int ||
+            queueWaitTimeoutMs < 1000 ||
+            queueWaitTimeoutMs > 2147483647)) {
+      return 'Assignment queueWaitTimeoutMs must be between 1000 and 2147483647 milliseconds';
+    }
+    final maxConcurrentAssignments = rawPayload['maxConcurrentAssignments'];
+    if (maxConcurrentAssignments != null &&
+        (maxConcurrentAssignments is! int ||
+            maxConcurrentAssignments < 1 ||
+            maxConcurrentAssignments > 1024)) {
+      return 'Assignment maxConcurrentAssignments must be between 1 and 1024';
+    }
     final repository = rawPayload['repository'];
     if (repository != null) {
       if (repository is! Map ||
@@ -565,6 +662,23 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       }
     }
     return null;
+  }
+
+  bool _hasAssignmentCorrelation(Map<String, dynamic> message) {
+    for (final field in const [
+      'executionWorkspaceId',
+      'workspaceRuntimeId',
+      'workerId',
+      'runId',
+      'taskId',
+      'attemptId',
+      'assignmentId',
+      'idempotencyKey',
+    ]) {
+      final value = message[field];
+      if (value is! String || value.trim().isEmpty) return false;
+    }
+    return true;
   }
 
   Future<void> _sendAssignmentError(

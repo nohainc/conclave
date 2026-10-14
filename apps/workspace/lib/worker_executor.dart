@@ -166,8 +166,15 @@ typedef ToolProfileActivityAssignmentExecutor = Future<WorkerResult> Function(
   WorkspaceAssignmentContext context,
   Map<String, Object?> payload, {
   void Function(WorkerProgress progress)? onProgress,
+  FutureOr<void> Function()? onSlotReserved,
   FutureOr<void> Function(WorkerActivity activity)? onActivity,
 });
+typedef WorkerExecutionStartedRelay = FutureOr<void> Function(
+  WorkspaceAssignmentContext context,
+);
+typedef WorkerExecutionSlotReservedRelay = FutureOr<void> Function(
+  WorkspaceAssignmentContext context,
+);
 
 class AssignmentLogicalWorker {
   const AssignmentLogicalWorker({
@@ -214,6 +221,8 @@ class WorkerAssignmentHandler {
     ThreadMutationCoordinator? threadMutationCoordinator,
     this.onProgress,
     this.onActivity,
+    this.onExecutionStarted,
+    this.onExecutionSlotReserved,
     this.cancelToolProfileAssignment,
   })  : spaceMutationCoordinator = spaceMutationCoordinator ??
             (spaceDirectoryLifecycle == null
@@ -240,7 +249,10 @@ class WorkerAssignmentHandler {
   final ThreadMutationCoordinator? threadMutationCoordinator;
   final WorkerProgressRelay? onProgress;
   final WorkerActivityRelay? onActivity;
+  final WorkerExecutionStartedRelay? onExecutionStarted;
+  final WorkerExecutionSlotReservedRelay? onExecutionSlotReserved;
   final Future<bool> Function(String assignmentId)? cancelToolProfileAssignment;
+  final _cancellationRequests = <String>{};
 
   /// Resolves the local Logical Worker and Workspace-owned execution directory.
   Future<WorkerAssignmentScope> prepareAssignmentScope(
@@ -307,6 +319,12 @@ class WorkerAssignmentHandler {
 
   Future<WorkspaceAssignmentResult> call(
       WorkspaceAssignmentContext context) async {
+    if (_cancellationRequests.remove(context.assignmentId)) {
+      throw const AssignmentExecutionFailure(
+        code: 'cancelled',
+        message: 'The assignment was cancelled before Engine launch.',
+      );
+    }
     final scope = await prepareAssignmentScope(context);
     final worker = scope.worker;
     final workerId = worker.id;
@@ -355,21 +373,42 @@ class WorkerAssignmentHandler {
       }
     }
     Future<WorkspaceAssignmentResult> execute() async {
+      if (_cancellationRequests.remove(context.assignmentId)) {
+        throw const AssignmentExecutionFailure(
+          code: 'cancelled',
+          message: 'The assignment was cancelled before Engine launch.',
+        );
+      }
       final workerPayload = _withCorrelation(context.payload, context);
       final profileExecutor = executeWithToolProfile;
       final activityProfileExecutor = executeWithActivity;
       if (profileExecutor == null && activityProfileExecutor == null) {
         throw StateError('Tool Profile Engine assignment runner is required');
       }
+      var startupRelay = Future<void>.value();
+      void relayProgress(WorkerProgress progress) {
+        if (progress.message == workerProviderExecutionStartedMessage) {
+          final started = onExecutionStarted;
+          if (started != null) {
+            startupRelay = startupRelay.then(
+              (_) => Future<void>.sync(() => started(context)),
+            );
+          }
+          return;
+        }
+        onProgress?.call(context, progress);
+      }
+
       final engineResult = activityProfileExecutor != null
           ? await activityProfileExecutor(
               worker,
               scope.workingDirectory,
               context,
               workerPayload,
-              onProgress: onProgress == null
+              onProgress: relayProgress,
+              onSlotReserved: onExecutionSlotReserved == null
                   ? null
-                  : (progress) => onProgress!(context, progress),
+                  : () => onExecutionSlotReserved!(context),
               onActivity: onActivity == null
                   ? null
                   : (activity) => onActivity!(context, activity),
@@ -379,10 +418,15 @@ class WorkerAssignmentHandler {
               scope.workingDirectory,
               context,
               workerPayload,
-              onProgress: onProgress == null
-                  ? null
-                  : (progress) => onProgress!(context, progress),
+              onProgress: relayProgress,
             );
+      await startupRelay;
+      if (_cancellationRequests.remove(context.assignmentId)) {
+        throw const AssignmentExecutionFailure(
+          code: 'cancelled',
+          message: 'The assignment was cancelled before terminal delivery.',
+        );
+      }
       final output = {
         'summary': engineResult.output.isEmpty
             ? 'Worker $workerId completed assignment'
@@ -459,8 +503,17 @@ class WorkerAssignmentHandler {
     return value;
   }
 
-  Future<bool> cancel(String assignmentId, String reason) =>
-      cancelToolProfileAssignment?.call(assignmentId) ?? Future.value(false);
+  Future<bool> cancel(String assignmentId, String reason) async {
+    _cancellationRequests.add(assignmentId);
+    final cancel = cancelToolProfileAssignment;
+    if (cancel == null) return true;
+    final cancelled = await cancel(assignmentId);
+    if (cancelled) _cancellationRequests.remove(assignmentId);
+    return cancelled || _cancellationRequests.contains(assignmentId);
+  }
+
+  bool isCancellationRequested(String assignmentId) =>
+      _cancellationRequests.contains(assignmentId);
 
   Map<String, Object?> _withCorrelation(
     Map<String, Object?> payload,

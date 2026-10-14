@@ -856,69 +856,6 @@ void main() {
     await connection.close();
   });
 
-  test('forwards Worker progress with trusted correlation and redacted output',
-      () async {
-    final socket = FakeSocket();
-    final connection = WorkspaceCloudConnection(
-      uri: Uri.parse(
-          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
-      workspaceRuntimeId: 'workspace-1',
-      workspaceId: 'workspace-1',
-      factory: (_) async => socket,
-      heartbeat: const Duration(hours: 1),
-    );
-    await connection.connect();
-    socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
-      'protocolVersion': workspaceRuntimeProtocolVersion,
-      'messageId': 'server-1',
-      'timestamp': DateTime.now().toUtc().toIso8601String(),
-      'type': 'workspace.hello.ack',
-      'payload': {'sessionId': 'session-1'},
-    }));
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-
-    const context = WorkspaceAssignmentContext(
-      workspaceId: 'workspace-1',
-      workspaceRuntimeId: 'workspace-1',
-      workerId: 'worker-1',
-      runId: 'run-1',
-      taskId: 'task-1',
-      attemptId: 'attempt-1',
-      assignmentId: 'assignment-1',
-      idempotencyKey: 'idem-1',
-      payload: {},
-    );
-    connection.reportWorkerProgress(
-      context,
-      WorkerProgress(
-        requestId: 'request-1',
-        assignmentId: 'assignment-1',
-        percentage: 20,
-        message: '[REDACTED]',
-      ),
-    );
-    connection.reportWorkerProgress(
-      context,
-      WorkerProgress(
-        requestId: 'request-2',
-        assignmentId: 'forged-assignment',
-        percentage: 20,
-      ),
-    );
-    final messages = socket.sent
-        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
-        .where((message) => message['type'] == 'assignment.progress')
-        .toList();
-    expect(messages, hasLength(1));
-    expect(messages.single['assignmentId'], 'assignment-1');
-    expect(
-      (messages.single['payload'] as Map<String, dynamic>)['message'],
-      '[REDACTED]',
-    );
-    await connection.close();
-  });
-
   test('forwards every Worker activity with ordering and safe details',
       () async {
     final socket = FakeSocket();
@@ -1229,7 +1166,7 @@ void main() {
         return cancellationRequested;
       },
       assignmentHandler: (_) async {
-        await Future<void>.delayed(const Duration(seconds: 2));
+        await Future<void>.delayed(const Duration(seconds: 5));
         return const WorkspaceAssignmentResult(summary: 'too late');
       },
     );
@@ -1259,13 +1196,17 @@ void main() {
         'input': {},
         'contextArtifactIds': [],
         'timeoutMs': 1000,
+        'queueWaitTimeoutMs': 1000,
       },
     }));
 
-    await waitFor(() => socket.sent.any((message) {
-          final decoded = jsonDecode(message as String) as Map<String, dynamic>;
-          return decoded['type'] == 'assignment.error';
-        }));
+    await waitFor(
+        () => socket.sent.any((message) {
+              final decoded =
+                  jsonDecode(message as String) as Map<String, dynamic>;
+              return decoded['type'] == 'assignment.error';
+            }),
+        timeout: const Duration(seconds: 3));
     final errorMessage = socket.sent
         .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
         .firstWhere((message) => message['type'] == 'assignment.error');

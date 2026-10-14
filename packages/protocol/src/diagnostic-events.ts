@@ -2,6 +2,19 @@ import { z } from "zod";
 
 export const DIAGNOSTIC_EVENT_SCHEMA_VERSION = 1 as const;
 
+/** Shared trace stages used to follow one assignment across Cloud and Service. */
+export const EXECUTION_TRACE_STAGES = [
+  "dispatch",
+  "accepted",
+  "slot_reservation",
+  "engine_startup",
+  "provider_execution",
+  "activity_forwarding",
+  "terminal_recorded",
+  "terminal_acknowledgement",
+] as const;
+export type ExecutionTraceStage = (typeof EXECUTION_TRACE_STAGES)[number];
+
 const boundedToken = z
   .string()
   .min(1)
@@ -16,7 +29,10 @@ export const DiagnosticContextSchema = z
     profileDefinitionId: boundedToken.optional(),
     profileReleaseVersion: z.number().int().positive().optional(),
     profileResolutionSource: boundedToken.optional(),
-    profileDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    profileDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     providerToolName: z.string().min(1).max(128).optional(),
     providerToolVersion: boundedToken.optional(),
     protocolStage: boundedToken.optional(),
@@ -28,7 +44,10 @@ export const DiagnosticContextSchema = z
     status: boundedToken.optional(),
     modelId: boundedToken.optional(),
     effort: boundedToken.optional(),
-    catalogRevision: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    catalogRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     selectionSource: boundedToken.optional(),
     lineBytes: z.number().int().nonnegative().max(4_194_304).optional(),
     httpStatusCode: z.number().int().min(100).max(599).optional(),

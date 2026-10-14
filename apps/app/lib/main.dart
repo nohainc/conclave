@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'src/platform/platform_services.dart';
 import 'src/app_shell.dart';
 import 'src/ax/ax_data.dart';
+import 'src/ax/ax_render_diagnostics.dart';
 
 void main() {
-  runApp(const ConclaveApp());
+  runConclaveApp(() => runApp(const ConclaveApp()));
 }
 
 class ConclaveApp extends StatelessWidget {

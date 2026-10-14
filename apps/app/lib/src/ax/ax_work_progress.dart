@@ -3,10 +3,9 @@ import 'ax_work_activity.dart';
 /// Presentation-ready live progress for one Worker response.
 ///
 /// The Work Request status is authoritative for the status chip and for every
-/// terminal state. Worker Activity is the faster, observational signal: it
-/// supplies the current action, the execution start time and liveness, and it
-/// may advance a pre-start request to Running optimistically. Activity never
-/// marks a request completed, failed or cancelled.
+/// lifecycle decision. Worker Activity is the faster, observational signal: it
+/// supplies the current action, the execution start time and liveness. Activity
+/// never advances a request state and never marks a request terminal.
 ///
 /// This is a pure value so the combination rules are testable without a
 /// widget tree. The caller supplies `now`; nothing here reads the clock.
@@ -35,13 +34,10 @@ class AxWorkProgress {
     'lost',
   };
 
-  static const _preStartStatuses = {'queued', 'starting', 'acknowledged'};
-
   /// How long a running execution may stay silent before the header says so.
   static const defaultStaleAfter = Duration(seconds: 45);
 
-  /// Effective status key: the request status, except that a pre-start request
-  /// with live Worker activity is promoted to `running`.
+  /// Effective status key from the authoritative Work Request projection.
   final String status;
   final String statusLabel;
 
@@ -66,7 +62,8 @@ class AxWorkProgress {
   /// attribute the response to the Worker as soon as it starts.
   final bool isExecuting;
 
-  /// True when [status] was promoted from queued/starting by Worker activity.
+  /// Kept as a projection field for callers that render diagnostic metadata.
+  /// It is always false because activity is observational, not authoritative.
   final bool isOptimistic;
 
   /// True when the execution is running but has been silent for too long.
@@ -106,7 +103,10 @@ class AxWorkProgress {
     // Provider diagnostics describe the adapter, not the Worker's work, so they
     // never become the current action.
     final unfinished = attempt
-        .where((a) => !a.isFinished && a.details['diagnostic'] == null)
+        .where((a) =>
+            !a.isFinished &&
+            a.type != 'execution.started' &&
+            a.details['diagnostic'] == null)
         .lastOrNull;
 
     DateTime shift(DateTime value) => value.add(clockOffset);
@@ -124,17 +124,15 @@ class AxWorkProgress {
             .map((a) => a.timestamp)
             .reduce((a, b) => a.isAfter(b) ? a : b));
 
-    var status = requestStatus;
-    var optimistic = false;
-    if (!terminal &&
-        _preStartStatuses.contains(requestStatus) &&
-        attempt.isNotEmpty &&
-        terminalExecution == null) {
-      status = 'running';
-      optimistic = true;
-    }
+    final status = requestStatus;
+    const optimistic = false;
 
-    final wrappingUp = !terminal && terminalExecution != null;
+    // A terminal marker from a previous attempt may still be present while a
+    // retry is queued. It must not make the new attempt look like it is
+    // wrapping up; only an already-started authoritative request can do that.
+    final wrappingUp = !terminal &&
+        terminalExecution != null &&
+        !const {'queued', 'starting', 'acknowledged'}.contains(requestStatus);
     String? action;
     if (!terminal) {
       if (wrappingUp) {
@@ -163,8 +161,9 @@ class AxWorkProgress {
       currentAction: action,
       startedAt: startedAt,
       endedAt: endedAt,
-      serverElapsed:
-          serverElapsedMs == null ? null : Duration(milliseconds: serverElapsedMs),
+      serverElapsed: serverElapsedMs == null
+          ? null
+          : Duration(milliseconds: serverElapsedMs),
       isTerminal: terminal,
       isExecuting: !terminal && attempt.isNotEmpty,
       isOptimistic: optimistic,

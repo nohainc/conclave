@@ -278,6 +278,7 @@ extension _AxAppController on _AxAppStateMixin {
   }
 
   void _onRealtimeEvent(Map<String, dynamic> event) {
+    AxRenderDiagnostics.instance.realtimeEvent(event);
     final type = event['type'];
     if (!mounted) return;
     final recoveryGeneration = const {
@@ -324,7 +325,7 @@ extension _AxAppController on _AxAppStateMixin {
     _recordNotification(event);
     if (type is String && type.startsWith('typing')) return;
     if (type is String &&
-        (type.startsWith('assignment.progress') ||
+        (type.startsWith('assignment.activity') ||
             type.startsWith('worker.status') ||
             type.startsWith('heartbeat'))) {
       _announceRealtimeProgress(event);
@@ -508,7 +509,9 @@ extension _AxAppController on _AxAppStateMixin {
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
                                 ),
                               ),
                             ),
@@ -622,7 +625,9 @@ extension _AxAppController on _AxAppStateMixin {
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
-                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
                                   ),
                                 ),
                               ),
@@ -665,10 +670,14 @@ extension _AxAppController on _AxAppStateMixin {
                                         Icons.mail_outline,
                                     },
                                     color: notification.read
-                                        ? Theme.of(context).colorScheme.onSurfaceVariant
+                                        ? Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant
                                         : notification.priority ==
                                                 AxNotificationPriority.high
-                                            ? Theme.of(context).colorScheme.error
+                                            ? Theme.of(context)
+                                                .colorScheme
+                                                .error
                                             : Theme.of(context)
                                                 .colorScheme
                                                 .primary,

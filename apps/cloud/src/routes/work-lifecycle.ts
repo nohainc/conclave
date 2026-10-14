@@ -64,6 +64,9 @@ async function loadWorkRequestActivityHistory(
                 h.activity_id AS activityId,
                 h.title,
                 h.details_json AS detailsJson,
+                h.duration_ms AS durationMs,
+                h.tool_id AS toolId,
+                h.tool_name AS toolName,
                 h.occurred_at AS timestamp
            FROM worker_activity_history h
            JOIN worker_assignments a ON a.id = h.assignment_id
@@ -103,6 +106,11 @@ async function loadWorkRequestActivityHistory(
         ? { activityId: row.activityId }
         : {}),
       title: String(row.title),
+      ...(row.durationMs !== null && row.durationMs !== undefined
+        ? { durationMs: Number(row.durationMs) }
+        : {}),
+      ...(typeof row.toolId === "string" ? { toolId: row.toolId } : {}),
+      ...(typeof row.toolName === "string" ? { toolName: row.toolName } : {}),
       details,
       timestamp: String(row.timestamp),
     };

@@ -3,6 +3,9 @@ import {
   EXECUTION_PERMISSIONS,
   EXECUTION_ERROR_CODES,
   EXECUTION_ERROR_MESSAGES,
+  NORMALIZED_ACTIVITY_EVENT_TYPES,
+  NORMALIZED_ACTIVITY_STATUSES,
+  NormalizedActivityDetailsSchema,
 } from "@conclave/protocol";
 
 export const WORKSPACE_RUNTIME_PROTOCOL_NAME =
@@ -25,8 +28,8 @@ export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "worker.inventory",
   "thread.status",
   "assignment.start",
+  "assignment.start.ack",
   "assignment.ack",
-  "assignment.progress",
   "assignment.activity",
   "assignment.result",
   "assignment.error",
@@ -53,61 +56,15 @@ const workerActivityPayload = z
     eventId: nonEmptyString.max(128),
     sequence: z.number().int().positive().max(2_147_483_647),
     timestamp,
-    eventType: z.enum([
-      "execution.started",
-      "model.started",
-      "message.updated",
-      "tool.started",
-      "tool.completed",
-      "tool.failed",
-      "model.status",
-      "execution.completed",
-      "execution.failed",
-      "execution.cancelled",
-    ]),
-    status: z.enum(["running", "updated", "completed", "failed", "cancelled"]),
+    eventType: z.enum(NORMALIZED_ACTIVITY_EVENT_TYPES),
+    status: z.enum(NORMALIZED_ACTIVITY_STATUSES),
     title: z.string().min(1).max(256),
     activityId: nonEmptyString.max(128).optional(),
     percentage: z.number().min(0).max(100).optional(),
-    details: z
-      .record(
-        z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
-        z.union([z.string().max(2048), z.number(), z.boolean(), z.null()]),
-      )
-      .superRefine((details, ctx) => {
-        if (Object.keys(details).length > 32) {
-          ctx.addIssue({
-            code: "custom",
-            message: "Activity details exceed 32 fields",
-          });
-        }
-        const unsafe = new Set([
-          "prompt",
-          "content",
-          "text",
-          "output",
-          "stdout",
-          "stderr",
-          "arguments",
-          "command",
-          "environment",
-          "env",
-          "token",
-          "secret",
-          "password",
-          "api_key",
-        ]);
-        for (const key of Object.keys(details)) {
-          if (unsafe.has(key.toLowerCase())) {
-            ctx.addIssue({
-              code: "custom",
-              path: [key],
-              message: "Activity details cannot contain provider content",
-            });
-          }
-        }
-      })
-      .optional(),
+    details: NormalizedActivityDetailsSchema.optional(),
+    durationMs: z.number().int().min(0).optional(),
+    toolId: nonEmptyString.max(128).optional(),
+    toolName: nonEmptyString.max(128).optional(),
   })
   .strict();
 
@@ -479,6 +436,26 @@ export const workspaceRuntimeEnvelopeSchema = z
             }),
         })
         .passthrough()
+        .safeParse(message.payload);
+      if (!payload.success) {
+        for (const issue of payload.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payload", ...issue.path],
+            message: issue.message,
+          });
+        }
+      }
+    }
+    if (message.type === "assignment.start.ack") {
+      const payload = z
+        .object({
+          started: z.literal(true),
+          engineStarted: z.literal(true),
+          providerStarted: z.literal(true),
+          startedAt: timestamp.optional(),
+        })
+        .strict()
         .safeParse(message.payload);
       if (!payload.success) {
         for (const issue of payload.error.issues) {

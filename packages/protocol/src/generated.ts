@@ -106,7 +106,6 @@ export const DURABLE_REALTIME_EVENT_TYPES = [
   "people.updated",
 ] as const;
 export const EPHEMERAL_REALTIME_EVENT_TYPES = [
-  "assignment.progress",
   "assignment.activity",
   "stream.delta",
   "tool.invocation.status",

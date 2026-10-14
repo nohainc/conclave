@@ -1283,18 +1283,14 @@ class CliWorkerEngine {
             for (final activity in _activitiesForLine(line, request)) {
               await _write(sink, activity);
             }
-            for (final progress in _progressForLine(line, execution)) {
+            for (final progress in _progressActivitiesForLine(
+              line,
+              request,
+              execution,
+            )) {
               final key = '${progress.$1}:${progress.$2}';
               if (eventProgress.add(key)) {
-                await _write(
-                  sink,
-                  WorkerProgress(
-                    requestId: request.requestId,
-                    assignmentId: request.assignmentId,
-                    percentage: progress.$1.toDouble(),
-                    message: progress.$2,
-                  ),
-                );
+                await _write(sink, progress.$3);
               }
             }
           },
@@ -1882,6 +1878,34 @@ class CliWorkerEngine {
     return result;
   }
 
+  List<(int, String, WorkerActivity)> _progressActivitiesForLine(
+    String line,
+    ExecuteRequest request,
+    Map<String, Object?> execution,
+  ) {
+    return _progressForLine(line, execution)
+        .map((progress) {
+          final sequence = (_activitySequences[request.requestId] ?? 0) + 1;
+          _activitySequences[request.requestId] = sequence;
+          final activity = WorkerActivity(
+            requestId: request.requestId,
+            assignmentId: request.assignmentId,
+            executionId: request.requestId,
+            workerId: _profile.workerTypeId,
+            eventId: '${request.requestId}:activity:$sequence',
+            sequence: sequence,
+            timestamp: DateTime.now().toUtc().toIso8601String(),
+            eventType: 'message.updated',
+            status: 'updated',
+            title: progress.$2,
+            percentage: progress.$1.toDouble(),
+            details: const {'source': 'profile.milestone'},
+          );
+          return (progress.$1, progress.$2, activity);
+        })
+        .toList(growable: false);
+  }
+
   List<WorkerActivity> _activitiesForLine(String line, ExecuteRequest request) {
     final output = _map(_profile.execution['output']);
     if (output['mode'] != 'jsonl') return const [];
@@ -1927,6 +1951,12 @@ class CliWorkerEngine {
           title: mapping.title,
           activityId: mapping.activityId,
           percentage: mapping.percentage?.toDouble(),
+          toolId: mapping.type.startsWith('tool.') ? mapping.activityId : null,
+          toolName: mapping.details['toolName'] is String
+              ? mapping.details['toolName'] as String
+              : mapping.details['toolKind'] is String
+              ? mapping.details['toolKind'] as String
+              : null,
           details: mapping.details.isEmpty ? null : mapping.details,
         ),
       );
@@ -1947,6 +1977,14 @@ class CliWorkerEngine {
           status: observation.status,
           title: observation.title,
           activityId: observation.activityId,
+          toolId: observation.type.startsWith('tool.')
+              ? observation.activityId
+              : null,
+          toolName: observation.details['toolName'] is String
+              ? observation.details['toolName'] as String
+              : observation.details['toolKind'] is String
+              ? observation.details['toolKind'] as String
+              : null,
           details: observation.details.isEmpty ? null : observation.details,
         ),
       );
@@ -1965,6 +2003,7 @@ class CliWorkerEngine {
     String? message,
     Map<String, Object?>? details,
     double? percentage,
+    int? durationMs,
   }) async {
     final sequence = (_activitySequences[requestId] ?? 0) + 1;
     _activitySequences[requestId] = sequence;
@@ -1987,6 +2026,7 @@ class CliWorkerEngine {
         title: title,
         activityId: activityId,
         percentage: percentage,
+        durationMs: durationMs,
         details: safeDetails.isEmpty ? null : safeDetails,
       ),
     );
@@ -2360,6 +2400,7 @@ class CliWorkerEngine {
               : error == null
               ? 'Execution completed'
               : 'Execution failed',
+          durationMs: _operationStarts[frame.requestId]?.elapsedMilliseconds,
           details: error == null ? null : {'errorCode': error.code},
         );
         _activitySequences.remove(frame.requestId);

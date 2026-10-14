@@ -246,6 +246,8 @@ bool _canTransition(AssignmentStatus previous, AssignmentStatus next) {
       }.contains(next),
     AssignmentStatus.accepted => {
         AssignmentStatus.running,
+        AssignmentStatus.completed,
+        AssignmentStatus.failed,
         AssignmentStatus.cancelling,
         AssignmentStatus.cancelled,
         AssignmentStatus.interrupted,

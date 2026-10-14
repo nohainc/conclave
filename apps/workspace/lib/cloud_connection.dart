@@ -4,7 +4,10 @@ import 'dart:io';
 
 import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
-    show CliWorkerEngineProbeException, SafeProviderDiagnostics;
+    show
+        CliWorkerEngineProbeException,
+        SafeProviderDiagnostics,
+        WorkerAssignmentCancelledException;
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
 import 'assignment_journal.dart';
@@ -166,6 +169,13 @@ bool isWorkerExecutionErrorRetryable(String code) => switch (code) {
 
 AssignmentExecutionFailure normalizeAssignmentExecutionFailure(Object error) {
   if (error is AssignmentExecutionFailure) return error;
+  if (error is WorkerAssignmentCancelledException) {
+    return const AssignmentExecutionFailure(
+      code: 'cancelled',
+      message: 'The assignment was cancelled.',
+      retryable: false,
+    );
+  }
   if (error is CliWorkerEngineProbeException) {
     final code = canonicalWorkerExecutionErrorCode(error.issueCode);
     return AssignmentExecutionFailure(
@@ -467,7 +477,6 @@ class WorkspaceCloudConnection {
   final _activeAssignments = <String>{};
   final _cancelledBeforeStart = <String>{};
   final _pendingAssignmentsDuringSync = <Map<String, dynamic>>[];
-  final _lastEphemeralWorkerEvent = <String, DateTime>{};
   static const _maxPendingActivityEvents = 256;
   final _pendingActivityEvents = <_PendingWorkerActivity>[];
   final _activitySpaceWaiters = <Completer<void>>[];
@@ -610,37 +619,30 @@ class WorkspaceCloudConnection {
     });
   }
 
-  /// Relays validated Worker facts using the trusted Assignment correlation.
-  /// Workers never provide Workspace, Workspace, Run, or Task identity.
-  void reportWorkerProgress(
-    WorkspaceAssignmentContext context,
-    WorkerProgress progress,
-  ) {
-    if (progress.assignmentId != context.assignmentId) return;
+  /// Records and reports the first evidence that the Engine and provider
+  /// process have actually started. Admission acknowledgement alone is not a
+  /// running signal.
+  Future<void> reportWorkerStarted(WorkspaceAssignmentContext context) async {
+    await recordAssignmentDiagnostic(
+      context,
+      event: 'assignment.executing',
+      stage: 'provider_execution',
+    );
+    await _recordAssignment(
+      context.assignmentId,
+      AssignmentStatus.running,
+      context: context,
+    );
     final socket = _transport;
     if (socket == null || sessionId == null) return;
-    final now = DateTime.now().toUtc();
-    final last = _lastEphemeralWorkerEvent[context.assignmentId];
-    if (last != null && now.difference(last).inMilliseconds < 100) return;
-    _lastEphemeralWorkerEvent[context.assignmentId] = now;
-    final correlation = {
-      'workspaceId': context.workspaceId,
-      'workspaceRuntimeId': context.workspaceRuntimeId,
-      'workerId': context.workerId,
-      'runId': context.runId,
-      'taskId': context.taskId,
-      'attemptId': context.attemptId,
-      'assignmentId': context.assignmentId,
-      'idempotencyKey': context.idempotencyKey,
-    };
     socket.send(jsonEncode(_assignmentEnvelope(
-      'assignment.progress',
-      correlation,
+      'assignment.start.ack',
+      _assignmentCorrelationForContext(context),
       {
-        'assignmentId': context.assignmentId,
-        'percentage': progress.percentage,
-        'message': progress.message ?? '',
-        'observedAt': now.toIso8601String(),
+        'started': true,
+        'engineStarted': true,
+        'providerStarted': true,
+        'startedAt': DateTime.now().toUtc().toIso8601String(),
       },
     )));
   }
@@ -746,6 +748,10 @@ class WorkspaceCloudConnection {
                 'activityId': activity.activityId,
               if (activity.percentage != null)
                 'percentage': activity.percentage,
+              if (activity.durationMs != null)
+                'durationMs': activity.durationMs,
+              if (activity.toolId != null) 'toolId': activity.toolId,
+              if (activity.toolName != null) 'toolName': activity.toolName,
               if (activity.details != null) 'details': activity.details,
             },
           )));
@@ -1254,7 +1260,27 @@ class WorkspaceCloudConnection {
             !_pendingAssignmentsDuringSync.any(
               (item) => item['assignmentId'] == assignmentId,
             )) {
-          _pendingAssignmentsDuringSync.add(decoded);
+          if (_pendingAssignmentsDuringSync.length >= 256) {
+            final socket = _transport;
+            if (socket != null) {
+              unawaited(_sendAssignmentError(
+                socket,
+                decoded,
+                'provider_unavailable',
+                retryable: true,
+                diagnostic: jsonEncode({
+                  'schemaVersion': 1,
+                  'component': 'workspace_service',
+                  'stage': 'assignment_sync_queue',
+                  'errorCode': 'provider_unavailable',
+                  'detail':
+                      'Assignment queue is full while synchronization is pending',
+                }),
+              ));
+            }
+          } else {
+            _pendingAssignmentsDuringSync.add(decoded);
+          }
         }
       } else {
         unawaited(_handleAssignmentStart(decoded));
@@ -1464,7 +1490,8 @@ class WorkspaceCloudConnection {
       if (state == null) continue;
       final cloudStatus = state['status'];
       if (cloudStatus is! String) continue;
-      if (const {'completed', 'failed', 'cancelled'}.contains(cloudStatus)) {
+      if (const {'completed', 'failed', 'cancelled', 'timed_out'}
+          .contains(cloudStatus)) {
         if (record.status != AssignmentStatus.reconciled) {
           await _recordAssignment(
               record.assignmentId, AssignmentStatus.reconciled,

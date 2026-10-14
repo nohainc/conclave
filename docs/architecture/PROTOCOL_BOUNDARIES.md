@@ -1,6 +1,6 @@
 # Conclave Protocol Boundaries
 
-**Status:** Current product boundary contract. Local Worker Protocol 4.0 is the Workspace-to-Engine contract.
+**Status:** Current product boundary contract. Local Worker Protocol 4.1 is the Workspace-to-Engine contract; 4.0 remains a negotiated compatibility version.
 **Applies to:** Conclave AX, Conclave Cloud, Conclave Workspace, and the CLI Worker Engine.
 
 Conclave has three protocol boundaries. They share domain vocabulary, but each
@@ -15,7 +15,7 @@ Conclave Workspace  <->  Conclave Cloud
                        Workspace Runtime Protocol
 
 Conclave Workspace  <->  CLI Worker Engine process
-                       Local Worker Protocol 4.0
+                       Local Worker Protocol 4.1
 ```
 
 The arrows show the three product/runtime boundaries. The Human Product
@@ -96,7 +96,7 @@ Only Conclave Workspace speaks this protocol as a client. Cloud's Workspace
 Gateway is its server. Conclave AX is not a runtime client. CLI Worker Engine
 processes are not runtime clients and MUST NOT connect to Cloud, invoke
 Workspace Gateway routes, or receive the Workspace runtime credential.
-Workspace translates between runtime messages and Local Worker Protocol 4.0
+Workspace translates between runtime messages and Local Worker Protocol 4.1
 frames.
 
 The current implementation is named
@@ -105,14 +105,14 @@ The current implementation is named
 authentication, transport negotiation, and assignment envelopes inside this
 boundary.
 
-## 3. Workspace ↔ CLI Worker Engine — Local Worker Protocol 4.0
+## 3. Workspace ↔ CLI Worker Engine — Local Worker Protocol 4.1
 
 **Endpoints:** Conclave Workspace process supervisor and one generic CLI Worker Engine child process.  
 **Authentication:** local admission only; no Cloud/human credential is present.  
 **Transport:** versioned NDJSON over stdin/stdout.  
 **Contract ownership:** Workspace + shared protocol package; Engine implements it.
 
-Protocol 4.0 carries:
+Protocol 4.1 carries:
 - initialize;
 - passive/live probe;
 - execute;
@@ -152,7 +152,8 @@ handles in Workspace-local state only. Model and effort changes do not partition
 sessions. See [Conversation Continuity Phase 6](../specifications/CONVERSATION_CONTINUITY_V1.md#phase-6--workspace-owned-worker-sessions)
 for local file upgrades, context synchronization limits, and coordinated rollout.
 
-Local Worker Protocol 4.0 is the sole Workspace-to-Engine protocol contract.
+Local Worker Protocol 4.1 is the sole Workspace-to-Engine protocol contract;
+4.0 remains supported only through version negotiation during migration.
 Provider identity, release state, and executable paths do not cross this
 boundary as caller-controlled values.
 
@@ -195,7 +196,7 @@ wire contracts.
 | Product and collaboration actions/read models | Conclave AX | Cloud human API/realtime | Human Product Protocol | Human session |
 | Desktop owner/account management | Workspace management UI | Cloud management routes | Human Product Protocol, HTTPS management surface | Human session |
 | Inventory, assignments, progress, cancellation | Workspace runtime | Cloud Workspace Gateway | Workspace Runtime Protocol | Workspace runtime credential |
-| Local setup, readiness, execution, progress, result | Workspace supervisor | CLI Worker Engine process | Local Worker Protocol 4.0 | Bounded non-secret settings; no provider tokens or account secrets |
+| Local setup, readiness, execution, progress, result | Workspace supervisor | CLI Worker Engine process | Local Worker Protocol 4.1 | Bounded non-secret settings; no provider tokens or account secrets |
 
 Cloud may translate and persist domain state between its product API and
 Workspace Gateway. Workspace may translate between its Cloud runtime client
@@ -211,7 +212,7 @@ unchanged across a boundary.
   `apps/workspace/lib/cloud_connection.dart`; schema
   `packages/workspace-runtime-protocol/src/workspace-runtime.ts`; Cloud
   `apps/cloud/src/workspace-gateway.ts`.
-- Local Worker Protocol 4.0: implemented by the Workspace supervisor
+- Local Worker Protocol 4.1: implemented by the Workspace supervisor
   `apps/workspace/lib/cli_worker_engine_supervisor.dart`, assignment handler
   `apps/workspace/lib/worker_executor.dart`, generic Engine
   `engines/cli_worker/lib/src/cli_worker_engine.dart`, and shared schema
@@ -222,7 +223,7 @@ unchanged across a boundary.
 Protocol binding generation covers the product envelope, Cloud Workspace
 message metadata, and realtime event metadata. It does not generate Local
 Worker Protocol bindings: `packages/conclave_worker_protocol` is the single
-source for Worker Protocol 4.0 models and validation.
+source for Worker Protocol 4.1 models and validation.
 
 Discussion reads use the [versioned paging contract](../specifications/DISCUSSION_PAGING.md). AX retains shared cached history across page disposal,
 synchronizes on reopening, and reconciles optimistic sends and edits per message.

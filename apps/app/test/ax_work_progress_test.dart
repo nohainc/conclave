@@ -46,15 +46,15 @@ AxWorkProgress resolve(
     );
 
 void main() {
-  test('promotes a pre-start request to Running from live activity', () {
+  test('keeps a pre-start request in its authoritative Cloud state', () {
     final progress = resolve('queued', [
       activity(1, 'execution.started', title: 'Execution started'),
       activity(2, 'tool.started', title: 'Reading files', atSeconds: 2),
     ]);
 
-    expect(progress.status, 'running');
-    expect(progress.statusLabel, 'Running');
-    expect(progress.isOptimistic, isTrue);
+    expect(progress.status, 'queued');
+    expect(progress.statusLabel, 'Queued');
+    expect(progress.isOptimistic, isFalse);
     expect(progress.currentAction, 'Reading files');
   });
 
@@ -154,8 +154,8 @@ void main() {
       nowSeconds: 1,
       clockOffset: const Duration(seconds: 30),
     );
-    expect(future.elapsedAt(_base.add(const Duration(seconds: 1))),
-        Duration.zero);
+    expect(
+        future.elapsedAt(_base.add(const Duration(seconds: 1))), Duration.zero);
   });
 
   test('marks a silent running execution as stale only after the threshold',
@@ -218,8 +218,10 @@ void main() {
     );
 
     expect(
-      resolve('running', [activity(1, 'tool.started', title: 'Reading files'),
-        diagnostic]).currentAction,
+      resolve('running', [
+        activity(1, 'tool.started', title: 'Reading files'),
+        diagnostic
+      ]).currentAction,
       'Reading files',
     );
     expect(resolve('running', [diagnostic]).currentAction, 'Working…');

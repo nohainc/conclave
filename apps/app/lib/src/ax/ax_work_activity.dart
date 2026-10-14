@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'ax_render_diagnostics.dart';
 
 import 'ax_work_models.dart';
 
@@ -23,6 +24,9 @@ class AxWorkActivity {
     required this.title,
     required this.timestamp,
     this.activityId,
+    this.durationMs,
+    this.toolId,
+    this.toolName,
     this.details = const <String, Object?>{},
   });
 
@@ -38,6 +42,9 @@ class AxWorkActivity {
   final String title;
   final DateTime timestamp;
   final String? activityId;
+  final int? durationMs;
+  final String? toolId;
+  final String? toolName;
   final Map<String, Object?> details;
 
   bool get isRunning => status == 'running' || status == 'updated';
@@ -82,6 +89,9 @@ class AxWorkActivity {
         title: title ?? this.title,
         timestamp: timestamp,
         activityId: activityId,
+        durationMs: durationMs,
+        toolId: toolId,
+        toolName: toolName,
         details: details ?? this.details,
       );
 
@@ -98,6 +108,9 @@ class AxWorkActivity {
         title: update.title,
         timestamp: update.timestamp,
         activityId: update.activityId ?? activityId,
+        durationMs: update.durationMs ?? durationMs,
+        toolId: update.toolId ?? toolId,
+        toolName: update.toolName ?? toolName,
         details: update.details.isEmpty ? details : update.details,
       );
 
@@ -181,6 +194,14 @@ class AxWorkActivity {
       activityId: values['activityId'] is String
           ? (values['activityId'] as String).trim()
           : null,
+      durationMs:
+          values['durationMs'] is int ? values['durationMs'] as int : null,
+      toolId: values['toolId'] is String
+          ? (values['toolId'] as String).trim()
+          : null,
+      toolName: values['toolName'] is String
+          ? (values['toolName'] as String).trim()
+          : null,
       details: Map.unmodifiable(details),
     );
   }
@@ -234,6 +255,14 @@ class AxWorkActivity {
       activityId: values['activityId'] is String
           ? (values['activityId'] as String).trim()
           : null,
+      durationMs:
+          values['durationMs'] is int ? values['durationMs'] as int : null,
+      toolId: values['toolId'] is String
+          ? (values['toolId'] as String).trim()
+          : null,
+      toolName: values['toolName'] is String
+          ? (values['toolName'] as String).trim()
+          : null,
       details: Map.unmodifiable(details),
     );
   }
@@ -242,7 +271,13 @@ class AxWorkActivity {
 /// Thread-local activity projection. It is intentionally separate from Work
 /// request/result state so operational events cannot mutate conversation text.
 class _AssignmentSignal extends ChangeNotifier {
-  void fire() => notifyListeners();
+  void fire() {
+    AxRenderDiagnostics.instance.notifierDispatch(
+      component: 'AxWorkActivityStore.assignment',
+      operation: 'activity.changed',
+    );
+    notifyListeners();
+  }
 }
 
 class AxWorkActivityStore extends ChangeNotifier {
@@ -262,6 +297,10 @@ class AxWorkActivityStore extends ChangeNotifier {
   final DateTime Function() _clock;
   final Duration _notifyInterval;
   final _activities = <String, List<AxWorkActivity>>{};
+  // The newest accepted execution.started event fences delayed events from a
+  // previous retry. Cloud stream order is not sufficient on its own because a
+  // reconnect can deliver an old attempt after a newer attempt has started.
+  final _latestAttempts = <String, String>{};
   final _eventIds = <String>{};
   final _signals = <String, _AssignmentSignal>{};
   final _clockOffsets = <String, Duration>{};
@@ -318,8 +357,7 @@ class AxWorkActivityStore extends ChangeNotifier {
       return;
     }
     if (_pendingNotifications.containsKey(assignmentId)) return;
-    _pendingNotifications[assignmentId] =
-        Timer(_notifyInterval - elapsed, () {
+    _pendingNotifications[assignmentId] = Timer(_notifyInterval - elapsed, () {
       _pendingNotifications.remove(assignmentId);
       if (_disposed) return;
       _fire(assignmentId, _clock());
@@ -329,6 +367,10 @@ class AxWorkActivityStore extends ChangeNotifier {
   void _fire(String assignmentId, DateTime now) {
     _lastNotified[assignmentId] = now;
     _signals[assignmentId]?.fire();
+    AxRenderDiagnostics.instance.notifierDispatch(
+      component: 'AxWorkActivityStore',
+      operation: 'activity.changed',
+    );
     notifyListeners();
   }
 
@@ -358,11 +400,17 @@ class AxWorkActivityStore extends ChangeNotifier {
         for (final activity in historical) activity.eventId: activity,
         for (final activity in activities) activity.eventId: activity,
       };
+      final ordered = merged.values.toList()..sort(_compare);
+      final latestAttempt =
+          _latestAttempts[assignmentId] ?? ordered.lastOrNull?.attemptId;
+      final currentAttempt = latestAttempt == null
+          ? ordered
+          : ordered.where((activity) => activity.attemptId == latestAttempt);
       if (!requestIsTerminal) {
-        result.addAll(merged.values);
+        result.addAll(currentAttempt);
         continue;
       }
-      result.addAll(merged.values.map((activity) {
+      result.addAll(currentAttempt.map((activity) {
         if (activity.isFinished) return activity;
         return activity.copyWith(
           status: 'interrupted',
@@ -383,6 +431,11 @@ class AxWorkActivityStore extends ChangeNotifier {
 
   bool handle(Map<String, dynamic> event, {required String threadId}) {
     if (event['type'] != 'assignment.activity') return false;
+    AxRenderDiagnostics.instance.cacheMutation(
+      component: 'AxWorkActivityStore',
+      operation: 'assignment.activity',
+      threadId: threadId,
+    );
     late final AxWorkActivity activity;
     try {
       activity = AxWorkActivity.fromRealtimeEvent(event, threadId: threadId);
@@ -395,6 +448,18 @@ class AxWorkActivityStore extends ChangeNotifier {
       _eventIds.remove(_eventIds.first);
     }
     final list = _activities.putIfAbsent(activity.assignmentId, () => []);
+    final latestAttempt = _latestAttempts[activity.assignmentId];
+    if (latestAttempt != null && latestAttempt != activity.attemptId) {
+      // A new attempt is admitted only by its execution.started marker and
+      // only when it is newer than the current activity. Every other event
+      // from another attempt is stale and must not reopen the card.
+      if (activity.type != 'execution.started' ||
+          (list.isNotEmpty && _compare(list.last, activity) >= 0)) {
+        return false;
+      }
+      list.clear();
+    }
+    _latestAttempts[activity.assignmentId] = activity.attemptId;
     final matchingIndex = _matchingIndex(list, activity);
     if (matchingIndex >= 0) {
       final current = list[matchingIndex];
@@ -416,6 +481,7 @@ class AxWorkActivityStore extends ChangeNotifier {
     if (_activities.isEmpty && _eventIds.isEmpty) return;
     final affected = _signals.values.toList();
     _activities.clear();
+    _latestAttempts.clear();
     _eventIds.clear();
     _clockOffsets.clear();
     _lastNotified.clear();
@@ -426,6 +492,10 @@ class AxWorkActivityStore extends ChangeNotifier {
     for (final signal in affected) {
       signal.fire();
     }
+    AxRenderDiagnostics.instance.notifierDispatch(
+      component: 'AxWorkActivityStore',
+      operation: 'activity.cleared',
+    );
     notifyListeners();
   }
 
