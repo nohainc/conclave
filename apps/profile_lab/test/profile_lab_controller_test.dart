@@ -119,6 +119,11 @@ void main() {
       apiClientOverride: _PublishedProfileApi(published),
     );
     addTearDown(sourceController.dispose);
+    await sourceController.store.saveDraft(
+      profileDefinitionId: 'gemini-antigravity',
+      profileJson: published,
+      notes: 'Published Profile candidate',
+    );
 
     await sourceController.selectWorker({
       'workerTypeId': 'gemini',

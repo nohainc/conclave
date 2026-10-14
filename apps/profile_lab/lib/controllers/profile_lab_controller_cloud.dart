@@ -104,11 +104,15 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
           final provenance = existingMetadata?.provenance;
           final sourceWasLoaded = provenance?['kind'] == 'bundled_source';
           final sourceDigest = provenance?['sourceDigest'];
+          final cloudDerivedCandidate = existingMetadata?.notes ==
+                  'Created from current Worker Profile' ||
+              existingMetadata?.notes == 'Published Profile candidate' ||
+              (existingMetadata?.notes ?? '')
+                  .startsWith('Restored Profile revision ');
           final shouldLoadSource = source != null &&
               (existingDraft == null ||
                   existingMetadata == null ||
-                  existingMetadata.notes ==
-                      'Created from current Worker Profile' ||
+                  cloudDerivedCandidate ||
                   (sourceWasLoaded &&
                       sourceDigest != sourceCandidate!.payloadDigest));
 
