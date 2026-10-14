@@ -41,6 +41,9 @@ synchronization deferral, so time spent waiting for the Service to reach
   Workers use the Unix epoch as `performance.timeOrigin`; absolute readings
   beyond the bounded `monotonicMs` field are omitted without dropping the
   event. Elapsed `durationMs` and wall-clock `timestamp` remain available.
+- Service trace context includes a bounded `traceEpochId`, generated once per
+  process. Compare local monotonic endpoints only within the same epoch and
+  runtime/attempt; a restart preserves runtime identity but resets the clock.
 - Cross-machine intervals use event `timestamp` values corrected by
   `clockOffsetMs` (Cloud minus Service). The Service estimates it NTP-style
   from `workspace.hello` and `workspace.heartbeat` acknowledgements
@@ -115,3 +118,13 @@ Auxiliary startup milestones (worker_resolved, profile_ready, waiting_for_space,
 ## Phase 6 addendum
 
 `workflow_observed_terminal` now measures the lag between the terminal row and the Workflow's wake-up by `assignment-terminal` event (or, on a lost event, the reconciliation timeout), not a 2 s poll. See WORKFLOW_TERMINAL_EVENTS_V9.md.
+
+## Release performance gate
+
+`scripts/execution-latency-acceptance.mjs` evaluates the five proposed targets
+using a build-pinned capture manifest, separate idle/burst interval tables,
+strict stage/identity/clock validation and explicit incomplete results. It
+reuses this parser and existing traces; it introduces no logging or command
+path. See [V9 acceptance](../acceptance/EXECUTION_RELIABILITY_V9.md#performance-evidence).
+The original baseline tool remains an exploratory report and can report partial
+traces; its successful exit does not certify release acceptance.

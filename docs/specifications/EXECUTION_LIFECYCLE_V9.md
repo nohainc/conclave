@@ -1,6 +1,7 @@
-# Authoritative execution lifecycle — V9 Phase 2
+# Authoritative execution lifecycle — V9
 
-**Status:** Phase 2 implementation contract
+**Status:** Implemented lifecycle contract; release acceptance is tracked in
+[execution acceptance](../acceptance/EXECUTION_RELIABILITY_V9.md).
 
 ## Authority
 
@@ -33,9 +34,11 @@ constraint, so no migration) maps to the lifecycle vocabulary as follows:
 | Lost | `lost` | Reserved final outcome for a confirmed unrecoverable execution loss |
 
 Queued and Starting occur inside the Service between admission and the
-provider-start acknowledgement. The protocol carries no signal for them, so
-Cloud projects both onto `acknowledged` rather than storing a second state for
-display. Distinguishing them would need a new message and is out of scope.
+provider-start acknowledgement. Both retain `acknowledged` as their assignment
+status. Capability-gated `assignment.startup` milestones and the start-permit
+timestamp distinguish them in Cloud's derived execution phase without a second
+lifecycle database. See [Service startup](SERVICE_STARTUP_V9.md) and
+[Work tab execution states](WORK_TAB_EXECUTION_STATES_V9.md).
 
 Assignment and attempt transitions are implemented in
 [`packages/core/src/execution-lifecycle.ts`](../../packages/core/src/execution-lifecycle.ts).
@@ -159,7 +162,7 @@ does not infer success.
 | Queue wait, then startup | Queue wait from admission (`acknowledged_at`); 30 seconds startup from the start permit | Workflow/Cloud revokes the assignment if `assignment.start.ack` is absent; outcome written on Service confirmation |
 | Provider execution | Assignment/task configured timeout | Workspace stops the process tree; Cloud revokes the assignment and records `timed_out` once the Service confirms the stop |
 | Terminal delivery | 10 seconds per local send attempt | Workspace keeps the journal terminal record and retries after reconnect |
-| Disconnected runtime reconciliation | 30 seconds after the latest assignment/runtime evidence | Cloud leaves recovery evidence, gives sync a chance, then classifies the assignment as provider-unavailable failure if no terminal evidence exists |
+| Disconnected runtime reconciliation | 30 seconds after the latest assignment/runtime evidence | Cloud requests revocation and gives sync a chance; uncertain execution remains `reconciling` until stop or terminal evidence arrives |
 
 The configured assignment timeout remains the execution deadline; dispatch and
 startup windows do not prove provider execution and do not consume the provider
@@ -174,9 +177,10 @@ The local journal stores the failure before transport delivery. The failure
 includes only bounded safe diagnostic evidence such as a process exit code or
 `missing_terminal_event`; provider output and credentials never cross the
 boundary. If Workspace itself restarts before that evidence is written, the
-assignment is outcome-unknown during reconciliation and Cloud eventually
-records a retryable provider-unavailable/lost outcome after the reconciliation
-deadline.
+assignment is outcome-unknown during reconciliation. A deadline alone cannot
+prove the provider stopped or authorize an automatic retry. Cloud retains
+revocation/reconciliation ownership until sufficient evidence arrives; `lost`
+remains reserved without a writer.
 
 ## Acceptance matrix
 

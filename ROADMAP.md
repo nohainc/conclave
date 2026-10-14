@@ -25,6 +25,12 @@ Consult the [Workspace release runbook](docs/deployment/WORKSPACE_RELEASES.md), 
 
 ## How to plan new work
 
+Communication and execution reliability Phases 1–7 have source implementations.
+The [Phase 8 acceptance record](docs/acceptance/EXECUTION_RELIABILITY_V9.md) and
+[Phase 9 rollout runbook](docs/rollouts/EXECUTION_RELIABILITY_V9.md) distinguish
+automated evidence from the still-open live provider, deployed fault-recovery,
+and complete latency gates. Implementation alone does not close release acceptance.
+
 Use the V9 Profile contract for new Profile architecture work. Keep the V8 implementation plan as historical evidence and update the owning current contract when behavior changes. Do not create a parallel Profile lifecycle specification.
 
 ### Gemini AGY discovery candidate

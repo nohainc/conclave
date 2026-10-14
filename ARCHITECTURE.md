@@ -25,7 +25,7 @@ generic Engine boundary.
 
 ## v8 architecture contract (historical implementation baseline)
 
-Architecture v8 has one execution path: AX → Cloud → Workspace → CLI Worker Engine → Worker Profile → provider CLI. The explicit exclusions in the
+Architecture v8 has one execution path: AX → Cloud → Workspace → CLI Worker Engine → current Worker Profile → provider CLI. The explicit exclusions in the
 [v8 architecture contract](docs/architecture/ARCHITECTURE_V8.md#architecture-contract)
 are normative and checked by `scripts/verify-v8-architecture.mjs`.
 
@@ -194,6 +194,9 @@ See [Release Trust and Rotation](docs/security/RELEASE_TRUST_AND_ROTATION.md), [
 The repository has converged on the v8 assignment path and clean v8 schema. The v8 release declaration remains withheld until the roadmap’s real-provider, release lifecycle, Work v1, and failure/security acceptance gates have retained evidence. See the [current implementation roadmap](docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
 
 ## Current references
+
+- [V9 communication/execution acceptance](docs/acceptance/EXECUTION_RELIABILITY_V9.md)
+- [V9 communication/execution rollout and recovery](docs/rollouts/EXECUTION_RELIABILITY_V9.md)
 
 - [Space/Thread rename completion and rollout requirements](docs/architecture/SPACE_THREAD_RENAME.md)
 
