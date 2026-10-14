@@ -621,15 +621,16 @@ export class RealtimeGateway implements DurableObject {
         if (matchingScopes.length === 0) continue;
         const replayable = isReplayableRealtimeEvent(event);
         const lastSequence = connected.lastDurableSequences.get(streamKey);
-        if (replayable && lastSequence !== undefined && event.sequence <= lastSequence) {
+        if (
+          replayable &&
+          lastSequence !== undefined &&
+          event.sequence <= lastSequence
+        ) {
           continue;
         }
         const gapScope = replayable
           ? matchingScopes.find((_scope) =>
-              requiresRealtimeReconnect(
-                lastSequence ?? null,
-                event.sequence,
-              ),
+              requiresRealtimeReconnect(lastSequence ?? null, event.sequence),
             )
           : undefined;
         if (gapScope) {
@@ -792,7 +793,10 @@ export class RealtimeGateway implements DurableObject {
       } catch {
         continue;
       }
-      if (!isReplayableRealtimeEvent(event) || !eventMatchesScope(event, scope)) {
+      if (
+        !isReplayableRealtimeEvent(event) ||
+        !eventMatchesScope(event, scope)
+      ) {
         continue;
       }
       const stream = realtimeEventStream(event);
@@ -899,7 +903,10 @@ export class RealtimeGateway implements DurableObject {
     const streamKey = realtimeStreamKey(realtimeEventStream(event));
     connected.lastDurableSequences.set(
       streamKey,
-      Math.max(connected.lastDurableSequences.get(streamKey) ?? 0, event.sequence),
+      Math.max(
+        connected.lastDurableSequences.get(streamKey) ?? 0,
+        event.sequence,
+      ),
     );
     this.sendRaw(connected.socket, {
       type: "reconnect.required",

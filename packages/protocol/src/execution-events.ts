@@ -5,8 +5,7 @@ import {
 } from "./execution-activity.js";
 
 /** Versioned contract for normalized observations of one Worker execution. */
-export const EXECUTION_EVENTS_PROTOCOL =
-  "conclave.execution-events" as const;
+export const EXECUTION_EVENTS_PROTOCOL = "conclave.execution-events" as const;
 export const EXECUTION_EVENTS_PROTOCOL_VERSION = "1.0" as const;
 export const EXECUTION_EVENT_SCHEMA_VERSION = 1 as const;
 
@@ -33,11 +32,7 @@ export const TERMINAL_EXECUTION_EVENT_TYPES = [
 
 const executionEventType = z.enum(EXECUTION_ACTIVITY_EVENT_TYPES);
 const executionEventCategory = z.enum(["activity", "lifecycle"]);
-const executionEventDelivery = z.enum([
-  "ephemeral",
-  "replayable",
-  "terminal",
-]);
+const executionEventDelivery = z.enum(["ephemeral", "replayable", "terminal"]);
 
 export const ExecutionEventPayloadSchema = NormalizedActivityPayloadSchema;
 
@@ -120,4 +115,3 @@ export function isTerminalExecutionEvent(
     eventType,
   );
 }
-
