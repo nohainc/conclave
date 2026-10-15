@@ -35,53 +35,43 @@ class AxRealtimeCacheRouter {
         event['payload'] is Map ? event['payload'] as Map : const {};
     String? id(Object? value) =>
         value is String && value.isNotEmpty ? value : null;
-    final spaceId = id(event['spaceId']) ??
-        id(payload['spaceId']) ??
-        id(event['spaceId']) ??
-        id(payload['spaceId']);
-    final threadId = id(event['threadId']) ??
-        id(payload['threadId']) ??
-        id(event['threadId']) ??
-        id(payload['threadId']);
+    final spaceId = id(event['spaceId']) ?? id(payload['spaceId']);
+    final threadId = id(event['threadId']) ?? id(payload['threadId']);
     if (type == 'reconnect.required' || type == 'realtime.ready') {
       final scope = AxSyncScope.fromEvent(event);
       final key = (scope.kind, scope.id);
       final pending = _recoveries[key];
       if (pending != null) return pending;
       late final Future<void> recovery;
-      recovery = _recover(scope,
-              fullDiscussionReconciliation:
-                  type == 'reconnect.required' || type == 'realtime.ready')
-          .whenComplete(() {
+      // Replay is bounded and may omit older edits without reporting a gap.
+      // Reconcile retained history on every ready signal until replay is complete.
+      recovery =
+          _recover(scope, fullDiscussionReconciliation: true).whenComplete(() {
         if (identical(_recoveries[key], recovery)) _recoveries.remove(key);
       });
       _recoveries[key] = recovery;
       return recovery;
     }
-    if (type == 'people.updated' || type.startsWith('space.')) {
-      try {
-        await engine.revalidateWhere((key) => key == AxQueryKey(['people']));
-      } catch (_) {
-        // People exposes its own read error; continue updating Space state.
-      }
-      if (type == 'people.updated') return;
+    if (type == 'people.updated') {
+      await engine.revalidateWhere((key) => key == AxQueryKey(['people']));
+      return;
     }
     if (type.startsWith('worker.inventory.')) {
       await engine.revalidateWhere((key) => key == AxQueryKey(['workers']));
       return;
     }
-    if (type.startsWith('discussion.') &&
-        threadId != null &&
-        discussionChanged != null) {
+    if (type.startsWith('discussion.') && threadId != null) {
+      final changed = discussionChanged;
       final entityId = id(payload['entityId']);
-      if (entityId != null) {
-        await discussionChanged!(threadId, type, entityId);
+      if (changed == null) {
+        await engine.revalidateWhere(
+            (key) => key == AxQueryKey(['thread', threadId, 'discussion']));
+      } else if (entityId != null) {
+        await changed(threadId, type, entityId);
       }
       return;
     }
-    if (type.startsWith('space.') ||
-        type.startsWith('space.') ||
-        type.startsWith('invitation.')) {
+    if (type.startsWith('space.') || type.startsWith('invitation.')) {
       final affected = spaceId ?? id(payload['entityId']);
       if (affected == null) return;
       if (type == 'space.deleted') {
@@ -104,7 +94,7 @@ class AxRealtimeCacheRouter {
           key == AxQueryKey(['spaces']) ||
           key == AxQueryKey(['archived-spaces']) ||
           key == AxQueryKey(['me', 'invitations']));
-    } else if (type.startsWith('thread.') || type.startsWith('thread.')) {
+    } else if (type.startsWith('thread.')) {
       final affectedThread = threadId ?? id(payload['entityId']);
       final parents = <String>{if (spaceId != null) spaceId};
       if (affectedThread != null) {
@@ -128,9 +118,6 @@ class AxRealtimeCacheRouter {
           (threadId != null &&
               key == AxQueryKey(['thread', threadId, 'discussion']) &&
               type.contains('discussion')));
-    } else if (type.startsWith('discussion.') && threadId != null) {
-      await engine.revalidateWhere(
-          (key) => key == AxQueryKey(['thread', threadId, 'discussion']));
     }
   }
 

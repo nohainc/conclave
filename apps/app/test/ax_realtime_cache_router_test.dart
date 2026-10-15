@@ -19,6 +19,26 @@ void main() {
     router = AxRealtimeCacheRouter(engine);
     loads = {};
   });
+  test('Space updates leave People alone; people.updated reloads People',
+      () async {
+    final people = query(['people']);
+    await engine.ensure(people);
+    await router.handle({'type': 'space.updated', 'spaceId': 'A'});
+    expect(loads['people'], 1);
+    await router.handle({'type': 'people.updated'});
+    expect(loads['people'], 2);
+  });
+  test('Discussion without integration callback revalidates its query',
+      () async {
+    final discussion = query(['thread', 'W', 'discussion']);
+    await engine.ensure(discussion);
+    await router.handle({
+      'type': 'discussion.updated',
+      'threadId': 'W',
+      'payload': {'entityId': 'message'}
+    });
+    expect(loads['thread:W:discussion'], 2);
+  });
   test('background Space updates only its own registered queries', () async {
     final a = query(['space', 'A', 'threads']);
     final b = query(['space', 'B', 'threads']);
@@ -225,9 +245,7 @@ void main() {
     expect(engine.peek(q).data, 1);
   });
 
-  test(
-      'initial realtime recovery uses full reconciliation for observed history',
-      () async {
+  test('plain realtime.ready reconciles observed history in full', () async {
     final q = query(['thread', 'W', 'discussion']);
     await engine.ensure(q);
     engine.watch(q, (_) {}, fireImmediately: false);
@@ -240,6 +258,26 @@ void main() {
     });
 
     await router.handle({'type': 'realtime.ready'});
+
+    expect(incremental, 0);
+    expect(full, 1);
+  });
+  test('reported replay gap reconciles observed history in full', () async {
+    final q = query(['thread', 'W', 'discussion']);
+    await engine.ensure(q);
+    engine.watch(q, (_) {}, fireImmediately: false);
+    var incremental = 0;
+    var full = 0;
+    router = AxRealtimeCacheRouter(engine, discussionResynchronize: (id) async {
+      incremental++;
+    }, discussionFullResynchronize: (id) async {
+      full++;
+    });
+
+    await router.handle({
+      'type': 'reconnect.required',
+      'scope': {'kind': 'user'}
+    });
 
     expect(full, 1);
     expect(incremental, 0);

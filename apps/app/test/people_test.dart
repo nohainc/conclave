@@ -105,7 +105,7 @@ void main() {
         () => engine.peek(people.query).data!.add(bob), throwsUnsupportedError);
   });
   test(
-      'membership, profile, and reconnect signals refresh even with no open page',
+      'People and reconnect signals refresh without a page; Space events do not',
       () async {
     final source = PeopleSource();
     final engine = AxSyncEngine();
@@ -114,7 +114,7 @@ void main() {
     await people.ensure();
     source.rows = [bob];
     await router.handle({'type': 'space.updated', 'spaceId': 'A'});
-    expect(engine.peek(people.query).data, [bob]);
+    expect(engine.peek(people.query).data, isEmpty);
     await router.handle({
       'type': 'people.updated',
       'payload': {'entityId': 'b'}
@@ -127,13 +127,13 @@ void main() {
       'type': 'reconnect.required',
       'scope': {'kind': 'space', 'spaceId': 'A'}
     });
-    expect(source.loads, 5);
+    expect(source.loads, 4);
     source.rows = [];
     await router.handle({'type': 'space.deleted', 'spaceId': 'A'});
-    expect(engine.peek(people.query).data, isEmpty);
+    expect(engine.peek(people.query).data, [bob]);
+    expect(source.loads, 4);
   });
-  test('a failed People refresh does not interrupt Space reconciliation',
-      () async {
+  test('Space reconciliation does not attempt a failing People read', () async {
     final source = PeopleSource();
     final engine = AxSyncEngine();
     final people = AxPeople(source, engine: engine);
@@ -146,7 +146,8 @@ void main() {
     await engine.ensure(space);
     source.failRead = true;
     await router.handle({'type': 'space.updated', 'spaceId': 'A'});
-    expect(engine.peek(people.query).error, isNotNull);
+    expect(engine.peek(people.query).error, isNull);
+    expect(source.loads, 1);
     expect(spaceLoads, 2);
   });
   test('session clearing fences a late People response', () async {
@@ -320,7 +321,7 @@ void main() {
             .onPressed,
         isNotNull);
     source.rows = [person];
-    await router.handle({'type': 'space.updated', 'spaceId': 'A'});
+    await router.handle({'type': 'people.updated'});
     await tester.pumpAndSettle();
     expect(find.text('Holiday planning'), findsOneWidget);
     expect(source.loads, 3);
@@ -351,8 +352,7 @@ void main() {
     await tester.tap(find.text('Candidate').last);
     await tester.pumpAndSettle();
     source.rows = [bob];
-    await AxRealtimeCacheRouter(engine)
-        .handle({'type': 'space.updated', 'spaceId': 'C'});
+    await AxRealtimeCacheRouter(engine).handle({'type': 'people.updated'});
     await tester.pumpAndSettle();
     expect(
         tester

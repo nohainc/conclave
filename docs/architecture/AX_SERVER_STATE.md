@@ -966,3 +966,19 @@ The Work history clear handler is exported through `routes/handlers.ts` and
 registered in the Cloud entrypoint's production route map. Regression coverage
 executes the clear endpoint through that map against the migrated SQLite schema,
 so a direct-handler test cannot hide missing production registration.
+
+
+## Cursor-aware bounded Cloud replay (2026-10-15)
+
+Cloud excludes acknowledged events using each stream's cursor before limiting
+replay to 256 rows. Unknown streams begin at their first retained event. A full
+page emits a scope-wide `reconnect.required` (`replay_limit`), without advancing
+an omitted stream's cursor, so consumers reconcile resources even when the
+page cannot include every stream. See the [realtime contract](../specifications/REALTIME_SYNCHRONIZATION.md).
+
+AX retains full observed Discussion reconciliation on `realtime.ready` and on
+reported gaps. Incremental-only ready recovery remains deferred pending request
+measurements. Space events revalidate Space resources without fetching People;
+`people.updated` owns People invalidation. Event revalidation retains the
+existing read-fencing behavior; the experimental coalesced follow-up was removed.
+No schema, wire version, or client migration is required.

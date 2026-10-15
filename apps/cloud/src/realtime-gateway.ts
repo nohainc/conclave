@@ -784,7 +784,11 @@ export class RealtimeGateway implements DurableObject {
     scope: RealtimeScope,
     until?: RealtimeEventEnvelope,
   ): Promise<void> {
-    const rows = await this.loadReplayRows(connected.identity.userId, scope);
+    const rows = await this.loadReplayRows(
+      connected.identity.userId,
+      scope,
+      connected.lastDurableSequences,
+    );
     const blockedStreams = new Set<string>();
     for (const row of rows) {
       let event: RealtimeEventEnvelope;
@@ -827,6 +831,16 @@ export class RealtimeGateway implements DurableObject {
       if (result === "resync-required") continue;
       connected.lastDurableSequences.set(streamKey, event.sequence);
     }
+    // A full page may omit other streams entirely. Recover the whole scope,
+    // without inventing a stream cursor or advancing beyond delivered evidence.
+    if (rows.length === MAX_REPLAY_EVENTS) {
+      this.metrics.reconnects += 1;
+      this.sendRaw(connected.socket, {
+        type: "reconnect.required",
+        reason: "replay_limit",
+        scope,
+      });
+    }
     if (until) {
       const stream = realtimeEventStream(until);
       const streamKey = realtimeStreamKey(stream);
@@ -844,6 +858,7 @@ export class RealtimeGateway implements DurableObject {
   private async loadReplayRows(
     userId: string,
     scope: RealtimeScope,
+    cursors: ReadonlyMap<string, number>,
   ): Promise<Record<string, unknown>[]> {
     let query = `
       SELECT e.*
@@ -883,6 +898,17 @@ export class RealtimeGateway implements DurableObject {
     } else {
       return [];
     }
+    // One JSON binding avoids a SQL parameter per cursor. Unknown streams
+    // have no matching entry and replay from the beginning. Keep the audience
+    // predicate grouped so user-scope OR branches cannot bypass cursor filtering.
+    const audience = conditions.join(" AND ");
+    conditions.splice(0, conditions.length, `(${audience})`);
+    conditions.push(`NOT EXISTS (
+      SELECT 1 FROM json_each(?) cursor
+      WHERE cursor.key = json_array(e.stream_kind, COALESCE(e.stream_id, e.workspace_id))
+        AND e.sequence <= cursor.value
+    )`);
+    bindings.push(JSON.stringify(Object.fromEntries(cursors)));
     const result = await this.env.CONCLAVE_DB.prepare(
       `${query}
        WHERE ${conditions.join(" AND ")}

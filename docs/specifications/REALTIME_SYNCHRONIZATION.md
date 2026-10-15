@@ -61,7 +61,15 @@ new stream map taking precedence, and never regresses a cursor on older delivery
 
 Sequence gaps and queue overflow include explicit stream identity. Space gaps
 carry a Space scope; execution gaps retain the legacy Workspace metadata.
-There is no historical replay promise. Ready/user recovery refreshes observed
+Replay filters acknowledged events by the client's per-stream cursor before
+applying the 256-row limit, across user, Space, Thread, run and execution
+Workspace scopes. Streams without a cursor start at their first retained event.
+A full 256-row page conservatively sends `reconnect.required` with reason
+`replay_limit` and the requested scope, even if exactly 256 events remain.
+This scope-wide signal carries no invented stream cursor: streams omitted by
+the limit must also reconcile through HTTP. Sequence gaps continue to use
+`durable_event_gap` with stream identity. Retention and bounded replay mean
+there is no complete historical replay promise. Ready/user recovery refreshes observed
 current-state queries and the Space catalog, including creations/deletions
 missed while disconnected. Narrow Space gaps recover the Space entity and
 its Thread list; Thread gaps recover forward Discussion cursors and
