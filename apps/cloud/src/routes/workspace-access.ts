@@ -4,6 +4,7 @@ import {
   type SecurityContext,
 } from "@conclave/security";
 import {
+  DEFAULT_SPACE_MAX_CONCURRENT_ASSIGNMENTS,
   validateWorkspaceConcurrencyPolicy,
   validateWorkspaceGrantPermissions,
   validateWorkspaceGrantWorkerIds,
@@ -271,7 +272,7 @@ export async function createWorkspaceSpaceGrant(
   const networkPolicy = JSON.stringify(networkPolicyValue);
   const concurrencyValue =
     body.concurrency === undefined
-      ? { maxConcurrentAssignments: 1 }
+      ? { maxConcurrentAssignments: DEFAULT_SPACE_MAX_CONCURRENT_ASSIGNMENTS }
       : body.concurrency;
   if (!validateWorkspaceConcurrencyPolicy(concurrencyValue)) {
     throw new HttpError(400, "concurrency is invalid");

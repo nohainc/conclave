@@ -13,4 +13,6 @@ const defaultLocalWorkerPermissions = <String>[
   'shell:execute',
 ];
 
-const defaultLocalWorkerConcurrency = 1;
+/// Parallel assignments one local Worker accepts. Cloud grants and Cloud
+/// scheduling can only lower this further.
+const defaultLocalWorkerConcurrency = 3;

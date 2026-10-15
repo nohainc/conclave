@@ -348,8 +348,9 @@ class SpaceDirectoryLifecycle {
       );
 }
 
-/// Serializes stateful work that shares one Space directory, while comparing
-/// Cloud-issued fencing tokens only within the Thread that owns the lease.
+/// Serializes stateful work per Thread (one lease, one durable session) while
+/// Threads of the same Space run in parallel in the shared Space directory.
+/// Cloud-issued fencing tokens are compared only within the owning Thread.
 class SpaceMutationCoordinator {
   SpaceMutationCoordinator({
     required this.lifecycle,
@@ -377,69 +378,94 @@ class SpaceMutationCoordinator {
       throw const SpaceMutationViolation(
           'leaseId and positive fencingToken are required');
     }
-    final previous = _tails[spaceId] ?? Future<void>.value();
+    // Threads of one Space run in parallel (the user decides what to run
+    // concurrently and may address different subfolders). Only the work of a
+    // single Thread is serialized, because it owns one durable session and one
+    // lease. The Space-wide lock below covers just the short preparation.
+    final key = '$spaceId/$threadId';
+    final previous = _tails[key] ?? Future<void>.value();
     final gate = Completer<void>();
-    _tails[spaceId] = gate.future;
+    _tails[key] = gate.future;
     try {
       await previous.catchError((_) {});
-      await applicationStateDirectory.create(recursive: true);
-      final lockFile = File(_join(
-          applicationStateDirectory.path, 'space-mutation-$spaceId.lock'));
-      final handle = await lockFile.open(mode: FileMode.append);
-      try {
-        await handle.lock(FileLock.exclusive);
-        final directory = await lifecycle.ensureForExecution(
-            spaceId: spaceId,
-            spaceName: spaceName,
-            adoptExistingFolder: adoptExistingFolder);
-        // The process lock remains Space-wide because Threads share a CWD.
-        // Lease counters are Thread-scoped in Cloud; a token from one Thread
-        // cannot be ordered against a token from another Thread. Leave legacy
-        // unscoped <spaceId>.json records intact as historical evidence.
-        final fenceDirectory = Directory(_join(
-            _join(applicationStateDirectory.path, 'space-fences'), spaceId));
-        await fenceDirectory.create(recursive: true);
-        final fenceFile = File(_join(fenceDirectory.path, '$threadId.json'));
-        Map<String, Object?>? previousFence;
-        if (await fenceFile.exists()) {
-          final value = jsonDecode(await fenceFile.readAsString());
-          if (value is! Map ||
-              value['schemaVersion'] != 1 ||
-              value['spaceId'] != spaceId ||
-              value['threadId'] != threadId) {
-            throw const SpaceMutationViolation(
-                'Space fencing metadata is invalid');
-          }
-          previousFence = Map<String, Object?>.from(value);
-        }
-        final priorToken = previousFence?['fencingToken'];
-        final priorLease = previousFence?['leaseId'];
-        if (previousFence != null &&
-            (priorToken is! int ||
-                priorLease is! String ||
-                fencingToken < priorToken ||
-                (fencingToken == priorToken && leaseId != priorLease))) {
-          throw const SpaceMutationViolation(
-              'stale or conflicting Space fencing token');
-        }
-        await fenceFile.writeAsString(
-            jsonEncode({
-              'schemaVersion': 1,
-              'spaceId': spaceId,
-              'threadId': threadId,
-              'leaseId': leaseId,
-              'fencingToken': fencingToken,
-              'updatedAt': DateTime.now().toUtc().toIso8601String(),
-            }),
-            flush: true);
-        return await action(directory);
-      } finally {
-        await handle.unlock();
-        await handle.close();
-      }
+      final Directory directory = await _prepare(
+        spaceId: spaceId,
+        threadId: threadId,
+        spaceName: spaceName,
+        leaseId: leaseId,
+        fencingToken: fencingToken,
+        adoptExistingFolder: adoptExistingFolder,
+      );
+      return await action(directory);
     } finally {
       gate.complete();
-      if (identical(_tails[spaceId], gate.future)) _tails.remove(spaceId);
+      if (identical(_tails[key], gate.future)) _tails.remove(key);
+    }
+  }
+
+  /// Resolves the Space directory and records the Thread fence under a short
+  /// Space-wide process lock that is released before any work starts.
+  Future<Directory> _prepare({
+    required String spaceId,
+    required String threadId,
+    required String spaceName,
+    required String leaseId,
+    required int fencingToken,
+    required bool adoptExistingFolder,
+  }) async {
+    await applicationStateDirectory.create(recursive: true);
+    final lockFile = File(
+        _join(applicationStateDirectory.path, 'space-mutation-$spaceId.lock'));
+    final handle = await lockFile.open(mode: FileMode.append);
+    try {
+      await handle.lock(FileLock.exclusive);
+      final directory = await lifecycle.ensureForExecution(
+          spaceId: spaceId,
+          spaceName: spaceName,
+          adoptExistingFolder: adoptExistingFolder);
+      // Lease counters are Thread-scoped in Cloud; a token from one Thread
+      // cannot be ordered against a token from another Thread. Leave legacy
+      // unscoped <spaceId>.json records intact as historical evidence.
+      final fenceDirectory = Directory(_join(
+          _join(applicationStateDirectory.path, 'space-fences'), spaceId));
+      await fenceDirectory.create(recursive: true);
+      final fenceFile = File(_join(fenceDirectory.path, '$threadId.json'));
+      Map<String, Object?>? previousFence;
+      if (await fenceFile.exists()) {
+        final value = jsonDecode(await fenceFile.readAsString());
+        if (value is! Map ||
+            value['schemaVersion'] != 1 ||
+            value['spaceId'] != spaceId ||
+            value['threadId'] != threadId) {
+          throw const SpaceMutationViolation(
+              'Space fencing metadata is invalid');
+        }
+        previousFence = Map<String, Object?>.from(value);
+      }
+      final priorToken = previousFence?['fencingToken'];
+      final priorLease = previousFence?['leaseId'];
+      if (previousFence != null &&
+          (priorToken is! int ||
+              priorLease is! String ||
+              fencingToken < priorToken ||
+              (fencingToken == priorToken && leaseId != priorLease))) {
+        throw const SpaceMutationViolation(
+            'stale or conflicting Space fencing token');
+      }
+      await fenceFile.writeAsString(
+          jsonEncode({
+            'schemaVersion': 1,
+            'spaceId': spaceId,
+            'threadId': threadId,
+            'leaseId': leaseId,
+            'fencingToken': fencingToken,
+            'updatedAt': DateTime.now().toUtc().toIso8601String(),
+          }),
+          flush: true);
+      return directory;
+    } finally {
+      await handle.unlock();
+      await handle.close();
     }
   }
 

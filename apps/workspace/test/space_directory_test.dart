@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -193,5 +194,45 @@ void main() {
     expect(Directory(kept.path).existsSync(), isTrue);
     expect(File('${gone.path}/user.txt').readAsStringSync(), 'mine');
     expect(await resolver.forgetSpacesExcept({'space-a'}), 0);
+  });
+
+  test('runs different Threads of one Space in parallel, one Thread serially',
+      () async {
+    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    addTearDown(() => root.delete(recursive: true));
+    final state = Directory('${root.path}/state');
+    final coordinator = SpaceMutationCoordinator(
+      lifecycle: SpaceDirectoryLifecycle(SpaceDirectoryResolver(
+        workRoot: Directory('${root.path}/work'),
+        registryDirectory: state,
+      )),
+      applicationStateDirectory: state,
+    );
+    final release = Completer<void>();
+    var running = 0;
+    var peak = 0;
+    Future<void> run(String thread, int token) => coordinator.withMutation<void>(
+          spaceId: 'space-a',
+          threadId: thread,
+          spaceName: 'Plan',
+          leaseId: 'lease-$thread',
+          fencingToken: token,
+          action: (_) async {
+            running++;
+            if (running > peak) peak = running;
+            await release.future;
+            running--;
+          },
+        );
+
+    final a = run('thread-a', 1);
+    final b = run('thread-b', 1);
+    final c = run('thread-c', 1);
+    final aAgain = run('thread-a', 1);
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(running, 3);
+    release.complete();
+    await Future.wait([a, b, c, aAgain]);
+    expect(peak, 3);
   });
 }

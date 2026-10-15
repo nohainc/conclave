@@ -70,6 +70,10 @@ export interface WorkspaceNetworkPolicy {
   readonly allowedHosts: readonly string[];
 }
 
+/** Parallel Work a Space may run on one Workspace by default. Running several
+ * requests at once is the user's decision; this is only the default ceiling. */
+export const DEFAULT_SPACE_MAX_CONCURRENT_ASSIGNMENTS = 3;
+
 export interface WorkspaceConcurrencyPolicy {
   readonly maxConcurrentAssignments: number;
 }

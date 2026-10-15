@@ -57,7 +57,7 @@ abstract final class AxExecutionPhase {
         waitingForService => 'Waiting for the Workspace Service to be ready',
         delivering => 'Sending to your Workspace',
         delivered => 'Worker accepted the request',
-        queued => 'Waiting for an available Worker slot',
+        queued => 'All Worker slots are busy; starting when one is free',
         starting => 'Starting your worker',
         uncertain => 'Checking whether execution is still active',
         _ => null,

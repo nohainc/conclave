@@ -53,7 +53,8 @@ export const FAILURE_CATEGORY_MESSAGES: Readonly<
   service_unavailable: "Workspace Service is offline",
   sync_incomplete: "Workspace is reconnecting",
   worker_unavailable: "Worker is not ready",
-  capacity_exceeded: "Waiting for an available Worker slot",
+  capacity_exceeded:
+    "No Worker slot became free in time. Retry when another request finishes",
   profile_incompatible: "Worker Profile is incompatible",
   space_folder_confirmation_required:
     "A folder with this Space's name already exists and is not empty",
@@ -86,7 +87,7 @@ export const EXECUTION_PHASE_DETAILS: Readonly<
   waiting_for_service: "Waiting for the Workspace Service to be ready",
   delivering: "Sending to your Workspace",
   delivered: "Worker accepted the request",
-  queued: "Waiting for an available Worker slot",
+  queued: "All Worker slots are busy; starting when one is free",
   starting: "Starting your worker",
   running: null,
   completed: null,

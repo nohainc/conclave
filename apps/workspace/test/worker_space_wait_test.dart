@@ -96,7 +96,7 @@ void main() {
   test('a waiting assignment is visible, cancellable and launches nothing',
       () async {
     await firstHoldsTheLock();
-    final waiting = handler.call(_statefulContext('second', 'thread-b', 1));
+    final waiting = handler.call(_statefulContext('second', 'thread-a', 1));
     final expectation = expectLater(
       waiting,
       throwsA(isA<AssignmentExecutionFailure>()
@@ -123,7 +123,7 @@ void main() {
     await firstHoldsTheLock();
     await expectLater(
       handler.call(
-          _statefulContext('second', 'thread-b', 1, queueWaitTimeoutMs: 200)),
+          _statefulContext('second', 'thread-a', 1, queueWaitTimeoutMs: 200)),
       throwsA(isA<AssignmentExecutionFailure>()
           .having((error) => error.code, 'code', 'timeout')
           .having((error) => error.retryable, 'retryable', isTrue)
@@ -139,7 +139,7 @@ void main() {
       () async {
     await firstHoldsTheLock();
     final second = handler.call(
-        _statefulContext('second', 'thread-b', 1, queueWaitTimeoutMs: 5000));
+        _statefulContext('second', 'thread-a', 1, queueWaitTimeoutMs: 5000));
     await Future<void>.delayed(const Duration(milliseconds: 300));
     releaseFirst.complete();
     expect((await second).summary, isNotEmpty);

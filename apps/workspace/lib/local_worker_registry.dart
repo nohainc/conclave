@@ -363,7 +363,11 @@ class LocalWorker {
       workspaceId: required('workspaceId'),
       workerTypeId: required('productWorkerTypeId'),
       localPermissions: strings('localPermissions'),
-      localConcurrencyLimit: concurrency,
+      // Records written when the default was 1 are raised to the current
+      // default; the limit has no user-facing setting.
+      localConcurrencyLimit: concurrency < defaultLocalWorkerConcurrency
+          ? defaultLocalWorkerConcurrency
+          : concurrency,
       fullLocalAccessAuthorized: fullLocalAccessAuthorized,
       status: activationState == LocalWorkerActivationState.disabled
           ? LocalWorkerStatus.disabled
@@ -510,7 +514,8 @@ class LocalWorkerRegistry {
           workspaceId: workspaceId,
           workerTypeId: normalizedTypeId,
           localPermissions: List.unmodifiable(localPermissions),
-          localConcurrencyLimit: localConcurrencyLimit ?? 1,
+          localConcurrencyLimit:
+              localConcurrencyLimit ?? defaultLocalWorkerConcurrency,
           status: status,
           readinessState: readinessState,
           revision: (previous?.revision ?? 0) + 1,
