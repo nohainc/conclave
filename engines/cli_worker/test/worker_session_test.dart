@@ -200,6 +200,67 @@ void main() {
   );
 
   test(
+    'a local session ahead of Cloud is rejected with the recoverable message and can be quarantined',
+    () async {
+      final root = await Directory.systemTemp.createTemp('session-ahead-');
+      addTearDown(() => root.delete(recursive: true));
+      final store = EngineSessionStore(root);
+      Future<String?> read(WorkerSessionContext context) => store.read(
+        sessionKey: 'scope',
+        workerTypeId: 'worker',
+        profileDefinitionId: 'profile',
+        providerToolIdentity: 'tool',
+        compatibleFormatIds: ['format'],
+        workerSession: context,
+      );
+      final ahead = WorkerSessionContext(
+        id: 'session',
+        conversationId: 'conversation',
+        workerId: 'worker',
+        baseContextRevision: 3,
+      );
+      await store.write(
+        sessionKey: 'scope',
+        workerTypeId: 'worker',
+        profileDefinitionId: 'profile',
+        providerToolIdentity: 'tool',
+        profileReleaseVersion: 1,
+        sessionFormatId: 'format',
+        sessionId: 'native',
+        workerSession: ahead,
+        synchronizedContextRevision: 3,
+      );
+      // Cloud was reset and now sends revision 0 for the same Worker Session.
+      final reset = WorkerSessionContext(
+        id: 'session',
+        conversationId: 'conversation',
+        workerId: 'worker',
+        baseContextRevision: 0,
+      );
+      await expectLater(
+        read(reset),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            staleSessionAheadOfCloudMessage,
+          ),
+        ),
+      );
+      expect(
+        await store.quarantine(
+          sessionKey: 'scope',
+          workerTypeId: 'worker',
+          profileDefinitionId: 'profile',
+          providerToolIdentity: 'tool',
+        ),
+        isTrue,
+      );
+      expect(await read(reset), isNull);
+    },
+  );
+
+  test(
     'fast path requires exact synchronized context and active native state',
     () async {
       final root = await Directory.systemTemp.createTemp('session-fast-path-');

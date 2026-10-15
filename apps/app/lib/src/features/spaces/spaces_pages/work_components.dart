@@ -994,9 +994,14 @@ class _WorkTimelineCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                       ],
-                      _MemoizedWorkMarkdown(
+                      CollapsibleOwnMessage(
+                        key: ValueKey(request.id),
                         data: request.prompt,
-                        fitContent: true,
+                        enabled: isOwnRequest,
+                        child: _MemoizedWorkMarkdown(
+                          data: request.prompt,
+                          fitContent: true,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Row(
@@ -1719,9 +1724,13 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                       ],
                     ),
                   ] else ...[
-                    ConclaveMarkdownBody(
+                    CollapsibleOwnMessage(
                       data: widget.item.text,
-                      fitContent: true,
+                      enabled: isMe,
+                      child: ConclaveMarkdownBody(
+                        data: widget.item.text,
+                        fitContent: true,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Row(

@@ -33,6 +33,7 @@ class SpaceTree extends StatelessWidget {
     this.onDeleteThread,
     this.onReorderThreads,
     this.compact = false,
+    this.narrow = false,
   });
 
   final AxShellContext shellContext;
@@ -54,6 +55,7 @@ class SpaceTree extends StatelessWidget {
   final Future<void> Function(AxSpace space, List<String> orderedThreadIds)?
       onReorderThreads;
   final bool compact;
+  final bool narrow;
 
   @override
   Widget build(BuildContext context) {
@@ -225,7 +227,7 @@ class SpaceTree extends StatelessWidget {
                     size: 16,
                     color: isSpaceFocused ? Colors.white : Colors.white54,
                   ),
-                  const SizedBox(width: 8),
+                  SizedBox(width: narrow ? 2 : 8),
                   Expanded(
                     child: Text(
                       space.name,
@@ -285,7 +287,7 @@ class SpaceTree extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
                   height: _sidebarRowHeight,
-                  padding: const EdgeInsets.only(left: 34, right: 2),
+                  padding: EdgeInsets.only(left: narrow ? 8 : 34, right: 2),
                   decoration: BoxDecoration(
                     color: isThreadSelected
                         ? ConclaveColors.navigationSelected
@@ -363,7 +365,7 @@ class SpaceTree extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
                   height: _sidebarRowHeight,
-                  padding: const EdgeInsets.only(left: 48, right: 2),
+                  padding: EdgeInsets.only(left: narrow ? 16 : 48, right: 2),
                   decoration: BoxDecoration(
                     color: isThreadSelected
                         ? ConclaveColors.navigationSelected
@@ -560,18 +562,18 @@ class SpaceTree extends StatelessWidget {
           divider(),
           MenuItemButton(
             style: itemStyle(isDestructive: true),
-            leadingIcon: const Icon(
+            leadingIcon: Icon(
               Icons.delete_rounded,
               size: 16,
-              color: ConclaveColors.error,
+              color: ConclaveColors.errorText(isDark),
             ),
             onPressed: () => select('delete'),
-            child: const Text(
+            child: Text(
               'Delete Thread',
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w500,
-                color: ConclaveColors.error,
+                color: ConclaveColors.errorText(isDark),
               ),
             ),
           ),
@@ -693,11 +695,11 @@ class SpaceTree extends StatelessWidget {
           divider(),
           MenuItemButton(
             style: itemStyle(isDestructive: true),
-            leadingIcon: const Icon(Icons.delete_rounded,
-                size: 16, color: ConclaveColors.error),
+            leadingIcon: Icon(Icons.delete_rounded,
+                size: 16, color: ConclaveColors.errorText(isDark)),
             onPressed: () => select('delete'),
-            child: const Text('Delete Space',
-                style: TextStyle(color: ConclaveColors.error)),
+            child: Text('Delete Space',
+                style: TextStyle(color: ConclaveColors.errorText(isDark))),
           ),
         ],
       ),

@@ -79,214 +79,75 @@ class AppSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Builder(
-      builder: (sidebarContext) => Container(
-        width: compact ? double.infinity : 220,
-        color: ConclaveColors.navigationBackgroundDark,
-        padding: const EdgeInsets.fromLTRB(10, 16, 10, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Brand header — clicking navigates to Home, with toggle sidebar icon on the right
-            Row(
-              children: [
-                Expanded(
-                  child: Tooltip(
-                    message: 'Conclave AX — Home',
-                    child: InkWell(
-                      onTap: () {
-                        onNavigateTo(const AxNavigation.home());
-                        if (compact) {
-                          Scaffold.maybeOf(sidebarContext)?.closeDrawer();
-                        }
-                      },
-                      borderRadius: BorderRadius.circular(ConclaveRadius.sm),
-                      hoverColor: ConclaveColors.navigationHoverDark,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 6),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: [
-                            ConclaveBrand.logoMark(size: 28),
-                            const SizedBox(width: 10),
-                            Flexible(
-                              child: Text(
-                                'Conclave AX',
-                                overflow: TextOverflow.ellipsis,
-                                style: ConclaveTypography.wordmark.copyWith(
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Tooltip(
-                  message: compact ? 'Close sidebar' : 'Hide sidebar',
-                  child: IconButton(
-                    onPressed: () {
-                      if (compact) {
-                        Scaffold.maybeOf(sidebarContext)?.closeDrawer();
-                      } else if (onToggleCollapse != null) {
-                        onToggleCollapse!();
-                      }
-                    },
-                    icon: const Icon(
-                      Icons.menu_open_rounded,
-                      size: 20,
-                      color: Colors.white70,
-                    ),
-                    splashRadius: 16,
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
-                    style: IconButton.styleFrom(
-                      hoverColor: ConclaveColors.navigationHoverDark,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(ConclaveRadius.sm),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // Search control, Add Space icon button & Notifications Alarm button
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Row(
+    return LayoutBuilder(
+      builder: (sidebarContext, constraints) {
+        final width =
+            constraints.hasBoundedWidth ? constraints.maxWidth : 220.0;
+        final narrow = width < 160;
+        final sidePadding = narrow ? 6.0 : 10.0;
+        return Container(
+          width: width,
+          color: ConclaveColors.navigationBackgroundDark,
+          padding: EdgeInsets.fromLTRB(sidePadding, 16, sidePadding, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Brand header — clicking navigates to Home, with toggle sidebar icon on the right
+              Row(
                 children: [
                   Expanded(
                     child: Tooltip(
-                      message: 'Search or jump to...',
-                      child: Container(
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: ConclaveColors.navigationBackgroundDark,
-                          borderRadius:
-                              BorderRadius.circular(ConclaveRadius.sm),
-                          border: Border.all(color: ConclaveColors.borderDark),
-                        ),
-                        child: ListenableBuilder(
-                          listenable:
-                              searchController ?? TextEditingController(),
-                          builder: (context, _) {
-                            final hasText =
-                                searchController?.text.isNotEmpty ?? false;
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                const Padding(
-                                  padding: EdgeInsets.only(left: 8, right: 4),
-                                  child: Icon(
-                                    Icons.search_rounded,
-                                    size: 15,
-                                    color: Colors.white54,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: CallbackShortcuts(
-                                    bindings: {
-                                      const SingleActivator(
-                                          LogicalKeyboardKey.escape): () {
-                                        searchController?.clear();
-                                        onSearchChanged?.call('');
-                                        onClearSearch?.call();
-                                      },
-                                    },
-                                    child: TextField(
-                                      controller: searchController,
-                                      focusNode: searchFocusNode,
-                                      onChanged: onSearchChanged,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.white,
-                                      ),
-                                      cursorColor: ConclaveBrand.accent,
-                                      cursorHeight: 14,
-                                      decoration: const InputDecoration(
-                                        filled: true,
-                                        fillColor: Colors.transparent,
-                                        hoverColor: Colors.transparent,
-                                        focusColor: Colors.transparent,
-                                        hintText: 'Search...',
-                                        hintStyle: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.white38,
-                                        ),
-                                        isDense: true,
-                                        contentPadding:
-                                            EdgeInsets.symmetric(vertical: 7),
-                                        border: InputBorder.none,
-                                        focusedBorder: InputBorder.none,
-                                        enabledBorder: InputBorder.none,
-                                        errorBorder: InputBorder.none,
-                                        disabledBorder: InputBorder.none,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                if (hasText)
-                                  InkWell(
-                                    onTap: onClearSearch,
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: const Padding(
-                                      padding: EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 4),
-                                      child: Icon(
-                                        Icons.close_rounded,
-                                        size: 14,
-                                        color: Colors.white54,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Tooltip(
-                    message: 'New Space',
-                    child: IconButton(
-                      onPressed: onCreateSpace,
-                      icon: const Icon(
-                        Icons.add_rounded,
-                        size: 18,
-                        color: Colors.white60,
-                      ),
-                      splashRadius: 14,
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 32, minHeight: 32),
-                      style: IconButton.styleFrom(
+                      message: 'Conclave AX — Home',
+                      child: InkWell(
+                        onTap: () {
+                          onNavigateTo(const AxNavigation.home());
+                          if (compact) {
+                            Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(ConclaveRadius.sm),
                         hoverColor: ConclaveColors.navigationHoverDark,
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(ConclaveRadius.sm),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: narrow ? 2 : 6, vertical: 6),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            children: [
+                              ConclaveBrand.logoMark(size: 28),
+                              if (!narrow) const SizedBox(width: 10),
+                              if (!narrow)
+                                Flexible(
+                                  child: Text(
+                                    'Conclave AX',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: ConclaveTypography.wordmark.copyWith(
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   Tooltip(
-                    message: 'Notifications',
+                    message: compact ? 'Close sidebar' : 'Hide sidebar',
                     child: IconButton(
-                      onPressed: onOpenNotifications,
+                      onPressed: () {
+                        if (compact) {
+                          Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                        } else if (onToggleCollapse != null) {
+                          onToggleCollapse!();
+                        }
+                      },
                       icon: const Icon(
-                        Icons.notifications_none_rounded,
-                        size: 18,
-                        color: Colors.white60,
+                        Icons.menu_open_rounded,
+                        size: 20,
+                        color: Colors.white70,
                       ),
-                      splashRadius: 14,
+                      splashRadius: 16,
                       padding: EdgeInsets.zero,
                       constraints:
                           const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -301,130 +162,283 @@ class AppSidebar extends StatelessWidget {
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
-            // Navigation Centerpiece: Full Space Tree
-            Expanded(
-              child: SingleChildScrollView(
-                child: SpaceTree(
-                  shellContext: shellContext,
-                  onNavigateTo: onNavigateTo,
-                  onToggleSpaceExpanded: onToggleSpaceExpanded,
-                  onCreateSpace: onCreateSpace,
-                  onCreateThread: onCreateThread,
-                  onEditSpace: onEditSpace,
-                  onArchiveSpace: onArchiveSpace,
-                  onDeleteSpace: onDeleteSpace,
-                  onRenameThread: onRenameThread,
-                  onSetThreadArchived: onSetThreadArchived,
-                  onClearChatHistory: onClearChatHistory,
-                  onClearWorkHistory: onClearWorkHistory,
-                  onDeleteThread: onDeleteThread,
-                  onReorderThreads: onReorderThreads,
-                  compact: compact,
+              // Search control, Add Space icon button & Notifications Alarm button
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    SizedBox(
+                      width: width - sidePadding * 2 - 4 - (narrow ? 0 : 76),
+                      child: Tooltip(
+                        message: 'Search or jump to...',
+                        child: Container(
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: ConclaveColors.navigationBackgroundDark,
+                            borderRadius:
+                                BorderRadius.circular(ConclaveRadius.sm),
+                            border:
+                                Border.all(color: ConclaveColors.borderDark),
+                          ),
+                          child: ListenableBuilder(
+                            listenable:
+                                searchController ?? TextEditingController(),
+                            builder: (context, _) {
+                              final hasText =
+                                  searchController?.text.isNotEmpty ?? false;
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.only(left: 8, right: 4),
+                                    child: Icon(
+                                      Icons.search_rounded,
+                                      size: 15,
+                                      color: Colors.white54,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: CallbackShortcuts(
+                                      bindings: {
+                                        const SingleActivator(
+                                            LogicalKeyboardKey.escape): () {
+                                          searchController?.clear();
+                                          onSearchChanged?.call('');
+                                          onClearSearch?.call();
+                                        },
+                                      },
+                                      child: TextField(
+                                        controller: searchController,
+                                        focusNode: searchFocusNode,
+                                        onChanged: onSearchChanged,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.white,
+                                        ),
+                                        cursorColor: ConclaveBrand.accent,
+                                        cursorHeight: 14,
+                                        decoration: const InputDecoration(
+                                          filled: true,
+                                          fillColor: Colors.transparent,
+                                          hoverColor: Colors.transparent,
+                                          focusColor: Colors.transparent,
+                                          hintText: 'Search...',
+                                          hintStyle: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.white38,
+                                          ),
+                                          isDense: true,
+                                          contentPadding:
+                                              EdgeInsets.symmetric(vertical: 7),
+                                          border: InputBorder.none,
+                                          focusedBorder: InputBorder.none,
+                                          enabledBorder: InputBorder.none,
+                                          errorBorder: InputBorder.none,
+                                          disabledBorder: InputBorder.none,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (hasText)
+                                    InkWell(
+                                      onTap: onClearSearch,
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: const Padding(
+                                        padding: EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 4),
+                                        child: Icon(
+                                          Icons.close_rounded,
+                                          size: 14,
+                                          color: Colors.white54,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                    Tooltip(
+                      message: 'New Space',
+                      child: IconButton(
+                        onPressed: onCreateSpace,
+                        icon: const Icon(
+                          Icons.add_rounded,
+                          size: 18,
+                          color: Colors.white60,
+                        ),
+                        splashRadius: 14,
+                        padding: EdgeInsets.zero,
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        style: IconButton.styleFrom(
+                          hoverColor: ConclaveColors.navigationHoverDark,
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(ConclaveRadius.sm),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Tooltip(
+                      message: 'Notifications',
+                      child: IconButton(
+                        onPressed: onOpenNotifications,
+                        icon: const Icon(
+                          Icons.notifications_none_rounded,
+                          size: 18,
+                          color: Colors.white60,
+                        ),
+                        splashRadius: 14,
+                        padding: EdgeInsets.zero,
+                        constraints:
+                            const BoxConstraints(minWidth: 32, minHeight: 32),
+                        style: IconButton.styleFrom(
+                          hoverColor: ConclaveColors.navigationHoverDark,
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(ConclaveRadius.sm),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
+              const SizedBox(height: 12),
 
-            if (compact)
-              _navItem(
-                icon: Icons.close_rounded,
-                label: 'Close menu',
-                target: null,
-                context: sidebarContext,
+              // Navigation Centerpiece: Full Space Tree
+              Expanded(
+                child: SingleChildScrollView(
+                  child: SpaceTree(
+                    shellContext: shellContext,
+                    onNavigateTo: onNavigateTo,
+                    onToggleSpaceExpanded: onToggleSpaceExpanded,
+                    onCreateSpace: onCreateSpace,
+                    onCreateThread: onCreateThread,
+                    onEditSpace: onEditSpace,
+                    onArchiveSpace: onArchiveSpace,
+                    onDeleteSpace: onDeleteSpace,
+                    onRenameThread: onRenameThread,
+                    onSetThreadArchived: onSetThreadArchived,
+                    onClearChatHistory: onClearChatHistory,
+                    onClearWorkHistory: onClearWorkHistory,
+                    onDeleteThread: onDeleteThread,
+                    onReorderThreads: onReorderThreads,
+                    compact: compact,
+                    narrow: narrow,
+                  ),
+                ),
               ),
 
-            const SizedBox(height: 6),
+              if (compact)
+                _navItem(
+                  icon: Icons.close_rounded,
+                  label: 'Close menu',
+                  target: null,
+                  context: sidebarContext,
+                ),
 
-            // Bottom Profile Button + ⋯ Global Application Menu
-            Row(
-              children: [
-                Expanded(
-                  child: Tooltip(
-                    message: 'Profile & Settings',
-                    waitDuration: const Duration(milliseconds: 600),
-                    child: InkWell(
-                      onTap: () {
-                        onNavigateTo(const AxNavigation.profileSecurity());
-                        if (compact) {
-                          Scaffold.maybeOf(sidebarContext)?.closeDrawer();
-                        }
-                      },
-                      borderRadius: BorderRadius.circular(ConclaveRadius.sm),
-                      hoverColor: ConclaveColors.navigationHoverDark,
-                      focusColor: ConclaveColors.navigationSelected,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: shellContext.isNavActive(
-                                  const AxNavigation.profileSecurity())
-                              ? ConclaveColors.navigationSelected
-                              : Colors.transparent,
-                          borderRadius:
-                              BorderRadius.circular(ConclaveRadius.sm),
-                        ),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 13,
-                              backgroundColor: ConclaveColors.primarySoft,
-                              backgroundImage: shellContext.viewerAvatarImage,
-                              child: shellContext.viewerAvatarImage == null
-                                  ? Text(
-                                      shellContext.viewerInitials,
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: ConclaveColors.primaryPressed,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                shellContext.viewerDisplayName ??
-                                    shellContext.viewerEmail ??
-                                    'Not signed in',
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: shellContext.isNavActive(
-                                          const AxNavigation.profileSecurity())
-                                      ? Colors.white
-                                      : Colors.white70,
-                                  fontSize: 11.5,
-                                  fontWeight: shellContext.isNavActive(
-                                          const AxNavigation.profileSecurity())
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                ),
+              const SizedBox(height: 6),
+
+              // Bottom Profile Button + ⋯ Global Application Menu
+              Row(
+                children: [
+                  Expanded(
+                    child: Tooltip(
+                      message: 'Profile & Settings',
+                      waitDuration: const Duration(milliseconds: 600),
+                      child: InkWell(
+                        onTap: () {
+                          onNavigateTo(const AxNavigation.profileSecurity());
+                          if (compact) {
+                            Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+                        hoverColor: ConclaveColors.navigationHoverDark,
+                        focusColor: ConclaveColors.navigationSelected,
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: narrow ? 2 : 6, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: shellContext.isNavActive(
+                                    const AxNavigation.profileSecurity())
+                                ? ConclaveColors.navigationSelected
+                                : Colors.transparent,
+                            borderRadius:
+                                BorderRadius.circular(ConclaveRadius.sm),
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 13,
+                                backgroundColor: ConclaveColors.primarySoft,
+                                backgroundImage: shellContext.viewerAvatarImage,
+                                child: shellContext.viewerAvatarImage == null
+                                    ? Text(
+                                        shellContext.viewerInitials,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: ConclaveColors.primaryPressed,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      )
+                                    : null,
                               ),
-                            ),
-                          ],
+                              if (!narrow) const SizedBox(width: 8),
+                              if (!narrow)
+                                Expanded(
+                                  child: Text(
+                                    shellContext.viewerDisplayName ??
+                                        shellContext.viewerEmail ??
+                                        'Not signed in',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: shellContext.isNavActive(
+                                              const AxNavigation
+                                                  .profileSecurity())
+                                          ? Colors.white
+                                          : Colors.white70,
+                                      fontSize: 11.5,
+                                      fontWeight: shellContext.isNavActive(
+                                              const AxNavigation
+                                                  .profileSecurity())
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                GlobalAppMenu(
-                  shellContext: shellContext,
-                  onNavigateTo: onNavigateTo,
-                  onToggleTheme: onToggleTheme,
-                  onSetThemeMode: onSetThemeMode,
-                  onOpenAbout: onOpenAbout,
-                  onOpenExternal: onOpenExternal,
-                  onLogout: onLogout,
-                  onOpenArchivedSpaces: onOpenArchivedSpaces,
-                  compact: compact,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+                  const SizedBox(width: 4),
+                  GlobalAppMenu(
+                    shellContext: shellContext,
+                    onNavigateTo: onNavigateTo,
+                    onToggleTheme: onToggleTheme,
+                    onSetThemeMode: onSetThemeMode,
+                    onOpenAbout: onOpenAbout,
+                    onOpenExternal: onOpenExternal,
+                    onLogout: onLogout,
+                    onOpenArchivedSpaces: onOpenArchivedSpaces,
+                    compact: compact,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

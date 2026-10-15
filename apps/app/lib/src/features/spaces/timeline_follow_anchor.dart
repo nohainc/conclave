@@ -54,7 +54,11 @@ class AxTimelineFollowAnchor {
       controller.jumpTo(position.maxScrollExtent);
       return false;
     }
-    final render = _key!.currentContext?.findRenderObject();
+    // Virtualized children can remain mounted while inactive in the sliver's
+    // keep-alive cache. Inspect attachment without findRenderObject(), which
+    // requires an active element and asserts before we can check attachment.
+    final context = _key!.currentContext;
+    final render = context is Element ? context.renderObject : null;
     if (render == null || !render.attached) {
       controller.jumpTo((_fallbackOffset ?? position.maxScrollExtent)
           .clamp(position.minScrollExtent, position.maxScrollExtent));

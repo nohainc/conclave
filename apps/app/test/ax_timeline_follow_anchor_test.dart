@@ -8,6 +8,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('inactive anchor falls back until it can be mounted again',
+      (tester) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final anchor = AxTimelineFollowAnchor();
+    var retry = false;
+    Widget view(bool visible) => MaterialApp(
+          home: ListView(controller: controller, children: [
+            const SizedBox(height: 1000),
+            if (visible)
+              _DeactivationProbe(
+                key: anchor.keyFor('incoming'),
+                onDeactivate: () => retry = anchor.reveal(controller),
+              ),
+          ]),
+        );
+    await tester.pumpWidget(view(false));
+    anchor.observe('incoming', controller);
+    await tester.pumpWidget(view(true));
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await tester.pump();
+    await tester.pumpWidget(view(false));
+    expect(tester.takeException(), isNull);
+    expect(retry, isTrue);
+  });
+
   for (final nestedResponse in [false, true]) {
     testWidgets(
         '${nestedResponse ? 'Work response' : 'Chat message'} reveals its beginning and preserves it during growth',
@@ -221,4 +247,23 @@ void main() {
     expect(tester.getTopLeft(find.text('Short message')).dy,
         greaterThanOrEqualTo(0));
   });
+}
+
+class _DeactivationProbe extends StatefulWidget {
+  const _DeactivationProbe({super.key, required this.onDeactivate});
+  final VoidCallback onDeactivate;
+
+  @override
+  State<_DeactivationProbe> createState() => _DeactivationProbeState();
+}
+
+class _DeactivationProbeState extends State<_DeactivationProbe> {
+  @override
+  void deactivate() {
+    super.deactivate();
+    widget.onDeactivate();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(height: 800);
 }

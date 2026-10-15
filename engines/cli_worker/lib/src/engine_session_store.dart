@@ -5,6 +5,13 @@ import 'package:crypto/crypto.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'worker_session.dart';
 
+/// The local session record is ahead of the canonical context Cloud sent for
+/// this turn (for example after a Cloud database reset or a cancelled turn
+/// whose revision Cloud never committed). Cloud is the source of truth, so the
+/// engine quarantines the local record and rebuilds the session.
+const staleSessionAheadOfCloudMessage =
+    'Worker Session contains context newer than this turn';
+
 /// Local logical-session mapping. Provider session IDs never cross Protocol 4.0.
 class EngineSessionStore {
   const EngineSessionStore(this.directory);
@@ -129,9 +136,7 @@ class EngineSessionStore {
       // model and must respect the same model-switch contract.
       if (stored.synchronizedContextRevision >
           workerSession.baseContextRevision) {
-        throw const FormatException(
-          'Worker Session contains context newer than this turn',
-        );
+        throw const FormatException(staleSessionAheadOfCloudMessage);
       }
       onSessionRead?.call(stored);
       if (stored.status == 'invalidated') return null;

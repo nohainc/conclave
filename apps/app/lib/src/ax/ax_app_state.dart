@@ -120,6 +120,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   bool deletingAccount = false;
   ThemeMode _themeMode = ThemeMode.system;
   bool _desktopSidebarCollapsed = false;
+  double _desktopSidebarWidth = 200;
   bool get showRunDetails => switch (navigation.kind) {
         AxRouteKind.home => false,
         _ => true,

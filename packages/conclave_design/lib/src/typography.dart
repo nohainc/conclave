@@ -54,7 +54,7 @@ abstract final class ConclaveTypography {
     height: 1.3,
   );
 
-  /// Section heading (17px, 650/700)
+  /// Section heading (17px, 700)
   static const sectionTitle = TextStyle(
     fontFamily: fontFamily,
     fontFamilyFallback: fontFamilyFallback,

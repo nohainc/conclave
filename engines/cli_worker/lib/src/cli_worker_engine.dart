@@ -908,7 +908,8 @@ class CliWorkerEngine {
   bool _canReconstructCorruptSession(String message) =>
       message == 'Engine session state is invalid' ||
       message == 'Missing local Worker Session' ||
-      message == 'Engine session state exceeds its limit';
+      message == 'Engine session state exceeds its limit' ||
+      message == staleSessionAheadOfCloudMessage;
 
   Future<void> _execute(ExecuteRequest request, IOSink sink) async {
     if (!_initialized ||
@@ -1107,7 +1108,12 @@ class CliWorkerEngine {
             );
     } on FormatException catch (error) {
       final bootstrap = request.workerSession?.bootstrap;
-      if (bootstrap != null && _canReconstructCorruptSession(error.message)) {
+      // A turn with no prior canonical context (base revision 0) needs no
+      // bootstrap to start a fresh native session after quarantine.
+      final canRebuild =
+          bootstrap != null ||
+          (request.workerSession?.baseContextRevision ?? 0) == 0;
+      if (canRebuild && _canReconstructCorruptSession(error.message)) {
         final quarantined = await _sessions.quarantine(
           sessionKey: request.sessionKey!,
           workerTypeId: _profile.workerTypeId,

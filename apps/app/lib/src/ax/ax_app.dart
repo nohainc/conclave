@@ -19,6 +19,7 @@ import '../features/execution/task_pipeline_dag.dart';
 import '../features/home/home_page.dart';
 import '../features/navigation/ax_shell_context.dart';
 import '../features/navigation/ax_sidebar.dart';
+import '../features/navigation/resizable_sidebar.dart';
 import '../features/navigation/ax_top_bar.dart';
 import '../features/spaces/spaces_pages.dart';
 import '../features/spaces/archived_spaces_page.dart';

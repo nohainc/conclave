@@ -107,6 +107,7 @@ void main() {
       ),
     ));
 
+    await tester.pumpAndSettle();
     final regions = find.byType(SelectableRegion);
     expect(regions, findsNWidgets(2));
     final first = tester.state<SelectableRegionState>(regions.at(0));
@@ -171,6 +172,83 @@ void main() {
     expect(selected?.plainText, 'after code');
   });
 
+  for (final prefix in [
+    '```dart\nfinal x = 1;\n```',
+    '| Name | State |\n| --- | --- |\n| Worker | Ready |',
+    '> ```dart\n> final x = 1;\n> ```',
+    '> | Name | State |\n> | --- | --- |\n> | Worker | Ready |',
+    '- Item\n\n  ```dart\n  final x = 1;\n  ```',
+  ]) {
+    testWidgets('drag selects text after an inset block: $prefix',
+        (tester) async {
+      SelectedContent? selected;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.fromLTRB(80, 100, 40, 0),
+            child: SingleChildScrollView(
+              child: ConclaveMarkdownBody(
+                data: '$prefix\n\nafter block',
+                onSelectionChanged: (value) => selected = value,
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      final rect = tester.getRect(find.text('after block'));
+      final gesture = await tester.startGesture(
+        Offset(rect.left + 1, rect.center.dy),
+        kind: PointerDeviceKind.mouse,
+      );
+      addTearDown(gesture.removePointer);
+      await gesture.moveTo(Offset(rect.right - 1, rect.center.dy));
+      await gesture.up();
+      await tester.pump();
+      expect(selected?.plainText, 'after block');
+
+      final reverse = await tester.startGesture(
+        Offset(rect.right - 1, rect.center.dy),
+        kind: PointerDeviceKind.mouse,
+      );
+      addTearDown(reverse.removePointer);
+      await reverse.moveTo(Offset(rect.left + 1, rect.center.dy));
+      await reverse.up();
+      await tester.pump();
+      expect(selected?.plainText, 'after block');
+    });
+  }
+
+  testWidgets('selection crosses quoted code in both directions',
+      (tester) async {
+    SelectedContent? selected;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Padding(
+          padding: const EdgeInsets.all(40),
+          child: ConclaveMarkdownBody(
+            data: 'Before.\n\n> ```dart\n> final x = 1;\n> ```\n\nAfter.',
+            onSelectionChanged: (value) => selected = value,
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    final start = tester.getTopLeft(find.text('Before.'));
+    final end = tester.getBottomRight(find.text('After.'));
+    for (final reverse in [false, true]) {
+      final gesture = await tester.startGesture(reverse ? end : start,
+          kind: PointerDeviceKind.mouse);
+      addTearDown(gesture.removePointer);
+      await gesture.moveTo(reverse ? start : end);
+      await gesture.up();
+      await tester.pump();
+      expect(selected?.plainText, contains('Before.'));
+      expect(selected?.plainText, contains('final x = 1;'));
+      expect(selected?.plainText, contains('After.'));
+    }
+  });
+
   testWidgets('selection is refreshed when a live message is replaced',
       (tester) async {
     String data = 'Old response';
@@ -193,6 +271,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
     final first =
         tester.state<SelectableRegionState>(find.byType(SelectableRegion));
     first.selectAll();

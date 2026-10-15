@@ -540,7 +540,8 @@ extension _AxAppViews on _AxAppStateMixin {
           child: OutlinedButton.icon(
             onPressed: deletingAccount ? null : _deleteAccount,
             style: OutlinedButton.styleFrom(
-              foregroundColor: ConclaveColors.error,
+              foregroundColor: ConclaveColors.errorText(
+                  Theme.of(context).brightness == Brightness.dark),
               side: BorderSide(
                   color: ConclaveColors.error.withValues(alpha: .45)),
             ),

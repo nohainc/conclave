@@ -856,6 +856,16 @@ Space list and detail responses include the authenticated viewer's membership
 `role`. Sidebar grouping must use that server attribution, including after a
 Space detail refresh, rather than inferring ownership from a missing field.
 
+The expanded desktop sidebar defaults to 200 logical pixels. Its right-edge
+resize grip supports dragging between 200 and 300 pixels. The resize line is visible only while the pointer
+is over the grip, uses the same neutral color in all interaction states, and
+has no tooltip. When focused, Left
+and Right adjust by 10 pixels; Home and End select the limits. Width is local
+shell state, retained through navigation, collapse/expand, and responsive layout
+changes for the current app session; it is not stored in Cloud or across reloads.
+Narrow widths use a compact header, wrapped search/actions, and reduced Thread
+indentation. The mobile drawer and collapsed icon rail keep their existing sizes.
+
 Sidebar group labels use uppercase text. Shared Space pages omit the empty
 instructions section while continuing to show configured instructions. The
 Members tab retains cached rows and an inline loading-failure notice without a

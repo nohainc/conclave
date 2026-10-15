@@ -14,16 +14,16 @@ abstract final class ConclaveColors {
   static const canvasLight = Color(0xfff8f7f3);
   static const surfaceLight = Color(0xffffffff);
   static const surfaceHoverLight = Color(0xfff1efe8);
-  static const borderLight = Color(0xffdfded8);
+  static const borderLight = Color(0xffd2d1ca);
   static const textPrimaryLight = Color(0xff20202a);
-  static const textSecondaryLight = Color(0xff6e6e7c);
+  static const textSecondaryLight = Color(0xff62626f);
   static const codeBackgroundLight = Color(0xfff0eee8);
 
   // Dark Mode Surfaces & Inks
   static const canvasDark = Color(0xff1b1a24);
   static const surfaceDark = Color(0xff24222e);
   static const surfaceHoverDark = Color(0xff343142);
-  static const borderDark = Color(0xff393645);
+  static const borderDark = Color(0xff403d50);
   static const textPrimaryDark = Color(0xfff4f4f6);
   static const textSecondaryDark = Color(0xffaaa7b8);
   static const codeBackgroundDark = Color(0xff15151d);
@@ -36,11 +36,11 @@ abstract final class ConclaveColors {
   static const navigationHoverLight = Color(0xfff1efe8);
   static const navigationHoverDark = Color(0xff1d1c28);
   static const navigationSelected = Color(0xff302b4d);
-  static const navigationBorderLight = Color(0xffdfded8);
+  static const navigationBorderLight = Color(0xffd2d1ca);
   static const navigationBorderDark = Color(0xff1f1e2a);
   static const navigationTextLight = Color(0xff20202a);
   static const navigationTextDark = Color(0xfff4f4f6);
-  static const navigationTextMutedLight = Color(0xff6e6e7c);
+  static const navigationTextMutedLight = Color(0xff62626f);
   static const navigationTextMutedDark = Color(0xffaaa7b8);
 
   // Composer/Input Panel Tokens
@@ -105,7 +105,20 @@ abstract final class ConclaveColors {
   static const neutralSoftLight = Color(0xffe5e5eb);
   static const neutralSoftDark = Color(0xff2a2a35);
 
+  // Status colors for text and icons on light surfaces (WCAG AA >= 4.5 on
+  // white). The base status colors stay for dots, fills, and dark mode.
+  static const successTextLight = Color(0xff15803d);
+  static const warningTextLight = Color(0xffb45309);
+  static const errorTextLight = Color(0xffb91c1c);
+  static const infoTextLight = Color(0xff1d4ed8);
+  static const neutralTextLight = Color(0xff62626f);
+
   // Status Contextual Getters
+  static Color successText(bool isDark) => isDark ? success : successTextLight;
+  static Color warningText(bool isDark) => isDark ? warning : warningTextLight;
+  static Color errorText(bool isDark) => isDark ? error : errorTextLight;
+  static Color infoText(bool isDark) => isDark ? info : infoTextLight;
+  static Color neutralText(bool isDark) => isDark ? neutral : neutralTextLight;
   static Color successSoft(bool isDark) =>
       isDark ? successSoftDark : successSoftLight;
   static Color warningSoft(bool isDark) =>

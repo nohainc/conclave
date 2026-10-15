@@ -2,6 +2,9 @@
 
 AI Chat is selected in the Thread **Work** composer. The **Chat** discussion
 tab stores human/team messages separately. Both surfaces preserve Markdown source.
+Own Chat messages and Work prompts longer than four preview lines start collapsed.
+Use **Show more** to view the full Markdown and **Hide more** to collapse again.
+Copy and edit actions retain the complete source.
 In both composers, Enter sends and Shift+Enter inserts a new line. Ctrl/Cmd+Enter
 also sends. Editing an existing discussion retains Enter for a new line and
 Ctrl/Cmd+Enter to save.

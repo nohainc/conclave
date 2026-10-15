@@ -74,6 +74,26 @@ void main() {
     );
   }
 
+  for (final width in [100.0, 125.0, 160.0, 200.0, 300.0, 400.0]) {
+    testWidgets('expanded sidebar fits at $width pixels', (tester) async {
+      await tester.pumpWidget(wrapWithMaterial(SizedBox(
+        width: width,
+        child: AppSidebar(
+          shellContext: baseShellContext,
+          onNavigateTo: (_) {},
+          onLogout: () {},
+          onOpenAbout: () {},
+          onOpenExternal: (_) {},
+        ),
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('Authentication redesign'), findsOneWidget);
+      expect(find.byTooltip('New Space'), findsOneWidget);
+      expect(find.byTooltip('Notifications'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   group('Phase 13: Sidebar Content & Isolation Regressions', () {
     testWidgets(
         'sidebar contains Conclave AX brand (home trigger), New Space button, Space tree, User profile, and Menu',

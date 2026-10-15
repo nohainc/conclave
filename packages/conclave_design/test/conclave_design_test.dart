@@ -20,15 +20,15 @@ void main() {
       expect(ConclaveColors.canvasLight, const Color(0xfff8f7f3));
       expect(ConclaveColors.surfaceLight, const Color(0xffffffff));
       expect(ConclaveColors.surfaceHoverLight, const Color(0xfff1efe8));
-      expect(ConclaveColors.borderLight, const Color(0xffdfded8));
+      expect(ConclaveColors.borderLight, const Color(0xffd2d1ca));
       expect(ConclaveColors.codeBackgroundLight, const Color(0xfff0eee8));
     });
 
     test('Dark mode surface hierarchy is defined deterministically', () {
-      expect(ConclaveColors.canvasDark, const Color(0xff121217));
-      expect(ConclaveColors.surfaceDark, const Color(0xff1a1a22));
-      expect(ConclaveColors.surfaceHoverDark, const Color(0xff24242f));
-      expect(ConclaveColors.borderDark, const Color(0xff2e2e3a));
+      expect(ConclaveColors.canvasDark, const Color(0xff1b1a24));
+      expect(ConclaveColors.surfaceDark, const Color(0xff24222e));
+      expect(ConclaveColors.surfaceHoverDark, const Color(0xff343142));
+      expect(ConclaveColors.borderDark, const Color(0xff403d50));
       expect(ConclaveColors.codeBackgroundDark, const Color(0xff15151d));
     });
 
@@ -258,7 +258,9 @@ void main() {
         // Input Decoration Theme
         expect(theme.inputDecorationTheme.filled, isTrue);
         expect(theme.inputDecorationTheme.fillColor,
-            isDark ? ConclaveColors.surfaceDark : ConclaveColors.surfaceLight);
+            isDark
+                ? ConclaveColors.composerBackgroundDark
+                : ConclaveColors.composerBackgroundLight);
 
         // Button Themes
         expect(theme.filledButtonTheme.style?.shape?.resolve({}),

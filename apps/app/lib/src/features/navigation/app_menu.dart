@@ -296,18 +296,18 @@ class GlobalAppMenu extends StatelessWidget {
         // 3. Session action
         MenuItemButton(
           style: itemStyle(isDestructive: true),
-          leadingIcon: const Icon(
+          leadingIcon: Icon(
             Icons.logout_rounded,
             size: 16,
-            color: ConclaveColors.error,
+            color: ConclaveColors.errorText(isDark),
           ),
           onPressed: onLogout,
-          child: const Text(
+          child: Text(
             'Log out',
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w500,
-              color: ConclaveColors.error,
+              color: ConclaveColors.errorText(isDark),
             ),
           ),
         ),

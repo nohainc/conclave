@@ -3,7 +3,7 @@ import 'quiet_notices.dart';
 
 import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show SelectedContent;
+import 'package:flutter/rendering.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
@@ -115,8 +115,65 @@ class ConclaveMarkdownBody extends StatelessWidget {
     // otherwise make Select All include neighboring messages or shell UI.
     return SelectionArea(
       onSelectionChanged: onSelectionChanged,
-      child: body,
+      child: _MarkdownSelectionOrder(child: body),
     );
+  }
+}
+
+// Horizontal scrollables treat a point to their left as preceding their
+// content, even when it is below them. Indented code/tables therefore capture
+// drags on later paragraphs. Resolve vertical block order before forwarding
+// those out-of-bounds edges; in-block gestures retain native scrolling.
+class _MarkdownSelectionOrder extends StatefulWidget {
+  const _MarkdownSelectionOrder({required this.child});
+  final Widget child;
+
+  @override
+  State<_MarkdownSelectionOrder> createState() =>
+      _MarkdownSelectionOrderState();
+}
+
+class _MarkdownSelectionOrderState extends State<_MarkdownSelectionOrder> {
+  final _delegate = _MarkdownSelectionDelegate();
+
+  @override
+  void dispose() {
+    _delegate.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SelectionContainer(
+        delegate: _delegate,
+        child: widget.child,
+      );
+}
+
+class _MarkdownSelectionDelegate extends StaticSelectionContainerDelegate {
+  @override
+  SelectionResult dispatchSelectionEventToChild(
+      Selectable selectable, SelectionEvent event) {
+    if (event is SelectionEdgeUpdateEvent) {
+      final bounds = MatrixUtils.transformRect(
+        selectable.getTransformTo(null),
+        Offset.zero & selectable.size,
+      );
+      final point = event.globalPosition;
+      final Offset adjusted;
+      if (point.dy > bounds.bottom) {
+        adjusted = Offset(bounds.right + 1, point.dy);
+      } else if (point.dy < bounds.top) {
+        adjusted = Offset(bounds.left - 1, point.dy);
+      } else {
+        adjusted = point;
+      }
+      event = event.type == SelectionEventType.startEdgeUpdate
+          ? SelectionEdgeUpdateEvent.forStart(
+              globalPosition: adjusted, granularity: event.granularity)
+          : SelectionEdgeUpdateEvent.forEnd(
+              globalPosition: adjusted, granularity: event.granularity);
+    }
+    return super.dispatchSelectionEventToChild(selectable, event);
   }
 }
 

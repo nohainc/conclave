@@ -100,8 +100,10 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                   onToggleCollapse: () => _updateState(
                                       () => _desktopSidebarCollapsed = false),
                                 )
-                              : SizedBox(
-                                  width: 220,
+                              : ResizableSidebar(
+                                  width: _desktopSidebarWidth,
+                                  onWidthChanged: (width) => _updateState(
+                                      () => _desktopSidebarWidth = width),
                                   child: AxSidebar(
                                     shellContext: shell,
                                     onNavigateTo: _navigateTo,
@@ -190,8 +192,8 @@ extension _AxAppShellViews on _AxAppStateMixin {
         : Uri.parse(navigation.loginReturnTo!);
     final resetToken = browserNavigation.current.queryParameters['token'];
     final resetPassword = resetToken != null;
-    final oauthError = _oauthErrorMessage(
-        browserNavigation.current.queryParameters['error']);
+    final oauthError =
+        _oauthErrorMessage(browserNavigation.current.queryParameters['error']);
     final title = resetPassword
         ? 'Choose a new password'
         : authResetRequest
@@ -284,12 +286,18 @@ extension _AxAppShellViews on _AxAppStateMixin {
                     if (authError != null) ...[
                       const SizedBox(height: 12),
                       Text(authError!,
-                          style: const TextStyle(color: ConclaveColors.error)),
+                          style: TextStyle(
+                              color: ConclaveColors.errorText(
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark))),
                     ],
                     if (authError == null && oauthError != null) ...[
                       const SizedBox(height: 12),
                       Text(oauthError,
-                          style: const TextStyle(color: ConclaveColors.error)),
+                          style: TextStyle(
+                              color: ConclaveColors.errorText(
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark))),
                     ],
                     if (authNotice != null) ...[
                       const SizedBox(height: 12),

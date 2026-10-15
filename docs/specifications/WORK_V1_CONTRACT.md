@@ -14,6 +14,9 @@ or record conversion is required in v1.
 Rendered messages use one selection region across paragraphs, lists and code
 blocks, allowing partial or whole-message selection. Copy Markdown preserves
 the original source; copying a text selection copies the visible text.
+Mouse selection follows vertical block order around horizontally scrollable
+code and tables, including blocks nested inside quotes or lists. Dragging
+on a later paragraph must not capture an earlier indented block.
 
 Work history updates automatically; the composer has no manual history refresh
 control. Error-specific retry actions remain available when synchronization fails.
