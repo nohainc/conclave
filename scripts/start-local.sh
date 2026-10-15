@@ -141,6 +141,16 @@ if [[ "$WEB_BUILD_MODE" == release ]]; then
 else
   WEB_CONTROLS="Controls: [r] Reload | [R] Restart | [q] Quit"
 fi
+# Flutter starts Chrome with a throwaway profile, so the session cookie is lost
+# on every launch and you sign in again each time. A persistent profile under
+# the git-ignored .development folder keeps the local sign-in between runs.
+# Set LOCAL_CHROME_PROFILE=off for a clean browser, or to a path to relocate it.
+WEB_BROWSER_FLAGS=""
+if [[ "${DEVICE}" == "chrome" || "${DEVICE}" == "web-server" ]] && [[ "${LOCAL_CHROME_PROFILE:-}" != "off" ]]; then
+  CHROME_PROFILE_DIR="${LOCAL_CHROME_PROFILE:-${ROOT_DIR}/.development/chrome-profile}"
+  mkdir -p "${CHROME_PROFILE_DIR}"
+  WEB_BROWSER_FLAGS="--web-browser-flag=--user-data-dir=${CHROME_PROFILE_DIR}"
+fi
 RUNNER_FLUTTER="/tmp/conclave-flutter-dev-${PORT}.sh"
 cat << EOF > "${RUNNER_FLUTTER}"
 #!/usr/bin/env bash
@@ -148,7 +158,7 @@ set -euo pipefail
 cd "${ROOT_DIR}/apps/app"
 echo -e "\033[1m\033[0;32m[Conclave AX Flutter Web]\033[0m ${WEB_CONTROLS}\n"
 export FLUTTER_PREBUILT_ENGINE_VERSION="${FLUTTER_ENGINE_VERSION}"
-exec "${FLUTTER_BIN}" run --${WEB_BUILD_MODE} -d "${DEVICE}" --web-port="${WEB_PORT}" --dart-define="CONCLAVE_API_URL=${API_URL}/api"
+exec "${FLUTTER_BIN}" run --${WEB_BUILD_MODE} -d "${DEVICE}" --web-port="${WEB_PORT}" ${WEB_BROWSER_FLAGS} --dart-define="CONCLAVE_API_URL=${API_URL}/api"
 EOF
 chmod +x "${RUNNER_FLUTTER}"
 
