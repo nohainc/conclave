@@ -74,6 +74,22 @@ class FakeSocket implements WorkspaceTransport {
   Future<void> close() => controller.close();
 }
 
+/// Rejects the first terminal sends while the connection itself stays up.
+class FlakyTerminalSocket extends FakeSocket {
+  FlakyTerminalSocket(this.failures);
+  int failures;
+
+  @override
+  Future<void> sendAndWait(Object message) {
+    final decoded = jsonDecode(message as String) as Map<String, dynamic>;
+    if (decoded['type'] == 'assignment.result' && failures > 0) {
+      failures--;
+      return Future<void>.error(TimeoutException('terminal send timed out'));
+    }
+    return super.sendAndWait(message);
+  }
+}
+
 Future<void> waitFor(
   bool Function() condition, {
   Duration timeout = const Duration(seconds: 2),
@@ -1475,6 +1491,99 @@ void main() {
 
     expect(executed, isTrue);
     await connection.close();
+  });
+
+  test('redelivers a terminal result on a timer after a failed send',
+      () async {
+    final socket = FlakyTerminalSocket(1);
+    final directory =
+        await Directory.systemTemp.createTemp('workspace-redeliver-');
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      assignmentHandler: (context) async => const WorkspaceAssignmentResult(
+        summary: 'completed by workspace',
+        output: {'text': 'durable result payload'},
+      ),
+      assignmentJournal: journal,
+      heartbeat: const Duration(hours: 1),
+      terminalRedeliveryInterval: const Duration(milliseconds: 40),
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'server-assignment-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'workspace-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-1',
+      'idempotencyKey': 'idem-1',
+      'payload': {
+        'objective': 'inspect',
+        'role': 'research',
+        'workerId': 'conclave.echo',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
+        'input': {},
+        'contextArtifactIds': [],
+        'timeoutMs': 1000,
+      },
+    }));
+    int results() => socket.sent
+        .where((message) =>
+            (jsonDecode(message as String) as Map)['type'] ==
+            'assignment.result')
+        .length;
+
+    // The first send is rejected; the timer, not a reconnect, redelivers it.
+    await waitFor(() => results() == 1);
+    expect(socket.failures, 0);
+    final redelivered = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'assignment.result');
+    expect((redelivered['payload'] as Map)['summary'], isNotNull);
+    expect((await journal.reconcile())['assignment-1']!.status,
+        AssignmentStatus.completed);
+
+    // Until Cloud acknowledges, delivery keeps being retried.
+    await waitFor(() => results() >= 2);
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'terminal-ack-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.ack',
+      'executionWorkspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'workspace-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-1',
+      'idempotencyKey': 'idem-1',
+      'payload': {'accepted': true, 'terminal': true, 'status': 'completed'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect((await journal.reconcile())['assignment-1']!.status,
+        AssignmentStatus.reconciled);
+    final settled = results();
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    expect(results(), settled);
+    await connection.close();
+    await directory.delete(recursive: true);
   });
 
   test('replays a terminal journal result when Cloud still has it active',

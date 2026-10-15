@@ -86,6 +86,17 @@ void main() {
     expect(cache.peek('unopened').requests, isEmpty);
   });
 
+  test('a 404 on a stale Work Request detail resets the history', () async {
+    await seed();
+    final read = cache.refreshRequest('w', '30');
+    final expectation =
+        expectLater(read, throwsA(isA<AxApiException>()));
+    source.detailPending.last
+        .completeError(const AxApiException('Not found', statusCode: 404));
+    await expectation;
+    expect(cache.peek('w').requests, isEmpty);
+  });
+
   test('failed remote clear preserves history', () async {
     await seed();
     source.clearError = const AxApiException('Clear failed');

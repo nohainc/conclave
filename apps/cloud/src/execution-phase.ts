@@ -28,12 +28,6 @@ export type ExecutionPhase =
   /** Stop of a possibly-running Worker is not confirmed. */
   | "uncertain";
 
-export const TERMINAL_EXECUTION_PHASES: ReadonlySet<ExecutionPhase> = new Set([
-  "completed",
-  "failed",
-  "cancelled",
-]);
-
 export type FailureCategory =
   | "service_unavailable"
   | "sync_incomplete"

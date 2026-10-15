@@ -6,12 +6,12 @@ import 'dart:html' as html;
 import 'ax_browser_navigation_stub.dart';
 
 export 'ax_browser_navigation_stub.dart'
-    show AxBrowserNavigation, AxBrowserConnectivity;
+    show AxBrowserNavigation, AxBrowserConnectivity, AxBrowserVisibility;
 
 AxBrowserNavigation createAxBrowserNavigation() => _WebAxBrowserNavigation();
 
 final class _WebAxBrowserNavigation
-    implements AxBrowserNavigation, AxBrowserConnectivity {
+    implements AxBrowserNavigation, AxBrowserConnectivity, AxBrowserVisibility {
   final _connectivity = StreamController<bool>.broadcast(sync: true);
   final _subscriptions = <StreamSubscription<html.Event>>[];
   _WebAxBrowserNavigation() {
@@ -20,6 +20,8 @@ final class _WebAxBrowserNavigation
     _subscriptions
         .add(html.window.onOffline.listen((_) => _connectivity.add(false)));
   }
+  @override
+  bool get visible => html.document.visibilityState == 'visible';
   @override
   bool get online => html.window.navigator.onLine ?? true;
   @override
@@ -55,9 +57,14 @@ final class _WebAxBrowserNavigation
 
   @override
   void startSocialLogin(String provider, Uri returnTo) {
-    final uri = Uri(
-      path: '/api/auth/sign-in/$provider',
-      queryParameters: {'returnTo': returnTo.toString()},
+    // Same API base as every other request: in local development the Cloud
+    // Worker and this app run on different ports, so a bare '/api' path would
+    // hit the app's own dev server. The return target is an absolute URL of
+    // this app; Cloud accepts only its own or the configured app origin.
+    const configuredApi = String.fromEnvironment('CONCLAVE_API_URL');
+    final apiBase = configuredApi.isNotEmpty ? configuredApi : '/api';
+    final uri = Uri.parse('$apiBase/auth/sign-in/$provider').replace(
+      queryParameters: {'returnTo': Uri.base.resolveUri(returnTo).toString()},
     );
     html.window.location.assign(uri.toString());
   }

@@ -111,6 +111,12 @@ FLUTTER_ROOT="$(cd "$(dirname "${FLUTTER_BIN}")/.." && pwd)"
 FLUTTER_ENGINE_VERSION="$(<"${FLUTTER_ROOT}/bin/internal/engine.version")"
 if [[ "$ISOLATED" == true ]]; then
   node "$ROOT_DIR/scripts/setup-development-auth.mjs"
+  for provider in GOOGLE GITHUB; do
+    if ! grep -Eq "^CONCLAVE_AUTH_${provider}_CLIENT_ID=.+" "$ROOT_DIR/apps/cloud/.dev.vars" 2>/dev/null; then
+      label="$(printf '%s' "${provider:0:1}${provider:1}" | tr '[:upper:]' '[:lower:]')"
+      echo "Note: ${label} sign-in is not configured for this local backend (see docs/deployment/CLOUDFLARE.md#${label}-sign-in)."
+    fi
+  done
   API_CONFIG="$ROOT_DIR/apps/cloud/wrangler.jsonc"
   API_MODE="isolated local v8 D1"
 else

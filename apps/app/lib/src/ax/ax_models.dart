@@ -256,8 +256,6 @@ class AxPhaseItem {
       };
 }
 
-typedef AxRunPhase = AxPhaseItem;
-
 class AxSpacePermissions {
   const AxSpacePermissions(
       {this.chat = false, this.work = false, this.manageOwnThreads = false});
@@ -286,11 +284,14 @@ class AxThread {
     required this.queueStatus,
     this.leadDisplayName = '',
     this.workConfig = const {},
+    this.metadata = const {},
     this.canConfigureWork = false,
     this.canExecuteWork = false,
     this.archived = false,
     this.creatorEmail = '',
     this.creatorIsOwner = true,
+    this.hasActiveWork = false,
+    this.hasUnread = false,
     this.createdAt = '',
     this.updatedAt = '',
   });
@@ -305,11 +306,23 @@ class AxThread {
   final String primaryWorkspace;
   final String queueStatus;
   final Map<String, dynamic> workConfig;
+
+  /// Cloud-backed Thread presentation state (`viewState`: active tab, selected
+  /// workflow, Worker, model, effort). Never used for execution decisions.
+  final Map<String, dynamic> metadata;
   final bool canConfigureWork;
   final bool canExecuteWork;
   final bool archived;
   final String creatorEmail;
   final bool creatorIsOwner;
+
+  Map<String, dynamic> get viewState => metadata['viewState'] is Map
+      ? Map<String, dynamic>.from(metadata['viewState'] as Map)
+      : const {};
+
+  /// Server-derived for the signed-in user; never persisted in the read cache.
+  final bool hasActiveWork;
+  final bool hasUnread;
   final String createdAt;
   final String updatedAt;
 
@@ -319,7 +332,9 @@ class AxThread {
           {String? name,
           String? title,
           String? status,
-          Map<String, dynamic>? workConfig}) =>
+          Map<String, dynamic>? workConfig,
+          Map<String, dynamic>? viewState,
+          bool? hasUnread}) =>
       AxThread(
           id: id,
           spaceId: spaceId,
@@ -331,8 +346,17 @@ class AxThread {
           primaryWorkspace: primaryWorkspace,
           queueStatus: queueStatus,
           workConfig: workConfig ?? this.workConfig,
+          metadata: viewState == null
+              ? metadata
+              : {
+                  ...metadata,
+                  'viewState': {...this.viewState, ...viewState}
+                    ..removeWhere((_, value) => value == null),
+                },
           creatorEmail: creatorEmail,
           creatorIsOwner: creatorIsOwner,
+          hasActiveWork: hasActiveWork,
+          hasUnread: hasUnread ?? this.hasUnread,
           createdAt: createdAt,
           updatedAt: updatedAt,
           canConfigureWork: canConfigureWork,
@@ -352,11 +376,16 @@ class AxThread {
         workConfig: json['workConfig'] is Map
             ? Map<String, dynamic>.from(json['workConfig'] as Map)
             : const {},
+        metadata: json['metadata'] is Map
+            ? Map<String, dynamic>.from(json['metadata'] as Map)
+            : const {},
         canConfigureWork: json['canConfigureWork'] == true,
         canExecuteWork: json['canExecuteWork'] == true,
         archived: json['archived'] == true,
         creatorEmail: _string(json, 'creatorEmail'),
         creatorIsOwner: json['creatorIsOwner'] != false,
+        hasActiveWork: json['hasActiveWork'] == true,
+        hasUnread: json['hasUnread'] == true,
         createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
         updatedAt: _string(json, 'updatedAt', _string(json, 'updated_at')),
       );
@@ -464,6 +493,64 @@ class AxDiscussionMessage {
   }
 }
 
+/// Returns a stable descending comparison for user-facing update timestamps.
+///
+/// Invalid or missing timestamps are treated as older than valid timestamps.
+int compareAxLastUpdatedDesc(String left, String right) {
+  final leftDate = DateTime.tryParse(left);
+  final rightDate = DateTime.tryParse(right);
+  if (leftDate != null && rightDate != null) {
+    return rightDate.compareTo(leftDate);
+  }
+  if (leftDate != null) return -1;
+  if (rightDate != null) return 1;
+  return 0;
+}
+
+List<AxSpace> sortAxSpacesByLastUpdate(Iterable<AxSpace> spaces) {
+  final indexed = spaces.toList().asMap().entries.toList();
+  indexed.sort((left, right) {
+    final comparison = compareAxLastUpdatedDesc(
+      left.value.lastActivity,
+      right.value.lastActivity,
+    );
+    return comparison == 0 ? left.key.compareTo(right.key) : comparison;
+  });
+  return indexed.map((entry) => entry.value).toList(growable: false);
+}
+
+List<AxThread> sortAxThreadsByLastUpdate(Iterable<AxThread> threads) {
+  final indexed = threads.toList().asMap().entries.toList();
+  indexed.sort((left, right) {
+    final comparison = compareAxLastUpdatedDesc(
+      left.value.updatedAt.isNotEmpty
+          ? left.value.updatedAt
+          : left.value.createdAt,
+      right.value.updatedAt.isNotEmpty
+          ? right.value.updatedAt
+          : right.value.createdAt,
+    );
+    return comparison == 0 ? left.key.compareTo(right.key) : comparison;
+  });
+  return indexed.map((entry) => entry.value).toList(growable: false);
+}
+
+/// Applies a Space's stored `threadOrder` to Threads already sorted by
+/// activity. Threads missing from the stored order (new ones) stay first, in
+/// activity order; listed Threads follow in their stored order.
+List<AxThread> applyAxThreadOrder(List<AxThread> sorted, Object? storedOrder) {
+  if (storedOrder is! List || storedOrder.isEmpty) return sorted;
+  final rank = <String, int>{
+    for (final entry
+        in storedOrder.whereType<String>().toList().asMap().entries)
+      entry.value: entry.key,
+  };
+  final unlisted = sorted.where((t) => !rank.containsKey(t.id));
+  final listed = sorted.where((t) => rank.containsKey(t.id)).toList()
+    ..sort((a, b) => rank[a.id]!.compareTo(rank[b.id]!));
+  return [...unlisted, ...listed];
+}
+
 class AxSpace {
   const AxSpace({
     required this.id,
@@ -477,6 +564,8 @@ class AxSpace {
     this.role = 'owner',
     this.settings = const {},
     this.permissions,
+    this.hasActiveWork = false,
+    this.hasUnread = false,
   });
 
   final String id;
@@ -490,6 +579,10 @@ class AxSpace {
   final String role;
   final Map<String, dynamic> settings;
   final AxSpacePermissions? permissions;
+
+  /// Server-derived for the signed-in user across all of the Space's Threads.
+  final bool hasActiveWork;
+  final bool hasUnread;
   AxSpacePermissions get effectivePermissions => role == 'owner'
       ? AxSpacePermissions.forRole(role)
       : permissions ?? AxSpacePermissions.forRole(role);
@@ -498,7 +591,8 @@ class AxSpace {
         id: _string(json, 'id'),
         name: _string(json, 'name'),
         branch: _string(json, 'branch'),
-        lastActivity: _string(json, 'lastActivity'),
+        lastActivity: _string(json, 'lastActivity',
+            _string(json, 'updatedAt', _string(json, 'createdAt'))),
         threads: (json['threads'] as List? ?? const [])
             .map((item) =>
                 AxThread.fromJson(Map<String, dynamic>.from(item as Map)))
@@ -521,6 +615,8 @@ class AxSpace {
         settings: json['settings'] is Map
             ? Map<String, dynamic>.from(json['settings'] as Map)
             : const {},
+        hasActiveWork: json['hasActiveWork'] == true,
+        hasUnread: json['hasUnread'] == true,
       );
 
   AxSpace copyWith({
@@ -547,6 +643,8 @@ class AxSpace {
         role: role ?? this.role,
         settings: settings ?? this.settings,
         permissions: permissions,
+        hasActiveWork: hasActiveWork,
+        hasUnread: hasUnread,
       );
 }
 
@@ -1413,7 +1511,6 @@ enum AxHomeAttentionType {
   static const AxHomeAttentionType invitation = spaceInvitation;
   static const AxHomeAttentionType failedExecution = executionFailed;
   static const AxHomeAttentionType completed = executionCompleted;
-  static const AxHomeAttentionType finding = needsInput;
   static const AxHomeAttentionType general = executionCompleted;
 }
 
@@ -2358,7 +2455,6 @@ class AxAiCapabilityUpdate {
 }
 
 typedef AxAiUpdate = AxAiCapabilityUpdate;
-typedef AiCapabilityUpdate = AxAiCapabilityUpdate;
 
 class AxAiCapabilityUpdateService {
   /// Resolves the set of worker profile and provider identifiers accessible to the user:

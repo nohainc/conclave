@@ -136,6 +136,11 @@ abstract class _AxApiClientCore
   }
 }
 
+/// Optional capability: record that the signed-in user has seen a Thread.
+abstract interface class AxThreadReadDataSource {
+  Future<void> markThreadRead(String threadId);
+}
+
 class AxApiClient extends _AxApiClientCore
     with
         _CatalogApi,
@@ -149,6 +154,7 @@ class AxApiClient extends _AxApiClientCore
         AxSpaceWorkflowConfigurationDataSource,
         AxWorkflowDefaultDataSource,
         AxWorkflowWorkspaceDataSource,
-        AxPeopleDataSource {
+        AxPeopleDataSource,
+        AxThreadReadDataSource {
   AxApiClient({super.baseUrl, super.client});
 }

@@ -71,6 +71,14 @@ class DiscussionSource extends AxFixtureDataSource {
     return request.future;
   }
 
+  final clearCalls = <String>[];
+  Object? clearError;
+  @override
+  Future<void> clearThreadChatHistory({required String threadId}) async {
+    clearCalls.add(threadId);
+    if (clearError != null) throw clearError!;
+  }
+
   @override
   Future<void> deleteDiscussionMessage({required String messageId}) async {
     deletedIds.add(messageId);
@@ -120,6 +128,41 @@ void main() {
     expect(cache.peek('w').messages, hasLength(2 * pageSize));
     expect(cache.peek('w').messages.map((row) => row.id).toSet(),
         hasLength(2 * pageSize));
+  });
+
+  test('clear chat calls the server even when nothing is loaded', () async {
+    await cache.clearHistory('w');
+    expect(source.clearCalls, ['w']);
+  });
+
+  test('failed remote chat clear preserves loaded messages', () async {
+    final head = Completer<AxDiscussionPage>();
+    source.queuedPages.add(head);
+    final load = cache.synchronize('w');
+    head.complete(AxDiscussionPage(messages: [message('1', 'One')]));
+    await load;
+    source.clearError = const AxApiException('Clear failed');
+    await expectLater(cache.clearHistory('w'), throwsA(isA<AxApiException>()));
+    expect(cache.peek('w').messages.single.id, '1');
+  });
+
+  test('confirmed chat clear (local or remote) empties history and tombstones',
+      () async {
+    final head = Completer<AxDiscussionPage>();
+    source.queuedPages.add(head);
+    final load = cache.synchronize('w');
+    head.complete(AxDiscussionPage(messages: [message('1', 'One')]));
+    await load;
+    await cache.clearHistory('w');
+    expect(cache.peek('w').messages, isEmpty);
+    // A second session receiving thread.chat_cleared uses resetHistory.
+    final head2 = Completer<AxDiscussionPage>();
+    source.queuedPages.add(head2);
+    final other = cache.synchronize('x');
+    head2.complete(AxDiscussionPage(messages: [message('2', 'Two', ws: 'x')]));
+    await other;
+    cache.resetHistory('x');
+    expect(cache.peek('x').messages, isEmpty);
   });
 
   test('remote edits merge an older loaded message through one detail read',

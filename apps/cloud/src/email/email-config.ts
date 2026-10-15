@@ -3,12 +3,6 @@ const DEFAULT_FALLBACK_SENDER = "vitalii@nohainc.com";
 const DEFAULT_DISPLAY_NAME = "Conclave AX";
 const LEGACY_SENDER = "auth@auth.earthuc.com";
 
-export const EMAIL_SENDER = Object.freeze({
-  primary: DEFAULT_PRIMARY_SENDER,
-  fallback: DEFAULT_FALLBACK_SENDER,
-  displayName: DEFAULT_DISPLAY_NAME,
-});
-
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const SENDER_REJECTION_CODES = new Set([

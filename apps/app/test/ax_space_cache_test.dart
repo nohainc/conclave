@@ -54,7 +54,65 @@ class ControlledSource extends AxFixtureDataSource {
   }
 }
 
+class UnsortedRecentSource extends AxFixtureDataSource {
+  @override
+  Future<List<AxSpace>> loadSpaces({bool includeArchived = false}) async => [
+        const AxSpace(
+          id: 'older-space',
+          name: 'Older Space',
+          branch: '',
+          lastActivity: '2026-10-01T00:00:00Z',
+        ),
+        const AxSpace(
+          id: 'newer-space',
+          name: 'Newer Space',
+          branch: '',
+          lastActivity: '2026-10-03T00:00:00Z',
+        ),
+      ];
+
+  @override
+  Future<List<AxThread>> loadSpaceThreads({required String spaceId}) async => [
+        AxThread(
+          id: 'older-thread',
+          spaceId: spaceId,
+          name: 'Older Thread',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: '',
+          updatedAt: '2026-10-01T00:00:00Z',
+        ),
+        AxThread(
+          id: 'newer-thread',
+          spaceId: spaceId,
+          name: 'Newer Thread',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: '',
+          updatedAt: '2026-10-03T00:00:00Z',
+        ),
+      ];
+}
+
 void main() {
+  test('sorts Spaces and Threads by their most recent update', () async {
+    final source = UnsortedRecentSource();
+    final store = AxStore(source);
+
+    await store.spaces.refresh();
+    await store.spaceThreads.ensure('newer-space');
+
+    expect(store.spaces.items.map((space) => space.id),
+        ['newer-space', 'older-space']);
+    expect(store.spaceThreads.peek('newer-space').map((thread) => thread.id),
+        ['newer-thread', 'older-thread']);
+    store.dispose();
+  });
+
   test('bootstrap and SpaceStore never own nested Threads', () async {
     final store = AxStore(const AxFixtureDataSource());
     await store.spaceThreads.ensure(a.id);

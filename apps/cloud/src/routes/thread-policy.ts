@@ -78,6 +78,74 @@ export function normalizeThreadWorkConfig(value: unknown): {
   };
 }
 
+const VIEW_STATE_STRING_KEYS = [
+  "workflowReference",
+  "workerId",
+  "model",
+  "reasoningEffort",
+  "catalogRevision",
+] as const;
+
+/**
+ * Validates a Thread metadata patch. Values are merged with JSON merge-patch
+ * semantics, so `null` clears a key. Only presentation state is accepted.
+ */
+export function normalizeThreadMetadataPatch(
+  value: unknown,
+): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new HttpError(400, "metadata must be an object");
+  const input = value as Record<string, unknown>;
+  if (Object.keys(input).some((key) => key !== "viewState"))
+    throw new HttpError(400, "metadata contains unsupported keys");
+  if (input.viewState === undefined) return {};
+  if (input.viewState === null) return { viewState: null };
+  if (typeof input.viewState !== "object" || Array.isArray(input.viewState))
+    throw new HttpError(400, "metadata.viewState must be an object");
+  const viewState = input.viewState as Record<string, unknown>;
+  const allowed = new Set<string>(["tabIndex", ...VIEW_STATE_STRING_KEYS]);
+  if (Object.keys(viewState).some((key) => !allowed.has(key)))
+    throw new HttpError(400, "metadata.viewState contains unsupported keys");
+  const patch: Record<string, unknown> = {};
+  if (viewState.tabIndex !== undefined) {
+    if (viewState.tabIndex !== 0 && viewState.tabIndex !== 1)
+      throw new HttpError(400, "metadata.viewState.tabIndex is invalid");
+    patch.tabIndex = viewState.tabIndex;
+  }
+  for (const key of VIEW_STATE_STRING_KEYS) {
+    const entry = viewState[key];
+    if (entry === undefined) continue;
+    if (
+      entry !== null &&
+      (typeof entry !== "string" || entry.length === 0 || entry.length > 200)
+    )
+      throw new HttpError(400, `metadata.viewState.${key} is invalid`);
+    patch[key] = entry;
+  }
+  return { viewState: patch };
+}
+
+/** JSON merge-patch (RFC 7386), matching SQLite json_patch. */
+export function mergeMetadata(
+  target: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const result = { ...target };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) delete result[key];
+    else if (typeof value === "object" && !Array.isArray(value)) {
+      const current = result[key];
+      result[key] = mergeMetadata(
+        current && typeof current === "object" && !Array.isArray(current)
+          ? (current as Record<string, unknown>)
+          : {},
+        value as Record<string, unknown>,
+      );
+    } else result[key] = value;
+  }
+  return result;
+}
+
 export function threadMetadata(
   row: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -102,11 +170,17 @@ export function threadMetadata(
       defaultWorkflowId: "full_cycle",
       bindings: {},
     }),
+    metadata: parseJson<Record<string, unknown>>(
+      row.metadataJson ?? row.metadata_json,
+      {},
+    ),
     primaryWorkspace:
       accessPolicy.primaryWorkspaceId ??
       accessPolicy.primary_workspace_id ??
       null,
     queueStatus: "Idle",
+    hasActiveWork: row.hasActiveWork === 1,
+    hasUnread: row.hasUnread === 1,
     createdAt: String(row.createdAt ?? row.created_at),
     updatedAt: String(row.updatedAt ?? row.updated_at),
   };
@@ -114,28 +188,18 @@ export function threadMetadata(
 
 export function sortThreads<T extends Record<string, unknown>>(
   threads: T[],
-  threadOrder?: unknown,
 ): T[] {
-  const hasCustomOrder = Array.isArray(threadOrder) && threadOrder.length > 0;
-  const orderMap = new Map<string, number>();
-  if (hasCustomOrder) {
-    (threadOrder as unknown[]).forEach((id, index) => {
-      if (typeof id === "string") orderMap.set(id, index);
-    });
-  }
   return [...threads].sort((a, b) => {
     const aId = String(a.id ?? "");
     const bId = String(b.id ?? "");
-    if (hasCustomOrder) {
-      const aIndex = orderMap.has(aId) ? orderMap.get(aId)! : 999999;
-      const bIndex = orderMap.has(bId) ? orderMap.get(bId)! : 999999;
-      if (aIndex !== bIndex) {
-        return aIndex - bIndex;
-      }
-    }
-    const aCreated = String(a.createdAt ?? a.created_at ?? "");
-    const bCreated = String(b.createdAt ?? b.created_at ?? "");
-    return aCreated.localeCompare(bCreated);
+    const aUpdated = String(
+      a.updatedAt ?? a.updated_at ?? a.createdAt ?? a.created_at ?? "",
+    );
+    const bUpdated = String(
+      b.updatedAt ?? b.updated_at ?? b.createdAt ?? b.created_at ?? "",
+    );
+    const byUpdated = bUpdated.localeCompare(aUpdated);
+    return byUpdated !== 0 ? byUpdated : bId.localeCompare(aId);
   });
 }
 
@@ -234,19 +298,6 @@ export async function authorizeThreadAccess(
           : canManageThread(context.userId, effectiveMembership, thread);
   if (!allowed) throw new HttpError(403, `Thread ${access} access is required`);
   return { context, thread, spaceId: String(row.spaceId) };
-}
-
-export async function threadSpaceId(
-  env: SecurityEnv,
-  threadId: string,
-): Promise<string> {
-  const row = await env.CONCLAVE_DB.prepare(
-    "SELECT space_id AS spaceId FROM threads WHERE id = ?1",
-  )
-    .bind(threadId)
-    .first<{ spaceId: string }>();
-  if (!row) throw new HttpError(404, "Thread not found");
-  return row.spaceId;
 }
 
 export type WorkEligibilityIssue = {

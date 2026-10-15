@@ -269,7 +269,7 @@ extension _ThreadActions on _ThreadPageState {
       });
     } catch (error) {
       if (mounted && widget.thread.id == id) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showNotice(SnackBar(
             content: Text('Failed to load older Work history: $error')));
       }
     } finally {
@@ -369,12 +369,12 @@ extension _ThreadActions on _ThreadPageState {
       unawaited(_workHistoryCache
           .refreshRequest(widget.thread.id, workRequestId, supersede: true)
           .catchError((Object _) {}));
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showNotice(
         const SnackBar(content: Text('Retrying your request.')),
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showNotice(
         const SnackBar(
           content:
               Text('Could not retry your request. Check Worker readiness.'),
@@ -404,7 +404,7 @@ extension _ThreadActions on _ThreadPageState {
           .refreshRequest(widget.thread.id, workRequestId, supersede: true)
           .catchError((Object _) {}));
       if (showFeedback) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showNotice(
           const SnackBar(content: Text('Request cancelled.')),
         );
       }
@@ -412,7 +412,7 @@ extension _ThreadActions on _ThreadPageState {
     } catch (_) {
       if (!mounted) return false;
       if (showFeedback) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showNotice(
           const SnackBar(content: Text('Could not cancel this request.')),
         );
       }
@@ -435,7 +435,7 @@ extension _ThreadActions on _ThreadPageState {
       if (_discussionController.text.isEmpty) {
         _discussionController.text = text;
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      ScaffoldMessenger.of(context).showNotice(SnackBar(
           content: Text('Failed to save message: $error'),
           backgroundColor: ConclaveColors.error));
     }
@@ -448,7 +448,7 @@ extension _ThreadActions on _ThreadPageState {
       await cache.edit(id, messageId, newText);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      ScaffoldMessenger.of(context).showNotice(SnackBar(
           content: Text('Failed to update message: $error'),
           backgroundColor: ConclaveColors.error));
     }
@@ -460,11 +460,11 @@ extension _ThreadActions on _ThreadPageState {
     try {
       await cache.delete(id, messageId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      ScaffoldMessenger.of(context).showNotice(const SnackBar(
           content: Text('Message deleted'), duration: Duration(seconds: 2)));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      ScaffoldMessenger.of(context).showNotice(SnackBar(
           content: Text('Failed to delete message: $error'),
           backgroundColor: ConclaveColors.error));
     }
@@ -500,7 +500,7 @@ extension _ThreadActions on _ThreadPageState {
           !identical(cache, _discussionCache)) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showNotice(
           SnackBar(content: Text('Failed to load older messages: $error')));
     } finally {
       _loadingOlderChat = false;
@@ -514,7 +514,7 @@ extension _ThreadActions on _ThreadPageState {
     final byAnother = archivedBy != null && archivedBy != widget.currentUserId;
 
     if (isArchived && byAnother) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showNotice(
         const SnackBar(
           content: Text('This Thread was archived.'),
           duration: Duration(seconds: 3),

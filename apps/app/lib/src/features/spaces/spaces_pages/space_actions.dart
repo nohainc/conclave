@@ -304,60 +304,11 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
     }
   }
 
-  Future<void> _moveThread(int index, int delta) async {
-    final targetIndex = index + delta;
-    if (targetIndex < 0 || targetIndex >= threads.length) return;
-    final previousList = List<AxThread>.from(threads);
-    final updatedList = List<AxThread>.from(threads);
-    final item = updatedList.removeAt(index);
-    updatedList.insert(targetIndex, item);
-    _updateState(() {
-      threads = updatedList;
-    });
-    try {
-      final orderIds = updatedList.map((w) => w.id).toList();
-      final updatedSpace = await _collaboration.editSpace(
-        widget.space,
-        name: widget.space.name,
-        description: widget.space.description,
-        instructions: widget.space.instructions,
-        settings: {
-          ...widget.space.settings,
-          'threadOrder': orderIds,
-        },
-      );
-      if (!mounted) return;
-      final mergedSpace = AxSpace(
-        id: updatedSpace.id,
-        name: updatedSpace.name,
-        branch: updatedSpace.branch,
-        lastActivity: updatedSpace.lastActivity,
-        threads: updatedList,
-        description: updatedSpace.description,
-        instructions: updatedSpace.instructions,
-        archived: updatedSpace.archived,
-        role: updatedSpace.role.isNotEmpty
-            ? updatedSpace.role
-            : widget.space.role,
-        settings: updatedSpace.settings,
-      );
-      _recordThreads();
-      widget.onSpaceUpdated?.call(mergedSpace);
-    } catch (error) {
-      if (mounted) {
-        _updateState(() {
-          threads = previousList;
-        });
-        _message(error.toString());
-      }
-    }
-  }
-
   void _message(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
+      ..showNotice(
         SnackBar(
           duration: const Duration(seconds: 4),
           showCloseIcon: true,

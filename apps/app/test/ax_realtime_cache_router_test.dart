@@ -39,6 +39,78 @@ void main() {
     });
     expect(loads['thread:W:discussion'], 2);
   });
+  test('Work and Discussion bursts share one debounced indicator refresh',
+      () async {
+    final spaces = query(['spaces']);
+    final threads = query(['space', 'A', 'threads']);
+    await engine.ensure(spaces);
+    await engine.ensure(threads);
+    router = AxRealtimeCacheRouter(engine,
+        activityDebounce: const Duration(milliseconds: 10));
+    for (final type in [
+      'work_request.started',
+      'discussion.created',
+      'work_request.completed'
+    ]) {
+      await router.handle({
+        'type': type,
+        'spaceId': 'A',
+        'threadId': 'W',
+        'payload': {'entityId': 'x', 'threadId': 'W'}
+      });
+    }
+    expect(loads['spaces'], 1);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(loads['spaces'], 2);
+    expect(loads['space:A:threads'], 2);
+  });
+  test('activity in the viewed Thread skips the indicator refresh', () async {
+    final spaces = query(['spaces']);
+    await engine.ensure(spaces);
+    final viewed = <String>[];
+    router = AxRealtimeCacheRouter(engine,
+        activityDebounce: const Duration(milliseconds: 10),
+        viewedThreadActivity: (id) {
+          viewed.add(id);
+          return id == 'W';
+        });
+    await router.handle({
+      'type': 'work_request.completed',
+      'spaceId': 'A',
+      'threadId': 'W',
+      'payload': {'threadId': 'W'}
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(viewed, ['W']);
+    expect(loads['spaces'], 1);
+  });
+  test('a newly accepted request refreshes ordering for a viewed Thread',
+      () async {
+    final spaces = AxQuery<List<AxSpace>>(
+        key: AxQueryKey(['spaces']), load: () async {
+      loads.update('spaces', (n) => n + 1, ifAbsent: () => 1);
+      return const [];
+    });
+    final threads = AxQuery<List<AxThread>>(
+        key: AxQueryKey(['space', 'A', 'threads']), load: () async {
+      loads.update('space:A:threads', (n) => n + 1, ifAbsent: () => 1);
+      return const [];
+    });
+    await engine.ensure(spaces);
+    await engine.ensure(threads);
+    router = AxRealtimeCacheRouter(engine,
+        activityDebounce: const Duration(milliseconds: 10),
+        viewedThreadActivity: (_) => true);
+    await router.handle({
+      'type': 'work_request.created',
+      'spaceId': 'A',
+      'threadId': 'W',
+      'payload': {'threadId': 'W', 'workRequestId': 'request'}
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(loads['spaces'], 2);
+    expect(loads['space:A:threads'], 2);
+  });
   test('background Space updates only its own registered queries', () async {
     final a = query(['space', 'A', 'threads']);
     final b = query(['space', 'B', 'threads']);

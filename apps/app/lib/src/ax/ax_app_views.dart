@@ -232,6 +232,9 @@ extension _AxAppViews on _AxAppStateMixin {
           currentUserName: store.auth.viewer?.displayName,
           viewerEmail: store.auth.viewer?.email,
           onBackToSpace: () => _navigateTo(AxNavigation.space(space.id)),
+          onViewStateChanged: (viewState) async {
+            await store.collaboration.editThread(thread, viewState: viewState);
+          },
           onArchive: () async {
             try {
               await store.collaboration.deleteThread(thread);

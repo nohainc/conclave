@@ -350,6 +350,7 @@ class WorkspaceCloudConnection {
     this.reconnectMaxDelay = const Duration(minutes: 2),
     this.protocolHandshakeTimeout = const Duration(seconds: 15),
     this.syncTimeout = const Duration(seconds: 20),
+    this.terminalRedeliveryInterval = const Duration(seconds: 20),
     this.webSocketProbeInterval = const Duration(minutes: 5),
     this.webSocketProbeMaxInterval = const Duration(hours: 1),
     this.webSocketFailureLimit = 3,
@@ -405,6 +406,12 @@ class WorkspaceCloudConnection {
   final Duration reconnectMaxDelay;
   final Duration protocolHandshakeTimeout;
   final Duration syncTimeout;
+
+  /// Base delay before re-sending an unacknowledged terminal result while the
+  /// transport stays up; it doubles per attempt up to sixteen times.
+  final Duration terminalRedeliveryInterval;
+  int _terminalRedeliveryAttempt = 0;
+  Timer? _terminalRedeliveryTimer;
   final Duration webSocketProbeInterval;
   final Duration webSocketProbeMaxInterval;
   int _webSocketProbeFailures = 0;
@@ -1419,6 +1426,9 @@ class WorkspaceCloudConnection {
     _protocolHandshakeTimer = null;
     _syncTimer?.cancel();
     _syncTimer = null;
+    _terminalRedeliveryTimer?.cancel();
+    _terminalRedeliveryTimer = null;
+    _terminalRedeliveryAttempt = 0;
     _webSocketProbeTimer?.cancel();
     _webSocketProbeTimer = null;
     final sub = _subscription;
@@ -2075,6 +2085,128 @@ class WorkspaceCloudConnection {
     lastWebSocketFailureAt = DateTime.now().toUtc();
   }
 
+  /// Re-sends the local terminal outcome. Cloud acknowledges it with a
+  /// terminal `assignment.ack`, which is what marks the record reconciled.
+  Future<void> _sendRecoveredTerminal(
+    WorkspaceTransport socket,
+    AssignmentRecord record,
+    Map<String, Object?> correlation,
+  ) async {
+    if (record.status == AssignmentStatus.completed) {
+      await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
+        'assignment.result',
+        correlation,
+        {
+          'status': 'completed',
+          'summary':
+              record.result?['summary'] ?? 'Recovered assignment result',
+          'output': record.result?['output'],
+          'artifactIds': record.result?['artifactIds'] ?? const [],
+          if (record.result?['evidence'] is Map)
+            'evidence': record.result?['evidence'],
+        },
+      )));
+    } else if (record.status == AssignmentStatus.failed) {
+      await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
+        'assignment.error',
+        correlation,
+        {
+          'status': 'failed',
+          'error': {
+            'code': record.errorCode ?? 'provider_unavailable',
+            'message':
+                record.result?['error'] ?? 'Recovered assignment failure',
+            'retryable': false,
+            if (record.processExitCode != null)
+              'details': {'processExitCode': record.processExitCode},
+          },
+        },
+      )));
+    } else if (record.status == AssignmentStatus.cancelled) {
+      await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
+        'assignment.cancelled',
+        correlation,
+        {
+          'status': 'cancelled',
+          'reason':
+              'Assignment was cancelled while the Workspace was offline',
+        },
+      )));
+    } else {
+      await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
+        'assignment.error',
+        correlation,
+        {
+          'status': 'failed',
+          'error': {
+            'code': 'provider_unavailable',
+            'message': executionErrorMessage('provider_unavailable'),
+            'retryable': true,
+            'details': {
+              'recoveryState':
+                  record.result?['recoveryState'] ?? 'workspace_restart',
+            },
+          },
+        },
+      )));
+    }
+  }
+
+  void _scheduleTerminalRedelivery() {
+    if (_closing || _terminalRedeliveryTimer != null) return;
+    final factor = 1 << (_terminalRedeliveryAttempt > 4 ? 4 : _terminalRedeliveryAttempt);
+    _terminalRedeliveryAttempt++;
+    _terminalRedeliveryTimer =
+        Timer(terminalRedeliveryInterval * factor, () {
+      _terminalRedeliveryTimer = null;
+      unawaited(_redeliverPendingTerminals());
+    });
+  }
+
+  /// A terminal send can fail while the transport stays up (timeout, Cloud
+  /// restarting). Sync only runs on connect, so retry on a timer until Cloud
+  /// acknowledges every locally recorded outcome. A reconnect cancels this
+  /// timer and the connect-time sync takes over.
+  Future<void> _redeliverPendingTerminals() async {
+    final journal = assignmentJournal;
+    final socket = _transport;
+    if (_closing ||
+        journal == null ||
+        socket == null ||
+        sessionId == null ||
+        connectionStage != WorkspaceConnectionStage.ready) {
+      return;
+    }
+    final generation = _transportGeneration;
+    var pending = false;
+    for (final record in (await journal.reconcile()).values) {
+      if (!const {
+            AssignmentStatus.completed,
+            AssignmentStatus.failed,
+            AssignmentStatus.cancelled,
+            AssignmentStatus.interrupted,
+          }.contains(record.status) ||
+          _activeAssignments.contains(record.assignmentId)) {
+        continue;
+      }
+      final correlation = _recordCorrelation(record);
+      if (correlation.values.any((value) => value is! String)) continue;
+      pending = true;
+      try {
+        await _sendRecoveredTerminal(socket, record, correlation)
+            .timeout(const Duration(seconds: 10));
+      } on Object {
+        // The next tick retries; the journal stays authoritative.
+      }
+      if (_closing || generation != _transportGeneration) return;
+    }
+    if (pending) {
+      _scheduleTerminalRedelivery();
+    } else {
+      _terminalRedeliveryAttempt = 0;
+    }
+  }
+
   Future<void> _reconcileSyncResponse(Map<String, Object?> payload) async {
     final knownSpaces = payload['knownSpaceIds'];
     final onKnownSpaces = this.onKnownSpaces;
@@ -2132,64 +2264,7 @@ class WorkspaceCloudConnection {
       if (correlation.values.any((value) => value is! String)) continue;
       final socket = _transport;
       if (socket == null || sessionId == null) continue;
-      if (record.status == AssignmentStatus.completed) {
-        await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
-          'assignment.result',
-          correlation,
-          {
-            'status': 'completed',
-            'summary':
-                record.result?['summary'] ?? 'Recovered assignment result',
-            'output': record.result?['output'],
-            'artifactIds': record.result?['artifactIds'] ?? const [],
-            if (record.result?['evidence'] is Map)
-              'evidence': record.result?['evidence'],
-          },
-        )));
-      } else if (record.status == AssignmentStatus.failed) {
-        await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
-          'assignment.error',
-          correlation,
-          {
-            'status': 'failed',
-            'error': {
-              'code': record.errorCode ?? 'provider_unavailable',
-              'message':
-                  record.result?['error'] ?? 'Recovered assignment failure',
-              'retryable': false,
-              if (record.processExitCode != null)
-                'details': {'processExitCode': record.processExitCode},
-            },
-          },
-        )));
-      } else if (record.status == AssignmentStatus.cancelled) {
-        await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
-          'assignment.cancelled',
-          correlation,
-          {
-            'status': 'cancelled',
-            'reason':
-                'Assignment was cancelled while the Workspace was offline',
-          },
-        )));
-      } else {
-        await socket.sendAndWait(jsonEncode(_assignmentEnvelope(
-          'assignment.error',
-          correlation,
-          {
-            'status': 'failed',
-            'error': {
-              'code': 'provider_unavailable',
-              'message': executionErrorMessage('provider_unavailable'),
-              'retryable': true,
-              'details': {
-                'recoveryState':
-                    record.result?['recoveryState'] ?? 'workspace_restart',
-              },
-            },
-          },
-        )));
-      }
+      await _sendRecoveredTerminal(socket, record, correlation);
       // Keep terminal evidence pending until Cloud acknowledges it. This is
       // what makes delivery independently retryable across transport loss.
     }

@@ -17,6 +17,7 @@ class ThreadPage extends StatefulWidget {
     required this.onBackToSpace,
     required this.onArchive,
     this.onRename,
+    this.onViewStateChanged,
     this.onRunWork,
     this.onRunWorkWithSelection,
     this.realtimeEvents,
@@ -37,6 +38,11 @@ class ThreadPage extends StatefulWidget {
   final VoidCallback onBackToSpace;
   final VoidCallback onArchive;
   final Future<void> Function(String name)? onRename;
+
+  /// Persists the Thread's active tab and workflow/Worker/model/effort
+  /// selection into the Thread metadata. Null values clear a stored key.
+  final Future<void> Function(Map<String, dynamic> viewState)?
+      onViewStateChanged;
   final Future<String> Function(String prompt, String workflowId,
       List<Map<String, dynamic>> attachments, String idempotencyKey)? onRunWork;
   final Future<String> Function(
@@ -65,9 +71,14 @@ class _ThreadPageState extends State<ThreadPage>
   bool _threadViewReady = false;
   bool _threadViewRevealScheduled = false;
   AxThreadViewState? _pendingThreadViewState;
+  Map<String, dynamic>? _lastRemoteViewState;
   final _requestController = TextEditingController();
   final _workHistoryController = ScrollController();
   final _chatHistoryController = ScrollController();
+  final _chatIncomingAnchor = AxTimelineFollowAnchor();
+  final _workIncomingAnchor = AxTimelineFollowAnchor();
+  List<String>? _previousChatIds;
+  Map<String, Object?>? _previousWorkReplies;
   bool _followWork = true;
   bool _followChat = true;
   bool _chatFollowScheduled = false;
@@ -84,6 +95,10 @@ class _ThreadPageState extends State<ThreadPage>
 
   void _invalidateInteractionCallbacks() {
     _interactionGeneration++;
+    _chatIncomingAnchor.reset(clearKeys: true);
+    _workIncomingAnchor.reset(clearKeys: true);
+    _previousChatIds = null;
+    _previousWorkReplies = null;
     _composerAlignmentScheduled = false;
     _chatFollowScheduled = false;
     _workFollowScheduled = false;
@@ -127,7 +142,7 @@ class _ThreadPageState extends State<ThreadPage>
     });
   }
 
-  void _scheduleFollowLatest(ScrollController controller) {
+  void _scheduleFollowLatest(ScrollController controller, {int attempt = 0}) {
     final isWork = controller == _workHistoryController;
     final follow = isWork ? _followWork : _followChat;
     if (!follow) return;
@@ -149,16 +164,67 @@ class _ThreadPageState extends State<ThreadPage>
       final stillFollowing =
           controller == _workHistoryController ? _followWork : _followChat;
       if (stillFollowing) {
-        controller.jumpTo(controller.position.maxScrollExtent);
+        final anchor = isWork ? _workIncomingAnchor : _chatIncomingAnchor;
+        if (anchor.reveal(controller) && attempt < 3) {
+          _scheduleFollowLatest(controller, attempt: attempt + 1);
+          WidgetsBinding.instance.scheduleFrame();
+        }
       }
     });
   }
 
   void _onChatPresentationChanged() {
+    final state = _chatPresentation;
+    final ids = state.messages.map((message) => message.id).toList();
+    final previous = _previousChatIds;
+    _chatIncomingAnchor.retainMessages(ids);
+    if (_followChat && previous != null) {
+      // Only appended entries count: older-page prepends and edits retain
+      // the reader's position and never become incoming-message anchors.
+      final frontier = previous.isEmpty ? -1 : ids.indexOf(previous.last);
+      for (final id in ids.skip(frontier + 1)) {
+        if (!previous.contains(id)) {
+          _chatIncomingAnchor.observe(id, _chatHistoryController);
+          break;
+        }
+      }
+    }
+    if (state.hasData) _previousChatIds = ids;
     _scheduleFollowLatest(_chatHistoryController);
   }
 
   void _onWorkPresentationChanged() {
+    final state = _workPresentation;
+    final previous = _previousWorkReplies;
+    final replies = <String, Object?>{};
+    _workIncomingAnchor.retainMessages([
+      for (final request in state.requests) ...[
+        (request.id, 'request'),
+        (request.id, 'response'),
+      ],
+    ]);
+    final frontier =
+        state.requests.indexWhere((r) => previous?.containsKey(r.id) == true);
+    for (final (index, request) in state.requests.indexed) {
+      final response = _workResponseText(request);
+      final reply = response == null && request.status != 'failed'
+          ? null
+          : (response, request.error, request.status == 'failed');
+      replies[request.id] = reply;
+      if (_followWork && previous != null) {
+        if (!previous.containsKey(request.id)) {
+          // Prepending a history page must not move the viewport.
+          if (previous.isEmpty || index > frontier) {
+            _workIncomingAnchor
+                .observe((request.id, 'request'), _workHistoryController);
+          }
+        } else if (reply != null && reply != previous[request.id]) {
+          _workIncomingAnchor
+              .observe((request.id, 'response'), _workHistoryController);
+        }
+      }
+    }
+    if (state.hasData) _previousWorkReplies = replies;
     _scheduleFollowLatest(_workHistoryController);
   }
 
@@ -175,6 +241,7 @@ class _ThreadPageState extends State<ThreadPage>
     final position = _workHistoryController.position;
     if (position.userScrollDirection == ScrollDirection.idle) return;
     _followWork = position.extentAfter <= 24;
+    _workIncomingAnchor.reset();
     if (position.userScrollDirection == ScrollDirection.forward &&
         position.extentBefore <= 24 &&
         _workHistoryCache.peek(widget.thread.id).olderCursor != null &&
@@ -189,6 +256,7 @@ class _ThreadPageState extends State<ThreadPage>
     final position = _chatHistoryController.position;
     if (position.userScrollDirection == ScrollDirection.idle) return;
     _followChat = position.extentAfter <= 24;
+    _chatIncomingAnchor.reset();
     if (position.userScrollDirection == ScrollDirection.forward &&
         position.extentBefore <= 24) {
       final state = _discussionCache.peek(widget.thread.id);
@@ -344,14 +412,69 @@ class _ThreadPageState extends State<ThreadPage>
         workDraft: _requestController.text,
       );
 
+  Map<String, dynamic> _remoteViewStatePayload(AxThreadViewState state) => {
+        'tabIndex': state.tabIndex.clamp(0, 1),
+        'workflowReference': state.workflowReference,
+        'workerId': state.workerId,
+        'model': state.model,
+        'reasoningEffort': state.reasoningEffort,
+        'catalogRevision': state.catalogRevision,
+      };
+
+  /// Thread metadata wins over the browser-local copy for the selection; the
+  /// drafts stay local because they are never shared through Cloud.
+  AxThreadViewState? _withRemoteViewState(AxThreadViewState? local) {
+    final remote = widget.thread.viewState;
+    if (remote.isEmpty) return local;
+    String? string(String key) {
+      final value = remote[key];
+      return value is String && value.isNotEmpty ? value : null;
+    }
+
+    final tab = remote['tabIndex'];
+    return AxThreadViewState(
+      tabIndex: tab is int ? tab.clamp(0, 1) : local?.tabIndex ?? 0,
+      workflowReference: string('workflowReference'),
+      workerId: string('workerId'),
+      model: string('model'),
+      reasoningEffort: string('reasoningEffort'),
+      catalogRevision: string('catalogRevision'),
+      chatDraft: local?.chatDraft ?? '',
+      workDraft: local?.workDraft ?? '',
+    );
+  }
+
   Future<void> _saveThreadViewState() async {
     final userId = widget.currentUserId;
     if (!_threadViewStateRestored || userId == null || userId.isEmpty) return;
+    final state = _currentThreadViewState();
     await _threadViewStateStore.save(
       userId: userId,
       threadId: widget.thread.id,
-      state: _currentThreadViewState(),
+      state: state,
     );
+    _persistRemoteViewState(state);
+  }
+
+  void _persistRemoteViewState(AxThreadViewState state) {
+    final callback = widget.onViewStateChanged;
+    // While a saved selection is still waiting for the catalogs, the current
+    // state is only defaults and must not replace the stored choice.
+    if (callback == null ||
+        !widget.thread.canConfigureWork ||
+        _pendingThreadViewState != null) {
+      return;
+    }
+    final payload = _remoteViewStatePayload(state);
+    final previous = _lastRemoteViewState;
+    if (previous != null && mapEquals(previous, payload)) return;
+    _lastRemoteViewState = payload;
+    callback(payload).catchError((Object _) {
+      // Leave the next change (or reopen) to retry; local state is intact.
+      if (mapEquals(_lastRemoteViewState, payload)) {
+        _lastRemoteViewState = previous;
+      }
+    });
   }
 
   void _reconcilePendingThreadViewState() {
@@ -394,10 +517,10 @@ class _ThreadPageState extends State<ThreadPage>
       _threadViewReady = true;
       return;
     }
-    final saved = await _threadViewStateStore.load(
+    final saved = _withRemoteViewState(await _threadViewStateStore.load(
       userId: userId,
       threadId: threadId,
-    );
+    ));
     if (!mounted ||
         generation != _threadViewStateGeneration ||
         widget.thread.id != threadId ||
@@ -405,6 +528,9 @@ class _ThreadPageState extends State<ThreadPage>
       return;
     }
     _threadViewStateRestored = true;
+    if (widget.thread.viewState.isNotEmpty && saved != null) {
+      _lastRemoteViewState = _remoteViewStatePayload(saved);
+    }
     if (saved != null) {
       // A draft typed while the asynchronous restore was in flight belongs
       // to the current user, not to the persistence result. Never overwrite
@@ -911,8 +1037,10 @@ class _ThreadPageState extends State<ThreadPage>
         if (type == 'thread.archived') {
           // Thread was archived by another user or session
           _handleThreadArchived(Map<String, dynamic>.from(payload));
-        } else if (type == 'thread.cleared' || type == 'thread.clearChat') {
-          // Chat was cleared, re-synchronize to prevent history reappearance
+        } else if (type == 'thread.chat_cleared') {
+          // Chat was cleared by another session; drop retained messages, then
+          // reconcile with the server.
+          _discussionCache.resetHistory(widget.thread.id);
           unawaited(_discussionCache
               .synchronize(widget.thread.id, reconcileNewest: true)
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
@@ -1274,14 +1402,19 @@ class _ThreadPageState extends State<ThreadPage>
           },
           itemBuilder: (context, index) {
             final message = messages[index];
-            return _DiscussionMessageBubble(
+            return KeyedSubtree(
               key: ValueKey(message.id),
-              item: message,
-              onCopy: () {
-                Clipboard.setData(ClipboardData(text: message.text));
-              },
-              onEdit: (newText) => _editDiscussion(message.id, newText),
-              onDelete: () => _deleteDiscussion(message.id),
+              child: KeyedSubtree(
+                key: _chatIncomingAnchor.keyFor(message.id),
+                child: _DiscussionMessageBubble(
+                  item: message,
+                  onCopy: () {
+                    Clipboard.setData(ClipboardData(text: message.text));
+                  },
+                  onEdit: (newText) => _editDiscussion(message.id, newText),
+                  onDelete: () => _deleteDiscussion(message.id),
+                ),
+              ),
             );
           },
         )),
@@ -1328,6 +1461,7 @@ class _ThreadPageState extends State<ThreadPage>
         composerKey: _workComposerKey,
         requestController: _requestController,
         historyController: _workHistoryController,
+        incomingAnchor: _workIncomingAnchor,
         currentUserId: widget.currentUserId,
         currentUserName: widget.currentUserName,
         workflow: _effectiveWorkflow,

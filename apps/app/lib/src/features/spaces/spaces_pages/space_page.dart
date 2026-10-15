@@ -1,6 +1,6 @@
 part of '../spaces_pages.dart';
 
-enum SpacePageSection { threads, workflows, members }
+enum SpacePageSection { threads, members }
 
 class SpacePage extends StatelessWidget {
   const SpacePage({
@@ -94,7 +94,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
   Object? membersError;
   late AxSpaceTabQueries _queries;
   late AxPeople _people;
-  late AxWorkflowConfigurations _workflowConfigurations;
   late AxSpaceThreads _streams;
   late AxCollaborationMutations _collaboration;
   final _tabCancels = <void Function()>[];
@@ -122,8 +121,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
           .ensure()
           .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
     }
-    _workflowConfigurations = AxWorkflowConfigurations(widget.dataSource,
-        engine: _streams.engine, spaceId: widget.space.id);
     threads = _streams.peek(widget.space.id);
   }
 
@@ -178,12 +175,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
       _ensure(_queries.engine, membersQuery);
       _ensure(_queries.engine, invitationsQuery);
     }
-  }
-
-  void _recordThreads() {
-    _streams.engine.update(
-        _streams.query(widget.space.id), (_) => List.unmodifiable(threads));
-    _queries.engine.invalidate(_queries.audit(widget.space.id).key);
   }
 
   @override
@@ -327,14 +318,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                       ],
                     ),
                   ),
-                  if (widget.section == SpacePageSection.workflows)
-                    WorkflowsPage(
-                        catalogs:
-                            AxSessionCatalogs.forSource(widget.dataSource),
-                        configurations: _workflowConfigurations,
-                        viewerEmail: widget.viewerEmail,
-                        canEdit: widget.space.role == 'owner')
-                  else if (widget.section == SpacePageSection.members)
+                  if (widget.section == SpacePageSection.members)
                     _membersTab()
                   else
                     _threadsTab(),

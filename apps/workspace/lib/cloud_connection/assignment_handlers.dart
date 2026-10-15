@@ -473,6 +473,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
           'errorType': error.runtimeType.toString(),
         },
       );
+      _scheduleTerminalRedelivery();
     }
   }
 

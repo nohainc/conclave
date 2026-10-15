@@ -21,6 +21,7 @@ class AxSidebar extends AppSidebar {
     super.onClearChatHistory,
     super.onClearWorkHistory,
     super.onDeleteThread,
+    super.onReorderThreads,
     super.searchController,
     super.searchFocusNode,
     super.onSearchChanged,

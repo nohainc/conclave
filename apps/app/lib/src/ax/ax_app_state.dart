@@ -8,6 +8,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   String? loadError;
   String? selectedTaskId = 'implement';
   final Set<String> expandedSpaceIds = <String>{};
+  // Spaces whose stored `sidebarExpanded` has been applied this session, so
+  // later refreshes never override a manual expand/collapse.
+  final Set<String> _sidebarRestoredSpaceIds = <String>{};
   List<AxWorker> get workspaceWorkers =>
       store.syncEngine.peek(store.catalogs.workers).data ?? const [];
   bool get workspaceWorkerInventoryLoaded =>
@@ -34,6 +37,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   late AxNavigation navigation;
   StreamSubscription<Uri>? navigationSubscription;
   StreamSubscription<void>? lifecycleSubscription;
+  Timer? _readTimer;
   StreamSubscription<bool>? connectivitySubscription;
   late final RealtimeClient realtimeClient;
   StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
@@ -120,44 +124,11 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         AxRouteKind.home => false,
         _ => true,
       };
-  void _showSnackBar(String message, {ToastType type = ToastType.info}) {
-    messengerKey.currentState
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 4),
-          showCloseIcon: true,
-          closeIconColor: Theme.of(context).colorScheme.onSurfaceVariant,
-          content: Text(
-            message,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          backgroundColor: Theme.of(context).brightness == Brightness.dark
-              ? ConclaveColors.navigationBackgroundDark
-              : ConclaveColors.navigationBackgroundLight,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          action: SnackBarAction(
-            label: 'Copy',
-            textColor: ConclaveColors.primaryForegroundDark,
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: message));
-              messengerKey.currentState?.hideCurrentSnackBar();
-            },
-          ),
-        ),
-      );
-    Future<void>.delayed(const Duration(seconds: 4), () {
-      if (mounted) {
-        messengerKey.currentState?.hideCurrentSnackBar();
-      }
-    });
-  }
+
+  /// Pop-ups are intentionally not shown (see quiet_notices.dart); callers
+  /// keep reporting outcomes here so they can be surfaced differently later.
+  void _showSnackBar(String message, {ToastType type = ToastType.info}) =>
+      quietNotice(Text(message));
 
   void _onSearchQueryChanged() {
     final newQuery = _searchQueryController.text.trim();
@@ -229,6 +200,49 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         .firstOrNull;
   }
 
+  bool get _tabVisible {
+    final nav = browserNavigation;
+    return nav is! AxBrowserVisibility || (nav as AxBrowserVisibility).visible;
+  }
+
+  /// The open Thread in a visible tab counts as read. [force] also advances
+  /// the marker when no unread flag is cached, for activity that just arrived.
+  void _scheduleMarkViewedRead({bool force = false}) {
+    final threadId = navigation.threadId;
+    final spaceId = navigation.spaceId;
+    if (navigation.kind != AxRouteKind.thread ||
+        threadId == null ||
+        spaceId == null ||
+        store.auth.session?.authenticated != true) {
+      return;
+    }
+    _readTimer?.cancel();
+    _readTimer = Timer(const Duration(seconds: 1), () {
+      if (!mounted ||
+          !_tabVisible ||
+          navigation.threadId != threadId ||
+          navigation.spaceId != spaceId) {
+        return;
+      }
+      final flagged = store.spaceThreads
+          .peek(spaceId)
+          .any((thread) => thread.id == threadId && thread.hasUnread);
+      if (force || flagged) {
+        unawaited(store.spaceThreads.markRead(spaceId, threadId));
+      }
+    });
+  }
+
+  bool _viewedThreadActivity(String threadId) {
+    if (navigation.kind != AxRouteKind.thread ||
+        navigation.threadId != threadId ||
+        !_tabVisible) {
+      return false;
+    }
+    _scheduleMarkViewedRead(force: true);
+    return true;
+  }
+
   String? get executionWorkspaceId => executionSnapshot.workspaceId;
   int get unreadNotificationCount =>
       notifications.where((notification) => !notification.read).length;
@@ -259,13 +273,44 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         expandedSpaceIds: expandedSpaceIds,
       );
   void _toggleSpaceExpanded(String spaceId) {
+    final expanded = !expandedSpaceIds.contains(spaceId);
     setState(() {
-      if (expandedSpaceIds.contains(spaceId)) {
-        expandedSpaceIds.remove(spaceId);
-      } else {
+      if (expanded) {
         expandedSpaceIds.add(spaceId);
+      } else {
+        expandedSpaceIds.remove(spaceId);
       }
     });
+    _saveSpaceSidebarState(spaceId, {'sidebarExpanded': expanded});
+  }
+
+  /// Space sidebar state lives in Space settings; only the owner may write it,
+  /// so other members keep the session-local expansion.
+  void _saveSpaceSidebarState(String spaceId, Map<String, dynamic> settings) {
+    final space =
+        store.spaces.items.where((item) => item.id == spaceId).firstOrNull;
+    if (space == null || space.role != 'owner') return;
+    unawaited(store.collaboration
+        .editSpace(space, settings: settings)
+        .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+  }
+
+  Future<void> _reorderThreadsFromSidebar(
+      AxSpace space, List<String> orderedThreadIds) async {
+    await store.collaboration
+        .editSpace(space, settings: {'threadOrder': orderedThreadIds});
+  }
+
+  void _restoreSidebarExpansion() {
+    var changed = false;
+    for (final space in store.spaces.items) {
+      if (!_sidebarRestoredSpaceIds.add(space.id)) continue;
+      if (space.settings['sidebarExpanded'] == true &&
+          expandedSpaceIds.add(space.id)) {
+        changed = true;
+      }
+    }
+    if (changed && mounted) setState(() {});
   }
 
   void _updateState(VoidCallback callback) => setState(callback);
@@ -273,6 +318,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   @override
   void initState() {
     super.initState();
+    store = AxStore(widget.dataSource);
+    store.spaces.addListener(_restoreSidebarExpansion);
     _searchQueryController.addListener(_onSearchQueryChanged);
     browserNavigation = widget.browserNavigation ?? createAxBrowserNavigation();
     final initialUri = widget.initialUri ?? browserNavigation.current;
@@ -290,11 +337,12 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
         browserNavigation.changes.listen(_onBrowserNavigation);
     realtimeClient = widget.realtimeClient ?? createRealtimeClient();
     realtimeSubscription = realtimeClient.events.listen(_onRealtimeEvent);
-    store = AxStore(widget.dataSource);
+    store.viewedThreadActivity = _viewedThreadActivity;
     lifecycleSubscription = browserNavigation.lifecycleChanges.listen((_) {
       unawaited(() async {
         await _syncSession();
         if (mounted && store.auth.session?.authenticated == true) {
+          _scheduleMarkViewedRead();
           await store.lifecycle.resume();
         }
       }());
@@ -322,7 +370,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
 
   @override
   void dispose() {
+    _readTimer?.cancel();
     _desktopAuthStatusTimer?.cancel();
+    store.spaces.removeListener(_restoreSidebarExpansion);
     _searchQueryController.removeListener(_onSearchQueryChanged);
     _searchQueryController.dispose();
     _searchFocusNode.dispose();

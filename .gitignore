@@ -17,3 +17,6 @@ coverage/
 apps/site/.astro/
 apps/site/dist/
 apps/workspace/assets/engines/conclave_cli_worker_engine*
+
+# AI session outputs
+Claude outputs/

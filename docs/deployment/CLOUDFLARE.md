@@ -100,11 +100,103 @@ they do not send a test message or prove Cloudflare sender authorization.
 The shared delivery service reports accepted delivery separately from sender
 authorization, recipient rejection, rate limiting, provider availability,
 temporary failure, and configuration errors. Authentication preserves its
-throw-on-failure behavior; invitation creation preserves its boolean delivery
-result.
+throw-on-failure behavior, with one exception: a failed verification email
+during sign-up is logged (`auth.verification_email.signup_failed`) instead of
+failing the request, because the account already exists at that point and the
+user can request a new link; an explicit resend still reports the failure.
+Invitation creation preserves its boolean delivery result.
 
 The automated coverage and the controlled production sender smoke test are
 documented in the [email delivery verification runbook](EMAIL_DELIVERY_VERIFICATION.md).
+
+### GitHub sign-in
+
+GitHub sign-in uses Better Auth's GitHub provider. It is active only when both
+`CONCLAVE_AUTH_GITHUB_CLIENT_ID` and `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET` are
+set; without them the "Continue with GitHub" button returns to the sign-in page
+with "Sign-in with this provider is not set up on this server yet."
+
+1. Open **GitHub → Settings → Developer settings → OAuth Apps → New OAuth
+   App**. Use a separate app for local development and production, because a
+   GitHub OAuth App accepts a single callback URL.
+
+   | Environment | Homepage URL | Authorization callback URL |
+   | --- | --- | --- |
+   | Production | `https://app.conclaveax.com` | `https://app.conclaveax.com/api/auth/callback/github` |
+   | Local (isolated mode) | `http://localhost:3000` | `http://localhost:8787/api/auth/callback/github` |
+
+   The callback URL is the Cloud API origin (`BETTER_AUTH_URL`), not the
+   Flutter app origin. Conclave requests only the `user:email` scope; leave
+   device flow off.
+2. Generate a client secret and copy the client ID and secret.
+3. Production: add them as the GitHub Actions secrets
+   `CONCLAVE_AUTH_GITHUB_CLIENT_ID` and `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET`
+   and run the deployment workflow, or set them on the Worker directly with
+   `pnpm exec wrangler secret put CONCLAVE_AUTH_GITHUB_CLIENT_ID --config
+   infra/cloudflare/app.wrangler.jsonc` (and the same for the secret).
+4. Local: add both values to `apps/cloud/.dev.vars` and start
+   `./scripts/start-local.sh --isolated`. The default local mode proxies to the
+   production gateway, so a GitHub sign-in there completes on the production
+   origin and does not sign in the local app.
+
+Behavior:
+
+- A new GitHub account creates a Conclave user from its verified primary email,
+  name and avatar. Anyone with a GitHub account may sign in; membership in
+  Spaces still requires an invitation. An account without a verified email
+  cannot sign in.
+- Implicit account linking is disabled. If a Conclave account already exists for
+  the same email, GitHub sign-in returns to the sign-in page with an "account
+  already exists" message. Sign in the usual way and use **Link GitHub** in the
+  profile security settings; later GitHub sign-ins then work.
+- Return targets and failures behave as described for Google sign-in below.
+
+### Google sign-in
+
+Google sign-in uses Better Auth's Google provider. It is active only when both
+`CONCLAVE_AUTH_GOOGLE_CLIENT_ID` and `CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET` are
+set; without them the "Continue with Google" button returns to the sign-in page
+with "Sign-in with this provider is not set up on this server yet."
+
+1. In Google Cloud Console open **APIs & Services → OAuth consent screen**.
+   Choose **External** so any Google account can sign in, fill in the app name,
+   support email and authorized domain, and request only the `openid`, `email`
+   and `profile` scopes (non-sensitive; no Google verification is required).
+   Set the publishing status to **In production**. In **Testing** status only
+   listed test users can sign in and grants expire after seven days.
+2. Open **Credentials → Create credentials → OAuth client ID**, type **Web
+   application**. Use a separate client for local development and production.
+
+   | Environment | Authorized JavaScript origin | Authorized redirect URI |
+   | --- | --- | --- |
+   | Production | `https://app.conclaveax.com` | `https://app.conclaveax.com/api/auth/callback/google` |
+   | Local (isolated mode) | `http://localhost:8787` | `http://localhost:8787/api/auth/callback/google` |
+
+   The redirect URI is the Cloud API origin (`BETTER_AUTH_URL`), not the Flutter
+   app origin.
+3. Production: add the client ID and secret as the GitHub Actions secrets
+   `CONCLAVE_AUTH_GOOGLE_CLIENT_ID` and `CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET`
+   and run the deployment workflow, or set them on the Worker directly with
+   `pnpm exec wrangler secret put CONCLAVE_AUTH_GOOGLE_CLIENT_ID --config
+   infra/cloudflare/app.wrangler.jsonc` (and the same for the secret).
+4. Local: add both values to `apps/cloud/.dev.vars` and start
+   `./scripts/start-local.sh --isolated`. The default local mode proxies to the
+   production gateway, so a Google sign-in there completes on the production
+   origin and does not sign in the local app.
+
+Behavior:
+
+- A new Google account creates a Conclave user from its verified email, name and
+  picture. Anyone with a Google account may sign in; membership in Spaces still
+  requires an invitation.
+- Implicit account linking is disabled. If a Conclave account already exists for
+  the same email (for example email and password), Google sign-in returns to the
+  sign-in page with an "account already exists" message. Sign in the usual way
+  and use **Link Google** in the profile security settings; later Google
+  sign-ins then work.
+- After sign-in the browser returns to the application page that started it.
+  Cloud accepts only its own origin and `CONCLAVE_APP_URL` as a return target.
+  Provider failures return to `/login?error=<code>` on the application origin.
 
 Store `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET`,
 `CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET`, and

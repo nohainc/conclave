@@ -316,3 +316,15 @@ rather than being materialized into saved preferences.
 No D1 migration or protocol version change is required. Existing observed
 revisions in preferences and local view state remain readable; historical
 request/assignment snapshots retain their original immutable revisions.
+
+## Space Workflows page removed from AX (2026-10-15)
+
+AX no longer offers a Space-level Workflows page or Space menu item;
+`/spaces/:id/workflows` opens the Space. Workflow, Worker, model and effort for
+a Thread come from the owner's default configuration when the Thread is
+created or its Workflow is changed, and the Thread's last choices (active tab,
+Workflow, Worker, model, effort) are restored from local per-user Thread view
+state. Cloud still resolves and honors any existing Space override rows and
+Space Workflow Workspace selections; their endpoints, tables and runtime
+precedence are scheduled for removal separately, because a Space's Workspace
+grant depends on that selection.

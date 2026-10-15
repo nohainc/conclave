@@ -10,6 +10,7 @@ vi.mock("../src/collaboration-events.js", () => ({
 }));
 import { publishCollaborationEvent } from "../src/collaboration-events.js";
 import { handleClearWorkHistory } from "../src/routes/work-lifecycle.js";
+import { handleClearChatHistory } from "../src/routes/threads.js";
 import { routeHandlers } from "../src/index.js";
 import {
   routeWorkerRequest,
@@ -142,6 +143,76 @@ it("emits a clear event that the protocol's realtime envelope accepts", async ()
       payload: { entityId, ...options },
     });
     expect(envelope.type).toBe("thread.work_cleared");
+  } finally {
+    f.sqlite.close();
+  }
+});
+
+it("clears Discussion Chat remotely, announces it, and leaves Work history alone", async () => {
+  const f = await conversationFixture();
+  try {
+    f.sqlite.exec(
+      `INSERT INTO discussion_messages(id,thread_id,author_user_id,body,created_at) VALUES('M1','W','U','hi','now'),('M2','W','U','there','now')`,
+    );
+    vi.mocked(publishCollaborationEvent).mockClear();
+    const response = await handleClearChatHistory(
+      new Request("https://test/api/threads/W/chat/clear", { method: "POST" }),
+      { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+      "W",
+    );
+    expect(response.status).toBe(200);
+    const calls = vi.mocked(publishCollaborationEvent).mock.calls;
+    expect(calls).toHaveLength(1);
+    const [, type, , entityId, options] = calls[0]!;
+    expect(type).toBe("thread.chat_cleared");
+    expect(entityId).toBe("W");
+    expect(options).toMatchObject({ threadId: "W" });
+    // The deletion rides on the event so both commit together.
+    for (const mutation of options!.mutations!) await mutation.run();
+    expect(
+      f.sqlite.prepare("SELECT COUNT(*) AS count FROM discussion_messages").get()!
+        .count,
+    ).toBe(0);
+    expect(
+      f.sqlite.prepare("SELECT COUNT(*) AS count FROM work_requests").get()!
+        .count,
+    ).toBe(1);
+  } finally {
+    f.sqlite.close();
+  }
+});
+
+it("announces a retried work-history clear even when the receipt replays", async () => {
+  const f = await conversationFixture();
+  try {
+    f.sqlite.exec(
+      readFileSync(
+        new URL(
+          "../migrations-v8/0054_thread_work_session_generation.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    f.sqlite.exec("UPDATE work_requests SET status='completed' WHERE id='R'");
+    const env = { CONCLAVE_DB: f.db } as unknown as SecurityEnv;
+    const clear = () =>
+      handleClearWorkHistory(
+        new Request("https://test/api/threads/W/work-history/clear", {
+          method: "POST",
+          headers: { "Idempotency-Key": "clear-1" },
+        }),
+        env,
+        "W",
+        { userId: "U" } as unknown as ExecutionContext,
+      );
+    vi.mocked(publishCollaborationEvent).mockClear();
+    await clear();
+    await clear();
+    const types = vi
+      .mocked(publishCollaborationEvent)
+      .mock.calls.map((call) => call[1]);
+    expect(types).toEqual(["thread.work_cleared", "thread.work_cleared"]);
   } finally {
     f.sqlite.close();
   }

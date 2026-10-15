@@ -45,8 +45,9 @@ void main() {
         AxNavigation.fromUri(Uri.parse('/spaces/space-1/workflows'));
     final members = AxNavigation.fromUri(Uri.parse('/spaces/space-1/members'));
 
-    expect(workflows, const AxNavigation.spaceWorkflows('space-1'));
-    expect(workflows.toUri().path, '/spaces/space-1/workflows');
+    // Space-level Workflow settings were removed; the old link opens the Space.
+    expect(workflows, const AxNavigation.space('space-1'));
+    expect(workflows.toUri().path, '/spaces/space-1');
     expect(members, const AxNavigation.spaceMembers('space-1'));
     expect(members.toUri().path, '/spaces/space-1/members');
   });

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildBetterAuthOptions,
+  configuredAppOrigin,
   copySetCookieHeaders,
   handleBetterAuthRequest,
   IdentityService,
+  isSocialProviderConfigured,
   provisionConclaveUser,
   safeAuthReturnTo,
   type AuthenticatedIdentity,
@@ -48,6 +50,98 @@ describe("IdentityService", () => {
     );
     expect(safeAuthReturnTo(request, "https://evil.example/steal")).toBe("/");
     expect(safeAuthReturnTo(request, "/api/auth/sign-out")).toBe("/");
+  });
+
+  it("returns to the configured app origin and still rejects other origins", () => {
+    // Local development: the API is on :8787 and the Flutter app on :3000.
+    const request = new Request(
+      "http://localhost:8787/api/auth/sign-in/google",
+    );
+    const app = "http://localhost:3000";
+    expect(
+      safeAuthReturnTo(request, "http://localhost:3000/spaces?x=1", app),
+    ).toBe("http://localhost:3000/spaces?x=1");
+    expect(safeAuthReturnTo(request, "/spaces", app)).toBe(
+      "http://localhost:3000/spaces",
+    );
+    expect(safeAuthReturnTo(request, null, app)).toBe("http://localhost:3000/");
+    expect(safeAuthReturnTo(request, "http://localhost:8787/spaces", app)).toBe(
+      "/spaces",
+    );
+    expect(safeAuthReturnTo(request, "https://evil.example/x", app)).toBe("/");
+    expect(safeAuthReturnTo(request, "http://localhost:3001/x", app)).toBe("/");
+    expect(
+      safeAuthReturnTo(request, "http://localhost:3000/api/auth/x", app),
+    ).toBe("/");
+    // Without an app origin, behavior is unchanged: same-origin paths only.
+    expect(safeAuthReturnTo(request, "http://localhost:3000/spaces")).toBe("/");
+  });
+
+  it("reads the app origin and provider credentials from configuration", () => {
+    expect(
+      configuredAppOrigin({ CONCLAVE_APP_URL: "http://localhost:3000/x" }),
+    ).toBe("http://localhost:3000");
+    expect(
+      configuredAppOrigin({ CONCLAVE_APP_URL: "not a url" }),
+    ).toBeUndefined();
+    expect(configuredAppOrigin({})).toBeUndefined();
+    const onlyId = { CONCLAVE_AUTH_GOOGLE_CLIENT_ID: "id" };
+    expect(isSocialProviderConfigured(onlyId, "google")).toBe(false);
+    expect(
+      isSocialProviderConfigured(
+        { ...onlyId, CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET: "secret" },
+        "google",
+      ),
+    ).toBe(true);
+    expect(isSocialProviderConfigured(onlyId, "github")).toBe(false);
+  });
+
+  it.each(["google", "github"])(
+    "sends an unconfigured %s sign-in to the app login page with a clear error",
+    async (provider) => {
+      const response = await handleBetterAuthRequest(
+        new Request(
+          `http://localhost:8787/api/auth/sign-in/${provider}?returnTo=http%3A%2F%2Flocalhost%3A3000%2Fspaces`,
+        ),
+        {
+          // Minimal D1 surface so Better Auth initializes without a real database.
+          CONCLAVE_DB: {
+            prepare: () => ({}),
+            batch: async () => [],
+            exec: async () => ({}),
+            dump: async () => new ArrayBuffer(0),
+          } as unknown as D1Database,
+          CONCLAVE_ENVIRONMENT: "development",
+          BETTER_AUTH_SECRET: "a-secure-development-secret-that-is-long-enough",
+          BETTER_AUTH_URL: "http://localhost:8787",
+          CONCLAVE_APP_URL: "http://localhost:3000",
+        },
+      );
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get("location") as string);
+      expect(location.origin).toBe("http://localhost:3000");
+      expect(location.pathname).toBe("/login");
+      expect(location.searchParams.get("error")).toBe(
+        "provider_not_configured",
+      );
+      expect(location.searchParams.get("returnTo")).toBe("/spaces");
+    },
+  );
+
+  it("includes the app origin in Better Auth trusted origins", () => {
+    const options = buildBetterAuthOptions({
+      CONCLAVE_DB: {} as D1Database,
+      CONCLAVE_ENVIRONMENT: "development",
+      BETTER_AUTH_SECRET: "a-secure-development-secret-that-is-long-enough",
+      CONCLAVE_APP_URL: "http://localhost:4000",
+      CONCLAVE_AUTH_GOOGLE_CLIENT_ID: "google-client-id",
+      CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET: "google-client-secret",
+    });
+    expect(options.trustedOrigins).toContain("http://localhost:4000");
+    expect(options.socialProviders.google).toMatchObject({
+      clientId: "google-client-id",
+      scope: ["email", "profile"],
+    });
   });
 
   it("configures Better Auth against the clean Conclave core tables", () => {
@@ -190,6 +284,57 @@ describe("IdentityService", () => {
     expect(messages[0]?.text).toContain("This link is valid for 60 minutes.");
     expect(messages[1]?.text).toContain("https://app.conclave.test/reset");
     expect(messages[2]?.text).toContain("https://app.conclave.test/change");
+  });
+
+  describe("verification email failures", () => {
+    const failingEnv = () =>
+      buildBetterAuthOptions({
+        CONCLAVE_DB: {} as D1Database,
+        CONCLAVE_ENVIRONMENT: "production",
+        BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
+        BETTER_AUTH_URL: "https://app.conclave.test",
+        CONCLAVE_EMAIL: {
+          send: vi.fn(async () => {
+            throw Object.assign(new Error("down"), { status: 503 });
+          }),
+        },
+      });
+    const payload = {
+      user: { email: "person@example.com", name: "Person" },
+      url: "https://app.conclave.test/verify",
+    };
+
+    it("does not fail sign-up after the account is created", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const signUp = new Request(
+        "https://app.conclave.test/api/auth/sign-up/email",
+        { method: "POST" },
+      );
+      await expect(
+        failingEnv().emailVerification?.sendVerificationEmail?.(
+          payload,
+          signUp,
+        ),
+      ).resolves.toBeUndefined();
+      expect(error).toHaveBeenCalledWith(
+        "auth.verification_email.signup_failed",
+        { status: "service_unavailable", providerCode: undefined },
+      );
+      error.mockRestore();
+    });
+
+    it("still reports failures to an explicit resend request", async () => {
+      const resend = new Request(
+        "https://app.conclave.test/api/auth/send-verification-email",
+        { method: "POST" },
+      );
+      await expect(
+        failingEnv().emailVerification?.sendVerificationEmail?.(
+          payload,
+          resend,
+        ),
+      ).rejects.toMatchObject({ status: "service_unavailable" });
+    });
   });
 
   it("uses the fallback once when the primary sender is rejected", async () => {

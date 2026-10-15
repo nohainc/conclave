@@ -124,8 +124,6 @@ void main() {
               : role == 'collaborator'
                   ? findsOneWidget
                   : findsNothing);
-      expect(find.byTooltip('Move up'),
-          role == 'owner' ? findsNWidgets(2) : findsNothing);
     });
   }
 

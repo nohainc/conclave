@@ -46,15 +46,9 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
             else
               Column(
                 children: [
-                  ...threads
-                      .asMap()
-                      .entries
-                      .where((entry) => entry.value.status != 'archived')
-                      .map((entry) {
-                    final index = entry.key;
-                    final thread = entry.value;
-                    return _threadListTile(thread, index);
-                  }),
+                  ...sortAxThreadsByLastUpdate(threads)
+                      .where((thread) => thread.status != 'archived')
+                      .map((thread) => _threadListTile(thread)),
                   if (threads.any((item) => item.status == 'archived')) ...[
                     const SizedBox(height: 12),
                     Align(
@@ -69,12 +63,9 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    ...threads
+                    ...sortAxThreadsByLastUpdate(threads)
                         .where((item) => item.status == 'archived')
-                        .map((thread) => _threadListTile(
-                              thread,
-                              threads.indexOf(thread),
-                            )),
+                        .map((thread) => _threadListTile(thread)),
                   ],
                 ],
               ),
@@ -82,7 +73,7 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
         ),
       );
 
-  Widget _threadListTile(AxThread thread, int index) {
+  Widget _threadListTile(AxThread thread) {
     final archived = thread.status == 'archived';
     final pending = thread.id.startsWith('local-thread-');
     return ListTile(
@@ -103,24 +94,6 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
           ? Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (isOwner && !archived)
-                  IconButton(
-                    icon: const Icon(Icons.keyboard_arrow_up_rounded),
-                    tooltip: 'Move up',
-                    iconSize: 20,
-                    splashRadius: 16,
-                    onPressed: index > 0 ? () => _moveThread(index, -1) : null,
-                  ),
-                if (isOwner && !archived)
-                  IconButton(
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                    tooltip: 'Move down',
-                    iconSize: 20,
-                    splashRadius: 16,
-                    onPressed: index < threads.length - 1
-                        ? () => _moveThread(index, 1)
-                        : null,
-                  ),
                 PopupMenuButton<String>(
                   tooltip: 'Thread actions',
                   onSelected: (action) {

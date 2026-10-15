@@ -74,6 +74,12 @@ restart without blindly rerunning uncertain work. Cloud session history is
 audited in D1, while live transport state, queues, cursors, and acknowledgments
 belong to the Cloud gateway's live transport layer.
 
+A terminal outcome is written to the local journal before it is sent. If the send
+fails while the connection stays up (timeout, Cloud restarting), the service
+re-sends every unacknowledged outcome on a timer (20 s, doubling up to 16x)
+until Cloud's terminal `assignment.ack` marks it reconciled. A reconnect cancels
+the timer and the connect-time sync takes over, so the two paths never overlap.
+
 Workspace release checks are also service-owned. The UI sends an
 `updates.check` IPC request; the service performs the authenticated release
 lookup without disconnecting or reconnecting Cloud. If update support is not
@@ -137,7 +143,8 @@ stable and tied to `spaceId`; display-name changes do not silently move files.
 
 Stateful assignments sharing a Space directory are serialized with one
 Space-wide process lock. Cloud mutation leases and their monotonic fencing
-counters belong to individual Threads. Workspace therefore compares tokens
+counters (`threads.lease_fence_counter`, never reset by clearing Work
+history) belong to individual Threads. Workspace therefore compares tokens
 only within the same `(spaceId, threadId)`, persisting versioned records at
 `space-fences/<spaceId>/<threadId>.json` in application state. A new Thread's
 token `1` must not be rejected because another Thread reached token `23`.

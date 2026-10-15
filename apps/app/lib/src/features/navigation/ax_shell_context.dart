@@ -66,9 +66,9 @@ class AxShellContext {
   final ValueListenable<List<AxSpace>>? spaceListenable;
   List<AxSpace> get spaces => spaceListenable?.value ?? _spaces;
   List<AxSpace> get ownedSpaces =>
-      spaces.where((space) => space.role == 'owner').toList();
+      sortAxSpacesByLastUpdate(spaces.where((space) => space.role == 'owner'));
   List<AxSpace> get sharedSpaces =>
-      spaces.where((space) => space.role != 'owner').toList();
+      sortAxSpacesByLastUpdate(spaces.where((space) => space.role != 'owner'));
   final AxSpaceThreads? spaceThreads;
   final Map<String, List<AxThread>> threadsBySpace;
   final AxSpace? selectedSpace;
@@ -260,19 +260,16 @@ class AxShellContext {
       case AxRouteKind.spaces:
         return navigation.kind == AxRouteKind.spaces ||
             navigation.kind == AxRouteKind.space ||
-            navigation.kind == AxRouteKind.spaceWorkflows ||
             navigation.kind == AxRouteKind.spaceMembers ||
             navigation.kind == AxRouteKind.thread ||
             navigation.kind == AxRouteKind.run;
       case AxRouteKind.space:
         return (navigation.kind == AxRouteKind.space ||
-                navigation.kind == AxRouteKind.spaceWorkflows ||
                 navigation.kind == AxRouteKind.spaceMembers ||
                 navigation.kind == AxRouteKind.thread ||
                 navigation.kind == AxRouteKind.run) &&
             target.spaceId != null &&
             navigation.spaceId == target.spaceId;
-      case AxRouteKind.spaceWorkflows:
       case AxRouteKind.spaceMembers:
         return navigation.kind == target.kind &&
             target.spaceId != null &&

@@ -578,13 +578,23 @@ class AxDiscussionCache {
         .then<void>((_) {});
   }
 
+  /// Clears the Thread's Chat remotely first; a failure preserves the visible
+  /// history. The server may hold messages this session never loaded, so an
+  /// empty local history still calls the server.
   Future<void> clearHistory(String id) async {
-    final history = _history(id);
-    final messageIds = history.messages.map((m) => m.id).toList();
-    if (messageIds.isEmpty) return;
+    await source?.clearThreadChatHistory(threadId: id);
+    resetHistory(id);
+  }
 
+  /// Apply a confirmed remote clear: tombstone every known message so a stale
+  /// in-flight read cannot bring it back.
+  void resetHistory(String id) {
+    final history = _history(id);
     final context = _context(id);
-    final deletedIds = {...history.deletedMessageIds, ...messageIds};
+    final deletedIds = {
+      ...history.deletedMessageIds,
+      ...history.messages.map((m) => m.id),
+    };
 
     engine.update(
       query(id),

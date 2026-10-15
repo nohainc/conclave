@@ -1,5 +1,6 @@
 import { publishPeopleProfileChanged } from "../people.js";
 import {
+  classifyEmailDeliveryFailure,
   EmailDeliveryError,
   type EmailSenderEnvironment,
 } from "../email/email-config.js";
@@ -32,6 +33,7 @@ export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> &
     BETTER_AUTH_TRUSTED_ORIGINS?: string;
     BETTER_AUTH_RP_ID?: string;
     BETTER_AUTH_ORIGIN?: string;
+    CONCLAVE_APP_URL?: string;
     CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
     CONCLAVE_AUTH_GITHUB_CLIENT_ID?: string;
     CONCLAVE_AUTH_GITHUB_CLIENT_SECRET?: string;
@@ -46,6 +48,55 @@ function providerCredentials(
 ): SocialProviderCredentials | undefined {
   if (!clientId || !clientSecret) return undefined;
   return { clientId, clientSecret, scope };
+}
+
+export type SocialProviderId = "github" | "google";
+
+/** True when both OAuth credentials for the provider are configured. */
+export function isSocialProviderConfigured(
+  env: Pick<
+    BetterAuthRuntimeEnv,
+    | "CONCLAVE_AUTH_GITHUB_CLIENT_ID"
+    | "CONCLAVE_AUTH_GITHUB_CLIENT_SECRET"
+    | "CONCLAVE_AUTH_GOOGLE_CLIENT_ID"
+    | "CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET"
+  >,
+  provider: SocialProviderId,
+): boolean {
+  return provider === "google"
+    ? Boolean(
+        env.CONCLAVE_AUTH_GOOGLE_CLIENT_ID &&
+        env.CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET,
+      )
+    : Boolean(
+        env.CONCLAVE_AUTH_GITHUB_CLIENT_ID &&
+        env.CONCLAVE_AUTH_GITHUB_CLIENT_SECRET,
+      );
+}
+
+/**
+ * Origin of the browser application when it differs from the API origin (local
+ * development serves the Flutter app and the Worker on different ports). In
+ * production both share one origin and this equals the request origin.
+ */
+export function configuredAppOrigin(
+  env: Pick<BetterAuthRuntimeEnv, "CONCLAVE_APP_URL">,
+): string | undefined {
+  if (!env.CONCLAVE_APP_URL) return undefined;
+  try {
+    return new URL(env.CONCLAVE_APP_URL).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function isSignUpRequest(request: Request | undefined): boolean {
+  if (!request) return false;
+  try {
+    return new URL(request.url).pathname.endsWith("/sign-up/email");
+  } catch {
+    return false;
+  }
 }
 
 async function sendAuthEmail<
@@ -120,6 +171,7 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
     "http://127.0.0.1:8080",
     "http://127.0.0.1:8787",
     ...(env.BETTER_AUTH_URL ? [new URL(env.BETTER_AUTH_URL).origin] : []),
+    ...(configuredAppOrigin(env) ? [configuredAppOrigin(env) as string] : []),
     ...(env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? []),
   ]
     .map((origin) => origin.trim().replace(/\/$/, ""))
@@ -254,25 +306,43 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
     },
     emailVerification: {
       sendOnSignUp: true,
-      sendVerificationEmail: async ({
-        user,
-        url,
-      }: {
-        user: { email: string; name?: string | null };
-        url: string;
-      }) =>
-        sendAuthEmail(
-          env,
+      sendVerificationEmail: async (
+        {
           user,
-          "auth.verify-email.v1",
-          {
-            recipientName: user.name,
-            verificationUrl: url,
-            expiresInMinutes: AUTH_EMAIL_LINK_EXPIRATION_MINUTES,
-          },
-          "Verify your email address",
           url,
-        ),
+        }: {
+          user: { email: string; name?: string | null };
+          url: string;
+        },
+        request?: Request,
+      ) => {
+        try {
+          await sendAuthEmail(
+            env,
+            user,
+            "auth.verify-email.v1",
+            {
+              recipientName: user.name,
+              verificationUrl: url,
+              expiresInMinutes: AUTH_EMAIL_LINK_EXPIRATION_MINUTES,
+            },
+            "Verify your email address",
+            url,
+          );
+        } catch (error) {
+          // Sign-up has already created the account when this runs. Failing
+          // the request would leave a user who cannot retry sign-up ("already
+          // exists") and never learns why. The user can request another link
+          // from the sign-in page, and that explicit request still reports
+          // the failure to the caller.
+          if (!isSignUpRequest(request)) throw error;
+          const failure = classifyEmailDeliveryFailure(error);
+          console.error("auth.verification_email.signup_failed", {
+            status: failure.status,
+            providerCode: failure.providerCode,
+          });
+        }
+      },
       expiresIn: AUTH_EMAIL_LINK_EXPIRATION_SECONDS,
     },
     emailAndPassword: {
@@ -412,12 +482,29 @@ export async function handleBetterAuthRequest(
   );
 
   if (request.method === "GET" && socialSignIn?.[1]) {
+    const appOrigin = configuredAppOrigin(env);
     const callbackURL = safeAuthReturnTo(
       request,
       url.searchParams.get("returnTo"),
+      appOrigin,
     );
-    const errorCallbackURL = new URL("/login", request.url);
-    errorCallbackURL.searchParams.set("returnTo", callbackURL);
+    // Failures land on the browser application's sign-in page, which shows the
+    // provider error code. The return target travels as a path.
+    const errorCallbackURL = new URL("/login", appOrigin ?? request.url);
+    errorCallbackURL.searchParams.set(
+      "returnTo",
+      callbackURL.startsWith("/")
+        ? callbackURL
+        : `${new URL(callbackURL).pathname}${new URL(callbackURL).search}${new URL(callbackURL).hash}`,
+    );
+    if (!isSocialProviderConfigured(env, socialSignIn[1] as SocialProviderId)) {
+      recordAuthMetric(socialSignIn[1], "failure", "invalid_callback");
+      errorCallbackURL.searchParams.set("error", "provider_not_configured");
+      return new Response(null, {
+        status: 302,
+        headers: { location: errorCallbackURL.toString() },
+      });
+    }
     const authRequest = new Request(
       new URL("/api/auth/sign-in/social", request.url),
       {
@@ -568,24 +655,43 @@ async function safeRecord(
   }
 }
 
-/** Keep OAuth callbacks on this AX origin and prevent open redirects. */
+/**
+ * Keep OAuth callbacks on this AX origin and prevent open redirects.
+ *
+ * Only the request origin and the operator-configured application origin
+ * (`CONCLAVE_APP_URL`) are accepted. Relative targets resolve against the
+ * application origin when one is configured, so local development, where the
+ * app and the API use different ports, returns to the app. Same-origin targets
+ * stay path-only; a distinct application origin yields an absolute URL.
+ */
 export function safeAuthReturnTo(
   request: Request,
   value: string | null,
+  appOrigin?: string,
 ): string {
-  if (!value) return "/";
+  if (!value)
+    return appOrigin && appOrigin !== requestOriginOf(request)
+      ? `${appOrigin}/`
+      : "/";
   try {
-    const candidate = new URL(value, request.url);
-    const requestOrigin = new URL(request.url).origin;
+    const requestOrigin = requestOriginOf(request);
+    const candidate = new URL(value, appOrigin ?? request.url);
     if (
-      candidate.origin !== requestOrigin ||
+      (candidate.origin !== requestOrigin && candidate.origin !== appOrigin) ||
       !candidate.pathname.startsWith("/") ||
       candidate.pathname.startsWith("/api/auth")
     ) {
       return "/";
     }
-    return `${candidate.pathname}${candidate.search}${candidate.hash}`;
+    const target = `${candidate.pathname}${candidate.search}${candidate.hash}`;
+    return candidate.origin === requestOrigin
+      ? target
+      : `${candidate.origin}${target}`;
   } catch {
     return "/";
   }
+}
+
+function requestOriginOf(request: Request): string {
+  return new URL(request.url).origin;
 }

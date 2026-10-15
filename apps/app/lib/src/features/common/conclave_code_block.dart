@@ -1,4 +1,5 @@
 import 'package:conclave_design/conclave_design.dart';
+import 'quiet_notices.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -114,6 +115,11 @@ class ConclaveCodeBlock extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
           color: ConclaveColors.codeBackground(isDark),
+          borderRadius: BorderRadius.circular(ConclaveRadius.md)),
+      // Painted on top rather than as `decoration.border`: a bordered
+      // decoration adds padding above the horizontal scrollable, after which
+      // drags on text below the block select the code instead.
+      foregroundDecoration: BoxDecoration(
           borderRadius: BorderRadius.circular(ConclaveRadius.md),
           border: Border.all(color: ConclaveColors.border(isDark))),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -132,7 +138,7 @@ class ConclaveCodeBlock extends StatelessWidget {
                       onPressed: () async {
                         await Clipboard.setData(ClipboardData(text: code));
                         if (context.mounted) {
-                          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                          ScaffoldMessenger.maybeOf(context)?.showNotice(
                               const SnackBar(content: Text('Code copied')));
                         }
                       }),

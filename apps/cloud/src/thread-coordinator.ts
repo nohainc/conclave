@@ -45,8 +45,66 @@ export function selectNextStatefulRequest(
   );
 }
 
-export function nextFencingToken(maxToken: number | null | undefined): number {
-  return Math.max(1, (maxToken ?? 0) + 1);
+/**
+ * Statements that start a stateful Work Request and issue its Thread lease.
+ *
+ * The fencing token comes from `threads.lease_fence_counter`, which only ever
+ * increases and survives clearing Work history (that deletes the lease rows).
+ * The counter is first raised to the highest recorded lease token so a drifted
+ * counter heals, then incremented; the lease reads the new value in the same
+ * batch. Workspaces compare tokens only within a Thread, so a token that goes
+ * backwards is rejected there as a stale fence.
+ */
+export function startStatefulLeaseStatements(
+  db: D1Database,
+  input: {
+    readonly threadId: string;
+    readonly workRequestId: string;
+    readonly workspaceId: string;
+    readonly leaseId: string;
+    readonly now: string;
+    readonly expiresAt: string;
+  },
+): D1PreparedStatement[] {
+  return [
+    db
+      .prepare(
+        "UPDATE work_requests SET status = 'running', updated_at = ?1 WHERE id = ?2 AND status = 'queued'",
+      )
+      .bind(input.now, input.workRequestId),
+    db
+      .prepare(
+        "UPDATE runs SET status = 'running', updated_at = ?1 WHERE work_request_id = ?2 AND status = 'created'",
+      )
+      .bind(input.now, input.workRequestId),
+    db
+      .prepare(
+        `UPDATE threads
+            SET lease_fence_counter = MAX(
+              lease_fence_counter,
+              COALESCE((SELECT MAX(fencing_token) FROM thread_runtime_leases
+                         WHERE thread_id = ?1), 0)
+            ) + 1
+          WHERE id = ?1`,
+      )
+      .bind(input.threadId),
+    db
+      .prepare(
+        `INSERT INTO thread_runtime_leases
+         (id, thread_id, work_request_id, workspace_id, fencing_token, status, acquired_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4,
+                 (SELECT lease_fence_counter FROM threads WHERE id = ?2),
+                 'active', ?5, ?6)`,
+      )
+      .bind(
+        input.leaseId,
+        input.threadId,
+        input.workRequestId,
+        input.workspaceId,
+        input.now,
+        input.expiresAt,
+      ),
+  ];
 }
 
 export function leaseIsCurrent(
@@ -290,36 +348,19 @@ export class ThreadExecutionCoordinator implements DurableObject {
       .all<CoordinatorRequestRow>();
     const next = selectNextStatefulRequest(rows.results);
     if (!next) return;
-    const tokenRow = await this.env.CONCLAVE_DB.prepare(
-      "SELECT MAX(fencing_token) AS maxToken FROM thread_runtime_leases WHERE thread_id = ?1",
-    )
-      .bind(threadId)
-      .first<{ maxToken: number | null }>();
-    const token = nextFencingToken(tokenRow?.maxToken);
     const leaseId = `lease-${crypto.randomUUID()}`;
     const now = new Date().toISOString();
     const expiresAt = new Date(Date.now() + THREAD_LEASE_MS).toISOString();
-    await this.env.CONCLAVE_DB.batch([
-      this.env.CONCLAVE_DB.prepare(
-        "UPDATE work_requests SET status = 'running', updated_at = ?1 WHERE id = ?2 AND status = 'queued'",
-      ).bind(now, next.id),
-      this.env.CONCLAVE_DB.prepare(
-        "UPDATE runs SET status = 'running', updated_at = ?1 WHERE work_request_id = ?2 AND status = 'created'",
-      ).bind(now, next.id),
-      this.env.CONCLAVE_DB.prepare(
-        `INSERT INTO thread_runtime_leases
-         (id, thread_id, work_request_id, workspace_id, fencing_token, status, acquired_at, expires_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?7)`,
-      ).bind(
-        leaseId,
+    await this.env.CONCLAVE_DB.batch(
+      startStatefulLeaseStatements(this.env.CONCLAVE_DB, {
         threadId,
-        next.id,
-        next.primaryWorkspaceId,
-        token,
+        workRequestId: next.id,
+        workspaceId: next.primaryWorkspaceId,
+        leaseId,
         now,
         expiresAt,
-      ),
-    ]);
+      }),
+    );
     await this.state.storage.setAlarm(Date.parse(expiresAt));
   }
 

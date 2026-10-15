@@ -166,11 +166,6 @@ export interface ThreadWorkConfig {
   >;
 }
 
-export const DEFAULT_THREAD_WORK_CONFIG: ThreadWorkConfig = {
-  defaultWorkflowId: "full_cycle",
-  bindings: {},
-};
-
 export type WorkflowExecutionMode = "stateless_read" | "stateful_thread";
 export type WorkflowExecutionClass = "analysis" | "workspace_action";
 export const WORKFLOW_CAPABILITIES = [
@@ -521,13 +516,6 @@ export function canManageThread(
   );
 }
 
-export function validateDiscussionMessage(message: DiscussionMessage): void {
-  required(message.id, "DiscussionMessage id");
-  required(message.threadId, "DiscussionMessage threadId");
-  required(message.authorUserId, "DiscussionMessage authorUserId");
-  required(message.body, "DiscussionMessage body");
-}
-
 export function validateWorkRequest(
   request: WorkRequest,
   policy: ThreadExecutionPolicy,
@@ -696,21 +684,6 @@ export function validateBuiltinWorkflowDefinition(
     required(
       step.promptProfileVersion,
       "BuiltinWorkflowStep promptProfileVersion",
-    );
-  }
-}
-
-export function validateThreadExecutionPolicy(
-  policy: ThreadExecutionPolicy,
-): void {
-  if (policy.mode === "stateful" && !policy.primaryWorkspaceId) {
-    throw new DomainInvariantError(
-      "Stateful Thread execution requires a Primary Workspace",
-    );
-  }
-  if (policy.mode === "stateless" && policy.primaryWorkspaceId) {
-    throw new DomainInvariantError(
-      "Stateless Thread execution cannot define a Primary Workspace",
     );
   }
 }

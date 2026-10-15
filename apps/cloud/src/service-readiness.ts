@@ -1,7 +1,4 @@
-import {
-  SERVICE_CONNECTION_STATES,
-  type ServiceConnectionState,
-} from "@conclave/workspace-runtime-protocol";
+import { type ServiceConnectionState } from "@conclave/workspace-runtime-protocol";
 
 /**
  * Service-level readiness for one authenticated runtime session.
@@ -51,14 +48,6 @@ export type ReadinessDecision =
   | { readonly outcome: "ignored_stale" }
   /** Claimed ready before Cloud had answered the Service's sync request. */
   | { readonly outcome: "ignored_unsynchronized" };
-
-const KNOWN_STATES = new Set<string>(SERVICE_CONNECTION_STATES);
-
-export function isServiceConnectionState(
-  value: unknown,
-): value is ServiceConnectionState {
-  return typeof value === "string" && KNOWN_STATES.has(value);
-}
 
 /** A freshly authenticated session: connected, nothing synchronized yet. */
 export function authenticatedReadiness(input: {

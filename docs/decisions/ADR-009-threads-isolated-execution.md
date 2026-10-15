@@ -58,6 +58,12 @@ serializes stateful Work Requests for that Thread. All stateful Steps run
 on the Primary Workspace. Workspace validates the lease and fencing token
 before mutating the ID-derived directory.
 
+The fencing token is issued from `threads.lease_fence_counter`, a per-Thread
+counter that only increases. It is stored on the Thread, not derived from lease
+rows, because lease rows are deleted with their Work Requests; clearing Work
+history must never move the counter backwards, or Workspace rejects the next
+lease as a stale fence.
+
 Research and Plan are stateless, read-only Steps. They may run on another
 eligible Workspace with an active Space grant and may run concurrently; they
 do not mutate the Thread directory. A Work Request that includes later

@@ -52,11 +52,24 @@ mixin _ThreadApi on _AxApiClientCore {
   }
 
   @override
+  Future<void> markThreadRead(String threadId) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/threads/$threadId/read'),
+      headers: _headers(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException('Marking Thread read failed',
+          statusCode: response.statusCode);
+    }
+  }
+
+  @override
   Future<AxThread> updateThread({
     required String threadId,
     String? name,
     String? status,
     Map<String, dynamic>? workConfig,
+    Map<String, dynamic>? metadata,
   }) async {
     final response = await client.patch(
       Uri.parse('$baseUrl/threads/$threadId'),
@@ -65,6 +78,7 @@ mixin _ThreadApi on _AxApiClientCore {
         if (name != null) 'name': name,
         if (status != null) 'status': status,
         if (workConfig != null) 'workConfig': workConfig,
+        if (metadata != null) 'metadata': metadata,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -99,6 +113,29 @@ mixin _ThreadApi on _AxApiClientCore {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AxApiException(
         'Thread deletion failed (${response.statusCode})',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  @override
+  Future<void> clearThreadChatHistory({required String threadId}) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/threads/$threadId/chat/clear'),
+      headers: _headers(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final errorBody = jsonDecode(response.body);
+        if (errorBody is Map && errorBody['error'] is String) {
+          detail = ': ${errorBody['error']}';
+        }
+      } on Object {
+        // Keep the status-only message for non-JSON responses.
+      }
+      throw AxApiException(
+        'Clear chat history failed (${response.statusCode})$detail',
         statusCode: response.statusCode,
       );
     }

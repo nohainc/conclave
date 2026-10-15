@@ -1,4 +1,5 @@
 import 'package:conclave_design/conclave_design.dart';
+import '../common/quiet_notices.dart';
 import 'package:conclave_protocol/conclave_protocol.dart'
     show ExecutionSelection;
 import '../../ax/workflow_configuration_options.dart';
@@ -6,6 +7,7 @@ import '../../ax/sync/ax_space_invitations.dart';
 import '../invitations/space_invitation_dialog.dart';
 import '../../ax/sync/ax_people.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -32,11 +34,11 @@ import '../../ax/sync/persistence/ax_thread_view_state.dart';
 import '../../ax/sync/persistence/ax_thread_view_state_store.dart';
 import '../../ax/sync/ax_collaboration_mutations.dart';
 import '../../brand.dart';
-import '../workflows/workflows_page.dart';
 import '../workflows/workflow_visibility.dart';
 import '../common/markdown_composer.dart';
 import '../common/conclave_markdown_body.dart';
 import 'thread_presentation_controller.dart';
+import 'timeline_follow_anchor.dart';
 import '../../ax/work_request_file_picker_stub.dart'
     if (dart.library.html) '../../ax/work_request_file_picker_web.dart'
     as work_request_files;

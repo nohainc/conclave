@@ -4,11 +4,7 @@ import { handleWorkflowWorkspace } from "./workflow-workspace.js";
 import { handleWorkflowConfigurations } from "./workflow-configurations.js";
 import { handleWorkflowDefault } from "./workflow-default.js";
 import { conditionalJson } from "./conditional-read.js";
-import {
-  BUILTIN_WORKFLOW_CATALOG,
-  CONVERSATION_WORKFLOWS,
-  workflowCatalogEntry,
-} from "@conclave/core";
+import { BUILTIN_WORKFLOW_CATALOG, workflowCatalogEntry } from "@conclave/core";
 
 export type RouteHandler = (...args: unknown[]) => Promise<Response>;
 export type WorkerRouteHandlers = Record<string, RouteHandler>;
@@ -329,14 +325,6 @@ export async function routeWorkerRequest(
         workflows: Object.values(BUILTIN_WORKFLOW_CATALOG).map(
           workflowCatalogEntry,
         ),
-      });
-    }
-    if (
-      request.method === "GET" &&
-      url.pathname === "/api/workflows/definitions"
-    ) {
-      return conditionalJson(request, {
-        workflows: Object.values(CONVERSATION_WORKFLOWS),
       });
     }
     if (request.method === "GET" && url.pathname === "/api/release-trust") {
@@ -751,6 +739,18 @@ export async function routeWorkerRequest(
       );
     }
 
+    const threadReadMatch = url.pathname.match(
+      /^\/api\/threads\/([^/]+)\/read$/,
+    );
+    if (request.method === "POST" && threadReadMatch?.[1]) {
+      return await handlers.handleMarkThreadRead!(
+        request,
+        env,
+        threadReadMatch[1],
+        ctx,
+      );
+    }
+
     const threadDiscussionMatch = url.pathname.match(
       /^\/api\/threads\/([^/]+)\/discussion-messages$/,
     );
@@ -835,6 +835,17 @@ export async function routeWorkerRequest(
         request,
         env,
         clearWorkHistoryMatch[1],
+        ctx,
+      );
+    }
+    const clearChatHistoryMatch = url.pathname.match(
+      /^\/api\/threads\/([^/]+)\/chat\/clear$/,
+    );
+    if (request.method === "POST" && clearChatHistoryMatch?.[1]) {
+      return await handlers.handleClearChatHistory!(
+        request,
+        env,
+        clearChatHistoryMatch[1],
         ctx,
       );
     }

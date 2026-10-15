@@ -107,11 +107,3 @@ export type ExecutionEventPayload = z.infer<typeof ExecutionEventPayloadSchema>;
 export function parseExecutionEvent(input: unknown): ExecutionEventEnvelope {
   return ExecutionEventEnvelopeSchema.parse(input);
 }
-
-export function isTerminalExecutionEvent(
-  eventType: string,
-): eventType is (typeof TERMINAL_EXECUTION_EVENT_TYPES)[number] {
-  return (TERMINAL_EXECUTION_EVENT_TYPES as readonly string[]).includes(
-    eventType,
-  );
-}

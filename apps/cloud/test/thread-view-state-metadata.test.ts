@@ -1,0 +1,131 @@
+import { expect, it } from "vitest";
+import { sqliteD1 } from "./helpers/sqlite-d1.js";
+import {
+  handleListSpaceThreads,
+  handleUpdateSpace,
+  handleUpdateThread,
+  type SecurityEnv,
+} from "../src/routes/handlers.js";
+
+const created = "2020-01-01T00:00:00.000Z";
+
+function fixture() {
+  const { sqlite, db } = sqliteD1();
+  sqlite
+    .prepare(
+      "INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('alice','alice@test','alice','now','now')",
+    )
+    .run();
+  sqlite.exec(
+    "INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES('S','alice','Space','now','now')",
+  );
+  sqlite
+    .prepare(
+      "INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES('m','S','alice','owner',?,?)",
+    )
+    .run(created, created);
+  sqlite
+    .prepare(
+      "INSERT INTO threads(id,space_id,name,status,lead_user_id,created_at,updated_at) VALUES('T','S','T','active','alice',?,?)",
+    )
+    .run(created, created);
+  const env = {
+    CONCLAVE_ENVIRONMENT: "development",
+    CONCLAVE_DB: db,
+    TEST_AUTHENTICATION: async () => ({
+      userId: "alice",
+      user: {
+        id: "alice",
+        email: "alice@test",
+        displayName: "alice",
+        status: "active",
+      },
+      workspaceId: "",
+      spaceRoles: { S: "owner" },
+      sessionId: "test",
+      clientType: "web",
+    }),
+  } as unknown as SecurityEnv;
+  const patch = (body: unknown) =>
+    new Request("https://test/api", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  return { env, patch };
+}
+
+it("stores Thread view state in metadata without touching updatedAt", async () => {
+  const { env, patch } = fixture();
+  const first = await handleUpdateThread(
+    patch({
+      metadata: {
+        viewState: {
+          tabIndex: 1,
+          workflowReference: "direct:2",
+          model: "sonnet",
+          reasoningEffort: "medium",
+        },
+      },
+    }),
+    env,
+    "T",
+  );
+  expect(first.status).toBe(200);
+  const second = await handleUpdateThread(
+    patch({ metadata: { viewState: { model: null, tabIndex: 0 } } }),
+    env,
+    "T",
+  );
+  const body = (await second.json()) as {
+    thread: { metadata: unknown; updatedAt: string };
+  };
+  expect(body.thread.updatedAt).toBe(created);
+  expect(body.thread.metadata).toEqual({
+    viewState: {
+      tabIndex: 0,
+      workflowReference: "direct:2",
+      reasoningEffort: "medium",
+    },
+  });
+  const listed = (await (
+    await handleListSpaceThreads(patch({}), env, "S")
+  ).json()) as { threads: { metadata: unknown }[] };
+  expect(listed.threads[0]!.metadata).toEqual(body.thread.metadata);
+});
+
+it("rejects unsupported Thread metadata", async () => {
+  const { env, patch } = fixture();
+  for (const metadata of [
+    { other: 1 },
+    { viewState: { tabIndex: 2 } },
+    { viewState: { unknown: "x" } },
+    { viewState: { model: 5 } },
+  ]) {
+    await expect(
+      handleUpdateThread(patch({ metadata }), env, "T"),
+    ).rejects.toMatchObject({ status: 400 });
+  }
+});
+
+it("stores Space sidebar state in Space settings and validates it", async () => {
+  const { env, patch } = fixture();
+  const response = await handleUpdateSpace(
+    patch({ settings: { threadOrder: ["T"], sidebarExpanded: true } }),
+    env,
+    "S",
+  );
+  const { space } = (await response.json()) as {
+    space: { settings: Record<string, unknown> };
+  };
+  expect(space.settings).toMatchObject({
+    threadOrder: ["T"],
+    sidebarExpanded: true,
+  });
+  await expect(
+    handleUpdateSpace(patch({ settings: { threadOrder: ["T", "T"] } }), env, "S"),
+  ).rejects.toMatchObject({ status: 400 });
+  await expect(
+    handleUpdateSpace(patch({ settings: { sidebarExpanded: "yes" } }), env, "S"),
+  ).rejects.toMatchObject({ status: 400 });
+});

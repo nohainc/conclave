@@ -561,6 +561,14 @@ export async function handleCreateWorkRequest(
         JSON.stringify(workRequest.input),
         now,
       ),
+      // Sidebar ordering is based on these parent timestamps. A newly
+      // accepted request is Thread activity even before a Worker responds.
+      env.CONCLAVE_DB.prepare(
+        "UPDATE threads SET updated_at = ?1 WHERE id = ?2",
+      ).bind(now, threadId),
+      env.CONCLAVE_DB.prepare(
+        "UPDATE spaces SET updated_at = ?1 WHERE id = ?2",
+      ).bind(now, spaceId),
       ...(conversationWorkflow
         ? conversationSubmissionStatements(
             env.CONCLAVE_DB,

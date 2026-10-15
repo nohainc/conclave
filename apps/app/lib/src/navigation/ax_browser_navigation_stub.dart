@@ -6,6 +6,11 @@ abstract interface class AxBrowserConnectivity {
   Stream<bool> get connectivityChanges;
 }
 
+/// Optional page-visibility surface; adapters without it count as visible.
+abstract interface class AxBrowserVisibility {
+  bool get visible;
+}
+
 abstract interface class AxBrowserNavigation {
   Uri get current;
   Stream<Uri> get changes;

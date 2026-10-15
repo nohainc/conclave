@@ -54,6 +54,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                               onClearChatHistory: _clearChatHistoryFromSidebar,
                               onClearWorkHistory: _clearWorkHistoryFromSidebar,
                               onDeleteThread: _deleteThreadFromSidebar,
+                              onReorderThreads: _reorderThreadsFromSidebar,
                               searchController: _searchQueryController,
                               searchFocusNode: _searchFocusNode,
                               onClearSearch: _clearSearch,
@@ -119,6 +120,8 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                     onClearWorkHistory:
                                         _clearWorkHistoryFromSidebar,
                                     onDeleteThread: _deleteThreadFromSidebar,
+                                    onReorderThreads:
+                                        _reorderThreadsFromSidebar,
                                     searchController: _searchQueryController,
                                     searchFocusNode: _searchFocusNode,
                                     onClearSearch: _clearSearch,
@@ -187,6 +190,8 @@ extension _AxAppShellViews on _AxAppStateMixin {
         : Uri.parse(navigation.loginReturnTo!);
     final resetToken = browserNavigation.current.queryParameters['token'];
     final resetPassword = resetToken != null;
+    final oauthError = _oauthErrorMessage(
+        browserNavigation.current.queryParameters['error']);
     final title = resetPassword
         ? 'Choose a new password'
         : authResetRequest
@@ -279,6 +284,11 @@ extension _AxAppShellViews on _AxAppStateMixin {
                     if (authError != null) ...[
                       const SizedBox(height: 12),
                       Text(authError!,
+                          style: const TextStyle(color: ConclaveColors.error)),
+                    ],
+                    if (authError == null && oauthError != null) ...[
+                      const SizedBox(height: 12),
+                      Text(oauthError,
                           style: const TextStyle(color: ConclaveColors.error)),
                     ],
                     if (authNotice != null) ...[
@@ -593,33 +603,20 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                 compact ? 18 : 34, 26, compact ? 18 : 34, 40),
                             child: _spaceOverviewView(),
                           )
-                        : navigation.kind == AxRouteKind.spaceWorkflows
+                        : navigation.kind == AxRouteKind.spaceMembers
                             ? SingleChildScrollView(
                                 padding: EdgeInsets.fromLTRB(compact ? 18 : 34,
                                     26, compact ? 18 : 34, 40),
                                 child: _spaceResourceView(
-                                    SpacePageSection.workflows),
+                                    SpacePageSection.members),
                               )
-                            : navigation.kind == AxRouteKind.spaceMembers
-                                ? SingleChildScrollView(
-                                    padding: EdgeInsets.fromLTRB(
-                                        compact ? 18 : 34,
-                                        26,
-                                        compact ? 18 : 34,
-                                        40),
-                                    child: _spaceResourceView(
-                                        SpacePageSection.members),
-                                  )
-                                : SingleChildScrollView(
-                                    padding: EdgeInsets.fromLTRB(
-                                        compact ? 18 : 34,
-                                        26,
-                                        compact ? 18 : 34,
-                                        40),
-                                    child: showRunDetails
-                                        ? _runDetailsView(compact)
-                                        : _homeView(),
-                                  ),
+                            : SingleChildScrollView(
+                                padding: EdgeInsets.fromLTRB(compact ? 18 : 34,
+                                    26, compact ? 18 : 34, 40),
+                                child: showRunDetails
+                                    ? _runDetailsView(compact)
+                                    : _homeView(),
+                              ),
               ),
             ]),
             Positioned(
@@ -636,6 +633,21 @@ extension _AxAppShellViews on _AxAppStateMixin {
           ],
         ));
   }
+}
+
+/// User-facing text for an OAuth error code Cloud appends to `/login?error=`.
+/// Returns null when there is no error to show.
+String? _oauthErrorMessage(String? code) {
+  if (code == null || code.isEmpty) return null;
+  return switch (code) {
+    'provider_not_configured' =>
+      'Sign-in with this provider is not set up on this server yet.',
+    'account_not_linked' =>
+      'An account with this email already exists. Sign in with your email and '
+          'password, then link Google or GitHub in your profile security settings.',
+    'access_denied' => 'Sign-in was cancelled.',
+    _ => 'Sign-in with the provider failed. Please try again.',
+  };
 }
 
 class _FloatingRealtimeStatusBanner extends StatefulWidget {

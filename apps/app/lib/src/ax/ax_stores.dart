@@ -187,6 +187,14 @@ class _AxDeferredListenableBuilderState
 }
 
 /// Focused Cloud-backed stores. The API remains the source of truth.
+/// A newer refresh or a cleared session replaced this Workspace recovery's
+/// results. It is an expected outcome, not a failure to report to the user.
+class AxRecoverySupersededException implements Exception {
+  const AxRecoverySupersededException();
+  @override
+  String toString() => 'Workspace recovery superseded';
+}
+
 class AxStore {
   AxStore(this.dataSource,
       {AxReadCacheBackend? readCacheBackend,
@@ -457,14 +465,21 @@ class AxStore {
   late final AxWorkRealtimeSync workRealtime =
       AxWorkRealtimeSync.forCache(workHistory);
 
+  /// Set by the shell: true when the Thread is open in a visible tab, in
+  /// which case the shell marks it read and no indicator refresh is needed.
+  bool Function(String threadId) viewedThreadActivity = (_) => false;
+
   late final realtimeCacheRouter = AxRealtimeCacheRouter(syncEngine,
+      viewedThreadActivity: (id) => viewedThreadActivity(id),
       discussionChanged: discussion.reconcileSignal,
       discussionObserved: discussion.isObserved,
       discussionResynchronize: (id) async {
-    await discussion.synchronize(id, reconcileNewest: false);
-  }, discussionFullResynchronize: (id) async {
-    await discussion.synchronize(id, reconcileNewest: true, reconcileAll: true);
-  });
+        await discussion.synchronize(id, reconcileNewest: false);
+      },
+      discussionFullResynchronize: (id) async {
+        await discussion.synchronize(id,
+            reconcileNewest: true, reconcileAll: true);
+      });
 
   /// Existing HTTP APIs expose user-wide lists. Merge only the affected
   /// Workspace into retained state; no bootstrap or route selection is involved.
@@ -490,7 +505,7 @@ class AxStore {
         !syncEngine.peek(stateQuery).hasData ||
         !identical(syncEngine.peek(stateQuery).data, workspace) ||
         !identical(syncEngine.peek(catalogs.workers).data, workers)) {
-      throw StateError('Workspace recovery superseded');
+      throw const AxRecoverySupersededException();
     }
     workspaces.replace([
       for (final item in workspaces.items)
@@ -574,8 +589,9 @@ class SpaceStore extends ValueNotifier<List<AxSpace>> {
   late final void Function() _cancel;
   late final query = AxQuery<List<AxSpace>>(
       key: AxQueryKey(['spaces']),
-      load: () async => List.unmodifiable((await source.loadSpaces())
-          .map((s) => s.copyWith(threads: const []))));
+      load: () async => List.unmodifiable(sortAxSpacesByLastUpdate(
+          (await source.loadSpaces())
+              .map((s) => s.copyWith(threads: const [])))));
   List<AxSpace> get items => value;
   void clear() => engine.remove(query.key);
   @override

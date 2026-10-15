@@ -94,6 +94,7 @@ extension _AxAppController on _AxAppStateMixin {
     try {
       await store.logout();
       expandedSpaceIds.clear();
+      _sidebarRestoredSpaceIds.clear();
       if (!mounted) return;
       _updateState(() {
         selectedSpaceId = null;
@@ -277,6 +278,12 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
+  /// A superseded recovery means a newer refresh already holds fresher data.
+  void _reportRefreshFailure(Object error) {
+    if (error is AxRecoverySupersededException || !mounted) return;
+    _showSnackBar('Live update refresh failed: $error');
+  }
+
   void _onRealtimeEvent(Map<String, dynamic> event) {
     AxRenderDiagnostics.instance.realtimeEvent(event);
     final type = event['type'];
@@ -292,7 +299,7 @@ extension _AxAppController on _AxAppStateMixin {
     final routed = store.realtimeCacheRouter.handle(event);
     if (type != 'reconnect.required') {
       unawaited(routed.catchError((Object error) {
-        if (mounted) _showSnackBar('Live update refresh failed: $error');
+        _reportRefreshFailure(error);
       }));
     }
     if (type == 'realtime.connection') {
@@ -371,7 +378,7 @@ extension _AxAppController on _AxAppStateMixin {
         realtimeNotice = 'Live updates connected.';
       });
     } catch (error) {
-      if (mounted) _showSnackBar('Live update refresh failed: $error');
+      _reportRefreshFailure(error);
     }
   }
 
@@ -419,7 +426,7 @@ extension _AxAppController on _AxAppStateMixin {
       // Execution events are reconciled by the shared Work router, never by
       // reloading Spaces, Workspaces, authentication, or bootstrap state.
     } catch (error) {
-      if (mounted) _showSnackBar('Live update refresh failed: $error');
+      _reportRefreshFailure(error);
     }
   }
 
@@ -1173,11 +1180,13 @@ extension _AxAppController on _AxAppStateMixin {
           store.persistence.userId != session.viewer?.id) {
         store.clearServerState();
         expandedSpaceIds.clear();
+        _sidebarRestoredSpaceIds.clear();
         _updateState(() => authRequired = true);
       }
       if (!session.authenticated && !authRequired) {
         store.clearServerState();
         expandedSpaceIds.clear();
+        _sidebarRestoredSpaceIds.clear();
         _updateState(() => authRequired = true);
         browserNavigation.replaceWithLogin(navigation.toUri());
         return;
@@ -1226,9 +1235,9 @@ extension _AxAppController on _AxAppStateMixin {
     unawaited(store.spaceDetails
         .ensure(spaceId)
         .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-    unawaited(store.spaceThreads
-        .ensure(spaceId)
-        .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+    unawaited(store.spaceThreads.ensure(spaceId).then<void>(
+        (_) => _scheduleMarkViewedRead(),
+        onError: (Object _, StackTrace __) {}));
   }
 
   void _onBrowserNavigation(Uri uri) {

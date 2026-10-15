@@ -79,6 +79,9 @@ export function sqliteD1(
     ...(options.beforeTurnLifecycleRepair
       ? []
       : ["0062_conversation_turn_lifecycle.sql"]),
+    "0064_thread_read_states.sql",
+    "0065_thread_fencing_counter.sql",
+    "0066_thread_metadata.sql",
   ]) {
     sqlite.exec(
       readFileSync(

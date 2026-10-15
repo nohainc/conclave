@@ -22,7 +22,7 @@ export async function handleGetHomeReadModel(
      JOIN space_memberships pm ON pm.space_id = p.id
      WHERE pm.user_id = ?1
        AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0
-     ORDER BY p.updated_at DESC`,
+     ORDER BY p.updated_at DESC, p.id DESC`,
   )
     .bind(context.userId)
     .all<{

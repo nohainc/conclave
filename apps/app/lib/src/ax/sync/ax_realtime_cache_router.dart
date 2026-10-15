@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../ax_models.dart';
 import 'ax_sync_engine.dart';
 
@@ -8,7 +10,14 @@ class AxRealtimeCacheRouter {
       {this.discussionChanged,
       this.discussionResynchronize,
       this.discussionFullResynchronize,
-      this.discussionObserved});
+      this.discussionObserved,
+      this.viewedThreadActivity,
+      this.activityDebounce = const Duration(milliseconds: 400)});
+
+  /// Returns true when the Thread is open in a visible tab. Such activity is
+  /// read on arrival, so the sidebar indicators need no refresh for it.
+  final bool Function(String threadId)? viewedThreadActivity;
+  final Duration activityDebounce;
   final Future<void> Function(String threadId, String type, String entityId)?
       discussionChanged;
   final Future<void> Function(String threadId)? discussionResynchronize;
@@ -18,9 +27,52 @@ class AxRealtimeCacheRouter {
   final _eventIds = <String>{};
   final _recoveries = <(String, String?), Future<void>>{};
 
+  Timer? _activityTimer;
+  final _activitySpaces = <String>{};
+  final _activityThreads = <String>{};
+
   void reset() {
     _eventIds.clear();
     _recoveries.clear();
+    _activityTimer?.cancel();
+    _activityTimer = null;
+    _activitySpaces.clear();
+    _activityThreads.clear();
+  }
+
+  /// Sidebar indicators come from the Space and Thread lists. A burst of
+  /// Discussion and Work events shares one trailing refresh of both.
+  Future<void> _activityChanged(String threadId, String? spaceId,
+      {bool refreshViewed = false}) {
+    final isViewed = viewedThreadActivity?.call(threadId) == true;
+    if (isViewed && !refreshViewed) return Future.value();
+    _activityThreads.add(threadId);
+    if (spaceId != null) _activitySpaces.add(spaceId);
+    _activityTimer ??= Timer(activityDebounce, () {
+      _activityTimer = null;
+      final threads = Set.of(_activityThreads);
+      final spaces = Set.of(_activitySpaces);
+      _activityThreads.clear();
+      _activitySpaces.clear();
+      for (final collection in engine.cachedValues<List<AxThread>>().entries) {
+        final parts = collection.key.parts;
+        if (parts.length == 3 &&
+            parts[0] == 'space' &&
+            parts[2] == 'threads' &&
+            collection.value.any((item) => threads.contains(item.id))) {
+          spaces.add(parts[1]);
+        }
+      }
+      unawaited(engine
+          .revalidateWhere((key) =>
+              key == AxQueryKey(['spaces']) ||
+              (key.parts.length == 3 &&
+                  key.parts[0] == 'space' &&
+                  key.parts[2] == 'threads' &&
+                  spaces.contains(key.parts[1])))
+          .catchError((Object _) {}));
+    });
+    return Future.value();
   }
 
   Future<void> handle(Map<String, dynamic> event) async {
@@ -69,6 +121,23 @@ class AxRealtimeCacheRouter {
       } else if (entityId != null) {
         await changed(threadId, type, entityId);
       }
+      if (type == 'discussion.created')
+        await _activityChanged(threadId, spaceId);
+      return;
+    }
+    if (threadId != null &&
+        const {
+          'work_request.created',
+          'work_request.started',
+          'work_request.completed',
+          'work_request.failed',
+          'work_request.cancelled',
+        }.contains(type)) {
+      await _activityChanged(
+        threadId,
+        spaceId,
+        refreshViewed: type == 'work_request.created',
+      );
       return;
     }
     if (type.startsWith('space.') || type.startsWith('invitation.')) {

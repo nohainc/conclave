@@ -1,4 +1,5 @@
 import 'package:conclave_design/conclave_design.dart';
+import 'quiet_notices.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../brand.dart';
@@ -101,7 +102,7 @@ class DiffViewer extends StatelessWidget {
                   color: mutedInk,
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: diffContent));
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(context).showNotice(
                       const SnackBar(
                         content: Text('Diff copied to clipboard'),
                         duration: Duration(seconds: 2),

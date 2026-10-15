@@ -65,7 +65,8 @@ class CollaborationSource extends AxFixtureDataSource {
       {required String threadId,
       String? name,
       String? status,
-      Map<String, dynamic>? workConfig}) {
+      Map<String, dynamic>? workConfig,
+      Map<String, dynamic>? metadata}) {
     final response = Completer<AxThread>();
     streamEdits.add(response);
     return response.future;

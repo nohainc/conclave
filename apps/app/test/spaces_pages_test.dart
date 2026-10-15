@@ -1816,8 +1816,7 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
-  testWidgets(
-      'Thread rename keeps its position and Move Up/Down reorders correctly',
+  testWidgets('Threads are ordered by their most recent update',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     const ws1 = AxThread(
@@ -1829,6 +1828,7 @@ void main() {
       brief: '',
       primaryWorkspace: 'MacBook',
       queueStatus: 'Idle',
+      updatedAt: '2026-10-01T10:00:00Z',
     );
     const ws2 = AxThread(
       id: 'ws-2',
@@ -1839,6 +1839,7 @@ void main() {
       brief: '',
       primaryWorkspace: 'MacBook',
       queueStatus: 'Idle',
+      updatedAt: '2026-10-03T10:00:00Z',
     );
     const ws3 = AxThread(
       id: 'ws-3',
@@ -1849,6 +1850,7 @@ void main() {
       brief: '',
       primaryWorkspace: 'MacBook',
       queueStatus: 'Idle',
+      updatedAt: '2026-10-02T10:00:00Z',
     );
 
     const space = AxSpace(
@@ -1875,34 +1877,13 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Verify initial ordering: Alpha (0), Beta (1), Gamma (2)
+    // The read model orders newest updates first: Beta, Gamma, Alpha.
     final listTiles = find.byType(ListTile);
     expect(listTiles, findsNWidgets(3));
-
-    // Verify Move up and Move down icons
-    expect(find.byTooltip('Move up'), findsNWidgets(3));
-    expect(find.byTooltip('Move down'), findsNWidgets(3));
-
-    // Move Beta (index 1) down -> should become index 2 (Alpha, Gamma, Beta)
-    await tester.tap(find.byTooltip('Move down').at(1));
-    await tester.pumpAndSettle();
-
-    // Verify order after moving Beta down
-    final tilesAfterDown =
-        tester.widgetList<ListTile>(find.byType(ListTile)).toList();
-    expect((tilesAfterDown[0].title as Text).data, 'Alpha Thread');
-    expect((tilesAfterDown[1].title as Text).data, 'Gamma Thread');
-    expect((tilesAfterDown[2].title as Text).data, 'Beta Thread');
-
-    // Move Gamma (now index 1) up -> should become index 0 (Gamma, Alpha, Beta)
-    await tester.tap(find.byTooltip('Move up').at(1));
-    await tester.pumpAndSettle();
-
-    final tilesAfterUp =
-        tester.widgetList<ListTile>(find.byType(ListTile)).toList();
-    expect((tilesAfterUp[0].title as Text).data, 'Gamma Thread');
-    expect((tilesAfterUp[1].title as Text).data, 'Alpha Thread');
-    expect((tilesAfterUp[2].title as Text).data, 'Beta Thread');
+    final tiles = tester.widgetList<ListTile>(listTiles).toList();
+    expect((tiles[0].title as Text).data, 'Beta Thread');
+    expect((tiles[1].title as Text).data, 'Gamma Thread');
+    expect((tiles[2].title as Text).data, 'Alpha Thread');
 
     await tester.binding.setSurfaceSize(null);
   });
@@ -2650,6 +2631,7 @@ class _GenericWorkerConfigDataSource extends _WorkFormDataSource {
     String? name,
     String? status,
     Map<String, dynamic>? workConfig,
+    Map<String, dynamic>? metadata,
   }) async {
     savedWorkConfig = workConfig;
     return AxThread(

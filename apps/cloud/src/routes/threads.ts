@@ -3,6 +3,7 @@ import {
   requireSpaceRight,
 } from "./space-permissions.js";
 import { conditionalJson } from "./conditional-read.js";
+import { activeWorkSql, unreadSql } from "./thread-activity.js";
 import { MutationIdempotency } from "./mutation-idempotency.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
@@ -18,6 +19,8 @@ import {
   authorizeThreadAccess,
   discussionReferences,
   json,
+  mergeMetadata,
+  normalizeThreadMetadataPatch,
   normalizeThreadWorkConfig,
   parseJson,
   requiredString,
@@ -39,18 +42,12 @@ export async function handleListSpaceThreads(
     spaceId,
     accessContext,
   );
-  const spaceRow = await env.CONCLAVE_DB.prepare(
-    `SELECT settings_json AS settingsJson FROM spaces WHERE id = ?1`,
-  )
-    .bind(spaceId)
-    .first<{ settingsJson: string | null }>();
-  const settings = parseJson(spaceRow?.settingsJson);
-
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT threads.id, threads.space_id AS spaceId,
             threads.name, threads.status,
             threads.access_policy_json AS accessPolicyJson,
             usage.config_json AS workConfigJson,
+            threads.metadata_json AS metadataJson,
             threads.lead_user_id AS leadUserId,
             lead.display_name AS leadDisplayName,
             creator.email AS creatorEmail,
@@ -66,15 +63,21 @@ export async function handleListSpaceThreads(
                 WHERE conversation.thread_id = threads.id
                 ORDER BY h.occurred_at DESC LIMIT 1),
               ''
-            ) AS brief
+            ) AS brief,
+            ${activeWorkSql("threads")} AS hasActiveWork,
+            ${unreadSql("threads", "?2", "COALESCE(read_state.read_at, member.created_at)")} AS hasUnread
      FROM threads
      JOIN spaces space ON space.id = threads.space_id
      LEFT JOIN users lead ON lead.id = threads.lead_user_id
      LEFT JOIN users creator ON creator.id = threads.lead_user_id
      LEFT JOIN thread_work_configs usage ON usage.thread_id = threads.id
-     WHERE threads.space_id = ?1 ORDER BY threads.created_at ASC`,
+     LEFT JOIN thread_read_states read_state
+       ON read_state.thread_id = threads.id AND read_state.user_id = ?2
+     LEFT JOIN space_memberships member
+       ON member.space_id = threads.space_id AND member.user_id = ?2
+     WHERE threads.space_id = ?1 ORDER BY threads.updated_at DESC, threads.id DESC`,
   )
-    .bind(spaceId)
+    .bind(spaceId, context.userId)
     .all<Record<string, unknown>>();
 
   const membership = await env.CONCLAVE_DB.prepare(
@@ -122,7 +125,7 @@ export async function handleListSpaceThreads(
       ),
     };
   });
-  const threads = sortThreads(raw, settings.threadOrder);
+  const threads = sortThreads(raw);
   return conditionalJson(request, { threads });
 }
 
@@ -246,6 +249,15 @@ export async function handleUpdateThread(
   let workConfig: Record<string, unknown> | undefined;
   if (rawWorkConfig !== undefined)
     workConfig = normalizeThreadWorkConfig(rawWorkConfig).config;
+  const metadataPatch =
+    body.metadata === undefined
+      ? undefined
+      : normalizeThreadMetadataPatch(body.metadata);
+  // A metadata-only write is presentation state, not Thread activity: it must
+  // not reorder the sidebar by bumping updated_at.
+  const metadataOnly =
+    metadataPatch !== undefined &&
+    Object.keys(body).every((key) => key === "metadata");
   if (name.trim().toLowerCase() !== thread.name.trim().toLowerCase()) {
     const duplicate = await env.CONCLAVE_DB.prepare(
       `SELECT id FROM threads
@@ -263,13 +275,22 @@ export async function handleUpdateThread(
     }
   }
   const now = new Date().toISOString();
+  const updatedAt = metadataOnly ? thread.updatedAt : now;
   const mutations: D1PreparedStatement[] = [];
   mutations.push(
     env.CONCLAVE_DB.prepare(
       `UPDATE threads
-     SET name = ?1, status = ?2, access_policy_json = ?3, updated_at = ?4
+     SET name = ?1, status = ?2, access_policy_json = ?3, updated_at = ?4,
+         metadata_json = json_patch(metadata_json, ?6)
      WHERE id = ?5`,
-    ).bind(name, status, JSON.stringify(accessPolicy), now, threadId),
+    ).bind(
+      name,
+      status,
+      JSON.stringify(accessPolicy),
+      updatedAt,
+      threadId,
+      JSON.stringify(metadataPatch ?? {}),
+    ),
   );
   if (workConfig !== undefined) {
     mutations.push(
@@ -291,6 +312,18 @@ export async function handleUpdateThread(
           .first<{ config_json: string }>()
           .then((row) => row?.config_json)
       : JSON.stringify(workConfig);
+  const savedMetadataJson = await env.CONCLAVE_DB.prepare(
+    "SELECT metadata_json FROM threads WHERE id = ?1",
+  )
+    .bind(threadId)
+    .first<{ metadata_json: string }>()
+    .then((row) => {
+      const current = parseJson<Record<string, unknown>>(
+        row?.metadata_json,
+        {},
+      );
+      return JSON.stringify(mergeMetadata(current, metadataPatch ?? {}));
+    });
   const member = await env.CONCLAVE_DB.prepare(
     `SELECT id, space_id AS spaceId, user_id AS userId, role,
             created_at AS createdAt, updated_at AS updatedAt
@@ -313,7 +346,7 @@ export async function handleUpdateThread(
     name,
     status: status as Thread["status"],
     accessPolicy: accessPolicy as Thread["accessPolicy"],
-    updatedAt: now,
+    updatedAt,
   };
   await publishCollaborationEvent(
     env,
@@ -331,11 +364,12 @@ export async function handleUpdateThread(
         status,
         accessPolicyJson: JSON.stringify(accessPolicy),
         workConfigJson: savedWorkConfigJson,
+        metadataJson: savedMetadataJson,
         leadUserId: thread.lead.userId,
         creatorEmail: creator?.email,
         creatorIsOwner: creator?.ownerUserId === thread.lead.userId ? 1 : 0,
         createdAt: thread.createdAt,
-        updatedAt: now,
+        updatedAt,
       }),
       canConfigureWork: true,
       canExecuteWork: canExecuteThread(
@@ -657,4 +691,60 @@ export async function handleDeleteDiscussionMessage(
     { threadId: String(message.threadId), mutations: [mutation] },
   );
   return json({ success: true });
+}
+
+/** Remove the Thread's Discussion Chat for everyone. Work history is separate. */
+export async function handleClearChatHistory(
+  request: Request,
+  env: SecurityEnv,
+  threadId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const { spaceId } = await authorizeThreadAccess(
+    request,
+    env,
+    threadId,
+    "manage",
+    accessContext,
+  );
+  const mutation = env.CONCLAVE_DB.prepare(
+    "DELETE FROM discussion_messages WHERE thread_id = ?1",
+  ).bind(threadId);
+  // The mutation and the event are committed together by the publisher, so a
+  // successful clear is always announced to other sessions.
+  await publishCollaborationEvent(env, "thread.chat_cleared", spaceId, threadId, {
+    threadId,
+    mutations: [mutation],
+  });
+  return json({ threadId, cleared: true });
+}
+
+/** Record that the caller has seen the Thread. Other sessions of the same
+ * user are told through a recipient-scoped event so their indicators clear. */
+export async function handleMarkThreadRead(
+  request: Request,
+  env: SecurityEnv,
+  threadId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const { context, spaceId } = await authorizeThreadAccess(
+    request,
+    env,
+    threadId,
+    "view",
+    accessContext,
+  );
+  const readAt = new Date().toISOString();
+  const mutation = env.CONCLAVE_DB.prepare(
+    `INSERT INTO thread_read_states (thread_id, user_id, read_at)
+     VALUES (?1, ?2, ?3)
+     ON CONFLICT (thread_id, user_id) DO UPDATE SET read_at = excluded.read_at
+     WHERE excluded.read_at > thread_read_states.read_at`,
+  ).bind(threadId, context.userId, readAt);
+  await publishCollaborationEvent(env, "thread.updated", spaceId, threadId, {
+    threadId,
+    recipientUserIds: [context.userId],
+    mutations: [mutation],
+  });
+  return json({ threadId, readAt });
 }

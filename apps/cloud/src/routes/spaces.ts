@@ -15,6 +15,7 @@ import {
   permissionJsonPath,
 } from "./space-permissions.js";
 import { conditionalJson } from "./conditional-read.js";
+import { activeWorkSql, unreadSql } from "./thread-activity.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
   resolveAppUrl,
@@ -68,12 +69,23 @@ export async function handleListSpaces(
       new URL(request.url).searchParams.get("archived") === "true";
     const rows = await env.CONCLAVE_DB.prepare(
       `SELECT p.id, p.name, p.description, pm.role,
-              p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
+              p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt,
+              EXISTS (
+                SELECT 1 FROM threads t
+                 WHERE t.space_id = p.id AND ${activeWorkSql("t")}
+              ) AS hasActiveWork,
+              EXISTS (
+                SELECT 1 FROM threads t
+                  LEFT JOIN thread_read_states rs
+                    ON rs.thread_id = t.id AND rs.user_id = ?1
+                 WHERE t.space_id = p.id
+                   AND ${unreadSql("t", "?1", "COALESCE(rs.read_at, pm.created_at)")}
+              ) AS hasUnread
        FROM spaces p
        JOIN space_memberships pm ON pm.space_id = p.id
        WHERE pm.user_id = ?1
          ${includeArchived ? "" : "AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0"}
-       ORDER BY p.updated_at DESC`,
+       ORDER BY p.updated_at DESC, p.id DESC`,
     )
       .bind(context.userId)
       .all<{
@@ -84,6 +96,8 @@ export async function handleListSpaces(
         settingsJson: string;
         createdAt: string;
         updatedAt: string;
+        hasActiveWork: number;
+        hasUnread: number;
       }>();
 
     const spaces = (rows.results ?? []).map((row) => {
@@ -105,6 +119,8 @@ export async function handleListSpaces(
         settings,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
+        hasActiveWork: row.hasActiveWork === 1,
+        hasUnread: row.hasUnread === 1,
       };
     });
     return json({ spaces });
@@ -317,6 +333,21 @@ export async function handleUpdateSpace(
       400,
       "Configure enabled workflows on the Workflows page",
     );
+  if (incomingSettings.threadOrder !== undefined) {
+    const order = incomingSettings.threadOrder;
+    if (
+      !Array.isArray(order) ||
+      order.length > 1000 ||
+      order.some((id) => typeof id !== "string" || id.length === 0) ||
+      new Set(order).size !== order.length
+    )
+      throw new HttpError(400, "threadOrder must be a list of unique Thread ids");
+  }
+  if (
+    incomingSettings.sidebarExpanded !== undefined &&
+    typeof incomingSettings.sidebarExpanded !== "boolean"
+  )
+    throw new HttpError(400, "sidebarExpanded must be a boolean");
   const settings = {
     ...spaceSettings(existing.settingsJson),
     ...(typeof body.settings === "object" && body.settings !== null

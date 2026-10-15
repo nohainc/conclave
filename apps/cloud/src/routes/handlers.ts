@@ -75,10 +75,12 @@ export {
   handleCreateThread,
   handleUpdateThread,
   handleDeleteThread,
+  handleMarkThreadRead,
   handleListDiscussionMessages,
   handleCreateDiscussionMessage,
   handleEditDiscussionMessage,
   handleDeleteDiscussionMessage,
+  handleClearChatHistory,
   handleGetDiscussionMessage,
 } from "./threads.js";
 export {

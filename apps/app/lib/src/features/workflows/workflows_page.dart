@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../common/quiet_notices.dart';
 import 'package:flutter/material.dart';
 import '../../ax/ax_models.dart';
 import '../../ax/ax_workflow_configuration.dart';
@@ -317,8 +318,8 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                   await widget.configurations.setDefault(id);
                 } catch (error) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(error.toString())));
+                    ScaffoldMessenger.of(context)
+                        .showNotice(SnackBar(content: Text(error.toString())));
                   }
                 }
               }
@@ -490,7 +491,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.toString())));
+            .showNotice(SnackBar(content: Text(error.toString())));
       }
     } finally {
       if (mounted) {

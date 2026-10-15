@@ -444,6 +444,7 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
     String? name,
     String? status,
     Map<String, dynamic>? workConfig,
+    Map<String, dynamic>? metadata,
   }) async =>
       AxThread(
         id: threadId,
@@ -466,6 +467,9 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
 
   @override
   Future<void> clearThreadWorkHistory({required String threadId}) async {}
+
+  @override
+  Future<void> clearThreadChatHistory({required String threadId}) async {}
 
   @override
   Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => const [];

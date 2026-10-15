@@ -42,12 +42,6 @@ export const ASSIGNMENT_LIFECYCLE_STATUSES = [
 export type AssignmentLifecycleStatus =
   (typeof ASSIGNMENT_LIFECYCLE_STATUSES)[number];
 
-/**
- * Attempts use the same monotonic execution lifecycle as their assignment.
- * The current schema projects an attempt through worker_assignments, but the
- * type keeps attempt identity distinct from a retry counter.
- */
-export const ATTEMPT_LIFECYCLE_STATUSES = ASSIGNMENT_LIFECYCLE_STATUSES;
 export type AttemptLifecycleStatus = AssignmentLifecycleStatus;
 
 export const TASK_LIFECYCLE_STATUSES = [
@@ -300,10 +294,4 @@ export function isTerminalAssignmentStatus(
   status: AssignmentLifecycleStatus,
 ): boolean {
   return terminalAssignmentStatuses.has(status);
-}
-
-export function isActiveAssignmentStatus(
-  status: AssignmentLifecycleStatus,
-): boolean {
-  return !isTerminalAssignmentStatus(status);
 }

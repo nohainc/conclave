@@ -150,6 +150,27 @@ void main() {
     expect(selected?.plainText, contains('Last paragraph.'));
   });
 
+  testWidgets('dragging text after a code block selects that text',
+      (tester) async {
+    SelectedContent? selected;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+          body: ConclaveMarkdownBody(
+        data: 'first\n\n```dart\nfinal x = 1;\n```\n\nafter code',
+        onSelectionChanged: (value) => selected = value,
+      )),
+    ));
+    await tester.pumpAndSettle();
+    final rect = tester.getRect(find.textContaining('after code'));
+    final gesture = await tester.startGesture(
+        Offset(rect.left + 1, rect.top + 8),
+        kind: PointerDeviceKind.mouse);
+    await gesture.moveTo(Offset(rect.right - 1, rect.top + 8));
+    await gesture.up();
+    await tester.pump();
+    expect(selected?.plainText, 'after code');
+  });
+
   testWidgets('selection is refreshed when a live message is replaced',
       (tester) async {
     String data = 'Old response';

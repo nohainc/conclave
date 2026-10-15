@@ -14,6 +14,23 @@ import 'package:conclave_app/src/ax/ax_models.dart';
 import 'ax_fixture_data.dart';
 
 void main() {
+  testWidgets('shell initializes its store before registering listeners',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: const AxFixtureDataSource(),
+        initialUri: Uri.parse('/settings/profile'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(ConclaveAppShell), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('profile page uses sections without passkey controls',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
@@ -227,17 +244,6 @@ void main() {
           isFalse);
       expect(spaceContext.isNavActive(const AxNavigation.spaces()), isTrue);
 
-      const workflowsContext = AxShellContext(
-        navigation: AxNavigation.spaceWorkflows('space-1'),
-        spaces: [],
-      );
-      expect(workflowsContext.isNavActive(const AxNavigation.space('space-1')),
-          isTrue);
-      expect(
-          workflowsContext
-              .isNavActive(const AxNavigation.spaceWorkflows('space-1')),
-          isTrue);
-
       const threadContext = AxShellContext(
         navigation: AxNavigation.thread('space-1', 'ws-1'),
         spaces: [],
@@ -249,7 +255,7 @@ void main() {
       expect(threadContext.isNavActive(const AxNavigation.spaces()), isTrue);
     });
 
-    testWidgets('active Space menu exposes actions and resource destinations',
+    testWidgets('active Space menu exposes actions and the Members destination',
         (tester) async {
       AxNavigation? navigatedTo;
       const space = AxSpace(
@@ -278,12 +284,12 @@ void main() {
       expect(find.text('Edit Space'), findsOneWidget);
       expect(find.text('Archive Space'), findsOneWidget);
       expect(find.text('Delete Space'), findsOneWidget);
-      expect(find.text('Workflows'), findsOneWidget);
+      expect(find.text('Workflows'), findsNothing);
       expect(find.text('Members'), findsOneWidget);
 
-      await tester.tap(find.text('Workflows'));
+      await tester.tap(find.text('Members'));
       await tester.pumpAndSettle();
-      expect(navigatedTo, const AxNavigation.spaceWorkflows('space-1'));
+      expect(navigatedTo, const AxNavigation.spaceMembers('space-1'));
     });
 
     test('isNavActive covers every route kind accurately', () {
@@ -291,7 +297,6 @@ void main() {
       const routesInSpaces = [
         AxNavigation.spaces(),
         AxNavigation.space('p-1'),
-        AxNavigation.spaceWorkflows('p-1'),
         AxNavigation.spaceMembers('p-1'),
         AxNavigation.thread('p-1', 'ws-1'),
         AxNavigation.run('p-1', 'r-1'),

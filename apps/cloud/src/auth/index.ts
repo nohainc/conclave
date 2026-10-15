@@ -3,8 +3,11 @@ export {
   copySetCookieHeaders,
   createBetterAuth,
   handleBetterAuthRequest,
+  configuredAppOrigin,
+  isSocialProviderConfigured,
   safeAuthReturnTo,
   type BetterAuthRuntimeEnv,
+  type SocialProviderId,
 } from "./better-auth.js";
 export {
   IdentityService,

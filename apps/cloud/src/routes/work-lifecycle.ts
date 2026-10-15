@@ -1271,15 +1271,28 @@ export async function handleClearWorkHistory(
     `thread:${threadId}:clear-work-history`,
     {},
   );
-  const replay = await receipt?.replay();
-  if (replay) return replay;
-
   const thread = await env.CONCLAVE_DB.prepare(
     "SELECT space_id AS spaceId FROM threads WHERE id = ?1",
   )
     .bind(threadId)
     .first<{ spaceId: string }>();
   if (!thread) throw new HttpError(404, "Thread not found");
+
+  // A retried request may follow a commit whose event was never published, so
+  // replays announce the clear again. The event is an idempotent invalidation.
+  const announce = () =>
+    publishCollaborationEvent(
+      env,
+      "thread.work_cleared",
+      thread.spaceId,
+      threadId,
+      { threadId },
+    );
+  const replay = await receipt?.replay();
+  if (replay) {
+    await announce();
+    return replay;
+  }
 
   const active = await env.CONCLAVE_DB.prepare(
     "SELECT COUNT(*) as count FROM work_requests WHERE thread_id = ?1 AND status IN ('queued', 'running', 'waiting')",
@@ -1317,19 +1330,9 @@ export async function handleClearWorkHistory(
       )
     : (await env.CONCLAVE_DB.batch(statements), null);
 
-  if (reply) return reply;
+  await announce();
 
-  await publishCollaborationEvent(
-    env,
-    "thread.work_cleared",
-    thread.spaceId,
-    threadId,
-    {
-      threadId,
-    },
-  );
-
-  return json({ threadId, cleared: true });
+  return reply ?? json({ threadId, cleared: true });
 }
 
 /**

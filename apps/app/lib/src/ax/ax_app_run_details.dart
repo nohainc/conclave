@@ -23,8 +23,6 @@ extension _AxAppRunDetails on _AxAppStateMixin {
         return _homeView();
       case AxRouteKind.space:
         return _spaceOverviewView();
-      case AxRouteKind.spaceWorkflows:
-        return _spaceResourceView(SpacePageSection.workflows);
       case AxRouteKind.spaceMembers:
         return _spaceResourceView(SpacePageSection.members);
       case AxRouteKind.thread:

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'quiet_notices.dart';
 
 import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
@@ -77,7 +78,7 @@ class ConclaveMarkdownBody extends StatelessWidget {
       }
     }
     if (failure != null && context.mounted) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showNotice(
         SnackBar(content: Text(failure)),
       );
     }

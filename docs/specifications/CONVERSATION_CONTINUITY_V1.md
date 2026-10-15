@@ -72,9 +72,6 @@ Database guards prevent changing identity or existing associations.
 
 ## Human API
 
-- `GET /api/workflows/definitions` returns `{ workflows: WorkflowDefinition[] }`
-  for current manual definitions. Like the existing built-in catalog, this is
-  product metadata and supports conditional reads.
 - `GET /api/threads/:id/conversations` returns
   `{ conversations: Conversation[] }` after Thread `view` authorization.
   No native provider data is included.

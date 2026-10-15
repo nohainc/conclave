@@ -158,7 +158,6 @@ export {
   SUPPORTED_DESKTOP_AUDIENCES,
   type DesktopAudience,
 };
-export const DESKTOP_HUMAN_AUDIENCE = DESKTOP_WORKSPACE_AUDIENCE;
 const DESKTOP_HUMAN_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function desktopAuthAppOrigin(request: Request, env: SecurityEnv): string {

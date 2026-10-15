@@ -720,8 +720,15 @@ class AxWorkHistoryCache {
         read.completer.complete();
       } catch (error, stack) {
         if (identical(_contexts[id], context)) {
-          context.detailErrors[requestId] = error;
-          _emit(context);
+          if (error is AxApiException && error.statusCode == 404) {
+            // The Work Request no longer exists: another session cleared the
+            // history while this one missed the realtime event. Drop retained
+            // pages rather than showing an error for a row that cannot return.
+            resetHistory(id);
+          } else {
+            context.detailErrors[requestId] = error;
+            _emit(context);
+          }
         }
         read.completer.completeError(error, stack);
       } finally {

@@ -124,6 +124,28 @@ void main() {
     expect(result.verificationRequired, isTrue);
     expect((jsonDecode(emailClient.lastBody!) as Map)['newEmail'],
         'new@example.test');
+
+    // Better Auth 1.7 answers a pending change with a bare `{status: true}`.
+    final bareApi = AxApiClient(
+      baseUrl: 'https://cloud.test/api',
+      client: _JsonClient(const <String, dynamic>{'status': true},
+          statusCode: 200),
+    );
+    expect(
+        (await bareApi.requestEmailChange(email: 'new@example.test'))
+            .verificationRequired,
+        isTrue);
+
+    final immediateApi = AxApiClient(
+      baseUrl: 'https://cloud.test/api',
+      client: _JsonClient(
+          const <String, dynamic>{'status': true, 'message': 'Email updated'},
+          statusCode: 200),
+    );
+    expect(
+        (await immediateApi.requestEmailChange(email: 'new@example.test'))
+            .verificationRequired,
+        isFalse);
   });
 
   test('Space and Thread API paths consume only current product envelopes',

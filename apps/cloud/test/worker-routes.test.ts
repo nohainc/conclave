@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  BUILTIN_WORKFLOW_CATALOG,
-  CONVERSATION_WORKFLOWS,
-  workflowCatalogEntry,
-} from "@conclave/core";
+import { BUILTIN_WORKFLOW_CATALOG, workflowCatalogEntry } from "@conclave/core";
 import { handleGetReleaseTrustState } from "../src/routes/releases.js";
 import {
   routeWorkerRequest,
@@ -45,18 +41,6 @@ describe("Worker API routes", () => {
       dependencies,
     );
     expect(handler).toHaveBeenCalledWith(req, env, "W", "C", undefined);
-  });
-  it("exposes manual Workflow definitions separately from execution graphs", async () => {
-    const response = await routeWorkerRequest(
-      request("/api/workflows/definitions"),
-      {} as Env,
-      undefined,
-      {},
-      dependencies,
-    );
-    expect(await response.json()).toEqual({
-      workflows: Object.values(CONVERSATION_WORKFLOWS),
-    });
   });
   it("routes Conversation reads through scoped authorization", async () => {
     const handler = vi.fn(async () => new Response("{}"));

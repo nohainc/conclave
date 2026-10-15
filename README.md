@@ -77,6 +77,10 @@ to its owner. Local email sign-in uses the local account database, so create a
 local account first if needed; hosted accounts are separate. If an already
 running backend reports “Authentication is not configured”, run
 `node scripts/setup-development-auth.mjs` and restart the local backend.
+To sign in with Google or GitHub locally, add `CONCLAVE_AUTH_GOOGLE_CLIENT_ID` /
+`CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET` or `CONCLAVE_AUTH_GITHUB_CLIENT_ID` /
+`CONCLAVE_AUTH_GITHUB_CLIENT_SECRET` to `apps/cloud/.dev.vars`; the OAuth setup is
+described in the [Cloudflare deployment guide](docs/deployment/CLOUDFLARE.md#github-sign-in).
 Neither mode runs migrations or deploys production code.
 
 ## Work v1

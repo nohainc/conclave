@@ -23,10 +23,9 @@ class AxRenderDiagnostics {
   /// Whether [details] is the engine assertion raised when a frame is rendered
   /// into an already disposed `EngineFlutterView`.
   @visibleForTesting
-  static bool isDisposedViewRenderError(FlutterErrorDetails details) =>
-      details
-          .exceptionAsString()
-          .contains('Trying to render a disposed EngineFlutterView');
+  static bool isDisposedViewRenderError(FlutterErrorDetails details) => details
+      .exceptionAsString()
+      .contains('Trying to render a disposed EngineFlutterView');
 
   /// Whether [details] is the debug-only framework assertion raised when a
   /// platform view's post-frame position update runs after its render object

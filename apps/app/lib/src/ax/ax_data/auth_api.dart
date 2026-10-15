@@ -80,7 +80,10 @@ mixin _AuthApi on _AxApiClientCore {
         : null;
     return AxEmailChangeResult(
       message: message,
-      verificationRequired: message == 'Verification email sent',
+      // Better Auth only changes the address immediately for unverified
+      // accounts; every other success is a pending confirmation flow and
+      // may omit `message` entirely (`{status: true}`).
+      verificationRequired: message != 'Email updated',
     );
   }
 
@@ -200,6 +203,11 @@ mixin _AuthApi on _AxApiClientCore {
         'name': name,
         'email': email,
         'password': password,
+        // The verification link lands here; a relative value would resolve
+        // against the API origin, which differs from the app in local dev.
+        'callbackURL': Uri.base.scheme == 'http' || Uri.base.scheme == 'https'
+            ? '${Uri.base.origin}/'
+            : '/',
       });
 
   @override
@@ -328,12 +336,16 @@ mixin _AuthApi on _AxApiClientCore {
 
   @override
   Future<Uri> beginAccountLink(String provider, Uri returnTo) async {
+    // Return to this app even when the API runs on another origin (local dev).
+    final callbackURL = Uri.base.scheme == 'http' || Uri.base.scheme == 'https'
+        ? Uri.base.resolveUri(returnTo).toString()
+        : returnTo.toString();
     final response = await client.post(
       Uri.parse('$baseUrl/auth/link-social'),
       headers: _headers(contentType: 'application/json'),
       body: jsonEncode({
         'provider': provider,
-        'callbackURL': returnTo.toString(),
+        'callbackURL': callbackURL,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {

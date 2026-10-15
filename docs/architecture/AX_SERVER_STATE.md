@@ -93,6 +93,11 @@ query consumer. Collapsing unsubscribes the row but retains its collection.
 Selecting another expanded Space preserves expansion; clicking the focused
 Space explicitly toggles it. Deep links initially expand their parent.
 
+Sidebar Spaces and each Space's Thread collection are presented newest-update
+first. Missing or invalid timestamps fall behind valid timestamps, with the
+source order retained for ties. Manual Thread ordering is not part of the
+presentation contract.
+
 Both internal and browser navigation ensure the target collection rather than
 reloading Spaces/session/Workspaces. Space views share the same query;
 opening a Thread does not trigger a duplicate snapshot load. Space-view
@@ -945,6 +950,17 @@ People list search is local to the hydrated session query. Shared Space names an
 
 The Space picker and reverse People flow use one `SpaceInvitationDialog` and `AxSpaceInvitations` writer. Open dialogs observe People and existing registered Space member/invitation queries without fetching on opening. `pendingInvitationSpaceIds` carries authorized per-Person status by stable identity. Successful invitations refresh People and target invitation/audit caches; partial failures preserve only unsent selections. All write outcomes are fenced at session changes. Cached private search remains local, including the invitation picker.
 
+### Confirmed Chat history clearing
+
+Clearing Chat calls `POST /threads/:id/chat/clear` before touching local state.
+Cloud deletes the Thread's `discussion_messages` in the same commit as the
+`thread.chat_cleared` event. Rejected requests preserve the displayed Chat, and
+the action works for Threads whose Chat was never loaded. Sessions receiving the
+event tombstone retained messages and re-synchronize. A Work Request detail read
+that returns 404 resets Work history, covering sessions that missed
+`thread.work_cleared`. Work-clear retries publish the event again, including on
+idempotent replay.
+
 ### Confirmed Work history clearing
 
 Work history clearing calls the Cloud deletion endpoint before clearing local
@@ -982,3 +998,45 @@ measurements. Space events revalidate Space resources without fetching People;
 `people.updated` owns People invalidation. Event revalidation retains the
 existing read-fencing behavior; the experimental coalesced follow-up was removed.
 No schema, wire version, or client migration is required.
+
+## Sidebar activity indicators
+
+Space and Thread reads carry two per-user booleans: `hasActiveWork` (a Work
+Request in `queued`, `running` or `waiting` that was updated within the last
+day) and `hasUnread` (another user's Discussion message, or a completed or
+failed Work Request, newer than the user's read marker). Space values
+aggregate their Threads. Markers live in `thread_read_states`
+(`0064_thread_read_states.sql`); existing history is backfilled as read, and
+users without a marker fall back to their Space membership date.
+
+`POST /api/threads/:id/read` advances the marker and publishes a
+recipient-scoped `thread.updated`, so the user's other sessions refresh their
+indicators. AX marks the open Thread read after one second while the tab is
+visible, and again for activity that arrives in it. Discussion creation and
+Work Request lifecycle events for other Threads refresh the Space and Thread
+lists through one 400 ms trailing batch. Accepting a new Work Request also
+advances its Thread and Space update timestamps, so both move to the top of
+their newest-update-first sidebar lists immediately, including when the Thread
+is open. No wire version change.
+
+## Phase 9: Persisted sidebar and Thread view state
+
+Presentation state follows the user across browsers through metadata, never
+through execution paths:
+
+- **Thread** (`threads.metadata_json`, migration 0066, returned as
+  `thread.metadata`): `viewState` holds `tabIndex` (0 Chat, 1 Work),
+  `workflowReference`, `workerId`, `model`, `reasoningEffort`, and
+  `catalogRevision`. `PATCH /threads/:id` accepts
+  `{ "metadata": { "viewState": { ... } } }` as a JSON merge patch (`null`
+  clears a key). The route validates keys and bounds values, and a
+  metadata-only write does not change `updatedAt`, so it never reorders the
+  sidebar. Writing requires Thread manage access. Drafts stay browser-local.
+- **Space** (`spaces.settings_json`): `threadOrder` (unique Thread ids) and
+  `sidebarExpanded` (boolean). Only the Space owner can write Space settings,
+  so other members keep session-local expansion.
+
+The app applies the stored selection once the workflow and Worker catalogs
+load, and never writes defaults over a stored choice while it is pending. The
+stored Space order places Threads missing from it (new ones) first, then the
+listed Threads in order; reordering uses the Thread menu's Move Up/Down.

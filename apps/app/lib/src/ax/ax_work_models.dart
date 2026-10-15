@@ -875,10 +875,13 @@ abstract interface class AxDataSource {
     String? name,
     String? status,
     Map<String, dynamic>? workConfig,
+    Map<String, dynamic>? metadata,
   });
   Future<void> deleteThread({required String threadId});
   Future<void> clearThreadWorkHistory({required String threadId}) async =>
       throw UnimplementedError('Clear work history is not available');
+  Future<void> clearThreadChatHistory({required String threadId}) async =>
+      throw UnimplementedError('Clear chat history is not available');
   Future<String> createWorkRequest({
     required String threadId,
     required String workflowId,

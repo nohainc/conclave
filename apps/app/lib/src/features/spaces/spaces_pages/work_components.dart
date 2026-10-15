@@ -92,6 +92,7 @@ class _WorkComposer extends StatelessWidget {
   const _WorkComposer({
     required this.requestController,
     required this.historyController,
+    required this.incomingAnchor,
     required this.currentUserId,
     required this.currentUserName,
     required this.workflow,
@@ -132,6 +133,7 @@ class _WorkComposer extends StatelessWidget {
 
   final TextEditingController requestController;
   final ScrollController historyController;
+  final AxTimelineFollowAnchor incomingAnchor;
   final String? currentUserId;
   final String? currentUserName;
   final String workflow;
@@ -268,25 +270,32 @@ class _WorkComposer extends StatelessWidget {
         return ListenableBuilder(
           key: ValueKey(request.id),
           listenable: activityStore.listenableForRequest(request),
-          builder: (context, _) => _WorkTimelineCard(
-            request: request,
-            activities: activityStore.forRequest(request),
-            clockOffset: activityStore.clockOffsetForRequest(request),
-            realtimeStatus: realtimeStatus,
-            progressText: localWorkProgress[request.id],
-            currentUserId: currentUserId,
-            currentUserName: currentUserName,
-            workflowCatalog: workflowCatalog,
-            onReportIssue: localWorkProgress.containsKey(request.id)
-                ? null
-                : onReportIssue,
-            reportedIssue: reportedIssues[request.id],
-            reportingIssue: reportingIssueIds.contains(request.id),
-            issueReportError: issueReportErrors[request.id],
-            onRetryStep:
-                localWorkProgress.containsKey(request.id) ? null : onRetryStep,
-            onCancelRun:
-                localWorkProgress.containsKey(request.id) ? null : onCancelRun,
+          builder: (context, _) => KeyedSubtree(
+            key: incomingAnchor.keyFor((request.id, 'request')),
+            child: _WorkTimelineCard(
+              responseAnchorKey:
+                  incomingAnchor.keyFor((request.id, 'response')),
+              request: request,
+              activities: activityStore.forRequest(request),
+              clockOffset: activityStore.clockOffsetForRequest(request),
+              realtimeStatus: realtimeStatus,
+              progressText: localWorkProgress[request.id],
+              currentUserId: currentUserId,
+              currentUserName: currentUserName,
+              workflowCatalog: workflowCatalog,
+              onReportIssue: localWorkProgress.containsKey(request.id)
+                  ? null
+                  : onReportIssue,
+              reportedIssue: reportedIssues[request.id],
+              reportingIssue: reportingIssueIds.contains(request.id),
+              issueReportError: issueReportErrors[request.id],
+              onRetryStep: localWorkProgress.containsKey(request.id)
+                  ? null
+                  : onRetryStep,
+              onCancelRun: localWorkProgress.containsKey(request.id)
+                  ? null
+                  : onCancelRun,
+            ),
           ),
         );
       },
@@ -577,7 +586,7 @@ class _WorkComposer extends StatelessWidget {
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: submitError!));
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(context).showNotice(
                       const SnackBar(content: Text('Request error copied')),
                     );
                   }
@@ -636,8 +645,24 @@ class _MemoizedWorkMarkdownState extends State<_MemoizedWorkMarkdown> {
   Widget build(BuildContext context) => _body;
 }
 
+String? _workResponseText(AxWorkRequest request) =>
+    request.finalText?.trim().isNotEmpty == true
+        ? request.finalText!
+        : request.turns
+                .where((turn) =>
+                    turn.status == 'completed' &&
+                    turn.resultText?.trim().isNotEmpty == true)
+                .lastOrNull
+                ?.resultText ??
+            request.steps
+                .map((step) => step.resultText)
+                .whereType<String>()
+                .where((text) => text.trim().isNotEmpty)
+                .firstOrNull;
+
 class _WorkTimelineCard extends StatelessWidget {
   const _WorkTimelineCard({
+    this.responseAnchorKey,
     required this.request,
     required this.activities,
     required this.realtimeStatus,
@@ -654,6 +679,7 @@ class _WorkTimelineCard extends StatelessWidget {
     required this.onCancelRun,
   });
 
+  final GlobalKey? responseAnchorKey;
   final AxWorkRequest request;
   final List<AxWorkActivity> activities;
   final AxWorkRealtimeStatus realtimeStatus;
@@ -744,19 +770,7 @@ class _WorkTimelineCard extends StatelessWidget {
         .firstOrNull;
     final stepForContext =
         activeStep ?? lastCompletedStep ?? request.steps.firstOrNull;
-    final response = request.finalText?.trim().isNotEmpty == true
-        ? request.finalText!
-        : request.turns
-                .where((turn) =>
-                    turn.status == 'completed' &&
-                    turn.resultText?.trim().isNotEmpty == true)
-                .lastOrNull
-                ?.resultText ??
-            request.steps
-                .map((step) => step.resultText)
-                .whereType<String>()
-                .where((text) => text.trim().isNotEmpty)
-                .firstOrNull;
+    final response = _workResponseText(request);
     // Cloud's phase of the step that currently matters. A terminal request
     // always wins, so a delayed step event can never show it as running.
     final requestIsTerminal =
@@ -1180,18 +1194,21 @@ class _WorkTimelineCard extends StatelessWidget {
                               const SizedBox(height: 8),
                             ],
                             if (message != null) ...[
-                              if (isError)
-                                SelectableText(
-                                  message,
-                                  style: ConclaveMessageTypography.fromTheme(
-                                          Theme.of(context))
-                                      .copyWith(color: colors.error),
-                                )
-                              else
-                                _MemoizedWorkMarkdown(
-                                  key: ValueKey((request.id, message)),
-                                  data: message,
-                                ),
+                              KeyedSubtree(
+                                key: responseAnchorKey,
+                                child: isError
+                                    ? SelectableText(
+                                        message,
+                                        style:
+                                            ConclaveMessageTypography.fromTheme(
+                                                    Theme.of(context))
+                                                .copyWith(color: colors.error),
+                                      )
+                                    : _MemoizedWorkMarkdown(
+                                        key: ValueKey((request.id, message)),
+                                        data: message,
+                                      ),
+                              ),
                               const SizedBox(height: 8),
                             ],
                             Row(
@@ -1532,7 +1549,6 @@ class _DiscussionItem {
 
 class _DiscussionMessageBubble extends StatefulWidget {
   const _DiscussionMessageBubble({
-    super.key,
     required this.item,
     required this.onCopy,
     required this.onEdit,

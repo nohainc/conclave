@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../common/quiet_notices.dart';
 
 import 'package:flutter/material.dart';
 
@@ -7,6 +8,11 @@ import '../../navigation/ax_navigation.dart';
 import '../../ax/ax_models.dart';
 import 'ax_shell_context.dart';
 import '../../ax/sync/ax_query_builder.dart';
+
+/// Width reserved at the right of every row for the menu button, so activity
+/// indicators keep a fixed position whether or not the row is selected.
+const double _menuSlotWidth = 28;
+const double _sidebarRowHeight = 30;
 
 /// Interactive Space Tree component for the Conclave AX App Sidebar.
 class SpaceTree extends StatelessWidget {
@@ -25,6 +31,7 @@ class SpaceTree extends StatelessWidget {
     this.onClearChatHistory,
     this.onClearWorkHistory,
     this.onDeleteThread,
+    this.onReorderThreads,
     this.compact = false,
   });
 
@@ -42,6 +49,10 @@ class SpaceTree extends StatelessWidget {
   final Future<void> Function(AxThread thread)? onClearChatHistory;
   final Future<void> Function(AxThread thread)? onClearWorkHistory;
   final Future<void> Function(AxThread thread)? onDeleteThread;
+
+  /// Persists a Space's Thread order (visible Thread ids, top to bottom).
+  final Future<void> Function(AxSpace space, List<String> orderedThreadIds)?
+      onReorderThreads;
   final bool compact;
 
   @override
@@ -169,20 +180,23 @@ class SpaceTree extends StatelessWidget {
     final isSpaceFocused = shellContext.navigation.spaceId == space.id &&
         const {
           AxRouteKind.space,
-          AxRouteKind.spaceWorkflows,
           AxRouteKind.spaceMembers,
         }.contains(shellContext.navigation.kind);
     final isExpanded = shellContext.isSpaceExpanded(space.id);
-    final visibleThreads =
-        threads.where((t) => t.status.toLowerCase() != 'archived').toList();
-    final archivedThreads =
-        threads.where((t) => t.status.toLowerCase() == 'archived').toList();
+    final sortedThreads = applyAxThreadOrder(
+        sortAxThreadsByLastUpdate(threads), space.settings['threadOrder']);
+    final visibleThreads = sortedThreads
+        .where((t) => t.status.toLowerCase() != 'archived')
+        .toList();
+    final archivedThreads = sortedThreads
+        .where((t) => t.status.toLowerCase() == 'archived')
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          margin: const EdgeInsets.only(bottom: 2),
+          height: _sidebarRowHeight,
           decoration: BoxDecoration(
             color: isSpaceFocused
                 ? ConclaveColors.navigationSelected
@@ -203,7 +217,7 @@ class SpaceTree extends StatelessWidget {
                   },
             borderRadius: BorderRadius.circular(8),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              padding: const EdgeInsets.only(left: 8, right: 2),
               child: Row(
                 children: [
                   ConclaveFolderIcon(
@@ -217,15 +231,24 @@ class SpaceTree extends StatelessWidget {
                       space.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isSpaceFocused ? Colors.white : Colors.white70,
+                      style: const TextStyle(
+                        color: Colors.white70,
                         fontSize: 12.5,
-                        fontWeight:
-                            isSpaceFocused ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight: FontWeight.w400,
                       ),
                     ),
                   ),
-                  if (isSpaceFocused) _spaceMenu(context, space),
+                  _ActivityIndicators(
+                    running: threads.isNotEmpty
+                        ? threads.any((t) => t.hasActiveWork)
+                        : space.hasActiveWork,
+                    unread: threads.isNotEmpty
+                        ? threads.any((t) => t.hasUnread)
+                        : space.hasUnread,
+                  ),
+                  isSpaceFocused
+                      ? _spaceMenu(context, space)
+                      : const SizedBox(width: _menuSlotWidth),
                 ],
               ),
             ),
@@ -261,8 +284,8 @@ class SpaceTree extends StatelessWidget {
                       },
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
-                  margin: const EdgeInsets.only(bottom: 1),
-                  padding: const EdgeInsets.fromLTRB(34, 6, 10, 6),
+                  height: _sidebarRowHeight,
+                  padding: const EdgeInsets.only(left: 34, right: 2),
                   decoration: BoxDecoration(
                     color: isThreadSelected
                         ? ConclaveColors.navigationSelected
@@ -276,22 +299,25 @@ class SpaceTree extends StatelessWidget {
                           thread.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: isThreadSelected
-                                ? Colors.white
-                                : Colors.white60,
+                          style: const TextStyle(
+                            color: Colors.white60,
                             fontSize: 11.5,
-                            fontWeight: isThreadSelected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
+                      ),
+                      _ActivityIndicators(
+                        running: thread.hasActiveWork,
+                        unread: thread.hasUnread && !isThreadSelected,
                       ),
                       if (statusIndicator != null) ...[
                         const SizedBox(width: 8),
                         statusIndicator,
                       ],
-                      if (isThreadSelected) _threadMenu(context, space, thread),
+                      isThreadSelected
+                          ? _threadMenu(context, space, thread,
+                              visibleThreads.map((t) => t.id).toList())
+                          : const SizedBox(width: _menuSlotWidth),
                     ],
                   ),
                 ),
@@ -336,8 +362,8 @@ class SpaceTree extends StatelessWidget {
                       },
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
-                  margin: const EdgeInsets.only(bottom: 1),
-                  padding: const EdgeInsets.fromLTRB(48, 4, 10, 4),
+                  height: _sidebarRowHeight,
+                  padding: const EdgeInsets.only(left: 48, right: 2),
                   decoration: BoxDecoration(
                     color: isThreadSelected
                         ? ConclaveColors.navigationSelected
@@ -351,18 +377,16 @@ class SpaceTree extends StatelessWidget {
                           thread.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: isThreadSelected
-                                ? Colors.white
-                                : Colors.white38,
+                          style: const TextStyle(
+                            color: Colors.white38,
                             fontSize: 11,
-                            fontWeight: isThreadSelected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
                       ),
-                      if (isThreadSelected) _threadMenu(context, space, thread),
+                      isThreadSelected
+                          ? _threadMenu(context, space, thread)
+                          : const SizedBox(width: _menuSlotWidth),
                     ],
                   ),
                 ),
@@ -373,7 +397,9 @@ class SpaceTree extends StatelessWidget {
     );
   }
 
-  Widget _threadMenu(BuildContext context, AxSpace space, AxThread thread) {
+  Widget _threadMenu(BuildContext context, AxSpace space, AxThread thread,
+      [List<String> visibleOrder = const []]) {
+    final position = visibleOrder.indexOf(thread.id);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isArchived =
         thread.archived || thread.status.toLowerCase() == 'archived';
@@ -462,6 +488,30 @@ class SpaceTree extends StatelessWidget {
           );
         },
         menuChildren: [
+          if (onReorderThreads != null && position > 0)
+            MenuItemButton(
+              style: itemStyle(),
+              leadingIcon: Icon(Icons.arrow_upward_rounded,
+                  size: 16, color: menuIconColor),
+              onPressed: () => _moveThread(space, visibleOrder, position, -1),
+              child: const Text(
+                'Move Up',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+              ),
+            ),
+          if (onReorderThreads != null &&
+              position >= 0 &&
+              position < visibleOrder.length - 1)
+            MenuItemButton(
+              style: itemStyle(),
+              leadingIcon: Icon(Icons.arrow_downward_rounded,
+                  size: 16, color: menuIconColor),
+              onPressed: () => _moveThread(space, visibleOrder, position, 1),
+              child: const Text(
+                'Move Down',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+              ),
+            ),
           MenuItemButton(
             style: itemStyle(),
             leadingIcon:
@@ -594,9 +644,6 @@ class SpaceTree extends StatelessWidget {
         case 'delete':
           unawaited(onDeleteSpace?.call(space));
           break;
-        case 'workflows':
-          onNavigateTo(AxNavigation.spaceWorkflows(space.id));
-          break;
         case 'members':
           onNavigateTo(AxNavigation.spaceMembers(space.id));
           break;
@@ -639,13 +686,6 @@ class SpaceTree extends StatelessWidget {
           divider(),
           MenuItemButton(
             style: itemStyle(),
-            leadingIcon:
-                Icon(Icons.account_tree_outlined, size: 16, color: iconColor),
-            onPressed: () => select('workflows'),
-            child: const Text('Workflows'),
-          ),
-          MenuItemButton(
-            style: itemStyle(),
             leadingIcon: Icon(Icons.people_outline, size: 16, color: iconColor),
             onPressed: () => select('members'),
             child: const Text('Members'),
@@ -662,6 +702,12 @@ class SpaceTree extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _moveThread(AxSpace space, List<String> order, int position, int delta) {
+    final next = [...order];
+    next.insert(position + delta, next.removeAt(position));
+    unawaited(onReorderThreads!(space, next).catchError((Object _) {}));
   }
 
   void _handleThreadMenuItem(
@@ -837,7 +883,7 @@ class SpaceTree extends StatelessWidget {
 
   void _showThreadActionError(
       BuildContext context, String action, Object error) {
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+    ScaffoldMessenger.maybeOf(context)?.showNotice(
       SnackBar(
         content: Text('Failed to $action: $error'),
         backgroundColor: ConclaveColors.error,
@@ -985,6 +1031,98 @@ class ConclaveFolderIcon extends StatelessWidget {
         isExpanded: isExpanded,
         color: iconColor,
       ),
+    );
+  }
+}
+
+/// Sidebar activity markers share one dot: solid for unread messages, and a
+/// slow, faint fade in and out while Work is running, so it stays in the
+/// periphery. Both are exposed to assistive technology.
+class _ActivityIndicators extends StatefulWidget {
+  const _ActivityIndicators({required this.running, required this.unread});
+  final bool running;
+  final bool unread;
+
+  @override
+  State<_ActivityIndicators> createState() => _ActivityIndicatorsState();
+}
+
+class _ActivityIndicatorsState extends State<_ActivityIndicators>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 2800));
+
+  @override
+  void initState() {
+    super.initState();
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(_ActivityIndicators oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncAnimation();
+  }
+
+  void _syncAnimation() {
+    if (widget.running) {
+      if (!_pulse.isAnimating) _pulse.repeat(reverse: true);
+    } else {
+      _pulse.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  Widget _dot(Key key, String label, Widget Function(Widget dot) wrap) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Semantics(
+        label: label,
+        child: Tooltip(
+          message: label,
+          child: wrap(Container(
+            key: key,
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              color: ConclaveBrand.accent,
+              shape: BoxShape.circle,
+            ),
+          )),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.running && !widget.unread) return const SizedBox.shrink();
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (widget.running)
+          _dot(
+            const ValueKey('sidebar-running-indicator'),
+            'Running',
+            (dot) => reduceMotion
+                ? Opacity(opacity: 0.4, child: dot)
+                : FadeTransition(
+                    opacity: Tween<double>(begin: 0.12, end: 0.55).animate(
+                        CurvedAnimation(
+                            parent: _pulse, curve: Curves.easeInOut)),
+                    child: dot,
+                  ),
+          ),
+        if (widget.unread)
+          _dot(const ValueKey('sidebar-unread-indicator'), 'Unread messages',
+              (dot) => dot),
+      ],
     );
   }
 }

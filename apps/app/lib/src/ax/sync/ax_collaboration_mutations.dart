@@ -17,8 +17,9 @@ class AxCollaborationMutations {
   late final threads = AxSpaceThreads(source, engine: engine);
   late final spaces = AxQuery<List<AxSpace>>(
       key: AxQueryKey(['spaces']),
-      load: () async => List.unmodifiable((await source.loadSpaces())
-          .map((s) => s.copyWith(threads: const []))));
+      load: () async => List.unmodifiable(sortAxSpacesByLastUpdate(
+          (await source.loadSpaces())
+              .map((s) => s.copyWith(threads: const [])))));
   late final invitations = AxQuery<List<AxSpaceInvitation>>(
       key: AxQueryKey(['me', 'invitations']),
       load: source.loadCurrentUserInvitations);
@@ -82,7 +83,7 @@ class AxCollaborationMutations {
         name: name,
         description: description,
         instructions: instructions,
-        settings: settings,
+        settings: settings == null ? null : {...value.settings, ...settings},
         archived: settings?['archived'] is bool
             ? settings!['archived'] as bool
             : null,
@@ -191,11 +192,15 @@ class AxCollaborationMutations {
       {String? title,
       String? name,
       String? status,
-      Map<String, dynamic>? workConfig}) {
+      Map<String, dynamic>? workConfig,
+      Map<String, dynamic>? viewState}) {
     final effectiveTitle = title ?? name;
     final query = threads.query(original.spaceId);
     AxThread patch(AxThread value) => value.copyWith(
-        title: effectiveTitle, status: status, workConfig: workConfig);
+        title: effectiveTitle,
+        status: status,
+        workConfig: workConfig,
+        viewState: viewState);
     return engine.mutations
         .run(AxMutationOperation<AxThread, AxOptimisticUpdate<List<AxThread>>>(
       key: AxQueryKey(['mutation', 'thread', original.id]),
@@ -214,7 +219,8 @@ class AxCollaborationMutations {
             threadId: original.id,
             name: effectiveTitle,
             status: status,
-            workConfig: workConfig);
+            workConfig: workConfig,
+            metadata: viewState == null ? null : {'viewState': viewState});
         if (value.id != original.id || value.spaceId != original.spaceId) {
           throw const AxApiException('Thread response identity does not match');
         }

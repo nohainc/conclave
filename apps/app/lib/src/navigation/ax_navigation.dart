@@ -2,7 +2,6 @@ enum AxRouteKind {
   home,
   spaces,
   space,
-  spaceWorkflows,
   spaceMembers,
   thread,
   run,
@@ -34,9 +33,6 @@ class AxNavigation {
 
   const AxNavigation.space(String spaceId)
       : this._(kind: AxRouteKind.space, spaceId: spaceId);
-
-  const AxNavigation.spaceWorkflows(String spaceId)
-      : this._(kind: AxRouteKind.spaceWorkflows, spaceId: spaceId);
 
   const AxNavigation.spaceMembers(String spaceId)
       : this._(kind: AxRouteKind.spaceMembers, spaceId: spaceId);
@@ -110,8 +106,9 @@ class AxNavigation {
     }
     if (parts case ['workflows']) return const AxNavigation.workflows();
     if (parts.length == 3 && parts[0] == 'spaces') {
+      // Space-level Workflow settings were removed; old links open the Space.
       if (parts[2] == 'workflows') {
-        return AxNavigation.spaceWorkflows(parts[1]);
+        return AxNavigation.space(parts[1]);
       }
       if (parts[2] == 'members') {
         return AxNavigation.spaceMembers(parts[1]);
@@ -152,7 +149,6 @@ class AxNavigation {
       AxRouteKind.home => Uri(path: '/'),
       AxRouteKind.spaces => Uri(path: '/spaces'),
       AxRouteKind.space => Uri(path: '/spaces/$spaceId'),
-      AxRouteKind.spaceWorkflows => Uri(path: '/spaces/$spaceId/workflows'),
       AxRouteKind.spaceMembers => Uri(path: '/spaces/$spaceId/members'),
       AxRouteKind.thread => Uri(path: '/spaces/$spaceId/threads/$threadId'),
       AxRouteKind.run => threadId != null

@@ -1,4 +1,5 @@
 import '../features/people/people_page.dart';
+import '../features/common/quiet_notices.dart';
 import '../features/workflows/workflows_page.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -116,7 +117,7 @@ class _RecoveryPanel extends StatelessWidget {
                     await Clipboard.setData(ClipboardData(
                         text: '$title\n$happened\n$safe\n$nextStep'));
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(context).showNotice(
                           const SnackBar(content: Text('Error copied')));
                     }
                   },

@@ -13,21 +13,6 @@ import type { SecurityEnv } from "./http-security.js";
 import { HttpError, json, securityContext } from "./http-security.js";
 import { WorkspaceRuntimeAuthenticator } from "../workspace-gateway/runtime-authenticator.js";
 
-export function assertSafeProviderMetadata(
-  value: unknown,
-): Record<string, unknown> {
-  if (value === undefined) return {};
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new HttpError(400, "providerMetadata must be an object");
-  }
-  const forbidden = /secret|token|password|api[_-]?key|private/i;
-  const metadata = value as Record<string, unknown>;
-  if (Object.keys(metadata).some((key) => forbidden.test(key))) {
-    throw new HttpError(400, "providerMetadata cannot contain credentials");
-  }
-  return metadata;
-}
-
 export async function authorizeToolProfileAdmin(
   request: Request,
   env: SecurityEnv,

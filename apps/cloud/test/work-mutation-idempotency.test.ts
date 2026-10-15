@@ -154,6 +154,29 @@ it.each(["chat", "direct"])(
   },
 );
 
+it("moves a Thread and its Space to the top when a Work Request is accepted", async () => {
+  const f = fixture();
+  try {
+    f.sqlite.exec(
+      "UPDATE spaces SET updated_at='2020-01-01T00:00:00.000Z' WHERE id='P'; UPDATE threads SET updated_at='2020-01-01T00:00:00.000Z' WHERE id='W'",
+    );
+    const response = await f.submit("Move this Thread up");
+    expect(response.status).toBe(202);
+    const timestamps = f.sqlite
+      .prepare(
+        `SELECT spaces.updated_at AS spaceUpdatedAt, threads.updated_at AS threadUpdatedAt
+           FROM spaces JOIN threads ON threads.space_id=spaces.id
+          WHERE spaces.id='P' AND threads.id='W'`,
+      )
+      .get() as { spaceUpdatedAt: string; threadUpdatedAt: string };
+    expect(timestamps.spaceUpdatedAt).not.toBe("2020-01-01T00:00:00.000Z");
+    expect(timestamps.threadUpdatedAt).not.toBe("2020-01-01T00:00:00.000Z");
+    expect(timestamps.spaceUpdatedAt).toBe(timestamps.threadUpdatedAt);
+  } finally {
+    f.sqlite.close();
+  }
+});
+
 describe("Work mutation identity through response loss", () => {
   it("rejects another Conversation scope without accepting a request", async () => {
     const f = fixture();

@@ -25,6 +25,7 @@ class AppSidebar extends StatelessWidget {
     this.onClearChatHistory,
     this.onClearWorkHistory,
     this.onDeleteThread,
+    this.onReorderThreads,
     this.searchController,
     this.searchFocusNode,
     this.onSearchChanged,
@@ -59,6 +60,8 @@ class AppSidebar extends StatelessWidget {
   final Future<void> Function(AxThread thread)? onClearChatHistory;
   final Future<void> Function(AxThread thread)? onClearWorkHistory;
   final Future<void> Function(AxThread thread)? onDeleteThread;
+  final Future<void> Function(AxSpace space, List<String> orderedThreadIds)?
+      onReorderThreads;
   final TextEditingController? searchController;
   final FocusNode? searchFocusNode;
   final ValueChanged<String>? onSearchChanged;
@@ -318,6 +321,7 @@ class AppSidebar extends StatelessWidget {
                   onClearChatHistory: onClearChatHistory,
                   onClearWorkHistory: onClearWorkHistory,
                   onDeleteThread: onDeleteThread,
+                  onReorderThreads: onReorderThreads,
                   compact: compact,
                 ),
               ),
@@ -466,10 +470,10 @@ class AppSidebar extends StatelessWidget {
               child: Text(
                 label,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: active ? Colors.white : Colors.white60,
+                style: const TextStyle(
+                  color: Colors.white60,
                   fontSize: 12.5,
-                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
             ),

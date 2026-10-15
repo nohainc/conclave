@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../common/quiet_notices.dart';
 
 import 'package:flutter/material.dart';
 
@@ -146,7 +147,7 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
       await widget.archivedSpaces.refresh();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showNotice(
           SnackBar(content: Text(error.toString())),
         );
       }
@@ -182,7 +183,7 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
       await widget.archivedSpaces.refresh();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showNotice(
           SnackBar(content: Text(error.toString())),
         );
       }
