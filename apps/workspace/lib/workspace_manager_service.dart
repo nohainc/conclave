@@ -215,6 +215,30 @@ class WorkspaceManagerService {
     };
   }
 
+  Future<Map<String, Object?>> _slotSnapshot() async {
+    final subsystem = workspace.workerSubsystem;
+    final slots = subsystem?.slotSnapshot() ??
+        const <String, Object?>{'workers': <Object?>[], 'busySessions': 0};
+    final names = <String, String>{};
+    final workers = await (subsystem?.listWorkers() ??
+        Future.value(const <LocalWorker>[]));
+    for (final worker in workers) {
+      names[worker.id] = worker.workerTypeId;
+    }
+    return {
+      'workers': [
+        for (final raw in (slots['workers'] as List).whereType<Map>())
+          {
+            ...Map<String, Object?>.from(raw),
+            'workerTypeId': names[raw['workerId']],
+          },
+      ],
+      'busySessions': slots['busySessions'] ?? 0,
+      'activeAssignmentIds':
+          workspace.cloudConnection?.activeAssignmentIds ?? const <String>[],
+    };
+  }
+
   Map<String, Object?> _workerCatalogSnapshot() {
     final catalog = (workspace.workerSubsystem?.catalog ??
             workspace.workerCatalogCoordinator)
@@ -606,6 +630,28 @@ class WorkspaceManagerService {
                     ?.rollbackToolProfile(workerTypeId) ??
                 false;
         return {'passed': passed, 'snapshot': await snapshot()};
+      case 'execution.getSlots':
+        return _slotSnapshot();
+      case 'execution.resetSlots':
+        {
+          // Stop what is running or waiting, then discard bookkeeping that did
+          // not release itself. Space folders and provider sessions on disk
+          // are untouched; Cloud reconciles the stopped assignments on sync.
+          for (final assignmentId
+              in connection?.activeAssignmentIds ?? const <String>[]) {
+            try {
+              await connection?.cancelActiveAssignment(
+                assignmentId,
+                reason: 'Slots reset by Workspace user',
+              );
+            } on Object {
+              // Continue: the reset below clears the bookkeeping regardless.
+            }
+          }
+          final stopped = await workerSubsystem?.resetSlots() ?? 0;
+          connection?.forgetActiveAssignments();
+          return {...await _slotSnapshot(), 'stopped': stopped};
+        }
       case 'execution.listActiveAssignments':
         return {
           'activeAssignmentIds': connection?.activeAssignmentIds ?? const [],

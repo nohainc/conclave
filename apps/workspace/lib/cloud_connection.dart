@@ -610,6 +610,14 @@ class WorkspaceCloudConnection {
     return cancel(assignmentId, reason);
   }
 
+  /// Forgets assignments this Service still counts as active. Only used by the
+  /// user-initiated slot reset after those assignments were cancelled; Cloud
+  /// reconciles their final state on the next synchronization.
+  void forgetActiveAssignments() {
+    _activeAssignments.clear();
+    _cancelledBeforeStart.clear();
+  }
+
   int _messageSequence = 0;
   int _heartbeatCount = 0;
   Map<String, Object?>? syncResponse;

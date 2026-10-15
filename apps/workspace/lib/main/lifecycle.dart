@@ -629,6 +629,19 @@ class WorkspaceLifecycleController extends ChangeNotifier {
         });
   }
 
+  /// Slot usage reported by the Workspace Service.
+  Future<Map<String, Object?>> loadWorkerSlots() async {
+    final result = await request('execution.getSlots');
+    return result is Map ? Map<String, Object?>.from(result) : const {};
+  }
+
+  /// Stops running and waiting work and clears stuck slot bookkeeping.
+  Future<Map<String, Object?>> resetWorkerSlots() async {
+    final result = await request('execution.resetSlots',
+        timeout: const Duration(seconds: 60));
+    return result is Map ? Map<String, Object?>.from(result) : const {};
+  }
+
   /// Reattach to local IPC after wake; the service owns Cloud recovery.
   Future<void> handleSystemResume() async {
     if (!_managerConnected) await _connectToManager();

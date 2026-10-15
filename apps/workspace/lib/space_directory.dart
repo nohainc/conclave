@@ -403,6 +403,16 @@ class SpaceMutationCoordinator {
     }
   }
 
+  /// Drops queued per-Thread work chains and the recorded Thread fences.
+  /// Used by the user-initiated slot reset after all work was stopped: a
+  /// fence left from a previous Cloud lease counter would otherwise reject
+  /// every new lease as "stale". Space folders and their files are untouched.
+  Future<void> reset() async {
+    _tails.clear();
+    final fences = Directory(_join(applicationStateDirectory.path, 'space-fences'));
+    if (await fences.exists()) await fences.delete(recursive: true);
+  }
+
   /// Resolves the Space directory and records the Thread fence under a short
   /// Space-wide process lock that is released before any work starts.
   Future<Directory> _prepare({

@@ -702,6 +702,17 @@ class WorkerAssignmentHandler {
     return value;
   }
 
+  /// Ends every wait for a Space/Thread and forgets local fencing records.
+  /// Part of the user-initiated slot reset; launches nothing and deletes no
+  /// Space data.
+  Future<void> resetSpaceState() async {
+    for (final stopWaiting in _spaceWaitCancels.values.toList()) {
+      stopWaiting();
+    }
+    _spaceWaitCancels.clear();
+    await spaceMutationCoordinator?.reset();
+  }
+
   Future<bool> cancel(String assignmentId, String reason) async {
     final stopWaiting = _spaceWaitCancels.remove(assignmentId);
     if (stopWaiting != null) {

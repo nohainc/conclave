@@ -680,6 +680,74 @@ final class CliWorkerEngineSupervisor {
     }
   }
 
+  /// Point-in-time view of Worker slots for the Workspace UI. Telemetry only.
+  Map<String, Object?> slotSnapshot() {
+    final workerIds = <String>{
+      ..._activeByWorker.keys,
+      ..._waitersByWorker.keys,
+      ..._reservedWorkerByAssignment.values,
+      ..._activeWorkerByAssignment.values,
+    }.toList()
+      ..sort();
+    return {
+      'workers': [
+        for (final workerId in workerIds)
+          {
+            'workerId': workerId,
+            'active': _activeByWorker[workerId] ?? 0,
+            'queued': _waitersByWorker[workerId]?.length ?? 0,
+            if (_limitByWorker[workerId] != null)
+              'limit': _limitByWorker[workerId],
+            'assignmentIds': ({
+              for (final entry in _reservedWorkerByAssignment.entries)
+                if (entry.value == workerId) entry.key,
+              for (final entry in _activeWorkerByAssignment.entries)
+                if (entry.value == workerId) entry.key,
+            }.toList()
+              ..sort()),
+          },
+      ],
+      'busySessions': _busySessionGates.length,
+    };
+  }
+
+  /// Stops every running and waiting assignment, then discards slot
+  /// bookkeeping that did not release itself (for example after an assignment
+  /// was abandoned during a disconnect). Returns how many assignments were
+  /// stopped or discarded. Provider session data on disk is untouched.
+  Future<int> resetSlots() async {
+    final assignmentIds = <String>{
+      ..._queuedAssignments.keys,
+      ..._activeAssignments.keys,
+      ..._reservedAssignmentIds,
+    };
+    for (final assignmentId in assignmentIds) {
+      try {
+        await cancel(assignmentId);
+      } on Object {
+        // Resetting must continue; the bookkeeping below is cleared anyway.
+      }
+    }
+    for (final waiters in _waitersByWorker.values.toList()) {
+      for (final queued in waiters.toList()) {
+        if (!queued.permit.isCompleted) {
+          queued.permit.completeError(
+            const WorkerAssignmentCancelledException(),
+          );
+        }
+      }
+    }
+    _waitersByWorker.clear();
+    _queuedAssignments.clear();
+    _activeByWorker.clear();
+    _reservedAssignmentIds.clear();
+    _reservedWorkerByAssignment.clear();
+    _busySessionGates.clear();
+    _sessionGateByAssignment.clear();
+    _limitByWorker.clear();
+    return assignmentIds.length;
+  }
+
   Future<void> shutdown() async {
     for (final assignmentId in _queuedAssignments.keys.toList()) {
       await cancel(assignmentId);

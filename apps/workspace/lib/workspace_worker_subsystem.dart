@@ -112,6 +112,18 @@ class WorkspaceWorkerSubsystem {
   Future<bool> cancelAssignment(String assignmentId) =>
       cancel(assignmentId, 'Cancelled by Workspace Service');
 
+  /// Slot usage per Worker for the Workspace UI.
+  Map<String, Object?> slotSnapshot() =>
+      engineSupervisor?.slotSnapshot() ??
+      const {'workers': <Object?>[], 'busySessions': 0};
+
+  /// Stops all work and discards slot, Space-wait and fencing bookkeeping.
+  Future<int> resetSlots() async {
+    final stopped = await engineSupervisor?.resetSlots() ?? 0;
+    await assignmentHandler?.resetSpaceState();
+    return stopped;
+  }
+
   Future<int> recoverOrphanedProcesses() =>
       engineSupervisor?.recoverOrphanedProcesses() ?? Future.value(0);
 

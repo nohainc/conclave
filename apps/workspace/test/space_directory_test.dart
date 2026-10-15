@@ -235,4 +235,35 @@ void main() {
     await Future.wait([a, b, c, aAgain]);
     expect(peak, 3);
   });
+
+  test('reset clears Thread fences so a restarted lease counter is accepted',
+      () async {
+    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    addTearDown(() => root.delete(recursive: true));
+    final state = Directory('${root.path}/state');
+    final coordinator = SpaceMutationCoordinator(
+      lifecycle: SpaceDirectoryLifecycle(SpaceDirectoryResolver(
+        workRoot: Directory('${root.path}/work'),
+        registryDirectory: state,
+      )),
+      applicationStateDirectory: state,
+    );
+    Future<void> run(int token, String lease) =>
+        coordinator.withMutation<void>(
+          spaceId: 'space-a',
+          threadId: 'thread-a',
+          spaceName: 'Plan',
+          leaseId: lease,
+          fencingToken: token,
+          action: (_) async {},
+        );
+
+    await run(5, 'lease-old');
+    await expectLater(
+        run(1, 'lease-new'), throwsA(isA<SpaceMutationViolation>()));
+
+    await coordinator.reset();
+    await run(1, 'lease-new');
+    expect(Directory('${root.path}/work/Plan').existsSync(), isTrue);
+  });
 }
