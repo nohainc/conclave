@@ -1,0 +1,19 @@
+name: Setup Flutter
+description: Install the stable Flutter SDK and cache the Pub package cache.
+
+runs:
+  using: composite
+  steps:
+    - id: flutter
+      uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+      with:
+        channel: stable
+        cache: true
+        pub-cache: false
+
+    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ~/.pub-cache
+        key: pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-${{ hashFiles('**/pubspec.lock') }}
+        restore-keys: |
+          pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-

@@ -1,0 +1,49 @@
+name: Nightly macOS builds
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
+
+jobs:
+  workspace-macos:
+    name: Workspace native build
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: ./.github/actions/setup-flutter
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - name: Prepare dependencies and Worker engine
+        working-directory: apps/workspace
+        run: flutter pub get
+      - run: bash scripts/build-cli-worker-engine.sh
+      - name: Build Workspace with prepared dependencies
+        run: bash scripts/build-workspace-macos.sh --prepared
+
+  profile-lab-macos:
+    name: Profile Lab native build
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: ./.github/actions/setup-flutter
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - name: Check Profile Lab and fixture Engine acceptance
+        run: bash scripts/check-flutter-app.sh profile_lab
+      - name: Build Profile Lab with prepared dependencies
+        run: bash scripts/build-profile-lab-macos.sh --release --prepared

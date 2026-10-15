@@ -1,18 +1,22 @@
-name: Release Conclave Workspace for macOS
+name: Release macOS app
 
 on:
   workflow_dispatch:
     inputs:
+      product:
+        description: Application to release
+        type: choice
+        options: [workspace, profile-lab]
+        required: true
       version:
-        description: Immutable Workspace release version
+        description: Immutable release version
         type: string
         required: true
       channel:
-        description: Release channel
+        description: Release channel (Workspace only)
         type: choice
         options: [development, beta, stable]
         default: development
-        required: true
       release_notes:
         description: Release notes included in signed metadata
         type: string
@@ -20,51 +24,35 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  ci-gate:
-    runs-on: ubuntu-latest
+  require-ci:
+    name: Require passing CI on main
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     steps:
-      - name: Require successful repository CI for this main revision
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Require successful CI for this commit
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "Workspace releases must be dispatched from main."
-            exit 1
-          fi
-          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/development-guard.yml/runs?head_sha=$GITHUB_SHA&per_page=100" > "$RUNNER_TEMP/ci-runs.json"
-          node --input-type=module - "$RUNNER_TEMP/ci-runs.json" <<'NODE'
-          import { readFileSync } from 'node:fs';
+        run: bash scripts/ci/require-ci-success.sh
 
-          const { workflow_runs: runs = [] } = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-          const passed = runs.some((run) =>
-            run.event === 'push' &&
-            run.head_branch === 'main' &&
-            run.head_sha === process.env.GITHUB_SHA &&
-            run.status === 'completed' &&
-            run.conclusion === 'success'
-          );
-          if (!passed) {
-            console.error(`No successful repository CI run exists for ${process.env.GITHUB_SHA} on main.`);
-            process.exit(1);
-          }
-          console.log(`Repository CI passed for ${process.env.GITHUB_SHA}.`);
-          NODE
-
-  release:
-    needs: ci-gate
+  workspace:
+    name: Conclave Workspace (signed and notarized)
+    needs: require-ci
+    if: inputs.product == 'workspace'
     runs-on: macos-15
     environment: workspace-release
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.sha }}
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
+      - uses: ./.github/actions/setup-flutter
+
       - name: Configure Developer ID and notarization
         env:
           MACOS_CERTIFICATE_P12: ${{ secrets.CONCLAVE_MACOS_CERTIFICATE_P12 }}
@@ -73,6 +61,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.CONCLAVE_APPLE_TEAM_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.CONCLAVE_APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
+          set -euo pipefail
           test -n "$MACOS_CERTIFICATE_P12" && test -n "$MACOS_CERTIFICATE_PASSWORD"
           test -n "$APPLE_ID" && test -n "$APPLE_TEAM_ID" && test -n "$APPLE_APP_SPECIFIC_PASSWORD"
           KEYCHAIN_PATH="$RUNNER_TEMP/conclave-release.keychain-db"
@@ -80,9 +69,11 @@ jobs:
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
           CERT_PATH="$RUNNER_TEMP/conclave-developer-id.p12"
           echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
           security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$CERT_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH"
           IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' '/Developer ID Application/ { print $2; exit }')"
@@ -90,17 +81,21 @@ jobs:
           echo "CONCLAVE_MACOS_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
           xcrun notarytool store-credentials conclave-notary --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --keychain "$KEYCHAIN_PATH"
           echo 'CONCLAVE_MACOS_NOTARY_PROFILE=conclave-notary' >> "$GITHUB_ENV"
+
       - name: Run Workspace analysis and tests
         run: bash scripts/test-workspace-macos.sh
+
       - name: Build, sign, and notarize Workspace
         env:
           CONCLAVE_WORKSPACE_VERSION: ${{ inputs.version }}
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
         run: bash scripts/build-workspace-macos.sh
+
       - name: Verify notarized app archive
         env:
           WORKSPACE_VERSION: ${{ inputs.version }}
         run: |
+          set -euo pipefail
           ARCHIVE="dist/conclave-workspace/macos/Conclave-Workspace-$WORKSPACE_VERSION-macos.zip"
           mkdir -p "$RUNNER_TEMP/workspace-app-check"
           ditto -x -k "$ARCHIVE" "$RUNNER_TEMP/workspace-app-check"
@@ -108,6 +103,7 @@ jobs:
           test -d "$APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
           spctl --assess --type execute --verbose "$APP"
+
       - name: Sign, publish, download, and verify immutable metadata
         env:
           WORKSPACE_ARCHIVE: dist/conclave-workspace/macos/Conclave-Workspace-${{ inputs.version }}-macos.zip
@@ -120,3 +116,48 @@ jobs:
           CONCLAVE_WORKSPACE_SIGNING_KEY_ID: ${{ vars.CONCLAVE_WORKSPACE_SIGNING_KEY_ID }}
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
         run: node scripts/release/publish-workspace-release.mjs
+
+      - name: Remove signing keychain
+        if: always()
+        run: security delete-keychain "${KEYCHAIN_PATH:-}" 2>/dev/null || true
+
+  profile-lab:
+    name: Profile Lab (internal build)
+    needs: require-ci
+    if: inputs.product == 'profile-lab'
+    runs-on: macos-15
+    environment: profile-lab-release
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+      - uses: ./.github/actions/setup-workspace
+      - uses: ./.github/actions/setup-flutter
+
+      - name: Run macOS Profile Lab tests
+        run: bash scripts/test-profile-lab-macos.sh
+
+      - name: Build unsigned development Profile Lab
+        env:
+          PROFILE_LAB_VERSION: ${{ inputs.version }}
+        run: |
+          bash scripts/build-profile-lab-macos.sh --release --unsigned --version "$PROFILE_LAB_VERSION"
+
+      - name: Verify development app archive
+        env:
+          PROFILE_LAB_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          ARCHIVE="dist/conclave-profile-lab/macos/Conclave-Profile-Lab-$PROFILE_LAB_VERSION-macos.zip"
+          mkdir -p "$RUNNER_TEMP/profile-lab-app-check"
+          ditto -x -k "$ARCHIVE" "$RUNNER_TEMP/profile-lab-app-check"
+          test -d "$RUNNER_TEMP/profile-lab-app-check/Conclave Profile Lab.app"
+
+      - name: Upload internal release artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: conclave-profile-lab-${{ inputs.version }}-macos
+          path: dist/conclave-profile-lab/macos/Conclave-Profile-Lab-${{ inputs.version }}-macos.zip
+          retention-days: 90
+          if-no-files-found: error

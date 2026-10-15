@@ -1,0 +1,11 @@
+# Every change needs review from the owner. These paths are the trust boundary
+# for CI, deployments, signing, and repository settings, so they are called out
+# explicitly to make them obvious in review.
+
+*                   @vitaliinoha
+
+/.github/           @vitaliinoha
+/scripts/ci/        @vitaliinoha
+/scripts/github/    @vitaliinoha
+/scripts/release/   @vitaliinoha
+/infra/             @vitaliinoha
