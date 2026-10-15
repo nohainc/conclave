@@ -378,6 +378,11 @@ export async function handleRetryWorkRequest(
       ? { retrySessionStrategy: retrySessionStrategy as "resume" | "fresh" }
       : {}),
     retryNumber,
+    // Only a failure that said "folder exists" can be answered by adopting it,
+    // and only when the user explicitly confirmed.
+    ...(errorCode === "space_folder_exists" && body.confirmSideEffects === true
+      ? { retryAdoptSpaceFolder: true }
+      : {}),
   });
   return json(
     { workRequestId, runId, stepKind, retryNumber, status: "queued" },
@@ -1194,7 +1199,7 @@ export async function handleCancelWorkRequest(
             wa.status AS assignmentStatus
        FROM workflow_tasks wt
        JOIN worker_assignments wa ON wa.task_id = wt.id
-      WHERE wt.work_request_id = ?1 AND wt.status = 'running'
+      WHERE wt.work_request_id = ?1
         AND wa.status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})
       ORDER BY wa.created_at DESC LIMIT 1`,
   )
@@ -1230,6 +1235,7 @@ export async function handleCancelWorkRequest(
       "UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status IN ('queued', 'waiting')",
     ).bind(now, workRequestId),
   ]);
+  await releaseThreadLeaseAfterCancel(env, row.threadId, workRequestId);
   if (!active) {
     await env.CONCLAVE_DB.prepare(
       "UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status = 'running'",
@@ -1324,4 +1330,44 @@ export async function handleClearWorkHistory(
   );
 
   return json({ threadId, cleared: true });
+}
+
+/**
+ * A cancelled stateful Work Request must give up its Thread runtime lease.
+ * Otherwise the lease stays active until it expires and the next request on
+ * the Thread cannot start, which surfaces as a misleading "no eligible
+ * Worker" failure. `complete` is idempotent for a lease that is already gone.
+ */
+async function releaseThreadLeaseAfterCancel(
+  env: SecurityEnv,
+  threadId: string,
+  workRequestId: string,
+): Promise<void> {
+  const namespace = env.CONCLAVE_THREAD_COORDINATOR;
+  if (!namespace) return;
+  const lease = await env.CONCLAVE_DB.prepare(
+    `SELECT id, fencing_token AS fencingToken FROM thread_runtime_leases
+      WHERE work_request_id = ?1 AND thread_id = ?2 AND status = 'active'
+      LIMIT 1`,
+  )
+    .bind(workRequestId, threadId)
+    .first<{ id: string; fencingToken: number }>();
+  if (!lease) return;
+  const response = await namespace.getByName(threadId).fetch(
+    new Request("https://thread-coordinator/complete", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-thread-id": threadId,
+      },
+      body: JSON.stringify({
+        workRequestId,
+        leaseId: lease.id,
+        fencingToken: lease.fencingToken,
+        status: "cancelled",
+      }),
+    }),
+  );
+  if (!response.ok)
+    throw new HttpError(503, "Thread execution coordinator unavailable");
 }

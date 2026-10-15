@@ -26,6 +26,7 @@ class WorkspaceShellRouter extends StatefulWidget {
     required this.onConnectWorkspace,
     required this.onSignOut,
     this.onRelease,
+    this.onReset,
     required this.onQuit,
     this.onRetry,
     this.onCheckForUpdates,
@@ -44,6 +45,7 @@ class WorkspaceShellRouter extends StatefulWidget {
   final Future<void> Function() onConnectWorkspace;
   final Future<void> Function() onSignOut;
   final Future<void> Function()? onRelease;
+  final Future<void> Function()? onReset;
   final Future<void> Function() onQuit;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onCheckForUpdates;
@@ -222,6 +224,7 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
                 child: _SignedOutShell(
                   onSignIn: widget.onSignIn,
                   signInRequired: access.signInRequired,
+                  onReset: widget.onReset,
                 ),
               );
             case HumanAuthState.reauthRequired:
@@ -232,6 +235,7 @@ class _WorkspaceShellRouterState extends State<WorkspaceShellRouter> {
                 child: _ReauthRequiredShell(
                   runtimeConnected: widget.snapshot.cloudConnected,
                   onSignIn: widget.onSignIn,
+                  onReset: widget.onReset,
                 ),
               );
             case HumanAuthState.signedIn:
@@ -346,10 +350,15 @@ class _MinimalShell extends StatelessWidget {
 }
 
 class _SignedOutShell extends StatelessWidget {
-  const _SignedOutShell({required this.onSignIn, this.signInRequired = false});
+  const _SignedOutShell({
+    required this.onSignIn,
+    this.signInRequired = false,
+    this.onReset,
+  });
 
   final Future<void> Function() onSignIn;
   final bool signInRequired;
+  final Future<void> Function()? onReset;
 
   @override
   Widget build(BuildContext context) => Center(
@@ -377,6 +386,17 @@ class _SignedOutShell extends StatelessWidget {
                   icon: const Icon(Icons.login),
                   label: const Text('Sign in'),
                 ),
+                if (onReset != null) ...[
+                  const SizedBox(height: 14),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                    onPressed: () => unawaited(onReset!()),
+                    icon: const Icon(Icons.restart_alt, size: 16),
+                    label: const Text('Reset Local Workspace'),
+                  ),
+                ],
               ]),
             ),
           ),
@@ -388,10 +408,12 @@ class _ReauthRequiredShell extends StatelessWidget {
   const _ReauthRequiredShell({
     required this.runtimeConnected,
     required this.onSignIn,
+    this.onReset,
   });
 
   final bool runtimeConnected;
   final Future<void> Function() onSignIn;
+  final Future<void> Function()? onReset;
 
   @override
   Widget build(BuildContext context) => Center(
@@ -416,6 +438,17 @@ class _ReauthRequiredShell extends StatelessWidget {
                   icon: const Icon(Icons.login),
                   label: const Text('Sign in'),
                 ),
+                if (onReset != null) ...[
+                  const SizedBox(height: 14),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Theme.of(context).colorScheme.error,
+                    ),
+                    onPressed: () => unawaited(onReset!()),
+                    icon: const Icon(Icons.restart_alt, size: 16),
+                    label: const Text('Reset Local Workspace'),
+                  ),
+                ],
               ]),
             ),
           ),

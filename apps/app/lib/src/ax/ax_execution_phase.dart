@@ -55,10 +55,10 @@ abstract final class AxExecutionPhase {
   static String? detail(String phase) => switch (phase) {
         submitted => 'Request received by Conclave',
         waitingForService => 'Waiting for the Workspace Service to be ready',
-        delivering => 'Request delivered to Conclave Service',
-        delivered => 'Command received · Worker accepted request',
+        delivering => 'Sending to your Workspace',
+        delivered => 'Worker accepted the request',
         queued => 'Waiting for an available Worker slot',
-        starting => 'Starting provider CLI',
+        starting => 'Starting your worker',
         uncertain => 'Checking whether execution is still active',
         _ => null,
       };

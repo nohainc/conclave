@@ -743,9 +743,15 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
 
   static Future<void> openAX([String? url]) async {
     try {
+      // The native handler always opens the production web app, so local
+      // builds open the local web app directly.
+      if (conclaveWorkspaceIsLocalBuild) throw StateError('local build');
       await _desktopChannel.invokeMethod<void>('openAX');
     } catch (_) {
-      final target = url ?? 'https://app.conclaveax.com';
+      final target = url ??
+          (conclaveWorkspaceIsLocalBuild
+              ? 'http://localhost:3000'
+              : 'https://app.conclaveax.com');
       if (Platform.isMacOS) {
         await Process.run('open', [target]);
       } else if (Platform.isLinux) {

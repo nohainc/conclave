@@ -344,6 +344,7 @@ class WorkspaceCloudConnection {
     this.workerInventoryProvider,
     this.onSessionReady,
     this.workspaceUpdateAvailableHandler,
+    this.onKnownSpaces,
     this.heartbeat = const Duration(seconds: 15),
     this.reconnectBaseDelay = const Duration(seconds: 2),
     this.reconnectMaxDelay = const Duration(minutes: 2),
@@ -395,6 +396,10 @@ class WorkspaceCloudConnection {
   final Future<List<Map<String, Object?>>> Function()? workerInventoryProvider;
   final Future<void> Function()? onSessionReady;
   final WorkspaceUpdateAvailableHandler? workspaceUpdateAvailableHandler;
+
+  /// Receives the Space IDs Cloud still knows for this Workspace on each
+  /// synchronization so local bookkeeping for removed Spaces can be dropped.
+  final Future<void> Function(Set<String> knownSpaceIds)? onKnownSpaces;
   final Duration heartbeat;
   final Duration reconnectBaseDelay;
   final Duration reconnectMaxDelay;
@@ -2063,6 +2068,15 @@ class WorkspaceCloudConnection {
   }
 
   Future<void> _reconcileSyncResponse(Map<String, Object?> payload) async {
+    final knownSpaces = payload['knownSpaceIds'];
+    final onKnownSpaces = this.onKnownSpaces;
+    if (knownSpaces is List && onKnownSpaces != null) {
+      try {
+        await onKnownSpaces(knownSpaces.whereType<String>().toSet());
+      } on Object {
+        // Housekeeping only; it must never block synchronization.
+      }
+    }
     final rawStates = payload['assignmentStates'];
     final journal = assignmentJournal;
     if (journal == null || rawStates is! List) return;

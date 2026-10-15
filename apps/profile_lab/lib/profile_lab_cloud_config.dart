@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 const profileLabProductionCloudOrigin = 'https://app.conclaveax.com';
+const profileLabLocalCloudOrigin = 'http://localhost:8787';
 
 /// Environment-derived Cloud default and the origin policy shared by clients.
 class ProfileLabCloudConfig {
@@ -12,7 +13,19 @@ class ProfileLabCloudConfig {
     defaultValue: profileLabProductionCloudOrigin,
   );
 
-  static String get buildDefaultOrigin => normalizeOrigin(_environmentOrigin);
+  /// Build-time target, set by the build scripts with
+  /// `--dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT=local|production`.
+  /// A build talks to exactly one Cloud; local builds are pinned to the local
+  /// API and ignore any saved override or `CONCLAVE_CLOUD_URL`.
+  static const environment = String.fromEnvironment(
+    'CONCLAVE_PROFILE_LAB_ENVIRONMENT',
+    defaultValue: 'production',
+  );
+  static const isLocalBuild = environment == 'local';
+
+  static String get buildDefaultOrigin => normalizeOrigin(
+        isLocalBuild ? profileLabLocalCloudOrigin : _environmentOrigin,
+      );
 
   static String normalizeOrigin(String value, {bool? allowInsecureLoopback}) {
     final parsed = Uri.tryParse(value.trim());
@@ -29,7 +42,9 @@ class ProfileLabCloudConfig {
     final secure = parsed.scheme.toLowerCase() == 'https';
     final loopback = const {'localhost', '127.0.0.1', '::1'}
         .contains(parsed.host.toLowerCase());
-    final allowLocalHttp = allowInsecureLoopback ?? !kReleaseMode;
+    // Local builds are release-mode bundles that talk to the local API, so
+    // they may use loopback HTTP. Production builds never can.
+    final allowLocalHttp = allowInsecureLoopback ?? (!kReleaseMode || isLocalBuild);
     if (!secure && (!loopback || !allowLocalHttp)) {
       throw ArgumentError(
         'Cloud must use HTTPS. HTTP is allowed only for loopback in development builds.',

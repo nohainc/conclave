@@ -20,6 +20,7 @@ command -v ditto >/dev/null 2>&1 || {
 }
 
 MODE="release"
+TARGET_ENV="${CONCLAVE_PROFILE_LAB_ENVIRONMENT:-production}"
 OPEN_APP="0"
 PREPARED="0"
 SIGN_APP="0"
@@ -36,6 +37,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --release)
       MODE="release"
+      shift
+      ;;
+    --local)
+      TARGET_ENV="local"
+      shift
+      ;;
+    --prod|--production)
+      TARGET_ENV="production"
       shift
       ;;
     --version|-v)
@@ -65,6 +74,9 @@ while [[ $# -gt 0 ]]; do
       echo "  --prepared         Reuse dependencies and Engine; skip clean (CI only)"
       echo "  --release          Build in release mode (default)"
       echo "  --debug            Build in debug mode"
+      echo "  --local            Local development build: talks to http://localhost:8787,"
+      echo "                     uses separate local state, shows a LOCAL banner"
+      echo "  --prod             Production build (default): talks to https://app.conclaveax.com"
       echo "  --version, -v VER  Override Profile Lab version"
       echo "  --unsigned         Skip Developer ID signing and notarization (default)"
       echo "  --sign IDENTITY    Developer ID signing identity"
@@ -72,6 +84,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --help, -h         Show this help message"
       echo ""
       echo "Environment variables:"
+      echo "  CONCLAVE_PROFILE_LAB_ENVIRONMENT     local | production (default production)"
       echo "  CONCLAVE_PROFILE_LAB_VERSION         Profile Lab version override"
       echo "  CONCLAVE_MACOS_SIGN_IDENTITY         Signing identity"
       echo "  CONCLAVE_MACOS_NOTARY_PROFILE        Keychain profile for notarization"
@@ -84,13 +97,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+case "$TARGET_ENV" in
+  local|production) ;;
+  *) echo "Unknown environment '$TARGET_ENV' (expected local or production)." >&2; exit 1 ;;
+esac
+if [[ "$TARGET_ENV" == "local" ]]; then
+  DIST_DIR="$ROOT/dist/conclave-profile-lab/macos-local"
+fi
+
 VERSION="${CONCLAVE_PROFILE_LAB_VERSION:-$(awk '/^version:/ {print $2; exit}' "$PROFILE_LAB_DIR/pubspec.yaml")}"
 if [[ -z "$VERSION" ]]; then
   echo "Could not determine Conclave Profile Lab version." >&2
   exit 1
 fi
 
-echo "Building Conclave Profile Lab $VERSION for macOS (mode: $MODE)"
+echo "Building Conclave Profile Lab $VERSION for macOS (mode: $MODE, environment: $TARGET_ENV)"
 cd "$PROFILE_LAB_DIR"
 if [[ "$PREPARED" == "1" ]]; then
   [[ -f .dart_tool/package_config.json && -x assets/engines/conclave_cli_worker_engine ]] || {
@@ -105,11 +126,13 @@ fi
 
 if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \
-    --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION"
+    --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION" \
+    --dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT="$TARGET_ENV"
   APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Debug/Conclave Profile Lab.app"
 else
   flutter build macos --release \
-    --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION"
+    --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION" \
+    --dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT="$TARGET_ENV"
   APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Release/Conclave Profile Lab.app"
 fi
 
@@ -129,7 +152,9 @@ fi
 
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
-ZIP="$DIST_DIR/Conclave-Profile-Lab-$VERSION-macos.zip"
+ZIP_SUFFIX=""
+[[ "$TARGET_ENV" == "local" ]] && ZIP_SUFFIX="-local"
+ZIP="$DIST_DIR/Conclave-Profile-Lab-$VERSION-macos$ZIP_SUFFIX.zip"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
 if [[ "$SIGN_APP" == "1" && -n "${CONCLAVE_MACOS_NOTARY_PROFILE:-}" ]]; then

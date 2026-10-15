@@ -33,8 +33,8 @@ void main() {
       expect(AxExecutionPhase.label('delivering'), 'Queued');
       expect(AxExecutionPhase.label('starting'), 'Starting');
       expect(AxExecutionPhase.detail('delivering'),
-          'Request delivered to Conclave Service');
-      expect(AxExecutionPhase.detail('starting'), 'Starting provider CLI');
+          'Sending to your Workspace');
+      expect(AxExecutionPhase.detail('starting'), 'Starting your worker');
     });
 
     test('advances only forward and never from or to a terminal phase', () {
@@ -147,7 +147,7 @@ void main() {
         expect(progress.isExecuting, isFalse, reason: phase);
       }
       expect(resolve('running', 'starting').currentAction,
-          'Starting provider CLI');
+          'Starting your worker');
     });
 
     test('Running only once Cloud says running', () {

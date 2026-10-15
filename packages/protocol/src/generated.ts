@@ -7,6 +7,7 @@ export const EXECUTION_ERROR_CODES = [
   "unsupported_cli_version",
   "model_not_supported",
   "permission_denied",
+  "space_folder_exists",
   "quota_exhausted",
   "provider_unavailable",
   "timeout",
@@ -22,6 +23,8 @@ export const EXECUTION_ERROR_MESSAGES = {
   model_not_supported: "The selected model is not supported by this Worker.",
   permission_denied:
     "A local permission required for this assignment was denied.",
+  space_folder_exists:
+    "A folder with this Space's name already exists on the Workspace and is not empty. Confirm to use it.",
   quota_exhausted: "The provider's usage limit has been reached.",
   provider_unavailable: "The provider is temporarily unavailable.",
   timeout: "The assignment exceeded its time limit.",

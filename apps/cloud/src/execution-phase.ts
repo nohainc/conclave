@@ -40,6 +40,7 @@ export type FailureCategory =
   | "worker_unavailable"
   | "capacity_exceeded"
   | "profile_incompatible"
+  | "space_folder_confirmation_required"
   | "provider_start_failed"
   | "startup_timeout"
   | "execution_failed"
@@ -54,6 +55,8 @@ export const FAILURE_CATEGORY_MESSAGES: Readonly<
   worker_unavailable: "Worker is not ready",
   capacity_exceeded: "Waiting for an available Worker slot",
   profile_incompatible: "Worker Profile is incompatible",
+  space_folder_confirmation_required:
+    "A folder with this Space's name already exists and is not empty",
   provider_start_failed: "AI provider could not start",
   startup_timeout: "Worker startup timed out",
   execution_failed: "Worker execution failed",
@@ -81,10 +84,10 @@ export const EXECUTION_PHASE_DETAILS: Readonly<
 > = {
   submitted: "Request received by Conclave",
   waiting_for_service: "Waiting for the Workspace Service to be ready",
-  delivering: "Request delivered to Conclave Service",
-  delivered: "Command received",
+  delivering: "Sending to your Workspace",
+  delivered: "Worker accepted the request",
   queued: "Waiting for an available Worker slot",
-  starting: "Starting provider CLI",
+  starting: "Starting your worker",
   running: null,
   completed: null,
   failed: null,
@@ -244,6 +247,9 @@ export function deriveFailureCategory(
   const code = evidence.errorCode ?? "execution_failed";
 
   if (evidence.runningAt) return "execution_failed";
+  if (code === "space_folder_exists") {
+    return "space_folder_confirmation_required";
+  }
   if (
     diagnosticStage === "workspace_disconnect" ||
     diagnosticStage === "workspace_lease" ||
@@ -287,6 +293,11 @@ export function deriveRetryAdvice(
   }
   if (phase !== "failed") return null;
   const { revocationObservedStatus } = parseError(evidence.errorJson);
+  // The Service stopped before any provider work; the only thing the user
+  // must decide is whether the existing folder may be used.
+  if (evidence.errorCode === "space_folder_exists") {
+    return { allowed: true, requiresConfirmation: true };
+  }
   const providerMayHaveStarted =
     Boolean(evidence.runningAt) ||
     revocationObservedStatus === "running" ||

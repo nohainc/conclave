@@ -247,3 +247,19 @@ The native bridge exposes selected operational fields only, never the launchd
 environment or the local capability key. IPC remains independent of Cloud
 connectivity. Login/reboot, TCC and signed-device acceptance remain separate
 release checks.
+
+## Local vs production builds
+
+A Workspace build targets exactly one Cloud; there is no runtime switch.
+
+| Command | Cloud API | State directory (macOS) |
+| --- | --- | --- |
+| `pnpm workspace:build:macos:prod` (default) | `https://app.conclaveax.com` | `~/Library/Application Support/Conclave` |
+| `pnpm workspace:build:macos:local` | `http://localhost:8787` | `~/Library/Application Support/Conclave Local` |
+
+Local builds are produced with `--dart-define=CONCLAVE_WORKSPACE_ENVIRONMENT=local`,
+show an orange "LOCAL DEVELOPMENT BUILD" banner, ignore saved or environment
+Cloud URLs, and write to a separate state directory so they never touch a
+production registration or session. Start the local API/web stack first with
+`pnpm app:run:local`. Local and production bundles share one launchd service
+label, so run only one at a time.

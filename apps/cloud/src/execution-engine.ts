@@ -27,6 +27,7 @@ export interface WorkerStepExecutionInput {
     readonly stepKind?: unknown;
     readonly sessionStrategy?: unknown;
     readonly number?: unknown;
+    readonly adoptSpaceFolder?: boolean;
   };
 }
 
@@ -70,6 +71,9 @@ export function prepareWorkerStepExecution(
       }),
       spaceId: scope.spaceId,
       ...(scope.spaceName ? { spaceName: scope.spaceName } : {}),
+      ...(input.retry.adoptSpaceFolder === true
+        ? { spaceFolderAdoptionConfirmed: true }
+        : {}),
       requestedByUserId: scope.requesterUserId,
       threadId: scope.threadId,
       workRequestId: scope.workRequestId,

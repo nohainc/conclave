@@ -26,14 +26,14 @@ IP="${IP:-127.0.0.1}"
 API_HOST="${API_HOST:-localhost}"
 DEVICE="${DEVICE:-chrome}"
 WEB_PORT="${WEB_PORT:-3000}"
-ISOLATED=false
+ISOLATED=true
 WEB_BUILD_MODE=debug
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 usage() {
-  echo "Usage: pnpm start:local [--isolated] [--web-release] [-p port] [-d device] [-i ip] [--web-port port] [--api-host host]"
+  echo "Usage: pnpm start:local [--proxy] [--isolated] [--web-release] [-p port] [-d device] [-i ip] [--web-port port] [--api-host host]"
 }
 
 option_value() {
@@ -54,6 +54,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --isolated)
       ISOLATED=true
+      shift
+      ;;
+    --proxy)
+      ISOLATED=false
       shift
       ;;
     -d|--device)

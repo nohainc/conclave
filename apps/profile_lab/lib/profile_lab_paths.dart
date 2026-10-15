@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'profile_lab_cloud_config.dart';
+
 /// Standard, isolated filesystem paths for Conclave Profile Lab on macOS.
 ///
 /// Profile Lab uses its own subtree of the Conclave application-family root,
@@ -14,8 +16,13 @@ class ProfileLabPaths {
 
   /// Application-managed Profile Lab data:
   /// `~/Library/Application Support/Conclave/Profile Lab/`
+  ///
+  /// Local development builds use `Conclave Local` instead of `Conclave` so
+  /// drafts and settings never mix with the production app.
   Directory get applicationSupportDirectory => Directory(
-        '$_home/Library/Application Support/Conclave/Profile Lab',
+        '$_home/Library/Application Support/'
+        '${ProfileLabCloudConfig.isLocalBuild ? 'Conclave Local' : 'Conclave'}'
+        '/Profile Lab',
       );
 
   /// Isolated drafts storage root:

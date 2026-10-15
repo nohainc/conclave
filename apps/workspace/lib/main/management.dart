@@ -7,9 +7,7 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
     if (context == null) return;
     final dataDirectory = lifecycle.config.dataDirectory;
     final registration = WorkspaceRegistrationStore(dataDirectory).readSync();
-    final cloudUrl = registration?.cloudUrl ??
-        Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL'] ??
-        conclaveProductionCloudUrl;
+    final cloudUrl = resolveWorkspaceCloudUrl(registration?.cloudUrl);
     try {
       final encoded =
           await lifecycle.credentialStore.read(desktopHumanCredentialKey);
@@ -188,7 +186,7 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
     final registration = WorkspaceRegistrationStore(
       widget.lifecycle.config.dataDirectory,
     ).readSync();
-    final cloudUrl = registration?.cloudUrl ?? conclaveProductionCloudUrl;
+    final cloudUrl = resolveWorkspaceCloudUrl(registration?.cloudUrl);
     final client = DesktopAuthClient(cloudUrl: cloudUrl);
     try {
       final intent = await client.createIntent();

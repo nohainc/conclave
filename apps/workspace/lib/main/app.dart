@@ -446,9 +446,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     if (dialogContext == null) return;
     final registration =
         WorkspaceRegistrationStore(lifecycle.config.dataDirectory).readSync();
-    final cloudUrl = registration?.cloudUrl ??
-        Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL'] ??
-        conclaveProductionCloudUrl;
+    final cloudUrl = resolveWorkspaceCloudUrl(registration?.cloudUrl);
     final client = DesktopAuthClient(cloudUrl: cloudUrl);
     DesktopHumanSession? previousSession;
     var failureContext = 'creating the sign-in request';
@@ -714,7 +712,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
         WorkspaceRegistrationStore(lifecycle.config.dataDirectory).readSync();
     await revokeAndForgetDesktopHumanSession(
       credentialStore: lifecycle.credentialStore,
-      cloudUrl: registration?.cloudUrl ?? conclaveProductionCloudUrl,
+      cloudUrl: resolveWorkspaceCloudUrl(registration?.cloudUrl),
     );
     if (mounted) setState(() => _workerRevision++);
   }
@@ -752,9 +750,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     final registration =
         WorkspaceRegistrationStore(widget.lifecycle.config.dataDirectory)
             .readSync();
-    final cloudUrl = registration?.cloudUrl ??
-        Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL'] ??
-        conclaveProductionCloudUrl;
+    final cloudUrl = resolveWorkspaceCloudUrl(registration?.cloudUrl);
     final client = DesktopAuthClient(cloudUrl: cloudUrl);
     try {
       await client.validateSession(session);
@@ -841,6 +837,13 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       theme: ConclaveBrand.lightTheme(),
       darkTheme: ConclaveBrand.darkTheme(),
       themeMode: ThemeMode.system,
+      builder: (context, child) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (conclaveWorkspaceIsLocalBuild) const _LocalBuildBanner(),
+          Expanded(child: child ?? const SizedBox.shrink()),
+        ],
+      ),
       home: Scaffold(
         body: ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 750, minHeight: 650),
@@ -850,8 +853,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
               : WorkspaceShellRouter(
                   snapshot: lifecycle.uiSnapshot,
                   credentialStore: lifecycle.credentialStore,
-                  cloudUrl: lifecycle.uiSnapshot.cloudUrl ??
-                      conclaveProductionCloudUrl,
+                  cloudUrl: resolveWorkspaceCloudUrl(
+                      lifecycle.uiSnapshot.cloudUrl),
                   refreshToken: _workerRevision,
                   restoreSession: _restoreDesktopSession,
                   onSignIn: _signInDesktopHuman,
@@ -859,6 +862,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
                   onSignOut: _signOutDesktopHuman,
                   onCheckForUpdates: _checkForUpdates,
                   onRelease: _releaseWorkspaceOwnership,
+                  onReset: _resetLocalWorkspace,
                   onQuit: _confirmQuit,
                   onManagementAuthRequiredChanged:
                       lifecycle.updateManagementAuthRequired,
@@ -868,4 +872,32 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       ),
     );
   }
+}
+
+/// Shown only in local development builds so they cannot be mistaken for the
+/// production Workspace app.
+class _LocalBuildBanner extends StatelessWidget {
+  const _LocalBuildBanner();
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: const Color(0xFFB45309),
+        child: SafeArea(
+          bottom: false,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+            child: const Text(
+              'LOCAL DEVELOPMENT BUILD · Cloud API: $conclaveLocalCloudUrl',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
+        ),
+      );
 }

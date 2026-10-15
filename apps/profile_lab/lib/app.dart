@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'controllers/profile_lab_controller.dart';
+import 'profile_lab_cloud_config.dart';
 import 'theme/profile_lab_theme.dart';
 import 'views/audit_view.dart';
 import 'widgets/lab_shortcuts.dart';
@@ -49,6 +50,14 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
       title: 'Conclave Profile Lab',
       debugShowCheckedModeBanner: false,
       theme: ProfileLabTheme.darkTheme,
+      builder: (context, child) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (ProfileLabCloudConfig.isLocalBuild)
+            _LocalBuildBanner(origin: c.cloudUrl),
+          Expanded(child: child ?? const SizedBox.shrink()),
+        ],
+      ),
       home: Builder(
           builder: (context) => Scaffold(
                   body: LabShortcuts(
@@ -391,4 +400,31 @@ class _AreaButton extends StatelessWidget {
                 icon: Icon(icon, size: 18),
                 label: Text(label))));
   }
+}
+
+/// Shown only in local development builds so they cannot be mistaken for the
+/// production Profile Lab app.
+class _LocalBuildBanner extends StatelessWidget {
+  const _LocalBuildBanner({required this.origin});
+
+  final String origin;
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: const Color(0xFFB45309),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+          child: Text(
+            'LOCAL DEVELOPMENT BUILD · Cloud API: $origin',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ),
+      );
 }

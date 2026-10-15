@@ -627,6 +627,9 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           onSessionReady: () async {
             await workerCatalogCoordinator?.refresh(force: true);
           },
+          onKnownSpaces: (spaceIds) async {
+            await spaceDirectoryLifecycle.forgetSpacesExcept(spaceIds);
+          },
           workspaceUpdateAvailableHandler: (payload) async {
             final controller = updateController;
             if (controller == null) return;

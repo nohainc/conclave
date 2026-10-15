@@ -2,6 +2,29 @@ import 'dart:async';
 import 'dart:io';
 
 const conclaveProductionCloudUrl = 'https://app.conclaveax.com';
+const conclaveLocalCloudUrl = 'http://localhost:8787';
+
+/// Build-time target environment, set by the build scripts with
+/// `--dart-define=CONCLAVE_WORKSPACE_ENVIRONMENT=local|production`.
+/// A Workspace build talks to exactly one Cloud; there is no runtime switch.
+const conclaveWorkspaceEnvironment = String.fromEnvironment(
+  'CONCLAVE_WORKSPACE_ENVIRONMENT',
+  defaultValue: 'production',
+);
+const conclaveWorkspaceIsLocalBuild = conclaveWorkspaceEnvironment == 'local';
+
+/// Cloud origin used when no explicit argument overrides it. Local builds
+/// always use the local API and ignore any saved or environment URL, so a
+/// local build can never silently talk to production.
+String resolveWorkspaceCloudUrl(String? savedCloudUrl) {
+  if (conclaveWorkspaceIsLocalBuild) return conclaveLocalCloudUrl;
+  if (savedCloudUrl != null && savedCloudUrl.isNotEmpty) return savedCloudUrl;
+  final fromEnvironment = Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL'];
+  if (fromEnvironment != null && fromEnvironment.isNotEmpty) {
+    return fromEnvironment;
+  }
+  return conclaveProductionCloudUrl;
+}
 const conclaveWorkspaceAppVersion =
     String.fromEnvironment('CONCLAVE_WORKSPACE_VERSION', defaultValue: '1.0.3');
 

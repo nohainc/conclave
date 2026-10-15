@@ -703,7 +703,8 @@ void _validateActivityMappings(Object? value) {
     throw const FormatException('activity mapping container is invalid');
   }
   if (value['adapter'] != null &&
-      !const {'codex-jsonl', 'agy-stream-json'}.contains(value['adapter'])) {
+      !const {'codex-jsonl', 'agy-stream-json', 'claude-stream-json'}
+          .contains(value['adapter'])) {
     throw const FormatException('activity adapter is invalid');
   }
   if (value['schemaVersion'] != null && value['schemaVersion'] != 1) {

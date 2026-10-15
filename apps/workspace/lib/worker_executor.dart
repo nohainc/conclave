@@ -340,10 +340,19 @@ class WorkerAssignmentHandler {
     if (spaceId != null) {
       final spaceLifecycle = spaceDirectoryLifecycle;
       if (spaceLifecycle != null) {
-        directory = await spaceLifecycle.ensureForExecution(
-          spaceId: spaceId,
-          spaceName: _spaceName(context.payload),
-        );
+        try {
+          directory = await spaceLifecycle.ensureForExecution(
+            spaceId: spaceId,
+            spaceName: _spaceName(context.payload),
+            adoptExistingFolder: _adoptSpaceFolder(context.payload),
+          );
+        } on SpaceFolderExistsException {
+          throw AssignmentExecutionFailure(
+            code: 'space_folder_exists',
+            message: executionErrorMessage('space_folder_exists'),
+            retryable: false,
+          );
+        }
       } else {
         final legacyLifecycle = threadDirectoryLifecycle;
         if (legacyLifecycle == null) {
@@ -558,6 +567,7 @@ class WorkerAssignmentHandler {
           spaceId: spaceId,
           threadId: threadId,
           spaceName: _spaceName(context.payload),
+          adoptExistingFolder: _adoptSpaceFolder(context.payload),
           leaseId: leaseId,
           fencingToken: fencingToken,
           action: (_) {
@@ -673,6 +683,9 @@ class WorkerAssignmentHandler {
       // Observation must never affect assignment execution.
     }
   }
+
+  bool _adoptSpaceFolder(Map<String, Object?> payload) =>
+      payload['spaceFolderAdoptionConfirmed'] == true;
 
   String _spaceName(Map<String, Object?> payload) {
     final value = payload['spaceName'];

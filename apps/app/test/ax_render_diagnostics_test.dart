@@ -120,4 +120,51 @@ void main() {
     expect(records.last['threadId'], 'thread-1');
     expect(records.last['tab'], 'work');
   });
+
+  test('recognizes the disposed-view render assertion only', () {
+    expect(
+      AxRenderDiagnostics.isDisposedViewRenderError(
+        FlutterErrorDetails(
+          exception: AssertionError(
+            'Trying to render a disposed EngineFlutterView.',
+          ),
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      AxRenderDiagnostics.isDisposedViewRenderError(
+        FlutterErrorDetails(
+          exception: FlutterError('setState() called after dispose()'),
+        ),
+      ),
+      isFalse,
+    );
+  });
+
+  test('recognizes the detached platform view assertion only', () {
+    final platformStack = StackTrace.fromString(
+      'package:flutter/src/rendering/box.dart 3092:39 localToGlobal\n'
+      'package:flutter/src/widgets/platform_view.dart 1608:22 <fn>',
+    );
+    expect(
+      AxRenderDiagnostics.isDetachedPlatformViewError(
+        FlutterErrorDetails(
+          exception: AssertionError('attached\nis not true'),
+          stack: platformStack,
+        ),
+      ),
+      isTrue,
+    );
+    // Same assertion from app or other framework code is still reported.
+    expect(
+      AxRenderDiagnostics.isDetachedPlatformViewError(
+        FlutterErrorDetails(
+          exception: AssertionError('attached\nis not true'),
+          stack: StackTrace.fromString('package:app/x.dart 1:1 build'),
+        ),
+      ),
+      isFalse,
+    );
+  });
 }

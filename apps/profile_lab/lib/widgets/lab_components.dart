@@ -89,7 +89,7 @@ class StatusBadge extends StatelessWidget {
     final color = switch (status) {
       LabStatus.success => ProfileLabTheme.passColor,
       LabStatus.warning => ProfileLabTheme.warnColor,
-      LabStatus.error => ProfileLabTheme.failColor,
+      LabStatus.error => const Color(0xffff6b6b),
       LabStatus.neutral => ProfileLabTheme.secondaryText
     };
     final symbol = icon ??

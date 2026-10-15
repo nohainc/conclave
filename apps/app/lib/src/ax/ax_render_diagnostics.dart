@@ -17,6 +17,30 @@ class AxRenderDiagnostics {
   bool Function(Object error, StackTrace stack)? _previousPlatformError;
   bool _installed = false;
   bool _reporting = false;
+  bool _reportedDisposedView = false;
+  bool _reportedDetachedPlatformView = false;
+
+  /// Whether [details] is the engine assertion raised when a frame is rendered
+  /// into an already disposed `EngineFlutterView`.
+  @visibleForTesting
+  static bool isDisposedViewRenderError(FlutterErrorDetails details) =>
+      details
+          .exceptionAsString()
+          .contains('Trying to render a disposed EngineFlutterView');
+
+  /// Whether [details] is the debug-only framework assertion raised when a
+  /// platform view's post-frame position update runs after its render object
+  /// was detached (`localToGlobal` in `platform_view.dart`). It happens when
+  /// the view is removed in the same frame, asserts are compiled out of
+  /// release builds, and it is raised inside the framework, not by app code.
+  @visibleForTesting
+  static bool isDetachedPlatformViewError(FlutterErrorDetails details) {
+    final stack = details.stack?.toString() ?? '';
+    return details.exception is AssertionError &&
+        stack.contains('platform_view.dart') &&
+        stack.contains('localToGlobal') &&
+        details.exceptionAsString().contains('attached');
+  }
 
   List<Map<String, Object?>> get recent => List.unmodifiable(_recent);
 
@@ -25,6 +49,32 @@ class AxRenderDiagnostics {
     _installed = true;
     _previousFlutterError = FlutterError.onError;
     FlutterError.onError = (details) {
+      // After a web hot restart (or when the tab replaces the view) the
+      // engine keeps scheduling frames for the disposed view and every one
+      // throws this assertion. It is a debug-only engine artifact, not an app
+      // failure: report it once per session and do not dump it each frame.
+      if (isDisposedViewRenderError(details)) {
+        if (!_reportedDisposedView) {
+          _reportedDisposedView = true;
+          record('exception', contextData: {
+            'category': 'disposed_view_render',
+            'error': 'Frame requested for a disposed Flutter view; '
+                'ignored (usually a web hot restart). Reload the tab.',
+          });
+        }
+        return;
+      }
+      if (isDetachedPlatformViewError(details)) {
+        if (!_reportedDetachedPlatformView) {
+          _reportedDetachedPlatformView = true;
+          record('exception', contextData: {
+            'category': 'detached_platform_view',
+            'error': 'A platform view updated its position after it was '
+                'removed; ignored (debug-only framework assertion).',
+          });
+        }
+        return;
+      }
       captureFlutterError(details);
       _previousFlutterError?.call(details);
     };

@@ -6,6 +6,7 @@ import 'secure_credentials.dart';
 import 'workspace_lifecycle.dart';
 import 'workspace_lifecycle_store.dart';
 import 'workspace_paths.dart';
+import 'workspace_registration_models.dart';
 import 'platform_runtime.dart';
 
 /// The inputs consumed by the headless Workspace Service. These values are
@@ -67,9 +68,12 @@ class WorkspaceConfigurationResolver {
         WorkspaceLifecyclePreferencesStore(dataDirectory).readSync();
     final cloudUrl = cloudIndex >= 0 && cloudIndex + 1 < args.length
         ? args[cloudIndex + 1]
-        : (!ignoreSavedRegistration && savedRegistration?.cloudUrl != null
-            ? savedRegistration!.cloudUrl
-            : Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL']);
+        // Local builds are pinned to the local Cloud API.
+        : conclaveWorkspaceIsLocalBuild
+            ? conclaveLocalCloudUrl
+            : (!ignoreSavedRegistration && savedRegistration?.cloudUrl != null
+                ? savedRegistration!.cloudUrl
+                : Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL']);
     final workspaceRuntimeId =
         workspaceRuntimeIndex >= 0 && workspaceRuntimeIndex + 1 < args.length
             ? args[workspaceRuntimeIndex + 1]

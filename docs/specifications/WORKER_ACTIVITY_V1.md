@@ -53,8 +53,9 @@ names and nesting differ.
 
 ## Provider normalization
 
-Profiles for the current Codex JSONL and agy stream-JSON formats may declare
-`activity.adapter` (`codex-jsonl` or `agy-stream-json`) with
+Profiles for the current Codex JSONL, agy stream-JSON and Claude Code
+stream-JSON formats may declare `activity.adapter` (`codex-jsonl`,
+`agy-stream-json` or `claude-stream-json`) with
 `activity.schemaVersion: 1`. The generic Engine uses the adapter only for
 provider lifecycle families that the bounded selector grammar cannot represent:
 tool failures, intermediate tool updates, missing provider identifiers,
@@ -70,6 +71,21 @@ Engine emits a bounded diagnostic activity once per diagnostic class for
 malformed JSON, unsupported event shapes, and provider errors. Unsupported CLI
 versions fail through the existing Profile compatibility gate before execution;
 they are not silently normalized as a compatible stream.
+
+The `claude-stream-json` adapter reads Claude Code `--output-format
+stream-json` messages. Tool calls live inside the `content` array of whole
+`assistant` and `user` messages, which the selector grammar cannot index, so
+the adapter inspects only block types, tool names and identifiers: an
+`assistant` `tool_use` block becomes `tool.started` keyed by its `id`, a
+`user` `tool_result` block becomes `tool.completed` (or `tool.failed` when
+`is_error` is true) keyed by `tool_use_id`, and `thinking` and `text` blocks
+become `model.status` and `message.updated`. Text, thinking, tool input and
+tool results are never read into activity. The session `system`/`init` message
+becomes `model.started`, so the Claude Profile declares the adapter with an
+empty `mappings` list. Titles come from a fixed table keyed
+by tool name. Messages arrive per completed assistant message; token-level
+partial messages (`--include-partial-messages`) are intentionally not enabled
+because they would multiply provider output against the Engine's output limit.
 
 The official Codex Profile (`docs/profile-templates/chatgpt-codex-runtime-catalog.v2.json`)
 declares `activity.adapter: codex-jsonl` and maps the Codex `exec --json` item

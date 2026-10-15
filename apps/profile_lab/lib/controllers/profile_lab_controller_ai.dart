@@ -6,8 +6,7 @@ mixin _ProfileLabAiOperations on _ProfileLabControllerState {
 
   Future<List<ProfileLabAiModelOption>> loadAvailableAiModels() async {
     if (currentSession == null || currentSession!.isExpired) {
-      throw StateError(
-          'Sign in to Cloud to load current Worker Profiles.');
+      throw StateError('Sign in to Cloud to load current Worker Profiles.');
     }
     final models = await _modelProposalService.loadAvailableModels(
       apiClient: apiClient,

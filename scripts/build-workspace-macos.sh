@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
-DIST_DIR="$ROOT/dist/conclave-workspace/macos"
+DIST_DIR="$ROOT/dist/conclave-workspace/macos"  # suffixed with -local for local builds below
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "Conclave Workspace macOS builds must run on macOS." >&2
@@ -20,6 +20,7 @@ command -v ditto >/dev/null 2>&1 || {
 }
 
 MODE="release"
+TARGET_ENV="${CONCLAVE_WORKSPACE_ENVIRONMENT:-production}"
 OPEN_APP="0"
 PREPARED="0"
 DEFAULT_CONCLAVE_MACOS_SIGN_IDENTITY='Apple Development: vitalii@nohainc.com (7X62W6499P)'
@@ -36,6 +37,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --release)
       MODE="release"
+      shift
+      ;;
+    --local)
+      TARGET_ENV="local"
+      shift
+      ;;
+    --prod|--production)
+      TARGET_ENV="production"
       shift
       ;;
     --version|-v)
@@ -60,12 +69,16 @@ while [[ $# -gt 0 ]]; do
       echo "  --prepared         Reuse dependencies and Engine; skip clean (CI only)"
       echo "  --release          Build in release mode (default)"
       echo "  --debug            Build in debug mode"
+      echo "  --local            Local development build: talks to http://localhost:8787,"
+      echo "                     uses separate local state, shows a LOCAL banner"
+      echo "  --prod             Production build (default): talks to https://app.conclaveax.com"
       echo "  --version, -v VER  Override workspace version"
       echo "  --sign IDENTITY    Apple signing identity"
       echo "  --open, -o         Open the built application bundle after build"
       echo "  --help, -h         Show this help message"
       echo ""
       echo "Environment variables:"
+      echo "  CONCLAVE_WORKSPACE_ENVIRONMENT       local | production (default production)"
       echo "  CONCLAVE_WORKSPACE_VERSION           Workspace version override"
       echo "  CONCLAVE_MACOS_SIGN_IDENTITY         Signing identity override"
       echo "  CONCLAVE_MACOS_NOTARY_PROFILE        Keychain profile for notarization"
@@ -97,6 +110,15 @@ if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
   fi
 fi
 
+case "$TARGET_ENV" in
+  local|production) ;;
+  *) echo "Unknown environment '$TARGET_ENV' (expected local or production)." >&2; exit 1 ;;
+esac
+
+if [[ "$TARGET_ENV" == "local" ]]; then
+  DIST_DIR="$ROOT/dist/conclave-workspace/macos-local"
+fi
+
 VERSION="${CONCLAVE_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$WORKSPACE_DIR/pubspec.yaml")}"
 if [[ -z "$VERSION" ]]; then
   echo "Could not determine Conclave Workspace version." >&2
@@ -104,7 +126,7 @@ if [[ -z "$VERSION" ]]; then
 fi
 
 PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-release-trust.mjs")"
-echo "Building Conclave Workspace $VERSION for macOS (mode: $MODE)"
+echo "Building Conclave Workspace $VERSION for macOS (mode: $MODE, environment: $TARGET_ENV)"
 cd "$WORKSPACE_DIR"
 if [[ "$PREPARED" == "1" ]]; then
   [[ -f .dart_tool/package_config.json && -x assets/engines/conclave_cli_worker_engine ]] || {
@@ -120,11 +142,13 @@ fi
 if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \
     --dart-define=CONCLAVE_WORKSPACE_VERSION="$VERSION" \
+    --dart-define=CONCLAVE_WORKSPACE_ENVIRONMENT="$TARGET_ENV" \
     --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="$PUBLIC_RELEASE_ROOTS"
   APP="$WORKSPACE_DIR/build/macos/Build/Products/Debug/Conclave Workspace.app"
 else
   flutter build macos --release \
     --dart-define=CONCLAVE_WORKSPACE_VERSION="$VERSION" \
+    --dart-define=CONCLAVE_WORKSPACE_ENVIRONMENT="$TARGET_ENV" \
     --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="$PUBLIC_RELEASE_ROOTS"
   APP="$WORKSPACE_DIR/build/macos/Build/Products/Release/Conclave Workspace.app"
 fi
@@ -152,6 +176,7 @@ LAUNCH_AGENTS_DIR="$APP/Contents/Library/LaunchAgents"
 mkdir -p "$HELPERS_DIR/assets/engines" "$LAUNCH_AGENTS_DIR"
 "$DART" compile exe \
   --define="CONCLAVE_WORKSPACE_VERSION=$VERSION" \
+  --define="CONCLAVE_WORKSPACE_ENVIRONMENT=$TARGET_ENV" \
   --define="CONCLAVE_RELEASE_TRUST_KEYS_JSON=$PUBLIC_RELEASE_ROOTS" \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
   "$WORKSPACE_DIR/bin/conclave_workspace_service.dart" \
@@ -255,7 +280,9 @@ bash "$ROOT/scripts/verify-workspace-service-bundle.sh" "$APP"
 
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
-ZIP="$DIST_DIR/Conclave-Workspace-$VERSION-macos.zip"
+ZIP_SUFFIX=""
+[[ "$TARGET_ENV" == "local" ]] && ZIP_SUFFIX="-local"
+ZIP="$DIST_DIR/Conclave-Workspace-$VERSION-macos$ZIP_SUFFIX.zip"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
 if [[ -n "${CONCLAVE_MACOS_NOTARY_PROFILE:-}" ]]; then

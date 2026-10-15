@@ -16,6 +16,8 @@ String _executionFailureMessage(String? code, {String? validationMessage}) =>
         'The worker could not continue the previous conversation. Please retry your request.',
       'worker_not_ready' =>
         'The selected worker is not ready on its workspace.',
+      'space_folder_exists' =>
+        'A folder with this Space’s name already exists and is not empty. Retry to choose whether to use it.',
       'cli_not_found' ||
       'provider_tool_unavailable' =>
         'The worker needs to be set up on its workspace before it can respond.',
@@ -1143,15 +1145,28 @@ class _WorkTimelineCard extends StatelessWidget {
                                 builder: (context, now) {
                                   final live = resolveProgress(now);
                                   final text = live.currentAction ?? '';
-                                  final labelled =
-                                      AxExecutionPhase.isKnown(executionPhase)
-                                          ? '${live.statusLabel} · $text'
-                                          : text;
-                                  return Text(
-                                    live.isStale
+                                  // The label only adds information while
+                                  // the request is waiting. Once the Worker
+                                  // is starting or running, the action says
+                                  // it ("Working…"), so repeating "Running ·"
+                                  // would be noise.
+                                  final labelled = AxExecutionPhase.isKnown(
+                                              executionPhase) &&
+                                          !live.isExecuting &&
+                                          executionPhase !=
+                                              AxExecutionPhase.starting
+                                      ? '${live.statusLabel} · $text'
+                                      : text;
+                                  return AxSettledStatusText(
+                                    key: const ValueKey('work-live-status'),
+                                    text: live.isStale
                                         ? '$labelled · no recent updates'
                                         : labelled,
-                                    key: const ValueKey('work-live-status'),
+                                    // Pre-start phases change within a few
+                                    // hundred milliseconds; settle them. A
+                                    // running provider, new Worker activity
+                                    // and recovery notices show at once.
+                                    urgent: live.isExecuting || !isPreStart,
                                     style: ConclaveMessageTypography.fromTheme(
                                             Theme.of(context))
                                         .copyWith(
@@ -1208,10 +1223,12 @@ class _WorkTimelineCard extends StatelessWidget {
                                     failedStep.retryAllowed &&
                                     onRetryStep != null)
                                   compactAction(
-                                    tooltip: failedStep
-                                            .retryRequiresConfirmation
-                                        ? 'Retry anyway — the previous execution may already have made changes'
-                                        : 'Retry',
+                                    tooltip: failedStep.errorCode ==
+                                            'space_folder_exists'
+                                        ? 'Use the existing folder and retry'
+                                        : failedStep.retryRequiresConfirmation
+                                            ? 'Retry anyway — the previous execution may already have made changes'
+                                            : 'Retry',
                                     icon: Icons.refresh_rounded,
                                     onPressed: () =>
                                         onRetryStep!(request.id, failedStep),
@@ -1376,6 +1393,63 @@ class _WorkActivityTrail extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Live status line that does not flicker through short-lived pre-start
+/// phases. See [AxStatusSettler] for the rules. Errors, a running provider
+/// and new Worker activity are passed with [urgent] and show immediately.
+class AxSettledStatusText extends StatefulWidget {
+  const AxSettledStatusText({
+    super.key,
+    required this.text,
+    required this.urgent,
+    this.style,
+    this.clock,
+    this.settleDelay = const Duration(milliseconds: 700),
+    this.minDisplay = const Duration(milliseconds: 600),
+  });
+
+  final String text;
+  final bool urgent;
+  final TextStyle? style;
+
+  /// Overrides the wall clock; used by tests.
+  final DateTime Function()? clock;
+  final Duration settleDelay;
+  final Duration minDisplay;
+
+  @override
+  State<AxSettledStatusText> createState() => _AxSettledStatusTextState();
+}
+
+class _AxSettledStatusTextState extends State<AxSettledStatusText> {
+  late final AxStatusSettler _settler = AxStatusSettler(
+    settleDelay: widget.settleDelay,
+    minDisplay: widget.minDisplay,
+  );
+  Timer? _timer;
+
+  DateTime _now() => (widget.clock ?? DateTime.now)();
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = _settler.update(widget.text, _now(), urgent: widget.urgent);
+    _timer?.cancel();
+    _timer = null;
+    final wait = _settler.nextCheck;
+    if (wait != null) {
+      _timer = Timer(wait, () {
+        if (mounted) setState(() {});
+      });
+    }
+    return Text(shown ?? '', style: widget.style);
   }
 }
 

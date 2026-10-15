@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'platform_runtime.dart';
+import 'workspace_registration_models.dart';
 
 /// Owns the on-disk layout for the Workspace desktop runtime.
 ///
@@ -22,11 +23,16 @@ class WorkspacePaths {
         runtime.homeDirectory,
         'Library',
         'Application Support',
-        'Conclave',
+        // Local development builds keep their state apart from the
+        // production app so registrations and sessions never mix.
+        conclaveWorkspaceIsLocalBuild ? 'Conclave Local' : 'Conclave',
       ]));
     }
+    final folder = conclaveWorkspaceIsLocalBuild
+        ? '.conclave-workspace-local'
+        : '.conclave-workspace';
     return Directory(
-        '${runtime.homeDirectory}${Platform.pathSeparator}.conclave-workspace');
+        '${runtime.homeDirectory}${Platform.pathSeparator}$folder');
   }
 
   static Directory defaultWorkspaceDirectory({PlatformRuntime? platform}) =>

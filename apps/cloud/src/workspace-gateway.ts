@@ -941,7 +941,12 @@ export class WorkspaceGateway implements DurableObject {
           // the last installation that happened to publish Workspace facts.
           await this.state.storage.put("execution-capabilities", {
             sessionId,
-            runtimeId: message.workspaceRuntimeId,
+            // The authenticated runtime identity is authoritative. The hello
+            // envelope's own `workspaceRuntimeId` is optional (the long-poll
+            // transport omits it) and was previously stored as null, which
+            // made every assignment look like the Service lacked the
+            // start-permit capability.
+            runtimeId: this.workspaceRuntimeId ?? message.workspaceRuntimeId,
             capabilities: facts.capabilities,
           });
           await this.env.CONCLAVE_DB.prepare(
@@ -1315,14 +1320,23 @@ export class WorkspaceGateway implements DurableObject {
                   thread_id,
                   work_request_id, attempt_id, idempotency_key, status,
                   (
+                    -- Assignments are inserted without worker_assignments
+                    -- .work_request_id; the owning Work Request is derived from
+                    -- the task or the conversation turn. The column is only a
+                    -- cross-check when it is set (a NULL never equals anything,
+                    -- which rejected every live activity event).
                     EXISTS (
                       SELECT 1 FROM workflow_tasks wt
                        WHERE wt.id = worker_assignments.task_id
-                         AND wt.work_request_id = worker_assignments.work_request_id
+                         AND wt.work_request_id IS NOT NULL
+                         AND (worker_assignments.work_request_id IS NULL
+                              OR wt.work_request_id = worker_assignments.work_request_id)
                     ) OR EXISTS (
                       SELECT 1 FROM conversation_turns ct
                        WHERE ct.assignment_id = worker_assignments.id
-                         AND ct.work_request_id = worker_assignments.work_request_id
+                         AND ct.work_request_id IS NOT NULL
+                         AND (worker_assignments.work_request_id IS NULL
+                              OR ct.work_request_id = worker_assignments.work_request_id)
                     )
                   ) AS work_request_binding_valid
            FROM worker_assignments
@@ -1771,6 +1785,24 @@ export class WorkspaceGateway implements DurableObject {
       .all<Record<string, unknown>>();
     const activeStatuses = new Set<string>(ASSIGNMENT_ACTIVE_STATUSES);
     const assignmentRows = assignments.results ?? [];
+    // Spaces that still exist for this Workspace. The Service uses it only to
+    // forget local bookkeeping for removed Spaces; it never deletes folders.
+    // Omitted on a query failure so the Service keeps everything.
+    let knownSpaceIds: string[] | undefined;
+    try {
+      const spaces = await this.env.CONCLAVE_DB.prepare(
+        `SELECT DISTINCT g.space_id AS space_id
+         FROM workspace_space_grants g
+         JOIN spaces s ON s.id = g.space_id
+         WHERE g.workspace_id = ?1
+         LIMIT 5000`,
+      )
+        .bind(workspaceId)
+        .all<{ space_id: string }>();
+      knownSpaceIds = (spaces.results ?? []).map((row) => String(row.space_id));
+    } catch {
+      knownSpaceIds = undefined;
+    }
     await this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
       protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
@@ -1788,6 +1820,7 @@ export class WorkspaceGateway implements DurableObject {
           assignmentId: String(row.assignment_id),
           status: String(row.status),
         })),
+        ...(knownSpaceIds ? { knownSpaceIds } : {}),
       },
     });
   }
@@ -2250,6 +2283,21 @@ export class WorkspaceGateway implements DurableObject {
       outcome = decision.outcome;
       return decision.outcome === "applied" ? decision.readiness : null;
     });
+    // A command can be queued while the Service is ready if readiness was
+    // observed as not-ready for an instant at dispatch time; the ready
+    // transition that normally flushes the queue has then already passed.
+    // Every readiness report from a ready Service re-checks the durable queue
+    // so such an assignment is delivered instead of timing out.
+    if (this.readiness?.readyForAssignments === true) {
+      await this.flushQueuedAssignments().catch((error: unknown) =>
+        logStructured(
+          "error",
+          "workspace_queue_flush_failed",
+          { workspaceId: this.executionWorkspaceId ?? undefined },
+          { error: error instanceof Error ? error.message : String(error) },
+        ),
+      );
+    }
     if (outcome !== "applied" && outcome !== "unchanged") {
       logStructured(
         "warn",
@@ -2261,6 +2309,51 @@ export class WorkspaceGateway implements DurableObject {
         },
         { outcome, state: report.state },
       );
+    }
+  }
+
+  /**
+   * Explains why an assignment stayed in the durable queue. Without this the
+   * only signal is a generic "waiting for service ready" with no cause.
+   */
+  private async logNotReadyDelivery(
+    reason: string,
+    body: { readonly assignmentId: string },
+  ): Promise<void> {
+    try {
+      await this.loadReadiness();
+      const advertised = await this.state.storage.get<{
+        sessionId: string;
+        runtimeId: string;
+        capabilities: string[];
+      }>("execution-capabilities");
+      const lastActivityAt = await this.lastRuntimeActivityAt();
+      logStructured(
+        "warn",
+        "assignment_delivery_deferred",
+        {
+          workspaceId: this.executionWorkspaceId ?? undefined,
+          runtimeId: this.workspaceRuntimeId ?? undefined,
+        },
+        {
+          reason,
+          assignmentId: body.assignmentId,
+          sessionId: this.sessionId,
+          hasSocket: this.socket !== null,
+          lastActivityAt,
+          activityRecent: this.isActivityRecent(lastActivityAt),
+          readinessState: this.readiness?.state ?? null,
+          readinessSessionId: this.readiness?.sessionId ?? null,
+          readyForAssignments: this.readiness?.readyForAssignments ?? null,
+          advertisedSessionId: advertised?.sessionId ?? null,
+          advertisedRuntimeId: advertised?.runtimeId ?? null,
+          advertisedHasStartPermit:
+            advertised?.capabilities.includes(START_PERMIT_CAPABILITY) ?? null,
+          runtimeIdMatches: advertised?.runtimeId === this.workspaceRuntimeId,
+        },
+      );
+    } catch {
+      // Diagnostics must never change delivery behavior.
     }
   }
 
@@ -2333,6 +2426,10 @@ export class WorkspaceGateway implements DurableObject {
              FROM worker_assignments
             WHERE execution_workspace_id = ?1 AND runtime_identity_id = ?2
               AND status = 'created' AND command_payload_json IS NOT NULL
+              AND task_id NOT IN (
+                SELECT wt.id FROM workflow_tasks wt
+                  JOIN work_requests wr ON wr.id = wt.work_request_id
+                 WHERE wr.status IN ('cancelled', 'failed', 'completed'))
             ORDER BY created_at, id
             LIMIT 25`,
         )
@@ -2480,6 +2577,7 @@ export class WorkspaceGateway implements DurableObject {
     }
     const deliverySessionId = this.sessionId;
     if (!(await this.serviceSupportsStartPermit())) {
+      await this.logNotReadyDelivery("start_permit_capability_missing", body);
       return Response.json(
         {
           delivered: false,
@@ -2497,6 +2595,7 @@ export class WorkspaceGateway implements DurableObject {
     // persisted: that is a durable Cloud-side queue, never a delivery. It is
     // flushed when the Service reports ready.
     if (!(await this.serviceIsReady())) {
+      await this.logNotReadyDelivery("service_not_ready", body);
       return Response.json(
         {
           delivered: false,

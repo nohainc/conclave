@@ -286,13 +286,18 @@ extension _ThreadActions on _ThreadPageState {
     if (step.retryRequiresConfirmation) {
       // Cloud saw evidence the provider may already have acted, so repeating
       // the step can repeat its changes. Require an explicit decision.
+      final folderExists = step.errorCode == 'space_folder_exists';
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Retry anyway?'),
-          content: const Text(
-            'The previous execution may already have made changes. '
-            'Retrying can repeat them.',
+          title: Text(folderExists ? 'Use existing folder?' : 'Retry anyway?'),
+          content: Text(
+            folderExists
+                ? 'A folder with this Space’s name already exists on your '
+                    'Workspace and is not empty. Conclave will not create a '
+                    'second folder. Use the existing folder for this Space?'
+                : 'The previous execution may already have made changes. '
+                    'Retrying can repeat them.',
           ),
           actions: [
             TextButton(
@@ -301,7 +306,7 @@ extension _ThreadActions on _ThreadPageState {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Retry anyway'),
+              child: Text(folderExists ? 'Use this folder' : 'Retry anyway'),
             ),
           ],
         ),
@@ -321,6 +326,7 @@ extension _ThreadActions on _ThreadPageState {
         'unsupported_cli_version',
         'model_not_supported',
         'permission_denied',
+        'space_folder_exists',
       }.contains(step.errorCode);
       final recommendation = resumeRecommended
           ? 'The failure looks like it happened before the Worker completed a turn. Resuming is recommended.'

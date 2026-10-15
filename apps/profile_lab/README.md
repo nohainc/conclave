@@ -139,3 +139,18 @@ The normal workflow is **Edit → Save → Validate → Run tests → Publish**.
 V9 has no testing, beta, stable, draft-release, promotion, or channel-selection UI. Installed CLI compatibility, readiness, revision, and current Profile status are shown as operational Worker information. The editor preserves its buffer, cursor, scroll position, and unsaved state while the Worker sidebar, test panel, and inspector are resized or toggled.
 
 Run `flutter test test/worker_first_run_acceptance_test.dart` for the complete ChatGPT/Gemini first-run flows and the no-template fallback. These widget tests use the real local store, controller, and bundled generic Engine with isolated temporary provider executables and controlled browser/Cloud boundaries. No vendor credentials or live-provider calls are required; Workspace admission still validates the V9 schema, identity, and digest contract. Existing local candidate/evidence data remains digest-bound.
+
+## Local vs production builds
+
+A Profile Lab build targets exactly one Cloud; rebuild to switch.
+
+| Command | Cloud API | State directory (macOS) |
+| --- | --- | --- |
+| `pnpm profile-lab:build:macos:prod` (default) | `https://app.conclaveax.com` | `~/Library/Application Support/Conclave/Profile Lab` |
+| `pnpm profile-lab:build:macos:local` | `http://localhost:8787` | `~/Library/Application Support/Conclave Local/Profile Lab` |
+
+Local builds use `--dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT=local`, show an
+orange "LOCAL DEVELOPMENT BUILD" banner, ignore saved Cloud overrides, and make
+the Cloud connection dialog read-only. `pnpm profile-lab:run:local` runs the
+same local configuration from source. Start the local stack with
+`pnpm app:run:local` first.

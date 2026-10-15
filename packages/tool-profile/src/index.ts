@@ -343,7 +343,9 @@ const activityMapping = z
   .strict();
 const activity = z
   .object({
-    adapter: z.enum(["codex-jsonl", "agy-stream-json"]).optional(),
+    adapter: z
+      .enum(["codex-jsonl", "agy-stream-json", "claude-stream-json"])
+      .optional(),
     schemaVersion: z.literal(1).optional(),
     mappings: z.array(activityMapping).max(TOOL_PROFILE_LIMITS.activityMappings),
   })

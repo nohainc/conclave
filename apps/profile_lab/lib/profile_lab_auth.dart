@@ -225,7 +225,15 @@ class ProfileLabAuthClient {
       },
     );
     final intent = ProfileLabAuthIntent.fromJson(json);
-    if (intent.verificationUrl.origin != _cloudOrigin.origin) {
+    // Local development serves the API (8787) and the web app that hosts the
+    // approval page (3000) on different loopback origins; production serves
+    // both from one origin, so only local builds accept a different one.
+    final url = intent.verificationUrl;
+    final localWebApp = ProfileLabCloudConfig.isLocalBuild &&
+        url.scheme == 'http' &&
+        const {'localhost', '127.0.0.1'}.contains(url.host) &&
+        const {'localhost', '127.0.0.1'}.contains(_cloudOrigin.host);
+    if (url.origin != _cloudOrigin.origin && !localWebApp) {
       throw const FormatException(
         'Profile Lab sign-in URL does not match configured Cloud origin',
       );

@@ -69,4 +69,6 @@ DART="${DART:-$(command -v dart || true)}"
 }
 
 cd "$WORKSPACE_DIR"
-exec "$DART" run bin/conclave_workspace_service.dart --background-service "$@"
+exec "$DART" run \
+  "-DCONCLAVE_WORKSPACE_ENVIRONMENT=${CONCLAVE_WORKSPACE_ENVIRONMENT:-production}" \
+  bin/conclave_workspace_service.dart --background-service "$@"

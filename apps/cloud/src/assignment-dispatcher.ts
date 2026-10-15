@@ -149,6 +149,10 @@ export interface TaskToDispatch {
   readonly spaceId?: string;
   /** Human-readable label used only to choose a stable local Space directory. */
   readonly spaceName?: string;
+  /** The user confirmed that the Workspace may use an existing, non-empty
+   * folder for this Space. Only set by an explicit retry after
+   * `space_folder_exists`. */
+  readonly spaceFolderAdoptionConfirmed?: boolean;
   readonly requestedByUserId?: string;
   readonly model?: string;
   readonly reasoningEffort?: string;
@@ -491,6 +495,9 @@ async function dispatchWorkspaceWorkerAssignment(
       workspaceRuntimeId: target.workspaceRuntimeIdentityId,
       spaceId: target.spaceId,
       ...(task.spaceName ? { spaceName: task.spaceName } : {}),
+      ...(task.spaceFolderAdoptionConfirmed === true
+        ? { spaceFolderAdoptionConfirmed: true }
+        : {}),
       runId,
       taskId,
       attemptId,

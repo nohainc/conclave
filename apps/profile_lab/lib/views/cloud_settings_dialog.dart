@@ -82,7 +82,7 @@ class _CloudSettingsDialogState extends State<CloudSettingsDialog> {
           children: [
             TextField(
               controller: _originController,
-              enabled: !_saving,
+              enabled: !_saving && !ProfileLabCloudConfig.isLocalBuild,
               keyboardType: TextInputType.url,
               decoration: const InputDecoration(
                 labelText: 'Cloud origin',
@@ -97,10 +97,12 @@ class _CloudSettingsDialogState extends State<CloudSettingsDialog> {
                   fontSize: 12, color: ProfileLabTheme.secondaryText),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'HTTPS is required for remote Cloud. Development builds may use HTTP on localhost or loopback. Changing the origin clears the current local sign-in.',
-              style:
-                  TextStyle(fontSize: 12, color: ProfileLabTheme.secondaryText),
+            Text(
+              ProfileLabCloudConfig.isLocalBuild
+                  ? 'This is a local development build. It is pinned to the local Cloud API; rebuild with --prod to use production.'
+                  : 'HTTPS is required for remote Cloud. Development builds may use HTTP on localhost or loopback. Changing the origin clears the current local sign-in.',
+              style: const TextStyle(
+                  fontSize: 12, color: ProfileLabTheme.secondaryText),
             ),
             if (_error != null) ...[
               const SizedBox(height: 10),
@@ -113,20 +115,27 @@ class _CloudSettingsDialogState extends State<CloudSettingsDialog> {
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _saving ? null : _reset,
-          child: const Text('Reset to build default'),
-        ),
-        TextButton(
-          onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          child: Text(_saving ? 'Saving…' : 'Save'),
-        ),
-      ],
+      actions: ProfileLabCloudConfig.isLocalBuild
+          ? [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ]
+          : [
+              TextButton(
+                onPressed: _saving ? null : _reset,
+                child: const Text('Reset to build default'),
+              ),
+              TextButton(
+                onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: _saving ? null : _save,
+                child: Text(_saving ? 'Saving…' : 'Save'),
+              ),
+            ],
     );
   }
 }

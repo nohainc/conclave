@@ -86,6 +86,7 @@ class ConclaveMarkdownBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final body = MarkdownBody(
+      key: ValueKey<String>(data),
       data: data,
       fitContent: fitContent,
       extensionSet: md.ExtensionSet.gitHubFlavored,
@@ -112,9 +113,6 @@ class ConclaveMarkdownBody extends StatelessWidget {
     // the region at the message boundary: an ancestor SelectionArea could
     // otherwise make Select All include neighboring messages or shell UI.
     return SelectionArea(
-      // A live response replaces its source over time. Recreate the boundary
-      // when that source changes so stale handles cannot point at old text.
-      key: ValueKey<String>(data),
       onSelectionChanged: onSelectionChanged,
       child: body,
     );

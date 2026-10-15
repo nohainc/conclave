@@ -38,7 +38,11 @@ class ProviderActivityAdapter {
     if (activity is! Map) return null;
     final declared = activity['adapter'];
     if (declared is String &&
-        const {'codex-jsonl', 'agy-stream-json'}.contains(declared)) {
+        const {
+          'codex-jsonl',
+          'agy-stream-json',
+          'claude-stream-json',
+        }.contains(declared)) {
       return ProviderActivityAdapter._(declared);
     }
     final provider = profile['providerTool'];
@@ -49,6 +53,9 @@ class ProviderActivityAdapter {
     }
     if (normalizedName == 'agy' || normalizedName.contains('antigravity')) {
       return ProviderActivityAdapter._('agy-stream-json');
+    }
+    if (normalizedName.contains('claude')) {
+      return ProviderActivityAdapter._('claude-stream-json');
     }
     return null;
   }
@@ -84,6 +91,7 @@ class ProviderActivityAdapter {
         event,
         declarativeMatched: declarativeMatched,
       ),
+      'claude-stream-json' => _normalizeClaude(event),
       _ => _diagnostic('unsupported_adapter'),
     };
   }
@@ -300,7 +308,16 @@ class ProviderActivityAdapter {
     // mapping when it has a provider identifier. If the provider omitted the
     // identifier, the adapter must still emit the paired fallback identity so
     // the activity stream cannot leave an unfinishable tool row behind.
-    if (declarativeMatched && rawId != null) return const [];
+    //
+    // The AGY Profile mapping keys tool steps by `step_index` when the CLI
+    // sends no `tool_id`, so a matched mapping already owns that identity.
+    // Emitting the adapter's own composed id as well would report every tool
+    // twice under two identifiers.
+    final stepIndex = step['step_index'];
+    if (declarativeMatched &&
+        (rawId != null || (stepIndex is int && stepIndex >= 0))) {
+      return const [];
+    }
 
     final state = step['state'];
     final failed =
@@ -365,6 +382,116 @@ class ProviderActivityAdapter {
         details: details,
       ),
     ];
+  }
+
+  /// Claude Code `--output-format stream-json` carries tool calls inside the
+  /// `content` array of whole `assistant` and `user` messages, which the
+  /// bounded selector grammar cannot index. The adapter reads only block
+  /// types, tool names and tool identifiers: never text, thinking, tool input
+  /// or tool results.
+  ///
+  /// * `assistant` message: a `tool_use` block starts a tool (keyed by its
+  ///   `id`), a `thinking` block reports thinking, a `text` block reports that
+  ///   the response is being written.
+  /// * `user` message: a `tool_result` block finishes the tool named by its
+  ///   `tool_use_id`, failed when `is_error` is true.
+  ///
+  /// The session `init` message reports that the model has started. The final
+  /// `result` stays with the Profile's execution events; every other event type
+  /// (`stream_event`, other `system` notices, rate limits) is progress noise
+  /// and is ignored without a diagnostic.
+  List<ProviderActivityObservation> _normalizeClaude(Map event) {
+    final type = event['type'];
+    if (type is! String) return _diagnostic('missing_event_type');
+    if (type == 'system' && event['subtype'] == 'init') {
+      return const <ProviderActivityObservation>[
+        ProviderActivityObservation(
+          type: 'model.started',
+          status: 'running',
+          title: 'Thinking',
+        ),
+      ];
+    }
+    if (type != 'assistant' && type != 'user') return const [];
+    final message = event['message'];
+    final content = message is Map ? message['content'] : null;
+    if (content is! List) return const [];
+    final observations = <ProviderActivityObservation>[];
+    for (final block in content) {
+      if (block is! Map) continue;
+      final blockType = block['type'];
+      if (type == 'assistant') {
+        switch (blockType) {
+          case 'tool_use':
+            final id = _safeText(block['id']);
+            final name = _safeText(block['name']) ?? 'tool';
+            observations.add(
+              ProviderActivityObservation(
+                type: 'tool.started',
+                status: 'running',
+                title: _claudeToolTitle(name),
+                activityId: id ?? _activityId(
+                  null,
+                  family: 'claude-tool',
+                  toolKind: name,
+                  terminal: false,
+                ),
+                details: {
+                  ..._toolDetails(name),
+                  if (id == null) 'identifierSource': 'generated',
+                },
+              ),
+            );
+          case 'thinking' || 'redacted_thinking':
+            observations.add(
+              const ProviderActivityObservation(
+                type: 'model.status',
+                status: 'updated',
+                title: 'Thinking',
+              ),
+            );
+          case 'text':
+            observations.add(
+              const ProviderActivityObservation(
+                type: 'message.updated',
+                status: 'updated',
+                title: 'Writing the response',
+              ),
+            );
+        }
+      } else if (blockType == 'tool_result') {
+        final id = _safeText(block['tool_use_id']);
+        if (id == null) continue;
+        final failed = block['is_error'] == true;
+        observations.add(
+          ProviderActivityObservation(
+            type: failed ? 'tool.failed' : 'tool.completed',
+            status: failed ? 'failed' : 'completed',
+            title: failed ? 'Tool failed' : 'Tool finished',
+            activityId: id,
+          ),
+        );
+      }
+    }
+    return observations;
+  }
+
+  /// A fixed, user-facing title for a Claude Code tool name. Only the tool
+  /// name is inspected; unknown tools get a generic title.
+  String _claudeToolTitle(String name) {
+    if (name.startsWith('mcp__')) return 'Using a connected tool';
+    return switch (name) {
+      'Bash' || 'BashOutput' || 'KillShell' => 'Running a command',
+      'Read' || 'Glob' || 'Grep' || 'LS' => 'Reading files',
+      'Edit' ||
+      'MultiEdit' ||
+      'Write' ||
+      'NotebookEdit' => 'Editing files',
+      'WebSearch' || 'WebFetch' => 'Searching the web',
+      'Task' || 'Agent' => 'Working with a sub-agent',
+      'TodoWrite' => 'Updating the plan',
+      _ => 'Running a tool',
+    };
   }
 
   Map<String, Object?> _toolDetails(String toolKind) => {

@@ -224,8 +224,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   ProfileLabAccessReadModel? labAccess;
   String? labAccessError;
   bool get isCheckingLabAccess => _refreshes.containsKey('access');
-  bool get canPublish =>
-      labAccess?.profilesAdmin == true;
+  bool get canPublish => labAccess?.profilesAdmin == true;
 
   bool get candidateIsCloudValidated =>
       currentDraft != null &&
@@ -366,7 +365,9 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   }
 
   Future<void> loadCloudConfiguration() async {
-    final configuredOrigin = await _cloudSettingsStore.loadOverride();
+    final configuredOrigin = ProfileLabCloudConfig.isLocalBuild
+        ? null
+        : await _cloudSettingsStore.loadOverride();
     cloudUrl = configuredOrigin ?? ProfileLabCloudConfig.buildDefaultOrigin;
     notifyListeners();
   }

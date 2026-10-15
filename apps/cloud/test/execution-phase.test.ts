@@ -112,6 +112,13 @@ describe("failureCategory", () => {
     ).toBe("profile_incompatible");
     expect(
       failed({
+        errorCode: "space_folder_exists",
+        dispatchedAt: T,
+        acknowledgedAt: T,
+      }),
+    ).toBe("space_folder_confirmation_required");
+    expect(
+      failed({
         errorCode: "cli_not_found",
         dispatchedAt: T,
         acknowledgedAt: T,

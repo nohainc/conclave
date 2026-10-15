@@ -119,7 +119,7 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
           if (shouldLoadSource) {
             await store.saveDraft(
               profileDefinitionId: selectedDefinitionId!,
-              profileJson: source!,
+              profileJson: source,
               notes: 'Loaded from bundled source Profile',
               provenance: {
                 'kind': 'bundled_source',

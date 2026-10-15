@@ -2,6 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+/// A folder with the Space's name already exists, is not empty, and does not
+/// belong to any Space. It is never used silently; the user must confirm.
+class SpaceFolderExistsException implements Exception {
+  const SpaceFolderExistsException(this.folderName);
+  final String folderName;
+  @override
+  String toString() =>
+      'SpaceFolderExistsException: "$folderName" already exists and is not empty';
+}
+
 /// Resolves the user-owned working directory for a Space.
 ///
 /// Directory names are only presentation. The private registry and the
@@ -22,15 +32,23 @@ class SpaceDirectoryResolver {
   static const _schemaVersion = 1;
   static final _safeId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$');
 
+  /// [adoptExistingFolder] is true only after the user confirmed that an
+  /// existing, non-empty, unmarked folder may be used for this Space.
   Future<Directory> resolve({
     required String spaceId,
     required String spaceName,
+    bool adoptExistingFolder = false,
   }) =>
-      _serial(() => _resolve(spaceId: spaceId, spaceName: spaceName));
+      _serial(() => _resolve(
+            spaceId: spaceId,
+            spaceName: spaceName,
+            adoptExistingFolder: adoptExistingFolder,
+          ));
 
   Future<Directory> _resolve({
     required String spaceId,
     required String spaceName,
+    required bool adoptExistingFolder,
   }) async {
     if (!_safeId.hasMatch(spaceId)) {
       throw ArgumentError.value(spaceId, 'spaceId', 'invalid Space ID');
@@ -75,9 +93,33 @@ class SpaceDirectoryResolver {
           directory = Directory(path);
           break;
         }
-        if (type == FileSystemEntityType.directory &&
-            await _markerMatches(Directory(path), spaceId)) {
-          directory = Directory(path);
+        if (type == FileSystemEntityType.directory) {
+          final existing = Directory(path);
+          if (await _markerMatches(existing, spaceId)) {
+            directory = existing;
+            break;
+          }
+          // Never skip to "Name (2)" silently. A non-empty folder that is not
+          // this Space's (unmarked, or marked for another Space, for example
+          // one that was removed in the app) is the user's own: stop and ask,
+          // then take it over once confirmed.
+          if (!await existing.list(followLinks: false).isEmpty) {
+            if (!adoptExistingFolder) {
+              throw SpaceFolderExistsException(candidate);
+            }
+            final foreign = File(_join(path, _markerFileName));
+            if (await foreign.exists()) await foreign.delete();
+            registry.removeWhere((id, value) =>
+                id != spaceId && value['relativePath'] == candidate);
+            directory = existing;
+            adoptingLegacy = true;
+            break;
+          }
+          // Empty: safe to claim.
+          if (await File(_join(path, _markerFileName)).exists()) {
+            await File(_join(path, _markerFileName)).delete();
+          }
+          directory = existing;
           break;
         }
         candidate = '$base ($suffix)';
@@ -102,6 +144,24 @@ class SpaceDirectoryResolver {
     await _writeRegistry(registry);
     return directory;
   }
+
+  /// Forgets registry entries for Spaces that no longer exist in Cloud. Only
+  /// the private registry changes; no Space folder or file is touched, and a
+  /// folder that still carries its marker is simply re-discovered if needed.
+  Future<int> forgetSpacesExcept(Set<String> knownSpaceIds) =>
+      _serial(() async {
+        final registry = await _readRegistry();
+        final stale = registry.keys
+            .where((id) => !knownSpaceIds.contains(id))
+            .toList();
+        if (stale.isEmpty) return 0;
+        for (final id in stale) {
+          registry.remove(id);
+        }
+        await registryDirectory.create(recursive: true);
+        await _writeRegistry(registry);
+        return stale.length;
+      });
 
   Future<Directory?> _findMarkedDirectory(String spaceId) async {
     if (!await workRoot.exists()) return null;
@@ -273,11 +333,19 @@ class SpaceDirectoryLifecycle {
 
   final SpaceDirectoryResolver resolver;
 
+  Future<int> forgetSpacesExcept(Set<String> knownSpaceIds) =>
+      resolver.forgetSpacesExcept(knownSpaceIds);
+
   Future<Directory> ensureForExecution({
     required String spaceId,
     required String spaceName,
+    bool adoptExistingFolder = false,
   }) =>
-      resolver.resolve(spaceId: spaceId, spaceName: spaceName);
+      resolver.resolve(
+        spaceId: spaceId,
+        spaceName: spaceName,
+        adoptExistingFolder: adoptExistingFolder,
+      );
 }
 
 /// Serializes stateful work that shares one Space directory, while comparing
@@ -299,6 +367,7 @@ class SpaceMutationCoordinator {
     required String leaseId,
     required int fencingToken,
     required Future<T> Function(Directory directory) action,
+    bool adoptExistingFolder = false,
   }) async {
     if (!SpaceDirectoryResolver._safeId.hasMatch(spaceId) ||
         !SpaceDirectoryResolver._safeId.hasMatch(threadId)) {
@@ -320,7 +389,9 @@ class SpaceMutationCoordinator {
       try {
         await handle.lock(FileLock.exclusive);
         final directory = await lifecycle.ensureForExecution(
-            spaceId: spaceId, spaceName: spaceName);
+            spaceId: spaceId,
+            spaceName: spaceName,
+            adoptExistingFolder: adoptExistingFolder);
         // The process lock remains Space-wide because Threads share a CWD.
         // Lease counters are Thread-scoped in Cloud; a token from one Thread
         // cannot be ordered against a token from another Thread. Leave legacy

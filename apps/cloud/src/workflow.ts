@@ -175,6 +175,8 @@ export interface ConclaveWorkflowParams {
   readonly retryStepKind?: StepKind;
   readonly retrySessionStrategy?: "resume" | "fresh";
   readonly retryNumber?: number;
+  /** Set by a confirmed retry of a `space_folder_exists` failure. */
+  readonly retryAdoptSpaceFolder?: boolean;
 }
 
 export interface ConclaveWorkflowCheckpoint {
@@ -801,6 +803,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                 stepKind: params.retryStepKind,
                 sessionStrategy: params.retrySessionStrategy,
                 number: params.retryNumber,
+                adoptSpaceFolder: params.retryAdoptSpaceFolder === true,
               },
             });
             const dispatched = await dispatchTaskAssignment(

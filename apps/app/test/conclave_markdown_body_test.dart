@@ -182,7 +182,6 @@ void main() {
     await tester.pumpAndSettle();
     final second =
         tester.state<SelectableRegionState>(find.byType(SelectableRegion));
-    expect(identical(first, second), isFalse);
     second.selectAll();
     await tester.pump();
     expect(selections.last, 'New response');

@@ -17,8 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('discovers model options only from current Worker Profiles',
-      () async {
+  test('discovers model options only from current Worker Profiles', () async {
     final currentProfile = await _createCurrentProfile();
     final api = _CurrentProfileApi(currentProfile);
 
@@ -75,8 +74,7 @@ void main() {
     pending.complete([]);
     await tester.pumpAndSettle();
     expect(find.text('Select Worker...'), findsOneWidget);
-    expect(find.textContaining('No current Worker Profile'),
-        findsOneWidget);
+    expect(find.textContaining('No current Worker Profile'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     controller.dispose();
     root.deleteSync(recursive: true);
@@ -87,8 +85,8 @@ void main() {
       (tester) async {
     final options = (await tester.runAsync(() async {
       final current = await _createCurrentProfile();
-      return const ProfileLabModelProposalService().loadAvailableModels(
-          apiClient: _CurrentProfileApi(current));
+      return const ProfileLabModelProposalService()
+          .loadAvailableModels(apiClient: _CurrentProfileApi(current));
     }))!;
     final root = Directory.systemTemp.createTempSync('selector-revocation-');
     final controller = _SelectorController(
@@ -126,11 +124,11 @@ void main() {
     controller.dispose();
     root.deleteSync(recursive: true);
   });
-
 }
 
 class _CurrentProfileApi extends ProfileAdminApiClient {
-  _CurrentProfileApi(this.currentProfile) : super(baseUrl: 'http://127.0.0.1:1');
+  _CurrentProfileApi(this.currentProfile)
+      : super(baseUrl: 'http://127.0.0.1:1');
 
   final _CurrentProfile currentProfile;
   @override

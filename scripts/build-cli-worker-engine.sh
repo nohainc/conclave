@@ -58,5 +58,9 @@ fi
 if [[ "$OUTPUT" != *.exe ]]; then
   chmod 755 "$OUTPUT"
   chmod 755 "$PROFILE_LAB_OUTPUT"
+  if [[ "$(uname -s)" == "Darwin" ]] && command -v codesign >/dev/null 2>&1; then
+    codesign -s - --force "$OUTPUT" >/dev/null 2>&1 || true
+    codesign -s - --force "$PROFILE_LAB_OUTPUT" >/dev/null 2>&1 || true
+  fi
 fi
 echo "Built generic CLI Worker Engine $VERSION: $OUTPUT and $PROFILE_LAB_OUTPUT"

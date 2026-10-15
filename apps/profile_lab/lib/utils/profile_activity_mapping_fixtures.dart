@@ -44,7 +44,11 @@ ProfileActivityMappingReplayResult replayProfileActivityMappings(
       events: const [],
       activities: const [],
       message: mappings is! List || mappings.isEmpty
-          ? 'No structured activity mappings are declared.'
+          ? (activity is Map && activity['adapter'] is String
+              ? 'Activity for this Profile is produced by the '
+                  '${activity['adapter']} Engine adapter, which has its own '
+                  'Engine tests; there are no declarative mappings to replay.'
+              : 'No structured activity mappings are declared.')
           : 'The Profile uses a non-JSONL output contract; provider event replay is not applicable.',
     );
   }
@@ -158,7 +162,10 @@ _ProfileActivityFixture? _fixtureFor(String provider) {
             {'tool_name': 'run_command', 'tool_info': toolInfo}),
         step(4, 'ACTIVE', 'agent_response'),
         step(4, 'DONE', 'agent_response'),
-        {'event': 'result', 'result': {'conversation_id': conversation, 'status': 'SUCCESS'}},
+        {
+          'event': 'result',
+          'result': {'conversation_id': conversation, 'status': 'SUCCESS'}
+        },
       ],
     );
   }

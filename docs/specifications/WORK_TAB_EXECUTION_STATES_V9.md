@@ -31,6 +31,7 @@ Running is shown only when the provider start was observed (`running_at`). A ter
 | worker_unavailable | Worker is not ready |
 | capacity_exceeded | Waiting for an available Worker slot |
 | profile_incompatible | Worker Profile is incompatible |
+| space_folder_confirmation_required | A folder with this Space's name already exists and is not empty |
 | provider_start_failed | AI provider could not start |
 | startup_timeout | Worker startup timed out |
 | execution_failed | Worker execution failed |
