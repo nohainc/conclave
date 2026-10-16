@@ -32,6 +32,15 @@ AxThread stream(String space, String name) => AxThread(
 class ControlledSource extends AxFixtureDataSource {
   final requests = <String, List<Completer<List<AxThread>>>>{};
   int snapshots = 0;
+
+  @override
+  Future<List<AxSpace>> loadSpaces({bool includeArchived = false}) async =>
+      [a, b];
+
+  @override
+  Future<AxSpace> loadSpace({required String spaceId}) async =>
+      (await loadSpaces()).firstWhere((s) => s.id == spaceId);
+
   @override
   Future<List<AxThread>> loadSpaceThreads({required String spaceId}) {
     final request = Completer<List<AxThread>>();

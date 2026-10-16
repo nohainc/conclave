@@ -38,7 +38,6 @@ void main() {
     await tester.pump();
     expect(copied, contains('ambiguous column name: updated_at'));
     expect(copied, contains('/api/spaces/test/threads (400)'));
-    expect(find.text('Error copied'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

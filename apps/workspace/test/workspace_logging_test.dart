@@ -6,7 +6,16 @@ import 'package:test/test.dart';
 
 void main() {
   test('writes structured logs to a user-private rotating log file', () async {
-    final directory = await Directory.systemTemp.createTemp('conclave-logs-');
+    final directory =
+        await Directory.systemTemp.createTemp('conclave-logs-data-');
+    final workDirectory =
+        await Directory.systemTemp.createTemp('conclave-logs-work-');
+    addTearDown(() async {
+      if (await directory.exists()) await directory.delete(recursive: true);
+      if (await workDirectory.exists()) {
+        await workDirectory.delete(recursive: true);
+      }
+    });
     final current = File('${directory.path}/logs/workspace.log');
     await current.parent.create(recursive: true);
     await current.writeAsString('${List.filled(128, 'x').join()}\n');
@@ -14,7 +23,7 @@ void main() {
     final engine = Workspace(
       config: WorkspaceConfig(
         dataDirectory: directory,
-        workRootPath: '${directory.path}/work',
+        workRootPath: workDirectory.path,
       ),
       logFileMaxBytes: 32,
     );
@@ -33,6 +42,5 @@ void main() {
       expect((await current.stat()).mode & 0x1ff, 0x180);
       expect((await current.parent.stat()).mode & 0x1ff, 0x1c0);
     }
-    await directory.delete(recursive: true);
   });
 }

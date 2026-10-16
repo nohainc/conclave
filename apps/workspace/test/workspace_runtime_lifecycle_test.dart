@@ -19,12 +19,12 @@ void main() {
     final directory =
         await Directory.systemTemp.createTemp('runtime-readiness-wiring-');
     final runtime = await buildWorkspaceRuntime(WorkspaceConfig(
-      dataDirectory: directory,
+      dataDirectory: Directory('${directory.path}/state'),
       cloudUri: Uri.parse('https://cloud.example.test'),
       workspaceRuntimeId: 'runtime-test',
       workspaceId: 'workspace-test',
       authToken: 'test-only-credential',
-      workRootPath: '${directory.path}/Work',
+      workRootPath: '${directory.path}/work',
     ));
     try {
       expect(runtime.workerCatalogCoordinator, isNotNull);

@@ -186,7 +186,7 @@ void main() {
 
     // 3. Verify instantaneous navigation into accepted Space without app reload
     expect(dataSource.acceptCalls, 1);
-    expect(find.byType(SpacePage), findsOneWidget);
+    expect(find.byType(NewThreadPage), findsOneWidget);
     expect(find.text('Conclave AX Development'), findsWidgets);
     expect(browser.current.path, '/spaces/proj-collab');
 

@@ -157,7 +157,8 @@ void main() {
     // A matching history notification must not schedule another navigation load.
     browser.history(browser.current);
     await tester.pump();
-    expect(tester.widget<SpacePage>(find.byType(SpacePage)).space.id, 'b');
+    expect(
+        tester.widget<NewThreadPage>(find.byType(NewThreadPage)).space.id, 'b');
     expect(source.bootstrapCounts, counts);
     expect(source.details['b'], hasLength(1));
     expect(source.collections['b'], hasLength(1));
@@ -165,7 +166,11 @@ void main() {
         .complete(b.copyWith(description: 'B server details'));
     source.collections['b']!.single.complete([w]);
     await tester.pumpAndSettle();
-    expect(tester.widget<SpacePage>(find.byType(SpacePage)).space.description,
+    expect(
+        tester
+            .widget<NewThreadPage>(find.byType(NewThreadPage))
+            .space
+            .description,
         'B server details');
     expect(source.bootstrapCounts, counts);
   });
@@ -181,25 +186,35 @@ void main() {
     await tester.pump();
     browser.history(Uri.parse('/spaces/b'));
     await tester.pump();
-    expect(tester.widget<SpacePage>(find.byType(SpacePage)).space.id, 'b');
+    expect(
+        tester.widget<NewThreadPage>(find.byType(NewThreadPage)).space.id, 'b');
     source.details['a']!.single
         .complete(a.copyWith(description: 'A server details'));
     source.collections['a']!.single.complete([]);
     await tester.pump();
     await tester.pump();
     expect(browser.current.path, '/spaces/b');
-    expect(tester.widget<SpacePage>(find.byType(SpacePage)).space.id, 'b');
+    expect(
+        tester.widget<NewThreadPage>(find.byType(NewThreadPage)).space.id, 'b');
     source.details['b']!.single
         .complete(b.copyWith(description: 'B server details'));
     source.collections['b']!.single.complete([w]);
     await tester.pumpAndSettle();
     browser.history(Uri.parse('/spaces/a'));
     await tester.pump();
-    expect(tester.widget<SpacePage>(find.byType(SpacePage)).space.description,
+    expect(
+        tester
+            .widget<NewThreadPage>(find.byType(NewThreadPage))
+            .space
+            .description,
         'A server details');
     browser.history(Uri.parse('/spaces/b'));
     await tester.pump();
-    expect(tester.widget<SpacePage>(find.byType(SpacePage)).space.description,
+    expect(
+        tester
+            .widget<NewThreadPage>(find.byType(NewThreadPage))
+            .space
+            .description,
         'B server details');
     expect(source.details['a'], hasLength(1));
     expect(source.details['b'], hasLength(1));
@@ -219,7 +234,7 @@ void main() {
     source.collections['b']!.single.complete([w]);
     await tester.pumpAndSettle();
     final counts = source.bootstrapCounts;
-    tester.widget<SpacePage>(find.byType(SpacePage)).onOpenThread('wb');
+    tester.widget<NewThreadPage>(find.byType(NewThreadPage)).onOpenThread(w);
     expect(browser.current.path, '/spaces/b/threads/wb');
     await tester.pumpAndSettle();
     expect(find.byType(ThreadPage), findsOneWidget);
@@ -244,8 +259,8 @@ void main() {
     source.details['missing']!.last.complete(const AxSpace(
         id: 'missing', name: 'Recovered Space', branch: '', lastActivity: ''));
     await tester.pumpAndSettle();
-    expect(
-        tester.widget<SpacePage>(find.byType(SpacePage)).space.id, 'missing');
+    expect(tester.widget<NewThreadPage>(find.byType(NewThreadPage)).space.id,
+        'missing');
     expect(source.details['missing'], hasLength(2));
     expect(source.collections['missing'], hasLength(1));
     expect(source.bootstrapCounts, counts);

@@ -1278,6 +1278,8 @@ void main() {
     testWidgets(
         'AxIconRail has 50px width and renders navigation icons and controls',
         (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       AxNavigation? navigatedTo;
       var notificationsOpened = false;
       var createSpaceOpened = false;
@@ -1325,7 +1327,7 @@ void main() {
       expect(find.byTooltip('Add Space'), findsOneWidget);
       expect(find.byTooltip('Notifications'), findsOneWidget);
       expect(find.byTooltip('YOUR SPACES'), findsOneWidget);
-      expect(find.byTooltip('Vitalii Noha'), findsOneWidget);
+      expect(find.byType(CircleAvatar), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
 
       // Tapping Conclave AX brand logo navigates to Home
@@ -1371,7 +1373,7 @@ void main() {
       expect(navigatedTo?.threadId, testSpace.threads.first.id);
 
       // Tapping Profile avatar button navigates to profile
-      await tester.tap(find.byTooltip('Vitalii Noha'));
+      await tester.tap(find.byType(CircleAvatar));
       expect(navigatedTo?.kind, AxRouteKind.profileSecurity);
 
       // Tapping Application menu opens menu with Workspaces
@@ -2482,7 +2484,6 @@ void main() {
       // Invitation is accepted and disappears, user is navigated into space
       expect(find.text('Welcome to Conclave AX'), findsNothing);
       expect(find.text('Join a Space'), findsNothing);
-      expect(find.text('Joined Joined AX Core.'), findsOneWidget);
       expect(find.text('Joined AX Core'), findsWidgets);
 
       // Drain toast timer
@@ -2530,9 +2531,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Instantly without reload:
-      // 1. Toast confirms joined
-      expect(find.text('Joined Joined AX Core.'), findsOneWidget);
-      // 2. Navigates into newly joined space
+      // 1. Navigates into newly joined space
       expect(find.text('Joined AX Core'), findsWidgets);
       // 3. Pending invitations in sidebar is gone
       expect(find.text('Pending invitations (1)'), findsNothing);

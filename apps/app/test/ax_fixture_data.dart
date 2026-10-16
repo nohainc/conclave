@@ -190,10 +190,8 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
     String? instructions,
     Map<String, dynamic>? settings,
   }) async {
-    final space = axFixtureSnapshot()
-        .spaces
-        .where((item) => item.id == spaceId)
-        .firstOrNull;
+    final space =
+        (await loadSpaces()).where((item) => item.id == spaceId).firstOrNull;
     return AxSpace(
       id: spaceId,
       name: name ?? space?.name ?? 'Updated space',

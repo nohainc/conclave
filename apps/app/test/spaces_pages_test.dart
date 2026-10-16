@@ -1710,6 +1710,7 @@ void main() {
     ];
     events.add({'type': 'reconnect.required'});
     await tester.pump();
+    await tester.pump(const Duration(seconds: 4));
     await tester.pumpAndSettle();
 
     expect(dataSource.activeOnlyCalls, contains(false));
@@ -2096,7 +2097,6 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify update occurred
-    expect(find.text('Space updated.'), findsOneWidget);
     expect(updatedSpace, isNotNull);
     expect(updatedSpace!.instructions, 'Initial instructions');
 

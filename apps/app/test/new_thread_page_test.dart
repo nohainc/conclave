@@ -173,7 +173,7 @@ void main() {
       const prompt = 'Please improve the login screen and settings';
       await tester.enterText(
           work ? _messageFields.last : _messageFields.first, prompt);
-      final send = find.byTooltip(work ? 'Send request' : 'Send message');
+      final send = find.widgetWithIcon(IconButton, Icons.send_rounded).last;
       await tester.tap(send);
       await tester.pump();
       expect(

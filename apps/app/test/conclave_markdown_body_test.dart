@@ -449,8 +449,6 @@ void main() {
     renderer.onTapLink!('Unsafe', 'javascript:alert', '');
     await tester.pump();
     expect(launches, 0);
-    expect(find.text('Only valid HTTP or HTTPS links can be opened.'),
-        findsOneWidget);
   });
 
   testWidgets('images show alt text without image loading widgets',

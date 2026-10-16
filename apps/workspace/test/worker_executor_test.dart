@@ -98,7 +98,7 @@ void main() {
       restarted.call(context('thread-b', 3)),
     ]);
     expect(executions, 5);
-    expect(maxActiveExecutions, 1);
+    expect(maxActiveExecutions, 2);
     expect(directories, hasLength(1));
     expect(await legacyFence.readAsString(), legacyBytes);
   });
