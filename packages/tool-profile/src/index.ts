@@ -367,6 +367,17 @@ const passiveCommand = z
     failureIssueCode: issueCode,
   })
   .strict();
+/**
+ * Profile-owned command that prints the provider's own usage/limits report.
+ * Conclave returns the output verbatim and never parses it, because every
+ * provider calculates usage differently.
+ */
+const usageCommand = z
+  .object({
+    arguments: z.array(templatedString).min(1).max(TOOL_PROFILE_LIMITS.arguments),
+    timeoutMs: z.number().int().min(1000).max(60_000),
+  })
+  .strict();
 const configCheck = z
   .object({
     id: identifier,
@@ -702,6 +713,7 @@ const profileSchema = z
       .strict(),
     progress: z.array(progressRule).max(TOOL_PROFILE_LIMITS.progressRules),
     activity: activity.optional(),
+    usage: usageCommand.optional(),
     errors: z
       .object({
         mappings: z.array(errorMapping).max(TOOL_PROFILE_LIMITS.errorMappings),

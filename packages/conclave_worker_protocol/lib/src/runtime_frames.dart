@@ -88,6 +88,133 @@ int _probeTimeout(Map<String, Object?> json) {
   return value;
 }
 
+/// Asks the Engine to run the Profile-owned usage command. The Engine only
+/// executes the command declared by the admitted Profile; the request carries
+/// no arguments.
+final class UsageRequest extends WorkerFrame {
+  UsageRequest({
+    required super.requestId,
+    this.timeoutMs = WorkerProtocolLimits.maxUsageTimeoutMs,
+    this.protocolVersion = localWorkerProtocolVersion,
+  }) {
+    _validateProtocol(protocolVersion);
+    _validateToken(
+      requestId,
+      'requestId',
+      WorkerProtocolLimits.maxRequestIdLength,
+    );
+    if (timeoutMs < 1000 || timeoutMs > WorkerProtocolLimits.maxUsageTimeoutMs) {
+      throw const FormatException('usage timeout is outside the allowed range');
+    }
+  }
+
+  final String protocolVersion;
+  final int timeoutMs;
+
+  @override
+  String get type => 'usage.request';
+
+  @override
+  Map<String, Object?> toJson() => {
+        'type': type,
+        'protocolVersion': protocolVersion,
+        'requestId': requestId,
+        'timeoutMs': timeoutMs,
+      };
+
+  factory UsageRequest.fromJson(Map<String, Object?> json) {
+    _expectKeys(
+      json,
+      const {'type', 'protocolVersion', 'requestId', 'timeoutMs'},
+    );
+    _expectType(json, 'usage.request');
+    final timeout = json['timeoutMs'];
+    if (timeout is! int) {
+      throw const FormatException('usage timeout must be an integer');
+    }
+    return UsageRequest(
+      requestId: _boundedString(
+        json,
+        'requestId',
+        WorkerProtocolLimits.maxRequestIdLength,
+      ),
+      protocolVersion: _requiredString(json, 'protocolVersion'),
+      timeoutMs: timeout,
+    );
+  }
+}
+
+/// Raw provider usage report. [output] is exactly what the provider command
+/// printed (ANSI escapes removed, bounded in size); it is never interpreted.
+final class UsageResult extends WorkerFrame {
+  UsageResult({
+    required super.requestId,
+    required this.output,
+    required this.errorOutput,
+    required this.exitCode,
+    this.truncated = false,
+  }) {
+    _validateToken(
+      requestId,
+      'requestId',
+      WorkerProtocolLimits.maxRequestIdLength,
+    );
+    if (output.length > WorkerProtocolLimits.maxUsageOutputChars ||
+        errorOutput.length > WorkerProtocolLimits.maxUsageOutputChars) {
+      throw const FormatException('usage output exceeds the size limit');
+    }
+  }
+
+  final String output;
+  final String errorOutput;
+  final int exitCode;
+  final bool truncated;
+
+  @override
+  String get type => 'usage.result';
+
+  @override
+  Map<String, Object?> toJson() => {
+        'type': type,
+        'requestId': requestId,
+        'output': output,
+        'errorOutput': errorOutput,
+        'exitCode': exitCode,
+        'truncated': truncated,
+      };
+
+  factory UsageResult.fromJson(Map<String, Object?> json) {
+    _expectKeys(
+      json,
+      const {
+        'type',
+        'requestId',
+        'output',
+        'errorOutput',
+        'exitCode',
+        'truncated',
+      },
+    );
+    _expectType(json, 'usage.result');
+    final exitCode = json['exitCode'];
+    final truncated = json['truncated'];
+    if (exitCode is! int || truncated is! bool) {
+      throw const FormatException('usage result fields are invalid');
+    }
+    return UsageResult(
+      requestId: _boundedString(
+        json,
+        'requestId',
+        WorkerProtocolLimits.maxRequestIdLength,
+      ),
+      output: _requiredStringAllowEmpty(json, 'output'),
+      errorOutput: _requiredStringAllowEmpty(json, 'errorOutput'),
+      exitCode: exitCode,
+      truncated: truncated,
+    );
+  }
+}
+
 final class ProviderToolInfo {
   ProviderToolInfo({required String name, String? version, String? path})
       : name = _boundedText(

@@ -33,7 +33,7 @@ const _topLevelKeys = {
   'errors',
   'compatibilityOverrides',
 };
-const _optionalTopLevelKeys = {'activity'};
+const _optionalTopLevelKeys = {'activity', 'usage'};
 
 class EngineProfile {
   EngineProfile._({
@@ -61,6 +61,10 @@ class EngineProfile {
   Map<String, Object?> get timeout => _object(json['timeout'], 'timeout');
   Map<String, Object?> get sandbox => _object(json['sandbox'], 'sandbox');
   Map<String, Object?> get probe => _object(json['probe'], 'probe');
+
+  /// Optional Profile-owned command whose raw output reports provider usage.
+  Map<String, Object?>? get usage =>
+      json['usage'] == null ? null : _object(json['usage'], 'usage');
 
   /// Materializes the one provider-version override selected by the detected
   /// CLI version. Overlapping overrides are rejected during parsing, so this
@@ -329,6 +333,7 @@ class EngineProfile {
     );
     _validateRules(progress, 'progress', 64, requireActions: false);
     _validateActivityMappings(json['activity']);
+    _validateUsageCommand(json['usage']);
     _validateErrorRules(errors['mappings']);
     _validateConfigChecks(passive['configChecks']);
     final session = _object(json['session'], 'session');
@@ -690,6 +695,23 @@ void _validateCompatibilityOverrides(Object? value) {
       _validateErrorRules(raw['errorMappings']);
     }
     _validateActivityMappings(raw['activity']);
+  }
+}
+
+void _validateUsageCommand(Object? value) {
+  if (value == null) return;
+  if (value is! Map) {
+    throw const FormatException('usage command must be an object');
+  }
+  final usage = Map<String, Object?>.from(value);
+  _expectOnly(usage, const {'arguments', 'timeoutMs'}, 'usage');
+  final arguments = _strings(usage['arguments'], 'usage.arguments');
+  if (arguments.isEmpty || arguments.length > 128) {
+    throw const FormatException('usage arguments are invalid');
+  }
+  final timeoutMs = usage['timeoutMs'];
+  if (timeoutMs is! int || timeoutMs < 1000 || timeoutMs > 60000) {
+    throw const FormatException('usage timeout is outside the allowed range');
   }
 }
 

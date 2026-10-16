@@ -630,6 +630,62 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
                 ) ??
                 const <Map<String, Object?>>[];
           },
+          workerUsageProvider: (workerId) async {
+            final supervisor = cliWorkerEngineSupervisor;
+            final worker = await localWorkerRegistry.find(workerId);
+            final descriptor = worker == null
+                ? null
+                : workerCatalogCoordinator?.entryForWorker(worker.workerTypeId);
+            if (supervisor == null || worker == null || descriptor == null) {
+              return const {
+                'status': 'error',
+                'errorCode': 'worker_not_ready',
+                'errorMessage':
+                    'The Worker is not available on this Workspace.',
+              };
+            }
+            final plan = (await launchPlans.resolve(
+              workerTypeId: worker.workerTypeId,
+              profileDefinitionId: descriptor.profileDefinitionId,
+              providerCliVersion: worker.toolVersion,
+            ))
+                .plan;
+            if (plan == null) {
+              return const {
+                'status': 'error',
+                'errorCode': 'worker_not_ready',
+                'errorMessage': 'The Worker Profile is not ready.',
+              };
+            }
+            // The Profile owns whether and how usage is read.
+            if (plan.release.profile['usage'] == null) {
+              return const {
+                'status': 'unavailable',
+                'errorCode': 'usage_not_configured',
+                'errorMessage': 'This Worker Profile has no usage command.',
+              };
+            }
+            try {
+              final usage = await supervisor.usage(
+                plan.release,
+                profileFile: plan.profileFile,
+                stateDirectory: workspacePaths.workerStateDirectory(worker.id),
+              );
+              return {
+                'status': 'ok',
+                'output': usage.output,
+                'errorOutput': usage.errorOutput,
+                'exitCode': usage.exitCode,
+                'truncated': usage.truncated,
+              };
+            } on CliWorkerEngineProbeException catch (error) {
+              return {
+                'status': 'error',
+                'errorCode': error.issueCode,
+                'errorMessage': error.safeMessage,
+              };
+            }
+          },
           onSessionReady: () async {
             await workerCatalogCoordinator?.refresh(force: true);
           },

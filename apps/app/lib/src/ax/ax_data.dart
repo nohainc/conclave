@@ -2,6 +2,8 @@ import 'ax_people.dart';
 export 'ax_people.dart';
 import 'ax_workflow_configuration.dart';
 export 'ax_workflow_configuration.dart';
+import 'worker_usage.dart';
+export 'worker_usage.dart';
 import 'dart:convert';
 import 'sync/ax_idempotency.dart';
 
@@ -172,6 +174,7 @@ class AxApiClient extends _AxApiClientCore
     implements
         AxWorkflowConfigurationDataSource,
         AxSpaceWorkflowConfigurationDataSource,
+        AxWorkerUsageDataSource,
         AxWorkflowDefaultDataSource,
         AxWorkflowWorkspaceDataSource,
         AxPeopleDataSource,

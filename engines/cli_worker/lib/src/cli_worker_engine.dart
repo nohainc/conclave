@@ -142,6 +142,8 @@ class CliWorkerEngine {
             await _initialize(frame, sink);
           case ProbeRequest():
             await _probe(frame, sink);
+          case UsageRequest():
+            await _usage(frame, sink);
           case ExecuteRequest():
             await _execute(frame, sink);
           default:
@@ -247,6 +249,96 @@ class CliWorkerEngine {
         capabilities: const [],
       ),
     );
+  }
+
+  /// Runs the Profile-declared usage command and returns its output verbatim.
+  /// Conclave deliberately never interprets the text: each provider calculates
+  /// usage differently, so the Profile owns the command and the UI shows it.
+  Future<void> _usage(UsageRequest request, IOSink sink) async {
+    if (!_initialized) return _write(sink, _notInitialized(request.requestId));
+    final spec = _profile.usage;
+    if (spec == null) {
+      return _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          code: WorkerIssueCode.providerFailure,
+          message: 'Profile does not define a usage command',
+        ),
+      );
+    }
+    try {
+      final executable = await _resolveTool();
+      final workingDirectory = Directory.current.path;
+      final context = ProfileVersionProbe.buildContext(
+        profile: _profile,
+        workingDirectory: workingDirectory,
+        homeDirectory: Platform.environment['HOME'] ?? workingDirectory,
+        workerStateDirectory: options.statePath,
+      );
+      final profileTimeoutMs = _int(spec['timeoutMs']);
+      final timeoutMs = profileTimeoutMs < request.timeoutMs
+          ? profileTimeoutMs
+          : request.timeoutMs;
+      final result = await _commandRunner.run(
+        executable,
+        _stringList(
+          spec['arguments'],
+        ).map((argument) => _template(argument, context)).toList(),
+        environment: _environment(),
+        workingDirectory: workingDirectory,
+        timeout: Duration(milliseconds: timeoutMs),
+      );
+      const limit = WorkerProtocolLimits.maxUsageOutputChars;
+      final out = _stripAnsi(result.stdout);
+      final err = _stripAnsi(result.stderr);
+      await _write(
+        sink,
+        UsageResult(
+          requestId: request.requestId,
+          output: out.length > limit ? out.substring(0, limit) : out,
+          errorOutput: err.length > limit ? err.substring(0, limit) : err,
+          exitCode: result.exitCode,
+          truncated: out.length > limit || err.length > limit,
+        ),
+      );
+    } on EngineProviderException catch (error) {
+      await _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          code: error.issueCode,
+          message: error.safeMessage,
+        ),
+      );
+    } on ProcessException {
+      await _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          code: WorkerIssueCode.providerToolUnavailable,
+          message: 'Provider CLI could not be started.',
+        ),
+      );
+    } on TimeoutException {
+      await _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          code: WorkerIssueCode.deadlineExceeded,
+          message: 'Provider usage command exceeded its deadline.',
+        ),
+      );
+    } on Object {
+      await _write(
+        sink,
+        WorkerErrorFrame(
+          requestId: request.requestId,
+          code: WorkerIssueCode.providerFailure,
+          message: 'Provider usage command failed.',
+        ),
+      );
+    }
   }
 
   Future<void> _probe(ProbeRequest request, IOSink sink) async {
@@ -2484,6 +2576,12 @@ class _InterpretedOutput {
 bool _isSemver(String value) => RegExp(
   r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$',
 ).hasMatch(value);
+/// Removes terminal control sequences so a CLI report renders as plain text.
+String _stripAnsi(String value) => value.replaceAll(
+  RegExp(r'\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\))'),
+  '',
+);
+
 Map<String, Object?> _map(Object? value) => value is Map
     ? Map<String, Object?>.from(value)
     : throw const FormatException('expected Profile object');

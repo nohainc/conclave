@@ -309,5 +309,9 @@
     "providerArguments": [],
     "providerReserveMs": 2000
   },
+  "usage": {
+    "arguments": ["-p", "/usage"],
+    "timeoutMs": 30000
+  },
   "compatibilityOverrides": []
 }

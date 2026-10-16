@@ -973,3 +973,27 @@ for cache ownership, wire metadata, availability states, security and release ga
 Optional signed `model.selectionMapping` schema version 1 requires Engine 1.2.0.
 Its exact native rows, effort/default rules and provider version gates are defined
 in [Provider discovery and normalization](MODEL_DISCOVERY_NORMALIZATION.md).
+
+## Optional `usage` command
+
+A Profile may declare a top-level `usage` object:
+
+~~~json
+"usage": { "arguments": ["-p", "/usage"], "timeoutMs": 30000 }
+~~~
+
+- `arguments` are templated provider CLI arguments (same placeholders as other
+  commands); `timeoutMs` is 1000-60000. No other fields are allowed.
+- The generic Engine runs the declared provider executable with these arguments
+  on a `usage.request` frame and answers with `usage.result` (`output`,
+  `errorOutput`, `exitCode`, `truncated`). Terminal escape sequences are removed
+  and each stream is capped at 64 KiB; nothing else is changed.
+- **Conclave never parses the report.** Providers calculate usage differently,
+  so the Profile owns how usage is read and AX shows the text as received.
+- A Profile without `usage` yields status `unavailable`. The starter Claude
+  Profile declares `-p /usage`; ChatGPT and Gemini declare none until a stable
+  non-interactive command is verified for their CLIs.
+- Cloud relays on demand: `POST /api/workspaces/:workspaceId/workers/:workerId/usage`
+  (Workspace owner only) sends `worker.usage.request`; the Service replies with
+  `worker.usage.result`. Results are never stored in Cloud or posted to a Thread.
+- AX exposes it as `Usage` in the composer `+` menu and as the `/usage` command.

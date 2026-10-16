@@ -83,6 +83,10 @@ class _ThreadPageState extends State<ThreadPage>
   Map<String, dynamic>? _lastRemoteViewState;
   final _requestController = TextEditingController();
   final _workHistoryController = ScrollController();
+  late final AxWorkerUsageController _workerUsage = AxWorkerUsageController(
+      widget.dataSource is AxWorkerUsageDataSource
+          ? widget.dataSource as AxWorkerUsageDataSource
+          : null);
   final _chatHistoryController = ScrollController();
   final _chatIncomingAnchor = AxTimelineFollowAnchor();
   final _workIncomingAnchor = AxTimelineFollowAnchor();
@@ -1085,6 +1089,7 @@ class _ThreadPageState extends State<ThreadPage>
       mounted: false,
       disposed: true,
     );
+    _workerUsage.dispose();
     _cancelWorkflowConfigurations?.call();
     _cancelWorkflowDefault?.call();
     _cancelWorkflows?.call();
@@ -1571,5 +1576,6 @@ class _ThreadPageState extends State<ThreadPage>
           _scheduleThreadViewStateSave();
         },
         onRun: _runWork,
+        usageController: _workerUsage,
       );
 }

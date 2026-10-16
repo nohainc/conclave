@@ -276,6 +276,42 @@ export async function handleExportWorkspaceAudit(
 }
 
 /**
+ * Owner-only: asks the Workspace Service to run the Worker Profile's usage
+ * command and returns the provider's raw report. The report belongs to the
+ * machine owner's provider account, so it is not shared with Space members.
+ */
+export async function handleWorkerUsage(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  workerId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  await workspaceOwnerContext(
+    request,
+    env,
+    workspaceId,
+    "workspace:manage",
+    accessContext,
+  );
+  if (!env.CONCLAVE_WORKSPACE_GATEWAY)
+    return json(
+      { error: "Workspace Gateway is not configured" },
+      { status: 503 },
+    );
+  const response = await env.CONCLAVE_WORKSPACE_GATEWAY.getByName(
+    workspaceId,
+  ).fetch("https://workspace-gateway/worker-usage", {
+    method: "POST",
+    body: JSON.stringify({ workerId }),
+  });
+  const body = await response.json().catch(() => ({
+    error: "Usage request returned an unreadable response",
+  }));
+  return json(body, { status: response.status });
+}
+
+/**
  * Owner-only latency diagnostic: sends a Cloud-to-Service probe over the
  * Workspace's live transport and returns the measured round trip. It never
  * starts a Worker or touches assignments.

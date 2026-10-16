@@ -1275,6 +1275,89 @@ void main() {
     await connection.close();
   });
 
+  test('returns the raw usage report for a Cloud usage request', () async {
+    final socket = FakeSocket();
+    final requestedWorkers = <String>[];
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      workerUsageProvider: (workerId) async {
+        requestedWorkers.add(workerId);
+        return {
+          'status': 'ok',
+          'output': 'Current session: 6% used\n',
+          'errorOutput': '',
+          'exitCode': 0,
+          'truncated': false,
+        };
+      },
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'cloud-usage-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'worker.usage.request',
+      'workspaceRuntimeId': 'workspace-1',
+      'executionWorkspaceId': 'workspace-1',
+      'payload': {'requestId': 'usage-1', 'workerId': 'worker-1'},
+    }));
+    await waitFor(() => socket.sent.any((message) =>
+        (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+        'worker.usage.result'));
+
+    final result = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) => message['type'] == 'worker.usage.result');
+    final payload = result['payload'] as Map<String, dynamic>;
+    expect(requestedWorkers, ['worker-1']);
+    expect(result['correlationId'], 'cloud-usage-1');
+    expect(payload['requestId'], 'usage-1');
+    expect(payload['status'], 'ok');
+    expect(payload['output'], 'Current session: 6% used\n');
+    await connection.close();
+  });
+
+  test('reports usage as unavailable when the Service cannot read it',
+      () async {
+    final socket = FakeSocket();
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'cloud-usage-2',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'worker.usage.request',
+      'workspaceRuntimeId': 'workspace-1',
+      'executionWorkspaceId': 'workspace-1',
+      'payload': {'requestId': 'usage-2', 'workerId': 'worker-1'},
+    }));
+    await waitFor(() => socket.sent.any((message) =>
+        (jsonDecode(message as String) as Map<String, dynamic>)['type'] ==
+        'worker.usage.result'));
+    final payload = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .firstWhere((message) =>
+            message['type'] ==
+            'worker.usage.result')['payload'] as Map<String, dynamic>;
+    expect(payload['status'], 'unavailable');
+    await connection.close();
+  });
+
   test('ignores a probe that has no usable probe ID', () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(

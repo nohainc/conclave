@@ -282,6 +282,133 @@ final class CliWorkerEngineSupervisor {
     }
   }
 
+  /// Runs the Profile-owned usage command in an isolated Engine process and
+  /// returns the provider's report verbatim.
+  Future<UsageResult> usage(
+    ToolProfileCandidate release, {
+    required File profileFile,
+    required Directory stateDirectory,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final boundedTimeout =
+        timeout >
+            const Duration(milliseconds: WorkerProtocolLimits.maxUsageTimeoutMs)
+        ? const Duration(milliseconds: WorkerProtocolLimits.maxUsageTimeoutMs)
+        : timeout;
+    if (boundedTimeout < const Duration(milliseconds: 100)) {
+      throw ArgumentError.value(
+        timeout,
+        'timeout',
+        'usage timeout is too short',
+      );
+    }
+    await stateDirectory.create(recursive: true);
+    final timer = Stopwatch()..start();
+    Process? process;
+    File? processRecord;
+    CliEngineChannel? channel;
+    var stopped = false;
+    try {
+      process = await _platformRuntime.startIsolatedProcess(
+        engineExecutable,
+        [
+          ...engineArgumentsPrefix,
+          '--profile',
+          profileFile.path,
+          '--engine-version',
+          cliWorkerEngineVersion,
+          '--state-directory',
+          stateDirectory.path,
+        ],
+        workingDirectory: stateDirectory.path,
+        environment: _engineEnvironment(),
+        includeParentEnvironment: false,
+      );
+      processRecord = await _writeProcessRecord(
+        process,
+        assignmentId: 'usage-${DateTime.now().microsecondsSinceEpoch}',
+        stateDirectory: stateDirectory,
+      );
+      channel = CliEngineChannel(
+        process,
+        maxFrameBytes: maxFrameBytes,
+        maxStderrBytes: maxStderrBytes,
+      );
+      final initialized = await channel.exchange(
+        InitializeRequest(
+          requestId: 'engine-init-${DateTime.now().microsecondsSinceEpoch}',
+          workerTypeId: release.logicalWorkerTypeId,
+          expectedEngineVersion: cliWorkerEngineVersion,
+          profileDefinitionId: release.profileDefinitionId,
+          profileReleaseVersion: release.revision.toString(),
+          profileDigest: release.payloadDigest,
+        ),
+        _remaining(boundedTimeout, timer),
+      );
+      if (initialized is! InitializeResult ||
+          initialized.workerTypeId != release.logicalWorkerTypeId ||
+          initialized.engineVersion != cliWorkerEngineVersion ||
+          initialized.profileDefinitionId != release.profileDefinitionId ||
+          initialized.profileReleaseVersion != release.revision.toString() ||
+          initialized.profileSchemaVersion !=
+              release.profile['schemaVersion']) {
+        throw const FormatException('CLI Worker Engine initialize mismatch');
+      }
+      final result = await channel.exchange(
+        UsageRequest(
+          requestId: 'engine-usage-${DateTime.now().microsecondsSinceEpoch}',
+          timeoutMs: boundedTimeout.inMilliseconds,
+        ),
+        _remaining(boundedTimeout, timer),
+      );
+      if (result is WorkerErrorFrame) {
+        throw CliWorkerEngineProbeException(result.code, result.message);
+      }
+      if (result is! UsageResult) {
+        throw const FormatException(
+          'CLI Worker Engine usage response mismatch',
+        );
+      }
+      await process.stdin.close();
+      final exitCode = await process.exitCode.timeout(
+        const Duration(seconds: 2),
+      );
+      if (exitCode != 0) {
+        throw const FormatException('CLI Worker Engine exited unsuccessfully');
+      }
+      stopped = true;
+      return result;
+    } on TimeoutException {
+      throw const CliWorkerEngineProbeException(
+        WorkerIssueCode.deadlineExceeded,
+        'Provider probe exceeded its deadline.',
+      );
+    } on ProcessException catch (error) {
+      throw CliWorkerEngineProbeException(
+        WorkerIssueCode.providerToolUnavailable,
+        'CLI Worker Engine could not be started.',
+        localDiagnostics: jsonEncode({
+          'stage': 'engine_process_start',
+          'errorCode': error.errorCode,
+          'message': error.message,
+        }),
+      );
+    } finally {
+      if (process != null && !stopped) {
+        await _platformRuntime.terminateProcessTree(process, force: true);
+      }
+      if (processRecord != null) {
+        await _updateProcessRecord(
+          processRecord,
+          engineState: 'terminated',
+          providerState: 'terminated',
+        );
+      }
+      await _deleteProcessRecord(processRecord);
+      await channel?.dispose();
+    }
+  }
+
   /// Executes one assignment through a Tool Profile candidate.
   Future<WorkerResult> execute(
     ToolProfileCandidate release, {

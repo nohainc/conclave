@@ -61,6 +61,7 @@ export {
   handleGetWorkspace,
   handleUpdateWorkspace,
   handleWorkspaceDeliveryProbe,
+  handleWorkerUsage,
   handleRevokeWorkspace,
   handleExportWorkspaceAudit,
   handleUploadArtifact,

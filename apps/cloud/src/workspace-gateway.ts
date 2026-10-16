@@ -127,6 +127,16 @@ export class WorkspaceGateway implements DurableObject {
       timer: ReturnType<typeof setTimeout>;
     }
   >();
+  private readonly pendingUsageRequests = new Map<
+    string,
+    {
+      resolve: (payload: Record<string, unknown>) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  // The Service may run a provider CLI, so allow longer than a delivery probe.
+  private static readonly USAGE_TIMEOUT_MS = 70_000;
+  private static readonly MAX_PENDING_USAGE_REQUESTS = 4;
   private static readonly PROBE_TIMEOUT_MS = 5_000;
   private static readonly MAX_PENDING_PROBES = 4;
   private readonly pendingCancelAcks = new Map<
@@ -217,6 +227,9 @@ export class WorkspaceGateway implements DurableObject {
     }
     if (request.method === "POST" && url.pathname === "/diagnostic-probe") {
       return this.diagnosticProbe();
+    }
+    if (request.method === "POST" && url.pathname === "/worker-usage") {
+      return this.requestWorkerUsage(request);
     }
     if (request.method === "POST" && url.pathname === "/dispatch-assignment") {
       return this.dispatchAssignment(request);
@@ -1167,6 +1180,20 @@ export class WorkspaceGateway implements DurableObject {
       }
       case "diagnostic.probe":
         // Cloud originates probes; a Service never sends one.
+        return;
+      case "worker.usage.result": {
+        const payload = message.payload as Record<string, unknown>;
+        const requestId =
+          typeof payload.requestId === "string" ? payload.requestId : "";
+        const pending = this.pendingUsageRequests.get(requestId);
+        if (!pending) return;
+        clearTimeout(pending.timer);
+        this.pendingUsageRequests.delete(requestId);
+        pending.resolve(payload);
+        return;
+      }
+      case "worker.usage.request":
+        // Cloud originates usage requests; a Service never sends one.
         return;
       case "assignment.start.ack": {
         // Provider-start evidence implies admission, so it is honoured from
@@ -2820,6 +2847,87 @@ export class WorkspaceGateway implements DurableObject {
           outcome: "timeout",
           timeoutMs: WorkspaceGateway.PROBE_TIMEOUT_MS,
           note: "No acknowledgement arrived. The Workspace Service may predate delivery probes or may not be reading its connection.",
+        },
+        { status: 504 },
+      );
+    }
+  }
+
+  /**
+   * Asks the Workspace Service to run a Worker's Profile-defined usage command
+   * and returns the provider's report verbatim. Nothing is stored or parsed:
+   * every provider calculates usage differently.
+   */
+  private async requestWorkerUsage(request: Request): Promise<Response> {
+    if (!(await this.isRuntimeLive()))
+      return Response.json({ error: "Workspace is offline" }, { status: 503 });
+    const body = (await request.json().catch(() => null)) as {
+      workerId?: unknown;
+    } | null;
+    const workerId = body?.workerId;
+    if (
+      typeof workerId !== "string" ||
+      !/^[A-Za-z0-9._:-]{1,128}$/.test(workerId)
+    )
+      return Response.json({ error: "Invalid Worker" }, { status: 400 });
+    if (
+      this.pendingUsageRequests.size >=
+      WorkspaceGateway.MAX_PENDING_USAGE_REQUESTS
+    )
+      return Response.json(
+        { error: "Too many usage requests are in progress" },
+        { status: 429 },
+      );
+    const requestId = `usage-${crypto.randomUUID()}`;
+    const result = new Promise<Record<string, unknown>>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingUsageRequests.delete(requestId);
+        reject(new Error("usage timeout"));
+      }, WorkspaceGateway.USAGE_TIMEOUT_MS);
+      this.pendingUsageRequests.set(requestId, { resolve, timer });
+    });
+    result.catch(() => undefined);
+    try {
+      await this.send({
+        protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
+        protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+        messageId: `message-${crypto.randomUUID()}`,
+        timestamp: new Date().toISOString(),
+        type: "worker.usage.request",
+        executionWorkspaceId: this.executionWorkspaceId ?? undefined,
+        workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
+        payload: { requestId, workerId },
+      });
+    } catch {
+      const pending = this.pendingUsageRequests.get(requestId);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingUsageRequests.delete(requestId);
+      }
+      return Response.json(
+        { error: "Usage request could not be queued" },
+        { status: 503 },
+      );
+    }
+    try {
+      const payload = await result;
+      return Response.json({
+        status: payload.status,
+        output: payload.output ?? "",
+        errorOutput: payload.errorOutput ?? "",
+        exitCode: payload.exitCode ?? null,
+        truncated: payload.truncated === true,
+        errorCode: payload.errorCode ?? null,
+        errorMessage: payload.errorMessage ?? null,
+        fetchedAt: new Date().toISOString(),
+      });
+    } catch {
+      return Response.json(
+        {
+          status: "error",
+          errorCode: "usage_timeout",
+          errorMessage:
+            "The Workspace did not return a usage report. It may need to be updated.",
         },
         { status: 504 },
       );

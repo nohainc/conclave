@@ -20,6 +20,35 @@ mixin _WorkspaceApi on _AxApiClientCore {
         .toList();
   }
 
+  Future<AxWorkerUsageReport> readWorkerUsage({
+    required String workspaceId,
+    required String workerId,
+  }) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/workspaces/${Uri.encodeComponent(workspaceId)}'
+          '/workers/${Uri.encodeComponent(workerId)}/usage'),
+      headers: _headers(contentType: 'application/json'),
+      body: '{}',
+    );
+    Object? body;
+    try {
+      body = jsonDecode(response.body);
+    } on FormatException {
+      body = null;
+    }
+    if (body is Map && body['status'] is String) {
+      return AxWorkerUsageReport.fromJson(Map<String, dynamic>.from(body));
+    }
+    final message = body is Map && body['error'] is String
+        ? body['error'] as String
+        : 'Usage request failed (${response.statusCode})';
+    return AxWorkerUsageReport(
+        status: 'error',
+        errorMessage: response.statusCode == 404
+            ? 'Only the Workspace owner can read this Worker\'s usage.'
+            : message);
+  }
+
   Future<Map<String, dynamic>> _workspaceJson(Uri uri) async {
     final response = await client.get(uri, headers: _headers());
     if (response.statusCode < 200 || response.statusCode >= 300) {

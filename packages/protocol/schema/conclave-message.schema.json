@@ -62,7 +62,9 @@
       "assignment.cancel.ack",
       "assignment.cancelled",
       "diagnostic.probe",
-      "diagnostic.probe.ack"
+      "diagnostic.probe.ack",
+      "worker.usage.request",
+      "worker.usage.result"
     ],
     "baseEnvelopeFields": [
       "protocol",

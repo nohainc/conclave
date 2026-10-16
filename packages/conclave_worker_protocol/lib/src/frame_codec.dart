@@ -18,6 +18,8 @@ WorkerFrame decodeWorkerFrame(String line) {
     'initialize.result' => InitializeResult.fromJson(json),
     'probe.request' => ProbeRequest.fromJson(json),
     'probe.result' => ProbeResult.fromJson(json),
+    'usage.request' => UsageRequest.fromJson(json),
+    'usage.result' => UsageResult.fromJson(json),
     'execute.request' => ExecuteRequest.fromJson(json),
     'progress' => WorkerProgress.fromJson(json),
     'activity' => WorkerActivity.fromJson(json),

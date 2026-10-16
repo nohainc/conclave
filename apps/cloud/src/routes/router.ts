@@ -519,6 +519,23 @@ export async function routeWorkerRequest(
       );
     }
 
+    const workerUsageMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/workers\/([^/]+)\/usage$/,
+    );
+    if (
+      request.method === "POST" &&
+      workerUsageMatch?.[1] &&
+      workerUsageMatch[2]
+    ) {
+      return await handlers.handleWorkerUsage!(
+        request,
+        env,
+        workerUsageMatch[1],
+        decodeURIComponent(workerUsageMatch[2]),
+        ctx,
+      );
+    }
+
     const workspaceMatch = url.pathname.match(/^\/api\/workspaces\/([^/]+)$/);
     if (request.method === "DELETE" && workspaceMatch?.[1]) {
       return await handlers.handleRevokeWorkspace!(

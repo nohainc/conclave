@@ -342,6 +342,7 @@ class WorkspaceCloudConnection {
     this.diagnosticStoreForWorkerType,
     this.localQueueLengthProvider,
     this.workerInventoryProvider,
+    this.workerUsageProvider,
     this.onSessionReady,
     this.workspaceUpdateAvailableHandler,
     this.onKnownSpaces,
@@ -397,6 +398,12 @@ class WorkspaceCloudConnection {
   final MonotonicCloudClock startPermitClock;
   final Map<String, _ClockProbe> _clockProbes = {};
   final Future<List<Map<String, Object?>>> Function()? workerInventoryProvider;
+
+  /// Runs a Worker's Profile-defined usage command and returns the raw report
+  /// as a `worker.usage.result` payload (without `requestId`). The report is
+  /// forwarded verbatim; the Service never interprets it.
+  final Future<Map<String, Object?>> Function(String workerId)?
+      workerUsageProvider;
   final Future<void> Function()? onSessionReady;
   final WorkspaceUpdateAvailableHandler? workspaceUpdateAvailableHandler;
 
@@ -1863,6 +1870,58 @@ class WorkspaceCloudConnection {
       unawaited(_handleAssignmentCancel(decoded));
     } else if (decoded['type'] == 'diagnostic.probe') {
       _handleDeliveryProbe(decoded);
+    } else if (decoded['type'] == 'worker.usage.request') {
+      unawaited(_handleWorkerUsageRequest(decoded));
+    }
+  }
+
+  /// Answers a Cloud usage request by running the Worker Profile's usage
+  /// command through the Engine. Failures are reported as a bounded result so
+  /// the requester never waits for the timeout.
+  Future<void> _handleWorkerUsageRequest(Map<String, dynamic> decoded) async {
+    final payload = decoded['payload'];
+    if (payload is! Map) return;
+    final requestId = payload['requestId'];
+    final workerId = payload['workerId'];
+    if (requestId is! String ||
+        requestId.isEmpty ||
+        requestId.length > 128 ||
+        workerId is! String ||
+        workerId.isEmpty ||
+        workerId.length > 128) {
+      return;
+    }
+    Map<String, Object?> result;
+    final provider = workerUsageProvider;
+    if (provider == null) {
+      result = {
+        'status': 'unavailable',
+        'errorCode': 'usage_not_supported',
+        'errorMessage': 'This Workspace cannot read Worker usage.',
+      };
+    } else {
+      try {
+        result = await provider(workerId);
+      } on Object {
+        result = {
+          'status': 'error',
+          'errorCode': 'provider_failure',
+          'errorMessage': 'The usage command could not be run.',
+        };
+      }
+    }
+    final socket = _transport;
+    if (socket == null || sessionId == null) return;
+    try {
+      socket.send(jsonEncode({
+        ..._envelope('worker.usage.result', {
+          'requestId': requestId,
+          ...result,
+        }),
+        'correlationId': decoded['messageId'],
+      }));
+    } on Object {
+      // The requester times out; never disturb the connection for this.
     }
   }
 

@@ -19,6 +19,8 @@ abstract final class WorkerProtocolLimits {
   static const maxTimeoutMs = 24 * 60 * 60 * 1000;
   static const maxProbeTimeoutMs = 30 * 1000;
   static const maxProbeChecks = 32;
+  static const maxUsageOutputChars = 64 * 1024;
+  static const maxUsageTimeoutMs = 60 * 1000;
   static const maxCheckCodeLength = 64;
   static const maxCheckMessageLength = 1024;
   static const maxProviderToolNameLength = 128;

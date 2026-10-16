@@ -66,6 +66,8 @@ const workspaceRuntimeProtocolSchemaMessageTypes = <String>{
   'assignment.cancelled',
   'diagnostic.probe',
   'diagnostic.probe.ack',
+  'worker.usage.request',
+  'worker.usage.result',
 };
 const workspaceRuntimeProtocolSchemaBaseEnvelopeFields = <String>[
   'protocol',

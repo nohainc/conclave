@@ -42,10 +42,15 @@ export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "assignment.cancelled",
   "diagnostic.probe",
   "diagnostic.probe.ack",
+  "worker.usage.request",
+  "worker.usage.result",
 ] as const;
 
 export type WorkspaceRuntimeMessageType =
   (typeof WORKSPACE_RUNTIME_MESSAGE_TYPES)[number];
+
+/** Maximum characters of raw provider usage output carried in one message. */
+export const WORKER_USAGE_OUTPUT_MAX_CHARS = 64 * 1024;
 
 const nonEmptyString = z.string().trim().min(1);
 const timestamp = z.string().datetime();
@@ -596,6 +601,40 @@ export const workspaceRuntimeEnvelopeSchema = z
                   .max(86_400_000)
                   .optional(),
                 clockRttMs: z.number().int().min(0).max(600_000).optional(),
+              })
+              .strict();
+      const payload = schema.safeParse(message.payload);
+      if (!payload.success) {
+        for (const issue of payload.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payload", ...issue.path],
+            message: issue.message,
+          });
+        }
+      }
+    }
+    if (
+      message.type === "worker.usage.request" ||
+      message.type === "worker.usage.result"
+    ) {
+      const token = nonEmptyString.max(128).regex(/^[A-Za-z0-9._:-]+$/);
+      const reportText = z.string().max(WORKER_USAGE_OUTPUT_MAX_CHARS);
+      const schema =
+        message.type === "worker.usage.request"
+          ? z.object({ requestId: token, workerId: token }).strict()
+          : z
+              .object({
+                requestId: token,
+                status: z.enum(["ok", "unavailable", "error"]),
+                // The provider's own report, returned verbatim and never
+                // interpreted by Conclave.
+                output: reportText.optional(),
+                errorOutput: reportText.optional(),
+                exitCode: z.number().int().min(-1024).max(1024).optional(),
+                truncated: z.boolean().optional(),
+                errorCode: token.optional(),
+                errorMessage: z.string().max(512).optional(),
               })
               .strict();
       const payload = schema.safeParse(message.payload);
