@@ -121,8 +121,9 @@ class AxRealtimeCacheRouter {
       } else if (entityId != null) {
         await changed(threadId, type, entityId);
       }
-      if (type == 'discussion.created')
+      if (type == 'discussion.created') {
         await _activityChanged(threadId, spaceId);
+      }
       return;
     }
     if (threadId != null &&

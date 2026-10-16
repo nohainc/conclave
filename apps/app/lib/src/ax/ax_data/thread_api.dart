@@ -1,6 +1,6 @@
 part of '../ax_data.dart';
 
-mixin _ThreadApi on _AxApiClientCore {
+mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
   @override
   Future<List<AxThread>> loadSpaceThreads({
     required String spaceId,

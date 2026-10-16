@@ -112,8 +112,8 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                   itemBuilder: (context) => [
                     if (!archived)
                       const PopupMenuItem(
-                        textStyle: const TextStyle(
-                            color: ConclaveColors.navigationTextDark),
+                        textStyle:
+                            TextStyle(color: ConclaveColors.navigationTextDark),
                         value: 'edit',
                         child: Text('Rename'),
                       ),
@@ -124,8 +124,8 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                       child: Text(archived ? 'Restore' : 'Archive'),
                     ),
                     const PopupMenuItem(
-                      textStyle: const TextStyle(
-                          color: ConclaveColors.navigationTextDark),
+                      textStyle:
+                          TextStyle(color: ConclaveColors.navigationTextDark),
                       value: 'delete',
                       child: Text('Delete'),
                     ),

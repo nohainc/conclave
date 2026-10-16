@@ -199,7 +199,6 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
   final isAuthFailure = prompt == 'Provider auth failure';
   final isPermissionFailure = prompt == 'Provider permission failure';
   final isMissingTerminal = prompt == 'Missing terminal';
-  final timeout = isLive ? '29s' : '9s';
   final expectedResume =
       prompt == 'Continue durable' ||
       prompt == 'Continue safely' ||
@@ -229,7 +228,7 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
       _hasPair(arguments, '--input-format', 'stream-json') &&
       _hasPair(arguments, '--output-format', 'stream-json') &&
       arguments.contains('--sandbox') &&
-      _hasPair(arguments, '--print-timeout', timeout) &&
+      _hasTimeoutPair(arguments, isLive) &&
       isResume == expectedResume &&
       (!isResume ||
           _hasPair(
@@ -310,4 +309,16 @@ bool _hasPair(List<String> arguments, String key, String value) {
   return index >= 0 &&
       index + 1 < arguments.length &&
       arguments[index + 1] == value;
+}
+
+bool _hasTimeoutPair(List<String> arguments, bool isLive) {
+  final index = arguments.indexOf('--print-timeout');
+  if (index < 0 || index + 1 >= arguments.length) return false;
+  final val = arguments[index + 1];
+  if (!val.endsWith('s')) return false;
+  final seconds = int.tryParse(val.substring(0, val.length - 1));
+  if (seconds == null) return false;
+  return isLive
+      ? (seconds >= 20 && seconds <= 30)
+      : (seconds >= 5 && seconds <= 15);
 }

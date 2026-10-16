@@ -102,7 +102,8 @@ void main() {
     expect(disabled.localPermissions, isNot(contains('network:use')));
   });
 
-  test('reset is performed by the runtime owner and shuts down local Worker instances',
+  test(
+      'reset is performed by the runtime owner and shuts down local Worker instances',
       () async {
     final worker = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),

@@ -2239,7 +2239,7 @@ class CliWorkerEngine {
         caseSensitive: false,
       ),
       'deadline_exceeded': RegExp(
-        r'timeout|timed out|deadline exceeded',
+        r'(?<![-_\w])(?:timeout|timed out|deadline exceeded)\b',
         caseSensitive: false,
       ),
       'provider_tool_unavailable': RegExp(
