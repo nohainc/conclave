@@ -1973,7 +1973,7 @@ class WorkspaceCloudConnection {
     }
     final journal = assignmentJournal;
     if (journal == null) return;
-    final record = (await journal.reconcile())[assignmentId];
+    final record = await journal.find(assignmentId);
     if (record == null || record.status == AssignmentStatus.reconciled) {
       return;
     }

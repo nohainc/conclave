@@ -268,4 +268,42 @@ void main() {
     await run(1, 'lease-new');
     expect(Directory('${root.path}/work/Plan').existsSync(), isTrue);
   });
+
+  test('asks before taking a registered folder claimed by another Space',
+      () async {
+    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    addTearDown(() => root.delete(recursive: true));
+    final work = Directory('${root.path}/work');
+    final resolver = SpaceDirectoryResolver(
+      workRoot: work,
+      registryDirectory: Directory('${root.path}/state'),
+    );
+    final folder = await resolver.resolve(spaceId: 'space-a', spaceName: 'Plan');
+    File('${folder.path}/notes.txt').writeAsStringSync('keep');
+    // Another environment sharing the work root claims the folder.
+    File('${folder.path}/.conclave-space.json').writeAsStringSync(
+      jsonEncode({'schemaVersion': 1, 'spaceId': 'space-b'}),
+    );
+
+    await expectLater(
+      resolver.resolve(spaceId: 'space-a', spaceName: 'Plan'),
+      throwsA(
+        isA<SpaceFolderExistsException>()
+            .having((e) => e.ownedByAnotherSpace, 'ownedByAnotherSpace', true),
+      ),
+    );
+    expect(File('${folder.path}/notes.txt').readAsStringSync(), 'keep');
+
+    final adopted = await resolver.resolve(
+      spaceId: 'space-a',
+      spaceName: 'Plan',
+      adoptExistingFolder: true,
+    );
+    expect(adopted.path, folder.path);
+    expect(File('${folder.path}/notes.txt').readAsStringSync(), 'keep');
+    final marker = jsonDecode(
+      File('${folder.path}/.conclave-space.json').readAsStringSync(),
+    ) as Map;
+    expect(marker['spaceId'], 'space-a');
+  });
 }

@@ -5,11 +5,20 @@ import 'dart:io';
 /// A folder with the Space's name already exists, is not empty, and does not
 /// belong to any Space. It is never used silently; the user must confirm.
 class SpaceFolderExistsException implements Exception {
-  const SpaceFolderExistsException(this.folderName);
+  const SpaceFolderExistsException(
+    this.folderName, {
+    this.ownedByAnotherSpace = false,
+  });
   final String folderName;
+
+  /// True when the folder carries the identity marker of a different Space,
+  /// for example because another Conclave environment on this machine shares
+  /// the work root and claimed it. Never true for an unmarked folder.
+  final bool ownedByAnotherSpace;
   @override
-  String toString() =>
-      'SpaceFolderExistsException: "$folderName" already exists and is not empty';
+  String toString() => ownedByAnotherSpace
+      ? 'SpaceFolderExistsException: "$folderName" belongs to another Space'
+      : 'SpaceFolderExistsException: "$folderName" already exists and is not empty';
 }
 
 /// Resolves the user-owned working directory for a Space.
@@ -75,6 +84,31 @@ class SpaceDirectoryResolver {
       }
       if (!await directory.exists()) {
         directory = await _findMarkedDirectory(spaceId);
+      }
+      if (directory != null && await directory.exists()) {
+        // The registry says this folder is the Space's, but the folder may
+        // since have been claimed by another Space (for example by another
+        // Conclave environment sharing this work root) or lost its marker.
+        // Stop and ask, exactly like a same-named folder, instead of failing
+        // with an internal error. A confirmed retry takes the folder over.
+        final markerFile = File(_join(directory.path, _markerFileName));
+        final hasMarker = await markerFile.exists();
+        final foreign = hasMarker && !await _markerMatches(directory, spaceId);
+        final unmarkedWithFiles = !hasMarker &&
+            !await directory.list(followLinks: false).isEmpty;
+        if (foreign || unmarkedWithFiles) {
+          final folderName = _relativeToRoot(directory.path);
+          if (!adoptExistingFolder) {
+            throw SpaceFolderExistsException(
+              folderName,
+              ownedByAnotherSpace: foreign,
+            );
+          }
+          if (foreign) await markerFile.delete();
+          registry.removeWhere((id, value) =>
+              id != spaceId && value['relativePath'] == folderName);
+          adoptingLegacy = true;
+        }
       }
     } else {
       directory = await _findMarkedDirectory(spaceId);

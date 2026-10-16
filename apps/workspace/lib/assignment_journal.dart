@@ -128,14 +128,50 @@ class AssignmentJournal {
   final File file;
   Future<void> _writeQueue = Future<void>.value();
 
+  // The journal is append-only, so the latest state per assignment can be kept
+  // in memory instead of re-reading and re-parsing the whole file on every
+  // lookup. The cache is trusted only while the file length equals the length
+  // this instance last wrote or loaded; any other change (an external write,
+  // a partial record after a crash, an out-of-order transition) discards it
+  // and the next lookup performs the full, validating replay.
+  Map<String, AssignmentRecord>? _cache;
+  int _knownLength = -1;
+  int _lineCount = 0;
+
+  /// Compaction thresholds: rewrite only a journal that is both large and
+  /// mostly superseded history.
+  static const compactionMinLines = 1000;
+  static const compactionHistoryFactor = 3;
+
   Future<void> append(AssignmentRecord record) {
     final next = _writeQueue.then((_) async {
       await file.parent.create(recursive: true);
-      await file.writeAsString('${jsonEncode(record.toJson())}\n',
-          mode: FileMode.append, flush: true);
+      final line = '${jsonEncode(record.toJson())}\n';
+      await file.writeAsString(line, mode: FileMode.append, flush: true);
+      _applyAppended(record, utf8.encode(line).length, await file.length());
     });
     _writeQueue = next.catchError((Object _) {});
     return next;
+  }
+
+  void _applyAppended(AssignmentRecord record, int bytes, int newLength) {
+    final cache = _cache;
+    if (cache == null || _knownLength + bytes != newLength) {
+      _cache = null;
+      return;
+    }
+    final previous = cache[record.assignmentId];
+    if (previous != null && !_canTransition(previous.status, record.status)) {
+      // Possibly an out-of-order record or a real violation: let the full
+      // replay decide, exactly as before.
+      _cache = null;
+      return;
+    }
+    if (previous == null || !record.updatedAt.isBefore(previous.updatedAt)) {
+      cache[record.assignmentId] = record;
+    }
+    _knownLength = newLength;
+    _lineCount++;
   }
 
   /// Marks work owned by a previous service process as interrupted.
@@ -175,14 +211,69 @@ class AssignmentJournal {
         },
       ));
     }
+    await compactIfNeeded();
     return reconcile();
   }
 
-  Future<Map<String, AssignmentRecord>> reconcile() async {
-    if (!await file.exists()) return {};
+  /// Latest state of every assignment. Returns a copy, so callers may iterate
+  /// it while appending.
+  Future<Map<String, AssignmentRecord>> reconcile() async =>
+      Map<String, AssignmentRecord>.of(await _snapshot());
+
+  /// Latest state of one assignment without copying the whole map. Use this on
+  /// per-assignment paths.
+  Future<AssignmentRecord?> find(String assignmentId) async =>
+      (await _snapshot())[assignmentId];
+
+  Future<Map<String, AssignmentRecord>> _snapshot() async {
+    if (!await file.exists()) {
+      _cache = null;
+      return const {};
+    }
+    final length = await file.length();
+    final cache = _cache;
+    if (cache != null && length == _knownLength) return cache;
+    final lines = await file.readAsLines();
+    final records = _replay(lines);
+    _cache = records;
+    _knownLength = length;
+    _lineCount = lines.length;
+    return records;
+  }
+
+  /// Rewrites the journal with only the latest record per assignment when it
+  /// is large and mostly superseded history. The replacement is written to a
+  /// temporary file and renamed over the journal, so a crash leaves either the
+  /// old or the new complete file.
+  Future<bool> compactIfNeeded() {
+    final result = _writeQueue.then((_) async {
+      final records = await _snapshot();
+      if (_lineCount < compactionMinLines ||
+          _lineCount < records.length * compactionHistoryFactor) {
+        return false;
+      }
+      final ordered = records.values.toList()
+        ..sort((left, right) => left.updatedAt.compareTo(right.updatedAt));
+      final buffer = StringBuffer();
+      for (final record in ordered) {
+        buffer.writeln(jsonEncode(record.toJson()));
+      }
+      final text = buffer.toString();
+      final temporary = File('${file.path}.compact');
+      await temporary.writeAsString(text, flush: true);
+      await temporary.rename(file.path);
+      _cache = Map<String, AssignmentRecord>.of(records);
+      _knownLength = utf8.encode(text).length;
+      _lineCount = records.length;
+      return true;
+    });
+    _writeQueue = result.then<void>((_) {}).catchError((Object _) {});
+    return result;
+  }
+
+  Map<String, AssignmentRecord> _replay(List<String> lines) {
     final records = <String, AssignmentRecord>{};
     final history = <String, List<_JournalEntry>>{};
-    final lines = await file.readAsLines();
     for (var index = 0; index < lines.length; index++) {
       final line = lines[index];
       if (line.trim().isEmpty) continue;

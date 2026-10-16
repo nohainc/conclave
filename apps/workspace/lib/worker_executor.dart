@@ -347,11 +347,7 @@ class WorkerAssignmentHandler {
             adoptExistingFolder: _adoptSpaceFolder(context.payload),
           );
         } on SpaceFolderExistsException {
-          throw AssignmentExecutionFailure(
-            code: 'space_folder_exists',
-            message: executionErrorMessage('space_folder_exists'),
-            retryable: false,
-          );
+          throw _spaceFolderFailure();
         }
       } else {
         final legacyLifecycle = threadDirectoryLifecycle;
@@ -563,18 +559,26 @@ class WorkerAssignmentHandler {
     if (spaceCoordinator != null) {
       return _awaitMutation(
         context,
-        (acquired) => spaceCoordinator.withMutation(
-          spaceId: spaceId,
-          threadId: threadId,
-          spaceName: _spaceName(context.payload),
-          adoptExistingFolder: _adoptSpaceFolder(context.payload),
-          leaseId: leaseId,
-          fencingToken: fencingToken,
-          action: (_) {
-            acquired();
-            return execute();
-          },
-        ),
+        (acquired) async {
+          try {
+            return await spaceCoordinator.withMutation(
+              spaceId: spaceId,
+              threadId: threadId,
+              spaceName: _spaceName(context.payload),
+              adoptExistingFolder: _adoptSpaceFolder(context.payload),
+              leaseId: leaseId,
+              fencingToken: fencingToken,
+              action: (_) {
+                acquired();
+                return execute();
+              },
+            );
+          } on SpaceFolderExistsException {
+            // Same recoverable, user-confirmed outcome as the stateless path:
+            // the Space's folder is occupied or claimed by another Space.
+            throw _spaceFolderFailure();
+          }
+        },
         (remaining) => queueAllowanceRemaining = remaining,
       );
     }
@@ -598,6 +602,12 @@ class WorkerAssignmentHandler {
       (remaining) => queueAllowanceRemaining = remaining,
     );
   }
+
+  AssignmentExecutionFailure _spaceFolderFailure() => AssignmentExecutionFailure(
+        code: 'space_folder_exists',
+        message: executionErrorMessage('space_folder_exists'),
+        retryable: false,
+      );
 
   /// Waits for the Space/Thread mutation lock as a visible, cancellable and
   /// bounded queue stage. The wait happens before a Worker slot is reserved

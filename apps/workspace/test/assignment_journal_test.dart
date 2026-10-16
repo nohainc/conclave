@@ -146,4 +146,112 @@ void main() {
         2);
     await directory.delete(recursive: true);
   });
+
+  test('find sees appends made through the same instance without a reload',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('journal-find-');
+    addTearDown(() => directory.delete(recursive: true));
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    expect(await journal.find('assignment-1'), isNull);
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-1',
+      status: AssignmentStatus.received,
+      updatedAt: DateTime.utc(2026, 1, 1),
+    ));
+    expect((await journal.find('assignment-1'))!.status,
+        AssignmentStatus.received);
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-1',
+      status: AssignmentStatus.running,
+      updatedAt: DateTime.utc(2026, 1, 1, 0, 0, 1),
+    ));
+    expect((await journal.find('assignment-1'))!.status,
+        AssignmentStatus.running);
+  });
+
+  test('notices a record written to the file outside this instance', () async {
+    final directory = await Directory.systemTemp.createTemp('journal-ext-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/assignments.jsonl');
+    final journal = AssignmentJournal(file);
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-1',
+      status: AssignmentStatus.running,
+      updatedAt: DateTime.utc(2026, 1, 1),
+    ));
+    expect((await journal.find('assignment-1'))!.status,
+        AssignmentStatus.running);
+    await file.writeAsString(
+      '{"assignmentId":"assignment-1","status":"completed",'
+      '"updatedAt":"2026-01-02T00:00:00Z"}\n',
+      mode: FileMode.append,
+    );
+    expect((await journal.find('assignment-1'))!.status,
+        AssignmentStatus.completed);
+  });
+
+  test('a returned snapshot can be iterated while appending', () async {
+    final directory = await Directory.systemTemp.createTemp('journal-iter-');
+    addTearDown(() => directory.delete(recursive: true));
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    for (var i = 0; i < 3; i++) {
+      await journal.append(AssignmentRecord(
+        assignmentId: 'assignment-$i',
+        status: AssignmentStatus.running,
+        updatedAt: DateTime.utc(2026, 1, 1),
+      ));
+    }
+    for (final record in (await journal.reconcile()).values) {
+      await journal.append(AssignmentRecord(
+        assignmentId: record.assignmentId,
+        status: AssignmentStatus.interrupted,
+        updatedAt: DateTime.utc(2026, 1, 2),
+      ));
+    }
+    expect((await journal.reconcile()).length, 3);
+  });
+
+  test('compacts a large, mostly superseded journal and keeps latest state',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('journal-compact-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/assignments.jsonl');
+    final journal = AssignmentJournal(file);
+    var tick = 0;
+    DateTime next() => DateTime.utc(2026, 1, 1).add(Duration(seconds: tick++));
+    for (var i = 0; i < 400; i++) {
+      for (final status in const [
+        AssignmentStatus.received,
+        AssignmentStatus.accepted,
+        AssignmentStatus.running,
+        AssignmentStatus.completed,
+      ]) {
+        await journal.append(AssignmentRecord(
+          assignmentId: 'assignment-$i',
+          status: status,
+          updatedAt: next(),
+        ));
+      }
+    }
+    expect(file.readAsLinesSync().length, 1600);
+
+    expect(await journal.compactIfNeeded(), isTrue);
+
+    expect(file.readAsLinesSync().length, 400);
+    final fresh = await AssignmentJournal(file).reconcile();
+    expect(fresh.length, 400);
+    expect(fresh.values.every((r) => r.status == AssignmentStatus.completed),
+        isTrue);
+    // Appending after compaction still works and is seen immediately.
+    await journal.append(AssignmentRecord(
+      assignmentId: 'assignment-new',
+      status: AssignmentStatus.received,
+      updatedAt: next(),
+    ));
+    expect((await journal.find('assignment-new'))!.status,
+        AssignmentStatus.received);
+    expect(await journal.compactIfNeeded(), isFalse);
+  });
 }

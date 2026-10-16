@@ -112,8 +112,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       )));
       return;
     }
-    final journalState = await assignmentJournal?.reconcile();
-    final previous = journalState?[context.assignmentId];
+    final previous = await assignmentJournal?.find(context.assignmentId);
     if (previous != null) {
       if (previous.status == AssignmentStatus.completed &&
           previous.result != null) {
@@ -505,7 +504,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
       cancelled = await assignmentCancellationHandler!(assignmentId, reason);
     }
     if (!cancelled) {
-      final previous = (await assignmentJournal?.reconcile())?[assignmentId];
+      final previous = await assignmentJournal?.find(assignmentId);
       final terminal = previous != null &&
           {
             AssignmentStatus.completed,
@@ -784,7 +783,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
   }) async {
     final journal = assignmentJournal;
     if (journal == null) return;
-    final current = (await journal.reconcile())[assignmentId];
+    final current = await journal.find(assignmentId);
     if (current != null) {
       final terminal = const {
         AssignmentStatus.completed,
