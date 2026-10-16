@@ -178,21 +178,21 @@
     "supported": true,
     "arguments": ["--model", "{{model}}"],
     "unknownModelPolicy": "profile_allowlist",
-    "allowlist": ["sonnet", "opus", "haiku"],
+    "allowlist": ["opus", "sonnet", "haiku"],
     "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"],
     "catalog": [
-      {
-        "id": "sonnet",
-        "name": "Claude Sonnet",
-        "badge": "Workhorse",
-        "description": "Latest Sonnet model for coding and everyday work",
-        "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"]
-      },
       {
         "id": "opus",
         "name": "Claude Opus",
         "badge": "Frontier",
         "description": "Latest Opus model for the most demanding work",
+        "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"]
+      },
+      {
+        "id": "sonnet",
+        "name": "Claude Sonnet",
+        "badge": "Workhorse",
+        "description": "Latest Sonnet model for coding and everyday work",
         "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"]
       },
       {

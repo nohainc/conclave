@@ -52,7 +52,9 @@ class ProfileExecutionOptions {
         !const {'separate', 'combined'}.contains(model['selectionMode']))
       fail();
     final selections = parseModelSelectionMapping(model['selectionMapping']);
-    if (selections.isNotEmpty &&
+    final derivesEffortVariants = model['discovery'] is Map &&
+        (model['discovery'] as Map)['effortVariants'] != null;
+    if ((selections.isNotEmpty || derivesEffortVariants) &&
         (model['selectionMode'] != 'combined' ||
             model['supported'] != true ||
             model['discovery'] == null ||
@@ -65,8 +67,11 @@ class ProfileExecutionOptions {
                 'arguments',
                 'timeoutMs',
                 'format',
-                'idPrefix'
+                'idPrefix',
+                'effortVariants'
               }.contains(key)) ||
+          (selections.isNotEmpty && derivesEffortVariants) ||
+          !validEffortVariants(discovery['effortVariants']) ||
           discovery['schemaVersion'] != 1 ||
           !const {'tsv', 'codex_app_server'}.contains(discovery['format']) ||
           discovery['timeoutMs'] is! int ||
@@ -164,3 +169,15 @@ class ProfileExecutionOptions {
     if (options['effortSupported'] == true && supported.isEmpty) fail();
   }
 }
+
+/// Declares how a discovery line names its effort, so no model list is signed.
+///
+/// The effort comes from the parenthesized label suffix (`Name (High)`); the
+/// native ID must equal `<family><separator><effort>`.
+bool validEffortVariants(Object? raw) =>
+    raw == null ||
+    (raw is Map &&
+        raw.length == 2 &&
+        raw['source'] == 'label_parenthesized_suffix' &&
+        raw['separator'] is String &&
+        RegExp(r'^[-_.:]$').hasMatch(raw['separator'] as String));

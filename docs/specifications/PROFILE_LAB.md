@@ -182,8 +182,9 @@ After the development release reset, use the clean candidate payloads in
 Gemini starter returned by Cloud (or
 `docs/profile-templates/gemini-antigravity-runtime-catalog.v1.json`) to create
 and test the next ChatGPT and Gemini releases. The Gemini candidate must carry
-`model.selectionMode: "combined"` and its signed `selectionMapping` before it
-can publish grouped model/effort choices. These files are unsigned authoring
+`model.selectionMode: "combined"` and `model.discovery.effortVariants` before it
+can publish grouped model/effort choices (models and efforts are derived from
+the CLI output, not listed in the Profile). These files are unsigned authoring
 inputs; publication still happens through the normal qualification and Cloud
 signing flow.
 

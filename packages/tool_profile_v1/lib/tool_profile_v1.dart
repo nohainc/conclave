@@ -373,6 +373,20 @@ class EngineProfile {
       'session.resumeArguments',
       max: 32,
     );
+    final modelObject = _object(json['model'], 'model');
+    final derivesEffortVariants = modelObject['discovery'] is Map &&
+        (modelObject['discovery'] as Map)['effortVariants'] != null;
+    if (derivesEffortVariants &&
+        compareSemanticVersions(
+              _object(json['engineCompatibility'], 'engineCompatibility')['min']
+                  as String,
+              '1.3.0',
+            ) <
+            0) {
+      throw const FormatException(
+        'Derived model efforts require Engine 1.3.0',
+      );
+    }
     if (_object(json['model'], 'model')['selectionMapping'] != null &&
         compareSemanticVersions(
               _object(json['engineCompatibility'], 'engineCompatibility')['min']
@@ -391,6 +405,7 @@ class EngineProfile {
     if (declaredOptions is Map &&
         declaredOptions['effortSupported'] == true &&
         _object(json['model'], 'model')['selectionMapping'] == null &&
+        !derivesEffortVariants &&
         [
           execution['arguments'],
           ...(compatibilityOverrides as List)
@@ -704,7 +719,20 @@ void _validateUsageCommand(Object? value) {
     throw const FormatException('usage command must be an object');
   }
   final usage = Map<String, Object?>.from(value);
-  _expectOnly(usage, const {'arguments', 'timeoutMs'}, 'usage');
+  _expectOnly(usage, const {'arguments', 'timeoutMs', 'jsonRpc'}, 'usage');
+  final jsonRpc = usage['jsonRpc'];
+  if (jsonRpc != null) {
+    if (jsonRpc is! Map) {
+      throw const FormatException('usage.jsonRpc must be an object');
+    }
+    final rpc = Map<String, Object?>.from(jsonRpc);
+    _expectOnly(rpc, const {'method'}, 'usage.jsonRpc');
+    final method = rpc['method'];
+    if (method is! String ||
+        !RegExp(r'^[A-Za-z][A-Za-z0-9/._-]{0,255}$').hasMatch(method)) {
+      throw const FormatException('usage.jsonRpc.method is invalid');
+    }
+  }
   final arguments = _strings(usage['arguments'], 'usage.arguments');
   if (arguments.isEmpty || arguments.length > 128) {
     throw const FormatException('usage arguments are invalid');

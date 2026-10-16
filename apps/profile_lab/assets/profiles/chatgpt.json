@@ -309,6 +309,11 @@
     ],
     "schemaVersion": 1
   },
+  "usage": {
+    "arguments": ["app-server", "--listen", "stdio://"],
+    "timeoutMs": 20000,
+    "jsonRpc": { "method": "account/rateLimits/read" }
+  },
   "compatibilityOverrides": [
     {
       "executionArguments": [

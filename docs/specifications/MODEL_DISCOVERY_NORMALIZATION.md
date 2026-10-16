@@ -4,6 +4,30 @@ Implemented 2026-10-11. Architecture v8 and the Workspace Service ownership
 boundary remain unchanged. Extends [Worker execution options v2](WORKER_EXECUTION_OPTIONS_V2.md)
 and [Tool Profile v1](TOOL_PROFILE_V1.md).
 
+## Derived efforts (Gemini / AGY)
+
+`model.selectionMapping` is no longer used by the Gemini Profile. Models and
+efforts come only from the CLI's own `models` output, so a new provider model
+(for example Gemini 4 Argon) needs no Profile change. The Profile declares only
+how a line is read, in `model.discovery.effortVariants`, which requires
+`selectionMode: combined`, no `selectionMapping` and minimum Engine 1.3.0:
+
+```json
+{"source": "label_parenthesized_suffix", "separator": "-"}
+```
+
+A line `gemini-4-argon-high<TAB>Gemini 4 Argon (High)` yields effort `high` from
+the lower-cased parenthesized label suffix, family ID `gemini-4-argon` by
+removing `<separator><effort>` from the native ID, and family name
+`Gemini 4 Argon`. Lines of one family are grouped, efforts are ordered
+low to max, and the execution value is rebuilt as `<family><separator><effort>`
+(an effort the CLI did not print cannot be selected). A line whose label or ID
+does not follow the rule stays a plain model without an effort choice. No
+default effort is inferred; a duplicate effort in one family fails discovery.
+Claude keeps its Profile `catalog`; Codex reads models and efforts from its
+app-server. The signed mapping below remains supported for providers whose
+native IDs cannot be derived.
+
 ## Signed mapping
 
 Optional `model.selectionMapping` schema version 1 is finite signed data. It

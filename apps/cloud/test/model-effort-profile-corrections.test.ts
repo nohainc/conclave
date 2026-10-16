@@ -27,23 +27,17 @@ it("publishes Claude effort choices with a matching invocation slot", () => {
   });
 });
 
-it("all Gemini authoring templates classify the observed non-Gemini variants", () => {
+it("Gemini authoring templates derive efforts from the CLI instead of declaring models", () => {
   for (const name of ["gemini.json"]) {
     const profile = parseProfile(
       JSON.parse(read(new URL(name, templates))),
     ).profile;
-    const families = profile.model.selectionMapping!.models;
-    expect(
-      families
-        .find((m) => m.id === "claude-opus-5-5")!
-        .variants.map((v) => v.effort),
-    ).toEqual(["low", "medium", "high"]);
-    expect(
-      families.find((m) => m.id === "claude-sonnet-5-5")!.variants,
-    ).toHaveLength(3);
-    expect(families.find((m) => m.id === "gpt-oss-120b")!.variants).toEqual([
-      { nativeId: "gpt-oss-120b-medium", effort: "medium" },
-    ]);
+    expect(profile.model.selectionMapping).toBeUndefined();
+    expect(profile.model.selectionMode).toBe("combined");
+    expect(profile.model.discovery?.effortVariants).toEqual({
+      source: "label_parenthesized_suffix",
+      separator: "-",
+    });
   }
 });
 

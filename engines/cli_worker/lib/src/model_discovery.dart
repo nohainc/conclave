@@ -118,6 +118,53 @@ Future<List<DiscoveredModel>> discoverCodexAppServerModels({
   }
 }
 
+/// Calls one parameterless JSON-RPC [method] on a stdio app-server (for
+/// example Codex `account/rateLimits/read`) and returns the raw result. The
+/// result is never interpreted: providers calculate usage differently.
+Future<Map<String, Object?>> readAppServerResult({
+  required String executable,
+  required List<String> arguments,
+  required Map<String, String> environment,
+  required String workingDirectory,
+  required String method,
+  Duration timeout = const Duration(seconds: 15),
+}) async {
+  final process = await Process.start(
+    executable,
+    arguments,
+    workingDirectory: workingDirectory,
+    environment: environment,
+    includeParentEnvironment: false,
+    runInShell: false,
+  );
+  final lines = StreamIterator(
+    process.stdout.transform(utf8.decoder).transform(const LineSplitter()),
+  );
+  const cleanup = WorkerProcessCleanup();
+  final stderrDrain = process.stderr.drain<void>();
+  final deadline = DateTime.now().add(timeout);
+  try {
+    await _sendAppServerRequest(process.stdin, {
+      'id': 1,
+      'method': 'initialize',
+      'params': {
+        'clientInfo': {
+          'name': 'conclave-cli-worker-engine',
+          'version': '1.2.0',
+        },
+        'capabilities': null,
+      },
+    });
+    await _readAppServerResponse(lines, 1, deadline);
+    await _sendAppServerRequest(process.stdin, {'id': 2, 'method': method});
+    return await _readAppServerResponse(lines, 2, deadline);
+  } finally {
+    await lines.cancel();
+    await cleanup.terminate(process, grace: const Duration(milliseconds: 500));
+    await stderrDrain.catchError((_) {});
+  }
+}
+
 Future<void> _sendAppServerRequest(IOSink sink, Map<String, Object?> request) {
   sink.writeln(jsonEncode(request));
   return sink.flush();
@@ -267,10 +314,15 @@ class ModelDiscoveryCache {
 List<DiscoveredModel> normalizeCombinedModels(
   List<DiscoveredModel> models,
   Object? mapping,
-  String version,
-) {
+  String version, {
+  Object? effortVariants,
+}) {
   final families = parseModelSelectionMapping(mapping);
-  if (families.isEmpty) return models;
+  if (families.isEmpty) {
+    return effortVariants is Map
+        ? deriveEffortVariantModels(models, effortVariants)
+        : models;
+  }
   final native = {for (final model in models) model.nativeId: model};
   if (native.length != models.length)
     throw const FormatException('Duplicate native model ID');
@@ -313,16 +365,100 @@ List<DiscoveredModel> normalizeCombinedModels(
   return result;
 }
 
+const _effortRank = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+final _labelEffort = RegExp(r'^(.+?)\s*\(([^()]+)\)$');
+final _effortValue = RegExp(r'^[a-z0-9][a-z0-9._:-]{0,63}$');
+
+/// Groups native models into one logical model per family using only what the
+/// CLI printed: the label ends with the effort in parentheses (`Name (High)`)
+/// and the native ID is `<family><separator><effort>`. No model or effort is
+/// declared in the Profile; a line that does not follow this stays a plain
+/// model with no effort choice.
+List<DiscoveredModel> deriveEffortVariantModels(
+  List<DiscoveredModel> models,
+  Map<Object?, Object?> rule,
+) {
+  final separator = rule['separator'] as String;
+  final names = <String, String>{};
+  final efforts = <String, List<String>>{};
+  final order = <String>[];
+  final plain = <DiscoveredModel>[];
+  for (final model in models) {
+    final label = _labelEffort.firstMatch(model.name);
+    final effort = label?.group(2)?.trim().toLowerCase();
+    if (label == null ||
+        effort == null ||
+        !_effortValue.hasMatch(effort) ||
+        !model.nativeId.endsWith('$separator$effort') ||
+        model.nativeId.length == '$separator$effort'.length) {
+      plain.add(model);
+      continue;
+    }
+    final suffix = '$separator$effort';
+    final family = model.nativeId.substring(
+      0,
+      model.nativeId.length - suffix.length,
+    );
+    if (!efforts.containsKey(family)) {
+      order.add(family);
+      efforts[family] = [];
+      names[family] = label.group(1)!.trim();
+    }
+    if (efforts[family]!.contains(effort)) {
+      throw const FormatException('Duplicate model effort');
+    }
+    efforts[family]!.add(effort);
+  }
+  int rank(String effort) {
+    final index = _effortRank.indexOf(effort);
+    return index < 0 ? _effortRank.length : index;
+  }
+
+  final result = <DiscoveredModel>[
+    for (final family in order)
+      DiscoveredModel(
+        id: family,
+        name: names[family]!,
+        selectionMode: 'combined',
+        supportedReasoningEfforts: [...efforts[family]!]
+          ..sort((a, b) => rank(a).compareTo(rank(b))),
+      ),
+    for (final model in plain)
+      DiscoveredModel(
+        id: model.id,
+        name: model.name,
+        nativeId: model.nativeId,
+        status: model.status,
+        selectionMode: 'combined',
+      ),
+  ];
+  if (result.map((m) => m.id).toSet().length != result.length) {
+    throw const FormatException('Logical model ID collision');
+  }
+  return result;
+}
+
 /// Resolves only an advertised pair; missing defaults never choose a variant.
 String resolveNativeSelection(
   DiscoveredModel model,
   String? effort,
   Object? mapping,
-  String version,
-) {
+  String version, {
+  Object? effortVariants,
+}) {
   final family = parseModelSelectionMapping(
     mapping,
   ).where((m) => m.id == model.id).firstOrNull;
+  if (family == null &&
+      effortVariants is Map &&
+      model.selectionMode == 'combined' &&
+      model.supportedReasoningEfforts.isNotEmpty) {
+    final selected = effort ?? model.defaultReasoningEffort;
+    if (selected == null || !model.supportedReasoningEfforts.contains(selected)) {
+      throw const FormatException('Explicit supported effort required');
+    }
+    return '${model.id}${effortVariants['separator']}$selected';
+  }
   if (family == null) return model.nativeId;
   final selected = effort ?? model.defaultReasoningEffort;
   if (selected == null || !model.supportedReasoningEfforts.contains(selected))

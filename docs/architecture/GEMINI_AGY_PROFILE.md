@@ -92,9 +92,12 @@ readiness policy.
 
 AGY 1.2.16 and the subsequently installed 1.3.3 expose `--effort`, but
 `agy models` reports the current Gemini effort as part of each native model ID
-(for example, `gemini-3.8-flash-high`). The signed mapping groups those native
-IDs into four logical families and resolves a selected family/effort pair back
-to exactly one native `--model` value. Gemini combined families have no provider
+(for example, `gemini-3.8-flash-high`). The Engine groups those native
+IDs into logical families and resolves a selected family/effort pair back
+to exactly one native `--model` value. Since Engine 1.3.0 this is derived from
+the CLI output (`model.discovery.effortVariants`, see
+[Derived efforts](../specifications/MODEL_DISCOVERY_NORMALIZATION.md)); the
+Profile no longer lists models. Gemini combined families have no provider
 model or effort Auto value: the UI requires both selections, and the Engine
 does not send a separate `--effort` argument. A missing or unresolved native
 variant stays unavailable rather than being guessed.

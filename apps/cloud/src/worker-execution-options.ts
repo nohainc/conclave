@@ -249,7 +249,8 @@ export function spaceWorkerExecutionOptions(
       (!runtimeRevision &&
         model.discovery &&
         !hasEffortInvocation &&
-        !model.selectionMapping) ||
+        !model.selectionMapping &&
+        !(model.discovery as { effortVariants?: unknown }).effortVariants) ||
       !Array.isArray(values)
         ? []
         : [

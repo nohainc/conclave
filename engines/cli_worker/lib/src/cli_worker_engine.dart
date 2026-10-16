@@ -280,15 +280,36 @@ class CliWorkerEngine {
       final timeoutMs = profileTimeoutMs < request.timeoutMs
           ? profileTimeoutMs
           : request.timeoutMs;
-      final result = await _commandRunner.run(
-        executable,
-        _stringList(
-          spec['arguments'],
-        ).map((argument) => _template(argument, context)).toList(),
-        environment: _environment(),
-        workingDirectory: workingDirectory,
-        timeout: Duration(milliseconds: timeoutMs),
-      );
+      final arguments = _stringList(
+        spec['arguments'],
+      ).map((argument) => _template(argument, context)).toList();
+      final rpc = spec['jsonRpc'];
+      final CliCommandResult result;
+      if (rpc is Map) {
+        // The Profile names the app-server method; the result is returned
+        // as pretty-printed JSON without interpretation.
+        final rpcResult = await readAppServerResult(
+          executable: executable,
+          arguments: arguments,
+          environment: _environment(),
+          workingDirectory: workingDirectory,
+          method: _string(rpc['method']),
+          timeout: Duration(milliseconds: timeoutMs),
+        );
+        result = CliCommandResult(
+          exitCode: 0,
+          stdout: '${const JsonEncoder.withIndent('  ').convert(rpcResult)}\n',
+          stderr: '',
+        );
+      } else {
+        result = await _commandRunner.run(
+          executable,
+          arguments,
+          environment: _environment(),
+          workingDirectory: workingDirectory,
+          timeout: Duration(milliseconds: timeoutMs),
+        );
+      }
       const limit = WorkerProtocolLimits.maxUsageOutputChars;
       final out = _stripAnsi(result.stdout);
       final err = _stripAnsi(result.stderr);
@@ -631,6 +652,7 @@ class CliWorkerEngine {
           models,
           _profile.model['selectionMapping'],
           version,
+          effortVariants: spec['effortVariants'],
         ).map((model) => _restoreModelStatus(model, cached)),
       );
       await cache.save(catalog);
@@ -1683,6 +1705,7 @@ class CliWorkerEngine {
             request.reasoningEffort,
             _profile.model['selectionMapping'],
             _modelCatalog!.providerToolVersion,
+            effortVariants: _map(_profile.model['discovery'])['effortVariants'],
           );
   }
 

@@ -376,6 +376,13 @@ const usageCommand = z
   .object({
     arguments: z.array(templatedString).min(1).max(TOOL_PROFILE_LIMITS.arguments),
     timeoutMs: z.number().int().min(1000).max(60_000),
+    // When present, `arguments` start a JSON-RPC server over stdio (for
+    // example Codex app-server); the Engine calls this method once and
+    // returns the raw result instead of the process output.
+    jsonRpc: z
+      .object({ method: shortString.regex(/^[A-Za-z][A-Za-z0-9/._-]*$/) })
+      .strict()
+      .optional(),
   })
   .strict();
 const configCheck = z
@@ -661,6 +668,17 @@ const profileSchema = z
               .string()
               .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/)
               .or(z.literal("")),
+            // Derives logical models and efforts from the discovery output:
+            // the label ends with the effort in parentheses ("Name (High)")
+            // and the native ID is "<family><separator><effort>". Nothing is
+            // declared in the Profile, so it cannot go stale.
+            effortVariants: z
+              .object({
+                source: z.literal("label_parenthesized_suffix"),
+                separator: z.string().regex(/^[-_.:]$/),
+              })
+              .strict()
+              .optional(),
           })
           .strict()
           .optional(),
@@ -849,6 +867,18 @@ export const toolProfileV1Schema = profileSchema.superRefine((profile, ctx) => {
   const model = profile.model;
   const optionIssue = (message: string) =>
     ctx.addIssue({ code: "custom", path: ["model"], message });
+  if (model.discovery?.effortVariants) {
+    if (
+      model.selectionMapping ||
+      model.selectionMode !== "combined" ||
+      !model.supported ||
+      compareVersion(profile.engineCompatibility.min, "1.3.0") < 0 ||
+      model.executionOptions?.effortSupported === false
+    )
+      optionIssue(
+        "Derived model efforts require combined selection, no mapping and Engine 1.3.0",
+      );
+  }
   if (model.selectionMapping) {
     if (
       model.selectionMode !== "combined" ||
@@ -945,6 +975,7 @@ export const toolProfileV1Schema = profileSchema.superRefine((profile, ctx) => {
     if (
       declared.effortSupported &&
       !model.selectionMapping &&
+      !model.discovery?.effortVariants &&
       [
         profile.execution.arguments,
         ...profile.compatibilityOverrides.flatMap((override) =>

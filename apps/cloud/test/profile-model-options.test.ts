@@ -503,7 +503,7 @@ it("normalizes retained installed Codex and AGY evidence into the same public co
   }
 });
 
-it("publishes seven signed AGY families and rejects invented effort combinations", async () => {
+it("publishes AGY families derived from the CLI catalog without a signed model list", async () => {
   const { spaceWorkerExecutionOptions } =
     await import("../src/worker-execution-options.js");
   const candidate = JSON.parse(
@@ -512,59 +512,72 @@ it("publishes seven signed AGY families and rejects invented effort combinations
       "utf8",
     ),
   );
+  expect(candidate.model.selectionMapping).toBeUndefined();
+  expect(candidate.model.discovery.effortVariants).toEqual({
+    source: "label_parenthesized_suffix",
+    separator: "-",
+  });
   const digest = "c".repeat(64);
-  const models = candidate.model.selectionMapping.models.map((family: any) => ({
-    id: family.id,
-    name: family.name,
+  const families: Record<string, string[]> = {
+    "gemini-4-argon": ["low", "medium", "high"],
+    "gemini-3.8-flash": ["low", "medium", "high"],
+    "claude-opus-5-5": ["low", "medium", "high"],
+    "claude-sonnet-5-5": ["low", "medium", "high"],
+    "gpt-oss-120b": ["medium"],
+  };
+  const models = Object.entries(families).map(([id, efforts]) => ({
+    id,
+    name: id,
     status: "listed",
     selectionMode: "combined",
-    efforts: family.variants.map((v: any) => v.effort),
+    efforts,
     defaultEffort: null,
   }));
   const catalog = {
     schemaVersion: 2,
     catalogRevision: "a".repeat(64),
     profileDigest: digest,
-    providerToolVersion: "1.3.3",
-    discoveredAt: "2026-10-11T00:00:00Z",
+    providerToolVersion: "1.4.0",
+    discoveredAt: "2026-10-16T00:00:00Z",
     models,
   };
   const result = spaceWorkerExecutionOptions(
     JSON.stringify(candidate),
-    "1.3.3",
+    "1.4.0",
     catalog,
     digest,
   )!;
-  expect(result.models.options).toHaveLength(7);
+  expect(result.models.options.map((m) => m.id)).toEqual(Object.keys(families));
   expect(
     result.models.options.reduce((sum, m) => sum + m.efforts.length, 0),
-  ).toBe(18);
+  ).toBe(13);
   expect(JSON.stringify(result)).not.toContain("nativeId");
   const stale = spaceWorkerExecutionOptions(
     JSON.stringify(candidate),
-    "1.3.3",
+    "1.4.0",
     { ...catalog, stale: true },
     digest,
   )!;
   expect(stale.catalogStale).toBe(true);
   expect(stale.catalogRevision).toBe(result.catalogRevision);
-  models[3].efforts.push("medium");
-  expect(
-    spaceWorkerExecutionOptions(
-      JSON.stringify(candidate),
-      "1.3.3",
-      catalog,
-      digest,
-    ),
-  ).toBeNull();
-  const duplicate = structuredClone(candidate);
-  duplicate.model.selectionMapping.models[0].variants.push(
-    duplicate.model.selectionMapping.models[0].variants[0],
-  );
-  expect(() => parseProfile(duplicate)).toThrow();
+  const mapped = structuredClone(candidate);
+  mapped.model.selectionMapping = {
+    schemaVersion: 1,
+    models: [
+      {
+        id: "x",
+        name: "X",
+        variants: [{ nativeId: "x-low", effort: "low" }],
+      },
+    ],
+  };
+  expect(() => parseProfile(mapped)).toThrow();
   const outdated = structuredClone(candidate);
-  outdated.engineCompatibility.min = "1.1.0";
+  outdated.engineCompatibility.min = "1.2.0";
   expect(() => parseProfile(outdated)).toThrow();
+  const badRule = structuredClone(candidate);
+  badRule.model.discovery.effortVariants.separator = "--";
+  expect(() => parseProfile(badRule)).toThrow();
 });
 
 it("publishes the v2 catalog effort matrix without reconstructing provider support", async () => {

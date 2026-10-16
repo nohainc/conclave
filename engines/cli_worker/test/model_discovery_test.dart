@@ -5,7 +5,7 @@ import 'package:conclave_cli_worker_engine/src/model_discovery.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('AGY template groups all reviewed native effort variants', () {
+  test('the Gemini profile derives models and efforts from agy output', () {
     final profile =
         jsonDecode(
               File(
@@ -13,29 +13,86 @@ void main() {
               ).readAsStringSync(),
             )
             as Map;
-    final mapping = profile['model']['selectionMapping'];
+    expect(profile['model']['selectionMapping'], isNull);
+    final rule = profile['model']['discovery']['effortVariants'];
     final models = parseDiscoveredModels(
-      'claude-opus-5-5-low\tClaude Opus 5.5 (Low)\n'
-          'claude-opus-5-5-high\tClaude Opus 5.5 (High)\n'
-          'claude-sonnet-5-5-medium\tClaude Sonnet 5.5 (Medium)\n'
-          'gpt-oss-120b-medium\tGPT-OSS 120B (Medium)\n',
+      File(
+        'test/fixtures/agy-models-1.4.0.tsv',
+      ).readAsStringSync(),
       '',
     );
-    final grouped = normalizeCombinedModels(models, mapping, '1.3.3');
+    final grouped = normalizeCombinedModels(
+      models,
+      null,
+      '1.4.0',
+      effortVariants: rule,
+    );
     expect(grouped.map((m) => m.id), [
+      'gemini-4-argon',
+      'gemini-3.8-flash',
       'claude-opus-5-5',
       'claude-sonnet-5-5',
       'gpt-oss-120b',
     ]);
-    expect(grouped.first.supportedReasoningEfforts, ['low', 'high']);
+    expect(grouped.first.name, 'Gemini 4 Argon');
+    expect(grouped.first.supportedReasoningEfforts, ['low', 'medium', 'high']);
+    expect(grouped.last.supportedReasoningEfforts, ['medium']);
+    expect(grouped.every((m) => m.selectionMode == 'combined'), isTrue);
+    expect(grouped.every((m) => m.defaultReasoningEffort == null), isTrue);
     for (final model in grouped) {
       for (final effort in model.supportedReasoningEfforts) {
         expect(
           models.map((m) => m.id),
-          contains(resolveNativeSelection(model, effort, mapping, '1.3.3')),
+          contains(
+            resolveNativeSelection(
+              model,
+              effort,
+              null,
+              '1.4.0',
+              effortVariants: rule,
+            ),
+          ),
         );
       }
+      expect(
+        () => resolveNativeSelection(
+          model,
+          null,
+          null,
+          '1.4.0',
+          effortVariants: rule,
+        ),
+        throwsFormatException,
+      );
     }
+  });
+  test('derived efforts leave unlabeled lines as plain models', () {
+    final rule = {'source': 'label_parenthesized_suffix', 'separator': '-'};
+    final grouped = normalizeCombinedModels(
+      parseDiscoveredModels(
+        'plain-model\tPlain model\n'
+            'odd-high\tOdd (Low)\n'
+            'x-low\tX (Low)\n',
+        '',
+      ),
+      null,
+      '1.0.0',
+      effortVariants: rule,
+    );
+    expect(grouped.map((m) => m.id), ['x', 'plain-model', 'odd-high']);
+    expect(grouped[0].supportedReasoningEfforts, ['low']);
+    expect(grouped[1].supportedReasoningEfforts, isEmpty);
+    expect(grouped[2].supportedReasoningEfforts, isEmpty);
+    expect(
+      resolveNativeSelection(
+        grouped[2],
+        null,
+        null,
+        '1.0.0',
+        effortVariants: rule,
+      ),
+      'odd-high',
+    );
   });
   test(
     'TSV discovery preserves exact Gemini IDs and filters other providers',
@@ -326,7 +383,25 @@ Future<void> main() async {
                 ).readAsString(),
               )
               as Map;
-      final mapping = profile['model']['selectionMapping'];
+      final mapping = {
+        'schemaVersion': 1,
+        'models': [
+          for (final family in const {
+            'gemini-3.8-flash': ['low', 'medium', 'high'],
+            'gemini-3.7-flash': ['low', 'medium', 'high'],
+            'gemini-3.6-flash': ['low', 'medium', 'high'],
+            'gemini-3.1-pro': ['low', 'high'],
+          }.entries)
+            {
+              'id': family.key,
+              'name': family.key,
+              'variants': [
+                for (final effort in family.value)
+                  {'nativeId': '${family.key}-$effort', 'effort': effort},
+              ],
+            },
+        ],
+      };
       final native = parseDiscoveredModels(
         await File(
           '../../docs/acceptance/real-provider/2026-10-11/model-effort-audit-agy.tsv',

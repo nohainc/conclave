@@ -21,7 +21,9 @@ Future<void> main(List<String> args) async {
     if (File('${Platform.script.toFilePath()}.offline').existsSync()) { stderr.writeln('temporary discovery failure'); exit(2); }
     for (final version in ['3.8','3.7','3.6','3.1']) {
       for (final effort in version == '3.1' ? ['low','high'] : ['low','medium','high']) {
-        stdout.writeln('gemini-$version-${version == '3.1' ? 'pro' : 'flash'}-$effort\tGemini $version $effort');
+        final kind = version == '3.1' ? 'pro' : 'flash';
+        final label = effort[0].toUpperCase() + effort.substring(1);
+        stdout.writeln('gemini-$version-$kind-$effort\tGemini $version ${kind[0].toUpperCase()}${kind.substring(1)} ($label)');
       }
     }
     return;
@@ -69,7 +71,7 @@ Future<void> main(List<String> args) async {
           '--profile',
           profileFile.path,
           '--engine-version',
-          '1.2.0',
+          '1.3.0',
           '--state-directory',
           '${root.path}/state',
         ],
@@ -109,7 +111,7 @@ Future<void> main(List<String> args) async {
           InitializeRequest(
             requestId: 'init',
             workerTypeId: 'gemini',
-            expectedEngineVersion: '1.2.0',
+            expectedEngineVersion: '1.3.0',
             profileDefinitionId: 'gemini-antigravity',
             profileReleaseVersion: '${profile['releaseVersion']}',
             profileDigest: sha256.convert(bytes).toString(),

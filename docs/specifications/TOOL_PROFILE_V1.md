@@ -971,6 +971,7 @@ Passive discovery does not authenticate the account. See
 for cache ownership, wire metadata, availability states, security and release gates.
 
 Optional signed `model.selectionMapping` schema version 1 requires Engine 1.2.0.
+Optional `model.discovery.effortVariants` (`source: label_parenthesized_suffix`, one-character `separator`) derives families and efforts from discovery output instead; it requires `selectionMode: combined`, Engine 1.3.0 and excludes `selectionMapping`.
 Its exact native rows, effort/default rules and provider version gates are defined
 in [Provider discovery and normalization](MODEL_DISCOVERY_NORMALIZATION.md).
 
@@ -983,7 +984,13 @@ A Profile may declare a top-level `usage` object:
 ~~~
 
 - `arguments` are templated provider CLI arguments (same placeholders as other
-  commands); `timeoutMs` is 1000-60000. No other fields are allowed.
+  commands); `timeoutMs` is 1000-60000. The only other allowed field is
+  `jsonRpc`.
+- Optional `jsonRpc: { "method": "..." }` marks `arguments` as a stdio JSON-RPC
+  server (for example `codex app-server --listen stdio://`). The Engine sends
+  `initialize`, calls the one parameterless method, and returns the raw result
+  as pretty-printed JSON in `output`. The starter ChatGPT Profile uses
+  `account/rateLimits/read`. The result is still never interpreted.
 - The generic Engine runs the declared provider executable with these arguments
   on a `usage.request` frame and answers with `usage.result` (`output`,
   `errorOutput`, `exitCode`, `truncated`). Terminal escape sequences are removed
@@ -991,8 +998,8 @@ A Profile may declare a top-level `usage` object:
 - **Conclave never parses the report.** Providers calculate usage differently,
   so the Profile owns how usage is read and AX shows the text as received.
 - A Profile without `usage` yields status `unavailable`. The starter Claude
-  Profile declares `-p /usage`; ChatGPT and Gemini declare none until a stable
-  non-interactive command is verified for their CLIs.
+  Profile declares `-p /usage`; Gemini declares `-p /usage` (agy) and ChatGPT
+  uses the Codex app-server rate-limit call.
 - Cloud relays on demand: `POST /api/workspaces/:workspaceId/workers/:workerId/usage`
   (Workspace owner only) sends `worker.usage.request`; the Service replies with
   `worker.usage.result`. Results are never stored in Cloud or posted to a Thread.
