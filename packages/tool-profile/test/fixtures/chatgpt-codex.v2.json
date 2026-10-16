@@ -10,20 +10,13 @@
   },
   "providerTool": {
     "name": "Codex CLI",
-    "executableCandidates": [
-      "codex"
-    ],
+    "executableCandidates": ["codex"],
     "discovery": {
-      "standardLocations": [
-        "{{home}}/.local/bin",
-        "/usr/local/bin"
-      ],
+      "standardLocations": ["{{home}}/.local/bin", "/usr/local/bin"],
       "allowPathSearch": true
     },
     "versionProbe": {
-      "arguments": [
-        "--version"
-      ],
+      "arguments": ["--version"],
       "timeoutMs": 10000,
       "source": "stdout",
       "extract": {
@@ -62,14 +55,9 @@
       "checks": [
         {
           "id": "authentication",
-          "arguments": [
-            "login",
-            "status"
-          ],
+          "arguments": ["login", "status"],
           "timeoutMs": 10000,
-          "successExitCodes": [
-            0
-          ],
+          "successExitCodes": [0],
           "failureIssueCode": "provider_authentication_required"
         }
       ],
@@ -100,10 +88,7 @@
       },
       {
         "ifPresent": "reasoningEffort",
-        "values": [
-          "-c",
-          "model_reasoning_effort=\"{{reasoningEffort}}\""
-        ]
+        "values": ["-c", "model_reasoning_effort=\"{{reasoningEffort}}\""]
       },
       {
         "sessionResumeArguments": true
@@ -111,9 +96,7 @@
       {
         "ifAbsent": "sessionId",
         "ifSessionPolicy": "stateless",
-        "values": [
-          "--ephemeral"
-        ]
+        "values": ["--ephemeral"]
       },
       {
         "providerTimeoutArguments": true
@@ -218,22 +201,14 @@
   "session": {
     "supported": true,
     "formatId": "codex-thread-v1",
-    "compatibleFormatIds": [
-      "codex-thread-v1"
-    ],
+    "compatibleFormatIds": ["codex-thread-v1"],
     "extract": "$.thread_id",
-    "resumeArguments": [
-      "resume",
-      "{{sessionId}}"
-    ],
+    "resumeArguments": ["resume", "{{sessionId}}"],
     "requireObservedIdMatch": true
   },
   "model": {
     "supported": true,
-    "arguments": [
-      "--model",
-      "{{model}}"
-    ],
+    "arguments": ["--model", "{{model}}"],
     "unknownModelPolicy": "profile_allowlist",
     "defaultReasoningEffort": "low",
     "supportedReasoningEfforts": [
@@ -303,13 +278,7 @@
         "name": "GPT-6-Luna",
         "description": "Fast and affordable model for easier tasks.",
         "defaultReasoningEffort": "medium",
-        "supportedReasoningEfforts": [
-          "low",
-          "medium",
-          "high",
-          "xhigh",
-          "max"
-        ]
+        "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"]
       },
       {
         "id": "gpt-5.6-sol",
@@ -344,25 +313,14 @@
         "name": "GPT-5.6-Luna",
         "description": "Older fast and efficient model.",
         "defaultReasoningEffort": "medium",
-        "supportedReasoningEfforts": [
-          "low",
-          "medium",
-          "high",
-          "xhigh",
-          "max"
-        ]
+        "supportedReasoningEfforts": ["low", "medium", "high", "xhigh", "max"]
       },
       {
         "id": "gpt-5.5",
         "name": "GPT-5.5",
         "description": "Legacy coding model.",
         "defaultReasoningEffort": "medium",
-        "supportedReasoningEfforts": [
-          "low",
-          "medium",
-          "high",
-          "xhigh"
-        ]
+        "supportedReasoningEfforts": ["low", "medium", "high", "xhigh"]
       }
     ]
   },
@@ -384,9 +342,7 @@
         "--sandbox",
         "read-only"
       ],
-      "full_access": [
-        "--dangerously-bypass-approvals-and-sandbox"
-      ]
+      "full_access": ["--dangerously-bypass-approvals-and-sandbox"]
     }
   },
   "progress": [
@@ -406,20 +362,12 @@
         {
           "kind": "one_of",
           "selector": "$.type",
-          "values": [
-            "item.started",
-            "item.updated",
-            "item.completed"
-          ]
+          "values": ["item.started", "item.updated", "item.completed"]
         },
         {
           "kind": "one_of",
           "selector": "$.item.type",
-          "values": [
-            "command_execution",
-            "mcp_tool_call",
-            "web_search_call"
-          ]
+          "values": ["command_execution", "mcp_tool_call", "web_search_call"]
         }
       ],
       "percentage": 45,
@@ -494,10 +442,7 @@
         },
         {
           "ifPresent": "reasoningEffort",
-          "values": [
-            "-c",
-            "model_reasoning_effort=\"{{reasoningEffort}}\""
-          ]
+          "values": ["-c", "model_reasoning_effort=\"{{reasoningEffort}}\""]
         },
         {
           "sessionResumeArguments": true

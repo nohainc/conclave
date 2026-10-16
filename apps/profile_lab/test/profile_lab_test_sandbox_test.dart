@@ -232,9 +232,14 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
         enginesDirectory: Directory('${temp.path}/engine-cache'),
       );
       expect(engine, isNotNull, reason: 'The real bundled Engine is required.');
+      // The bundled Engine binary must be materialized and executable.
+      expect(engine!.existsSync(), isTrue);
+      if (!Platform.isWindows) {
+        expect(engine.statSync().mode & 0x49, isNonZero);
+      }
       final sandbox = ProfileLabTestSandbox(
         sandboxRoot: sandboxRoot,
-        engineExecutable: engine!,
+        engineExecutable: engine,
         environmentOverrides: {'PATH': path},
       );
 

@@ -61,6 +61,7 @@ class AxWorkRealtimeSync extends ChangeNotifier {
       _connectionInterrupted || _gapStale || _recovery != null
           ? AxWorkRealtimeStatus.checking
           : AxWorkRealtimeStatus.available;
+
   /// Debounced [status] for display; [status] itself stays immediate.
   AxWorkRealtimeStatus get displayStatus => _displayChecking
       ? AxWorkRealtimeStatus.checking

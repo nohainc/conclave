@@ -36,8 +36,10 @@ class AxSpaceThreads {
     final before = engine.peek(key).data;
     if (before == null) return;
     final stamp = pinned ? DateTime.now().toUtc().toIso8601String() : '';
-    final top = nextAxPinPosition(
-        [for (final t in before) if (t.isPinned) t.pinPosition]);
+    final top = nextAxPinPosition([
+      for (final t in before)
+        if (t.isPinned) t.pinPosition
+    ]);
     engine.update(
         key,
         (state) => List.unmodifiable([
@@ -81,9 +83,7 @@ class AxSpaceThreads {
         key,
         (state) => List.unmodifiable([
               for (final t in state.data ?? const <AxThread>[])
-                rank.containsKey(t.id)
-                    ? t.copyWith(pinPosition: rank[t.id])
-                    : t
+                rank.containsKey(t.id) ? t.copyWith(pinPosition: rank[t.id]) : t
             ]),
         fenceReads: false);
     try {

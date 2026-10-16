@@ -151,9 +151,8 @@ class SpaceDirectoryResolver {
   Future<int> forgetSpacesExcept(Set<String> knownSpaceIds) =>
       _serial(() async {
         final registry = await _readRegistry();
-        final stale = registry.keys
-            .where((id) => !knownSpaceIds.contains(id))
-            .toList();
+        final stale =
+            registry.keys.where((id) => !knownSpaceIds.contains(id)).toList();
         if (stale.isEmpty) return 0;
         for (final id in stale) {
           registry.remove(id);
@@ -409,7 +408,8 @@ class SpaceMutationCoordinator {
   /// every new lease as "stale". Space folders and their files are untouched.
   Future<void> reset() async {
     _tails.clear();
-    final fences = Directory(_join(applicationStateDirectory.path, 'space-fences'));
+    final fences =
+        Directory(_join(applicationStateDirectory.path, 'space-fences'));
     if (await fences.exists()) await fences.delete(recursive: true);
   }
 

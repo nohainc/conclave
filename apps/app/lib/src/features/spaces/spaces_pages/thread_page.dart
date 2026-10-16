@@ -787,7 +787,8 @@ class _ThreadPageState extends State<ThreadPage>
             : null;
         if (visibleWorkflows.isEmpty) {
           _workflow = '';
-        } else if (!visibleWorkflows.any((item) => item.reference == _workflow)) {
+        } else if (!visibleWorkflows
+            .any((item) => item.reference == _workflow)) {
           _workflow = _threadDefaultReference(visibleWorkflows,
               preferredId: _workflowDefaultId);
         }

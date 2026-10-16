@@ -7,7 +7,6 @@ import 'package:test/test.dart';
 void main() {
   test('versioned IPC authenticates, responds and streams runtime events',
       () async {
-    if (Platform.isWindows) return;
     final root = await Directory.systemTemp.createTemp('workspace-ipc-');
     addTearDown(() => root.delete(recursive: true));
     final source = StreamController<Map<String, Object?>>.broadcast();
@@ -54,11 +53,10 @@ void main() {
     final receivedEvent = await event;
     expect(receivedEvent['type'], 'event');
     expect(receivedEvent['name'], 'cloud.connectionChanged');
-  });
+  }, skip: Platform.isWindows ? 'POSIX only' : false);
 
   test('IPC rejects clients that do not possess the local capability key',
       () async {
-    if (Platform.isWindows) return;
     final root = await Directory.systemTemp.createTemp('workspace-ipc-auth-');
     addTearDown(() => root.delete(recursive: true));
     final server = WorkspaceManagerIpcServer(
@@ -89,5 +87,5 @@ void main() {
         'unauthorized',
       )),
     );
-  });
+  }, skip: Platform.isWindows ? 'POSIX only' : false);
 }

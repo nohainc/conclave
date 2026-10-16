@@ -351,7 +351,10 @@ export async function handleUpdateSpace(
       order.some((id) => typeof id !== "string" || id.length === 0) ||
       new Set(order).size !== order.length
     )
-      throw new HttpError(400, "threadOrder must be a list of unique Thread ids");
+      throw new HttpError(
+        400,
+        "threadOrder must be a list of unique Thread ids",
+      );
   }
   if (
     incomingSettings.sidebarExpanded !== undefined &&

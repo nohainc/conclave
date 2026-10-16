@@ -43,7 +43,6 @@ void main() {
 
   test('update checks are handled by the service without reconnecting Cloud',
       () async {
-    if (Platform.isWindows) return;
     final root = await Directory('/tmp').createTemp('ws-updates-');
     addTearDown(() => root.delete(recursive: true));
     var checks = 0;
@@ -77,12 +76,11 @@ void main() {
 
     expect(await client.request('updates.check'), {'phase': 'idle'});
     expect(checks, 1);
-  });
+  }, skip: Platform.isWindows ? 'POSIX only' : false);
 
   test(
       'prepareStop drains Cloud admission while process shutdown stays host-owned',
       () async {
-    if (Platform.isWindows) return;
     final root = await Directory('/tmp').createTemp('ws-stop-');
     addTearDown(() => root.delete(recursive: true));
     var cloudAttempts = 0;
@@ -128,9 +126,8 @@ void main() {
     expect(await client.request('service.getStatus'), isA<Map>());
     await expectLater(client.request('service.shutdown'),
         throwsA(isA<WorkspaceManagerProtocolException>()));
-  });
+  }, skip: Platform.isWindows ? 'POSIX only' : false);
   test('configuration reload responds before a slow Cloud handshake', () async {
-    if (Platform.isWindows) return;
     final root = await Directory('/tmp').createTemp('ws-reload-');
     addTearDown(() => root.delete(recursive: true));
     final cloudGate = Completer<void>();
@@ -179,5 +176,5 @@ void main() {
     expect(cloudGate.isCompleted, isFalse);
     expect(replacement.isRunning, isTrue);
     cloudGate.complete();
-  });
+  }, skip: Platform.isWindows ? 'POSIX only' : false);
 }

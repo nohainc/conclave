@@ -1267,7 +1267,7 @@ export async function handleClearWorkHistory(
   const receipt = await MutationIdempotency.from(
     request,
     env.CONCLAVE_DB,
-    (context as any)?.userId ?? "",
+    (context as { userId?: string } | undefined)?.userId ?? "",
     `thread:${threadId}:clear-work-history`,
     {},
   );

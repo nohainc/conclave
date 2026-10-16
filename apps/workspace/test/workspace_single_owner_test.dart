@@ -58,7 +58,6 @@ void main() {
 
   test('fixture cleanup kills its exact child when graceful stop is ignored',
       () async {
-    if (Platform.isWindows) return;
     final child = await Process.start('/bin/sh', [
       '-c',
       'trap "" TERM; printf ready; read ignored',
@@ -74,7 +73,7 @@ void main() {
       await child.exitCode;
       await stderrDrain;
     }
-  });
+  }, skip: Platform.isWindows ? 'POSIX only' : false);
 }
 
 String _dartExecutable() {

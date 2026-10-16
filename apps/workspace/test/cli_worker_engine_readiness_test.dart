@@ -13,13 +13,14 @@ import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
 import 'support/logical_worker_catalog_fixture.dart';
+import 'support/repository_root.dart';
 import 'support/worker_profile_snapshot_fixture.dart';
 
 void main() {
   test(
       'live readiness runs the Worker Profile through the generic Engine and keeps a disabled Worker disabled',
       () async {
-    final repository = Directory.current.parent.parent.path;
+    final repository = repositoryRoot;
     final root = await Directory.systemTemp.createTemp('profile-live-test-');
     addTearDown(() => root.delete(recursive: true));
     final signing = await Ed25519ReleaseFixture.create();
@@ -178,7 +179,7 @@ void main() {
   test(
       'Gemini live readiness uses stream-json through the generic Engine and keeps a disabled Worker disabled',
       () async {
-    final repository = Directory.current.parent.parent.path;
+    final repository = repositoryRoot;
     final root = await Directory.systemTemp.createTemp('profile-gemini-live-');
     addTearDown(() => root.delete(recursive: true));
     final signing = await Ed25519ReleaseFixture.create();

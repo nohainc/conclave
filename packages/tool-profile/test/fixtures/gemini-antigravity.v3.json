@@ -10,9 +10,7 @@
   },
   "providerTool": {
     "name": "Antigravity CLI",
-    "executableCandidates": [
-      "agy"
-    ],
+    "executableCandidates": ["agy"],
     "discovery": {
       "standardLocations": [
         "{{home}}/.local/bin",
@@ -21,9 +19,7 @@
       "allowPathSearch": true
     },
     "versionProbe": {
-      "arguments": [
-        "--version"
-      ],
+      "arguments": ["--version"],
       "timeoutMs": 10000,
       "source": "stdout",
       "extract": {
@@ -198,28 +194,18 @@
   "session": {
     "supported": true,
     "formatId": "antigravity-conversation-v1",
-    "compatibleFormatIds": [
-      "antigravity-conversation-v1"
-    ],
+    "compatibleFormatIds": ["antigravity-conversation-v1"],
     "extract": "$.conversation_id",
-    "resumeArguments": [
-      "--conversation",
-      "{{sessionId}}"
-    ],
+    "resumeArguments": ["--conversation", "{{sessionId}}"],
     "requireObservedIdMatch": true
   },
   "model": {
     "supported": true,
-    "arguments": [
-      "--model",
-      "{{model}}"
-    ],
+    "arguments": ["--model", "{{model}}"],
     "unknownModelPolicy": "pass_through",
     "discovery": {
       "schemaVersion": 1,
-      "arguments": [
-        "models"
-      ],
+      "arguments": ["models"],
       "timeoutMs": 10000,
       "format": "tsv",
       "idPrefix": ""
@@ -232,24 +218,13 @@
     }
   },
   "timeout": {
-    "providerArguments": [
-      "--print-timeout",
-      "{{timeoutSeconds}}s"
-    ],
+    "providerArguments": ["--print-timeout", "{{timeoutSeconds}}s"],
     "providerReserveMs": 1500
   },
   "sandbox": {
     "mappings": {
-      "restricted": [
-        "--sandbox",
-        "--mode",
-        "accept-edits"
-      ],
-      "provider_default": [
-        "--sandbox",
-        "--mode",
-        "plan"
-      ],
+      "restricted": ["--sandbox", "--mode", "accept-edits"],
+      "provider_default": ["--sandbox", "--mode", "plan"],
       "full_access": ["--dangerously-skip-permissions"]
     }
   },

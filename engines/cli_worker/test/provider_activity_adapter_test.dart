@@ -291,11 +291,11 @@ void main() {
       expect(failed.single.activityId, 'toolu_02');
 
       // Nothing from prompts, reasoning, input or output crosses the boundary.
-      final everything = [...started, ...done, ...failed]
-          .map(
-            (e) => '${e.title} ${e.details} ${e.activityId}',
-          )
-          .join(' ');
+      final everything = [
+        ...started,
+        ...done,
+        ...failed,
+      ].map((e) => '${e.title} ${e.details} ${e.activityId}').join(' ');
       expect(everything, isNot(contains('secret')));
     });
 
@@ -333,35 +333,37 @@ void main() {
     });
   });
 
-  test('agy adapter defers to a matched mapping that keys tools by step_index',
-      () {
-    final adapter = ProviderActivityAdapter.fromProfile({
-      'providerTool': {'name': 'agy'},
-      'activity': {'adapter': 'agy-stream-json', 'mappings': <Object?>[]},
-    })!;
-    Map<String, Object?> tool(String state) => {
-      'event': 'step_update',
-      'step_update': {
-        'conversation_id': 'c1',
-        'step_index': 1,
-        'state': state,
-        'step_type': 'tool',
-        'tool_name': 'run_command',
-      },
-    };
-    // The Profile mapping already reported these under id "1".
-    expect(
-      adapter.normalizeEvent(tool('ACTIVE'), declarativeMatched: true),
-      isEmpty,
-    );
-    expect(
-      adapter.normalizeEvent(tool('DONE'), declarativeMatched: true),
-      isEmpty,
-    );
-    // Without a matching mapping the adapter still provides the pair.
-    expect(
-      adapter.normalizeEvent(tool('ACTIVE'), declarativeMatched: false),
-      hasLength(1),
-    );
-  });
+  test(
+    'agy adapter defers to a matched mapping that keys tools by step_index',
+    () {
+      final adapter = ProviderActivityAdapter.fromProfile({
+        'providerTool': {'name': 'agy'},
+        'activity': {'adapter': 'agy-stream-json', 'mappings': <Object?>[]},
+      })!;
+      Map<String, Object?> tool(String state) => {
+        'event': 'step_update',
+        'step_update': {
+          'conversation_id': 'c1',
+          'step_index': 1,
+          'state': state,
+          'step_type': 'tool',
+          'tool_name': 'run_command',
+        },
+      };
+      // The Profile mapping already reported these under id "1".
+      expect(
+        adapter.normalizeEvent(tool('ACTIVE'), declarativeMatched: true),
+        isEmpty,
+      );
+      expect(
+        adapter.normalizeEvent(tool('DONE'), declarativeMatched: true),
+        isEmpty,
+      );
+      // Without a matching mapping the adapter still provides the pair.
+      expect(
+        adapter.normalizeEvent(tool('ACTIVE'), declarativeMatched: false),
+        hasLength(1),
+      );
+    },
+  );
 }

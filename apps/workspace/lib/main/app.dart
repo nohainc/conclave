@@ -856,8 +856,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
               : WorkspaceShellRouter(
                   snapshot: lifecycle.uiSnapshot,
                   credentialStore: lifecycle.credentialStore,
-                  cloudUrl: resolveWorkspaceCloudUrl(
-                      lifecycle.uiSnapshot.cloudUrl),
+                  cloudUrl:
+                      resolveWorkspaceCloudUrl(lifecycle.uiSnapshot.cloudUrl),
                   refreshToken: _workerRevision,
                   restoreSession: _restoreDesktopSession,
                   onSignIn: _signInDesktopHuman,

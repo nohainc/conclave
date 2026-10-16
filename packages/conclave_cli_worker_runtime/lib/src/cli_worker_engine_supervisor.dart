@@ -36,6 +36,7 @@ final class CliWorkerEngineSupervisor {
   final Map<String, Process> _activeAssignments = {};
   final Map<String, String> _activeWorkerByAssignment = {};
   final Map<String, String> _reservedWorkerByAssignment = {};
+
   /// Slot admission is one Workspace-wide pool: every Worker draws from the
   /// same [_pool] entry, so the limit is total parallel executions regardless
   /// of which Worker runs them. Per-Worker views are derived for telemetry.
@@ -68,11 +69,11 @@ final class CliWorkerEngineSupervisor {
 
   /// Slots of [workerId] currently reserved or running. Telemetry only.
   int activeAssignmentCountFor(String workerId) => {
-        for (final entry in _reservedWorkerByAssignment.entries)
-          if (entry.value == workerId) entry.key,
-        for (final entry in _activeWorkerByAssignment.entries)
-          if (entry.value == workerId) entry.key,
-      }.length;
+    for (final entry in _reservedWorkerByAssignment.entries)
+      if (entry.value == workerId) entry.key,
+    for (final entry in _activeWorkerByAssignment.entries)
+      if (entry.value == workerId) entry.key,
+  }.length;
 
   /// Slots of the shared pool currently reserved or running. Telemetry only.
   int get activeSlotCount => _activeByWorker[_pool] ?? 0;
@@ -698,8 +699,7 @@ final class CliWorkerEngineSupervisor {
       ..._queuedAssignments.values.map((queued) => queued.workerId),
       ..._reservedWorkerByAssignment.values,
       ..._activeWorkerByAssignment.values,
-    }.toList()
-      ..sort();
+    }.toList()..sort();
     return {
       'active': _activeByWorker[_pool] ?? 0,
       'queued': _waitersByWorker[_pool]?.length ?? 0,
@@ -715,8 +715,7 @@ final class CliWorkerEngineSupervisor {
                 if (entry.value == workerId) entry.key,
               for (final entry in _activeWorkerByAssignment.entries)
                 if (entry.value == workerId) entry.key,
-            }.toList()
-              ..sort()),
+            }.toList()..sort()),
           },
       ],
       'busySessions': _busySessionGates.length,

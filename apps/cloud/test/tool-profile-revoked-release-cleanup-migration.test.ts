@@ -93,8 +93,16 @@ describe("revoked ChatGPT/Gemini release cleanup migration", () => {
         )
         .all(),
     ).toEqual([
-      { worker_type_id: "chatgpt", release_version: 2, lifecycle_state: "testing" },
-      { worker_type_id: "other", release_version: 1, lifecycle_state: "revoked" },
+      {
+        worker_type_id: "chatgpt",
+        release_version: 2,
+        lifecycle_state: "testing",
+      },
+      {
+        worker_type_id: "other",
+        release_version: 1,
+        lifecycle_state: "revoked",
+      },
     ]);
     const remainingAudit = db
       .prepare(
@@ -117,7 +125,9 @@ describe("revoked ChatGPT/Gemini release cleanup migration", () => {
 
     expect(() =>
       db
-        .prepare("DELETE FROM tool_profile_releases WHERE profile_definition_id = ?")
+        .prepare(
+          "DELETE FROM tool_profile_releases WHERE profile_definition_id = ?",
+        )
         .run("other-worker"),
     ).toThrow(/published Tool Profile releases cannot be deleted/);
   });

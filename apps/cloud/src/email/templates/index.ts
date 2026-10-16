@@ -270,7 +270,7 @@ function renderInvitation(input: SpaceInvitationInput): RenderedEmailContent {
       eyebrow: "Space invitation",
       title: "You have been invited to a Space",
       intro: `<strong>${inviterName}</strong> invited you to join <strong>${spaceName}</strong> as a <strong>${role}</strong>.`,
-      bodyHtml: `<p style=\"margin:20px 0 0;color:#435066;font-size:15px;line-height:24px;\">Sign in with <strong>${recipientEmail}</strong> to accept the invitation.</p>`,
+      bodyHtml: `<p style="margin:20px 0 0;color:#435066;font-size:15px;line-height:24px;">Sign in with <strong>${recipientEmail}</strong> to accept the invitation.</p>`,
       bodyText: `${inviterNameValue} invited you to join "${spaceNameValue}" as a ${roleValue} on Conclave AX.\n\nSign in with ${input.recipientEmail.trim()} to accept.`,
       action: { label: "View invitation", url: invitationUrl },
       securityNotice:

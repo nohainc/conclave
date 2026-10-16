@@ -35,8 +35,8 @@ describe("CI acceptance orchestration", () => {
   });
 
   it("aggregation rejects failed and skipped domains", () => {
-    const workflow = source(".github/workflows/test-full.yml");
-    const gateSection = workflow.slice(workflow.indexOf("  acceptance-gate:"));
+    const workflow = source(".github/workflows/ci.yml");
+    const gateSection = workflow.slice(workflow.indexOf("  ci-passed:"));
     const dependencies = gateSection
       .match(/needs:\s*\[([\s\S]*?)\]/)[1]
       .split(",")
@@ -44,35 +44,37 @@ describe("CI acceptance orchestration", () => {
       .filter(Boolean);
     expect(dependencies.sort()).toEqual(
       [
-        "repo-static",
-        "typescript",
-        "dart-core",
-        "app-flutter",
-        "workspace-check",
-        "workspace-macos-build",
-        "profile-lab-macos",
-        "site-astro",
+        "changes",
+        "static",
+        "cloud",
+        "dart-packages",
+        "app",
+        "workspace",
+        "profile-lab",
+        "engine",
+        "site",
       ].sort(),
     );
     const gate = workflow.match(
-      /python3 - <<'PY_GATE'\n([\s\S]*?)\n\s+PY_GATE/,
+      /if ! echo "\$NEEDS" \| (jq -e '[^']+') > \/dev\/null/,
     )[1];
-    const script = gate
-      .split("\n")
-      .map((line) => line.slice(10))
-      .join("\n");
-    for (const result of ["success", "failure", "skipped", "cancelled"]) {
-      const run = spawnSync("python3", ["-c", script], {
+    for (const [result, expectedStatus] of [
+      ["success", 0],
+      ["skipped", 0],
+      ["failure", 1],
+      ["cancelled", 1],
+    ]) {
+      const run = spawnSync("sh", ["-c", `echo "$NEEDS" | ${gate}`], {
         env: {
           ...process.env,
-          NEEDS_JSON: JSON.stringify({ domain: { result } }),
+          NEEDS: JSON.stringify({ domain: { result } }),
         },
       });
-      expect(run.status, run.stderr.toString()).toBe(
-        result === "success" ? 0 : 1,
-      );
+      expect(run.status, run.stderr.toString()).toBe(expectedStatus);
     }
-    expect(workflow).toContain("cancel-in-progress: true");
+    expect(workflow).toContain(
+      "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+    );
     expect(workflow).not.toContain("windows-latest");
     expect(workflow).not.toContain("pnpm check\n");
   });
@@ -130,6 +132,7 @@ describe("CI acceptance orchestration", () => {
         "ditto",
         "security",
         "codesign",
+        "PlistBuddy",
       ]) {
         const script =
           command === "uname"
@@ -142,9 +145,11 @@ describe("CI acceptance orchestration", () => {
                   ? 'while [ "$1" != "-o" ] && [ "$#" -gt 0 ]; do shift; done; if [ "$1" = "-o" ]; then shift; mkdir -p "$(dirname "$1")"; touch "$1"; fi'
                   : command === "codesign"
                     ? 'if [ "$1" = "-dv" ] || [ "$1" = "-d" ]; then exit 1; fi; exit 0'
-                    : command === "flutter"
-                      ? `echo "flutter $*" >> "$CI_TEST_LOG"\nif [ "$1" = build ]; then app='build/macos/Build/Products/Release/Conclave ${name === "workspace" ? "Workspace" : "Profile Lab"}.app'; mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks"; printf '%s' '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Conclave</string></dict></plist>' > "$app/Contents/Info.plist"; touch "$app/Contents/MacOS/Conclave"; chmod 755 "$app/Contents/MacOS/Conclave"; fi`
-                      : "exit 0";
+                    : command === "PlistBuddy"
+                      ? 'if [ "$1" = "-c" ] && [ "$2" = "Print :CFBundleExecutable" ]; then echo Conclave; elif [ "$1" = "-c" ] && [ "$2" = "Print :Label" ]; then echo com.conclaveax.workspace.service; elif [ "$1" = "-c" ] && [ "$2" = "Print :AssociatedBundleIdentifiers:0" ]; then echo com.conclaveax.workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :BundleProgram" ]; then echo Contents/Helpers/conclave-service; elif [ "$1" = "-c" ] && [ "$2" = "Print :ProgramArguments:0" ]; then echo Contents/Helpers/conclave-service; elif [ "$1" = "-c" ] && [ "$2" = "Print :RunAtLoad" ]; then echo false; else exit 1; fi'
+                      : command === "flutter"
+                        ? `echo "flutter $*" >> "$CI_TEST_LOG"\nif [ "$1" = build ]; then app='build/macos/Build/Products/Release/Conclave ${name === "workspace" ? "Workspace" : "Profile Lab"}.app'; mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks"; printf '%s' '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Conclave</string></dict></plist>' > "$app/Contents/Info.plist"; touch "$app/Contents/MacOS/Conclave"; chmod 755 "$app/Contents/MacOS/Conclave"; fi`
+                        : "exit 0";
         writeFileSync(join(bin, command), `#!/bin/sh\n${script}\n`);
         chmodSync(join(bin, command), 0o755);
       }
@@ -180,8 +185,8 @@ describe("CI acceptance orchestration", () => {
         expect(readFileSync(log, "utf8")).toBe(
           "flutter build macos --release --dart-define=" +
             (name === "workspace"
-              ? "CONCLAVE_WORKSPACE_VERSION=1.0.0 --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON={}"
-              : "CONCLAVE_PROFILE_LAB_VERSION=1.0.0") +
+              ? "CONCLAVE_WORKSPACE_VERSION=1.0.0 --dart-define=CONCLAVE_WORKSPACE_ENVIRONMENT=production --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON={}"
+              : "CONCLAVE_PROFILE_LAB_VERSION=1.0.0 --dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT=production") +
             "\n",
         );
         writeFileSync(log, "");
@@ -198,26 +203,26 @@ describe("CI acceptance orchestration", () => {
   );
 
   it("public site production deployment is decoupled with path filtering and self-contained validation", () => {
-    const workflow = source(".github/workflows/deploy-site-production.yml");
+    const workflow = source(".github/workflows/deploy-site.yml");
+    const checkAction = source(".github/actions/check-site/action.yml");
     expect(workflow).toContain("branches: [main]");
     expect(workflow).toContain('paths:\n      - "apps/site/**"');
     expect(workflow).toContain("workflow_dispatch:");
-    expect(workflow).toContain("cancel-in-progress: true");
     expect(workflow).not.toContain('workflows: ["CI"]');
     expect(workflow).not.toContain("workflow_run:");
 
     // Ensures site builds and all validations are present
-    expect(workflow).toContain("./node_modules/.bin/astro check");
-    expect(workflow).toContain("./node_modules/.bin/astro build");
-    expect(workflow).toContain("node scripts/check-performance.mjs");
-    expect(workflow).toContain("node scripts/check-accessibility.mjs");
-    expect(workflow).toContain("node scripts/check-responsive.mjs");
-    expect(workflow).toContain("node scripts/check-analytics-privacy.mjs");
-    expect(workflow).toContain("node scripts/check-security.mjs");
-    expect(workflow).toContain("node scripts/check-content.mjs");
-    expect(workflow).toContain("node scripts/check-release.mjs");
-    expect(workflow).toContain("./node_modules/.bin/vitest run test");
-    expect(workflow).toContain("Verify static routes");
+    expect(checkAction).toContain("./node_modules/.bin/astro check");
+    expect(checkAction).toContain("./node_modules/.bin/astro build");
+    expect(checkAction).toContain("node scripts/check-performance.mjs");
+    expect(checkAction).toContain("node scripts/check-accessibility.mjs");
+    expect(checkAction).toContain("node scripts/check-responsive.mjs");
+    expect(checkAction).toContain("node scripts/check-analytics-privacy.mjs");
+    expect(checkAction).toContain("node scripts/check-security.mjs");
+    expect(checkAction).toContain("node scripts/check-content.mjs");
+    expect(checkAction).toContain("node scripts/check-release.mjs");
+    expect(checkAction).toContain("./node_modules/.bin/vitest run test");
+    expect(checkAction).toContain("Verify static routes");
     expect(workflow).toContain(
       "../../node_modules/.bin/wrangler deploy --config wrangler.production.jsonc",
     );

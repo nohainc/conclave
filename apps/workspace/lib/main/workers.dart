@@ -605,6 +605,9 @@ class _WorkspaceRecoveryPanel extends StatelessWidget {
   }
 }
 
+/// From this many slots up, the setting warns that the computer may be
+/// overloaded and providers may rate-limit.
+const _highParallelSlots = 8;
 
 /// Shows the shared parallel execution slots in use and lets the user reset them when
 /// work was abandoned (for example during a disconnect) and slots stay busy.
@@ -724,9 +727,6 @@ class _WorkerSlotsCardState extends State<_WorkerSlotsCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final slots = _slots;
-    final workers = slots == null
-        ? const <Map>[]
-        : ((slots['workers'] as List?) ?? const []).whereType<Map>().toList();
     final active = (slots?['active'] as int?) ?? 0;
     final queued = (slots?['queued'] as int?) ?? 0;
     final limit = slots?['limit'] as int?;
@@ -738,7 +738,8 @@ class _WorkerSlotsCardState extends State<_WorkerSlotsCard> {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5),
+          color:
+              theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -799,22 +800,50 @@ class _WorkerSlotsCardState extends State<_WorkerSlotsCard> {
                   ],
                 ),
               ),
+            if (limit != null && limit >= _highParallelSlots)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  'A high value can overload this computer and run into '
+                  'provider rate limits.',
+                  key: const ValueKey('parallel-slots-high-warning'),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.error),
+                ),
+              ),
             Text(
               slots == null
                   ? 'Reading slots…'
-                  : '$active${limit == null ? '' : ' of $limit'} slots in use'
-                      ' · $queued waiting · $trackedIds tracked request(s)',
-
+                  : limit == null
+                      ? 'Slots: $active in use'
+                      : 'Slots $active/$limit in use',
+              key: const ValueKey('parallel-slots-usage'),
               style: theme.textTheme.bodyMedium,
             ),
-            for (final worker in workers)
+            if (queued > 0)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  '${worker['workerTypeId'] ?? worker['workerId']}: '
-                  '${worker['active']} running, ${worker['queued']} waiting',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant),
+                  queued == 1
+                      ? 'Waiting for a free slot'
+                      : 'Waiting for a free slot · $queued requests',
+                  key: const ValueKey('parallel-slots-waiting'),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                ),
+              ),
+            // Slots are one shared pool, so Workers show no slot counts of
+            // their own. A tracked-request count that disagrees with what is
+            // running or waiting means slot bookkeeping is stuck.
+            if (slots != null && trackedIds != active + queued)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'Slot usage looks out of sync. Use Reset slots if work '
+                  'does not start.',
+                  key: const ValueKey('parallel-slots-out-of-sync'),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ),
             if (_error != null)

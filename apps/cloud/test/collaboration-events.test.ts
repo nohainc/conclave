@@ -290,7 +290,7 @@ describe("collaboration durable signals", () => {
         space: { id: string };
       };
       f.sqlite.exec(
-        "INSERT INTO execution_workspaces VALUES('ws','owner','Workspace','online','now','now')",
+        "INSERT INTO execution_workspaces(id,owner_user_id,name,status,created_at,updated_at) VALUES('ws','owner','Workspace','online','now','now')",
       );
       const granted = await handleCreateWorkspaceSpaceGrant(
         f.request({ allowedPermissions: ["repository:read"] }),

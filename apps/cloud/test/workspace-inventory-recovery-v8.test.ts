@@ -128,7 +128,7 @@ describe("v8 Workspace inventory recovery", () => {
       provider_tool_name: "Codex CLI",
       provider_tool_version: "1.0.0",
       // Legacy Worker capability metadata is ignored by inventory writes.
-      capabilities_json: '[]',
+      capabilities_json: "[]",
       revision: 1,
     });
 
@@ -231,7 +231,9 @@ describe("v8 Workspace inventory recovery", () => {
     ]) {
       database.exec(
         readFileSync(
-          fileURLToPath(new URL(`../migrations-v8/${migration}`, import.meta.url)),
+          fileURLToPath(
+            new URL(`../migrations-v8/${migration}`, import.meta.url),
+          ),
           "utf8",
         ),
       );
@@ -254,7 +256,9 @@ describe("v8 Workspace inventory recovery", () => {
     const slots = () =>
       (
         database
-          .prepare("SELECT parallel_slots FROM execution_workspaces WHERE id = 'workspace-a'")
+          .prepare(
+            "SELECT parallel_slots FROM execution_workspaces WHERE id = 'workspace-a'",
+          )
           .get() as { parallel_slots: number | null }
       ).parallel_slots;
 

@@ -36,19 +36,24 @@ void main() {
 
     expect(engine, isNot(contains('cloud_connection')));
     expect(engine, isNot(contains('workspace_gateway')));
-    expect(engine, isNot(contains('d1')));
+    // Whole-word match: a bare substring would also hit unrelated identifiers.
+    expect(engine, isNot(contains(RegExp(r'\bd1\b', caseSensitive: false))));
     expect(engine, contains('conclave_worker_protocol'));
   });
 
   test('service stop is separate from host registration', () {
     final serviceManager = _source('lib/workspace_background_service.dart');
 
-    expect(serviceManager, contains('Future<WorkspaceServiceInfo> stop()'));
-    expect(
-        serviceManager, contains('Future<WorkspaceServiceInfo> unregister()'));
-    expect(
-      serviceManager.indexOf('stop()'),
-      isNot(serviceManager.indexOf('unregister()')),
-    );
+    // The manager interface exposes stopping and unregistering as two
+    // distinct operations, so stopping the Service never implies removing its
+    // host registration.
+    for (final method in ['stop', 'unregister']) {
+      expect(
+        RegExp('Future<WorkspaceServiceInfo> $method\\(\\);')
+            .allMatches(serviceManager),
+        hasLength(1),
+        reason: 'the manager interface must declare $method() exactly once',
+      );
+    }
   });
 }

@@ -7,9 +7,30 @@ if [[ -z "$APP" || ! -d "$APP" ]]; then
   exit 2
 fi
 
+plist_buddy() {
+  if command -v PlistBuddy >/dev/null 2>&1; then
+    PlistBuddy "$@"
+  elif [[ -x /usr/libexec/PlistBuddy ]]; then
+    /usr/libexec/PlistBuddy "$@"
+  else
+    echo "PlistBuddy not found" >&2
+    exit 1
+  fi
+}
+
+plutil_lint() {
+  if command -v plutil >/dev/null 2>&1; then
+    plutil -lint "$1"
+  elif [[ -x /usr/bin/plutil ]]; then
+    /usr/bin/plutil -lint "$1"
+  else
+    true
+  fi
+}
+
 HELPER="$APP/Contents/Helpers/conclave-service"
 ENGINE="$APP/Contents/Helpers/assets/engines/conclave_cli_worker_engine"
-APP_EXECUTABLE="$APP/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
+APP_EXECUTABLE="$APP/Contents/MacOS/$(plist_buddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
 PLIST="$APP/Contents/Library/LaunchAgents/com.conclaveax.workspace.service.plist"
 for path in "$HELPER" "$ENGINE" "$APP_EXECUTABLE" "$PLIST"; do
   [[ -e "$path" ]] || { echo "Missing service bundle item: $path" >&2; exit 1; }
@@ -22,33 +43,33 @@ done
   echo "Workspace app executable must be executable." >&2
   exit 1
 }
-/usr/libexec/PlistBuddy -c 'Print :Label' "$PLIST" >/dev/null
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :Label' "$PLIST")" == "com.conclaveax.workspace.service" ]] || {
+plist_buddy -c 'Print :Label' "$PLIST" >/dev/null
+[[ "$(plist_buddy -c 'Print :Label' "$PLIST")" == "com.conclaveax.workspace.service" ]] || {
   echo "Unexpected LaunchAgent label." >&2
   exit 1
 }
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' "$PLIST")" == "com.conclaveax.workspace" ]] || {
+[[ "$(plist_buddy -c 'Print :AssociatedBundleIdentifiers:0' "$PLIST")" == "com.conclaveax.workspace" ]] || {
   echo "LaunchAgent is not associated with the Workspace app bundle." >&2
   exit 1
 }
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :BundleProgram' "$PLIST")" == "Contents/Helpers/conclave-service" ]] || {
+[[ "$(plist_buddy -c 'Print :BundleProgram' "$PLIST")" == "Contents/Helpers/conclave-service" ]] || {
   echo "LaunchAgent does not point at the embedded service." >&2
   exit 1
 }
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$PLIST")" == "Contents/Helpers/conclave-service" ]] || {
+[[ "$(plist_buddy -c 'Print :ProgramArguments:0' "$PLIST")" == "Contents/Helpers/conclave-service" ]] || {
   echo "LaunchAgent argv[0] does not identify the embedded service." >&2
   exit 1
 }
-if /usr/libexec/PlistBuddy -c 'Print :SpawnConstraint' "$PLIST" >/dev/null 2>&1; then
+if plist_buddy -c 'Print :SpawnConstraint' "$PLIST" >/dev/null 2>&1; then
   echo "LaunchAgent must not declare a SpawnConstraint (launchd rejects it)." >&2
   exit 1
 fi
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :RunAtLoad' "$PLIST")" == "false" ]] || {
+[[ "$(plist_buddy -c 'Print :RunAtLoad' "$PLIST")" == "false" ]] || {
   echo "LaunchAgent must not start on registration (RunAtLoad must be false)." >&2
   exit 1
 }
 
-/usr/bin/plutil -lint "$PLIST" >/dev/null || {
+plutil_lint "$PLIST" >/dev/null || {
   echo "LaunchAgent manifest is not valid plist data." >&2
   exit 1
 }

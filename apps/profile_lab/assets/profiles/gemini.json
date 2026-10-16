@@ -340,14 +340,9 @@
   },
   "logicalWorkerTypeId": "gemini",
   "model": {
-    "arguments": [
-      "--model",
-      "{{model}}"
-    ],
+    "arguments": ["--model", "{{model}}"],
     "discovery": {
-      "arguments": [
-        "models"
-      ],
+      "arguments": ["models"],
       "format": "tsv",
       "idPrefix": "",
       "schemaVersion": 1,
@@ -543,9 +538,7 @@
         "{{home}}/.gemini/antigravity-cli/bin"
       ]
     },
-    "executableCandidates": [
-      "agy"
-    ],
+    "executableCandidates": ["agy"],
     "name": "Antigravity CLI",
     "supportedVersions": [
       {
@@ -562,9 +555,7 @@
       }
     ],
     "versionProbe": {
-      "arguments": [
-        "--version"
-      ],
+      "arguments": ["--version"],
       "extract": {
         "kind": "regex_capture",
         "patternId": "semver"
@@ -576,40 +567,22 @@
   "releaseVersion": 4,
   "sandbox": {
     "mappings": {
-      "full_access": [
-        "--dangerously-skip-permissions"
-      ],
-      "provider_default": [
-        "--sandbox",
-        "--mode",
-        "plan"
-      ],
-      "restricted": [
-        "--sandbox",
-        "--mode",
-        "accept-edits"
-      ]
+      "full_access": ["--dangerously-skip-permissions"],
+      "provider_default": ["--sandbox", "--mode", "plan"],
+      "restricted": ["--sandbox", "--mode", "accept-edits"]
     }
   },
   "schemaVersion": 1,
   "session": {
-    "compatibleFormatIds": [
-      "antigravity-conversation-v1"
-    ],
+    "compatibleFormatIds": ["antigravity-conversation-v1"],
     "extract": "$.conversation_id",
     "formatId": "antigravity-conversation-v1",
     "requireObservedIdMatch": true,
-    "resumeArguments": [
-      "--conversation",
-      "{{sessionId}}"
-    ],
+    "resumeArguments": ["--conversation", "{{sessionId}}"],
     "supported": true
   },
   "timeout": {
-    "providerArguments": [
-      "--print-timeout",
-      "{{timeoutSeconds}}s"
-    ],
+    "providerArguments": ["--print-timeout", "{{timeoutSeconds}}s"],
     "providerReserveMs": 1500
   }
 }

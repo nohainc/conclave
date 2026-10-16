@@ -71,7 +71,9 @@ void main() {
         spaceId: 'space-b', spaceName: 'Plan', adoptExistingFolder: true);
     expect(second.path, first.path);
     expect(File('${first.path}/user.txt').readAsStringSync(), 'keep');
-    expect(jsonDecode(File('${first.path}/.conclave-space.json').readAsStringSync())['spaceId'],
+    expect(
+        jsonDecode(File('${first.path}/.conclave-space.json')
+            .readAsStringSync())['spaceId'],
         'space-b');
   });
 
@@ -91,8 +93,8 @@ void main() {
       throwsA(isA<SpaceFolderExistsException>()),
     );
     expect(Directory('${work.path}/Space (2)').existsSync(), isFalse);
-    expect(File('${work.path}/Space/.conclave-space.json').existsSync(),
-        isFalse);
+    expect(
+        File('${work.path}/Space/.conclave-space.json').existsSync(), isFalse);
 
     final adopted = await resolver.resolve(
       spaceId: 'space-a',
@@ -211,7 +213,8 @@ void main() {
     final release = Completer<void>();
     var running = 0;
     var peak = 0;
-    Future<void> run(String thread, int token) => coordinator.withMutation<void>(
+    Future<void> run(String thread, int token) =>
+        coordinator.withMutation<void>(
           spaceId: 'space-a',
           threadId: thread,
           spaceName: 'Plan',
@@ -248,8 +251,7 @@ void main() {
       )),
       applicationStateDirectory: state,
     );
-    Future<void> run(int token, String lease) =>
-        coordinator.withMutation<void>(
+    Future<void> run(int token, String lease) => coordinator.withMutation<void>(
           spaceId: 'space-a',
           threadId: 'thread-a',
           spaceName: 'Plan',

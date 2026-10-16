@@ -23,6 +23,17 @@ MODE="release"
 TARGET_ENV="${CONCLAVE_WORKSPACE_ENVIRONMENT:-production}"
 OPEN_APP="0"
 PREPARED="0"
+
+plist_buddy() {
+  if command -v PlistBuddy >/dev/null 2>&1; then
+    PlistBuddy "$@"
+  elif [[ -x /usr/libexec/PlistBuddy ]]; then
+    /usr/libexec/PlistBuddy "$@"
+  else
+    echo "PlistBuddy not found" >&2
+    exit 1
+  fi
+}
 DEFAULT_CONCLAVE_MACOS_SIGN_IDENTITY='Apple Development: vitalii@nohainc.com (7X62W6499P)'
 
 while [[ $# -gt 0 ]]; do
@@ -231,7 +242,7 @@ if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
   # bundle is later sealed with the configured Apple identity. SMAppService
   # validates the complete bundle, so the main executable must carry the same
   # trusted signature as the app and its embedded helpers.
-  APP_EXECUTABLE="$APP/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
+  APP_EXECUTABLE="$APP/Contents/MacOS/$(plist_buddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
   [[ -x "$APP_EXECUTABLE" ]] || {
     echo "The Workspace app executable is missing: $APP_EXECUTABLE" >&2
     exit 1
@@ -267,7 +278,7 @@ else
     --entitlements "$WORKSPACE_DIR/macos/Runner/WorkspaceHelper.entitlements" \
     --identifier "conclave-service" \
     --sign - "$HELPERS_DIR/conclave-service"
-  APP_EXECUTABLE="$APP/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
+  APP_EXECUTABLE="$APP/Contents/MacOS/$(plist_buddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
   codesign --force --options runtime \
     --entitlements "$APP_ENTITLEMENTS" \
     --sign - "$APP_EXECUTABLE"

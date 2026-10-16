@@ -62,9 +62,10 @@ Future<void> _open(WidgetTester tester, String tooltip) async {
   }
 }
 
-bool _enabled(WidgetTester tester, String label) => tester
-    .widget<MenuItemButton>(find.widgetWithText(MenuItemButton, label))
-    .onPressed !=
+bool _enabled(WidgetTester tester, String label) =>
+    tester
+        .widget<MenuItemButton>(find.widgetWithText(MenuItemButton, label))
+        .onPressed !=
     null;
 
 void main() {

@@ -26,7 +26,13 @@ function fixture() {
       .prepare(
         "INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES(?,'S',?,?,?,?)",
       )
-      .run(`m-${id}`, id, id === "alice" ? "owner" : "collaborator", joined, joined);
+      .run(
+        `m-${id}`,
+        id,
+        id === "alice" ? "owner" : "collaborator",
+        joined,
+        joined,
+      );
   for (const id of ["T1", "T2"])
     sqlite
       .prepare(
@@ -84,14 +90,20 @@ it("marks a Thread unread for other members until they read it", async () => {
       "INSERT INTO discussion_messages(id,thread_id,author_user_id,body,created_at) VALUES('m1','T1','alice','hello',?)",
     )
     .run(new Date().toISOString());
-  expect(await flags("alice")).toEqual({ T1: [false, false], T2: [false, false] });
+  expect(await flags("alice")).toEqual({
+    T1: [false, false],
+    T2: [false, false],
+  });
   expect(await flags("bob")).toEqual({ T1: [false, true], T2: [false, false] });
   expect(await spaceFlags("bob")).toEqual([false, true]);
   expect(await spaceFlags("alice")).toEqual([false, false]);
 
   const response = await handleMarkThreadRead(as("bob", "POST"), env, "T1");
   expect(response.status).toBe(200);
-  expect(await flags("bob")).toEqual({ T1: [false, false], T2: [false, false] });
+  expect(await flags("bob")).toEqual({
+    T1: [false, false],
+    T2: [false, false],
+  });
   expect(await spaceFlags("bob")).toEqual([false, false]);
 });
 

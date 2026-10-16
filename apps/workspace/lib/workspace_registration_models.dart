@@ -25,6 +25,7 @@ String resolveWorkspaceCloudUrl(String? savedCloudUrl) {
   }
   return conclaveProductionCloudUrl;
 }
+
 const conclaveWorkspaceAppVersion =
     String.fromEnvironment('CONCLAVE_WORKSPACE_VERSION', defaultValue: '1.0.3');
 

@@ -175,6 +175,7 @@ function sanitizeFailureDiagnostic(value: string): string | null {
       /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|cookie|authorization|secret)\s*[:=]\s*)[^\s,;]+/gi,
       "$1[REDACTED]",
     )
+    // eslint-disable-next-line no-control-regex -- Remove control bytes from diagnostic text.
     .replace(/[\u0000-\u001f\u007f]+/g, " ")
     .replace(
       /(?<![A-Za-z0-9])(?:\/Users|\/home|\/private\/var|\/tmp)\/[^\s,;]+/g,
@@ -696,7 +697,7 @@ export async function handleCreateIssueReport(
   ];
   try {
     await env.CONCLAVE_DB.batch(statements);
-  } catch (error) {
+  } catch {
     const duplicate = await existingReport(env, actor.userId, attemptKey);
     if (duplicate) return json(userReportResponse(duplicate), { status: 200 });
     throw new HttpError(503, "Issue report could not be stored");

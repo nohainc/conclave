@@ -10,8 +10,7 @@ void main() {
     final settler = AxStatusSettler();
     expect(settler.update('Queued · A', at(0), urgent: false), 'Starting…');
     expect(settler.update('Queued · B', at(100), urgent: false), 'Starting…');
-    expect(
-        settler.update('Starting · C', at(250), urgent: false), 'Starting…');
+    expect(settler.update('Starting · C', at(250), urgent: false), 'Starting…');
     // The provider starts before anything settled: shown immediately.
     expect(settler.update('Running · Working…', at(300), urgent: true),
         'Running · Working…');

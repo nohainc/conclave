@@ -44,7 +44,8 @@ class ProfileLabCloudConfig {
         .contains(parsed.host.toLowerCase());
     // Local builds are release-mode bundles that talk to the local API, so
     // they may use loopback HTTP. Production builds never can.
-    final allowLocalHttp = allowInsecureLoopback ?? (!kReleaseMode || isLocalBuild);
+    final allowLocalHttp =
+        allowInsecureLoopback ?? (!kReleaseMode || isLocalBuild);
     if (!secure && (!loopback || !allowLocalHttp)) {
       throw ArgumentError(
         'Cloud must use HTTPS. HTTP is allowed only for loopback in development builds.',

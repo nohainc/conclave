@@ -102,7 +102,7 @@ void main() {
     expect(disabled.localPermissions, isNot(contains('network:use')));
   });
 
-  test('reset is performed by the runtime owner and shuts down Worker slots',
+  test('reset is performed by the runtime owner and shuts down local Worker instances',
       () async {
     final worker = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
@@ -163,7 +163,7 @@ void main() {
     expect(() => registry.setParallelSlots(11), throwsArgumentError);
   });
 
-  test('keeps one local Worker slot per logical Worker Type', () async {
+  test('keeps one local Worker instance per logical Worker Type', () async {
     final chatgpt = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
     );

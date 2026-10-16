@@ -281,7 +281,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
             Platform.environment['CONCLAVE_TEST_HOST_REPOSITORY'] ??
                 'https://github.com/nohainc/conclave.git';
         final script =
-            File('${threadDirectory.path}/phase7-host-access-check.sh');
+            File('${threadDirectory.path}/host-host-access-check.sh');
         await script.writeAsString(_hostAccessScript(repositoryUrl));
         final chmod = await Process.run('chmod', ['700', script.path]);
         if (chmod.exitCode != 0) {
@@ -304,7 +304,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
               requestId: 'accept-full-local-access',
               assignmentId: 'profile-acceptance-full-local-access',
               prompt:
-                  'Run ./phase7-host-access-check.sh in the current working directory. Reply with exactly HOST_ACCESS_OK after it succeeds.',
+                  'Run ./host-host-access-check.sh in the current working directory. Reply with exactly HOST_ACCESS_OK after it succeeds.',
               timeoutMs: 180000,
               sessionPolicy: WorkerSessionPolicy.stateless,
               executionPolicy: WorkerExecutionPolicy.fullAccess,
@@ -325,7 +325,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
         }
 
         final evidenceFile = File(
-          '${threadDirectory.path}/phase7-host-evidence.json',
+          '${threadDirectory.path}/host-host-evidence.json',
         );
         expect(evidenceFile.existsSync(), isTrue);
         final evidence = jsonDecode(await evidenceFile.readAsString())
@@ -504,24 +504,24 @@ set -eu
 REMOTE='$quotedRepository'
 curl -fsSIL --max-time 20 https://github.com >/dev/null
 git ls-remote --heads "\$REMOTE" >/dev/null
-rm -rf phase7-host-checkout
-git clone --depth=1 "\$REMOTE" phase7-host-checkout >/dev/null
-if [ -s phase7-host-checkout/README.md ]; then
-  cat phase7-host-checkout/README.md >/dev/null
-elif [ -s phase7-host-checkout/README ]; then
-  cat phase7-host-checkout/README >/dev/null
-elif [ -s phase7-host-checkout/AGENTS.md ]; then
-  cat phase7-host-checkout/AGENTS.md >/dev/null
+rm -rf host-checkout
+git clone --depth=1 "\$REMOTE" host-checkout >/dev/null
+if [ -s host-checkout/README.md ]; then
+  cat host-checkout/README.md >/dev/null
+elif [ -s host-checkout/README ]; then
+  cat host-checkout/README >/dev/null
+elif [ -s host-checkout/AGENTS.md ]; then
+  cat host-checkout/AGENTS.md >/dev/null
 else
   echo "No readable repository documentation file" >&2
   exit 1
 fi
-printf 'full local access\\n' > phase7-host-checkout/.conclave-phase7-marker
-git -C phase7-host-checkout config user.name 'Conclave Host Acceptance'
-git -C phase7-host-checkout config user.email host-acceptance@conclave.invalid
-git -C phase7-host-checkout add .conclave-phase7-marker
-git -C phase7-host-checkout commit -qm 'Phase 7 host access verification'
-cat > phase7-host-evidence.json <<'EOF'
+printf 'full local access\\n' > host-checkout/.conclave-host-marker
+git -C host-checkout config user.name 'Conclave Host Acceptance'
+git -C host-checkout config user.email host-acceptance@conclave.invalid
+git -C host-checkout add .conclave-host-marker
+git -C host-checkout commit -qm 'Host access verification'
+cat > host-host-evidence.json <<'EOF'
 {"dns":"passed","https":"passed","gitLsRemote":"passed","gitClone":"passed","repositoryRead":"passed","repositoryWrite":"passed","gitCommit":"passed"}
 EOF
 printf 'HOST_ACCESS_OK\\n'

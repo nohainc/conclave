@@ -45,7 +45,12 @@ function fixture() {
       const userId = request.headers.get("test-user")!;
       return {
         userId,
-        user: { id: userId, email: `${userId}@test`, displayName: userId, status: "active" },
+        user: {
+          id: userId,
+          email: `${userId}@test`,
+          displayName: userId,
+          status: "active",
+        },
         workspaceId: "",
         spaceRoles: userId === "eve" ? {} : { S: "collaborator" },
         sessionId: "test",
@@ -85,8 +90,13 @@ it("leaves out the caller's own successful Work but keeps their failures", async
 
 it("marks selected or all notifications read per user", async () => {
   const { env, as, list } = fixture();
-  await handleMarkNotificationsRead(as("bob", "POST", { ids: ["w-done", "nope"] }), env);
-  expect((await list("bob")).filter((n) => n.read).map((n) => n.id)).toEqual(["w-done"]);
+  await handleMarkNotificationsRead(
+    as("bob", "POST", { ids: ["w-done", "nope"] }),
+    env,
+  );
+  expect((await list("bob")).filter((n) => n.read).map((n) => n.id)).toEqual([
+    "w-done",
+  ]);
   expect((await list("alice")).some((n) => n.read)).toBe(false);
   await handleMarkNotificationsRead(as("bob", "POST", {}), env);
   expect((await list("bob")).every((n) => n.read)).toBe(true);

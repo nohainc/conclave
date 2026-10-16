@@ -135,6 +135,7 @@ export const requiredProductionSmokeColumns = Object.freeze({
     "status",
     "created_at",
     "updated_at",
+    "parallel_slots",
   ],
   workspace_installations: [
     "installation_id",

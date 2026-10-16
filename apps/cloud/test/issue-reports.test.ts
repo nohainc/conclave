@@ -235,7 +235,7 @@ describe("issue reports", () => {
     );
     const body = (await admin.json()) as {
       report: Record<string, unknown>;
-      diagnostics: { data: Record<string, any> };
+      diagnostics: { data: Record<string, Record<string, unknown>> };
       investigation: { workspace: Record<string, unknown> };
     };
     expect(body.report).toMatchObject({

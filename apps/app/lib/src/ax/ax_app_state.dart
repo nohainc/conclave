@@ -302,8 +302,10 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     if (source is! AxPinDataSource) return;
     final before = store.spaces.items;
     final stamp = pinned ? DateTime.now().toUtc().toIso8601String() : '';
-    final top = nextAxPinPosition(
-        [for (final s in before) if (s.isPinned) s.pinPosition]);
+    final top = nextAxPinPosition([
+      for (final s in before)
+        if (s.isPinned) s.pinPosition
+    ]);
     store.spaces.replace([
       for (final item in before)
         item.id == space.id

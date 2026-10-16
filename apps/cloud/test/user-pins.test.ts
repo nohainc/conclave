@@ -36,9 +36,17 @@ function fixture() {
       const userId = request.headers.get("test-user")!;
       return {
         userId,
-        user: { id: userId, email: `${userId}@test`, displayName: userId, status: "active" },
+        user: {
+          id: userId,
+          email: `${userId}@test`,
+          displayName: userId,
+          status: "active",
+        },
         workspaceId: "",
-        spaceRoles: userId === "eve" ? {} : { S: userId === "alice" ? "owner" : "collaborator" },
+        spaceRoles:
+          userId === "eve"
+            ? {}
+            : { S: userId === "alice" ? "owner" : "collaborator" },
         sessionId: "test",
         clientType: "web",
       };
@@ -50,7 +58,9 @@ function fixture() {
     const spaces = (await (await handleListSpaces(as(user), env)).json()) as {
       spaces: { pinnedAt: string | null }[];
     };
-    const threads = (await (await handleListSpaceThreads(as(user), env, "S")).json()) as {
+    const threads = (await (
+      await handleListSpaceThreads(as(user), env, "S")
+    ).json()) as {
       threads: { pinnedAt: string | null }[];
     };
     return [!!spaces.spaces[0]!.pinnedAt, !!threads.threads[0]!.pinnedAt];
@@ -61,7 +71,9 @@ function fixture() {
 it("pins a Space and a Thread for the caller only, idempotently", async () => {
   const { env, as, pins } = fixture();
   expect(await pins("bob")).toEqual([false, false]);
-  expect((await handleSetPin(as("bob", "PUT"), env, "space", "S")).status).toBe(200);
+  expect((await handleSetPin(as("bob", "PUT"), env, "space", "S")).status).toBe(
+    200,
+  );
   await handleSetPin(as("bob", "PUT"), env, "space", "S");
   await handleSetPin(as("bob", "PUT"), env, "thread", "T");
   expect(await pins("bob")).toEqual([true, true]);
@@ -73,9 +85,15 @@ it("pins a Space and a Thread for the caller only, idempotently", async () => {
 
 it("rejects pins from people outside the Space and unknown kinds", async () => {
   const { env, as } = fixture();
-  await expect(handleSetPin(as("eve", "PUT"), env, "space", "S")).rejects.toMatchObject({});
-  await expect(handleSetPin(as("eve", "PUT"), env, "thread", "T")).rejects.toMatchObject({});
-  await expect(handleSetPin(as("bob", "PUT"), env, "other", "S")).rejects.toMatchObject({});
+  await expect(
+    handleSetPin(as("eve", "PUT"), env, "space", "S"),
+  ).rejects.toMatchObject({});
+  await expect(
+    handleSetPin(as("eve", "PUT"), env, "thread", "T"),
+  ).rejects.toMatchObject({});
+  await expect(
+    handleSetPin(as("bob", "PUT"), env, "other", "S"),
+  ).rejects.toMatchObject({});
 });
 
 it("keeps a Space's position when only sidebar view state changes", async () => {
@@ -91,11 +109,17 @@ it("keeps a Space's position when only sidebar view state changes", async () => 
       "S",
     );
   const updatedAt = () =>
-    (sqlite.prepare("SELECT updated_at AS u FROM spaces WHERE id='S'").get() as {
-      u: string;
-    }).u;
+    (
+      sqlite
+        .prepare("SELECT updated_at AS u FROM spaces WHERE id='S'")
+        .get() as {
+        u: string;
+      }
+    ).u;
   const before = updatedAt();
-  expect((await update({ settings: { sidebarExpanded: true } })).status).toBe(200);
+  expect((await update({ settings: { sidebarExpanded: true } })).status).toBe(
+    200,
+  );
   expect(updatedAt()).toBe(before);
   expect((await update({ description: "changed" })).status).toBe(200);
   expect(updatedAt()).not.toBe(before);

@@ -864,6 +864,8 @@ void main() {
     );
     final payload = inventory['payload'] as Map<String, dynamic>;
     expect(payload['fullSnapshot'], isTrue);
+    expect(payload['parallelSlots'], 1,
+        reason: 'The Workspace-wide slot total must reach Cloud.');
     expect((payload['workers'] as List).single['workerId'],
         'workspace-worker-dynamic');
     expect((payload['workers'] as List).single['engineVersion'], '1.0.0');
@@ -1493,8 +1495,7 @@ void main() {
     await connection.close();
   });
 
-  test('redelivers a terminal result on a timer after a failed send',
-      () async {
+  test('redelivers a terminal result on a timer after a failed send', () async {
     final socket = FlakyTerminalSocket(1);
     final directory =
         await Directory.systemTemp.createTemp('workspace-redeliver-');

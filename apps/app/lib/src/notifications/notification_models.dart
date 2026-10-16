@@ -236,7 +236,9 @@ AxNotification? notificationFromRealtimeEvent(
   final workRequestId = type.startsWith('work_request.')
       ? _optionalString(payloadMap['workRequestId'])
       : null;
-  final eventId = (workRequestId == null ? null : 'work-request:$workRequestId') ??
+  final eventId = (workRequestId == null
+          ? null
+          : 'work-request:$workRequestId') ??
       _optionalString(event['eventId']) ??
       _optionalString(event['id']) ??
       '$type:${threadId ?? runId ?? spaceId ?? 'workspace'}:${timestamp.microsecondsSinceEpoch}';

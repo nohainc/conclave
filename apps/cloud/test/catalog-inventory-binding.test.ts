@@ -106,7 +106,9 @@ it("binds catalog ingestion to the current V9 Profile revision and tool version"
       ],
     });
     expect(JSON.parse(stored().catalog!)).toEqual(catalog);
-    sqlite.exec("DELETE FROM worker_profiles WHERE worker_type_id = 'provider'");
+    sqlite.exec(
+      "DELETE FROM worker_profiles WHERE worker_type_id = 'provider'",
+    );
     await publish(9, catalog);
     expect(stored().catalog).toBeNull();
   } finally {

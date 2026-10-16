@@ -257,7 +257,8 @@ void main() {
 
         // Input Decoration Theme
         expect(theme.inputDecorationTheme.filled, isTrue);
-        expect(theme.inputDecorationTheme.fillColor,
+        expect(
+            theme.inputDecorationTheme.fillColor,
             isDark
                 ? ConclaveColors.composerBackgroundDark
                 : ConclaveColors.composerBackgroundLight);

@@ -63,6 +63,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
       "0014_exact_history_context.sql",
       "0015_conversation_workflow_runs.sql",
       "0016_workflow_step_runs.sql",
+      "0070_workspace_parallel_slots.sql",
     ]) {
       database.exec(
         readFileSync(
@@ -394,21 +395,21 @@ describe("production Workspace Gateway smoke schema gate", () => {
 
   it("requires the browser signing secret and runs dual auth acceptance after deployment", () => {
     const workflow = readFileSync(
-      new URL("../.github/workflows/deploy-app.yml", import.meta.url),
+      new URL("../.github/workflows/deploy-cloud.yml", import.meta.url),
       "utf8",
     );
     const migrations = workflow.indexOf("name: Apply production D1 migrations");
     const deployedSmoke = workflow.indexOf(
-      "name: Require production dual desktop-auth and Workspace Gateway acceptance",
+      "name: Require production desktop-auth and Workspace Gateway acceptance",
     );
-    const deploy = workflow.indexOf("name: Deploy app.conclaveax.com");
+    const deploy = workflow.indexOf("name: Deploy app.conclaveax.com Worker");
     const secretRequirement = workflow.indexOf(
-      "name: Require Better Auth signing secret for desktop auth smoke",
+      "name: Sync Better Auth and OAuth secrets to the Worker",
     );
 
     expect(secretRequirement).toBeGreaterThan(-1);
     expect(workflow).toContain(
-      "name: Require Better Auth signing secret for desktop auth smoke",
+      "name: Sync Better Auth and OAuth secrets to the Worker",
     );
     expect(secretRequirement).toBeLessThan(migrations);
     expect(migrations).toBeLessThan(deployedSmoke);

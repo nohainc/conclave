@@ -430,12 +430,14 @@ class ProviderActivityAdapter {
                 type: 'tool.started',
                 status: 'running',
                 title: _claudeToolTitle(name),
-                activityId: id ?? _activityId(
-                  null,
-                  family: 'claude-tool',
-                  toolKind: name,
-                  terminal: false,
-                ),
+                activityId:
+                    id ??
+                    _activityId(
+                      null,
+                      family: 'claude-tool',
+                      toolKind: name,
+                      terminal: false,
+                    ),
                 details: {
                   ..._toolDetails(name),
                   if (id == null) 'identifierSource': 'generated',
@@ -483,10 +485,7 @@ class ProviderActivityAdapter {
     return switch (name) {
       'Bash' || 'BashOutput' || 'KillShell' => 'Running a command',
       'Read' || 'Glob' || 'Grep' || 'LS' => 'Reading files',
-      'Edit' ||
-      'MultiEdit' ||
-      'Write' ||
-      'NotebookEdit' => 'Editing files',
+      'Edit' || 'MultiEdit' || 'Write' || 'NotebookEdit' => 'Editing files',
       'WebSearch' || 'WebFetch' => 'Searching the web',
       'Task' || 'Agent' => 'Working with a sub-agent',
       'TodoWrite' => 'Updating the plan',

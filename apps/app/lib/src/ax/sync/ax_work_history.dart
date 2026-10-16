@@ -465,22 +465,25 @@ class AxWorkHistoryCache {
                 'Request received. Waiting to start…';
           }
           // Realtime may already have delivered a newer, complete server entity.
-          replace(id, [
-            for (final request in history.requests)
-              if (request.id != localId) request,
-            if (!history.requests.any((r) => r.id == savedId))
-              AxWorkRequest(
-                  id: savedId,
-                  requestedByName: local.requestedByName,
-                  requestedByUserId: local.requestedByUserId,
-                  prompt: prompt,
-                  workflowId: workflowId,
-                  workflowVersion: workflowVersion,
-                  workflowName: workflowName,
-                  status: 'queued',
-                  createdAt: local.createdAt,
-                  steps: const []),
-          ], fenceReads: false);
+          replace(
+              id,
+              [
+                for (final request in history.requests)
+                  if (request.id != localId) request,
+                if (!history.requests.any((r) => r.id == savedId))
+                  AxWorkRequest(
+                      id: savedId,
+                      requestedByName: local.requestedByName,
+                      requestedByUserId: local.requestedByUserId,
+                      prompt: prompt,
+                      workflowId: workflowId,
+                      workflowVersion: workflowVersion,
+                      workflowName: workflowName,
+                      status: 'queued',
+                      createdAt: local.createdAt,
+                      steps: const []),
+              ],
+              fenceReads: false);
         },
         rollback: (error, _, context) {
           final rejected = error is AxApiException &&
@@ -495,24 +498,27 @@ class AxWorkHistoryCache {
               : 'Could not send your request: $error${attemptedPost && !rejected ? '\nSubmission status is unknown. Sending the same request again safely retries this submission.' : ''}';
           context.localProgress[localId] = message;
           // Keep the failed local row for correction/history; no automatic replay.
-          replace(id, [
-            for (final r in peek(id).requests)
-              if (r.id == localId)
-                AxWorkRequest(
-                    id: localId,
-                    requestedByName: local.requestedByName,
-                    requestedByUserId: local.requestedByUserId,
-                    prompt: prompt,
-                    workflowId: workflowId,
-                    workflowVersion: workflowVersion,
-                    workflowName: workflowName,
-                    status: 'failed',
-                    createdAt: local.createdAt,
-                    steps: const [],
-                    error: message)
-              else
-                r
-          ], fenceReads: false);
+          replace(
+              id,
+              [
+                for (final r in peek(id).requests)
+                  if (r.id == localId)
+                    AxWorkRequest(
+                        id: localId,
+                        requestedByName: local.requestedByName,
+                        requestedByUserId: local.requestedByUserId,
+                        prompt: prompt,
+                        workflowId: workflowId,
+                        workflowVersion: workflowVersion,
+                        workflowName: workflowName,
+                        status: 'failed',
+                        createdAt: local.createdAt,
+                        steps: const [],
+                        error: message)
+                  else
+                    r
+              ],
+              fenceReads: false);
         },
         invalidate: (savedId, _) => refreshRequest(id, savedId),
       ));

@@ -7,10 +7,10 @@ const boundaryDoc = readFileSync(boundaryDocPath, "utf8");
 const requiredContractText = [
   "## 1. AX ↔ Cloud — Human Product Protocol",
   "## 2. Workspace ↔ Cloud — Workspace Runtime Protocol",
-  "## 3. Workspace ↔ CLI Worker Engine — Local Worker Protocol 4.0",
+  "## 3. Workspace ↔ CLI Worker Engine — Local Worker Protocol 4.1",
   "AX MUST NOT open a Workspace Runtime Protocol connection",
   "CLI Worker Engine process",
-  "Local Worker Protocol 4.0: implemented by the Workspace supervisor",
+  "Local Worker Protocol 4.1: implemented by the Workspace supervisor",
   "## Shared canonical domain vocabulary",
   "`WorkspaceId`",
   "`WorkspaceRuntimeId`",

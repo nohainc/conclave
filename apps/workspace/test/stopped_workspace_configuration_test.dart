@@ -49,7 +49,6 @@ void main() {
 
   test('an independently running owner prevents configuration changes',
       () async {
-    if (Platform.isWindows) return;
     await state.create();
     final lock =
         WorkspacePaths(state).installationLockFile('installation-test');
@@ -78,5 +77,5 @@ void main() {
         throwsA(isA<StateError>()));
     expect(WorkspaceLifecyclePreferencesStore(state).readSync().workRootPath,
         isNull);
-  });
+  }, skip: Platform.isWindows ? 'POSIX only' : false);
 }

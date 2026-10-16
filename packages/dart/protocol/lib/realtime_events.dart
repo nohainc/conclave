@@ -134,7 +134,7 @@ class RealtimeEvent {
       _requiredString(decoded, 'assignmentId');
       _requiredString(decoded, 'attemptId');
       _requiredString(decoded, 'workspaceRuntimeId');
-      final activity = Map<String, Object?>.from(payload as Map);
+      final activity = Map<String, Object?>.from(payload);
       if (_requiredString(activity, 'entityId') != decoded['assignmentId']) {
         throw const ProtocolException(
           'Worker Activity entity does not match assignment',

@@ -123,9 +123,17 @@ it("stores Space sidebar state in Space settings and validates it", async () => 
     sidebarExpanded: true,
   });
   await expect(
-    handleUpdateSpace(patch({ settings: { threadOrder: ["T", "T"] } }), env, "S"),
+    handleUpdateSpace(
+      patch({ settings: { threadOrder: ["T", "T"] } }),
+      env,
+      "S",
+    ),
   ).rejects.toMatchObject({ status: 400 });
   await expect(
-    handleUpdateSpace(patch({ settings: { sidebarExpanded: "yes" } }), env, "S"),
+    handleUpdateSpace(
+      patch({ settings: { sidebarExpanded: "yes" } }),
+      env,
+      "S",
+    ),
   ).rejects.toMatchObject({ status: 400 });
 });

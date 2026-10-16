@@ -32,8 +32,8 @@ void main() {
     test('delivery sub-steps read as Queued, starting as Starting', () {
       expect(AxExecutionPhase.label('delivering'), 'Queued');
       expect(AxExecutionPhase.label('starting'), 'Starting');
-      expect(AxExecutionPhase.detail('delivering'),
-          'Sending to your Workspace');
+      expect(
+          AxExecutionPhase.detail('delivering'), 'Sending to your Workspace');
       expect(AxExecutionPhase.detail('starting'), 'Starting your worker');
     });
 
@@ -146,8 +146,8 @@ void main() {
         expect(progress.currentAction, isNot('Working…'), reason: phase);
         expect(progress.isExecuting, isFalse, reason: phase);
       }
-      expect(resolve('running', 'starting').currentAction,
-          'Starting your worker');
+      expect(
+          resolve('running', 'starting').currentAction, 'Starting your worker');
     });
 
     test('Running only once Cloud says running', () {

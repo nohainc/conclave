@@ -414,7 +414,10 @@ export function interpretProfileReadiness(
   input: ProfileReadinessInput,
 ): NormalizedProfileReadiness {
   const parsedProfile = validateToolProfileV1(profileInput);
-  const version = extractProfileProviderVersion(parsedProfile, input.versionProbe);
+  const version = extractProfileProviderVersion(
+    parsedProfile,
+    input.versionProbe,
+  );
   const checks: NormalizedReadinessCheck[] = [
     {
       code: "provider_tool_version",
@@ -559,10 +562,8 @@ export function expandExecutionArguments(
 ): string[] {
   const parsedProfile = validateToolProfileV1(profileInput);
   const compatibleProfile = context.providerVersion
-    ? resolveToolProfileCompatibility(
-        parsedProfile,
-        context.providerVersion,
-      ).profile
+    ? resolveToolProfileCompatibility(parsedProfile, context.providerVersion)
+        .profile
     : parsedProfile;
   const profile = argumentsOverride
     ? validateToolProfileV1({
@@ -714,10 +715,8 @@ export function constructProviderStdin(
 ): string {
   const parsedProfile = validateToolProfileV1(profileInput);
   const profile = context.providerVersion
-    ? resolveToolProfileCompatibility(
-        parsedProfile,
-        context.providerVersion,
-      ).profile
+    ? resolveToolProfileCompatibility(parsedProfile, context.providerVersion)
+        .profile
     : parsedProfile;
   validateContext(profile, context);
   let value: string;

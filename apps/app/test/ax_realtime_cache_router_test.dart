@@ -71,9 +71,9 @@ void main() {
     router = AxRealtimeCacheRouter(engine,
         activityDebounce: const Duration(milliseconds: 10),
         viewedThreadActivity: (id) {
-          viewed.add(id);
-          return id == 'W';
-        });
+      viewed.add(id);
+      return id == 'W';
+    });
     await router.handle({
       'type': 'work_request.completed',
       'spaceId': 'A',
@@ -87,15 +87,17 @@ void main() {
   test('a newly accepted request refreshes ordering for a viewed Thread',
       () async {
     final spaces = AxQuery<List<AxSpace>>(
-        key: AxQueryKey(['spaces']), load: () async {
-      loads.update('spaces', (n) => n + 1, ifAbsent: () => 1);
-      return const [];
-    });
+        key: AxQueryKey(['spaces']),
+        load: () async {
+          loads.update('spaces', (n) => n + 1, ifAbsent: () => 1);
+          return const [];
+        });
     final threads = AxQuery<List<AxThread>>(
-        key: AxQueryKey(['space', 'A', 'threads']), load: () async {
-      loads.update('space:A:threads', (n) => n + 1, ifAbsent: () => 1);
-      return const [];
-    });
+        key: AxQueryKey(['space', 'A', 'threads']),
+        load: () async {
+          loads.update('space:A:threads', (n) => n + 1, ifAbsent: () => 1);
+          return const [];
+        });
     await engine.ensure(spaces);
     await engine.ensure(threads);
     router = AxRealtimeCacheRouter(engine,

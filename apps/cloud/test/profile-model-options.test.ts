@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { readFileSync } from "node:fs";
 import { parseProfile } from "../src/tool-profile-validation.js";
 import { describe, expect, it } from "vitest";
@@ -397,10 +398,7 @@ it("does not expose discovered efforts without a Profile invocation mapping", as
 it("validates the additive signed selection mode and current authoring candidate", () => {
   const candidate = JSON.parse(
     readFileSync(
-      new URL(
-        "../../profile_lab/assets/profiles/gemini.json",
-        import.meta.url,
-      ),
+      new URL("../../profile_lab/assets/profiles/gemini.json", import.meta.url),
       "utf8",
     ),
   );
@@ -510,10 +508,7 @@ it("publishes seven signed AGY families and rejects invented effort combinations
     await import("../src/worker-execution-options.js");
   const candidate = JSON.parse(
     readFileSync(
-      new URL(
-        "../../profile_lab/assets/profiles/gemini.json",
-        import.meta.url,
-      ),
+      new URL("../../profile_lab/assets/profiles/gemini.json", import.meta.url),
       "utf8",
     ),
   );

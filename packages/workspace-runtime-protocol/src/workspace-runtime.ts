@@ -203,6 +203,7 @@ const DiscoveredModelCatalogV1Schema = z
               .string()
               .min(1)
               .max(256)
+              // eslint-disable-next-line no-control-regex -- Disallow ASCII control characters in names.
               .regex(/^[^\x00-\x1f\x7f]+$/),
             status: z.enum(["listed", "verified", "unavailable"]),
             supportedReasoningEfforts: z
@@ -262,6 +263,7 @@ export const DiscoveredModelCatalogV2Schema = z
               .string()
               .min(1)
               .max(256)
+              // eslint-disable-next-line no-control-regex -- Disallow ASCII control characters in names.
               .regex(/^[^\x00-\x1f\x7f]+$/),
             status: z.enum(["listed", "verified", "unavailable"]),
             selectionMode: z.enum(["separate", "combined"]),

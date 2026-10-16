@@ -503,7 +503,9 @@ extension _AxAppController on _AxAppStateMixin {
     _updateNotifications(() {
       notifications.insert(
         0,
-        isViewingRun || isViewingThread ? notification.markRead() : notification,
+        isViewingRun || isViewingThread
+            ? notification.markRead()
+            : notification,
       );
       if (notifications.length > 50) notifications.removeLast();
     });

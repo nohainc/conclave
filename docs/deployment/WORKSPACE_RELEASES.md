@@ -25,7 +25,7 @@ Real acceptance evidence is produced by [the Profile acceptance suite](../../app
 
 Each Workspace release contains one platform-specific CLI Worker Engine build. Workspace verifies the bundled executable and checks its identity during Local Worker Protocol initialization. Updating or rolling back the Engine means updating or restoring the complete signed Workspace release.
 
-Use the manually dispatched [Workspace macOS release workflow](../../.github/workflows/release-workspace-macos.yml) to build, sign, notarize, publish, download, and verify a macOS release. The workflow uses Workspace signing credentials and public trust roots.
+Use the manually dispatched [Workspace macOS release workflow](../../.github/workflows/release-macos.yml) to build, sign, notarize, publish, download, and verify a macOS release. The workflow uses Workspace signing credentials and public trust roots.
 
 Dispatch it from `main`. Before accessing release credentials or building, the
 workflow requires a successful push-triggered repository CI run for the exact

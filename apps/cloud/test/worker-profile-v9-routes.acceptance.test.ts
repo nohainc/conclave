@@ -197,9 +197,7 @@ describe("V9 Worker Profile routes", () => {
         },
       );
       expect(published.response.status).toBe(200);
-      expect(published.body).toEqual(
-        expect.objectContaining({ revision: 1 }),
-      );
+      expect(published.body).toEqual(expect.objectContaining({ revision: 1 }));
 
       const current = await send(
         env,

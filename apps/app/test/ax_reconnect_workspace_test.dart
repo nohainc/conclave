@@ -59,7 +59,8 @@ void main() {
     final old = workspace('A', 'cached');
     store.workspaces.replace([old]);
     final recovery = store.resynchronizeWorkspace('A');
-    final check = expectLater(recovery, throwsA(isA<AxRecoverySupersededException>()));
+    final check =
+        expectLater(recovery, throwsA(isA<AxRecoverySupersededException>()));
     store.clearServerState();
     source.state.complete([workspace('A', 'late')]);
     source.inventory.complete([]);

@@ -10,6 +10,8 @@ export default tseslint.config(
       "**/.dart_tool/**",
       "**/build/**",
       "**/.astro/**",
+      "**/.development/**",
+      "_to_delete/**",
       "**/worker-configuration.d.ts",
     ],
   },
@@ -23,6 +25,7 @@ export default tseslint.config(
         {
           argsIgnorePattern: "^_",
           varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
         },
       ],
     },

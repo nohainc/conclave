@@ -142,7 +142,7 @@ describe("Workspace Worker inventory catalog metadata", () => {
       prepare: vi.fn((sql: string) => {
         queries.push(sql);
         return {
-          bind: vi.fn((...values: unknown[]) => {
+          bind: vi.fn((..._values: unknown[]) => {
             return {
               first: async () =>
                 sql.includes("workspace_runtime_identities")
@@ -224,7 +224,7 @@ describe("Workspace Worker inventory catalog metadata", () => {
       prepare: vi.fn((sql: string) => {
         queries.push(sql);
         return {
-          bind: vi.fn((...values: unknown[]) => {
+          bind: vi.fn((..._values: unknown[]) => {
             return {
               all: async () => ({
                 results: [

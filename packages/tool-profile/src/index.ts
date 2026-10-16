@@ -310,7 +310,12 @@ const safeActivitySelector = selector.superRefine((value, ctx) => {
     "password",
     "api_key",
   ]);
-  if (value.slice(2).split(".").some((part) => unsafe.has(part.toLowerCase()))) {
+  if (
+    value
+      .slice(2)
+      .split(".")
+      .some((part) => unsafe.has(part.toLowerCase()))
+  ) {
     ctx.addIssue({
       code: "custom",
       message: "Activity selectors cannot copy content or execution details",
@@ -347,7 +352,9 @@ const activity = z
       .enum(["codex-jsonl", "agy-stream-json", "claude-stream-json"])
       .optional(),
     schemaVersion: z.literal(1).optional(),
-    mappings: z.array(activityMapping).max(TOOL_PROFILE_LIMITS.activityMappings),
+    mappings: z
+      .array(activityMapping)
+      .max(TOOL_PROFILE_LIMITS.activityMappings),
   })
   .strict();
 
@@ -1209,7 +1216,8 @@ function rejectPlaintextCredentialMaterial(profile: ToolProfileV1): void {
   const visit = (value: unknown): boolean => {
     if (typeof value === "string") return credentialMaterial.test(value);
     if (Array.isArray(value)) return value.some(visit);
-    if (value && typeof value === "object") return Object.values(value).some(visit);
+    if (value && typeof value === "object")
+      return Object.values(value).some(visit);
     return false;
   };
   if (visit(profile)) {

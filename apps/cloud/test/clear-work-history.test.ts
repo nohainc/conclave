@@ -170,8 +170,9 @@ it("clears Discussion Chat remotely, announces it, and leaves Work history alone
     // The deletion rides on the event so both commit together.
     for (const mutation of options!.mutations!) await mutation.run();
     expect(
-      f.sqlite.prepare("SELECT COUNT(*) AS count FROM discussion_messages").get()!
-        .count,
+      f.sqlite
+        .prepare("SELECT COUNT(*) AS count FROM discussion_messages")
+        .get()!.count,
     ).toBe(0);
     expect(
       f.sqlite.prepare("SELECT COUNT(*) AS count FROM work_requests").get()!
@@ -200,7 +201,7 @@ it("announces a retried work-history clear even when the receipt replays", async
       handleClearWorkHistory(
         new Request("https://test/api/threads/W/work-history/clear", {
           method: "POST",
-          headers: { "Idempotency-Key": "clear-1" },
+          headers: { "Idempotency-Key": "clear-work-history-key-1" },
         }),
         env,
         "W",

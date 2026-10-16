@@ -42,7 +42,10 @@ export async function handleListNotifications(
   return json({
     notifications: (rows.results ?? []).map((row) => ({
       id: String(row.id),
-      type: row.status === "failed" ? "work_request.failed" : "work_request.completed",
+      type:
+        row.status === "failed"
+          ? "work_request.failed"
+          : "work_request.completed",
       spaceId: String(row.spaceId),
       threadId: String(row.threadId),
       threadName: String(row.threadName),
@@ -72,7 +75,9 @@ export async function handleMarkNotificationsRead(
     {},
   );
   const ids = Array.isArray(body.ids)
-    ? body.ids.filter((id): id is string => typeof id === "string").slice(0, 200)
+    ? body.ids
+        .filter((id): id is string => typeof id === "string")
+        .slice(0, 200)
     : null;
   const readAt = new Date().toISOString();
   const scope = `FROM work_requests w

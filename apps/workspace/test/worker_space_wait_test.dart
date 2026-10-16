@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:conclave_workspace/assignment_startup.dart';
+import 'package:conclave_workspace/cli_worker_engine_supervisor.dart'
+    show CliWorkerEngineSupervisor;
 import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/space_directory.dart';
 import 'package:conclave_workspace/worker_executor.dart';
@@ -149,6 +151,7 @@ void main() {
   });
 
   test('the default allowance matches the Engine supervisor default', () {
-    expect(defaultAssignmentQueueAllowance, const Duration(minutes: 2));
+    expect(defaultAssignmentQueueAllowance,
+        CliWorkerEngineSupervisor.defaultQueueWaitTimeout);
   });
 }

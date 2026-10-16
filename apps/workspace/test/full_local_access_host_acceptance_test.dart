@@ -13,7 +13,7 @@ void main() {
   final enabled =
       Platform.environment['CONCLAVE_TEST_FULL_LOCAL_ACCESS'] == '1';
   test(
-    'Phase 7 — host network, Git, filesystem and process access',
+    'Host network, Git, filesystem and process access',
     () async {
       final evidence = <String, Object?>{
         'schemaVersion': 1,
@@ -111,7 +111,7 @@ Future<void> _runHostAcceptance(Map<String, Object?> evidence) async {
   }
   checks['gitLsRemote'] = {'repository': repositoryUrl, 'succeeded': true};
 
-  final root = await Directory.systemTemp.createTemp('conclave-phase7-host-');
+  final root = await Directory.systemTemp.createTemp('conclave-host-host-');
   try {
     final checkout = Directory('${root.path}/checkout');
     final clone = await _run(
@@ -132,7 +132,7 @@ Future<void> _runHostAcceptance(Map<String, Object?> evidence) async {
     if (sourceContents.isEmpty) {
       throw StateError('Cloned repository file was unexpectedly empty.');
     }
-    final marker = File('${checkout.path}/.conclave-phase7-marker');
+    final marker = File('${checkout.path}/.conclave-host-marker');
     await marker.writeAsString('full-local-access\n');
     await _run(git, ['add', marker.path], workingDirectory: checkout.path);
     final commit = await _run(
@@ -144,7 +144,7 @@ Future<void> _runHostAcceptance(Map<String, Object?> evidence) async {
         'user.email=host-acceptance@conclave.invalid',
         'commit',
         '-qm',
-        'Phase 7 host access verification',
+        'Host access verification',
       ],
       workingDirectory: checkout.path,
     );

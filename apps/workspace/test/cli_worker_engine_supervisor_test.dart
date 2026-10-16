@@ -15,44 +15,53 @@ void main() {
     expect((await _execute(setup, 'vm-banner')).output, 'vm-banner');
   });
 
-  test('reaps only registered Engine processes after restart', () async {
-    if (Platform.isWindows) return;
-    final root = await Directory.systemTemp.createTemp('engine-recovery-');
-    addTearDown(() => root.delete(recursive: true));
-    try {
-      final psProbe = await Process.run('ps', ['-p', '1', '-o', 'pid=']);
-      if (psProbe.exitCode != 0) return;
-    } on ProcessException {
-      return;
-    }
-    final state = Directory('${root.path}/worker-state');
-    await state.create();
-    final process = await Process.start(
-      '/bin/sh',
-      [
-        '-c',
-        'while :; do sleep 30; done',
-        'conclave-engine-test',
-        '--state-directory',
-        state.path
-      ],
-    );
-    final registry = Directory('${root.path}/runtime');
-    await registry.create();
-    await File('${registry.path}/assignment.worker-process.json')
-        .writeAsString(jsonEncode({
-      'pid': process.pid,
-      'executable': File('/bin/sh').absolute.path,
-      'stateDirectory': state.path,
-    }));
-    final supervisor = CliWorkerEngineSupervisor(
-      engineExecutable: '/bin/sh',
-      processRegistryDirectory: registry,
-    );
+  test(
+    'reaps only registered Engine processes after restart',
+    () async {
+      final root = await Directory.systemTemp.createTemp('engine-recovery-');
+      addTearDown(() => root.delete(recursive: true));
+      final state = Directory('${root.path}/worker-state');
+      await state.create();
 
-    expect(await supervisor.recoverOrphanedProcesses(), 1);
-    await process.exitCode.timeout(const Duration(seconds: 2));
-  });
+      Future<Process> startLoop(String name) async {
+        final process = await Process.start(
+          '/bin/sh',
+          [
+            '-c',
+            'while :; do sleep 30; done',
+            name,
+            '--state-directory',
+            state.path
+          ],
+        );
+        // Never leave a loop behind, even when an assertion fails first.
+        addTearDown(() => Process.killPid(process.pid, ProcessSignal.sigkill));
+        return process;
+      }
+
+      final registered = await startLoop('conclave-engine-test');
+      final unrelated = await startLoop('conclave-engine-test');
+      final registry = Directory('${root.path}/runtime');
+      await registry.create();
+      await File('${registry.path}/assignment.worker-process.json')
+          .writeAsString(jsonEncode({
+        'pid': registered.pid,
+        'executable': File('/bin/sh').absolute.path,
+        'stateDirectory': state.path,
+      }));
+      final supervisor = CliWorkerEngineSupervisor(
+        engineExecutable: '/bin/sh',
+        processRegistryDirectory: registry,
+      );
+
+      expect(await supervisor.recoverOrphanedProcesses(), 1);
+      await registered.exitCode.timeout(const Duration(seconds: 2));
+      // A process with the same shape that was never registered is left alone.
+      // SIGCONT is a harmless no-op that reports whether the process exists.
+      expect(Process.killPid(unrelated.pid, ProcessSignal.sigcont), isTrue);
+    },
+    skip: _orphanReapingSkipReason(),
+  );
 
   test('serializes Engine assignments at the local Worker limit', () async {
     final setup = await _setup();
@@ -128,13 +137,20 @@ void main() {
     addTearDown(() => setup.root.delete(recursive: true));
     final first = _execute(setup, 'first', prompt: 'slow');
     await _waitFor(File('${setup.state.path}/active').existsSync);
+    final queuedSignal = Completer<void>();
+    // The first assignment holds the slot for about five seconds. The queued
+    // one has a shorter execution timeout with ample headroom over its own
+    // run time, so it can only pass if queue wait is not counted against it.
     final queued = _execute(
       setup,
       'queued',
-      timeout: const Duration(seconds: 1),
+      timeout: const Duration(seconds: 3),
       queueWaitTimeout: const Duration(seconds: 7),
+      onQueued: (_) {
+        if (!queuedSignal.isCompleted) queuedSignal.complete();
+      },
     );
-    await Future<void>.delayed(const Duration(seconds: 1));
+    await queuedSignal.future;
     expect(await first, isA<WorkerResult>());
     expect((await queued).output, 'queued');
   });
@@ -187,11 +203,9 @@ void main() {
         File('${setup.state.path}/started-second').existsSync());
     final queued = Completer<void>();
     final third = _execute(setup, 'third',
-        workerId: 'worker-c',
-        maxConcurrentAssignments: 2,
-        onQueued: (_) {
-          if (!queued.isCompleted) queued.complete();
-        });
+        workerId: 'worker-c', maxConcurrentAssignments: 2, onQueued: (_) {
+      if (!queued.isCompleted) queued.complete();
+    });
     await queued.future;
     expect(File('${setup.state.path}/started-third').existsSync(), isFalse);
     final snapshot = setup.supervisor.slotSnapshot();
@@ -579,6 +593,19 @@ String _testDartExecutable() {
     // Fall back to the current runtime when the Dart executable is not on PATH.
   }
   return Platform.resolvedExecutable;
+}
+
+/// Why orphan reaping cannot be exercised here, or false when it can.
+Object _orphanReapingSkipReason() {
+  if (Platform.isWindows) return 'POSIX process tree reaping only';
+  try {
+    if (Process.runSync('ps', ['-p', '1', '-o', 'pid=']).exitCode != 0) {
+      return 'ps is not usable in this environment';
+    }
+  } on ProcessException {
+    return 'ps is not available in this environment';
+  }
+  return false;
 }
 
 Future<void> _waitFor(bool Function() condition) async {

@@ -2104,8 +2104,7 @@ class WorkspaceCloudConnection {
         correlation,
         {
           'status': 'completed',
-          'summary':
-              record.result?['summary'] ?? 'Recovered assignment result',
+          'summary': record.result?['summary'] ?? 'Recovered assignment result',
           'output': record.result?['output'],
           'artifactIds': record.result?['artifactIds'] ?? const [],
           if (record.result?['evidence'] is Map)
@@ -2134,8 +2133,7 @@ class WorkspaceCloudConnection {
         correlation,
         {
           'status': 'cancelled',
-          'reason':
-              'Assignment was cancelled while the Workspace was offline',
+          'reason': 'Assignment was cancelled while the Workspace was offline',
         },
       )));
     } else {
@@ -2160,10 +2158,10 @@ class WorkspaceCloudConnection {
 
   void _scheduleTerminalRedelivery() {
     if (_closing || _terminalRedeliveryTimer != null) return;
-    final factor = 1 << (_terminalRedeliveryAttempt > 4 ? 4 : _terminalRedeliveryAttempt);
+    final factor =
+        1 << (_terminalRedeliveryAttempt > 4 ? 4 : _terminalRedeliveryAttempt);
     _terminalRedeliveryAttempt++;
-    _terminalRedeliveryTimer =
-        Timer(terminalRedeliveryInterval * factor, () {
+    _terminalRedeliveryTimer = Timer(terminalRedeliveryInterval * factor, () {
       _terminalRedeliveryTimer = null;
       unawaited(_redeliverPendingTerminals());
     });

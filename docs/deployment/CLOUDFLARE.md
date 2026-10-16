@@ -18,7 +18,7 @@ Its production Worker owns only `conclaveax.com` and `www.conclaveax.com`.
 It does not handle `/api/*`, `app.conclaveax.com`, Workspace Gateway traffic, or
 Better Auth callbacks. PR previews use a separate temporary Workers name with
 no production custom-domain routes; merging to `main` deploys the production
-site through `.github/workflows/deploy-site-production.yml`.
+site through `.github/workflows/deploy-site.yml`.
 
 The public site's production config provisions HTTPS custom domains for the
 apex and `www` hostnames. The site Worker returns a permanent 308 redirect

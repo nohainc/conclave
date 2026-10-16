@@ -21,7 +21,7 @@ const runtime = readRequired("apps/workspace/lib/workspace_runtime.dart");
 const catalogCoordinator = readRequired(
   "apps/workspace/lib/worker_catalog_coordinator.dart",
 );
-const workspaceConfig = readRequired("apps/workspace/lib/workspace.dart");
+const _workspaceConfig = readRequired("apps/workspace/lib/workspace.dart");
 const workspaceRegistration = readRequired(
   "apps/workspace/lib/workspace_configuration.dart",
 );
@@ -33,29 +33,12 @@ const axData = readRequired("apps/app/lib/src/ax/ax_data.dart");
 const cloudWrangler = readRequired("apps/cloud/wrangler.jsonc");
 const infraWrangler = readRequired("infra/cloudflare/app.wrangler.jsonc");
 const packageJson = JSON.parse(readRequired("package.json") || "{}");
-const testFull = readRequired(".github/workflows/test-full.yml");
-const testComponent = readRequired(".github/workflows/test-component.yml");
-const devApp = readRequired(".github/workflows/development-app.yml");
-const devWorkspace = readRequired(
-  ".github/workflows/development-workspace.yml",
-);
-const devProfileLab = readRequired(
-  ".github/workflows/development-profile-lab.yml",
-);
-const devCloud = readRequired(".github/workflows/development-cloud.yml");
-const devSite = readRequired(".github/workflows/development-site.yml");
-const devEngine = readRequired(".github/workflows/development-engine.yml");
-const devGuard = readRequired(".github/workflows/development-guard.yml");
-const deploy = readRequired(".github/workflows/deploy-app.yml");
-const siteProductionDeploy = readRequired(
-  ".github/workflows/deploy-site-production.yml",
-);
-const workspaceRelease = readRequired(
-  ".github/workflows/release-workspace-macos.yml",
-);
-const profileLabRelease = readRequired(
-  ".github/workflows/release-profile-lab-macos.yml",
-);
+const ciWorkflow = readRequired(".github/workflows/ci.yml");
+const deployCloud = readRequired(".github/workflows/deploy-cloud.yml");
+const deploySite = readRequired(".github/workflows/deploy-site.yml");
+const releaseMacos = readRequired(".github/workflows/release-macos.yml");
+const nightlyWorkflow = readRequired(".github/workflows/nightly.yml");
+const checkSiteAction = readRequired(".github/actions/check-site/action.yml");
 const cloudPackage = JSON.parse(
   readRequired("apps/cloud/package.json") || "{}",
 );
@@ -321,99 +304,94 @@ for (const name of Object.keys(scripts)) {
   }
 }
 for (const job of [
-  "repo-static",
-  "typescript",
-  "dart-core",
-  "app-flutter",
-  "workspace-check",
-  "workspace-macos-build",
-  "profile-lab-macos",
-  "site-astro",
-  "acceptance-gate",
+  "changes",
+  "static",
+  "cloud",
+  "dart-packages",
+  "app",
+  "workspace",
+  "profile-lab",
+  "engine",
+  "site",
+  "ci-passed",
 ]) {
-  if (!new RegExp(`^  ${job}:`, "m").test(testFull))
-    failures.push(`Full validation workflow is missing ${job}.`);
+  if (!new RegExp(`^  ${job}:`, "m").test(ciWorkflow))
+    failures.push(`CI workflow is missing ${job}.`);
 }
 if (
   /engine-tests|profile-fixture-tests|profile-security-tests|workspace-runtime-tests|v8-runtime-e2e|work-v1-e2e|v7-runtime-e2e|worker-adapters:test|v4-architecture-guard/.test(
-    testFull,
+    ciWorkflow,
   )
 ) {
   failures.push(
-    "Full validation workflow retains a historical runtime or architecture gate.",
+    "CI workflow retains a historical runtime or architecture gate.",
   );
 }
 for (const [workflowName, workflowContent, command] of [
-  ["test-full", testFull, "pnpm check:static"],
-  ["test-full", testFull, "pnpm check:typescript"],
-  ["test-full", testFull, "bash scripts/check-dart-packages.sh"],
-  ["development-app", devApp, "bash scripts/check-flutter-app.sh app"],
+  ["ci", ciWorkflow, "pnpm check:static"],
+  ["ci", ciWorkflow, "pnpm check:typescript"],
+  ["ci", ciWorkflow, "bash scripts/check-dart-packages.sh"],
+  ["ci", ciWorkflow, "bash scripts/check-flutter-app.sh app"],
+  ["ci", ciWorkflow, "bash scripts/check-flutter-app.sh workspace"],
+  ["ci", ciWorkflow, "bash scripts/check-flutter-app.sh profile_lab"],
+  ["ci", ciWorkflow, "bash scripts/validate-engine.sh"],
+  ["ci", ciWorkflow, "uses: ./.github/actions/check-site"],
+  ["check-site", checkSiteAction, "./node_modules/.bin/astro check"],
+  ["check-site", checkSiteAction, "./node_modules/.bin/astro build"],
+  ["check-site", checkSiteAction, "./node_modules/.bin/vitest run test"],
   [
-    "development-workspace",
-    devWorkspace,
-    "bash scripts/check-flutter-app.sh workspace",
+    "nightly",
+    nightlyWorkflow,
+    "bash scripts/build-workspace-macos.sh --prepared",
   ],
   [
-    "development-profile-lab",
-    devProfileLab,
-    "bash scripts/check-flutter-app.sh profile_lab",
+    "nightly",
+    nightlyWorkflow,
+    "bash scripts/build-profile-lab-macos.sh --release --prepared",
   ],
-  ["development-engine", devEngine, "bash scripts/validate-engine.sh"],
-  ["development-guard", devGuard, "pnpm check:static"],
-  ["development-cloud", devCloud, "pnpm check:typescript"],
-  ["development-site", devSite, "./node_modules/.bin/astro check"],
 ]) {
-  if (!workflowContent.includes(`run: ${command}`))
+  if (!workflowContent.includes(command))
     failures.push(
       `${workflowName} workflow is missing validation owner: ${command}.`,
     );
 }
-if (!testComponent.includes("workflow_dispatch:")) {
-  failures.push("Component Validation workflow is missing workflow_dispatch.");
+if (!ciWorkflow.includes("workflow_dispatch:")) {
+  failures.push("CI workflow is missing workflow_dispatch.");
 }
 if (
-  !deploy.includes("run: pnpm validate:cloud && pnpm check:fixture-e2e") ||
-  !deploy.includes("run: pnpm validate:app")
-) {
-  failures.push(
-    "The AX App production deployment workflow must validate Cloud and AX Web App.",
-  );
-}
-if (
-  !workspaceRelease.includes("needs: ci-gate") ||
-  !workspaceRelease.includes(
-    "Require successful repository CI for this main revision",
+  !deployCloud.includes("needs: require-ci") ||
+  !deployCloud.includes("run: bash scripts/ci/require-ci-success.sh") ||
+  !deployCloud.includes(
+    "run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api",
   ) ||
-  !workspaceRelease.includes("run.event === 'push'") ||
-  !workspaceRelease.includes("run.conclusion === 'success'") ||
-  !workspaceRelease.includes("run.head_sha === process.env.GITHUB_SHA")
-) {
-  failures.push(
-    "Workspace releases must require successful main-branch CI for the exact release revision.",
-  );
-}
-if (
-  !profileLabRelease.includes("needs: ci-gate") ||
-  !profileLabRelease.includes("environment: profile-lab-release") ||
-  !profileLabRelease.includes("run: pnpm check") ||
-  !profileLabRelease.includes("bash scripts/test-profile-lab-macos.sh") ||
-  !profileLabRelease.includes("bash scripts/build-profile-lab-macos.sh") ||
-  !profileLabRelease.includes("actions/upload-artifact@v4")
-) {
-  failures.push(
-    "Profile Lab releases must require CI gate, environment authorization, pnpm check, Profile Lab tests, build, and internal artifact upload.",
-  );
-}
-if (
-  !siteProductionDeploy.includes("branches: [main]") ||
-  !siteProductionDeploy.includes('"apps/site/**"') ||
-  !siteProductionDeploy.includes("cancel-in-progress: true") ||
-  !siteProductionDeploy.includes(
-    "wrangler deploy --config wrangler.production.jsonc",
+  !deployCloud.includes(
+    "run: node scripts/production-workspace-gateway-smoke.mjs --schema-only",
+  ) ||
+  !deployCloud.includes(
+    "run: pnpm exec wrangler deploy --config ../../infra/cloudflare/app.wrangler.jsonc",
   )
 ) {
   failures.push(
-    "Public-site production deployment must trigger on main site changes with cancellation enabled.",
+    "The Cloud production deployment workflow must require CI gate, build web bundle, verify schema, and deploy with wrangler.",
+  );
+}
+if (
+  !releaseMacos.includes("needs: require-ci") ||
+  !releaseMacos.includes("run: bash scripts/ci/require-ci-success.sh") ||
+  !releaseMacos.includes("environment: workspace-release") ||
+  !releaseMacos.includes("environment: profile-lab-release")
+) {
+  failures.push(
+    "Workspace and Profile Lab releases must require CI gate, environment authorization, and require-ci-success.",
+  );
+}
+if (
+  !deploySite.includes("branches: [main]") ||
+  !deploySite.includes('"apps/site/**"') ||
+  !deploySite.includes("wrangler deploy --config wrangler.production.jsonc")
+) {
+  failures.push(
+    "Public-site production deployment must trigger on main site changes and deploy wrangler.production.jsonc.",
   );
 }
 
@@ -481,7 +459,7 @@ if (
 }
 if (
   /forge-execution\.wrangler\.jsonc|forge-execution|CONCLAVE_FORGE_/.test(
-    deploy,
+    deployCloud,
   )
 ) {
   failures.push(

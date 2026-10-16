@@ -5,14 +5,15 @@ import { expect, it } from "vitest";
 import { parseProfile } from "../src/tool-profile-validation.js";
 import { spaceModelOptions } from "../src/worker-execution-options.js";
 
-const templates = new URL("../../profile_lab/assets/profiles/", import.meta.url);
+const templates = new URL(
+  "../../profile_lab/assets/profiles/",
+  import.meta.url,
+);
 const migrations = new URL("../migrations-v8/", import.meta.url);
 const read = (url: URL) => readFileSync(url, "utf8");
 
 it("publishes Claude effort choices with a matching invocation slot", () => {
-  const payload = read(
-    new URL("claude.json", templates),
-  );
+  const payload = read(new URL("claude.json", templates));
   const profile = parseProfile(JSON.parse(payload)).profile;
   const options = spaceModelOptions(payload, "2.1.287")!;
   expect(options.catalog.map((m) => m.supportedReasoningEfforts)).toEqual([

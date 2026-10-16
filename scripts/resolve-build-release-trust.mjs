@@ -31,11 +31,15 @@ export function resolveBuildReleaseTrust(root, env = process.env) {
       Array.isArray(publisher) ||
       Object.keys(publisher).length === 0
     ) {
-      throw new Error("Invalid public application-release trust configuration.");
+      throw new Error(
+        "Invalid public application-release trust configuration.",
+      );
     }
     for (const key of Object.values(publisher)) {
       if (typeof key !== "string" || Buffer.from(key, "base64").length !== 32) {
-        throw new Error("Application-release trust requires raw Ed25519 public keys.");
+        throw new Error(
+          "Application-release trust requires raw Ed25519 public keys.",
+        );
       }
     }
   }

@@ -38,7 +38,7 @@ Profile Lab and Workspace boundaries.
 
 ```text
 flutter test apps/profile_lab/test/phase11_profile_lab_binary_acceptance_test.dart
-flutter test apps/workspace/test/phase11_profile_rollout_acceptance_test.dart
+flutter test apps/workspace/test/worker_profile_rollout_acceptance_test.dart
 vitest run apps/cloud/test/worker-profile-v9-registry.test.ts
 ```
 

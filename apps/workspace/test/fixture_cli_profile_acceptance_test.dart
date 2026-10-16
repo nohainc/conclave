@@ -16,13 +16,14 @@ import 'package:conclave_workspace/workspace_worker_view.dart';
 import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
+import 'support/repository_root.dart';
 import 'support/worker_profile_snapshot_fixture.dart';
 
 void main() {
   test(
     'a dynamic Worker survives an offline restart, retirement, and restoration',
     () async {
-      final repository = Directory.current.parent.parent.path;
+      final repository = repositoryRoot;
       final root = await Directory.systemTemp.createTemp('third-cli-profile-');
       addTearDown(() => root.delete(recursive: true));
 

@@ -718,10 +718,16 @@ export async function handleClearChatHistory(
   ).bind(threadId);
   // The mutation and the event are committed together by the publisher, so a
   // successful clear is always announced to other sessions.
-  await publishCollaborationEvent(env, "thread.chat_cleared", spaceId, threadId, {
+  await publishCollaborationEvent(
+    env,
+    "thread.chat_cleared",
+    spaceId,
     threadId,
-    mutations: [mutation],
-  });
+    {
+      threadId,
+      mutations: [mutation],
+    },
+  );
   return json({ threadId, cleared: true });
 }
 

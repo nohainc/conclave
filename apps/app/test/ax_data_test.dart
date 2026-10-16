@@ -128,8 +128,8 @@ void main() {
     // Better Auth 1.7 answers a pending change with a bare `{status: true}`.
     final bareApi = AxApiClient(
       baseUrl: 'https://cloud.test/api',
-      client: _JsonClient(const <String, dynamic>{'status': true},
-          statusCode: 200),
+      client:
+          _JsonClient(const <String, dynamic>{'status': true}, statusCode: 200),
     );
     expect(
         (await bareApi.requestEmailChange(email: 'new@example.test'))

@@ -96,6 +96,7 @@ export function sanitizeActivityDetails(
     ) {
       output[key] = value;
     } else if (typeof value === "string") {
+      // eslint-disable-next-line no-control-regex -- Remove control bytes from activity payload text.
       const safe = value.replace(/[\u0000-\u001f\u007f]/g, " ").trim();
       if (safe) output[key] = safe.slice(0, 2048);
     }
@@ -113,6 +114,7 @@ export function normalizeActivityPayload(
     title:
       typeof raw.title === "string"
         ? raw.title
+            // eslint-disable-next-line no-control-regex -- Remove control bytes from activity payload text.
             .replace(/[\u0000-\u001f\u007f]/g, " ")
             .trim()
             .slice(0, 256)

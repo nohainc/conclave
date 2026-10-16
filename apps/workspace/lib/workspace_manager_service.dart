@@ -220,8 +220,8 @@ class WorkspaceManagerService {
     final slots = subsystem?.slotSnapshot() ??
         const <String, Object?>{'workers': <Object?>[], 'busySessions': 0};
     final names = <String, String>{};
-    final workers = await (subsystem?.listWorkers() ??
-        Future.value(const <LocalWorker>[]));
+    final workers =
+        await (subsystem?.listWorkers() ?? Future.value(const <LocalWorker>[]));
     for (final worker in workers) {
       names[worker.id] = worker.workerTypeId;
     }

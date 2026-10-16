@@ -96,16 +96,6 @@ export async function recordWorkspaceWorkerInventory(
       }
       continue;
     }
-    const arrayJson = (value: unknown, max: number): string =>
-      JSON.stringify(
-        Array.isArray(value)
-          ? value
-              .filter((entry): entry is string => typeof entry === "string")
-              .map((entry) => entry.trim())
-              .filter((entry) => /^[a-z][a-z0-9_:-]{0,127}$/.test(entry))
-              .slice(0, max)
-          : [],
-      );
     const nullableText = (value: unknown, max: number): string | null =>
       typeof value === "string" && value.trim().length <= max
         ? value.trim() || null

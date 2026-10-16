@@ -10,6 +10,7 @@ import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/ed25519_release_fixture.dart';
+import 'support/repository_root.dart';
 
 void main() {
   late Directory root;
@@ -121,7 +122,7 @@ void main() {
 
   test('executes an unsigned development draft through the real generic Engine',
       () async {
-    final repository = Directory.current.parent.parent.path;
+    final repository = repositoryRoot;
     final providerScript =
         '$repository/packages/tool-profile/test/fixtures/provider-cli/fixture_provider.dart';
     final provider = profile['providerTool'] as Map<String, Object?>;
