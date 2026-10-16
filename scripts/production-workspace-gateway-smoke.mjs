@@ -636,12 +636,9 @@ async function verifyProfileLabAuth(workspaceCredential) {
     );
     if (deniedClaim.status !== 409)
       throw new Error("Rejected Profile Lab intent must remain unclaimable");
-    const deniedAdmin = await fetch(
-      `https://${hostname}/api/admin/tool-profiles/definitions`,
-      {
-        headers: { Authorization: `Bearer ${workspaceCredential}` },
-      },
-    );
+    const deniedAdmin = await fetch(`https://${hostname}/api/admin/workers`, {
+      headers: { Authorization: `Bearer ${workspaceCredential}` },
+    });
     if (deniedAdmin.status !== 403)
       throw new Error("Workspace credentials must not administer Profile Lab");
     console.log(
@@ -745,7 +742,7 @@ async function verifyProfileLabAuth(workspaceCredential) {
   }
 
   const profileAdminResponse = await fetch(
-    `https://${hostname}/api/admin/tool-profiles/definitions`,
+    `https://${hostname}/api/admin/workers`,
     { headers: { Authorization: `Bearer ${claimed.credential}` } },
   );
   const profileAdminResult = await profileAdminResponse
@@ -800,7 +797,7 @@ async function verifyProfileLabAuth(workspaceCredential) {
   }
 
   const workspaceProfileAdminResponse = await fetch(
-    `https://${hostname}/api/admin/tool-profiles/definitions`,
+    `https://${hostname}/api/admin/workers`,
     { headers: { Authorization: `Bearer ${workspaceCredential}` } },
   );
   const workspaceProfileAdminResult = await workspaceProfileAdminResponse

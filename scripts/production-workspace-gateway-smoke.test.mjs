@@ -380,11 +380,10 @@ describe("production Workspace Gateway smoke schema gate", () => {
       "claimed_session_id",
       "conclave.profile-lab.management",
       "/api/desktop-auth/session",
-      "/api/admin/tool-profiles/definitions",
+      "/api/admin/workers",
       "The profiles:admin permission is required",
       "/api/workspace-runtime/register",
       "/api/workspace-runtime/sessions",
-      "/api/admin/tool-profiles/definitions",
       "workspaceHumanCredential = await verifyWorkspaceAuth()",
       "DELETE FROM auth_sessions",
     ]) {
