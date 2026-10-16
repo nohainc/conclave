@@ -1,57 +1,101 @@
 part of 'profile_lab_controller.dart';
 
-const _bundledSourceWorkerTypes = {'chatgpt', 'gemini', 'claude'};
-
-Future<Map<String, Object?>?> _readBundledSourceProfile(
-  String workerTypeId,
-) async {
-  if (!_bundledSourceWorkerTypes.contains(workerTypeId)) return null;
-  final raw = await rootBundle.loadString('assets/profiles/$workerTypeId.json');
-  final decoded = jsonDecode(raw);
-  if (decoded is! Map<String, dynamic>) {
-    throw const FormatException('Source Profile must be a JSON object.');
-  }
-  final source = Map<String, Object?>.from(decoded);
-  if (source['logicalWorkerTypeId'] != workerTypeId) {
-    throw const FormatException('Source Profile Worker identity mismatch.');
-  }
-  EngineProfile.parse(utf8.encode(canonicalJson(source)));
-  final profileDefinitionId = source['profileDefinitionId'];
-  if (profileDefinitionId is! String || profileDefinitionId.isEmpty) {
-    throw const FormatException('Source Profile definition ID is missing.');
-  }
-  return source;
-}
-
 mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
-  /// Loads the one bundled source Profile for the selected logical Worker into
-  /// a local candidate. Never alters Cloud's published Profile.
-  /// The UI must confirm before replacing an existing local candidate.
-  Future<void> loadSourceProfileCandidate() async {
+  /// Loads `<profiles folder>/<workerTypeId>.json` as the local candidate.
+  /// This is the only source of a candidate: nothing comes from app assets or
+  /// Cloud, and the published Cloud Profile never changes.
+  ///
+  /// The file replaces the candidate unless the editor has unsaved edits, or
+  /// always when [force] is set. With unsaved edits the file is not applied and
+  /// [profileFileUpdateAvailable] is raised.
+  @override
+  Future<void> loadProfileFromFolder({bool force = false}) async {
     final workerTypeId = selectedCloudWorker?['workerTypeId'] as String?;
-    if (workerTypeId == null) {
-      throw StateError('No bundled source Profile for this Worker.');
+    if (workerTypeId == null) return;
+    final directory = paths.profilesDirectory;
+    profileFileError = null;
+    profileFileUpdateAvailable = false;
+    if (directory == null) {
+      profileFilePath = null;
+      profileFileError = 'Profile Lab must run from a repository checkout '
+          '(no .git found above the working directory or the app binary).';
+      notifyListeners();
+      return;
     }
-    final source = await _readBundledSourceProfile(workerTypeId);
-    if (source == null) {
-      throw StateError('No bundled source Profile for this Worker.');
+    final file = File('${directory.path}/$workerTypeId.json');
+    profileFilePath = file.path;
+    try {
+      if (!await file.exists()) {
+        profileFileError = 'No Profile file found: ${file.path}';
+        return;
+      }
+      final profile = _parseProfileFile(await file.readAsString(), workerTypeId);
+      final profileDefinitionId = profile['profileDefinitionId'] as String;
+      if (selectedDefinitionId != null &&
+          selectedDefinitionId != profileDefinitionId) {
+        throw FormatException(
+          'Profile definition "$profileDefinitionId" does not match the '
+          'selected definition "$selectedDefinitionId".',
+        );
+      }
+      final fileDigest =
+          LocalDraftProfileCandidate.fromProfileMap(profile).payloadDigest;
+      final existing = await store.loadDraft(profileDefinitionId);
+      if (existing != null && existing.payloadDigest == fileDigest) {
+        await selectDraft(profileDefinitionId);
+        return;
+      }
+      if (existing == null || force || !isDirty) {
+        final fileName = file.path.split(Platform.pathSeparator).last;
+        await store.saveDraft(
+          profileDefinitionId: profileDefinitionId,
+          profileJson: profile,
+          notes: 'Loaded from $fileName',
+          provenance: {
+            'kind': 'imported_file',
+            'fileName': fileName,
+            'sourceDigest': fileDigest,
+          },
+        );
+        selectedDefinitionId = profileDefinitionId;
+        draftDefinitionIds = await store.listDraftDefinitionIds();
+        resetDraftTestState();
+      } else {
+        profileFileUpdateAvailable = true;
+      }
+      await selectDraft(profileDefinitionId);
+    } on FormatException catch (error) {
+      profileFileError = '${file.path}: ${error.message}';
+    } on Object catch (error) {
+      profileFileError = 'Could not load ${file.path}: $error';
+    } finally {
+      notifyListeners();
     }
-    final profileDefinitionId = source['profileDefinitionId'] as String;
-    final sourceCandidate = LocalDraftProfileCandidate.fromProfileMap(source);
-    await store.saveDraft(
-      profileDefinitionId: profileDefinitionId,
-      profileJson: source,
-      notes: 'Loaded from bundled source Profile',
-      provenance: {
-        'kind': 'bundled_source',
-        'workerTypeId': workerTypeId,
-        'sourceDigest': sourceCandidate.payloadDigest,
-      },
-    );
-    selectedDefinitionId = profileDefinitionId;
-    draftDefinitionIds = await store.listDraftDefinitionIds();
-    resetDraftTestState();
-    await selectDraft(profileDefinitionId);
+  }
+
+  Map<String, Object?> _parseProfileFile(String raw, String workerTypeId) {
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } on FormatException catch (error) {
+      throw FormatException('Not valid JSON: ${error.message}');
+    }
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Profile file must contain a JSON object.');
+    }
+    final profile = Map<String, Object?>.from(decoded);
+    if (profile['logicalWorkerTypeId'] != workerTypeId) {
+      throw FormatException(
+        'Profile is for Worker "${profile['logicalWorkerTypeId']}", '
+        'but "$workerTypeId" is selected.',
+      );
+    }
+    final id = profile['profileDefinitionId'];
+    if (id is! String || id.isEmpty) {
+      throw const FormatException('Profile definition ID is missing.');
+    }
+    EngineProfile.parse(utf8.encode(canonicalJson(profile)));
+    return profile;
   }
 
   @override
@@ -282,67 +326,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       notifyListeners();
     }
   }
-
-  /// Creates an unsigned local candidate from the selected Cloud definition.
-  Future<void> createInitialDraft() => _refresh('initial-draft', () async {
-        final worker = selectedCloudWorker;
-        final definition = selectedCloudDefinition;
-        final id = selectedDefinitionId;
-        if (worker == null ||
-            definition == null ||
-            id == null ||
-            currentDraft != null) {
-          return;
-        }
-        if (await store.loadDraft(id) != null) {
-          await selectDraft(id);
-          return;
-        }
-        final starter = definition['starterTemplate'];
-        if (starter != null) {
-          if (starter is! Map ||
-              starter['schemaVersion'] != 1 ||
-              starter['profile'] is! Map) {
-            throw StateError('Unsupported starter template');
-          }
-          final payload = Map<String, Object?>.from(
-            jsonDecode(jsonEncode(starter['profile'])) as Map,
-          );
-          if (payload['profileDefinitionId'] != id ||
-              payload['logicalWorkerTypeId'] != worker['workerTypeId'] ||
-              payload['releaseVersion'] != 1 ||
-              ((payload['providerTool'] as Map?)?['executableCandidates']
-                          as List?)
-                      ?.contains(definition['providerToolName']) !=
-                  true) {
-            throw StateError(
-                'Starter template does not match the selected Worker');
-          }
-          final migrated = migrateProfilePayload(payload);
-          await store.saveDraft(
-            profileDefinitionId: id,
-            profileJson: migrated ?? payload,
-            notes: migrated == null
-                ? 'Created from Cloud starter template'
-                : 'Created from Cloud starter template and migrated legacy ChatGPT model discovery.',
-          );
-          draftDefinitionIds = await store.listDraftDefinitionIds();
-          if (selectedDefinitionId == id) {
-            await selectDraft(id);
-          }
-        } else {
-          await createNewDraft(
-            profileDefinitionId: id,
-            workerTypeId: worker['workerTypeId'] as String,
-            providerToolName: definition['providerToolName'] as String,
-            activate: false,
-          );
-          draftDefinitionIds = await store.listDraftDefinitionIds();
-          if (selectedDefinitionId == id) {
-            await selectDraft(id);
-          }
-        }
-      });
 
   Future<void> createNewDraft({
     required String profileDefinitionId,

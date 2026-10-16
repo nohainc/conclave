@@ -1120,7 +1120,11 @@ class ProfileLabTestSandbox {
             displayName: 'Representative Thread Write',
             status: 'failed',
             durationMs: s7Timer.elapsedMilliseconds,
-            diagnostics: 'Engine execution failed: $error',
+            diagnostics: error is CliWorkerEngineProbeException &&
+                    error.localDiagnostics != null
+                ? 'Engine execution failed: $error\n'
+                    'Local diagnostics: ${error.localDiagnostics}'
+                : 'Engine execution failed: $error',
             consumesQuota: true,
             issueCode: error is CliWorkerEngineProbeException
                 ? error.issueCode

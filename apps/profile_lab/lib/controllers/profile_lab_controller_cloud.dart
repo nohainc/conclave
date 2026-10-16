@@ -93,52 +93,8 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
           'providerToolName': provider is Map ? provider['name'] : null,
           'status': 'current',
         };
-        if (selectedDefinitionId != null) {
-          final existingDraft = await store.loadDraft(selectedDefinitionId!);
-          final existingMetadata =
-              await store.loadDraftMetadata(selectedDefinitionId!);
-          final source = await _readBundledSourceProfile(workerTypeId);
-          final sourceCandidate = source == null
-              ? null
-              : LocalDraftProfileCandidate.fromProfileMap(source);
-          final provenance = existingMetadata?.provenance;
-          final sourceWasLoaded = provenance?['kind'] == 'bundled_source';
-          final sourceDigest = provenance?['sourceDigest'];
-          final cloudDerivedCandidate = existingMetadata?.notes ==
-                  'Created from current Worker Profile' ||
-              existingMetadata?.notes == 'Published Profile candidate' ||
-              (existingMetadata?.notes ?? '')
-                  .startsWith('Restored Profile revision ');
-          final shouldLoadSource = source != null &&
-              (existingDraft == null ||
-                  existingMetadata == null ||
-                  cloudDerivedCandidate ||
-                  (sourceWasLoaded &&
-                      sourceDigest != sourceCandidate!.payloadDigest));
-
-          if (shouldLoadSource) {
-            await store.saveDraft(
-              profileDefinitionId: selectedDefinitionId!,
-              profileJson: source,
-              notes: 'Loaded from bundled source Profile',
-              provenance: {
-                'kind': 'bundled_source',
-                'workerTypeId': workerTypeId,
-                'sourceDigest': sourceCandidate!.payloadDigest,
-              },
-            );
-            draftDefinitionIds = await store.listDraftDefinitionIds();
-          } else if (existingDraft == null) {
-            await store.saveDraft(
-              profileDefinitionId: selectedDefinitionId!,
-              profileJson: profileMap,
-              notes: 'Created from current Worker Profile',
-            );
-            draftDefinitionIds = await store.listDraftDefinitionIds();
-          }
-          await selectDraft(selectedDefinitionId!);
-        }
       }
+      await loadProfileFromFolder();
       await discoverInstalledProviders();
       notifyListeners();
     } on ProfileAdminNotFoundException {
@@ -147,9 +103,12 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
         'providerToolName': worker['providerToolName'],
       };
       definitionsError = null;
+      await loadProfileFromFolder();
+      await discoverInstalledProviders();
       notifyListeners();
     } catch (e) {
       definitionsError = 'Failed to fetch current Worker Profile: $e';
+      await loadProfileFromFolder();
       notifyListeners();
     }
   }

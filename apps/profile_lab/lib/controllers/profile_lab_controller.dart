@@ -5,7 +5,6 @@ import 'dart:io';
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
 
 import '../bundled_cli_worker_engine_loader.dart';
 import '../profile_admin_api_client.dart';
@@ -145,20 +144,14 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   bool isGeneratingAiProposal = false;
   List<ProfileLabAiModelOption> availableAiModels = [];
   String? aiProposalError;
+  String? profileFilePath;
+  String? profileFileError;
+  bool profileFileUpdateAvailable = false;
   Map<String, Object?>? pendingAiProvenance;
   ProfileLabTestSandbox? _activeAiSandbox;
   final Map<String, Future<void>> _refreshes = {};
   final Set<String> _loaded = {};
   int _cloudGeneration = 0;
-  bool get isCreatingInitialDraft => _refreshes.containsKey('initial-draft');
-  bool get hasStarterTemplate =>
-      selectedCloudDefinition?['starterTemplate'] != null;
-  bool get canCreateInitialDraft =>
-      selectedCloudWorker != null &&
-      selectedCloudDefinition != null &&
-      currentDraft == null &&
-      definitionsError == null &&
-      !isCreatingInitialDraft;
   bool get isPublishing => _refreshes.containsKey('publish');
   bool get isLoadingProfileHistory => _refreshes.containsKey('profile-history');
   bool get isRestoringProfile => _refreshes.containsKey('restore-profile');
@@ -425,6 +418,7 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   // Cross-feature operations used by the composition root during initialization
   // and selection. Feature implementations live in the controller parts below.
   Future<void> refreshDrafts();
+  Future<void> loadProfileFromFolder({bool force = false});
   Future<void> selectDraft(String profileDefinitionId);
   Future<void> refreshEvidence();
   Future<void> discoverInstalledProviders();

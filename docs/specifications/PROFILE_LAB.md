@@ -104,13 +104,16 @@ The `ProfileLabController` remains the UI-facing façade, with draft editing and
 
 ### Draft & Test workbench
 
-For first-party Workers, selecting a Worker loads the bundled source Profile from
-`apps/profile_lab/assets/profiles/<workerTypeId>.json` into the local candidate.
-The current Cloud Profile remains available as comparison and publication
-revision state; it is not silently copied over the source candidate. The
-**Load source Profile** action explicitly refreshes the candidate after
-confirmation. Any saved local edits remain the candidate until the operator
-chooses to load a newer source file.
+The local candidate is always loaded from
+`apps/profile_lab/assets/profiles/<workerTypeId>.json` in the repository checkout Profile
+Lab runs from (the nearest ancestor containing `.git` of the working directory or
+the app binary). Profile Lab does not load profiles from bundled app assets,
+starter templates or the Cloud Profile. Selecting a Worker reads the file;
+**More → Reload Profile from file…** forces a reload after confirmation. The file
+must be for the selected Worker and its profile definition. If the candidate has
+local edits and the file changed, the edits are kept and the menu flags the file
+as changed. The current Cloud Profile stays available only as comparison and
+publication revision state.
 
 The selected Worker defines the workbench context; there is no separate local
 Draft selector. A single header shows Draft version, local save status and Cloud
@@ -158,15 +161,11 @@ result. Cloud acceptance records are inspected under the matching published
 release in **Releases**, with definition/version/digest filtering. Cloud still
 validates qualification and promotion independently.
 
-### Initial Profile creation
+### Profile creation
 
-Workers → Draft & Test shows a creation card when the selected Worker has no
-local draft or Cloud release. **Create Initial Draft** clones the optional
-`starterTemplate` returned by the existing authenticated admin definition GET
-into Profile Lab’s local Draft store. No identity dialog is required. Definitions
-without a template offer **Create blank Profile**, using the catalog/definition
-Worker and provider identities. Existing releases are edited through Releases;
-initial creation never replaces a local draft or an existing Cloud version.
+When the repository has no file for the selected Worker, Draft & Test shows the
+expected path and **Reload from folder**. No Profile is created or seeded
+automatically. Loading a file never replaces an existing Cloud version.
 
 Cloud owns `tool_profile_starter_templates`, keyed by `profile_definition_id`,
 with schema version, v1 Profile JSON and update timestamp. The fresh v8 baseline

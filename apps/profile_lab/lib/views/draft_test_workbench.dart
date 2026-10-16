@@ -74,8 +74,8 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
   void _advanced(String action) {
     final c = widget.controller;
     switch (action) {
-      case 'source':
-        _loadSourceProfile();
+      case 'reload':
+        _reloadProfileFile();
       case 'format':
         c.formatCurrentJson();
       case 'compare':
@@ -99,37 +99,33 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
     }
   }
 
-  Future<void> _loadSourceProfile() async {
+  Future<void> _reloadProfileFile() async {
     final c = widget.controller;
-    final worker = c.selectedCloudWorker?['workerTypeId'] as String?;
-    if (worker == null ||
-        !const {'chatgpt', 'gemini', 'claude'}.contains(worker)) {
-      return;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Load source Profile?'),
-        content: const Text(
-          'Replace the local candidate with the bundled source Profile? '
-          'Unsaved edits and local candidate changes will be lost. '
-          'The published Cloud Profile will not change.',
+    if (c.currentDraft != null) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Reload Profile from file?'),
+          content: Text(
+            'Replace the local candidate with ${c.profileFilePath}? '
+            'Unsaved edits and local candidate changes will be lost. '
+            'The published Cloud Profile will not change.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Reload'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Load source'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true && mounted) {
-      await _perform(c.loadSourceProfileCandidate);
+      );
+      if (confirmed != true || !mounted) return;
     }
+    await _perform(() => c.loadProfileFromFolder(force: true));
   }
 
   Future<void> _runTests() async {
@@ -230,48 +226,20 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
     if (c.currentDraft == null) {
       final name = c.selectedWorkerState.displayName;
       return EmptyState(
-        title: '$name does not have an implementation Profile yet',
-        description: c.hasStarterTemplate
-            ? 'Start with the Cloud starter template, then test it locally.'
-            : 'Create a blank Profile using this Worker’s configured identity.',
+        title: 'No Profile file is loaded for $name',
+        description: 'Profile Lab loads ${c.selectedCloudWorker?['workerTypeId']}.json '
+            'from ${c.profileFilePath ?? 'the repository'}.',
         action: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (c.definitionsError != null)
               ErrorState(message: c.definitionsError!),
-            if (const {'chatgpt', 'gemini', 'claude'}
-                .contains(c.selectedCloudWorker?['workerTypeId'])) ...[
-              FilledButton.icon(
-                onPressed: _loadSourceProfile,
-                icon: const Icon(Icons.description_outlined),
-                label: const Text('Load source Profile'),
-              ),
-              const SizedBox(height: 8),
-            ],
-            OutlinedButton(
-              onPressed: c.canCreateInitialDraft
-                  ? () async {
-                      try {
-                        await c.createInitialDraft();
-                      } catch (error) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content:
-                                  Text('Could not create candidate: $error'),
-                            ),
-                          );
-                        }
-                      }
-                    }
-                  : null,
-              child: Text(
-                c.isCreatingInitialDraft
-                    ? 'Creating…'
-                    : c.hasStarterTemplate
-                        ? 'Create local candidate'
-                        : 'Create blank candidate',
-              ),
+            if (c.profileFileError != null)
+              ErrorState(message: c.profileFileError!),
+            FilledButton.icon(
+              onPressed: _reloadProfileFile,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reload from folder'),
             ),
           ],
         ),
@@ -413,6 +381,19 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                     }),
                   ),
                   IconButton(
+                    key: const ValueKey('reload-profile-file'),
+                    tooltip: c.profileFileUpdateAvailable
+                        ? 'Reload Profile from file (file changed)'
+                        : 'Reload Profile from file',
+                    icon: Icon(
+                      c.profileFileUpdateAvailable
+                          ? Icons.sync_problem
+                          : Icons.refresh,
+                      size: 18,
+                    ),
+                    onPressed: locked ? null : _reloadProfileFile,
+                  ),
+                  IconButton(
                     tooltip:
                         _focusMode ? 'Exit focused editor' : 'Focus editor',
                     icon: Icon(
@@ -427,14 +408,11 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                     onSelected: _advanced,
                     itemBuilder: (_) => [
                       PopupMenuItem(
-                        value: 'source',
-                        enabled: !locked &&
-                            const {
-                              'chatgpt',
-                              'gemini',
-                              'claude'
-                            }.contains(c.selectedCloudWorker?['workerTypeId']),
-                        child: const Text('Load source Profile…'),
+                        value: 'reload',
+                        enabled: !locked,
+                        child: Text(c.profileFileUpdateAvailable
+                            ? 'Reload Profile from file… (file changed)'
+                            : 'Reload Profile from file…'),
                       ),
                       PopupMenuItem(
                         value: 'format',

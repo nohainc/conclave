@@ -71,7 +71,7 @@ void main() {
   late _Controller c;
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('lab_design_');
-    c = _Controller(ProfileLabPaths(homeDirectory: temp.path));
+    c = _Controller(ProfileLabPaths(homeDirectory: temp.path, repositoryRoot: Directory('${temp.path}/repo')));
     c.labAccess = ProfileLabAccessReadModel.fromJson({
       'permissions': {'profilesAdmin': true},
     });

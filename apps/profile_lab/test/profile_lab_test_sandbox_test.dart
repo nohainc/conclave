@@ -7,6 +7,8 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/worker_profile_fixture.dart';
+
 void main() {
   group('ProfileLabTestSandbox', () {
     late Directory temp;
@@ -80,41 +82,37 @@ void main() {
       final providerBin = Directory('${temp.path}/model-provider-bin')
         ..createSync(recursive: true);
       final provider = File('${providerBin.path}/fixture-provider');
-      final fixtureFile = File(
-        '${Directory.current.parent.parent.path}/packages/tool-profile/test/fixtures/fixture-cli.v1.json',
+      final profile = buildTestWorkerProfile(
+        profileDefinitionId: 'model-runner',
+        releaseVersion: 3,
+        logicalWorkerTypeId: 'model-worker',
+        model: {
+          'supported': true,
+          'arguments': ['--model', '{{model}}'],
+          'allowlist': ['model'],
+          'unknownModelPolicy': 'profile_allowlist',
+          'catalog': [
+            {
+              'id': 'model',
+              'name': 'Model',
+              'supportedReasoningEfforts': ['careful']
+            }
+          ],
+        },
+        execution: {
+          'arguments': [
+            'run',
+            {'modelArguments': true},
+            {
+              'ifPresent': 'reasoningEffort',
+              'values': ['--effort', '{{reasoningEffort}}']
+            }
+          ],
+          'stdin': {'mode': 'raw_text', 'value': '{{prompt}}'},
+          'output': {'mode': 'plain_text'},
+          'events': <Object?>[],
+        },
       );
-      final profile = Map<String, Object?>.from(
-        jsonDecode(await fixtureFile.readAsString()) as Map,
-      );
-      profile['profileDefinitionId'] = 'model-runner';
-      profile['releaseVersion'] = 3;
-      profile['logicalWorkerTypeId'] = 'model-worker';
-      profile['model'] = {
-        'supported': true,
-        'arguments': ['--model', '{{model}}'],
-        'allowlist': ['model'],
-        'unknownModelPolicy': 'profile_allowlist',
-        'catalog': [
-          {
-            'id': 'model',
-            'name': 'Model',
-            'supportedReasoningEfforts': ['careful']
-          }
-        ],
-      };
-      profile['execution'] = {
-        'arguments': [
-          'run',
-          {'modelArguments': true},
-          {
-            'ifPresent': 'reasoningEffort',
-            'values': ['--effort', '{{reasoningEffort}}']
-          }
-        ],
-        'stdin': {'mode': 'raw_text', 'value': '{{prompt}}'},
-        'output': {'mode': 'plain_text'},
-        'events': <Object?>[],
-      };
       final profileDigest =
           sha256.convert(utf8.encode(canonicalJson(profile))).toString();
       final proposal = Map<String, Object?>.from(profile)
@@ -243,14 +241,10 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
         environmentOverrides: {'PATH': path},
       );
 
-      final validProfile = <String, Object?>{
-        'schemaVersion': 1,
-        'profileDefinitionId': 'sandbox-test-worker',
-        'releaseVersion': 1,
-        'logicalWorkerTypeId': 'worker',
-        'engineFamily': 'cli',
-        'engineCompatibility': {'min': '1.0.0', 'maxExclusive': '2.0.0'},
-        'providerTool': {
+      final validProfile = buildTestWorkerProfile(
+        profileDefinitionId: 'sandbox-test-worker',
+        logicalWorkerTypeId: 'worker',
+        providerTool: {
           'name': 'tool',
           'executableCandidates': ['tool'],
           'discovery': {'standardLocations': [], 'allowPathSearch': true},
@@ -264,11 +258,7 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
             {'min': '1.2.3', 'maxExclusive': '1.3.0'}
           ],
         },
-        'environment': {
-          'passthrough': ['PATH', 'HOME'],
-          'set': {}
-        },
-        'probe': {
+        probe: {
           'passive': {
             'checks': [
               {
@@ -286,7 +276,7 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
             'expectedFinalText': {'kind': 'exact', 'value': 'OK'},
           },
         },
-        'execution': {
+        execution: {
           'arguments': ['run', '{{prompt}}'],
           'stdin': {'mode': 'raw_text', 'value': '{{prompt}}'},
           'output': {'mode': 'single_json'},
@@ -300,7 +290,7 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
             },
           ]
         },
-        'session': {
+        session: {
           'supported': true,
           'formatId': 'session-v1',
           'compatibleFormatIds': ['session-v1'],
@@ -308,22 +298,20 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
           'resumeArguments': [],
           'requireObservedIdMatch': false
         },
-        'model': {
+        model: {
           'supported': true,
           'arguments': ['--model', '{{model}}'],
           'allowlist': ['fixture-model'],
           'unknownModelPolicy': 'profile_allowlist'
         },
-        'timeout': {'providerArguments': [], 'providerReserveMs': 0},
-        'sandbox': {
+        sandbox: {
           'mappings': {
             'restricted': ['--sandbox', 'workspace-write'],
             'provider_default': [],
             'full_access': []
           }
         },
-        'progress': [],
-        'errors': {
+        errors: {
           'mappings': [
             {
               'evidence': {'kind': 'exit_code', 'value': 2},
@@ -331,8 +319,7 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
             }
           ]
         },
-        'compatibilityOverrides': [],
-      };
+      );
 
       final draftStore = DraftProfileStore(
         draftsRoot: Directory('${temp.path}/profile-lab-drafts'),

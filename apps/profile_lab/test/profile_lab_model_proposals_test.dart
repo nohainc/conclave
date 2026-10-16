@@ -14,6 +14,8 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/worker_profile_fixture.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -155,36 +157,30 @@ class _CurrentProfile {
 
 Future<_CurrentProfile> _createCurrentProfile(
     {bool dynamicModels = false}) async {
-  final repositoryRoot = Directory.current.parent.parent;
-  final fixtureFile = File(
-    '${repositoryRoot.path}/packages/tool-profile/test/fixtures/fixture-cli.v1.json',
+  final profile = buildTestWorkerProfile(
+    profileDefinitionId: 'model-profile',
+    releaseVersion: 2,
+    logicalWorkerTypeId: 'model-worker',
+    model: dynamicModels
+        ? {
+            'supported': true,
+            'arguments': ['--model', '{{model}}'],
+            'unknownModelPolicy': 'pass_through',
+            'discovery': {
+              'schemaVersion': 1,
+              'arguments': ['models'],
+              'timeoutMs': 10000,
+              'format': 'tsv',
+              'idPrefix': 'gemini-'
+            },
+          }
+        : {
+            'supported': true,
+            'arguments': ['--model', '{{model}}'],
+            'allowlist': ['model-safe', 'model-fast'],
+            'unknownModelPolicy': 'profile_allowlist',
+          },
   );
-  final profile = Map<String, Object?>.from(
-    jsonDecode(await fixtureFile.readAsString()) as Map,
-  );
-  profile['profileDefinitionId'] = 'model-profile';
-  profile['releaseVersion'] = 2;
-  profile['logicalWorkerTypeId'] = 'model-worker';
-  profile['model'] = {
-    'supported': true,
-    'arguments': ['--model', '{{model}}'],
-    'allowlist': ['model-safe', 'model-fast'],
-    'unknownModelPolicy': 'profile_allowlist',
-  };
-  if (dynamicModels) {
-    profile['model'] = {
-      'supported': true,
-      'arguments': ['--model', '{{model}}'],
-      'unknownModelPolicy': 'pass_through',
-      'discovery': {
-        'schemaVersion': 1,
-        'arguments': ['models'],
-        'timeoutMs': 10000,
-        'format': 'tsv',
-        'idPrefix': 'gemini-'
-      },
-    };
-  }
   final digest = sha256.convert(utf8.encode(canonicalJson(profile))).toString();
   return _CurrentProfile(
     {

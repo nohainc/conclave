@@ -17,8 +17,7 @@ For a new approved Worker, use the catalog’s **Create Worker + Definition** co
 
 Open the selected Worker’s **Draft & Test** view. With no local Draft or release, Profile Lab shows that the Worker does not have an implementation Profile yet.
 
-- Choose **Create Initial Draft** when Cloud supplies a starter template. The payload is cloned into the local Draft store with the Worker’s configured identity. ChatGPT uses `chatgpt-codex`/`codex`; Gemini uses `gemini-antigravity`/`agy`.
-- Choose **Create blank Profile** when no template exists. Profile Lab fills the known Worker, definition, and provider identities. Author the version range, probes, and execution/event mapping before testing. A blank Draft is not qualified or production ready.
+- Add `apps/profile_lab/assets/profiles/<workerTypeId>.json` to the repository and select the Worker (or choose **Reload from folder**). Profile Lab never generates or seeds a Profile. A file for another Worker or definition is rejected.
 
 There is no second Draft selector or identity-entry dialog. Cloud-managed starter templates are authoring aids; Workspace never reads them.
 

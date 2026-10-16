@@ -6,6 +6,8 @@ import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
 import 'package:conclave_profile_lab/utils/profile_lab_security.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 
+import 'support/worker_profile_fixture.dart';
+
 void main() {
   group('ProfileLabSecurity Tests', () {
     test(
@@ -83,64 +85,26 @@ Environment: API_KEY=super_secret_val; DATABASE_URL=postgres://localhost:5432/db
           engineExecutable: File('${tempDir.path}/fake_engine'),
         );
 
-        final unsafeProfile = <String, Object?>{
-          'schemaVersion': 1,
-          'profileDefinitionId': 'prof-def-unsafe',
-          'releaseVersion': 1,
-          'logicalWorkerTypeId': 'worker-unsafe',
-          'engineFamily': 'cli',
-          'engineCompatibility': {'min': '0.0.0', 'maxExclusive': '99.0.0'},
-          'providerTool': {
-            'name': 'bash',
-            'executableCandidates': ['bash'],
-            'discovery': {'standardLocations': [], 'allowPathSearch': true},
-            'versionProbe': {
-              'arguments': ['--version'],
-              'timeoutMs': 10000,
-              'source': 'stdout',
-              'extract': {'kind': 'regex_capture', 'patternId': 'semver'}
-            },
-            'supportedVersions': [
-              {'min': '1.2.3', 'maxExclusive': '1.3.0'}
-            ],
-          },
-          'environment': {
-            'passthrough': ['PATH', 'HOME'],
-            'set': {}
-          },
-          'probe': {
+        final unsafeProfile = buildTestWorkerProfile(
+          profileDefinitionId: 'prof-def-unsafe',
+          logicalWorkerTypeId: 'worker-unsafe',
+          engineCompatibility: {'min': '0.0.0', 'maxExclusive': '99.0.0'},
+          providerToolName: 'bash',
+          executableCandidates: ['bash'],
+          supportedVersions: [
+            {'min': '1.2.3', 'maxExclusive': '1.3.0'}
+          ],
+          probe: {
             'passive': {'checks': [], 'configChecks': []}
           },
-          'execution': {
+          execution: {
             'arguments': ['run', '{{prompt}}'],
             'stdin': {'mode': 'raw_text', 'value': '{{prompt}}'},
             'output': {'mode': 'plain_text'},
             'events': []
           },
-          'session': {
-            'supported': false,
-            'formatId': 'session-v1',
-            'compatibleFormatIds': ['session-v1'],
-            'resumeArguments': [],
-            'requireObservedIdMatch': false
-          },
-          'model': {
-            'supported': false,
-            'arguments': [],
-            'unknownModelPolicy': 'pass_through'
-          },
-          'timeout': {'providerArguments': [], 'providerReserveMs': 0},
-          'sandbox': {
-            'mappings': {
-              'restricted': [],
-              'provider_default': [],
-              'full_access': []
-            }
-          },
-          'progress': [],
-          'errors': {'mappings': []},
-          'compatibilityOverrides': [],
-        };
+          errors: {'mappings': []},
+        );
         final unsafeCandidate =
             LocalDraftProfileCandidate.fromProfileMap(unsafeProfile);
 

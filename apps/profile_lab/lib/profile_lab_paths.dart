@@ -7,12 +7,14 @@ import 'profile_lab_cloud_config.dart';
 /// Profile Lab uses its own subtree of the Conclave application-family root,
 /// separate from Conclave Workspace.
 class ProfileLabPaths {
-  ProfileLabPaths({String? homeDirectory})
-      : _home = homeDirectory ??
+  ProfileLabPaths({String? homeDirectory, Directory? repositoryRoot})
+      : _repositoryRoot = repositoryRoot,
+        _home = homeDirectory ??
             Platform.environment['HOME'] ??
             Directory.current.path;
 
   final String _home;
+  final Directory? _repositoryRoot;
 
   /// Application-managed Profile Lab data:
   /// `~/Library/Application Support/Conclave/Profile Lab/`
@@ -29,6 +31,39 @@ class ProfileLabPaths {
   /// `~/Library/Application Support/Conclave/Profile Lab/drafts/`
   Directory get draftsDirectory =>
       Directory('${applicationSupportDirectory.path}/drafts');
+
+  /// Repository that holds the Profile files. Profile Lab is an internal tool
+  /// that runs from a checkout: this is the nearest ancestor containing `.git`
+  /// of the current directory or of the running executable. Tests inject it.
+  late final Directory? repositoryRoot = _repositoryRoot ?? _findRepository();
+
+  /// Worker Profile source files, one per Worker:
+  /// `<repository>/apps/profile_lab/assets/profiles/<workerTypeId>.json`
+  Directory? get profilesDirectory {
+    final root = repositoryRoot;
+    return root == null
+        ? null
+        : Directory('${root.path}/apps/profile_lab/assets/profiles');
+  }
+
+  static Directory? _findRepository() {
+    for (final start in [
+      Directory.current.absolute.path,
+      File(Platform.resolvedExecutable).parent.absolute.path,
+    ]) {
+      var dir = Directory(start);
+      while (true) {
+        if (FileSystemEntity.typeSync('${dir.path}/.git') !=
+            FileSystemEntityType.notFound) {
+          return dir;
+        }
+        final parent = dir.parent;
+        if (parent.path == dir.path) break;
+        dir = parent;
+      }
+    }
+    return null;
+  }
 
   /// Bundled/cached CLI Worker Engine binaries root:
   /// `~/Library/Application Support/Conclave/Profile Lab/engines/`

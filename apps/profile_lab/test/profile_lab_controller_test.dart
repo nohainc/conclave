@@ -21,7 +21,7 @@ void main() {
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('lab_ctrl_test_');
-    paths = ProfileLabPaths(homeDirectory: temp.path);
+    paths = ProfileLabPaths(homeDirectory: temp.path, repositoryRoot: Directory('${temp.path}/repo'));
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(sessionChannel, (call) async {
       final account = (call.arguments as Map)['account'] as String;
@@ -74,8 +74,7 @@ void main() {
     expect(controller.lastTestResult, isNull);
   });
 
-  test('creates a blank candidate when the Worker has no current Profile',
-      () async {
+  test('loads the Worker Profile file from the profiles folder only', () async {
     final api = _NoPublishedProfileApi();
     final noProfileController = ProfileLabController(
       paths: paths,
@@ -90,61 +89,54 @@ void main() {
       'profileDefinitionId': 'chatgpt-codex',
       'providerToolName': 'codex',
     });
-
     expect(noProfileController.currentDraft, isNull);
-    expect(noProfileController.canCreateInitialDraft, isTrue);
-    await noProfileController.createInitialDraft();
+
+    await noProfileController.createNewDraft(
+      profileDefinitionId: 'chatgpt-codex',
+      workerTypeId: 'chatgpt',
+      providerToolName: 'codex',
+    );
+    await paths.profilesDirectory!.create(recursive: true);
+    File('${paths.profilesDirectory!.path}/chatgpt.json')
+        .writeAsStringSync(noProfileController.currentJsonText);
+    await noProfileController.deleteCurrentDraft();
+    expect(noProfileController.currentDraft, isNull);
+
+    await noProfileController.loadProfileFromFolder();
+    expect(noProfileController.profileFileError, isNull);
 
     expect(noProfileController.currentDraft, isNotNull);
     expect(
         noProfileController.currentDraft!.profileDefinitionId, 'chatgpt-codex');
     expect(noProfileController.currentDraft!.logicalWorkerTypeId, 'chatgpt');
-    expect(noProfileController.currentDraft!.providerToolName, 'codex');
+    expect(noProfileController.currentMetadata!.provenance?['kind'],
+        'imported_file');
   });
 
-  test(
-      'selecting Gemini loads the bundled source instead of the stale Cloud Profile',
-      () async {
-    final source = jsonDecode(
-      await rootBundle.loadString('assets/profiles/gemini.json'),
-    ) as Map<String, dynamic>;
-    final published = jsonDecode(jsonEncode(source)) as Map<String, dynamic>;
-    final provider = published['providerTool'] as Map<String, dynamic>;
-    final ranges = provider['supportedVersions'] as List<dynamic>;
-    (ranges[2] as Map<String, dynamic>)['maxExclusive'] = '1.3.5';
-
-    final sourceController = ProfileLabController(
+  test('rejects a Profile file that belongs to a different Worker', () async {
+    final other = ProfileLabController(
       paths: paths,
       sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths),
-      apiClientOverride: _PublishedProfileApi(published),
+      apiClientOverride: _NoPublishedProfileApi(),
     );
-    addTearDown(sourceController.dispose);
-    await sourceController.store.saveDraft(
-      profileDefinitionId: 'gemini-antigravity',
-      profileJson: published,
-      notes: 'Published Profile candidate',
-    );
-
-    await sourceController.selectWorker({
+    addTearDown(other.dispose);
+    await other.selectWorker({
       'workerTypeId': 'gemini',
       'displayName': 'Gemini',
       'profileDefinitionId': 'gemini-antigravity',
       'providerToolName': 'agy',
     });
+    await paths.profilesDirectory!.create(recursive: true);
+    File('${paths.profilesDirectory!.path}/gemini.json')
+        .writeAsStringSync(jsonEncode({
+      'logicalWorkerTypeId': 'chatgpt',
+      'profileDefinitionId': 'chatgpt-codex',
+    }));
 
-    final sourceRanges = (sourceController.currentDraft!.profile['providerTool']
-        as Map<String, dynamic>)['supportedVersions'] as List;
-    final publishedRanges =
-        (sourceController.currentCloudProfileSnapshot!['profile']
-            as Map<String, dynamic>)['providerTool'] as Map;
-    expect((sourceRanges[2] as Map)['maxExclusive'], '1.3.6');
-    expect(
-      ((publishedRanges['supportedVersions'] as List)[2]
-          as Map)['maxExclusive'],
-      '1.3.5',
-    );
-    expect(sourceController.currentMetadata!.notes,
-        'Loaded from bundled source Profile');
+    await other.loadProfileFromFolder();
+
+    expect(other.profileFileError, contains('chatgpt'));
+    expect(other.currentDraft, isNull);
   });
 
   test('invalid JSON reports a location and supports local recovery', () async {
@@ -245,23 +237,5 @@ class _NoPublishedProfileApi extends ProfileAdminApiClient {
     throw ProfileAdminNotFoundException(
       'The Worker does not have a published Profile',
     );
-  }
-}
-
-class _PublishedProfileApi extends ProfileAdminApiClient {
-  _PublishedProfileApi(this.profile) : super(baseUrl: 'http://localhost');
-
-  final Map<String, dynamic> profile;
-
-  @override
-  Future<Map<String, dynamic>> fetchCurrentWorkerProfile(
-    String workerTypeId,
-  ) async {
-    return {
-      'workerTypeId': workerTypeId,
-      'revision': 4,
-      'digest': 'stale-published-profile',
-      'profile': profile,
-    };
   }
 }

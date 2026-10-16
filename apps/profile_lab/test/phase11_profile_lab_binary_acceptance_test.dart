@@ -4,11 +4,14 @@ import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/repository_root.dart';
+import 'support/worker_profile_fixture.dart';
+
 void main() {
   test(
     'Profile Lab runs the V9 test ladder through the bundled Engine binary',
     () async {
-      final repository = Directory.current.parent.parent.path;
+      final repository = repositoryRoot;
       final root =
           await Directory.systemTemp.createTemp('phase11-profile-lab-');
       addTearDown(() => root.delete(recursive: true));
@@ -66,32 +69,15 @@ void main() {
 }
 
 Map<String, Object?> _phase11Profile() {
-  return <String, Object?>{
-    'schemaVersion': 1,
-    'profileDefinitionId': 'phase11-profile-lab-worker',
-    'releaseVersion': 1,
-    'logicalWorkerTypeId': 'phase11-worker',
-    'engineFamily': 'cli',
-    'engineCompatibility': {'min': '1.0.0', 'maxExclusive': '2.0.0'},
-    'providerTool': {
-      'name': 'Phase 11 Provider',
-      'executableCandidates': ['phase11-provider'],
-      'discovery': {'standardLocations': [], 'allowPathSearch': true},
-      'versionProbe': {
-        'arguments': ['--version'],
-        'timeoutMs': 10000,
-        'source': 'stdout',
-        'extract': {'kind': 'regex_capture', 'patternId': 'semver'},
-      },
-      'supportedVersions': [
-        {'min': '1.2.3', 'maxExclusive': '1.3.0'},
-      ],
-    },
-    'environment': {
-      'passthrough': ['PATH', 'HOME'],
-      'set': {},
-    },
-    'probe': {
+  return buildTestWorkerProfile(
+    profileDefinitionId: 'phase11-profile-lab-worker',
+    logicalWorkerTypeId: 'phase11-worker',
+    providerToolName: 'Phase 11 Provider',
+    executableCandidates: ['phase11-provider'],
+    supportedVersions: [
+      {'min': '1.2.3', 'maxExclusive': '1.3.0'},
+    ],
+    probe: {
       'passive': {
         'checks': [
           {
@@ -109,7 +95,7 @@ Map<String, Object?> _phase11Profile() {
         'expectedFinalText': {'kind': 'exact', 'value': 'OK'},
       },
     },
-    'execution': {
+    execution: {
       'arguments': ['run', '{{prompt}}'],
       'stdin': {'mode': 'raw_text', 'value': '{{prompt}}'},
       'output': {'mode': 'single_json'},
@@ -123,7 +109,7 @@ Map<String, Object?> _phase11Profile() {
         },
       ],
     },
-    'session': {
+    session: {
       'supported': true,
       'formatId': 'phase11-session-v1',
       'compatibleFormatIds': ['phase11-session-v1'],
@@ -131,35 +117,20 @@ Map<String, Object?> _phase11Profile() {
       'resumeArguments': [],
       'requireObservedIdMatch': false,
     },
-    'model': {
+    model: {
       'supported': true,
       'arguments': ['--model', '{{model}}'],
       'allowlist': ['phase11-model'],
       'unknownModelPolicy': 'profile_allowlist',
     },
-    'timeout': {'providerArguments': [], 'providerReserveMs': 0},
-    'sandbox': {
+    sandbox: {
       'mappings': {
         'restricted': ['--sandbox', 'workspace-write'],
         'provider_default': [],
         'full_access': [],
       },
     },
-    'progress': [],
-    'errors': {
-      'mappings': [
-        {
-          'evidence': {'kind': 'exit_code', 'value': 2},
-          'issueCode': 'provider_failure',
-        },
-        {
-          'evidence': {'kind': 'missing_terminal'},
-          'issueCode': 'provider_failure',
-        },
-      ],
-    },
-    'compatibilityOverrides': [],
-  };
+  );
 }
 
 Future<void> _writeProvider(File provider) async {
