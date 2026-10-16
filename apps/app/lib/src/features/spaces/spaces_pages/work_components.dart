@@ -18,8 +18,7 @@ String _executionFailureMessage(String? code, {String? validationMessage}) =>
         'The worker could not continue the previous conversation. Please retry your request.',
       'worker_not_ready' =>
         'The selected worker is not ready on its workspace.',
-      'space_folder_exists' =>
-        'A folder with this Space’s name already exists and is not empty. Retry to choose whether to use it.',
+      'space_folder_exists' => 'Retry to choose whether to use it.',
       'cli_not_found' ||
       'provider_tool_unavailable' =>
         'The worker needs to be set up on its workspace before it can respond.',
@@ -174,6 +173,7 @@ class _WorkComposer extends StatelessWidget {
     required this.onCancelRun,
     required this.onWorkflowChanged,
     required this.onRun,
+    this.usageController,
   });
 
   final TextEditingController requestController;
@@ -214,6 +214,10 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
   final Future<void> Function() onRun;
+
+  /// Local view state for the Worker usage card; null when the data source
+  /// cannot read usage.
+  final AxWorkerUsageController? usageController;
 
   @override
   Widget build(BuildContext context) =>
@@ -351,29 +355,35 @@ class _WorkComposer extends StatelessWidget {
       Theme.of(context).brightness == Brightness.dark,
       Theme.of(context).colorScheme);
 
-  Widget _additionalControls(BuildContext context) {
-    final selectedWorkflow = workflowCatalog
-            .where((item) => item.reference == workflow)
-            .firstOrNull ??
-        workflowCatalog
-            .where((item) => item.id == workflow.split(':').first)
-            .firstOrNull;
+  AxBuiltinWorkflow? _selectedWorkflow() =>
+      workflowCatalog.where((item) => item.reference == workflow).firstOrNull ??
+      workflowCatalog
+          .where((item) => item.id == workflow.split(':').first)
+          .firstOrNull;
 
+  Map<String, dynamic> _stepBinding() {
     final bindings = workConfig['bindings'] is Map
         ? Map<String, dynamic>.from(workConfig['bindings'] as Map)
         : <String, dynamic>{};
-    final stepKind = selectedWorkflow?.composerBindingId;
+    final stepKind = _selectedWorkflow()?.composerBindingId;
     final rawBinding = stepKind == null ? null : bindings[stepKind];
-    final binding = rawBinding is Map
+    return rawBinding is Map
         ? Map<String, dynamic>.from(rawBinding)
         : <String, dynamic>{};
+  }
+
+  String? _selectedWorkerId() => (executionSelection.containsKey('workerId')
+          ? executionSelection['workerId']
+          : _stepBinding()['workerId'])
+      ?.toString()
+      .trim();
+
+  Widget _additionalControls(BuildContext context) {
+    final selectedWorkflow = _selectedWorkflow();
+    final binding = _stepBinding();
     final policy =
         selectedWorkflow?.executionPolicy ?? const AxWorkflowCapabilities();
-    final selectedWorkerId = (executionSelection.containsKey('workerId')
-            ? executionSelection['workerId']
-            : binding['workerId'])
-        ?.toString()
-        .trim();
+    final selectedWorkerId = _selectedWorkerId();
     final selectedModel = (executionSelection.containsKey('model')
                 ? executionSelection['model']
                 : binding['model'])
@@ -424,11 +434,28 @@ class _WorkComposer extends StatelessWidget {
                                 style: ConclaveMenuStyle.textStyle),
                           ),
                         ),
+                        if (usageController?.supported ?? false)
+                          ConclaveMenuEntry<String>(
+                            value: 'usage',
+                            child: MenuItemButton(
+                              key: const ValueKey('work-menu-usage'),
+                              style: ConclaveMenuStyle.item(
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark),
+                              leadingIcon: const Icon(Icons.speed, size: 16),
+                              onPressed: () =>
+                                  Navigator.pop(buttonContext, 'usage'),
+                              child: const Text('Usage',
+                                  style: ConclaveMenuStyle.textStyle),
+                            ),
+                          ),
                       ],
                     );
                     if (!buttonContext.mounted || value == null) return;
                     if (value == 'files') {
                       onAddFiles();
+                    } else if (value == 'usage') {
+                      _runComposerCommand(_usageCommand);
                     }
                   },
                   child: const Padding(
@@ -572,6 +599,41 @@ class _WorkComposer extends StatelessWidget {
     );
   }
 
+  /// Runs a composer command against the Worker selected for the current Step.
+  void _runComposerCommand(_ComposerCommand command) {
+    final controller = usageController;
+    if (controller == null || command.id != _usageCommand.id) return;
+    final selectedId = _selectedWorkerId();
+    final worker = [...spaceWorkers, ...eligibleWorkers]
+        .where((item) => item.id == selectedId)
+        .firstOrNull;
+    if (worker == null) {
+      controller.showMessage('Choose a Worker to read its usage.');
+      return;
+    }
+    controller.load(
+      workspaceId: worker.workspaceId,
+      workerId: worker.id,
+      workerName: worker.displayName,
+    );
+  }
+
+  /// A message that is exactly one known `/command` runs it instead of being
+  /// sent as a request. Any other text, including paths such as `/etc/hosts`,
+  /// is sent normally.
+  bool _tryRunSlashCommand() {
+    if (!(usageController?.supported ?? false)) return false;
+    final text = requestController.text.trim();
+    if (!RegExp(r'^/[a-z]+$').hasMatch(text)) return false;
+    final matches = _composerCommands
+        .where((command) => command.id.startsWith(text.substring(1)))
+        .toList();
+    if (matches.length != 1) return false;
+    requestController.clear();
+    _runComposerCommand(matches.single);
+    return true;
+  }
+
   Widget _buildComposerInput(
     BuildContext context,
     bool isDark,
@@ -582,6 +644,20 @@ class _WorkComposer extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (usageController != null)
+            _WorkerUsagePanel(
+              controller: usageController!,
+              onRefresh: () => _runComposerCommand(_usageCommand),
+            ),
+          if (usageController?.supported ?? false)
+            _SlashCommandPalette(
+              textController: requestController,
+              commands: _composerCommands,
+              onSelected: (command) {
+                requestController.clear();
+                _runComposerCommand(command);
+              },
+            ),
           MarkdownComposer(
             controller: requestController,
             hintText: 'Write a message...',
@@ -589,7 +665,10 @@ class _WorkComposer extends StatelessWidget {
             minLines: 1,
             maxLines: 6,
             enabled: canExecute,
-            onSend: () => onRun(),
+            onSend: () {
+              if (_tryRunSlashCommand()) return;
+              onRun();
+            },
             sendTooltip: 'Send request',
             showSendTooltip: false,
             sendEnabled: canExecute &&
@@ -672,6 +751,179 @@ class _WorkComposer extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A command available from the `/` palette and the `+` menu. Commands are
+/// local to the composer: they never create a Work Request.
+class _ComposerCommand {
+  const _ComposerCommand({
+    required this.id,
+    required this.label,
+    required this.description,
+    required this.icon,
+  });
+
+  final String id;
+  final String label;
+  final String description;
+  final IconData icon;
+}
+
+const _usageCommand = _ComposerCommand(
+  id: 'usage',
+  label: 'Usage',
+  description: 'Show the selected Worker\'s usage and limits',
+  icon: Icons.speed,
+);
+
+const _composerCommands = <_ComposerCommand>[_usageCommand];
+
+/// Lists matching commands while the composer holds a lone `/word`.
+class _SlashCommandPalette extends StatelessWidget {
+  const _SlashCommandPalette({
+    required this.textController,
+    required this.commands,
+    required this.onSelected,
+  });
+
+  final TextEditingController textController;
+  final List<_ComposerCommand> commands;
+  final ValueChanged<_ComposerCommand> onSelected;
+
+  @override
+  Widget build(BuildContext context) =>
+      ValueListenableBuilder<TextEditingValue>(
+        valueListenable: textController,
+        builder: (context, value, _) {
+          final text = value.text;
+          if (!RegExp(r'^/[a-z]*$').hasMatch(text)) {
+            return const SizedBox.shrink();
+          }
+          final matches = commands
+              .where((command) => command.id.startsWith(text.substring(1)))
+              .toList();
+          if (matches.isEmpty) return const SizedBox.shrink();
+          final colors = Theme.of(context).colorScheme;
+          return Padding(
+            key: const ValueKey('slash-command-palette'),
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Material(
+              color: colors.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final command in matches)
+                    ListTile(
+                      key: ValueKey('slash-command-${command.id}'),
+                      dense: true,
+                      leading: Icon(command.icon, size: 18),
+                      title: Text('/${command.id}',
+                          style: const TextStyle(fontSize: 13)),
+                      subtitle: Text(command.description,
+                          style: const TextStyle(fontSize: 12)),
+                      onTap: () => onSelected(command),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+}
+
+/// Shows the provider's usage report exactly as the Worker printed it.
+class _WorkerUsagePanel extends StatelessWidget {
+  const _WorkerUsagePanel({required this.controller, required this.onRefresh});
+
+  final AxWorkerUsageController controller;
+  final VoidCallback onRefresh;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: controller,
+        builder: (context, _) {
+          if (!controller.visible) return const SizedBox.shrink();
+          final colors = Theme.of(context).colorScheme;
+          final report = controller.report;
+          final message = controller.message;
+          final text = report == null
+              ? ''
+              : report.isOk
+                  ? report.displayText
+                  : report.status == 'unavailable'
+                      ? 'This Worker does not provide a usage report.'
+                      : (report.errorMessage ?? 'Usage could not be read.');
+          return Container(
+            key: const ValueKey('worker-usage-panel'),
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(children: [
+                  const Icon(Icons.speed, size: 16),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '${controller.workerName ?? 'Worker'} usage',
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  if (report?.fetchedAt != null && !controller.loading)
+                    Text(
+                      'as of ${TimeOfDay.fromDateTime(report!.fetchedAt!.toLocal()).format(context)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  IconButton(
+                    tooltip: 'Refresh usage',
+                    icon: const Icon(Icons.refresh, size: 16),
+                    onPressed: controller.loading ? null : onRefresh,
+                  ),
+                  IconButton(
+                    tooltip: 'Close usage',
+                    icon: const Icon(Icons.close, size: 16),
+                    onPressed: controller.dismiss,
+                  ),
+                ]),
+                if (controller.loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: LinearProgressIndicator(),
+                  )
+                else if (message != null)
+                  Text(message, style: const TextStyle(fontSize: 12))
+                else
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 260),
+                    child: SingleChildScrollView(
+                      child: SelectableText(
+                        text,
+                        key: const ValueKey('worker-usage-text'),
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                          color: report != null && !report.isOk
+                              ? colors.error
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (report?.truncated ?? false)
+                  Text('Output was shortened.',
+                      style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          );
+        },
+      );
 }
 
 /// Keeps the parsed Markdown subtree stable while the surrounding Work card

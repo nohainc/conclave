@@ -515,6 +515,12 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         (persistedRows.results ?? []).map((row) => [String(row.kind), row]),
       );
       tasks = tasks.map((task) => {
+        // The retried step is re-executed by this run. The workflow function
+        // body is replayed on every wake-up, and by then the retried step's
+        // own task row may already be completed by the terminal-result handler
+        // (its output is the assignment output, not a step result), so it must
+        // never be preloaded here.
+        if (task.step.kind === params.retryStepKind) return task;
         const persisted = persistedByKind.get(task.step.kind);
         if (persisted?.status !== "completed") return task;
         const output = parseWorkflowStepResult(persisted.outputJson);
