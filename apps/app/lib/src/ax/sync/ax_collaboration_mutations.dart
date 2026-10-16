@@ -122,8 +122,21 @@ class AxCollaborationMutations {
       },
       commit: (saved, changes) {
         changes.$1.commit((_) => saved);
-        changes.$2
-            .commit((state) => _replace(state.data ?? [], saved, (s) => s.id));
+        // The edit response carries no per-user state (pin, indicators), so
+        // keep what the list already has.
+        changes.$2.commit((state) {
+          final values = state.data ?? const <AxSpace>[];
+          final current = values.where((s) => s.id == saved.id).firstOrNull;
+          return _replace(
+              values,
+              current == null
+                  ? saved
+                  : saved.copyWith(
+                      pinnedAt: current.pinnedAt,
+                      hasActiveWork: current.hasActiveWork,
+                      hasUnread: current.hasUnread),
+              (s) => s.id);
+        });
       },
       rollback: (_, __, changes) {
         changes.$1.rollback();

@@ -22,7 +22,11 @@ class ThreadPage extends StatefulWidget {
     this.onRunWorkWithSelection,
     this.realtimeEvents,
     this.initialTab = 0,
-  });
+    this.isDraft = false,
+    this.draftBusy = false,
+    this.onSendDraftDiscussion,
+  }) : assert(!isDraft ||
+            (onSendDraftDiscussion != null && onRunWorkWithSelection != null));
 
   final AxSpace space;
   final AxThread thread;
@@ -53,6 +57,11 @@ class ThreadPage extends StatefulWidget {
       Map<String, dynamic> executionSelection)? onRunWorkWithSelection;
   final Stream<Map<String, dynamic>>? realtimeEvents;
   final int initialTab;
+
+  /// Draft views load Space configuration but never read or persist Thread data.
+  final bool isDraft;
+  final bool draftBusy;
+  final Future<void> Function(String text)? onSendDraftDiscussion;
 
   // Compatibility getters
 
@@ -85,61 +94,14 @@ class _ThreadPageState extends State<ThreadPage>
   bool _workFollowScheduled = false;
   int _interactionGeneration = 0;
   bool _loadingOlderChat = false;
-  final _chatComposerKey = GlobalKey();
-  final _workComposerKey = GlobalKey();
-  final _chatComposerSpaceChanges = ValueNotifier<double>(48);
-  bool _composerAlignmentScheduled = false;
-  double? _lastChatComposerHeight;
-  double? _lastWorkComposerHeight;
-  double get _chatComposerSpace => _chatComposerSpaceChanges.value;
-
   void _invalidateInteractionCallbacks() {
     _interactionGeneration++;
     _chatIncomingAnchor.reset(clearKeys: true);
     _workIncomingAnchor.reset(clearKeys: true);
     _previousChatIds = null;
     _previousWorkReplies = null;
-    _composerAlignmentScheduled = false;
     _chatFollowScheduled = false;
     _workFollowScheduled = false;
-  }
-
-  void _scheduleComposerAlignment() {
-    if (!mounted || _composerAlignmentScheduled) return;
-    final generation = _interactionGeneration;
-    _composerAlignmentScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (generation != _interactionGeneration) return;
-      _composerAlignmentScheduled = false;
-      if (!mounted) return;
-      final chat =
-          _chatComposerKey.currentContext?.findRenderObject() as RenderBox?;
-      final work =
-          _workComposerKey.currentContext?.findRenderObject() as RenderBox?;
-      if (chat == null || work == null || !chat.hasSize || !work.hasSize) {
-        return;
-      }
-      final chatHeight = chat.size.height;
-      final workHeight = work.size.height;
-      if (_lastChatComposerHeight != null &&
-          (_lastChatComposerHeight! - chatHeight).abs() <= 0.5 &&
-          _lastWorkComposerHeight != null &&
-          (_lastWorkComposerHeight! - workHeight).abs() <= 0.5) {
-        return;
-      }
-      _lastChatComposerHeight = chatHeight;
-      _lastWorkComposerHeight = workHeight;
-      final space =
-          (_chatComposerSpace + workHeight - chatHeight).clamp(0.0, 500.0);
-      if ((space - _chatComposerSpace).abs() > 0.5) {
-        AxRenderDiagnostics.instance.notifierDispatch(
-          component: 'ThreadPage',
-          operation: 'composer.alignment',
-        );
-        _chatComposerSpaceChanges.value = space;
-        _scheduleComposerAlignment();
-      }
-    });
   }
 
   void _scheduleFollowLatest(ScrollController controller, {int attempt = 0}) {
@@ -232,10 +194,6 @@ class _ThreadPageState extends State<ThreadPage>
     _scheduleFollowLatest(_workHistoryController);
   }
 
-  void _onComposerPresentationChanged() {
-    _scheduleComposerAlignment();
-  }
-
   void _onWorkHistoryScroll() {
     if (!_workHistoryController.hasClients) return;
     final position = _workHistoryController.position;
@@ -310,6 +268,7 @@ class _ThreadPageState extends State<ThreadPage>
   List<AxWorkRequest> get _workTimeline =>
       _presentation.work.value?.requests ?? const [];
   void _subscribeWorkHistory() {
+    if (widget.isDraft) return;
     _presentation.attach(
       threadId: widget.thread.id,
       discussionCache: _discussionCache,
@@ -357,7 +316,9 @@ class _ThreadPageState extends State<ThreadPage>
   final _issueReportLoads = <String, Future<void>>{};
   StreamSubscription<Map<String, dynamic>>? _workEventSubscription;
   void Function()? _cancelWorkRealtime;
-  bool get _submittingWork => _workPresentation.submitting;
+  bool _draftSubmitting = false;
+  bool get _submittingWork =>
+      widget.draftBusy || _draftSubmitting || _workPresentation.submitting;
   List<Map<String, dynamic>> _workAttachments = [];
   Map<String, dynamic> _workExecutionSelection = {};
   List<AxWorker> _spaceWorkers = const [];
@@ -375,7 +336,11 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   void _scheduleThreadViewStateSave() {
-    if (!_threadViewStateRestored || widget.currentUserId == null) return;
+    if (widget.isDraft ||
+        !_threadViewStateRestored ||
+        widget.currentUserId == null) {
+      return;
+    }
     _threadViewStateSaveTimer?.cancel();
     _threadViewStateSaveTimer = Timer(const Duration(milliseconds: 180), () {
       _threadViewStateSaveTimer = null;
@@ -445,6 +410,7 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   Future<void> _saveThreadViewState() async {
+    if (widget.isDraft) return;
     final userId = widget.currentUserId;
     if (!_threadViewStateRestored || userId == null || userId.isEmpty) return;
     final state = _currentThreadViewState();
@@ -512,7 +478,7 @@ class _ThreadPageState extends State<ThreadPage>
     _threadViewReady = false;
     _threadViewRevealScheduled = false;
     _pendingThreadViewState = null;
-    if (userId == null || userId.isEmpty) {
+    if (widget.isDraft || userId == null || userId.isEmpty) {
       _threadViewStateRestored = true;
       _threadViewReady = true;
       return;
@@ -566,19 +532,12 @@ class _ThreadPageState extends State<ThreadPage>
       mounted: mounted,
       disposed: false,
     );
-    _scheduleComposerAlignment();
     if (_tabController.index == 1) {
       _scheduleFollowLatest(_workHistoryController);
     } else {
       _scheduleFollowLatest(_chatHistoryController);
     }
     if (!_tabController.indexIsChanging) _scheduleThreadViewStateSave();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _scheduleComposerAlignment();
   }
 
   Map<String, dynamic> get _composerWorkConfig {
@@ -671,7 +630,6 @@ class _ThreadPageState extends State<ThreadPage>
     );
     _presentation.chat.addListener(_onChatPresentationChanged);
     _presentation.work.addListener(_onWorkPresentationChanged);
-    _presentation.composer.addListener(_onComposerPresentationChanged);
     _workActivityStore.addListener(_onWorkActivityChanged);
     _subscribeWorkHistory();
     _workHistoryController.addListener(_onWorkHistoryScroll);
@@ -683,9 +641,7 @@ class _ThreadPageState extends State<ThreadPage>
     );
     _tabController.addListener(_onThreadTabChanged);
     _refreshWorkTimeline();
-    _requestController.addListener(_scheduleComposerAlignment);
     _requestController.addListener(_scheduleThreadViewStateSave);
-    _discussionController.addListener(_scheduleComposerAlignment);
     _discussionController.addListener(_scheduleThreadViewStateSave);
     _subscribeToWorkEvents();
     _subscribeWorkflowConfigurations();
@@ -693,7 +649,6 @@ class _ThreadPageState extends State<ThreadPage>
     _subscribeWorkflowWorkspace();
     _loadWorkChoices();
     _loadWorkflowCatalog();
-    _scheduleComposerAlignment();
     unawaited(_restoreThreadViewState());
   }
 
@@ -958,7 +913,6 @@ class _ThreadPageState extends State<ThreadPage>
       _workEventSubscription?.cancel();
       _subscribeToWorkEvents();
     }
-    _scheduleComposerAlignment();
   }
 
   static const _terminalActivityTypes = {
@@ -1008,6 +962,7 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   void _subscribeToWorkEvents() {
+    if (widget.isDraft) return;
     _cancelWorkRealtime?.call();
     _cancelWorkRealtime = AxWorkRealtimeSync.forCache(_workHistoryCache)
         .listen(widget.realtimeEvents, threadId: widget.thread.id);
@@ -1055,7 +1010,10 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   bool get _canExecute =>
-      (widget.space.role == 'owner' || widget.thread.canExecuteWork) &&
+      (widget.isDraft
+          ? widget.space.effectivePermissions.work &&
+              widget.space.effectivePermissions.manageOwnThreads
+          : (widget.space.role == 'owner' || widget.thread.canExecuteWork)) &&
       _effectiveWorkflow.isNotEmpty;
   @override
   void dispose() {
@@ -1078,12 +1036,9 @@ class _ThreadPageState extends State<ThreadPage>
     _tabController.dispose();
     _presentation.chat.removeListener(_onChatPresentationChanged);
     _presentation.work.removeListener(_onWorkPresentationChanged);
-    _presentation.composer.removeListener(_onComposerPresentationChanged);
     _workActivityStore.removeListener(_onWorkActivityChanged);
     _workActivityStore.dispose();
-    _requestController.removeListener(_scheduleComposerAlignment);
     _requestController.removeListener(_scheduleThreadViewStateSave);
-    _discussionController.removeListener(_scheduleComposerAlignment);
     _discussionController.removeListener(_scheduleThreadViewStateSave);
     _workHistoryController.removeListener(_onWorkHistoryScroll);
     _chatHistoryController.removeListener(_onChatHistoryScroll);
@@ -1093,7 +1048,6 @@ class _ThreadPageState extends State<ThreadPage>
     _chatHistoryController.dispose();
     _discussionController.dispose();
     _presentation.dispose();
-    _chatComposerSpaceChanges.dispose();
     super.dispose();
   }
 
@@ -1117,6 +1071,10 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   void _updateState(VoidCallback callback) {
+    if (widget.isDraft) {
+      setState(callback);
+      return;
+    }
     callback();
     AxRenderDiagnostics.instance.notifierDispatch(
       component: 'ThreadPage',
@@ -1149,7 +1107,6 @@ class _ThreadPageState extends State<ThreadPage>
               _threadViewReady = true;
               _threadViewRevealScheduled = false;
             });
-            _scheduleComposerAlignment();
           });
         }
         Widget tabHeader(List<String> names, {TabController? controller}) =>
@@ -1161,6 +1118,12 @@ class _ThreadPageState extends State<ThreadPage>
                   controller: controller,
                   isScrollable: true,
                   tabAlignment: TabAlignment.center,
+                  labelColor: Theme.of(context).colorScheme.onSurface,
+                  unselectedLabelColor:
+                      Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white38
+                          : Colors.black45,
+                  indicatorColor: Theme.of(context).colorScheme.onSurface,
                   dividerHeight: 0,
                   tabs: names.map((name) => Tab(text: name)).toList(),
                 )),
@@ -1175,8 +1138,9 @@ class _ThreadPageState extends State<ThreadPage>
               key: ValueKey('thread-$name-pane'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (widget.isDraft) const Spacer(),
                 tabHeader([name]),
-                Expanded(child: content),
+                if (widget.isDraft) content else Expanded(child: content),
               ],
             ));
         late final Widget content;
@@ -1186,8 +1150,7 @@ class _ThreadPageState extends State<ThreadPage>
             constraints: const BoxConstraints(maxWidth: 1681),
             child:
                 Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Expanded(
-                  child: pane('Chat', _discuss(context, alignWithWork: true))),
+              Expanded(child: pane('Chat', _discuss(context, twoPane: true))),
               VerticalDivider(
                 width: 1,
                 thickness: 1,
@@ -1208,11 +1171,17 @@ class _ThreadPageState extends State<ThreadPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (widget.isDraft) const Spacer(),
                     tabHeader(['Chat', 'Work'], controller: _tabController),
-                    Expanded(
-                        child: _tabController.index == 0
-                            ? _discuss(context)
-                            : _work(context)),
+                    if (widget.isDraft)
+                      _tabController.index == 0
+                          ? _discuss(context)
+                          : _work(context)
+                    else
+                      Expanded(
+                          child: _tabController.index == 0
+                              ? _discuss(context)
+                              : _work(context)),
                   ],
                 )),
           ));
@@ -1231,19 +1200,19 @@ class _ThreadPageState extends State<ThreadPage>
     );
   }
 
-  Widget _discuss(BuildContext context, {bool alignWithWork = false}) =>
+  Widget _discuss(BuildContext context, {bool twoPane = false}) =>
       ValueListenableBuilder<ThreadChatPresentationSnapshot?>(
         valueListenable: _presentation.chat,
         builder: (context, snapshot, _) => _discussionBody(
           context,
           snapshot ?? _chatPresentation,
-          alignWithWork: alignWithWork,
+          twoPane: twoPane,
         ),
       );
 
   Widget _discussionBody(
       BuildContext context, ThreadChatPresentationSnapshot state,
-      {bool alignWithWork = false}) {
+      {bool twoPane = false}) {
     final messages = state.messages.map((message) {
       final isMe =
           widget.currentUserId != null && widget.currentUserId!.isNotEmpty
@@ -1305,160 +1274,189 @@ class _ThreadPageState extends State<ThreadPage>
           )
         : null;
 
+    if (widget.isDraft) return _discussionComposer(twoPane: true);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-            child: AxTimelineContainer(
-          scrollKey: const ValueKey('chat-history-scroll'),
-          controller: _chatHistoryController,
-          headerSlivers: [
-            if (state.olderCursor != null)
-              SliverToBoxAdapter(
-                child: TextButton(
-                  onPressed: state.loadingOlder ? null : _loadOlderDiscussion,
-                  child: Text(state.loadingOlder
-                      ? 'Loading older messages…'
-                      : 'Load older messages'),
-                ),
-              ),
-            if (state.error != null)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text.rich(
-                    TextSpan(
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                        fontSize: 13,
+            child: TimelineScrollOverlay(
+                key: ValueKey('chat-scroll-overlay-${widget.thread.id}'),
+                controller: _chatHistoryController,
+                onFollowLatest: () {
+                  _chatIncomingAnchor.reset();
+                  _followChat = true;
+                },
+                child: AxTimelineContainer(
+                  scrollKey: const ValueKey('chat-history-scroll'),
+                  controller: _chatHistoryController,
+                  headerSlivers: [
+                    if (state.olderCursor != null)
+                      SliverToBoxAdapter(
+                        child: TextButton(
+                          onPressed:
+                              state.loadingOlder ? null : _loadOlderDiscussion,
+                          child: Text(state.loadingOlder
+                              ? 'Loading older messages…'
+                              : 'Load older messages'),
+                        ),
                       ),
-                      children: [
-                        TextSpan(
-                            text:
-                                'Chat could not synchronize: ${state.error}  '),
-                        WidgetSpan(
-                          alignment: PlaceholderAlignment.middle,
-                          child: Semantics(
-                            link: true,
-                            child: InkWell(
-                              onTap: () => _discussionCache
-                                  .synchronize(widget.thread.id)
-                                  .then<void>((_) {},
-                                      onError: (Object _, StackTrace __) {}),
-                              child: Text(
-                                'Retry Chat sync',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Theme.of(context).colorScheme.error,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor:
-                                      Theme.of(context).colorScheme.error,
-                                ),
+                    if (state.error != null)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          child: Text.rich(
+                            TextSpan(
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 13,
                               ),
+                              children: [
+                                TextSpan(
+                                    text:
+                                        'Chat could not synchronize: ${state.error}  '),
+                                WidgetSpan(
+                                  alignment: PlaceholderAlignment.middle,
+                                  child: Semantics(
+                                    link: true,
+                                    child: InkWell(
+                                      onTap: () => _discussionCache
+                                          .synchronize(widget.thread.id)
+                                          .then<void>((_) {},
+                                              onError:
+                                                  (Object _, StackTrace __) {}),
+                                      child: Text(
+                                        'Retry Chat sync',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .error,
+                                          decoration: TextDecoration.underline,
+                                          decorationColor: Theme.of(context)
+                                              .colorScheme
+                                              .error,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const TextSpan(text: ' '),
+                                WidgetSpan(
+                                  alignment: PlaceholderAlignment.middle,
+                                  child: IconButton(
+                                    tooltip: 'Copy Chat error',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(
+                                        minWidth: 24, minHeight: 24),
+                                    visualDensity: VisualDensity.compact,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                    icon: const Icon(Icons.copy_rounded,
+                                        size: 14),
+                                    onPressed: () => Clipboard.setData(
+                                      ClipboardData(
+                                          text:
+                                              'Chat could not synchronize: ${state.error}'),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        const TextSpan(text: ' '),
-                        WidgetSpan(
-                          alignment: PlaceholderAlignment.middle,
-                          child: IconButton(
-                            tooltip: 'Copy Chat error',
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                                minWidth: 24, minHeight: 24),
-                            visualDensity: VisualDensity.compact,
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                            icon: const Icon(Icons.copy_rounded, size: 14),
-                            onPressed: () => Clipboard.setData(
-                              ClipboardData(
-                                  text:
-                                      'Chat could not synchronize: ${state.error}'),
-                            ),
-                          ),
+                      ),
+                    if (!state.hasData && state.isFetching)
+                      const SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text('Loading Chat…'),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            if (!state.hasData && state.isFetching)
-              const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.all(24),
-                  child: Text('Loading Chat…'),
-                ),
-              ),
-          ],
-          itemCount: messages.length,
-          empty: empty,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
-          findChildIndexCallback: (key) {
-            if (key is! ValueKey<String>) return null;
-            final index =
-                messages.indexWhere((message) => message.id == key.value);
-            return index < 0 ? null : index;
-          },
-          itemBuilder: (context, index) {
-            final message = messages[index];
-            return KeyedSubtree(
-              key: ValueKey(message.id),
-              child: KeyedSubtree(
-                key: _chatIncomingAnchor.keyFor(message.id),
-                child: _DiscussionMessageBubble(
-                  item: message,
-                  onCopy: () {
-                    Clipboard.setData(ClipboardData(text: message.text));
+                      ),
+                  ],
+                  itemCount: messages.length,
+                  empty: empty,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  findChildIndexCallback: (key) {
+                    if (key is! ValueKey<String>) return null;
+                    final index = messages
+                        .indexWhere((message) => message.id == key.value);
+                    return index < 0 ? null : index;
                   },
-                  onEdit: (newText) => _editDiscussion(message.id, newText),
-                  onDelete: () => _deleteDiscussion(message.id),
-                ),
-              ),
-            );
-          },
-        )),
+                  itemBuilder: (context, index) {
+                    final message = messages[index];
+                    return KeyedSubtree(
+                      key: ValueKey(message.id),
+                      child: KeyedSubtree(
+                        key: _chatIncomingAnchor.keyFor(message.id),
+                        child: _DiscussionMessageBubble(
+                          item: message,
+                          onCopy: () {
+                            Clipboard.setData(
+                                ClipboardData(text: message.text));
+                          },
+                          onEdit: (newText) =>
+                              _editDiscussion(message.id, newText),
+                          onDelete: () => _deleteDiscussion(message.id),
+                        ),
+                      ),
+                    );
+                  },
+                ))),
         const SizedBox(height: 16),
-        MarkdownComposer(
-          key: alignWithWork ? _chatComposerKey : null,
-          controller: _discussionController,
-          chatStyle: true,
-          enabled: widget.space.effectivePermissions.chat,
-          onSend: _sendDiscussion,
-          showMarkdownControlsInSuffix: true,
-          showSendInSuffix: true,
-          sendInToolbar: false,
-          additionalControlsBuilder: alignWithWork
-              ? (_) => ValueListenableBuilder<double>(
-                  valueListenable: _chatComposerSpaceChanges,
-                  builder: (context, space, _) => SizedBox(height: space))
-              : null,
-        ),
+        _discussionComposer(twoPane: twoPane),
       ],
     );
   }
 
-  Widget _work(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-              child: ListenableBuilder(
-                  listenable: _workRealtime,
-                  builder: (context, _) =>
-                      ValueListenableBuilder<ThreadWorkPresentationSnapshot?>(
-                          valueListenable: _presentation.work,
-                          builder: (context, snapshot, _) {
-                            return _workComposer().history(context);
-                          }))),
-          const SizedBox(height: 16),
-          ValueListenableBuilder<ThreadComposerPresentationSnapshot>(
-              valueListenable: _presentation.composer,
-              builder: (context, _, __) => _workComposer().controls(context)),
-        ],
+  Widget _discussionComposer({bool twoPane = false}) => MarkdownComposer(
+        controller: _discussionController,
+        hintText: 'Write a message...',
+        chatStyle: true,
+        enabled: !widget.draftBusy &&
+            widget.space.effectivePermissions.chat &&
+            (!widget.isDraft ||
+                widget.space.effectivePermissions.manageOwnThreads),
+        onSend: _sendDiscussion,
+        sendEnabled: !_draftSubmitting && !widget.draftBusy,
+        showMarkdownControls: !twoPane,
+        showMarkdownControlsInSuffix: !twoPane,
+        showSendInSuffix: !twoPane,
+        sendInFormattingToolbar: twoPane,
       );
 
+  Widget _work(BuildContext context) => widget.isDraft
+      ? ValueListenableBuilder<ThreadComposerPresentationSnapshot>(
+          valueListenable: _presentation.composer,
+          builder: (context, _, __) => _workComposer().controls(context))
+      : Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+                child: TimelineScrollOverlay(
+                    key: ValueKey('work-scroll-overlay-${widget.thread.id}'),
+                    controller: _workHistoryController,
+                    onFollowLatest: () {
+                      _workIncomingAnchor.reset();
+                      _followWork = true;
+                    },
+                    child: ListenableBuilder(
+                        listenable: _workRealtime,
+                        builder: (context, _) => ValueListenableBuilder<
+                                ThreadWorkPresentationSnapshot?>(
+                            valueListenable: _presentation.work,
+                            builder: (context, snapshot, _) {
+                              return _workComposer().history(context);
+                            })))),
+            const SizedBox(height: 16),
+            ValueListenableBuilder<ThreadComposerPresentationSnapshot>(
+                valueListenable: _presentation.composer,
+                builder: (context, _, __) => _workComposer().controls(context)),
+          ],
+        );
+
   _WorkComposer _workComposer() => _WorkComposer(
-        composerKey: _workComposerKey,
         requestController: _requestController,
         historyController: _workHistoryController,
         incomingAnchor: _workIncomingAnchor,
@@ -1474,7 +1472,7 @@ class _ThreadPageState extends State<ThreadPage>
         canExecute: _canExecute,
         workTimeline: _workTimeline,
         activityStore: _workActivityStore,
-        realtimeStatus: _workRealtime.status,
+        realtimeStatus: _workRealtime.displayStatus,
         localWorkProgress: _localWorkProgress,
         loadingTimeline: _loadingWorkTimeline,
         timelineError: _workTimelineError,

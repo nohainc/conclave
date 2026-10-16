@@ -264,7 +264,10 @@ class AxWorkHistoryCache {
         .refresh(query(id, activeOnly: activeOnly && peek(id).initialLoaded));
   }
 
-  void replace(String id, Iterable<AxWorkRequest> requests) =>
+  /// [fenceReads] false keeps an in-flight history load alive so it can merge
+  /// into the result; submission updates must not discard it.
+  void replace(String id, Iterable<AxWorkRequest> requests,
+          {bool fenceReads = true}) =>
       engine.update(query(id), (state) {
         final current = state.data ?? AxWorkHistory();
         return AxWorkHistory(
@@ -274,7 +277,7 @@ class AxWorkHistoryCache {
             newestPageRequest: current.newestPageRequest,
             gaps: current._gaps,
             confirmedIds: current.confirmedIds);
-      });
+      }, fenceReads: fenceReads);
   AxQueryKey _creationKey(String id) =>
       AxQueryKey(['mutation', 'thread', id, 'create-work-request']);
   bool submitting(String id) => engine.mutations.isRunning(_creationKey(id));
@@ -410,7 +413,8 @@ class AxWorkHistoryCache {
         optimisticUpdate: () {
           context.localProgress[localId] = 'Preparing your request…';
           replace(
-              id, [...peek(id).requests.where((r) => r.id != localId), local]);
+              id, [...peek(id).requests.where((r) => r.id != localId), local],
+              fenceReads: false);
           return context;
         },
         isCurrent: current,
@@ -476,7 +480,7 @@ class AxWorkHistoryCache {
                   status: 'queued',
                   createdAt: local.createdAt,
                   steps: const []),
-          ]);
+          ], fenceReads: false);
         },
         rollback: (error, _, context) {
           final rejected = error is AxApiException &&
@@ -508,7 +512,7 @@ class AxWorkHistoryCache {
                     error: message)
               else
                 r
-          ]);
+          ], fenceReads: false);
         },
         invalidate: (savedId, _) => refreshRequest(id, savedId),
       ));

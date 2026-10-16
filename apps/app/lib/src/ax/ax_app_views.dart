@@ -155,18 +155,22 @@ extension _AxAppViews on _AxAppStateMixin {
   Widget _spaceOverviewView() {
     final space = selectedSpace;
     if (space == null) return _homeView();
-    return SpacePage(
-      key: ValueKey('space-page-${space.id}'),
-      spaceThreads: store.spaceThreads,
-      tabQueries: store.spaceTabs,
-      mutations: store.collaboration,
+    return NewThreadPage(
+      key: ValueKey('space-draft-${space.id}'),
       space: space,
       dataSource: widget.dataSource,
+      discussionCache: store.discussion,
+      workHistoryCache: store.workHistory,
+      threadViewStateStore: store.threadViewState,
+      catalogs: store.catalogs,
+      workflowConfigurations: AxWorkflowConfigurations(widget.dataSource,
+          engine: store.syncEngine, spaceId: space.id),
+      currentUserId: store.auth.viewer?.id,
+      currentUserName: store.auth.viewer?.displayName,
       viewerEmail: store.auth.viewer?.email,
-      onOpenThread: (threadId) => _openThread(space.id, threadId),
-      onEdit: () => _editSpace(space),
-      onArchive: () => _archiveSpace(space),
-      onDelete: () => _deleteSpace(space.id),
+      createThread: (name) =>
+          store.collaboration.createThread(spaceId: space.id, name: name),
+      onOpenThread: (thread) => _openThread(space.id, thread.id),
     );
   }
 

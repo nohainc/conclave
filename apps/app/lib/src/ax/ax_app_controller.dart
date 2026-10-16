@@ -315,6 +315,7 @@ extension _AxAppController on _AxAppStateMixin {
     }
     if (type == 'realtime.ready') {
       _realtimeTransportConnected = true;
+      unawaited(_syncNotificationFeed());
       unawaited(_refreshRealtimeFeatures('space.updated'));
       _updateLiveState(() => realtimeStale = false);
       return;
@@ -430,8 +431,52 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
+  /// Merges the durable Cloud feed so notifications survive reloads and
+  /// reach other devices; failures keep the live list as is.
+  Future<void> _syncNotificationFeed() async {
+    final source = store.dataSource;
+    if (source is! AxNotificationDataSource ||
+        store.auth.session?.authenticated != true) {
+      return;
+    }
+    try {
+      final feed = notificationsFromFeed(
+          await (source as AxNotificationDataSource).loadNotificationFeed());
+      if (!mounted) return;
+      _updateNotifications(() {
+        for (final item in feed) {
+          final index = notifications.indexWhere((n) => n.id == item.id);
+          if (index < 0) {
+            notifications.add(item);
+          } else if (item.read && !notifications[index].read) {
+            notifications[index] = notifications[index].markRead();
+          }
+        }
+        notifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        if (notifications.length > 50) {
+          notifications.removeRange(50, notifications.length);
+        }
+      });
+    } catch (_) {}
+  }
+
+  /// Persists read state for Work notifications; [ids] null marks all.
+  void _persistNotificationsRead({List<String>? ids}) {
+    final source = store.dataSource;
+    if (source is! AxNotificationDataSource) return;
+    final serverIds = ids
+        ?.where((id) => id.startsWith('work-request:'))
+        .map((id) => id.substring('work-request:'.length))
+        .toList();
+    if (serverIds != null && serverIds.isEmpty) return;
+    unawaited((source as AxNotificationDataSource)
+        .markNotificationsRead(ids: serverIds)
+        .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+  }
+
   void _recordNotification(Map<String, dynamic> event) {
-    final notification = notificationFromRealtimeEvent(event);
+    final notification = notificationFromRealtimeEvent(event,
+        viewerId: store.auth.session?.viewer?.id);
     if (notification == null ||
         notifications.any((item) => item.id == notification.id)) {
       return;
@@ -441,10 +486,24 @@ extension _AxAppController on _AxAppStateMixin {
     final isViewingRun = showRunDetails &&
         notification.runId != null &&
         notification.runId == currentRunId;
+    // Finished Work on the Thread you are looking at is already on screen.
+    final isViewingThread = notification.threadId != null &&
+        navigation.threadId == notification.threadId &&
+        _tabVisible;
+    if (isViewingThread) _persistNotificationsRead(ids: [notification.id]);
+    // A hidden tab cannot show the in-app badge, so surface it as an alert.
+    if (!_tabVisible && !notification.read) {
+      browserAlerts.show(
+        title: notification.title,
+        body: notification.message,
+        tag: notification.id,
+        onClick: () => _navigateToNotification(notification),
+      );
+    }
     _updateNotifications(() {
       notifications.insert(
         0,
-        isViewingRun ? notification.markRead() : notification,
+        isViewingRun || isViewingThread ? notification.markRead() : notification,
       );
       if (notifications.length > 50) notifications.removeLast();
     });
@@ -709,6 +768,7 @@ extension _AxAppController on _AxAppStateMixin {
               if (notifications.isNotEmpty)
                 TextButton(
                   onPressed: () {
+                    _persistNotificationsRead();
                     _updateNotifications(() {
                       for (var index = 0;
                           index < notifications.length;
@@ -720,6 +780,26 @@ extension _AxAppController on _AxAppStateMixin {
                   },
                   child: const Text('Mark all as read'),
                 ),
+              if (browserAlerts.supported)
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    if (browserAlerts.enabled) {
+                      browserAlerts.disable();
+                      _showSnackBar('Desktop alerts turned off.');
+                    } else {
+                      unawaited(browserAlerts.enable().then((on) {
+                        if (!mounted) return;
+                        _showSnackBar(on
+                            ? 'Desktop alerts turned on for background tabs.'
+                            : 'Desktop alerts need browser permission.');
+                      }));
+                    }
+                  },
+                  child: Text(browserAlerts.enabled
+                      ? 'Turn off desktop alerts'
+                      : 'Turn on desktop alerts'),
+                ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
                 child: const Text('Close'),
@@ -730,6 +810,7 @@ extension _AxAppController on _AxAppStateMixin {
       ),
     );
     if (!mounted || selected == null) return;
+    _persistNotificationsRead(ids: [selected.id]);
     _updateNotifications(() {
       final index = notifications.indexWhere((item) => item.id == selected.id);
       if (index >= 0) notifications[index] = notifications[index].markRead();

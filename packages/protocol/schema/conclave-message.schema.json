@@ -15,7 +15,8 @@
     "provider_unavailable",
     "timeout",
     "cancelled",
-    "execution_failed"
+    "execution_failed",
+    "context_limit_exceeded"
   ],
   "x-execution-error-messages": {
     "worker_not_ready": "The selected Worker is not ready on its Workspace.",
@@ -29,7 +30,8 @@
     "provider_unavailable": "The provider is temporarily unavailable.",
     "timeout": "The assignment exceeded its time limit.",
     "cancelled": "The assignment was cancelled.",
-    "execution_failed": "The assignment could not be completed."
+    "execution_failed": "The assignment could not be completed.",
+    "context_limit_exceeded": "This conversation exceeds the supported context limit. Start a new Thread with the relevant context."
   },
   "x-workspace-runtime-protocol": {
     "name": "conclave.workspace-runtime-protocol",

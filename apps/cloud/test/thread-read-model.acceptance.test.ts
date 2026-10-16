@@ -19,6 +19,7 @@ it("reads threads and configuration with distinct update timestamps", async () =
       CREATE TABLE discussion_messages (thread_id TEXT, author_user_id TEXT, body TEXT, created_at TEXT);
       CREATE TABLE work_requests (thread_id TEXT, status TEXT, updated_at TEXT);
       CREATE TABLE thread_read_states (thread_id TEXT, user_id TEXT, read_at TEXT);
+      CREATE TABLE user_pins (user_id TEXT, kind TEXT, target_id TEXT, pinned_at TEXT, position INTEGER);
       CREATE TABLE conversations (id TEXT, thread_id TEXT);
       CREATE TABLE conversation_history_entries (conversation_id TEXT, text TEXT, occurred_at TEXT);
       CREATE TABLE space_memberships (id TEXT, space_id TEXT, user_id TEXT, role TEXT, created_at TEXT, updated_at TEXT);

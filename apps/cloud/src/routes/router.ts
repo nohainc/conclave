@@ -739,6 +739,30 @@ export async function routeWorkerRequest(
       );
     }
 
+    if (url.pathname === "/api/pins/order" && request.method === "PUT") {
+      return await handlers.handleSetPinOrder!(request, env, ctx);
+    }
+    const pinMatch = url.pathname.match(/^\/api\/pins\/([^/]+)\/([^/]+)$/);
+    if (pinMatch && (request.method === "PUT" || request.method === "DELETE")) {
+      return await handlers.handleSetPin!(
+        request,
+        env,
+        decodeURIComponent(pinMatch[1]!),
+        decodeURIComponent(pinMatch[2]!),
+        ctx,
+      );
+    }
+    if (url.pathname === "/api/notifications") {
+      if (request.method === "GET")
+        return await handlers.handleListNotifications!(request, env, ctx);
+    }
+    if (
+      url.pathname === "/api/notifications/read" &&
+      request.method === "POST"
+    ) {
+      return await handlers.handleMarkNotificationsRead!(request, env, ctx);
+    }
+
     const threadReadMatch = url.pathname.match(
       /^\/api\/threads\/([^/]+)\/read$/,
     );

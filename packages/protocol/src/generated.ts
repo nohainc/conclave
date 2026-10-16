@@ -13,6 +13,7 @@ export const EXECUTION_ERROR_CODES = [
   "timeout",
   "cancelled",
   "execution_failed",
+  "context_limit_exceeded",
 ] as const;
 export const EXECUTION_ERROR_MESSAGES = {
   worker_not_ready: "The selected Worker is not ready on its Workspace.",
@@ -30,6 +31,8 @@ export const EXECUTION_ERROR_MESSAGES = {
   timeout: "The assignment exceeded its time limit.",
   cancelled: "The assignment was cancelled.",
   execution_failed: "The assignment could not be completed.",
+  context_limit_exceeded:
+    "This conversation exceeds the supported context limit. Start a new Thread with the relevant context.",
 } as const;
 
 export const REALTIME_EVENTS_NAME = "conclave.realtime-events" as const;

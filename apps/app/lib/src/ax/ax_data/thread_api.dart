@@ -63,6 +63,55 @@ mixin _ThreadApi on _AxApiClientCore {
     }
   }
 
+  Future<void> setPinned(
+      {required String kind, required String id, required bool pinned}) async {
+    final uri = Uri.parse(
+        '$baseUrl/pins/${Uri.encodeComponent(kind)}/${Uri.encodeComponent(id)}');
+    final response = pinned
+        ? await client.put(uri, headers: _headers())
+        : await client.delete(uri, headers: _headers());
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException('Updating the pin failed',
+          statusCode: response.statusCode);
+    }
+  }
+
+  Future<void> setPinOrder(
+      {required String kind,
+      required List<String> ids,
+      String? spaceId}) async {
+    final response = await client.put(
+      Uri.parse('$baseUrl/pins/order'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode(
+          {'kind': kind, 'ids': ids, if (spaceId != null) 'spaceId': spaceId}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException('Reordering pins failed',
+          statusCode: response.statusCode);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> loadNotificationFeed() async {
+    final body = await _getJson(Uri.parse('$baseUrl/notifications'));
+    return (body['notifications'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<void> markNotificationsRead({List<String>? ids}) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/notifications/read'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({if (ids != null) 'ids': ids}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException('Marking notifications read failed',
+          statusCode: response.statusCode);
+    }
+  }
+
   @override
   Future<AxThread> updateThread({
     required String threadId,

@@ -8,6 +8,22 @@ import {
 } from "../src/index.js";
 
 describe("canonical execution error taxonomy", () => {
+  it.each([
+    "context_limit_exceeded",
+    "Context exceeds the byte limit",
+    "Conversation bootstrap exceeds the history or byte limit",
+    "Conversation bootstrap exceeds the history limit",
+    "Conversation bootstrap exceeds the byte limit",
+    "Conversation context exceeds the supported history or 256 KiB serialized byte limit. Start a new Thread with the relevant context before retrying.",
+  ])(
+    "preserves actionable context overflow for stored task error %s",
+    (error) => {
+      const code = canonicalExecutionErrorCode(error);
+      expect(code).toBe("context_limit_exceeded");
+      expect(executionErrorMessage(code)).toContain("Start a new Thread");
+    },
+  );
+
   it("has one safe display message for every stable code", () => {
     expect(Object.keys(EXECUTION_ERROR_MESSAGES).sort()).toEqual(
       [...EXECUTION_ERROR_CODES].sort(),

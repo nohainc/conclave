@@ -19,6 +19,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   final authEmailController = TextEditingController();
   final authPasswordController = TextEditingController();
   final authConfirmPasswordController = TextEditingController();
+  final AxBrowserAlerts browserAlerts = createAxBrowserAlerts();
   List<AxNotification> get notifications => store.notifications;
   void _updateNotifications(VoidCallback callback) {
     callback();
@@ -120,7 +121,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   bool deletingAccount = false;
   ThemeMode _themeMode = ThemeMode.system;
   bool _desktopSidebarCollapsed = false;
-  double _desktopSidebarWidth = 200;
+  double _desktopSidebarWidth = ResizableSidebar.minWidth;
   bool get showRunDetails => switch (navigation.kind) {
         AxRouteKind.home => false,
         _ => true,
@@ -294,6 +295,75 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     unawaited(store.collaboration
         .editSpace(space, settings: settings)
         .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+  }
+
+  Future<void> _setSpacePinnedFromSidebar(AxSpace space, bool pinned) async {
+    final source = store.dataSource;
+    if (source is! AxPinDataSource) return;
+    final before = store.spaces.items;
+    final stamp = pinned ? DateTime.now().toUtc().toIso8601String() : '';
+    final top = nextAxPinPosition(
+        [for (final s in before) if (s.isPinned) s.pinPosition]);
+    store.spaces.replace([
+      for (final item in before)
+        item.id == space.id
+            ? item.copyWith(pinnedAt: stamp, pinPosition: pinned ? top : 0)
+            : item
+    ]);
+    try {
+      await (source as AxPinDataSource)
+          .setPinned(kind: 'space', id: space.id, pinned: pinned);
+    } catch (error) {
+      store.spaces.replace(before);
+      if (mounted) {
+        _showSnackBar('Could not update the pin: $error',
+            type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _setSpacePinOrderFromSidebar(List<String> orderedIds) async {
+    final source = store.dataSource;
+    if (source is! AxPinDataSource) return;
+    final before = store.spaces.items;
+    final rank = {for (final e in orderedIds.asMap().entries) e.value: e.key};
+    store.spaces.replace([
+      for (final item in before)
+        rank.containsKey(item.id)
+            ? item.copyWith(pinPosition: rank[item.id])
+            : item
+    ]);
+    try {
+      await (source as AxPinDataSource)
+          .setPinOrder(kind: 'space', ids: orderedIds);
+    } catch (error) {
+      store.spaces.replace(before);
+      if (mounted) {
+        _showSnackBar('Could not reorder pins: $error', type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _setThreadPinOrderFromSidebar(
+      AxSpace space, List<String> orderedIds) async {
+    try {
+      await store.spaceThreads.setPinOrder(space.id, orderedIds);
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar('Could not reorder pins: $error', type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _setThreadPinnedFromSidebar(AxThread thread, bool pinned) async {
+    try {
+      await store.spaceThreads.setPinned(thread.spaceId, thread.id, pinned);
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar('Could not update the pin: $error',
+            type: ToastType.error);
+      }
+    }
   }
 
   Future<void> _reorderThreadsFromSidebar(

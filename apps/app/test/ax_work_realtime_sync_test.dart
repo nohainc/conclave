@@ -415,6 +415,27 @@ void main() {
     expect(cache.request('w', 'other'), isNotNull);
     root();
   });
+  testWidgets('brief interruptions are not displayed; lasting ones are',
+      (tester) async {
+    await seed();
+    final cancel = sync.listen(null, threadId: 'w');
+    await sync.handle({'type': 'realtime.connection', 'status': 'connected'});
+    await sync
+        .handle({'type': 'realtime.connection', 'status': 'reconnecting'});
+    expect(sync.checkingExecution, isTrue);
+    expect(sync.displayStatus, AxWorkRealtimeStatus.available);
+    await tester.pump(const Duration(seconds: 1));
+    await sync.handle({'type': 'realtime.connection', 'status': 'connected'});
+    await tester.pump(const Duration(seconds: 5));
+    expect(sync.displayStatus, AxWorkRealtimeStatus.available);
+    await sync
+        .handle({'type': 'realtime.connection', 'status': 'reconnecting'});
+    await tester.pump(const Duration(seconds: 3));
+    expect(sync.displayStatus, AxWorkRealtimeStatus.checking);
+    await sync.handle({'type': 'realtime.connection', 'status': 'connected'});
+    expect(sync.displayStatus, AxWorkRealtimeStatus.available);
+    cancel();
+  });
   testWidgets(
       'healthy realtime disables polling; disconnection polls every 15 seconds and restoration stops it',
       (tester) async {

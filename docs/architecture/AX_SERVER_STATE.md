@@ -507,7 +507,8 @@ Within ThreadPage, Discussion observes its own cached query. Work history
 and Workflow/Worker/grant controls have separate local listenables. Catalog,
 inventory, and grant updates do not rebuild Chat or Work history. History updates
 do not rebuild Chat, and Discussion updates do not rebuild Work history.
-Composer alignment updates only its spacing listenable. The Work composer
+Chat and Work composers size independently without a shared spacing listenable.
+The Work composer
 observes Space Workflow choices, including realtime inventory changes; editing
 those choices belongs to the Space Workflows surface. Reconnect notices,
 notification badges, execution-health popovers, and account-security data have
@@ -856,8 +857,8 @@ Space list and detail responses include the authenticated viewer's membership
 `role`. Sidebar grouping must use that server attribution, including after a
 Space detail refresh, rather than inferring ownership from a missing field.
 
-The expanded desktop sidebar defaults to 200 logical pixels. Its right-edge
-resize grip supports dragging between 200 and 300 pixels. The resize line is visible only while the pointer
+The expanded desktop sidebar defaults to 220 logical pixels. Its right-edge
+resize grip supports dragging between 220 and 300 pixels. The resize line is visible only while the pointer
 is over the grip, uses the same neutral color in all interaction states, and
 has no tooltip. When focused, Left
 and Right adjust by 10 pixels; Home and End select the limits. Width is local
@@ -1011,6 +1012,23 @@ No schema, wire version, or client migration is required.
 
 ## Sidebar activity indicators
 
+The collapsed icon rail aggregates running and unread states separately on the
+Your Spaces and Shared With You icons, using Space summaries and cached Thread
+flags. Its switcher menu also shows markers beside each Space and Thread.
+Expanded and collapsed sidebars share the same 9-pixel markers, synchronized
+40%–100% running pulse, static unread state, and reduced-motion behavior. The
+rail observes the existing Space/Thread stores without loading extra histories.
+
+Sidebar Space folder icons use the same color as their text labels in both
+selected and unselected rows. Sidebar activity dots are 9 logical pixels in diameter.
+The running marker pulses between 40% and 100% opacity, with each fade lasting
+2.8 seconds. All dots in a sidebar share one animation clock; newly added
+markers join the current opacity and phase. Reduced-motion mode uses a static
+marker at 40% opacity. Collapsed Space folders show aggregated running activity,
+including when unread activity is also present (running takes priority until it
+ends). Collapsed rows observe cached Thread updates without fetching Threads;
+the Space aggregate also preserves activity for Threads outside the cached list.
+
 Space and Thread reads carry two per-user booleans: `hasActiveWork` (a Work
 Request in `queued`, `running` or `waiting` that was updated within the last
 day) and `hasUnread` (another user's Discussion message, or a completed or
@@ -1028,6 +1046,41 @@ lists through one 400 ms trailing batch. Accepting a new Work Request also
 advances its Thread and Space update timestamps, so both move to the top of
 their newest-update-first sidebar lists immediately, including when the Thread
 is open. No wire version change.
+
+### Notification feed
+
+`GET /api/notifications` lists finished (`completed` or `failed`) Work Requests
+from the last 14 days in the caller's Spaces, newest first, at most 50. The
+caller's own successful Work is left out; their own failures stay. The feed is
+derived from `work_requests`, so no status writer needs a hook. Read markers
+live in `user_notification_reads` (`0067_notification_reads.sql`);
+`POST /api/notifications/read` marks the listed ids, or every visible item
+when `ids` is omitted. The `work_request.completed` and `.failed` realtime
+events carry `requestedByUserId`. AX merges the feed with live events under
+the shared id `work-request:<id>`, drops the viewer's own successful Work, and
+marks Work on the open Thread read. Opt-in desktop alerts (browser permission
+plus a local switch) show only while the tab is hidden.
+
+### Pins
+
+Pins are per user. `user_pins` (`0068_user_pins.sql`) holds
+`(user_id, kind, target_id, pinned_at)` for `space` and `thread`.
+`PUT` and `DELETE /api/pins/:kind/:id` are idempotent, require Space
+membership, and publish a recipient-scoped `space.updated` or `thread.updated`
+so the user's other sessions refresh. Space and Thread list reads return
+`pinnedAt` (null when not pinned). The sidebar lists pinned Spaces first, without a group label,
+above the usual groups, and pinned Threads first within their Space,
+newest pin first, ahead of the shared `threadOrder`. Archived Threads ignore
+pins. Pins have a per-user manual order (`position`, migration
+`0069_user_pin_position.sql`): a new pin takes the lowest position, so it lands
+on top, and ties fall back to newest pin first. `PUT /api/pins/order`
+(`{kind, ids, spaceId?}`) stores the order of the caller's own pins; threads
+send their `spaceId`. Lists return `pinPosition` next to `pinnedAt`. Move
+Up / Move Down in the Space menu apply to pinned Spaces only, and for Threads
+they move a pinned Thread among the pinned ones (your own order) or an
+unpinned Thread among the unpinned ones (the Space's shared `threadOrder`,
+owner-only as before). Unpinned Spaces stay newest-activity first. Space settings stay owner-only and are not used for pins. No wire
+version change; the field is additive.
 
 ## Phase 9: Persisted sidebar and Thread view state
 

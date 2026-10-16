@@ -137,6 +137,22 @@ void main() {
         store.spaceDetails.peek('P')?.instructions, 'Normalized instructions');
   });
 
+  test('Space edit response keeps the pin and indicators already in the list',
+      () async {
+    store.spaces.replace([
+      store.spaces.items.first
+          .copyWith(pinnedAt: '2026-10-01T00:00:00Z', hasUnread: true),
+      ...store.spaces.items.skip(1),
+    ]);
+    final write = store.collaboration.editSpace(store.spaces.items.first,
+        settings: {'sidebarExpanded': false});
+    // The edit response carries no per-user state.
+    source.spaceEdits.single.complete(space('P', 'Original'));
+    await write;
+    expect(store.spaces.items.first.isPinned, isTrue);
+    expect(store.spaces.items.first.hasUnread, isTrue);
+  });
+
   test(
       'failed Space edit restores latest realtime base and preserves other Space edits',
       () async {

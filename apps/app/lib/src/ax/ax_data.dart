@@ -141,6 +141,26 @@ abstract interface class AxThreadReadDataSource {
   Future<void> markThreadRead(String threadId);
 }
 
+/// Optional capability: the durable notification feed of finished Work and
+/// its per-user read markers.
+abstract interface class AxNotificationDataSource {
+  Future<List<Map<String, dynamic>>> loadNotificationFeed();
+
+  /// Marks [ids] read, or every notification when [ids] is null.
+  Future<void> markNotificationsRead({List<String>? ids});
+}
+
+/// Optional capability: pin or unpin a Space or Thread for the signed-in user.
+abstract interface class AxPinDataSource {
+  Future<void> setPinned(
+      {required String kind, required String id, required bool pinned});
+
+  /// Stores the manual order of pinned items (first to last). Threads need
+  /// their [spaceId].
+  Future<void> setPinOrder(
+      {required String kind, required List<String> ids, String? spaceId});
+}
+
 class AxApiClient extends _AxApiClientCore
     with
         _CatalogApi,
@@ -155,6 +175,8 @@ class AxApiClient extends _AxApiClientCore
         AxWorkflowDefaultDataSource,
         AxWorkflowWorkspaceDataSource,
         AxPeopleDataSource,
-        AxThreadReadDataSource {
+        AxThreadReadDataSource,
+        AxNotificationDataSource,
+        AxPinDataSource {
   AxApiClient({super.baseUrl, super.client});
 }

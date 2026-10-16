@@ -65,7 +65,13 @@ export async function handleListSpaceThreads(
               ''
             ) AS brief,
             ${activeWorkSql("threads")} AS hasActiveWork,
-            ${unreadSql("threads", "?2", "COALESCE(read_state.read_at, member.created_at)")} AS hasUnread
+            ${unreadSql("threads", "?2", "COALESCE(read_state.read_at, member.created_at)")} AS hasUnread,
+            (SELECT up.pinned_at FROM user_pins up
+              WHERE up.user_id = ?2 AND up.kind = 'thread'
+                AND up.target_id = threads.id) AS pinnedAt,
+            (SELECT up.position FROM user_pins up
+              WHERE up.user_id = ?2 AND up.kind = 'thread'
+                AND up.target_id = threads.id) AS pinPosition
      FROM threads
      JOIN spaces space ON space.id = threads.space_id
      LEFT JOIN users lead ON lead.id = threads.lead_user_id

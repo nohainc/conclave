@@ -208,6 +208,24 @@ class SqliteD1 {
 }
 
 describe("Cloud event publisher", () => {
+  it("persists failure events with requester attribution", async () => {
+    const harness = createHarness();
+    const result = await new CloudEventPublisher(harness.env).publish({
+      ...baseEvent,
+      type: "work_request.failed",
+      payload: {
+        entityId: "request-1",
+        workRequestId: "request-1",
+        threadId: "thread-1",
+        requestedByUserId: "user-1",
+        status: "failed",
+      },
+    });
+    expect(result.persisted).toBe(true);
+    expect(result.event.payload.requestedByUserId).toBe("user-1");
+    expect(harness.insertCount).toBe(1);
+  });
+
   it("allocates a sequence and inserts the durable event in one D1 batch", async () => {
     const harness = createHarness();
     const result = await new CloudEventPublisher(harness.env).publish({

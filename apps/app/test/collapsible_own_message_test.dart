@@ -49,4 +49,32 @@ void main() {
     await tester.pumpWidget(host('1\n2\n3\n4\n5'));
     expect(find.text('Show more'), findsOneWidget);
   });
+
+  testWidgets('toggle shares the meta line and is plain text, not a button',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          width: 300,
+          child: CollapsibleOwnMessage(
+            data: 'One\nTwo\nThree\nFour\nFive',
+            toggleColor: Colors.red,
+            footerBuilder: (_, toggle) => Row(children: [
+              if (toggle != null) toggle,
+              const SizedBox(width: 8),
+              const Text('12:00'),
+            ]),
+            child: const Text('Full Markdown'),
+          ),
+        ),
+      ),
+    ));
+    expect(find.byType(TextButton), findsNothing);
+    final toggle = tester.getRect(find.text('Show more'));
+    final time = tester.getRect(find.text('12:00'));
+    expect(toggle.left, lessThan(time.left));
+    expect(toggle.center.dy, closeTo(time.center.dy, 4));
+    expect(
+        tester.widget<Text>(find.text('Show more')).style?.color, Colors.red);
+  });
 }

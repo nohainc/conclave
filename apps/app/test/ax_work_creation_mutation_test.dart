@@ -130,7 +130,7 @@ void main() {
     await tester.pumpWidget(page());
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Persistent request');
-    await tester.tap(find.byTooltip('Send request'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
     await tester.pump();
     expect(posts, 1);
     expect(cache.submitting('W'), isTrue);

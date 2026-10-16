@@ -36,50 +36,9 @@ class GlobalAppMenu extends StatelessWidget {
     final activeThemeMode = shellContext.themeMode;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final menuStyle = MenuStyle(
-      backgroundColor: WidgetStatePropertyAll(
-        ConclaveColors.navigationRaised(isDark),
-      ),
-      surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-      elevation: const WidgetStatePropertyAll(12),
-      shadowColor: WidgetStatePropertyAll(
-        Colors.black.withValues(alpha: isDark ? 0.7 : 0.18),
-      ),
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-            color: ConclaveColors.navigationBorder(isDark),
-            width: 1,
-          ),
-        ),
-      ),
-      padding: const WidgetStatePropertyAll(
-        EdgeInsets.symmetric(vertical: 6, horizontal: 6),
-      ),
-    );
-
-    ButtonStyle itemStyle({bool isDestructive = false}) {
-      return ButtonStyle(
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        ),
-        minimumSize: const WidgetStatePropertyAll(Size(196, 36)),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        overlayColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.hovered) ||
-              states.contains(WidgetState.focused)) {
-            if (isDestructive) {
-              return ConclaveColors.error.withValues(alpha: 0.12);
-            }
-            return ConclaveColors.navigationHover(isDark);
-          }
-          return null;
-        }),
-      );
-    }
+    final menuStyle = ConclaveMenuStyle.surface(isDark);
+    ButtonStyle itemStyle({bool isDestructive = false}) =>
+        ConclaveMenuStyle.item(isDark, isDestructive: isDestructive);
 
     Widget divider() => Padding(
           padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),

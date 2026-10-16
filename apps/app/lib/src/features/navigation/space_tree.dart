@@ -32,6 +32,10 @@ class SpaceTree extends StatelessWidget {
     this.onClearWorkHistory,
     this.onDeleteThread,
     this.onReorderThreads,
+    this.onSetSpacePinned,
+    this.onSetThreadPinned,
+    this.onReorderPinnedSpaces,
+    this.onReorderPinnedThreads,
     this.compact = false,
     this.narrow = false,
   });
@@ -54,11 +58,23 @@ class SpaceTree extends StatelessWidget {
   /// Persists a Space's Thread order (visible Thread ids, top to bottom).
   final Future<void> Function(AxSpace space, List<String> orderedThreadIds)?
       onReorderThreads;
+
+  /// Pins or unpins for the signed-in user only.
+  final Future<void> Function(AxSpace space, bool pinned)? onSetSpacePinned;
+  final Future<void> Function(AxThread thread, bool pinned)? onSetThreadPinned;
+
+  /// Stores the user's order of pinned Spaces / of a Space's pinned Threads.
+  final Future<void> Function(List<String> orderedIds)? onReorderPinnedSpaces;
+  final Future<void> Function(AxSpace space, List<String> orderedIds)?
+      onReorderPinnedThreads;
   final bool compact;
   final bool narrow;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      SidebarPulse(child: Builder(builder: _buildContent));
+
+  Widget _buildContent(BuildContext context) {
     Widget content(BuildContext context) {
       final invitations = shellContext.invitationsListenable;
       if (invitations != null) {
@@ -82,6 +98,15 @@ class SpaceTree extends StatelessWidget {
 
   Widget _tree(BuildContext context) {
     final invitations = shellContext.invitations;
+    // Pinned Spaces lead the list; the rest keep their usual groups.
+    final pinnedSpaces = [
+      for (final space in shellContext.spaces)
+        if (space.isPinned) space
+    ]..sort(compareAxPins);
+    final ownedSpaces =
+        shellContext.ownedSpaces.where((space) => !space.isPinned).toList();
+    final sharedSpaces =
+        shellContext.sharedSpaces.where((space) => !space.isPinned).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -138,15 +163,15 @@ class SpaceTree extends StatelessWidget {
               ),
             ),
           ),
-        if (shellContext.ownedSpaces.isNotEmpty) ...[
-          if (shellContext.sharedSpaces.isNotEmpty) _groupLabel('YOUR SPACES'),
-          ...shellContext.ownedSpaces
-              .map((space) => _buildSpaceItem(context, space)),
+        // Pinned Spaces lead the list, without a group of their own.
+        ...pinnedSpaces.map((space) => _buildSpaceItem(context, space)),
+        if (ownedSpaces.isNotEmpty) ...[
+          if (sharedSpaces.isNotEmpty) _groupLabel('YOUR SPACES'),
+          ...ownedSpaces.map((space) => _buildSpaceItem(context, space)),
         ],
-        if (shellContext.sharedSpaces.isNotEmpty) ...[
+        if (sharedSpaces.isNotEmpty) ...[
           _groupLabel('SHARED WITH YOU'),
-          ...shellContext.sharedSpaces
-              .map((space) => _buildSpaceItem(context, space)),
+          ...sharedSpaces.map((space) => _buildSpaceItem(context, space)),
         ],
       ],
     );
@@ -162,11 +187,12 @@ class SpaceTree extends StatelessWidget {
 
   Widget _buildSpaceItem(BuildContext context, AxSpace space) {
     final cache = shellContext.spaceThreads;
-    if (cache != null && shellContext.isSpaceExpanded(space.id)) {
+    if (cache != null) {
       return AxQueryBuilder<List<AxThread>>(
         key: ValueKey('space-threads-${space.id}'),
         engine: cache.engine,
         query: cache.query(space.id),
+        ensure: shellContext.isSpaceExpanded(space.id),
         builder: (context, state) => _spaceItem(
             context, space, state.data ?? const [],
             loading: !state.hasData && state.isFetching,
@@ -185,8 +211,8 @@ class SpaceTree extends StatelessWidget {
           AxRouteKind.spaceMembers,
         }.contains(shellContext.navigation.kind);
     final isExpanded = shellContext.isSpaceExpanded(space.id);
-    final sortedThreads = applyAxThreadOrder(
-        sortAxThreadsByLastUpdate(threads), space.settings['threadOrder']);
+    final sortedThreads = applyAxThreadPins(applyAxThreadOrder(
+        sortAxThreadsByLastUpdate(threads), space.settings['threadOrder']));
     final visibleThreads = sortedThreads
         .where((t) => t.status.toLowerCase() != 'archived')
         .toList();
@@ -222,11 +248,39 @@ class SpaceTree extends StatelessWidget {
               padding: const EdgeInsets.only(left: 8, right: 2),
               child: Row(
                 children: [
-                  ConclaveFolderIcon(
-                    isExpanded: isExpanded,
-                    size: 16,
-                    color: isSpaceFocused ? Colors.white : Colors.white54,
-                  ),
+                  Builder(builder: (context) {
+                    // Collapsed Spaces hide their Threads, so the folder
+                    // carries the roll-up: running stays visible until work ends.
+                    final anyUnread = threads.isNotEmpty
+                        ? threads.any((t) => t.hasUnread)
+                        : space.hasUnread;
+                    final anyRunning = space.hasActiveWork ||
+                        threads.any((t) => t.hasActiveWork);
+                    return SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          ConclaveFolderIcon(
+                            isExpanded: isExpanded,
+                            size: 16,
+                            color: Colors.white70,
+                          ),
+                          if (!isExpanded)
+                            Positioned(
+                              right: -3,
+                              top: -2,
+                              child: SidebarActivityIndicators(
+                                running: anyRunning,
+                                unread: anyUnread && !anyRunning,
+                                gap: 0,
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
                   SizedBox(width: narrow ? 2 : 8),
                   Expanded(
                     child: Text(
@@ -240,14 +294,12 @@ class SpaceTree extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _ActivityIndicators(
-                    running: threads.isNotEmpty
-                        ? threads.any((t) => t.hasActiveWork)
-                        : space.hasActiveWork,
-                    unread: threads.isNotEmpty
-                        ? threads.any((t) => t.hasUnread)
-                        : space.hasUnread,
-                  ),
+                  if (space.isPinned && isSpaceFocused)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 4),
+                      child: Icon(Icons.push_pin_outlined,
+                          size: 12, color: Colors.white38),
+                    ),
                   isSpaceFocused
                       ? _spaceMenu(context, space)
                       : const SizedBox(width: _menuSlotWidth),
@@ -287,7 +339,7 @@ class SpaceTree extends StatelessWidget {
                 borderRadius: BorderRadius.circular(6),
                 child: Container(
                   height: _sidebarRowHeight,
-                  padding: EdgeInsets.only(left: narrow ? 8 : 34, right: 2),
+                  padding: const EdgeInsets.only(left: 8, right: 2),
                   decoration: BoxDecoration(
                     color: isThreadSelected
                         ? ConclaveColors.navigationSelected
@@ -296,6 +348,16 @@ class SpaceTree extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
+                      // Leading slot sits under the Space folder icon, so the
+                      // title stays put and the right edge stays clear.
+                      SizedBox(
+                        width: narrow ? 10 : 26,
+                        child: SidebarActivityIndicators(
+                          running: thread.hasActiveWork,
+                          unread: thread.hasUnread && !isThreadSelected,
+                          gap: narrow ? 0 : 4,
+                        ),
+                      ),
                       Expanded(
                         child: Text(
                           thread.title,
@@ -308,17 +370,28 @@ class SpaceTree extends StatelessWidget {
                           ),
                         ),
                       ),
-                      _ActivityIndicators(
-                        running: thread.hasActiveWork,
-                        unread: thread.hasUnread && !isThreadSelected,
-                      ),
                       if (statusIndicator != null) ...[
                         const SizedBox(width: 8),
                         statusIndicator,
                       ],
+                      // Like the menu, only on the active row; same spot as
+                      // the Space pin, just left of the menu slot.
+                      if (thread.isPinned && isThreadSelected)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 4),
+                          child: Icon(Icons.push_pin_outlined,
+                              size: 12, color: Colors.white38),
+                        ),
                       isThreadSelected
-                          ? _threadMenu(context, space, thread,
-                              visibleThreads.map((t) => t.id).toList())
+                          ? _threadMenu(
+                              context,
+                              space,
+                              thread,
+                              visibleThreads.map((t) => t.id).toList(),
+                              visibleThreads
+                                  .where((t) => t.isPinned)
+                                  .map((t) => t.id)
+                                  .toList())
                           : const SizedBox(width: _menuSlotWidth),
                     ],
                   ),
@@ -374,6 +447,16 @@ class SpaceTree extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
+                      // Leading slot sits under the Space folder icon, so the
+                      // title stays put and the right edge stays clear.
+                      SizedBox(
+                        width: narrow ? 10 : 26,
+                        child: SidebarActivityIndicators(
+                          running: thread.hasActiveWork,
+                          unread: thread.hasUnread && !isThreadSelected,
+                          gap: narrow ? 0 : 4,
+                        ),
+                      ),
                       Expanded(
                         child: Text(
                           thread.title,
@@ -400,8 +483,17 @@ class SpaceTree extends StatelessWidget {
   }
 
   Widget _threadMenu(BuildContext context, AxSpace space, AxThread thread,
-      [List<String> visibleOrder = const []]) {
-    final position = visibleOrder.indexOf(thread.id);
+      [List<String> visibleOrder = const [],
+      List<String> pinnedOrder = const []]) {
+    final isPinnedHere = thread.isPinned && pinnedOrder.contains(thread.id);
+    // Pinned Threads move among pinned ones (your own order); the rest move
+    // among the unpinned ones (the Space's shared order).
+    final group = isPinnedHere
+        ? pinnedOrder
+        : visibleOrder.where((id) => !pinnedOrder.contains(id)).toList();
+    final canReorder =
+        isPinnedHere ? onReorderPinnedThreads != null : onReorderThreads != null;
+    final position = group.indexOf(thread.id);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isArchived =
         thread.archived || thread.status.toLowerCase() == 'archived';
@@ -490,28 +582,42 @@ class SpaceTree extends StatelessWidget {
           );
         },
         menuChildren: [
-          if (onReorderThreads != null && position > 0)
+          if (canReorder && position > 0)
             MenuItemButton(
               style: itemStyle(),
               leadingIcon: Icon(Icons.arrow_upward_rounded,
                   size: 16, color: menuIconColor),
-              onPressed: () => _moveThread(space, visibleOrder, position, -1),
+              onPressed: () => _moveThread(
+                  space, visibleOrder, group, position, -1, isPinnedHere),
               child: const Text(
                 'Move Up',
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
               ),
             ),
-          if (onReorderThreads != null &&
-              position >= 0 &&
-              position < visibleOrder.length - 1)
+          if (canReorder && position >= 0 && position < group.length - 1)
             MenuItemButton(
               style: itemStyle(),
               leadingIcon: Icon(Icons.arrow_downward_rounded,
                   size: 16, color: menuIconColor),
-              onPressed: () => _moveThread(space, visibleOrder, position, 1),
+              onPressed: () => _moveThread(
+                  space, visibleOrder, group, position, 1, isPinnedHere),
               child: const Text(
                 'Move Down',
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+              ),
+            ),
+          if (onSetThreadPinned != null && !isArchived)
+            MenuItemButton(
+              style: itemStyle(),
+              leadingIcon: Icon(
+                  thread.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                  size: 16,
+                  color: menuIconColor),
+              onPressed: () => select(thread.isPinned ? 'unpin' : 'pin'),
+              child: Text(
+                thread.isPinned ? 'Unpin Thread' : 'Pin Thread',
+                style: const TextStyle(
+                    fontSize: 12.5, fontWeight: FontWeight.w500),
               ),
             ),
           MenuItemButton(
@@ -584,6 +690,14 @@ class SpaceTree extends StatelessWidget {
 
   Widget _spaceMenu(BuildContext context, AxSpace space) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final pinnedOrder = ([
+      for (final item in shellContext.spaces)
+        if (item.isPinned) item
+    ]..sort(compareAxPins))
+        .map((item) => item.id)
+        .toList();
+    final pinnedPosition = pinnedOrder.indexOf(space.id);
+    final canReorderPins = space.isPinned && onReorderPinnedSpaces != null;
     final menuStyle = MenuStyle(
       backgroundColor: WidgetStatePropertyAll(
         ConclaveColors.navigationRaised(isDark),
@@ -637,6 +751,10 @@ class SpaceTree extends StatelessWidget {
     final iconColor = isDark ? Colors.white70 : Colors.black87;
     void select(String action) {
       switch (action) {
+        case 'pin':
+        case 'unpin':
+          unawaited(onSetSpacePinned?.call(space, action == 'pin'));
+          break;
         case 'edit':
           unawaited(onEditSpace?.call(space));
           break;
@@ -672,6 +790,34 @@ class SpaceTree extends StatelessWidget {
           },
         ),
         menuChildren: [
+          if (canReorderPins && pinnedPosition > 0)
+            MenuItemButton(
+              style: itemStyle(),
+              leadingIcon:
+                  Icon(Icons.arrow_upward_rounded, size: 16, color: iconColor),
+              onPressed: () => _moveSpace(pinnedOrder, pinnedPosition, -1),
+              child: const Text('Move Up'),
+            ),
+          if (canReorderPins &&
+              pinnedPosition >= 0 &&
+              pinnedPosition < pinnedOrder.length - 1)
+            MenuItemButton(
+              style: itemStyle(),
+              leadingIcon: Icon(Icons.arrow_downward_rounded,
+                  size: 16, color: iconColor),
+              onPressed: () => _moveSpace(pinnedOrder, pinnedPosition, 1),
+              child: const Text('Move Down'),
+            ),
+          if (onSetSpacePinned != null)
+            MenuItemButton(
+              style: itemStyle(),
+              leadingIcon: Icon(
+                  space.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                  size: 16,
+                  color: iconColor),
+              onPressed: () => select(space.isPinned ? 'unpin' : 'pin'),
+              child: Text(space.isPinned ? 'Unpin Space' : 'Pin Space'),
+            ),
           MenuItemButton(
             style: itemStyle(),
             leadingIcon: Icon(Icons.edit_outlined, size: 16, color: iconColor),
@@ -706,15 +852,37 @@ class SpaceTree extends StatelessWidget {
     );
   }
 
-  void _moveThread(AxSpace space, List<String> order, int position, int delta) {
+  void _moveThread(AxSpace space, List<String> order, List<String> group,
+      int position, int delta, bool pinned) {
+    if (pinned) {
+      final next = [...group];
+      next.insert(position + delta, next.removeAt(position));
+      unawaited(onReorderPinnedThreads!(space, next));
+      return;
+    }
+    // Swap with the neighbouring unpinned Thread inside the full shared order.
+    final next = [...order];
+    final a = next.indexOf(group[position]);
+    final b = next.indexOf(group[position + delta]);
+    final moved = next[a];
+    next[a] = next[b];
+    next[b] = moved;
+    unawaited(onReorderThreads!(space, next).catchError((Object _) {}));
+  }
+
+  void _moveSpace(List<String> order, int position, int delta) {
     final next = [...order];
     next.insert(position + delta, next.removeAt(position));
-    unawaited(onReorderThreads!(space, next).catchError((Object _) {}));
+    unawaited(onReorderPinnedSpaces!(next));
   }
 
   void _handleThreadMenuItem(
       BuildContext context, AxSpace space, AxThread thread, String action) {
     switch (action) {
+      case 'pin':
+      case 'unpin':
+        unawaited(onSetThreadPinned?.call(thread, action == 'pin'));
+        break;
       case 'rename':
         unawaited(_showRenameDialog(context, thread));
         break;
@@ -897,22 +1065,8 @@ class SpaceTree extends StatelessWidget {
     switch (status.toLowerCase()) {
       case 'running':
       case 'executing':
-        return Container(
-          width: 6.5,
-          height: 6.5,
-          decoration: BoxDecoration(
-            color: ConclaveColors.primaryForegroundDark,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color:
-                    ConclaveColors.primaryForegroundDark.withValues(alpha: 0.4),
-                blurRadius: 4,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-        );
+        return const SidebarActivityIndicators(
+            running: true, unread: false, gap: 0);
       case 'queued':
       case 'ready':
       case 'scheduled':
@@ -1037,60 +1191,122 @@ class ConclaveFolderIcon extends StatelessWidget {
   }
 }
 
-/// Sidebar activity markers share one dot: solid for unread messages, and a
-/// slow, faint fade in and out while Work is running, so it stays in the
-/// periphery. Both are exposed to assistive technology.
-class _ActivityIndicators extends StatefulWidget {
-  const _ActivityIndicators({required this.running, required this.unread});
-  final bool running;
-  final bool unread;
+/// One clock per sidebar, so newly mounted dots join the current pulse.
+class SidebarPulse extends StatefulWidget {
+  const SidebarPulse({super.key, required this.child});
+  final Widget child;
 
   @override
-  State<_ActivityIndicators> createState() => _ActivityIndicatorsState();
+  State<SidebarPulse> createState() => _SidebarPulseState();
 }
 
-class _ActivityIndicatorsState extends State<_ActivityIndicators>
+class _SidebarPulseState extends State<SidebarPulse>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 2800));
+  late final AnimationController _controller;
+  late final Animation<double> _opacity = Tween<double>(begin: 0.4, end: 1)
+      .chain(CurveTween(curve: Curves.easeInOut))
+      .animate(_controller);
+
+  int _users = 0;
 
   @override
   void initState() {
     super.initState();
-    _syncAnimation();
+    // Create the ticker while this State is active, including reduced motion.
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    );
   }
 
-  @override
-  void didUpdateWidget(_ActivityIndicators oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncAnimation();
+  void retain() {
+    if (_users++ == 0) _controller.repeat(reverse: true);
   }
 
-  void _syncAnimation() {
-    if (widget.running) {
-      if (!_pulse.isAnimating) _pulse.repeat(reverse: true);
-    } else {
-      _pulse.stop();
-    }
+  void release() {
+    if (--_users == 0) _controller.stop();
   }
 
   @override
   void dispose() {
-    _pulse.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _SidebarPulseScope(
+        owner: this,
+        child: widget.child,
+      );
+}
+
+class _SidebarPulseScope extends InheritedWidget {
+  const _SidebarPulseScope({required this.owner, required super.child});
+  final _SidebarPulseState owner;
+
+  @override
+  bool updateShouldNotify(_SidebarPulseScope oldWidget) =>
+      owner != oldWidget.owner;
+}
+
+/// Solid unread markers and synchronized running pulses, with accessible labels.
+/// Place under [SidebarPulse] to share its animation clock.
+class SidebarActivityIndicators extends StatefulWidget {
+  const SidebarActivityIndicators(
+      {super.key, required this.running, required this.unread, this.gap = 8});
+  final bool running;
+  final bool unread;
+  final double gap;
+
+  @override
+  State<SidebarActivityIndicators> createState() => _ActivityIndicatorsState();
+}
+
+class _ActivityIndicatorsState extends State<SidebarActivityIndicators> {
+  _SidebarPulseState? _owner;
+
+  void _syncClock() {
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    final next = widget.running && !reduceMotion
+        ? context
+            .dependOnInheritedWidgetOfExactType<_SidebarPulseScope>()!
+            .owner
+        : null;
+    if (identical(next, _owner)) return;
+    _owner?.release();
+    _owner = next;
+    _owner?.retain();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncClock();
+  }
+
+  @override
+  void didUpdateWidget(SidebarActivityIndicators oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncClock();
+  }
+
+  @override
+  void dispose() {
+    _owner?.release();
     super.dispose();
   }
 
   Widget _dot(Key key, String label, Widget Function(Widget dot) wrap) {
     return Padding(
-      padding: const EdgeInsets.only(left: 8),
+      padding: EdgeInsets.only(left: widget.gap),
       child: Semantics(
         label: label,
         child: Tooltip(
           message: label,
           child: wrap(Container(
             key: key,
-            width: 7,
-            height: 7,
+            width: 9,
+            height: 9,
             decoration: const BoxDecoration(
               color: ConclaveBrand.accent,
               shape: BoxShape.circle,
@@ -1115,9 +1331,7 @@ class _ActivityIndicatorsState extends State<_ActivityIndicators>
             (dot) => reduceMotion
                 ? Opacity(opacity: 0.4, child: dot)
                 : FadeTransition(
-                    opacity: Tween<double>(begin: 0.12, end: 0.55).animate(
-                        CurvedAnimation(
-                            parent: _pulse, curve: Curves.easeInOut)),
+                    opacity: _owner!._opacity,
                     child: dot,
                   ),
           ),

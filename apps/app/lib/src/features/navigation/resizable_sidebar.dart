@@ -12,7 +12,7 @@ class ResizableSidebar extends StatefulWidget {
     required this.child,
   });
 
-  static const minWidth = 200.0;
+  static const minWidth = 220.0;
   static const maxWidth = 300.0;
   final double width;
   final ValueChanged<double> onWidthChanged;
@@ -26,7 +26,7 @@ class _ResizableSidebarState extends State<ResizableSidebar> {
   bool _hovered = false;
   double _dragStartX = 0;
   double _dragStartWidth = 0;
-  double get width => widget.width;
+  double get width => widget.width.clamp(minWidth, maxWidth).toDouble();
   static const minWidth = ResizableSidebar.minWidth;
   static const maxWidth = ResizableSidebar.maxWidth;
 

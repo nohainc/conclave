@@ -5,6 +5,62 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final brightness in Brightness.values) {
+    for (final toolbarSend in [false, true]) {
+      testWidgets(
+          'composer control colors $brightness toolbarSend=$toolbarSend',
+          (tester) async {
+        final controller = TextEditingController(text: 'Draft');
+        addTearDown(controller.dispose);
+        final theme = ThemeData(brightness: brightness);
+        await tester.pumpWidget(MaterialApp(
+          theme: theme,
+          home: Scaffold(
+              body: MarkdownComposer(
+            controller: controller,
+            chatStyle: true,
+            sendInToolbar: toolbarSend,
+            additionalControlsBuilder:
+                toolbarSend ? (_) => const Text("Options") : null,
+            showMarkdownControlsInSuffix: !toolbarSend,
+            onSend: () {},
+          )),
+        ));
+        void expectControls(String toggle) {
+          final icon = tester.widget<Icon>(find.descendant(
+              of: find.byTooltip(toggle), matching: find.byType(Icon)));
+          expect(icon.color, theme.colorScheme.onSurface);
+          final send = tester.widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.send_rounded));
+          expect(send.color, theme.colorScheme.onSurface);
+          expect(find.byType(Divider), findsNothing);
+        }
+
+        expectControls('Show Markdown controls');
+        await tester.tap(find.byTooltip('Show Markdown controls'));
+        await tester.pump();
+        expectControls('Hide Markdown controls');
+        expect(
+            tester
+                .widget<IconButton>(
+                    find.widgetWithIcon(IconButton, Icons.format_bold))
+                .color,
+            theme.colorScheme.onSurface);
+        final preview = tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Preview'));
+        expect(preview.style?.foregroundColor?.resolve({}),
+            theme.colorScheme.onSurface);
+        await tester.tap(find.text('Preview'));
+        await tester.pump();
+        final write =
+            tester.widget<TextButton>(find.widgetWithText(TextButton, 'Write'));
+        expect(write.style?.foregroundColor?.resolve({}),
+            theme.colorScheme.onSurface);
+        expect(find.byType(Divider), findsNothing);
+      });
+    }
+  }
+
   testWidgets(
       'toolbar Send stays visible on narrow screens while typing remains enabled',
       (tester) async {
@@ -101,34 +157,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('two-pane Chat puts Markdown and Send in the secondary row',
+  testWidgets('two-pane toolbar keeps Send at the right in Write and Preview',
       (tester) async {
-    final controller = TextEditingController();
+    final controller = TextEditingController(text: '**Draft**');
     addTearDown(controller.dispose);
+    var sends = 0;
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-            body: MarkdownComposer(
-      controller: controller,
-      chatStyle: true,
-      onSend: () {},
-      showMarkdownControlsInSuffix: false,
-      showSendInSuffix: false,
-    ))));
-
-    expect(
-        find.descendant(
-            of: find.byType(TextField),
-            matching: find.byTooltip('Show Markdown controls')),
-        findsNothing);
-    expect(
-        find.descendant(
-            of: find.byType(TextField),
-            matching: find.byTooltip('Send message')),
-        findsNothing);
-    expect(find.byTooltip('Show Markdown controls'), findsOneWidget);
-    expect(find.byTooltip('Send message'), findsOneWidget);
-    expect(tester.getCenter(find.byTooltip('Show Markdown controls')).dy,
-        closeTo(tester.getCenter(find.byTooltip('Send message')).dy, 1));
+            body: SizedBox(
+                width: 460,
+                child: MarkdownComposer(
+                  controller: controller,
+                  chatStyle: true,
+                  onSend: () => sends++,
+                  showMarkdownControls: false,
+                  showMarkdownControlsInSuffix: false,
+                  showSendInSuffix: false,
+                  sendInFormattingToolbar: true,
+                )))));
+    expect(find.byTooltip('Show Markdown controls'), findsNothing);
+    expect(find.byTooltip('Hide Markdown controls'), findsNothing);
+    expect(find.byTooltip('Bold'), findsOneWidget);
+    for (final mode in ['Preview', 'Write']) {
+      expect(find.byTooltip('Send message'), findsOneWidget);
+      expect(tester.getCenter(find.byTooltip('Send message')).dy,
+          closeTo(tester.getCenter(find.text(mode)).dy, 1));
+      expect(
+          tester
+              .getRect(find.widgetWithIcon(IconButton, Icons.send_rounded))
+              .right,
+          closeTo(454, 1));
+      await tester.tap(find.text(mode));
+      await tester.pump();
+    }
+    await tester.tap(find.byTooltip('Send message'));
+    expect(sends, 1);
+    expect(controller.text, '**Draft**');
+    expect(tester.takeException(), isNull);
   });
 
   test('empty selections, multiline prefixes and quote toggle', () {

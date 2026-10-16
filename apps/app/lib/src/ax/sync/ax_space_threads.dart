@@ -27,6 +27,74 @@ class AxSpaceThreads {
     return engine.refresh(query(spaceId));
   }
 
+  /// Pins or unpins for the signed-in user. The list changes first and is put
+  /// back when Cloud rejects the change.
+  Future<void> setPinned(String spaceId, String threadId, bool pinned) async {
+    final source = this.source;
+    if (source is! AxPinDataSource) return;
+    final key = query(spaceId);
+    final before = engine.peek(key).data;
+    if (before == null) return;
+    final stamp = pinned ? DateTime.now().toUtc().toIso8601String() : '';
+    final top = nextAxPinPosition(
+        [for (final t in before) if (t.isPinned) t.pinPosition]);
+    engine.update(
+        key,
+        (state) => List.unmodifiable([
+              for (final t in state.data ?? const <AxThread>[])
+                t.id == threadId
+                    ? t.copyWith(pinnedAt: stamp, pinPosition: pinned ? top : 0)
+                    : t
+            ]),
+        fenceReads: false);
+    try {
+      await (source as AxPinDataSource)
+          .setPinned(kind: 'thread', id: threadId, pinned: pinned);
+    } catch (_) {
+      engine.update(
+          key,
+          (state) => List.unmodifiable([
+                for (final t in state.data ?? const <AxThread>[])
+                  t.id == threadId
+                      ? t.copyWith(
+                          pinnedAt: before
+                                  .where((b) => b.id == threadId)
+                                  .firstOrNull
+                                  ?.pinnedAt ??
+                              '')
+                      : t
+              ]),
+          fenceReads: false);
+      rethrow;
+    }
+  }
+
+  /// Stores the user's order of pinned Threads (first to last).
+  Future<void> setPinOrder(String spaceId, List<String> orderedIds) async {
+    final source = this.source;
+    if (source is! AxPinDataSource) return;
+    final key = query(spaceId);
+    final before = engine.peek(key).data;
+    if (before == null) return;
+    final rank = {for (final e in orderedIds.asMap().entries) e.value: e.key};
+    engine.update(
+        key,
+        (state) => List.unmodifiable([
+              for (final t in state.data ?? const <AxThread>[])
+                rank.containsKey(t.id)
+                    ? t.copyWith(pinPosition: rank[t.id])
+                    : t
+            ]),
+        fenceReads: false);
+    try {
+      await (source as AxPinDataSource)
+          .setPinOrder(kind: 'thread', ids: orderedIds, spaceId: spaceId);
+    } catch (_) {
+      engine.update(key, (_) => before, fenceReads: false);
+      rethrow;
+    }
+  }
+
   /// Clears the indicator locally first; the server marker follows and also
   /// clears it for the user's other sessions. Failures leave the next list
   /// read to restore the authoritative flag.

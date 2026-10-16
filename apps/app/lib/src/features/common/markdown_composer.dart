@@ -92,7 +92,9 @@ class MarkdownComposer extends StatefulWidget {
       this.executionControlsBuilder,
       this.sendEnabled = true,
       this.sendInToolbar = false,
+      this.sendInFormattingToolbar = false,
       this.sendTooltip = 'Send message',
+      this.showSendTooltip = true,
       this.compact = false,
       this.chatStyle = false,
       this.autofocus = false,
@@ -112,7 +114,11 @@ class MarkdownComposer extends StatefulWidget {
   final Widget Function(GlobalKey inputKey)? executionControlsBuilder;
   final bool sendEnabled;
   final bool sendInToolbar;
+  final bool sendInFormattingToolbar;
   final String sendTooltip;
+
+  /// Hide the hover hint while retaining the send action’s semantic label.
+  final bool showSendTooltip;
   final bool compact;
   final bool chatStyle;
   final bool autofocus;
@@ -187,6 +193,8 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
       widget.chatStyle &&
       (_showFormatting || _preview || !widget.showMarkdownControlsInSuffix);
 
+  Color get _controlColor => Theme.of(context).colorScheme.onSurface;
+
   Widget _formattingToolbar() =>
       Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
         for (final (format, label, icon) in const [
@@ -211,13 +219,37 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
         ])
           IconButton(
               tooltip: label,
+              color: _controlColor,
               iconSize: 18,
-              visualDensity: VisualDensity.compact,
+              style: widget.sendInFormattingToolbar
+                  ? IconButton.styleFrom(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap)
+                  : null,
+              visualDensity: widget.sendInFormattingToolbar
+                  ? VisualDensity.standard
+                  : VisualDensity.compact,
+              constraints: widget.sendInFormattingToolbar
+                  ? const BoxConstraints.tightFor(width: 28, height: 32)
+                  : null,
+              padding: widget.sendInFormattingToolbar
+                  ? const EdgeInsets.all(4)
+                  : const EdgeInsets.all(8),
               onPressed:
                   widget.enabled && !_preview ? () => _format(format) : null,
               icon: Icon(icon)),
         if (widget.chatStyle)
           TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: _controlColor,
+              padding: widget.sendInFormattingToolbar
+                  ? const EdgeInsets.symmetric(horizontal: 8)
+                  : null,
+              minimumSize:
+                  widget.sendInFormattingToolbar ? const Size(0, 32) : null,
+              tapTargetSize: widget.sendInFormattingToolbar
+                  ? MaterialTapTargetSize.shrinkWrap
+                  : null,
+            ),
             onPressed: () => setState(() => _preview = !_preview),
             child: Text(_preview ? 'Write' : 'Preview'),
           ),
@@ -231,30 +263,30 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
             icon: Icon(
               Icons.text_format,
               size: 18,
-              color: _showFormatting
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
+              color: _controlColor,
             ),
             onPressed: () => setState(() => _showFormatting = !_showFormatting),
           ),
         if (widget.chatStyle &&
             widget.onSend != null &&
             !widget.sendInToolbar &&
+            !widget.sendInFormattingToolbar &&
             (!widget.showSendInSuffix || _preview))
           IconButton(
-            tooltip: widget.sendTooltip,
+            key: ValueKey('composer-send-${widget.sendTooltip}'),
+            tooltip: widget.showSendTooltip ? widget.sendTooltip : null,
             onPressed:
                 widget.enabled && widget.sendEnabled ? widget.onSend : null,
-            color: Theme.of(context).colorScheme.primary,
-            icon: const Icon(Icons.send_rounded, size: 18),
+            color: _controlColor,
+            icon: Icon(Icons.send_rounded,
+                size: 18,
+                semanticLabel:
+                    widget.showSendTooltip ? null : widget.sendTooltip),
           ),
       ]);
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     final inputContent = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -296,6 +328,12 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
               decoration: InputDecoration(
                 labelText: widget.labelText,
                 hintText: widget.hintText,
+                // Same muted color as the message date/time.
+                hintStyle: TextStyle(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white38
+                      : Colors.black45,
+                ),
                 isDense: widget.chatStyle,
                 hoverColor: Colors.transparent,
                 contentPadding: widget.chatStyle
@@ -319,9 +357,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                               icon: Icon(
                                 Icons.text_format,
                                 size: 18,
-                                color: _showFormatting
-                                    ? colorScheme.primary
-                                    : null,
+                                color: _controlColor,
                               ),
                               onPressed: () => setState(
                                   () => _showFormatting = !_showFormatting),
@@ -330,12 +366,20 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                               !widget.sendInToolbar &&
                               widget.showSendInSuffix)
                             IconButton(
-                              tooltip: widget.sendTooltip,
+                              key: ValueKey(
+                                  'composer-send-${widget.sendTooltip}'),
+                              tooltip: widget.showSendTooltip
+                                  ? widget.sendTooltip
+                                  : null,
                               onPressed: widget.enabled && widget.sendEnabled
                                   ? widget.onSend
                                   : null,
-                              color: colorScheme.primary,
-                              icon: const Icon(Icons.send_rounded, size: 18),
+                              color: _controlColor,
+                              icon: Icon(Icons.send_rounded,
+                                  size: 18,
+                                  semanticLabel: widget.showSendTooltip
+                                      ? null
+                                      : widget.sendTooltip),
                             ),
                         ],
                       )
@@ -365,14 +409,34 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
             (_showFormatting ||
                 _preview ||
                 !widget.showMarkdownControlsInSuffix)) ...[
-          Divider(
-            height: 1,
-            thickness: 1,
-            color: colorScheme.outlineVariant.withValues(alpha: 0.5),
-          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
-            child: _formattingToolbar(),
+            padding: widget.sendInFormattingToolbar
+                ? const EdgeInsets.symmetric(horizontal: 6)
+                : const EdgeInsets.fromLTRB(6, 2, 6, 4),
+            child: widget.sendInFormattingToolbar
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(child: _formattingToolbar()),
+                      if (widget.onSend != null)
+                        IconButton(
+                          key: ValueKey('composer-send-${widget.sendTooltip}'),
+                          tooltip: widget.showSendTooltip
+                              ? widget.sendTooltip
+                              : null,
+                          onPressed: widget.enabled && widget.sendEnabled
+                              ? widget.onSend
+                              : null,
+                          color: _controlColor,
+                          icon: Icon(Icons.send_rounded,
+                              size: 18,
+                              semanticLabel: widget.showSendTooltip
+                                  ? null
+                                  : widget.sendTooltip),
+                        ),
+                    ],
+                  )
+                : _formattingToolbar(),
           ),
         ],
       ],
@@ -382,96 +446,107 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
       Theme.of(context).brightness == Brightness.dark,
     );
 
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      padding: EdgeInsets.all(widget.chatStyle
-          ? 0
-          : widget.compact
-              ? 6
-              : 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (!widget.chatStyle)
-            Row(children: [
-              TextButton(
-                  onPressed: () => setState(() => _preview = false),
-                  child: Text('Write',
-                      style: TextStyle(
-                          fontWeight: !_preview ? FontWeight.bold : null))),
-              TextButton(
-                  onPressed: () => setState(() => _preview = true),
-                  child: Text('Preview',
-                      style: TextStyle(
-                          fontWeight: _preview ? FontWeight.bold : null))),
-              const Spacer(),
-              Tooltip(
-                message: 'Thread content is GitHub-Flavored Markdown source.',
-                child: Text('Markdown',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        )),
-              ),
-            ]),
-          if (!widget.chatStyle && !_preview) _formattingToolbar(),
-          inputContent,
-          if (widget.chatStyle &&
-              widget.sendInToolbar &&
-              widget.executionControlsBuilder != null &&
-              widget.additionalControlsBuilder != null)
-            widget.additionalControlsBuilder!(_inputKey),
-          if (widget.chatStyle &&
-              widget.sendInToolbar &&
-              (widget.executionControlsBuilder != null ||
-                  widget.additionalControlsBuilder != null ||
-                  !_secondaryToolbarVisible))
-            Row(children: [
-              if (widget.executionControlsBuilder != null)
-                Expanded(child: widget.executionControlsBuilder!(_inputKey))
-              else if (widget.additionalControlsBuilder != null)
-                Expanded(child: widget.additionalControlsBuilder!(_inputKey))
-              else
+    return IconTheme.merge(
+      data: IconThemeData(color: _controlColor),
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        padding: EdgeInsets.all(widget.chatStyle
+            ? 0
+            : widget.compact
+                ? 6
+                : 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!widget.chatStyle)
+              Row(children: [
+                TextButton(
+                    onPressed: () => setState(() => _preview = false),
+                    child: Text('Write',
+                        style: TextStyle(
+                            fontWeight: !_preview ? FontWeight.bold : null))),
+                TextButton(
+                    onPressed: () => setState(() => _preview = true),
+                    child: Text('Preview',
+                        style: TextStyle(
+                            fontWeight: _preview ? FontWeight.bold : null))),
                 const Spacer(),
-              if (widget.onSend != null)
-                IconButton(
-                  tooltip: widget.sendTooltip,
-                  onPressed: widget.enabled && widget.sendEnabled
-                      ? widget.onSend
-                      : null,
-                  color: Theme.of(context).colorScheme.primary,
-                  icon: const Icon(Icons.send_rounded, size: 18),
+                Tooltip(
+                  message: 'Thread content is GitHub-Flavored Markdown source.',
+                  child: Text('Markdown',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          )),
                 ),
-            ])
-          else if (widget.additionalControlsBuilder != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-              child: widget.additionalControlsBuilder!(_inputKey),
-            ),
-          if (!widget.chatStyle &&
-              (widget.onSend != null || widget.onSubmit != null))
-            Row(children: [
-              Text(
-                widget.onSend != null && widget.onSubmit == null
-                    ? 'Enter to send · Shift+Enter for a new line'
-                    : '${Theme.of(context).platform == TargetPlatform.macOS || Theme.of(context).platform == TargetPlatform.iOS ? '⌘' : 'Ctrl+'} Enter to save',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+              ]),
+            if (!widget.chatStyle && !_preview) _formattingToolbar(),
+            inputContent,
+            if (widget.chatStyle &&
+                widget.sendInToolbar &&
+                widget.executionControlsBuilder != null &&
+                widget.additionalControlsBuilder != null)
+              widget.additionalControlsBuilder!(_inputKey),
+            if (widget.chatStyle &&
+                widget.sendInToolbar &&
+                (widget.executionControlsBuilder != null ||
+                    widget.additionalControlsBuilder != null ||
+                    !_secondaryToolbarVisible))
+              Row(children: [
+                if (widget.executionControlsBuilder != null)
+                  Expanded(child: widget.executionControlsBuilder!(_inputKey))
+                else if (widget.additionalControlsBuilder != null)
+                  Expanded(child: widget.additionalControlsBuilder!(_inputKey))
+                else
+                  const Spacer(),
+                if (widget.onSend != null && !widget.sendInFormattingToolbar)
+                  IconButton(
+                    key: ValueKey('composer-send-${widget.sendTooltip}'),
+                    tooltip: widget.showSendTooltip ? widget.sendTooltip : null,
+                    onPressed: widget.enabled && widget.sendEnabled
+                        ? widget.onSend
+                        : null,
+                    color: _controlColor,
+                    icon: Icon(Icons.send_rounded,
+                        size: 18,
+                        semanticLabel:
+                            widget.showSendTooltip ? null : widget.sendTooltip),
+                  ),
+              ])
+            else if (widget.additionalControlsBuilder != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+                child: widget.additionalControlsBuilder!(_inputKey),
               ),
-              const Spacer(),
-              if (widget.onSend != null)
-                IconButton(
-                  tooltip: widget.sendTooltip,
-                  onPressed: widget.onSend,
-                  icon: const Icon(Icons.send_rounded),
+            if (!widget.chatStyle &&
+                (widget.onSend != null || widget.onSubmit != null))
+              Row(children: [
+                Text(
+                  widget.onSend != null && widget.onSubmit == null
+                      ? 'Enter to send · Shift+Enter for a new line'
+                      : '${Theme.of(context).platform == TargetPlatform.macOS || Theme.of(context).platform == TargetPlatform.iOS ? '⌘' : 'Ctrl+'} Enter to save',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                 ),
-            ]),
-        ],
+                const Spacer(),
+                if (widget.onSend != null && !widget.sendInFormattingToolbar)
+                  IconButton(
+                    key: ValueKey('composer-send-${widget.sendTooltip}'),
+                    tooltip: widget.showSendTooltip ? widget.sendTooltip : null,
+                    onPressed: widget.onSend,
+                    icon: Icon(Icons.send_rounded,
+                        semanticLabel:
+                            widget.showSendTooltip ? null : widget.sendTooltip),
+                  ),
+              ]),
+          ],
+        ),
       ),
     );
   }

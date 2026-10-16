@@ -8,3 +8,5 @@ export 'src/brand_assets.dart';
 export 'src/brand_theme.dart';
 
 export 'src/model_effort_selector.dart';
+
+export 'src/menu_style.dart';

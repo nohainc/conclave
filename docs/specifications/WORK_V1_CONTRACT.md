@@ -42,14 +42,37 @@ efforts. For a one-step Workflow, the composer may temporarily override Worker,
 model, and effort for the current request; those choices are never written to
 Space or user Workflow settings.
 
+The Space landing page renders an empty Thread view. Its optional Space
+description appears at the top, followed by an optional Thread name field.
+Chat/Work tab controls sit immediately above their inputs, leaving the unused
+history area blank. The name field contains a Create Thread action, enabled
+only for a nonempty trimmed name and the existing create permission. This
+creates and opens the Thread without sending a message. Entered names are
+limited to 22 displayed characters. Merely opening the page does not create a
+Thread or read history for a draft identity. The first Chat/Work
+submission creates a Thread through the existing collaboration mutation before
+sending through the existing discussion/Work request APIs. The Thread name is
+taken from the name field when populated, otherwise formed from complete
+opening words, at most 22 displayed characters, with the
+first word truncated only when it alone exceeds that limit. A failed creation
+preserves the draft; a failed submission after creation retries in the same
+Thread. While creation/submission is pending, both send actions are guarded.
+The resulting Thread opens on the submitting tab and retains the other text draft.
+
 Thread content is capped at 800 logical pixels per pane. At available widths
 of 1000 pixels or more, Chat and Work appear side by side with a vertical divider;
 smaller windows use the Chat/Work tabs. Both layouts use the same tab controls.
+Active tab labels and indicators use the theme text color; inactive labels use
+the message timestamp color (white at 38% in dark mode, black at 45% in light mode).
 Each pane has 20 pixels of side and bottom padding and no top padding. The
 vertical divider uses the inactive navigation background color and is inset
 20 pixels from the top and bottom. Both panes keep their composers fixed.
-In the two-pane layout, Chat reserves space below its composer to align the
-send controls with Work's composer and additional controls.
+In the two-pane layout, Chat shows Markdown formatting controls without a
+visibility toggle and places Send at the right of that toolbar. Compact
+formatting controls keep the toolbar on one row at the two-pane breakpoint. Work keeps its
+Markdown controls hidden and places Send beside its execution controls. Both
+composers use theme text colors for controls and size independently; neither
+pane reserves space to match the other.
 
 The canonical values remain strings:
 

@@ -13,6 +13,7 @@ const executionErrorCodes = <String>{
   'timeout',
   'cancelled',
   'execution_failed',
+  'context_limit_exceeded',
 };
 const executionErrorMessages = <String, String>{
   'worker_not_ready': 'The selected Worker is not ready on its Workspace.',
@@ -27,6 +28,7 @@ const executionErrorMessages = <String, String>{
   'timeout': 'The assignment exceeded its time limit.',
   'cancelled': 'The assignment was cancelled.',
   'execution_failed': 'The assignment could not be completed.',
+  'context_limit_exceeded': 'This conversation exceeds the supported context limit. Start a new Thread with the relevant context.',
 };
 
 const workspaceRuntimeProtocolSchemaName = 'conclave.workspace-runtime-protocol';

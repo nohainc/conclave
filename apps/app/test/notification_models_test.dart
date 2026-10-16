@@ -114,4 +114,76 @@ void main() {
     expect(notifications[3].target, AxNotificationTarget.space);
     expect(notifications[3].kind, AxNotificationKind.spaceInvitationReceived);
   });
+
+  test('finished and failed Work Requests notify on their Thread', () {
+    final done = notificationFromRealtimeEvent({
+      'eventId': 'e-done',
+      'type': 'work_request.completed',
+      'spaceId': 'space-1',
+      'payload': {'workRequestId': 'wr-1', 'threadId': 'thread-1'},
+    });
+    expect(done!.kind, AxNotificationKind.threadCompleted);
+    expect(done.target, AxNotificationTarget.thread);
+    expect(done.threadId, 'thread-1');
+    final failed = notificationFromRealtimeEvent({
+      'eventId': 'e-fail',
+      'type': 'work_request.failed',
+      'spaceId': 'space-1',
+      'payload': {'threadId': 'thread-1'},
+    });
+    expect(failed!.kind, AxNotificationKind.threadFailed);
+    expect(failed.priority, AxNotificationPriority.high);
+    expect(isMeaningfulRealtimeNotification('work_request.completed'), isTrue);
+    expect(notificationFromRealtimeEvent({'type': 'work_request.started'}),
+        isNull);
+  });
+
+  test('feed items share ids with live events and keep read state', () {
+    final feed = notificationsFromFeed([
+      {
+        'id': 'wr-1',
+        'type': 'work_request.completed',
+        'spaceId': 'space-1',
+        'threadId': 'thread-1',
+        'timestamp': '2026-10-01T10:00:00Z',
+        'read': true,
+      },
+      {
+        'id': 'wr-2',
+        'type': 'work_request.failed',
+        'spaceId': 'space-1',
+        'threadId': 'thread-2',
+        'timestamp': '2026-10-01T11:00:00Z',
+        'read': false,
+      },
+    ]);
+    expect(feed.map((n) => n.id), ['work-request:wr-1', 'work-request:wr-2']);
+    expect(feed.map((n) => n.read), [true, false]);
+    final live = notificationFromRealtimeEvent({
+      'eventId': 'other',
+      'type': 'work_request.completed',
+      'payload': {'workRequestId': 'wr-1', 'threadId': 'thread-1'},
+    });
+    expect(live!.id, feed.first.id);
+  });
+
+  test('your own successful Work is not announced, failures are', () {
+    Map<String, dynamic> event(String type) => {
+          'eventId': type,
+          'type': type,
+          'payload': {'threadId': 't', 'requestedByUserId': 'me'},
+        };
+    expect(
+        notificationFromRealtimeEvent(event('work_request.completed'),
+            viewerId: 'me'),
+        isNull);
+    expect(
+        notificationFromRealtimeEvent(event('work_request.completed'),
+            viewerId: 'other'),
+        isNotNull);
+    expect(
+        notificationFromRealtimeEvent(event('work_request.failed'),
+            viewerId: 'me'),
+        isNotNull);
+  });
 }

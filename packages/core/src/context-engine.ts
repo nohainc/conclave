@@ -1,5 +1,13 @@
 import type { ConversationHistoryKind } from "./conversation.js";
 
+/** A valid canonical snapshot cannot fit the supported context transport. */
+export class ContextLimitError extends Error {
+  constructor(message = "Context exceeds the byte limit") {
+    super(message);
+    this.name = "ContextLimitError";
+  }
+}
+
 export interface ContextFact<T = string> {
   readonly revision: number;
   readonly sequence: number;
@@ -434,6 +442,6 @@ export class ContextEngine {
       maxBytes < 1 ||
       new TextEncoder().encode(JSON.stringify(document)).byteLength > maxBytes
     )
-      throw new Error("Context exceeds the byte limit");
+      throw new ContextLimitError();
   }
 }

@@ -292,6 +292,8 @@ class AxThread {
     this.creatorIsOwner = true,
     this.hasActiveWork = false,
     this.hasUnread = false,
+    this.pinnedAt = '',
+    this.pinPosition = 0,
     this.createdAt = '',
     this.updatedAt = '',
   });
@@ -323,6 +325,13 @@ class AxThread {
   /// Server-derived for the signed-in user; never persisted in the read cache.
   final bool hasActiveWork;
   final bool hasUnread;
+
+  /// When the signed-in user pinned this item; empty when not pinned.
+  final String pinnedAt;
+  bool get isPinned => pinnedAt.isNotEmpty;
+
+  /// The user's manual pin order; lower comes first.
+  final int pinPosition;
   final String createdAt;
   final String updatedAt;
 
@@ -334,7 +343,9 @@ class AxThread {
           String? status,
           Map<String, dynamic>? workConfig,
           Map<String, dynamic>? viewState,
-          bool? hasUnread}) =>
+          bool? hasUnread,
+          String? pinnedAt,
+          int? pinPosition}) =>
       AxThread(
           id: id,
           spaceId: spaceId,
@@ -357,6 +368,8 @@ class AxThread {
           creatorIsOwner: creatorIsOwner,
           hasActiveWork: hasActiveWork,
           hasUnread: hasUnread ?? this.hasUnread,
+          pinnedAt: pinnedAt ?? this.pinnedAt,
+          pinPosition: pinPosition ?? this.pinPosition,
           createdAt: createdAt,
           updatedAt: updatedAt,
           canConfigureWork: canConfigureWork,
@@ -386,6 +399,8 @@ class AxThread {
         creatorIsOwner: json['creatorIsOwner'] != false,
         hasActiveWork: json['hasActiveWork'] == true,
         hasUnread: json['hasUnread'] == true,
+        pinnedAt: _string(json, 'pinnedAt', ''),
+        pinPosition: (json['pinPosition'] as num?)?.toInt() ?? 0,
         createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
         updatedAt: _string(json, 'updatedAt', _string(json, 'updated_at')),
       );
@@ -551,6 +566,27 @@ List<AxThread> applyAxThreadOrder(List<AxThread> sorted, Object? storedOrder) {
   return [...unlisted, ...listed];
 }
 
+/// Manual pin order, then the most recently pinned first.
+int compareAxPins(dynamic a, dynamic b) {
+  final byPosition = (a.pinPosition as int).compareTo(b.pinPosition as int);
+  return byPosition != 0
+      ? byPosition
+      : (b.pinnedAt as String).compareTo(a.pinnedAt as String);
+}
+
+/// The position that puts a new pin above all current ones.
+int nextAxPinPosition(Iterable<int> current) =>
+    current.isEmpty ? 0 : current.reduce((a, b) => a < b ? a : b) - 1;
+
+/// Pinned Threads first (most recently pinned on top), everything else in the
+/// given order. Archived Threads ignore pins.
+List<AxThread> applyAxThreadPins(List<AxThread> ordered) {
+  bool pinned(AxThread t) => t.isPinned && t.status.toLowerCase() != 'archived';
+  final pins = ordered.where(pinned).toList()..sort(compareAxPins);
+  if (pins.isEmpty) return ordered;
+  return [...pins, ...ordered.where((t) => !pinned(t))];
+}
+
 class AxSpace {
   const AxSpace({
     required this.id,
@@ -566,6 +602,8 @@ class AxSpace {
     this.permissions,
     this.hasActiveWork = false,
     this.hasUnread = false,
+    this.pinnedAt = '',
+    this.pinPosition = 0,
   });
 
   final String id;
@@ -583,6 +621,13 @@ class AxSpace {
   /// Server-derived for the signed-in user across all of the Space's Threads.
   final bool hasActiveWork;
   final bool hasUnread;
+
+  /// When the signed-in user pinned this item; empty when not pinned.
+  final String pinnedAt;
+  bool get isPinned => pinnedAt.isNotEmpty;
+
+  /// The user's manual pin order; lower comes first.
+  final int pinPosition;
   AxSpacePermissions get effectivePermissions => role == 'owner'
       ? AxSpacePermissions.forRole(role)
       : permissions ?? AxSpacePermissions.forRole(role);
@@ -617,6 +662,8 @@ class AxSpace {
             : const {},
         hasActiveWork: json['hasActiveWork'] == true,
         hasUnread: json['hasUnread'] == true,
+        pinnedAt: _string(json, 'pinnedAt', ''),
+        pinPosition: (json['pinPosition'] as num?)?.toInt() ?? 0,
       );
 
   AxSpace copyWith({
@@ -630,6 +677,10 @@ class AxSpace {
     bool? archived,
     String? role,
     Map<String, dynamic>? settings,
+    String? pinnedAt,
+    bool? hasActiveWork,
+    bool? hasUnread,
+    int? pinPosition,
   }) =>
       AxSpace(
         id: id ?? this.id,
@@ -643,8 +694,10 @@ class AxSpace {
         role: role ?? this.role,
         settings: settings ?? this.settings,
         permissions: permissions,
-        hasActiveWork: hasActiveWork,
-        hasUnread: hasUnread,
+        hasActiveWork: hasActiveWork ?? this.hasActiveWork,
+        hasUnread: hasUnread ?? this.hasUnread,
+        pinnedAt: pinnedAt ?? this.pinnedAt,
+        pinPosition: pinPosition ?? this.pinPosition,
       );
 }
 

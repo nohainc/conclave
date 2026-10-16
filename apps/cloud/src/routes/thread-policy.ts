@@ -181,6 +181,8 @@ export function threadMetadata(
     queueStatus: "Idle",
     hasActiveWork: row.hasActiveWork === 1,
     hasUnread: row.hasUnread === 1,
+    pinnedAt: typeof row.pinnedAt === "string" ? row.pinnedAt : null,
+    pinPosition: typeof row.pinPosition === "number" ? row.pinPosition : 0,
     createdAt: String(row.createdAt ?? row.created_at),
     updatedAt: String(row.updatedAt ?? row.updated_at),
   };

@@ -24,6 +24,11 @@ streams, whose identity and audience are the user ID. Space streams must match
 `spaceId`. Stream identity, not the currently selected Space, governs
 sequencing and synchronization.
 
+Work Request lifecycle payloads may include optional `requestedByUserId`, the
+Cloud-read requester identity used to suppress redundant completion notices for
+the requester. This additive field is accepted on existing 1.0/1.1 envelopes;
+payloads without it remain valid. It does not change stream authorization.
+
 ## Collaboration signals
 
 | Event | Envelope IDs | Payload IDs |

@@ -11,7 +11,8 @@ const worker = WorkerSelectionCapability(id: 'worker', name: 'Worker', models: [
 ]);
 Finder picker(String label) => find.byWidgetPredicate((w) =>
     w is DropdownButtonFormField<String> &&
-    (w.key as ValueKey<String>).value.startsWith('execution-$label-'));
+        (w.key as ValueKey<String>).value.startsWith('execution-$label-') ||
+    w is MenuAnchor && w.key == ValueKey('execution-$label-menu'));
 Future<void> choose(WidgetTester tester, String label, String text) async {
   await tester.tap(picker(label));
   await tester.pumpAndSettle();
@@ -289,6 +290,66 @@ void main() {
     await tester.pumpAndSettle();
     expect(result?.model, 'two');
   });
+  for (final brightness in Brightness.values) {
+    testWidgets('compact popup uses application menu surface in $brightness',
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(brightness: brightness),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomLeft,
+            child: ModelEffortSelector(
+              compact: true,
+              catalog: const ExecutionSelectionCatalog([worker]),
+              value: const ExecutionSelection(
+                  worker: 'worker', model: 'one', effort: 'deep'),
+              onChanged: (_) {},
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.byKey(const ValueKey('execution-open')));
+      await tester.pumpAndSettle();
+      final isDark = brightness == Brightness.dark;
+      expect(
+        find.byWidgetPredicate((widget) =>
+            widget is Material &&
+            widget.color == ConclaveMenuStyle.background(isDark) &&
+            widget.shape == ConclaveMenuStyle.shape(isDark) &&
+            widget.elevation == 12 &&
+            widget.surfaceTintColor == Colors.transparent),
+        findsOneWidget,
+      );
+      final surface = find.byWidgetPredicate((widget) =>
+          widget is Material &&
+          widget.shape == ConclaveMenuStyle.shape(isDark));
+      expect(
+          tester.getBottomLeft(surface).dy,
+          closeTo(
+              tester
+                      .getTopLeft(find.byKey(const ValueKey('execution-open')))
+                      .dy -
+                  8,
+              1));
+      for (final label in ['Worker', 'Model', 'Effort']) {
+        await tester.tap(picker(label));
+        await tester.pumpAndSettle();
+        final anchor = tester.widget<MenuAnchor>(picker(label));
+        expect(
+            anchor.style?.shape?.resolve({}), ConclaveMenuStyle.shape(isDark));
+        expect(anchor.style?.backgroundColor?.resolve({}),
+            ConclaveMenuStyle.background(isDark));
+        final option = anchor.menuChildren.whereType<MenuItemButton>().last;
+        expect(option.style?.overlayColor?.resolve({WidgetState.hovered}),
+            ConclaveColors.navigationHover(isDark));
+        // Escape closes the option menu while keeping settings open.
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+        expect(find.text('Done'), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
   testWidgets('compact result can show only model and effort', (tester) async {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(

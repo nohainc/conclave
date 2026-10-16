@@ -32,6 +32,19 @@ export function isExecutionErrorCode(
 export function canonicalExecutionErrorCode(
   value: unknown,
 ): ExecutionErrorCode {
+  // These fixed Conclave errors can already be stored on tasks that failed
+  // before assignment creation. Never expose arbitrary diagnostic text.
+  if (
+    typeof value === "string" &&
+    [
+      "Context exceeds the byte limit",
+      "Conversation bootstrap exceeds the history or byte limit",
+      "Conversation bootstrap exceeds the history limit",
+      "Conversation bootstrap exceeds the byte limit",
+      "Conversation context exceeds the supported history or 256 KiB serialized byte limit. Start a new Thread with the relevant context before retrying.",
+    ].includes(value)
+  )
+    return "context_limit_exceeded";
   return isExecutionErrorCode(value) ? value : "execution_failed";
 }
 

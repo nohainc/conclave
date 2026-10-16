@@ -6,6 +6,7 @@ import {
 } from "@conclave/workspace-runtime-protocol";
 import {
   ASSIGNMENT_LIFECYCLE_STATUSES,
+  ContextLimitError,
   canTransitionAssignment,
   isRevocationAssignmentStatus,
   isTerminalAssignmentStatus,
@@ -334,14 +335,28 @@ async function dispatchWorkspaceWorkerAssignment(
     const requestId = target.workRequestId ?? task.workRequestId;
     if (!requestId)
       throw new Error("Conversation bootstrap requires a Work request");
-    bootstrap = await loadConversationBootstrap(
-      env.CONCLAVE_DB,
-      target.conversationId,
-      requestId,
-      target.baseContextRevision ?? 0,
-      sessionPolicy === "stateless" ? "stateless" : "bootstrap",
-      taskId,
-    );
+    try {
+      bootstrap = await loadConversationBootstrap(
+        env.CONCLAVE_DB,
+        target.conversationId,
+        requestId,
+        target.baseContextRevision ?? 0,
+        sessionPolicy === "stateless" ? "stateless" : "bootstrap",
+        taskId,
+      );
+    } catch (error) {
+      if (!(error instanceof ContextLimitError)) throw error;
+      return {
+        assignmentId: "",
+        attemptId: "",
+        workerId: target.workerId,
+        workspaceRuntimeId: target.workspaceRuntimeIdentityId,
+        workerCatalogId: "",
+        status: "failed",
+        accepted: false,
+        error: "context_limit_exceeded",
+      };
+    }
   }
   const snapshot = {
     ...target.permissionSnapshot,

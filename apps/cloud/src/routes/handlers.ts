@@ -70,6 +70,11 @@ export {
   handleUpdateWorkspaceSpaceGrant,
   handleRevokeWorkspaceSpaceGrant,
 } from "./workspaces.js";
+export { handleSetPin, handleSetPinOrder } from "./pins.js";
+export {
+  handleListNotifications,
+  handleMarkNotificationsRead,
+} from "./notifications.js";
 export {
   handleListSpaceThreads,
   handleCreateThread,

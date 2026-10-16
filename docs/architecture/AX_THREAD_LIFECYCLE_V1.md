@@ -2,6 +2,19 @@
 
 Phase 5 moves interaction side effects out of ThreadPage rendering callbacks.
 
+## Space draft lifecycle
+
+The Space landing view reuses `ThreadPage` in draft mode through `NewThreadPage`.
+It loads Space execution choices while leaving history subscriptions, Thread
+realtime subscriptions, and Thread view-state storage inactive. The draft
+identity is a UI placeholder and is never submitted to Cloud. On first send,
+`NewThreadPage` creates the Thread and dispatches through the existing caches
+using its real ID. A nonempty explicit name can also create and open the Thread
+without a submission. Both creation paths share the same busy guard and reuse
+an already-created identity. Failed sends retain that ID for retries. Successful sends
+transfer local text drafts and selection to the real Thread view and navigate
+to it. No Cloud protocol or schema changes are involved.
+
 ## Scheduling ownership
 
 - Chat and Work use separate `ScrollController` instances. Each controller
@@ -9,9 +22,8 @@ Phase 5 moves interaction side effects out of ThreadPage rendering callbacks.
 - Cache snapshots, normalized activity notifications, and tab changes request a
   follow pass. Timeline builders only describe the current snapshot; they do
   not schedule scrolling.
-- Composer alignment is requested by controller changes, dependency changes,
-  tab changes, and the post-layout reveal of restored Thread state. Composer
-  builders do not schedule alignment.
+- Chat and Work composers size independently. No cross-pane height measurement
+  or deferred alignment is scheduled.
 - Older-page anchor restoration is also deferred, but is guarded by the same
   interaction generation as the Thread navigation lifecycle.
 
@@ -20,7 +32,7 @@ Phase 5 moves interaction side effects out of ThreadPage rendering callbacks.
 `_interactionGeneration` changes whenever the State switches Thread and when it
 is disposed. Every deferred post-frame operation captures the generation that
 created it. A callback from an earlier Thread therefore cannot jump a current
-scroll position, realign a current composer, reveal stale content, or restore
+scroll position, reveal stale content, or restore
 an older-page anchor.
 
 Cache and presentation subscriptions are detached and reattached by

@@ -43,10 +43,10 @@ at 256 entries and individual error text and stacks are bounded.
 ## Lifecycle audit changes
 
 The Thread page now uses named, removable scroll listeners and checks controller
-attachment before reading positions. Composer alignment is coalesced into one
-post-frame callback, and tab changes update diagnostic context. The page marks
-its mounted/disposed state during initialization and disposal. Stable composer
-keys remain owned by the Thread page state; no new key reuse was introduced.
+attachment before reading positions. Tab changes update diagnostic context.
+The page marks its mounted/disposed state during initialization and disposal.
+Composers size independently; the former cross-pane measurement keys and
+alignment callback have been removed.
 
 The realtime sync and activity store report cache and notifier operations, while
 the app shell and Thread page report selected rebuilds. These records are

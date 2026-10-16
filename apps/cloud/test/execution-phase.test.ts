@@ -10,6 +10,19 @@ const T = "2026-10-14T10:00:00.000Z";
 const base = (e: ExecutionAssignmentEvidence) => presentExecution(e);
 
 describe("executionPhase", () => {
+  it("explains context overflow and disallows retrying the same snapshot", () => {
+    const result = base({
+      taskStatus: "failed",
+      errorCode: "context_limit_exceeded",
+    });
+    expect(result.failureCategory).toBe("context_limit_exceeded");
+    expect(result.failureCategoryMessage).toContain("Start a new Thread");
+    expect(result.retry).toEqual({
+      allowed: false,
+      requiresConfirmation: false,
+    });
+  });
+
   it("is submitted when no assignment exists", () => {
     expect(base({ taskStatus: "queued" }).executionPhase).toBe("submitted");
   });

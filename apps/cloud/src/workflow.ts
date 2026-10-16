@@ -408,6 +408,16 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             .first<{ spaceId: string }>()
         )?.spaceId;
       if (!spaceId) return;
+      // Lets clients skip "finished" notices for the person who asked.
+      const requestedByUserId = type.startsWith("work_request.")
+        ? ((
+            await (this.env as ExecutionEnv).CONCLAVE_DB.prepare(
+              "SELECT requested_by_user_id AS userId FROM work_requests WHERE id = ?1",
+            )
+              .bind(workRequestId)
+              .first<{ userId: string }>()
+          )?.userId ?? null)
+        : null;
       const stepSuffix = options.stepKind ? `:step:${options.stepKind}` : "";
       const attemptSuffix = options.attempt
         ? `:attempt:${options.attempt}`
@@ -422,6 +432,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           entityId: options.stepKind ?? workRequestId,
           workRequestId,
           threadId,
+          ...(requestedByUserId ? { requestedByUserId } : {}),
           ...(options.stepKind ? { stepKind: options.stepKind } : {}),
           status: options.status,
         },

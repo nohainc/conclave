@@ -40,6 +40,7 @@ import '../common/conclave_markdown_body.dart';
 import '../common/collapsible_own_message.dart';
 import 'thread_presentation_controller.dart';
 import 'timeline_follow_anchor.dart';
+import 'timeline_scroll_overlay.dart';
 import '../../ax/work_request_file_picker_stub.dart'
     if (dart.library.html) '../../ax/work_request_file_picker_web.dart'
     as work_request_files;
@@ -48,6 +49,7 @@ part 'spaces_pages/space_page.dart';
 part 'spaces_pages/space_actions.dart';
 part 'spaces_pages/space_tabs.dart';
 part 'spaces_pages/thread_page.dart';
+part 'spaces_pages/new_thread_page.dart';
 part 'spaces_pages/thread_actions.dart';
 part 'spaces_pages/work_components.dart';
 part 'spaces_pages/timeline_container.dart';

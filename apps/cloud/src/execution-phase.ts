@@ -38,6 +38,7 @@ export type FailureCategory =
   | "provider_start_failed"
   | "startup_timeout"
   | "execution_failed"
+  | "context_limit_exceeded"
   | "state_uncertain";
 
 /** Fixed public wording. Never built from provider or Service text. */
@@ -55,6 +56,8 @@ export const FAILURE_CATEGORY_MESSAGES: Readonly<
   provider_start_failed: "AI provider could not start",
   startup_timeout: "Worker startup timed out",
   execution_failed: "Worker execution failed",
+  context_limit_exceeded:
+    "This conversation exceeds the supported context limit. Start a new Thread with the relevant context.",
   state_uncertain: "Checking whether execution is still active",
 };
 
@@ -241,6 +244,8 @@ export function deriveFailureCategory(
   const { diagnosticStage } = parseError(evidence.errorJson);
   const code = evidence.errorCode ?? "execution_failed";
 
+  if (code === "context_limit_exceeded") return "context_limit_exceeded";
+
   if (evidence.runningAt) return "execution_failed";
   if (code === "space_folder_exists") {
     return "space_folder_confirmation_required";
@@ -287,6 +292,9 @@ export function deriveRetryAdvice(
     return { allowed: false, requiresConfirmation: false };
   }
   if (phase !== "failed") return null;
+  if (evidence.errorCode === "context_limit_exceeded") {
+    return { allowed: false, requiresConfirmation: false };
+  }
   const { revocationObservedStatus } = parseError(evidence.errorJson);
   // The Service stopped before any provider work; the only thing the user
   // must decide is whether the existing folder may be used.

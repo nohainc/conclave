@@ -45,6 +45,8 @@ bool isMeaningfulRealtimeNotification(String type) => {
       'run.approval_required',
       'workflow_run.input_required',
       'workflow_run.approval_required',
+      'work_request.completed',
+      'work_request.failed',
       'thread.needs_input',
       'thread.completed',
       'thread.failed',
@@ -118,13 +120,17 @@ class AxNotification {
 }
 
 AxNotification? notificationFromRealtimeEvent(
-  Map<String, dynamic> event,
-) {
+  Map<String, dynamic> event, {
+  String? viewerId,
+}) {
   final type = event['type'];
   if (type is! String) return null;
   final kind = switch (type) {
     'thread.needs_input' => AxNotificationKind.threadNeedsInput,
-    'thread.completed' => AxNotificationKind.threadCompleted,
+    'thread.completed' ||
+    'work_request.completed' =>
+      AxNotificationKind.threadCompleted,
+    'work_request.failed' ||
     'thread.failed' ||
     'thread.grant.problem' ||
     'thread.recovery.required' =>
@@ -171,6 +177,13 @@ AxNotification? notificationFromRealtimeEvent(
   final payloadMap = payload is Map
       ? Map<String, dynamic>.from(payload)
       : const <String, dynamic>{};
+  // You asked for it, so a success needs no announcement; failures still do.
+  if (kind == AxNotificationKind.threadCompleted &&
+      type == 'work_request.completed' &&
+      viewerId != null &&
+      payloadMap['requestedByUserId'] == viewerId) {
+    return null;
+  }
   final runId =
       _optionalString(event['runId']) ?? _optionalString(payloadMap['runId']);
   final spaceId = _optionalString(event['spaceId']) ??
@@ -218,12 +231,16 @@ AxNotification? notificationFromRealtimeEvent(
   final timestamp =
       DateTime.tryParse(_optionalString(event['timestamp']) ?? '')?.toLocal() ??
           DateTime.now();
-  final eventId = _optionalString(event['eventId']) ??
+  // Live events and the durable feed describe the same Work Request, so both
+  // share one id and merge without duplicates.
+  final workRequestId = type.startsWith('work_request.')
+      ? _optionalString(payloadMap['workRequestId'])
+      : null;
+  final eventId = (workRequestId == null ? null : 'work-request:$workRequestId') ??
+      _optionalString(event['eventId']) ??
+      _optionalString(event['id']) ??
       '$type:${threadId ?? runId ?? spaceId ?? 'workspace'}:${timestamp.microsecondsSinceEpoch}';
   final target = switch (kind) {
-    AxNotificationKind.threadNeedsInput ||
-    AxNotificationKind.threadCompleted ||
-    AxNotificationKind.threadFailed ||
     AxNotificationKind.threadNeedsInput ||
     AxNotificationKind.threadCompleted ||
     AxNotificationKind.threadFailed =>
@@ -272,8 +289,6 @@ AxNotification? notificationFromRealtimeEvent(
     priority: switch (kind) {
       AxNotificationKind.threadNeedsInput ||
       AxNotificationKind.threadFailed ||
-      AxNotificationKind.threadNeedsInput ||
-      AxNotificationKind.threadFailed ||
       AxNotificationKind.workflowRunNeedsApproval ||
       AxNotificationKind.workflowRunFailed ||
       AxNotificationKind.approvalRequired ||
@@ -301,3 +316,23 @@ AxNotification? notificationFromRealtimeEvent(
 
 String? _optionalString(Object? value) =>
     value is String && value.trim().isNotEmpty ? value : null;
+
+/// Builds notifications from the Cloud feed; items already read stay read.
+List<AxNotification> notificationsFromFeed(
+    Iterable<Map<String, dynamic>> feed) {
+  final result = <AxNotification>[];
+  for (final item in feed) {
+    final notification = notificationFromRealtimeEvent({
+      'type': item['type'],
+      'spaceId': item['spaceId'],
+      'timestamp': item['timestamp'],
+      'payload': {
+        'workRequestId': item['id'],
+        'threadId': item['threadId'],
+      },
+    });
+    if (notification == null) continue;
+    result.add(item['read'] == true ? notification.markRead() : notification);
+  }
+  return result;
+}

@@ -89,8 +89,7 @@ void main() {
   test('a 404 on a stale Work Request detail resets the history', () async {
     await seed();
     final read = cache.refreshRequest('w', '30');
-    final expectation =
-        expectLater(read, throwsA(isA<AxApiException>()));
+    final expectation = expectLater(read, throwsA(isA<AxApiException>()));
     source.detailPending.last
         .completeError(const AxApiException('Not found', statusCode: 404));
     await expectation;
@@ -466,7 +465,7 @@ void main() {
     source.pending.last.complete(AxWorkRequestPage(requests: []));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Send this Work');
-    await tester.tap(find.byTooltip('Send request'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
     await tester.pump();
     expect(cache.peek('w').requests.single.id, startsWith('local-'));
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));

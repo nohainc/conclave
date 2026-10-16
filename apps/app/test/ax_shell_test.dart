@@ -14,6 +14,15 @@ import 'package:conclave_app/src/ax/ax_models.dart';
 import 'ax_fixture_data.dart';
 
 void main() {
+  final binding = TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    // Layout/menu tests settle finite transitions; pulse timing is tested separately.
+    binding.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+  });
+  tearDown(
+      () => binding.platformDispatcher.clearAccessibilityFeaturesTestValue());
+
   testWidgets('shell initializes its store before registering listeners',
       (tester) async {
     await tester.pumpWidget(MaterialApp(

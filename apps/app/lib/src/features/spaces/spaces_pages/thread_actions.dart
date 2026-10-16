@@ -10,6 +10,26 @@ extension _ThreadActions on _ThreadPageState {
         _submittingWork) {
       return;
     }
+    if (widget.isDraft) {
+      final requestText = text.trim().isEmpty
+          ? 'Please use the attached inputs to complete the request.'
+          : text;
+      final inputs = List<Map<String, dynamic>>.from(_workAttachments);
+      final selection = Map<String, dynamic>.from(_workExecutionSelection);
+      _updateState(() {
+        _draftSubmitting = true;
+        _workSubmitError = null;
+      });
+      try {
+        await widget.onRunWorkWithSelection!(requestText,
+            _effectiveWorkflow.split(':').first, inputs, '', selection);
+      } catch (error) {
+        if (mounted) _updateState(() => _workSubmitError = error.toString());
+      } finally {
+        if (mounted) _updateState(() => _draftSubmitting = false);
+      }
+      return;
+    }
     final activeRequests = _workTimeline
         .where((request) =>
             !request.id.startsWith('local-') &&
@@ -147,6 +167,7 @@ extension _ThreadActions on _ThreadPageState {
   }
 
   Future<void> _refreshWorkTimeline({bool activeOnly = false}) async {
+    if (widget.isDraft) return;
     final cache = _workHistoryCache;
     final id = widget.thread.id;
     try {
@@ -421,9 +442,27 @@ extension _ThreadActions on _ThreadPageState {
   }
 
   Future<void> _sendDiscussion() async {
-    if (!widget.space.effectivePermissions.chat) return;
+    if (!widget.space.effectivePermissions.chat ||
+        (widget.isDraft &&
+            !widget.space.effectivePermissions.manageOwnThreads)) {
+      return;
+    }
     final text = _discussionController.text;
-    if (text.trim().isEmpty) return;
+    if (text.trim().isEmpty || _draftSubmitting || widget.draftBusy) return;
+    if (widget.isDraft) {
+      _updateState(() => _draftSubmitting = true);
+      try {
+        await widget.onSendDraftDiscussion!(text);
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showNotice(
+              SnackBar(content: Text('Failed to send message: $error')));
+        }
+      } finally {
+        if (mounted) _updateState(() => _draftSubmitting = false);
+      }
+      return;
+    }
     _discussionController.clear();
     final cache = _discussionCache;
     final id = widget.thread.id;

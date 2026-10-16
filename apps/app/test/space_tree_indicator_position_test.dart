@@ -13,7 +13,6 @@ const _space = AxSpace(
   lastActivity: '',
   role: 'owner',
   hasActiveWork: true,
-  hasUnread: true,
 );
 
 Future<double> _runningIndicatorRight(
@@ -43,6 +42,123 @@ Future<double> _runningIndicatorRight(
 }
 
 void main() {
+  testWidgets('running indicator pulses between 40 and 100 percent opacity',
+      (tester) async {
+    await _runningIndicatorRight(tester, const AxNavigation.home());
+    expect(
+        tester.getSize(find.byKey(const ValueKey('sidebar-running-indicator'))),
+        const Size(9, 9));
+    final fade = find.ancestor(
+      of: find.byKey(const ValueKey('sidebar-running-indicator')),
+      matching: find.byType(FadeTransition),
+    );
+    double opacity() => tester.widget<FadeTransition>(fade.first).opacity.value;
+    expect(opacity(), closeTo(0.4, 0.001));
+    await tester.pump(const Duration(milliseconds: 2800));
+    expect(opacity(), closeTo(1, 0.001));
+    await tester.pump(const Duration(milliseconds: 2800));
+    expect(opacity(), closeTo(0.4, 0.001));
+  });
+
+  testWidgets('new running dots and collapsed folders share the existing pulse',
+      (tester) async {
+    const second = AxSpace(
+      id: 'space-b',
+      name: 'Space B',
+      branch: '',
+      lastActivity: '',
+      role: 'owner',
+      hasActiveWork: true,
+      hasUnread: true,
+    );
+    Future<void> render({bool addSecond = false, bool expanded = false}) async {
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: SizedBox(
+        width: 260,
+        child: SpaceTree(
+          shellContext: AxShellContext(
+            navigation: const AxNavigation.home(),
+            spaces: [_space, if (addSecond) second],
+            expandedSpaceIds: expanded ? {'space-a'} : {},
+            threadsBySpace: const {
+              'space-a': [
+                AxThread(
+                  id: 't',
+                  spaceId: 'space-a',
+                  name: 'Busy',
+                  lead: '',
+                  status: 'running',
+                  brief: '',
+                  primaryWorkspace: '',
+                  queueStatus: '',
+                  hasActiveWork: true,
+                )
+              ]
+            },
+          ),
+          onNavigateTo: (_) {},
+        ),
+      ))));
+      await tester.pump();
+    }
+
+    List<Animation<double>> animations() => [
+          for (final element in find
+              .byKey(const ValueKey('sidebar-running-indicator'))
+              .evaluate())
+            tester
+                .widget<FadeTransition>(find
+                    .ancestor(
+                      of: find.byWidget(element.widget),
+                      matching: find.byType(FadeTransition),
+                    )
+                    .first)
+                .opacity,
+        ];
+
+    await render();
+    await tester.pump(const Duration(milliseconds: 1400));
+    final original = animations().single;
+    final opacity = original.value;
+    expect(opacity, greaterThan(0.4));
+    await render(addSecond: true);
+    expect(animations(), hasLength(2));
+    for (final animation in animations()) {
+      expect(identical(animation, original), isTrue);
+      expect(animation.value, opacity);
+    }
+    // Expanding replaces the folder dot with its Thread dot, on the same clock.
+    await render(addSecond: true, expanded: true);
+    for (final animation in animations()) {
+      expect(identical(animation, original), isTrue);
+    }
+    expect(find.byTooltip('Running'), findsNWidgets(3));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'reduced motion gives every running dot static 40 percent opacity',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: MediaQuery(
+      data: const MediaQueryData(disableAnimations: true),
+      child: SpaceTree(
+        shellContext: const AxShellContext(
+          navigation: AxNavigation.home(),
+          spaces: [_space],
+        ),
+        onNavigateTo: (_) {},
+      ),
+    ))));
+    final opacity = find.ancestor(
+      of: find.byKey(const ValueKey('sidebar-running-indicator')),
+      matching: find.byType(Opacity),
+    );
+    expect(tester.widget<Opacity>(opacity.first).opacity, 0.4);
+  });
+
   testWidgets('Space and Thread rows are 30 px in every selection state',
       (tester) async {
     const threads = [
@@ -143,6 +259,11 @@ void main() {
       final text = tester.widget<Text>(find.text('Space A'));
       final paragraph =
           tester.renderObject<RenderParagraph>(find.text('Space A'));
+      expect(
+          tester
+              .widget<ConclaveFolderIcon>(find.byType(ConclaveFolderIcon))
+              .color,
+          paragraph.text.style?.color);
       return (
         height: tester.getSize(find.text('Space A')).height,
         color: paragraph.text.style?.color,
@@ -155,5 +276,46 @@ void main() {
     expect(selected.height, unselected.height);
     expect(selected.color, unselected.color);
     expect(selected.weight, unselected.weight);
+  });
+
+  testWidgets(
+      'Thread indicators sit left of the title, Space roll-up on folder',
+      (tester) async {
+    const thread = AxThread(
+        id: 't',
+        spaceId: 'space-a',
+        name: 'Busy Thread',
+        lead: '',
+        status: 'active',
+        brief: '',
+        primaryWorkspace: '',
+        queueStatus: '',
+        hasUnread: true);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          width: 260,
+          child: SpaceTree(
+            shellContext: const AxShellContext(
+              navigation: AxNavigation.home(),
+              spaces: [_space],
+              expandedSpaceIds: {'space-a'},
+              threadsBySpace: {
+                'space-a': [thread]
+              },
+            ),
+            onNavigateTo: (_) {},
+            onToggleSpaceExpanded: (_) {},
+          ),
+        ),
+      ),
+    ));
+    await tester.pump();
+    expect(
+        tester.getSize(find.byKey(const ValueKey('sidebar-unread-indicator'))),
+        const Size(9, 9));
+    final dot = tester
+        .getTopRight(find.byKey(const ValueKey('sidebar-unread-indicator')));
+    expect(dot.dx, lessThan(tester.getTopLeft(find.text('Busy Thread')).dx));
   });
 }

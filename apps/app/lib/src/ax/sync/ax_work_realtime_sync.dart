@@ -28,9 +28,17 @@ enum AxWorkRealtimeStatus { available, checking }
 
 class AxWorkRealtimeSync extends ChangeNotifier {
   AxWorkRealtimeSync(this.cache,
-      {this.fallbackInterval = const Duration(seconds: 15)});
+      {this.fallbackInterval = const Duration(seconds: 15),
+      this.checkingGrace = const Duration(seconds: 3)});
   final AxWorkHistoryCache cache;
   final Duration fallbackInterval;
+
+  /// How long an interruption must last before the UI reports it. Reconnects
+  /// and recovery reads right after a request is sent routinely finish within
+  /// a second or two and would otherwise flash "Connection interrupted".
+  final Duration checkingGrace;
+  Timer? _graceTimer;
+  bool _displayChecking = false;
   static final _instances = Expando<AxWorkRealtimeSync>();
   static AxWorkRealtimeSync forCache(AxWorkHistoryCache cache) =>
       _instances[cache] ??= AxWorkRealtimeSync(cache);
@@ -53,6 +61,10 @@ class AxWorkRealtimeSync extends ChangeNotifier {
       _connectionInterrupted || _gapStale || _recovery != null
           ? AxWorkRealtimeStatus.checking
           : AxWorkRealtimeStatus.available;
+  /// Debounced [status] for display; [status] itself stays immediate.
+  AxWorkRealtimeStatus get displayStatus => _displayChecking
+      ? AxWorkRealtimeStatus.checking
+      : AxWorkRealtimeStatus.available;
   bool get checkingExecution => status == AxWorkRealtimeStatus.checking;
   Future<void> get pendingRecovery =>
       _recovery?.completer.future ?? Future.value();
@@ -63,7 +75,24 @@ class AxWorkRealtimeSync extends ChangeNotifier {
       component: 'AxWorkRealtimeSync',
       operation: operation,
     );
-    if (!_disposed) notifyListeners();
+    if (_disposed) return;
+    _syncDisplayStatus();
+    notifyListeners();
+  }
+
+  void _syncDisplayStatus() {
+    if (!checkingExecution) {
+      _graceTimer?.cancel();
+      _graceTimer = null;
+      _displayChecking = false;
+    } else if (!_displayChecking && _graceTimer == null) {
+      _graceTimer = Timer(checkingGrace, () {
+        _graceTimer = null;
+        if (_disposed || !checkingExecution) return;
+        _displayChecking = true;
+        notifyListeners();
+      });
+    }
   }
 
   void Function() listen(Stream<Map<String, dynamic>>? events,
@@ -465,6 +494,7 @@ class AxWorkRealtimeSync extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _graceTimer?.cancel();
     reset();
     for (final lease in _streams.values) {
       unawaited(lease.subscription.cancel());

@@ -1,10 +1,25 @@
 # Chat and Work execution
 
+Opening a Space shows its description, when available, and an optional Thread
+name field. Chat/Work tabs sit directly above the composers at the bottom;
+the empty history area stays blank. The Space page's Chat composer always shows
+its Markdown toolbar without a Show/Hide toggle, including in the single-tab
+layout. **Create Thread** inside the name field
+creates and opens a Thread without sending a message, and is disabled when the
+trimmed name is empty. Names are limited to 22 characters.
+The first nonempty Chat message or Work request also creates the Thread before
+submitting. It uses the entered name, or the opening words of the request when
+the name is empty; an oversized first word is truncated. The app then opens that Thread on the tab
+used to send. Creation failures keep the draft. If creation succeeds but sending
+fails, retry uses the same Thread. Existing Threads remain in the sidebar.
+
 AI Chat is selected in the Thread **Work** composer. The **Chat** discussion
 tab stores human/team messages separately. Both surfaces preserve Markdown source.
 Own Chat messages and Work prompts longer than four preview lines start collapsed.
 Use **Show more** to view the full Markdown and **Hide more** to collapse again.
 Copy and edit actions retain the complete source.
+Chat and Work composer Send, Preview/Write, and Show/Hide Markdown controls
+use the theme text color. Work keeps its Markdown toolbar hidden in both layouts. The expanded Markdown toolbar has no top divider.
 In both composers, Enter sends and Shift+Enter inserts a new line. Ctrl/Cmd+Enter
 also sends. Editing an existing discussion retains Enter for a new line and
 Ctrl/Cmd+Enter to save.

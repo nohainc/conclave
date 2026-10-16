@@ -26,6 +26,10 @@ class AppSidebar extends StatelessWidget {
     this.onClearWorkHistory,
     this.onDeleteThread,
     this.onReorderThreads,
+    this.onSetSpacePinned,
+    this.onSetThreadPinned,
+    this.onReorderPinnedSpaces,
+    this.onReorderPinnedThreads,
     this.searchController,
     this.searchFocusNode,
     this.onSearchChanged,
@@ -62,6 +66,11 @@ class AppSidebar extends StatelessWidget {
   final Future<void> Function(AxThread thread)? onDeleteThread;
   final Future<void> Function(AxSpace space, List<String> orderedThreadIds)?
       onReorderThreads;
+  final Future<void> Function(AxSpace space, bool pinned)? onSetSpacePinned;
+  final Future<void> Function(AxThread thread, bool pinned)? onSetThreadPinned;
+  final Future<void> Function(List<String> orderedIds)? onReorderPinnedSpaces;
+  final Future<void> Function(AxSpace space, List<String> orderedIds)?
+      onReorderPinnedThreads;
   final TextEditingController? searchController;
   final FocusNode? searchFocusNode;
   final ValueChanged<String>? onSearchChanged;
@@ -331,6 +340,10 @@ class AppSidebar extends StatelessWidget {
                     onClearWorkHistory: onClearWorkHistory,
                     onDeleteThread: onDeleteThread,
                     onReorderThreads: onReorderThreads,
+                    onSetSpacePinned: onSetSpacePinned,
+                    onSetThreadPinned: onSetThreadPinned,
+                    onReorderPinnedSpaces: onReorderPinnedSpaces,
+                    onReorderPinnedThreads: onReorderPinnedThreads,
                     compact: compact,
                     narrow: narrow,
                   ),
@@ -578,8 +591,23 @@ class AppIconRail extends StatelessWidget {
     );
   }
 
+  List<AxThread> _threads(AxSpace space) =>
+      shellContext.spaceThreads?.peek(space.id) ??
+      shellContext.threadsBySpace[space.id] ??
+      const [];
+
+  bool _unread(AxSpace space) =>
+      space.hasUnread || _threads(space).any((thread) => thread.hasUnread);
+
+  bool _running(AxSpace space) =>
+      space.hasActiveWork ||
+      _threads(space).any((thread) => thread.hasActiveWork);
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      SidebarPulse(child: Builder(builder: _buildContent));
+
+  Widget _buildContent(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final menuStyle = MenuStyle(
@@ -727,6 +755,22 @@ class AppIconRail extends StatelessWidget {
                       builder: (context, controller, child) {
                         return _railIconButton(
                           icon: group.icon,
+                          iconWidget: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Icon(group.icon, size: 20, color: Colors.white70),
+                              Positioned(
+                                right: -5,
+                                top: -5,
+                                child: SidebarActivityIndicators(
+                                  key: ValueKey('rail-activity-${group.label}'),
+                                  running: group.spaces.any(_running),
+                                  unread: group.spaces.any(_unread),
+                                  gap: 2,
+                                ),
+                              ),
+                            ],
+                          ),
                           tooltip: group.label,
                           onPressed: () {
                             if (controller.isOpen) {
@@ -741,6 +785,11 @@ class AppIconRail extends StatelessWidget {
                         for (final space in group.spaces) ...[
                           MenuItemButton(
                             style: itemStyle(),
+                            trailingIcon: SidebarActivityIndicators(
+                              key: ValueKey('rail-space-activity-${space.id}'),
+                              running: _running(space),
+                              unread: _unread(space),
+                            ),
                             leadingIcon: ConclaveFolderIcon(
                               isExpanded: true,
                               size: 16,
@@ -772,6 +821,12 @@ class AppIconRail extends StatelessWidget {
                                   const <AxThread>[]))
                             MenuItemButton(
                               style: itemStyle(),
+                              trailingIcon: SidebarActivityIndicators(
+                                key: ValueKey(
+                                    'rail-thread-activity-${thread.id}'),
+                                running: thread.hasActiveWork,
+                                unread: thread.hasUnread,
+                              ),
                               onPressed: () => onNavigateTo(
                                   AxNavigation.thread(space.id, thread.id)),
                               child: Padding(

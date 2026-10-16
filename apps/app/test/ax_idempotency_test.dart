@@ -148,7 +148,7 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).first, 'Implement this');
-    await tester.tap(find.byTooltip('Send request'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
     await tester.pumpAndSettle();
     expect(source.workKeys, hasLength(1));
     expect(cache.peek('W').requests.single.status, 'failed');
@@ -159,7 +159,7 @@ void main() {
     await tester.pump(const Duration(seconds: 20));
     expect(source.workKeys, hasLength(1));
     source.loseResponse = false;
-    await tester.tap(find.byTooltip('Send request'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
     await tester.pumpAndSettle();
     expect(source.workKeys, hasLength(2));
     expect(source.workKeys[1], source.workKeys[0]);

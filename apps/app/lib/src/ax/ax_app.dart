@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import '../navigation/ax_browser_navigation.dart';
 import '../navigation/ax_navigation.dart';
+import '../notifications/browser_alerts.dart';
 import '../notifications/notification_models.dart';
 import '../platform/platform_services.dart';
 import '../realtime/realtime_client.dart';

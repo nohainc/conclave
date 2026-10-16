@@ -82,6 +82,9 @@ export function sqliteD1(
     "0064_thread_read_states.sql",
     "0065_thread_fencing_counter.sql",
     "0066_thread_metadata.sql",
+    "0067_notification_reads.sql",
+    "0068_user_pins.sql",
+    "0069_user_pin_position.sql",
   ]) {
     sqlite.exec(
       readFileSync(

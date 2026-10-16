@@ -1,5 +1,6 @@
 import {
   ContextEngine,
+  ContextLimitError,
   emptyContextState,
   projectContextState,
   type ContextHistoryFact,
@@ -55,7 +56,9 @@ export async function loadConversationBootstrap(
     .bind(conversationId, throughSequence, contextRevision)
     .first<{ count: number; bytes: number }>();
   if (!bounds || bounds.count > 1000 || bounds.bytes > 256 * 1024) {
-    throw new Error("Conversation bootstrap exceeds the history or byte limit");
+    throw new ContextLimitError(
+      "Conversation bootstrap exceeds the history or byte limit",
+    );
   }
   const result = await db
     .prepare(
@@ -80,7 +83,9 @@ export async function loadConversationBootstrap(
     }>();
   const entries = result.results ?? [];
   if (entries.length > 1000)
-    throw new Error("Conversation bootstrap exceeds the history limit");
+    throw new ContextLimitError(
+      "Conversation bootstrap exceeds the history limit",
+    );
   const history = entries.map(({ metadataJson, ...entry }) => ({
     ...entry,
     metadata: JSON.parse(metadataJson) as Record<string, unknown>,
@@ -247,7 +252,9 @@ export async function loadConversationBootstrap(
     mode === "stateless" ? engine.stateless(input) : engine.bootstrap(input),
   );
   if (new TextEncoder().encode(text).byteLength > 256 * 1024)
-    throw new Error("Conversation bootstrap exceeds the byte limit");
+    throw new ContextLimitError(
+      "Conversation bootstrap exceeds the byte limit",
+    );
   return {
     schemaVersion: 1,
     conversationId,

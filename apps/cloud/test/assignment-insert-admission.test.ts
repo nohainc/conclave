@@ -54,6 +54,9 @@ async function fixture() {
             );
           return row;
         },
+        async all() {
+          return stmt.bind(...values).all();
+        },
         async run() {
           const before = f.sqlite.prepare("SELECT total_changes() AS n").get()!
             .n as number;
@@ -99,6 +102,47 @@ async function fixture() {
       ),
   };
 }
+
+it.each([140 * 1024, 300 * 1024])(
+  "rejects oversized canonical context (%i bytes) before creating an assignment",
+  async (bytes) => {
+    const f = await fixture();
+    try {
+      const conversation = f.sqlite
+        .prepare("SELECT id FROM conversations")
+        .get()!;
+      f.sqlite
+        .prepare(
+          `INSERT INTO conversation_history_entries
+        (conversation_id,sequence,kind,event_type,actor_type,source_id,text,metadata_json,occurred_at)
+        SELECT ?1,MAX(sequence)+1,'user_message','user_message','user','large-history',?2,'{}','now'
+        FROM conversation_history_entries WHERE conversation_id=?1`,
+        )
+        .run(String(conversation.id), "x".repeat(bytes));
+      scheduler.selectSpaceExecutionTarget.mockResolvedValue({
+        ...(await scheduler.selectSpaceExecutionTarget()),
+        conversationId: conversation.id,
+        workRequestId: "R",
+        baseContextRevision: 0,
+      });
+      const result = await f.dispatch();
+      expect(result).toMatchObject({
+        accepted: false,
+        status: "failed",
+        assignmentId: "",
+      });
+      expect(result.error).toBe("context_limit_exceeded");
+      expect(
+        f.sqlite
+          .prepare("SELECT COUNT(*) AS count FROM worker_assignments")
+          .get()!.count,
+      ).toBe(0);
+      expect(f.fetch).not.toHaveBeenCalled();
+    } finally {
+      f.sqlite.close();
+    }
+  },
+);
 
 it("dispatches an inserted assignment despite conversation and history trigger writes", async () => {
   const f = await fixture();

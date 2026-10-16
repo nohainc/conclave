@@ -80,7 +80,13 @@ export async function handleListSpaces(
                     ON rs.thread_id = t.id AND rs.user_id = ?1
                  WHERE t.space_id = p.id
                    AND ${unreadSql("t", "?1", "COALESCE(rs.read_at, pm.created_at)")}
-              ) AS hasUnread
+              ) AS hasUnread,
+              (SELECT up.pinned_at FROM user_pins up
+                WHERE up.user_id = ?1 AND up.kind = 'space'
+                  AND up.target_id = p.id) AS pinnedAt,
+              (SELECT up.position FROM user_pins up
+                WHERE up.user_id = ?1 AND up.kind = 'space'
+                  AND up.target_id = p.id) AS pinPosition
        FROM spaces p
        JOIN space_memberships pm ON pm.space_id = p.id
        WHERE pm.user_id = ?1
@@ -98,6 +104,8 @@ export async function handleListSpaces(
         updatedAt: string;
         hasActiveWork: number;
         hasUnread: number;
+        pinnedAt: string | null;
+        pinPosition: number | null;
       }>();
 
     const spaces = (rows.results ?? []).map((row) => {
@@ -121,6 +129,8 @@ export async function handleListSpaces(
         updatedAt: row.updatedAt,
         hasActiveWork: row.hasActiveWork === 1,
         hasUnread: row.hasUnread === 1,
+        pinnedAt: row.pinnedAt ?? null,
+        pinPosition: row.pinPosition ?? 0,
       };
     });
     return json({ spaces });
@@ -360,7 +370,17 @@ export async function handleUpdateSpace(
   }
   if (body.archived === true) settings.archived = true;
   if (body.archived === false) settings.archived = false;
-  const now = new Date().toISOString();
+  // Sidebar view state (expanded, Thread order) is not Space activity: it must
+  // not move the Space in the newest-update-first list.
+  const viewStateOnly =
+    Object.keys(incomingSettings).every(
+      (key) => key === "sidebarExpanded" || key === "threadOrder",
+    ) &&
+    body.instructions === undefined &&
+    body.archived === undefined &&
+    body.name === undefined &&
+    body.description === undefined;
+  const now = viewStateOnly ? existing.updatedAt : new Date().toISOString();
   const space = {
     id: existing.id,
     name:

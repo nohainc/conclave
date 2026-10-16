@@ -36,6 +36,14 @@ prepends and Chat edits do not create incoming-message anchors. Anchors use
 rendered positions and retain the existing virtualized list; keys are pruned
 when their messages leave cached history.
 
+Each timeline has a centered floating down-arrow just above the composer. It
+appears when the reader scrolls down away from the bottom, hides on upward
+scrolling or reaching the bottom, and smoothly scrolls to the latest content
+when clicked. The destination is rechecked after layout because virtualized
+variable-height rows can change the estimated bottom during scrolling. A user
+scroll cancels further corrections. The final row remains immediately above
+the composer gap. The action overlays history without reserving layout space.
+
 The composer remains outside the timeline viewport in both tabs. Switching
 tabs therefore does not transfer or reuse a scroll controller, and switching
 Threads retains the existing controller lifecycle and saved view state.

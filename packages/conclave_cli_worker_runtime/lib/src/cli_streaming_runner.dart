@@ -21,11 +21,18 @@ class CliStreamingRunner {
     this.maxStdoutBytes = 8 * 1024 * 1024,
     this.maxStderrBytes = 1024 * 1024,
     this.cleanup = const WorkerProcessCleanup(),
+    this.drainGrace = const Duration(seconds: 3),
   });
 
   final int maxStdoutBytes;
   final int maxStderrBytes;
   final WorkerProcessCleanup cleanup;
+
+  /// How long to keep draining stdout/stderr after the CLI process has exited.
+  /// A background process started by the provider (a dev server, a watcher)
+  /// can inherit the pipes and keep them open long after the CLI is gone, so
+  /// waiting for end-of-stream would hold the assignment until its deadline.
+  final Duration drainGrace;
 
   Future<CliStreamResult> run(
     String executable,
@@ -49,11 +56,13 @@ class CliStreamingRunner {
     var stderrBytes = 0;
     var stdoutBytes = 0;
     Object? streamError;
+    var drainAbandoned = false;
     final stdoutTask = () async {
       try {
         var pending = '';
         var pendingBytes = 0;
         await for (final chunk in process.stdout.transform(utf8.decoder)) {
+          if (drainAbandoned) break;
           final chunkBytes = utf8.encode(chunk).length;
           stdoutBytes += chunkBytes;
           if (stdoutBytes > maxStdoutBytes) {
@@ -86,6 +95,7 @@ class CliStreamingRunner {
     }();
     final stderrTask = () async {
       await for (final chunk in process.stderr) {
+        if (drainAbandoned) break;
         final remaining = maxStderrBytes - stderrBytes;
         if (remaining > 0) {
           final accepted = chunk.length <= remaining
@@ -113,10 +123,18 @@ class CliStreamingRunner {
       }();
       final code = await process.exitCode.timeout(_remaining(timeout, timer));
       await stdinTask.timeout(_remaining(timeout, timer));
-      await Future.wait([
-        stdoutTask,
-        stderrTask,
-      ]).timeout(_remaining(timeout, timer));
+      final drainBudget = _remaining(timeout, timer);
+      try {
+        await Future.wait([
+          stdoutTask,
+          stderrTask,
+        ]).timeout(drainGrace < drainBudget ? drainGrace : drainBudget);
+      } on TimeoutException {
+        // The CLI exited but something else still holds its pipes. The
+        // provider result is complete, so stop waiting for end-of-stream.
+        if (_remaining(timeout, timer) <= Duration.zero) rethrow;
+        drainAbandoned = true;
+      }
       if (streamError != null) throw streamError!;
       // Some CLIs ignore stdin and exit as soon as their argument-based
       // request finishes. A closed stdin pipe must not override a successful

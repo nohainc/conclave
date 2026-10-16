@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:conclave_protocol/conclave_protocol.dart';
 
-import 'radius.dart';
+import 'menu_style.dart';
 
 /// Controlled selector: catalog refreshes never modify a saved selection.
 class ModelEffortSelector extends StatefulWidget {
@@ -19,6 +19,7 @@ class ModelEffortSelector extends StatefulWidget {
       this.readOnly = false,
       this.loading = false,
       this.compact = false,
+      this.menuPickers = false,
       this.scope = 'execution',
       this.validationMessage,
       this.helperMessage,
@@ -37,6 +38,9 @@ class ModelEffortSelector extends StatefulWidget {
   final ValueChanged<ExecutionSelection>? onChanged;
   final bool showWorker, showModel, showEffort, readOnly, loading, compact;
   final bool showCatalog;
+
+  /// Use application menus for fields inside the compact settings popup.
+  final bool menuPickers;
   final bool allowWorkerChange, allowModelChange, allowEffortChange;
 
   /// Keeps validation available to callers without rendering duplicate inline
@@ -260,6 +264,61 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
     final items = {...choices};
     if (value != null && !items.containsKey(value))
       items[value] = '$value · Unavailable';
+    if (widget.menuPickers) {
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      final defaultLabel = label == 'Worker'
+          ? inherited == null
+              ? 'Select Worker...'
+              : 'Inherit workflow Worker'
+          : inherited != null
+              ? 'Inherit workflow $label'
+              : allowAuto
+                  ? 'Auto'
+                  : 'Select $label...';
+      return MenuAnchor(
+        key: ValueKey('${widget.scope}-$label-menu'),
+        style: ConclaveMenuStyle.surface(isDark),
+        menuChildren: [
+          for (final entry in {'': defaultLabel, ...items}.entries)
+            MenuItemButton(
+              autofocus: entry.key == (value ?? ''),
+              style: ConclaveMenuStyle.item(isDark),
+              leadingIcon: Icon(
+                entry.key == (value ?? '')
+                    ? Icons.check_circle_rounded
+                    : Icons.circle_outlined,
+                size: 15,
+              ),
+              onPressed: enabled &&
+                      (entry.key.isEmpty
+                          ? allowAuto || inherited != null
+                          : choices.containsKey(entry.key) &&
+                              available(entry.key))
+                  ? () => changed(entry.key.isEmpty ? null : entry.key)
+                  : null,
+              child: Text(entry.value, style: ConclaveMenuStyle.textStyle),
+            ),
+        ],
+        builder: (context, controller, child) => TextButton(
+          onPressed: enabled
+              ? () {
+                  controller.isOpen ? controller.close() : controller.open();
+                }
+              : null,
+          child: InputDecorator(
+            isEmpty: false,
+            decoration: InputDecoration(labelText: label, enabled: enabled),
+            child: Row(children: [
+              Expanded(
+                  child: Text(items[value] ?? defaultLabel,
+                      style: ConclaveMenuStyle.textStyle,
+                      overflow: TextOverflow.ellipsis)),
+              const Icon(Icons.keyboard_arrow_down, size: 16),
+            ]),
+          ),
+        ),
+      );
+    }
     return DropdownButtonFormField<String>(
       key: ValueKey('${widget.scope}-$label-$value-${items.keys.join(',')}'),
       initialValue: value ?? '',
@@ -309,58 +368,33 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
   Future<void> _open(BuildContext context) async {
     var value = widget.value;
     final box = context.findRenderObject()! as RenderBox;
+    // showMenu positions against the Navigator's overlay, so measure there.
     final overlay =
-        Overlay.of(context).context.findRenderObject()! as RenderBox;
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
     final rect = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
     final menuWidth = math.min(320.0, math.max(260.0, overlay.size.width - 32));
-    final maxMenuHeight =
-        math.min(520.0, math.max(220.0, overlay.size.height - 16));
-    final fieldCount = [widget.showWorker, widget.showModel, widget.showEffort]
-        .where((visible) => visible)
-        .length;
-    final estimatedMenuHeight = math.min(
-      maxMenuHeight,
-      math.max(220.0, fieldCount * 70.0 + 104.0),
-    );
+    final availableAbove = rect.top - 16;
+    final maxMenuHeight = math.min(
+        520.0,
+        availableAbove >= 120 ? availableAbove : overlay.size.height - 16);
     final left =
         rect.left.clamp(8.0, overlay.size.width - menuWidth - 8).toDouble();
-    final top = (rect.top - estimatedMenuHeight - 8)
-        .clamp(8.0, overlay.size.height - estimatedMenuHeight - 8)
-        .toDouble();
-    final result = await showMenu<ExecutionSelection>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        left,
-        top,
-        overlay.size.width - left - menuWidth,
-        overlay.size.height - top - estimatedMenuHeight,
-      ),
-      constraints: BoxConstraints(
-        maxWidth: menuWidth,
-        maxHeight: maxMenuHeight,
-      ),
-      shape:
-          const RoundedRectangleBorder(borderRadius: ConclaveRadius.radiusMd),
-      popUpAnimationStyle: AnimationStyle.noAnimation,
-      items: [
-        PopupMenuItem<ExecutionSelection>(
-          enabled: false,
-          height: 0,
-          padding: EdgeInsets.zero,
-          child: StatefulBuilder(
-            builder: (menuContext, setMenuState) => SizedBox(
-              width: menuWidth,
-              child: Padding(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    Widget body(BuildContext menuContext, StateSetter setMenuState) =>
+        SizedBox(
+          width: menuWidth,
+          child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxHeight: maxMenuHeight - 32,
+                    maxHeight: math.max(0, maxMenuHeight - 44),
                   ),
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ModelEffortSelector(
+                          menuPickers: true,
                           catalog: widget.catalog,
                           value: value,
                           inherited: widget.inherited,
@@ -412,7 +446,66 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                   ),
                 ),
               ),
+        );
+    // Measure the content offstage so the popup is exactly as tall as its
+    // controls, then anchor its bottom edge above the button.
+    final measureKey = GlobalKey();
+    final entry = OverlayEntry(
+      builder: (_) => Offstage(
+        child: Material(
+          child: StatefulBuilder(
+            builder: (c, set) => KeyedSubtree(
+              key: measureKey,
+              child: Theme(
+                data: Theme.of(context),
+                child: body(c, set),
+              ),
             ),
+          ),
+        ),
+      ),
+    );
+    Overlay.of(context).insert(entry);
+    await WidgetsBinding.instance.endOfFrame;
+    final measured =
+        (measureKey.currentContext?.findRenderObject() as RenderBox?)
+                ?.size
+                .height ??
+            maxMenuHeight;
+    entry.remove();
+    entry.dispose();
+    if (!context.mounted) return;
+    final menuHeight = math.min(
+        maxMenuHeight, measured + ConclaveMenuStyle.padding.vertical);
+    final top = math.max(8.0, rect.top - 8 - menuHeight);
+    final result = await showMenu<ExecutionSelection>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        left,
+        top,
+        overlay.size.width - left - menuWidth,
+        overlay.size.height - top,
+      ),
+      constraints: BoxConstraints(
+        maxWidth: menuWidth,
+        minHeight: menuHeight,
+        maxHeight: menuHeight,
+      ),
+      color: ConclaveMenuStyle.background(isDark),
+      surfaceTintColor: Colors.transparent,
+      elevation: 12,
+      shadowColor: ConclaveMenuStyle.shadow(isDark),
+      shape: ConclaveMenuStyle.shape(isDark),
+      menuPadding: ConclaveMenuStyle.padding,
+      popUpAnimationStyle: AnimationStyle.noAnimation,
+      items: [
+        PopupMenuItem<ExecutionSelection>(
+          enabled: false,
+          height: 0,
+          padding: EdgeInsets.zero,
+          child: StatefulBuilder(
+            builder: (menuContext, setMenuState) =>
+                body(menuContext, setMenuState),
           ),
         ),
       ],

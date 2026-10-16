@@ -13,6 +13,15 @@ import 'package:conclave_app/src/navigation/ax_navigation.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 
 void main() {
+  final binding = TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    // Layout/menu tests settle finite transitions; pulse timing is tested separately.
+    binding.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+  });
+  tearDown(
+      () => binding.platformDispatcher.clearAccessibilityFeaturesTestValue());
+
   const wsRunning = AxThread(
     id: 'ws-1',
     spaceId: 'p-1',

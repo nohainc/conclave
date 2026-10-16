@@ -55,6 +55,12 @@ extension _AxAppShellViews on _AxAppStateMixin {
                               onClearWorkHistory: _clearWorkHistoryFromSidebar,
                               onDeleteThread: _deleteThreadFromSidebar,
                               onReorderThreads: _reorderThreadsFromSidebar,
+                              onSetSpacePinned: _setSpacePinnedFromSidebar,
+                              onSetThreadPinned: _setThreadPinnedFromSidebar,
+                              onReorderPinnedSpaces:
+                                  _setSpacePinOrderFromSidebar,
+                              onReorderPinnedThreads:
+                                  _setThreadPinOrderFromSidebar,
                               searchController: _searchQueryController,
                               searchFocusNode: _searchFocusNode,
                               onClearSearch: _clearSearch,
@@ -124,6 +130,14 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                     onDeleteThread: _deleteThreadFromSidebar,
                                     onReorderThreads:
                                         _reorderThreadsFromSidebar,
+                                    onSetSpacePinned:
+                                        _setSpacePinnedFromSidebar,
+                                    onSetThreadPinned:
+                                        _setThreadPinnedFromSidebar,
+                                    onReorderPinnedSpaces:
+                                        _setSpacePinOrderFromSidebar,
+                                    onReorderPinnedThreads:
+                                        _setThreadPinOrderFromSidebar,
                                     searchController: _searchQueryController,
                                     searchFocusNode: _searchFocusNode,
                                     onClearSearch: _clearSearch,
@@ -606,9 +620,8 @@ extension _AxAppShellViews on _AxAppStateMixin {
                         child: _threadView(),
                       )
                     : navigation.kind == AxRouteKind.space
-                        ? SingleChildScrollView(
-                            padding: EdgeInsets.fromLTRB(
-                                compact ? 18 : 34, 26, compact ? 18 : 34, 40),
+                        ? Padding(
+                            padding: EdgeInsets.zero,
                             child: _spaceOverviewView(),
                           )
                         : navigation.kind == AxRouteKind.spaceMembers

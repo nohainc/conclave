@@ -727,6 +727,17 @@ turns are the last 20 user/worker history entries; exact history is retained.
 The Engine's combined prompt limit still applies. Compaction, generated summaries,
 artifact-body resolution, and provider token budgets remain future work.
 
+Context size limits include the complete serialized document, including repeated
+recent-turn evidence and structured facts, rather than raw history text alone.
+Cloud treats history/serialized-byte overflow as an assignment admission failure
+before creating an assignment or consuming Worker capacity. The failure asks the
+user to start a new Thread with the relevant context; retrying the same oversized
+snapshot cannot reduce its size. Canonical history remains intact.
+Cloud reports the stable `context_limit_exceeded` error code and fixed public
+guidance in Thread history, including for previously stored fixed context-limit
+errors. Retry advice disallows replaying the same oversized snapshot. This is an
+additive error-taxonomy value; older readers may display their generic fallback.
+
 No Phase 16 database migration is required. Structured context documents and the
 optional Local Worker Protocol 4.0 `statelessContext` envelope use schema version 1;
 updated Workspace/Engine readers must precede Cloud emission of the new field.

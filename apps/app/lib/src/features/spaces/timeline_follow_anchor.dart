@@ -9,8 +9,6 @@ class AxTimelineFollowAnchor {
   Object? _message;
   GlobalKey? _key;
   double? _fallbackOffset;
-  bool _pending = false;
-  bool _protected = false;
 
   GlobalKey? keyFor(Object message) => _keys[message];
 
@@ -21,12 +19,13 @@ class AxTimelineFollowAnchor {
   }
 
   void observe(Object message, ScrollController controller) {
-    if (_message == message || (_message != null && (_pending || _protected))) {
-      return;
-    }
+    // The first unread message owns the anchor until the reader scrolls or it
+    // disappears. A short first message fits above the composer and is never
+    // "protected", so later arrivals must not steal the anchor and push it
+    // out of view.
+    if (_message != null) return;
     _message = message;
     _key = _keys.putIfAbsent(message, GlobalKey.new);
-    _pending = true;
     _fallbackOffset =
         controller.hasClients && controller.position.hasContentDimensions
             ? controller.position.maxScrollExtent +
@@ -42,8 +41,6 @@ class AxTimelineFollowAnchor {
     _message = null;
     _key = null;
     _fallbackOffset = null;
-    _pending = false;
-    _protected = false;
   }
 
   /// Returns true if another layout is needed to mount a virtualized anchor.
@@ -66,8 +63,6 @@ class AxTimelineFollowAnchor {
     }
     final viewport = RenderAbstractViewport.of(render);
     final start = viewport.getOffsetToReveal(render, 0).offset;
-    _pending = false;
-    _protected = position.maxScrollExtent > start + 1;
     // Short messages can remain fully visible above the composer. Long
     // messages stop at their opening line instead of their final line.
     controller.jumpTo(

@@ -12,6 +12,8 @@ String _modelDisplayName(String? modelId, {AxWorker? worker}) {
 // Execution diagnostics remain in Workspace/Engine logs, not conversation text.
 String _executionFailureMessage(String? code, {String? validationMessage}) =>
     switch (code) {
+      'context_limit_exceeded' =>
+        'This conversation exceeds the supported context limit. Start a new Thread with the relevant context.',
       'session_resume_failed' =>
         'The worker could not continue the previous conversation. Please retry your request.',
       'worker_not_ready' =>
@@ -49,7 +51,10 @@ String _publicFailureMessage(AxWorkRequestStep? step, String guidance) {
   final headline = step?.failureCategoryMessage?.trim();
   if (headline == null || headline.isEmpty) return guidance;
   final code = step?.errorCode;
-  if (code == null || code == 'execution_failed' || code == 'timeout') {
+  if (code == null ||
+      code == 'execution_failed' ||
+      code == 'timeout' ||
+      code == 'context_limit_exceeded') {
     return headline;
   }
   return '$headline. $guidance';
@@ -57,29 +62,31 @@ String _publicFailureMessage(AxWorkRequestStep? step, String guidance) {
 
 Future<T?> _showAnchoredMenu<T>({
   required BuildContext buttonContext,
-  required GlobalKey inputKey,
   required List<PopupMenuEntry<T>> items,
   required double itemHeight,
   int dividerCount = 0,
 }) async {
+  final isDark = Theme.of(buttonContext).brightness == Brightness.dark;
   final box = buttonContext.findRenderObject()! as RenderBox;
-  final overlay =
-      Overlay.of(buttonContext).context.findRenderObject()! as RenderBox;
+  // showMenu positions against the Navigator's overlay, so measure there.
+  final overlay = Navigator.of(buttonContext).overlay!.context.findRenderObject()!
+      as RenderBox;
   final rect = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
-  final inputBox = inputKey.currentContext?.findRenderObject() as RenderBox?;
-  final anchorBottom = inputBox == null
-      ? rect.top
-      : inputBox.localToGlobal(Offset.zero, ancestor: overlay).dy +
-          inputBox.size.height;
+  final anchorBottom = rect.top - 8;
   final availableHeight = (anchorBottom - 8).clamp(0.0, overlay.size.height);
   final itemCount = items.length - dividerCount;
-  final exactHeight = (itemCount * itemHeight) + (dividerCount * 16.0) + 16.0;
+  final exactHeight = (itemCount * itemHeight) + (dividerCount * 16.0) + 12.0;
   final menuHeight = exactHeight.clamp(0.0, availableHeight);
   return showMenu<T>(
     context: buttonContext,
     popUpAnimationStyle: AnimationStyle.noAnimation,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    constraints: BoxConstraints(maxHeight: menuHeight),
+    color: ConclaveMenuStyle.background(isDark),
+    surfaceTintColor: Colors.transparent,
+    elevation: 12,
+    shadowColor: ConclaveMenuStyle.shadow(isDark),
+    shape: ConclaveMenuStyle.shape(isDark),
+    menuPadding: ConclaveMenuStyle.padding,
+    constraints: BoxConstraints(minHeight: menuHeight, maxHeight: menuHeight),
     position: RelativeRect.fromRect(
       Rect.fromLTWH(rect.left, anchorBottom - menuHeight, rect.width, 0),
       Offset.zero & overlay.size,
@@ -111,7 +118,6 @@ class _WorkComposer extends StatelessWidget {
     required this.timelineError,
     required this.submitError,
     required this.submitting,
-    required this.composerKey,
     required this.attachments,
     required this.onAddFiles,
     required this.executionSelection,
@@ -152,7 +158,6 @@ class _WorkComposer extends StatelessWidget {
   final String? timelineError;
   final String? submitError;
   final bool submitting;
-  final GlobalKey composerKey;
   final List<Map<String, dynamic>> attachments;
   final Future<void> Function() onAddFiles;
   final Map<String, dynamic> executionSelection;
@@ -307,7 +312,7 @@ class _WorkComposer extends StatelessWidget {
       Theme.of(context).brightness == Brightness.dark,
       Theme.of(context).colorScheme);
 
-  Widget _additionalControls(BuildContext context, GlobalKey inputKey) {
+  Widget _additionalControls(BuildContext context) {
     final selectedWorkflow = workflowCatalog
             .where((item) => item.reference == workflow)
             .firstOrNull ??
@@ -352,8 +357,9 @@ class _WorkComposer extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Builder(
-            builder: (buttonContext) => Tooltip(
-              message: 'Add attachments',
+            builder: (buttonContext) => Semantics(
+              key: const ValueKey('work-add-attachments'),
+              label: 'Add attachments',
               child: Material(
                 color: controlBg,
                 borderRadius: controlBorderRadius,
@@ -362,16 +368,21 @@ class _WorkComposer extends StatelessWidget {
                   onTap: () async {
                     final value = await _showAnchoredMenu<String>(
                       buttonContext: buttonContext,
-                      inputKey: inputKey,
-                      itemHeight: 48.0,
+                      itemHeight: 36.0,
                       items: [
-                        PopupMenuItem(
+                        ConclaveMenuEntry<String>(
                           value: 'files',
-                          enabled: canExecute && !submitting,
-                          child: const ListTile(
-                            dense: true,
-                            leading: Icon(Icons.attach_file, size: 18),
-                            title: Text('Add files'),
+                          child: MenuItemButton(
+                            style: ConclaveMenuStyle.item(
+                                Theme.of(context).brightness ==
+                                    Brightness.dark),
+                            leadingIcon:
+                                const Icon(Icons.attach_file, size: 16),
+                            onPressed: canExecute && !submitting
+                                ? () => Navigator.pop(buttonContext, 'files')
+                                : null,
+                            child: const Text('Add files',
+                                style: ConclaveMenuStyle.textStyle),
                           ),
                         ),
                       ],
@@ -391,8 +402,9 @@ class _WorkComposer extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Builder(
-            builder: (workflowBtnContext) => Tooltip(
-              message: 'Choose workflow',
+            builder: (workflowBtnContext) => Semantics(
+              key: const ValueKey('work-choose-workflow'),
+              label: 'Choose workflow',
               child: Material(
                 color: controlBg,
                 borderRadius: controlBorderRadius,
@@ -404,17 +416,28 @@ class _WorkComposer extends StatelessWidget {
                               _currentWorkflowVersions(workflowCatalog);
                           final value = await _showAnchoredMenu<String>(
                             buttonContext: workflowBtnContext,
-                            inputKey: inputKey,
-                            itemHeight: 48.0,
+                            itemHeight: 36.0,
                             items: [
                               for (final item in versions)
-                                CheckedPopupMenuItem(
+                                ConclaveMenuEntry<String>(
                                   value: item.reference,
-                                  checked: item.reference == workflow,
-                                  enabled: canExecute && !submitting,
-                                  child: Tooltip(
-                                    message: item.description,
-                                    child: Text(item.name),
+                                  child: Semantics(
+                                    label: item.description,
+                                    child: MenuItemButton(
+                                      style: ConclaveMenuStyle.item(
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark),
+                                      leadingIcon: Icon(
+                                        item.reference == workflow
+                                            ? Icons.check_circle_rounded
+                                            : Icons.circle_outlined,
+                                        size: 15,
+                                      ),
+                                      onPressed: () => Navigator.pop(
+                                          workflowBtnContext, item.reference),
+                                      child: Text(item.name,
+                                          style: ConclaveMenuStyle.textStyle),
+                                    ),
                                   ),
                                 ),
                             ],
@@ -505,18 +528,19 @@ class _WorkComposer extends StatelessWidget {
   ) {
     return Container(
       padding: EdgeInsets.zero,
-      key: composerKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           MarkdownComposer(
             controller: requestController,
+            hintText: 'Write a message...',
             chatStyle: true,
             minLines: 1,
             maxLines: 6,
             enabled: canExecute,
             onSend: () => onRun(),
             sendTooltip: 'Send request',
+            showSendTooltip: false,
             sendEnabled: canExecute &&
                 !submitting &&
                 !loadingWorkflows &&
@@ -525,8 +549,7 @@ class _WorkComposer extends StatelessWidget {
             showMarkdownControlsInSuffix: true,
             showSendInSuffix: true,
             sendInToolbar: true,
-            executionControlsBuilder: (inputKey) =>
-                _additionalControls(context, inputKey),
+            executionControlsBuilder: (_) => _additionalControls(context),
           ),
           if (attachments.isNotEmpty) ...[
             const SizedBox(height: 8),
@@ -998,32 +1021,35 @@ class _WorkTimelineCard extends StatelessWidget {
                         key: ValueKey(request.id),
                         data: request.prompt,
                         enabled: isOwnRequest,
+                        toggleColor: metaColor,
+                        crossAxisAlignment: isOwnRequest
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
                         child: _MemoizedWorkMarkdown(
                           data: request.prompt,
                           fitContent: true,
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (timeLabel.isNotEmpty) ...[
-                            Text(
-                              timeLabel,
-                              style: TextStyle(fontSize: 11, color: metaColor),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          _AnimatedMessageAction(
-                            tooltip: 'Copy Markdown',
-                            icon: Icons.copy_rounded,
-                            color: metaColor,
-                            onTap: () {
-                              Clipboard.setData(
-                                  ClipboardData(text: request.prompt));
-                            },
-                          ),
-                        ].orderedForMessage(isOwnRequest),
+                        footerBuilder: (context, toggle) => _messageFooter(
+                            toggle,
+                            [
+                              if (timeLabel.isNotEmpty) ...[
+                                Text(
+                                  timeLabel,
+                                  style:
+                                      TextStyle(fontSize: 11, color: metaColor),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              _AnimatedMessageAction(
+                                tooltip: 'Copy Markdown',
+                                icon: Icons.copy_rounded,
+                                color: metaColor,
+                                onTap: () {
+                                  Clipboard.setData(
+                                      ClipboardData(text: request.prompt));
+                                },
+                              ),
+                            ].orderedForMessage(isOwnRequest)),
                       ),
                     ],
                   ),
@@ -1727,64 +1753,67 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                     CollapsibleOwnMessage(
                       data: widget.item.text,
                       enabled: isMe,
+                      toggleColor: metaColor,
+                      footerGap: 8,
+                      crossAxisAlignment: isMe
+                          ? CrossAxisAlignment.end
+                          : CrossAxisAlignment.start,
                       child: ConclaveMarkdownBody(
                         data: widget.item.text,
                         fitContent: true,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (widget.item.editedAt != null) ...[
-                          Text(
-                            'Edited ${widget.item.editedAt}',
-                            style: TextStyle(
-                              fontSize: 11,
+                      footerBuilder: (context, toggle) => _messageFooter(
+                          toggle,
+                          [
+                            if (widget.item.editedAt != null) ...[
+                              Text(
+                                'Edited ${widget.item.editedAt}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: metaColor,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ] else if (widget.item.sentAt != null) ...[
+                              Text(
+                                widget.item.sentAt!,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: metaColor,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            if (isMe &&
+                                widget.onDelete != null &&
+                                !widget.item.id.startsWith('temp-')) ...[
+                              _AnimatedMessageAction(
+                                tooltip: 'Delete message',
+                                icon: Icons.delete_outline_rounded,
+                                color: metaColor,
+                                onTap: () => _confirmDelete(context),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            if (!widget.item.id.startsWith('temp-')) ...[
+                              _AnimatedMessageAction(
+                                tooltip: 'Edit message',
+                                icon: Icons.edit_outlined,
+                                color: metaColor,
+                                onTap: () => setState(() {
+                                  _editController.text = widget.item.text;
+                                  _isEditing = true;
+                                }),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            _AnimatedMessageAction(
+                              tooltip: 'Copy Markdown',
+                              icon: Icons.copy_rounded,
                               color: metaColor,
+                              onTap: widget.onCopy,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                        ] else if (widget.item.sentAt != null) ...[
-                          Text(
-                            widget.item.sentAt!,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: metaColor,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        if (isMe &&
-                            widget.onDelete != null &&
-                            !widget.item.id.startsWith('temp-')) ...[
-                          _AnimatedMessageAction(
-                            tooltip: 'Delete message',
-                            icon: Icons.delete_outline_rounded,
-                            color: metaColor,
-                            onTap: () => _confirmDelete(context),
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                        if (!widget.item.id.startsWith('temp-')) ...[
-                          _AnimatedMessageAction(
-                            tooltip: 'Edit message',
-                            icon: Icons.edit_outlined,
-                            color: metaColor,
-                            onTap: () => setState(() {
-                              _editController.text = widget.item.text;
-                              _isEditing = true;
-                            }),
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                        _AnimatedMessageAction(
-                          tooltip: 'Copy Markdown',
-                          icon: Icons.copy_rounded,
-                          color: metaColor,
-                          onTap: widget.onCopy,
-                        ),
-                      ].orderedForMessage(isMe),
+                          ].orderedForMessage(isMe)),
                     ),
                   ],
                 ],
@@ -1858,4 +1887,20 @@ class _AnimatedMessageActionState extends State<_AnimatedMessageAction> {
 // Own-message metadata follows reading order toward the right edge.
 extension _MessageFooterOrder on List<Widget> {
   List<Widget> orderedForMessage(bool own) => own ? this : reversed.toList();
+}
+
+/// Meta line under a message. With a Show more / Hide more [toggle] it spans the
+/// bubble: toggle at the left edge, date/time and actions at the right edge.
+Widget _messageFooter(Widget? toggle, List<Widget> meta) {
+  final items = Wrap(
+    alignment: toggle != null ? WrapAlignment.end : WrapAlignment.start,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: meta,
+  );
+  if (toggle == null) return items;
+  return Row(children: [
+    toggle,
+    const SizedBox(width: 8),
+    Expanded(child: items),
+  ]);
 }

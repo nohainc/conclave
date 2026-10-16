@@ -247,6 +247,44 @@ void main() {
     expect(tester.getTopLeft(find.text('Short message')).dy,
         greaterThanOrEqualTo(0));
   });
+  testWidgets('a later message does not replace a short first unread anchor',
+      (tester) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final anchor = AxTimelineFollowAnchor();
+    Widget view(int incoming) => MaterialApp(
+            home: Scaffold(
+                body: SizedBox(
+          height: 300,
+          child: ListView(
+              controller: controller,
+              padding: EdgeInsets.zero,
+              children: [
+                const SizedBox(height: 700),
+                if (incoming > 0)
+                  SizedBox(
+                      key: anchor.keyFor('first'),
+                      height: 60,
+                      child: const Text('First unread')),
+                if (incoming > 1)
+                  SizedBox(
+                      key: anchor.keyFor('second'),
+                      height: 600,
+                      child: const Text('Second unread')),
+              ]),
+        )));
+    await tester.pumpWidget(view(0));
+    controller.jumpTo(controller.position.maxScrollExtent);
+    anchor.observe('first', controller);
+    await tester.pumpWidget(view(1));
+    anchor.reveal(controller);
+    await tester.pump();
+    anchor.observe('second', controller);
+    await tester.pumpWidget(view(2));
+    anchor.reveal(controller);
+    await tester.pump();
+    expect(tester.getTopLeft(find.text('First unread')).dy, closeTo(0, 1));
+  });
 }
 
 class _DeactivationProbe extends StatefulWidget {

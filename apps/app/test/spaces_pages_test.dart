@@ -12,6 +12,7 @@ import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
 import 'ax_fixture_data.dart';
 import 'conversation_turn_fixture.dart';
 import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
+import 'package:conclave_app/src/features/common/markdown_composer.dart';
 
 void main() {
   for (final workflow in [
@@ -164,6 +165,7 @@ void main() {
   for (final workflow in ['chat', 'direct']) {
     for (final code in [
       'session_resume_failed',
+      'context_limit_exceeded',
       'execution_failed',
       'unknown_code'
     ]) {
@@ -218,7 +220,9 @@ void main() {
         await tester.pumpAndSettle();
         final friendly = code == 'session_resume_failed'
             ? 'The worker could not continue the previous conversation. Please retry your request.'
-            : 'Your request could not be completed. Please retry.';
+            : code == 'context_limit_exceeded'
+                ? 'This conversation exceeds the supported context limit. Start a new Thread with the relevant context.'
+                : 'Your request could not be completed. Please retry.';
         expect(find.text(friendly), findsOneWidget);
         expect(find.textContaining('C123'), findsNothing);
         for (final hidden in [
@@ -442,11 +446,11 @@ void main() {
         .map((body) => body.data)
         .toList();
     expect(markdown, containsAll(['**Chat answer**', '**Work answer**']));
-    await tester.tap(find.byTooltip('Choose workflow'));
+    await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
     final options = tester
-        .widgetList<CheckedPopupMenuItem<String>>(
-            find.byType(CheckedPopupMenuItem<String>))
+        .widgetList<ConclaveMenuEntry<String>>(
+            find.byType(ConclaveMenuEntry<String>))
         .toList();
     expect(options.map((item) => item.value), [
       'chat:v1',
@@ -454,7 +458,8 @@ void main() {
     ]);
     expect(
         options
-            .map((item) => (item.child as Tooltip).child)
+            .map((item) =>
+                ((item.child as Semantics).child as MenuItemButton).child)
             .cast<Text>()
             .map((text) => text.data),
         [
@@ -463,11 +468,11 @@ void main() {
         ]);
     expect(find.text('Direct'), findsNothing);
     await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> && widget.value == 'chat:v1'));
+        widget is ConclaveMenuEntry<String> && widget.value == 'chat:v1'));
     await tester.pumpAndSettle();
     const source = '## Question\n\n**Explain** this `code`.';
     await tester.enterText(find.byType(TextField).first, source);
-    await tester.tap(find.byTooltip('Send request'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
     await tester.pumpAndSettle();
     expect(sentWorkflow, 'chat');
     expect(sentSource, source);
@@ -509,21 +514,25 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     expect(find.text('· Direct'), findsOneWidget);
-    await tester.tap(find.byTooltip('Choose workflow'));
+    await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
     final options = tester
-        .widgetList<CheckedPopupMenuItem<String>>(
-            find.byType(CheckedPopupMenuItem<String>))
+        .widgetList<ConclaveMenuEntry<String>>(
+            find.byType(ConclaveMenuEntry<String>))
         .toList();
     expect(options, hasLength(1));
     expect(options.single.value, 'direct:v2');
-    expect(options.single.checked, isTrue);
-    await tester.ensureVisible(find.byType(CheckedPopupMenuItem<String>));
-    await tester.tap(find.byType(CheckedPopupMenuItem<String>));
+    expect(
+        (((options.single.child as Semantics).child as MenuItemButton)
+                .leadingIcon as Icon)
+            .icon,
+        Icons.check_circle_rounded);
+    await tester.ensureVisible(find.byType(ConclaveMenuEntry<String>));
+    await tester.tap(find.byType(ConclaveMenuEntry<String>));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Work settings'), findsNothing);
     await tester.enterText(find.byType(TextField).first, 'New work');
-    await tester.tap(find.byTooltip('Send request'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
     await tester.pumpAndSettle();
     expect(sentWorkflow, 'direct');
     expect(find.text('· Work'), findsOneWidget);
@@ -532,6 +541,49 @@ void main() {
     submission.complete('saved-new');
     await tester.pump();
   });
+
+  for (final brightness in Brightness.values) {
+    testWidgets('Thread tab colors follow text and timestamps in $brightness',
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(brightness: brightness),
+        home: Scaffold(
+            body: ThreadPage(
+          space: const AxSpace(
+              id: 'space-1',
+              name: 'Space',
+              branch: '',
+              lastActivity: '',
+              role: 'owner'),
+          thread: const AxThread(
+              id: 'thread-1',
+              spaceId: 'space-1',
+              name: 'Thread',
+              lead: '',
+              status: 'active',
+              brief: '',
+              primaryWorkspace: '',
+              queueStatus: ''),
+          dataSource: _PinnedHistoryDataSource(),
+          onBackToSpace: _noop,
+          onArchive: _noop,
+        )),
+      ));
+      await tester.pumpAndSettle();
+      final tabs = tester.widget<TabBar>(find.byType(TabBar));
+      final theme = Theme.of(tester.element(find.byType(TabBar)));
+      expect(tabs.labelColor, theme.colorScheme.onSurface);
+      expect(tabs.indicatorColor, theme.colorScheme.onSurface);
+      expect(tabs.unselectedLabelColor,
+          brightness == Brightness.dark ? Colors.white38 : Colors.black45);
+      await tester.tap(find.text('Work').first);
+      await tester.pumpAndSettle();
+      final switched = tester.widget<TabBar>(find.byType(TabBar));
+      expect(switched.controller!.index, 1);
+      expect(switched.labelColor, tabs.labelColor);
+      expect(switched.unselectedLabelColor, tabs.unselectedLabelColor);
+    });
+  }
 
   testWidgets('Thread uses bounded tabs or two panes at the width breakpoint',
       (tester) async {
@@ -601,13 +653,61 @@ void main() {
             find.widgetWithIcon(IconButton, Icons.send_rounded).first;
         final workSend =
             find.widgetWithIcon(IconButton, Icons.send_rounded).last;
-        // Work's Send now sits beside next-turn choices below the input.
-        // Both message inputs remain aligned in the two-pane layout.
+        expect(find.byTooltip('Show Markdown controls'), findsNothing);
+        expect(find.byTooltip('Hide Markdown controls'), findsNothing);
+        expect(find.byTooltip('Bold'), findsOneWidget);
+        final chatPane = find.byKey(const ValueKey('thread-Chat-pane'));
+        final workPane = find.byKey(const ValueKey('thread-Work-pane'));
+        expect(find.descendant(of: workPane, matching: find.byTooltip('Bold')),
+            findsNothing);
+        expect(find.descendant(of: workPane, matching: find.text('Preview')),
+            findsNothing);
+        final preview =
+            find.descendant(of: chatPane, matching: find.text('Preview'));
+        expect(tester.getCenter(chatSend).dy,
+            closeTo(tester.getCenter(preview).dy, 1));
+        expect(tester.getRect(chatSend).right,
+            closeTo(tester.getRect(chatPane).right - 6, 1));
+        expect(tester.getRect(workSend).right,
+            closeTo(tester.getRect(workPane).right, 1));
+        for (final send in [chatSend, workSend]) {
+          final context = tester.element(send);
+          expect(tester.widget<IconButton>(send).color,
+              Theme.of(context).colorScheme.onSurface);
+        }
+        final composers = find.byType(MarkdownComposer);
+        expect(tester.getSize(composers.first).height,
+            closeTo(tester.getSize(composers.last).height, 1));
         final fields = find.byType(TextField);
-        expect(tester.getBottomLeft(fields.first).dy,
-            closeTo(tester.getBottomLeft(fields.last).dy, 1));
-        expect(tester.getCenter(workSend).dy,
-            greaterThanOrEqualTo(tester.getCenter(chatSend).dy));
+        final chatRect = tester.getRect(fields.first);
+        tester.widget<TextField>(fields.last).controller!.text =
+            'One\nTwo\nThree\nFour';
+        await tester.pumpAndSettle();
+        expect(tester.getRect(fields.first), chatRect);
+        expect(tester.getSize(fields.last).height,
+            greaterThan(tester.getSize(fields.first).height));
+        for (final (pane, history) in [(chatPane, chat), (workPane, work)]) {
+          final controller =
+              tester.widget<CustomScrollView>(history).controller!;
+          controller.jumpTo(controller.position.maxScrollExtent);
+          await tester.pumpAndSettle();
+          await tester.drag(history, const Offset(0, 350));
+          await tester.pumpAndSettle();
+          await tester.drag(history, const Offset(0, -60));
+          await tester.pumpAndSettle();
+          final arrow = find.descendant(
+              of: pane,
+              matching: find.byKey(const ValueKey('scroll-to-latest')));
+          expect(arrow, findsOneWidget);
+          final composer = find.descendant(
+              of: pane, matching: find.byType(MarkdownComposer));
+          expect(tester.getRect(arrow).bottom,
+              lessThan(tester.getRect(composer).top));
+          await tester.tap(arrow);
+          await tester.pumpAndSettle();
+          expect(controller.position.extentAfter, closeTo(0, 1));
+          expect(arrow, findsNothing);
+        }
       }
       expect(tester.takeException(), isNull);
     }
@@ -720,7 +820,8 @@ void main() {
 
       await tester.enterText(
           find.byType(TextField).first, '**Immediate request**');
-      await tester.tap(find.byTooltip('Send request'));
+      await tester
+          .tap(find.byKey(const ValueKey('composer-send-Send request')));
       await tester.pump();
       expect(
           tester
@@ -844,7 +945,8 @@ void main() {
                     find.widgetWithIcon(IconButton, Icons.send_rounded))
                 .onPressed,
             isNotNull);
-        await tester.tap(find.byTooltip('Send request'));
+        await tester
+            .tap(find.byKey(const ValueKey('composer-send-Send request')));
         await tester.pumpAndSettle();
         expect(find.text('Cancel previous request?'), findsOneWidget);
         expect(find.text('Cancel and send'), findsOneWidget);
@@ -958,7 +1060,8 @@ void main() {
       expect(tester.getRect(field), before);
       expect(find.ancestor(of: field, matching: history), findsNothing);
       if (tab == 1) {
-        expect(find.byTooltip('Send request'), findsOneWidget);
+        expect(find.byKey(const ValueKey('composer-send-Send request')),
+            findsOneWidget);
       }
       expect(tester.takeException(), isNull);
     }
@@ -976,7 +1079,7 @@ void main() {
     });
     addTearDown(() => tester.binding.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, null));
-    await tester.binding.setSurfaceSize(const Size(1000, 1600));
+    await tester.binding.setSurfaceSize(const Size(1300, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -1163,8 +1266,9 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Implement the change');
-    await tester.ensureVisible(find.byTooltip('Send request'));
-    await tester.tap(find.byTooltip('Send request'));
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('composer-send-Send request')));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byTooltip('Copy error'));
     await tester.tap(find.byTooltip('Copy error'));
@@ -1331,7 +1435,8 @@ void main() {
     expect(find.textContaining('checkout key'), findsNothing);
     expect(find.text('Viewer access can read the thread but cannot run Work.'),
         findsOneWidget);
-    expect(find.byTooltip('Send request'), findsOneWidget);
+    expect(find.byKey(const ValueKey('composer-send-Send request')),
+        findsOneWidget);
   });
 
   testWidgets('collaborator can explicitly run Work', (tester) async {
@@ -1375,32 +1480,69 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('What should Conclave do?'), findsNothing);
-    expect(find.byTooltip('Add attachments'), findsOneWidget);
-    await tester.tap(find.byTooltip('Add attachments'));
+    expect(find.byKey(const ValueKey('work-add-attachments')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('work-add-attachments')));
     await tester.pumpAndSettle();
     expect(find.text('Add files'), findsOneWidget);
+    expect(find.byTooltip('Add attachments'), findsNothing);
+    expect(find.byTooltip('Choose workflow'), findsNothing);
+    expect(find.byTooltip('Send request'), findsNothing);
+
+    expect(
+        find.ancestor(
+            of: find.text('Add files'), matching: find.byType(InkWell)),
+        findsOneWidget);
+
     expect(find.text('Add link'), findsNothing);
-    expect(tester.getBottomLeft(find.text('Add files')).dy,
-        lessThan(tester.getTopLeft(find.byTooltip('Add attachments')).dy));
+    expect(
+        tester.getBottomLeft(find.text('Add files')).dy,
+        lessThan(tester
+            .getTopLeft(find.byKey(const ValueKey('work-add-attachments')))
+            .dy));
     final menu = find
-        .ancestor(of: find.text('Add files'), matching: find.byType(Material))
+        .ancestor(
+            of: find.text('Add files'),
+            matching: find.byWidgetPredicate(
+                (widget) => widget is Material && widget.elevation == 12))
         .first;
+    expect(
+        tester.getBottomLeft(menu).dy,
+        closeTo(
+            tester
+                    .getTopLeft(
+                        find.byKey(const ValueKey('work-add-attachments')))
+                    .dy -
+                8,
+            1));
     expect(
         (tester.widget<Material>(menu).shape as RoundedRectangleBorder)
             .borderRadius,
-        BorderRadius.circular(10));
+        BorderRadius.circular(14));
     await tester.tapAt(Offset.zero);
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Choose workflow'), findsOneWidget);
-    await tester.tap(find.byTooltip('Choose workflow'));
+    expect(find.byKey(const ValueKey('work-choose-workflow')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
+    final workflowSurface = find.byWidgetPredicate(
+        (widget) => widget is Material && widget.elevation == 12);
+    expect(
+        tester.getBottomLeft(workflowSurface).dy,
+        closeTo(
+            tester
+                    .getTopLeft(
+                        find.byKey(const ValueKey('work-choose-workflow')))
+                    .dy -
+                8,
+            1));
     final workOption = find.descendant(
-        of: find.byType(CheckedPopupMenuItem<String>),
+        of: find.byType(ConclaveMenuEntry<String>),
         matching: find.text('Work'));
+    expect(find.ancestor(of: workOption, matching: find.byType(InkWell)),
+        findsOneWidget);
     await tester.ensureVisible(workOption);
     await tester.pumpAndSettle();
     await tester.tap(find.ancestor(
-        of: workOption, matching: find.byType(CheckedPopupMenuItem<String>)));
+        of: workOption, matching: find.byType(ConclaveMenuEntry<String>)));
     await tester.pumpAndSettle();
     const markdownPrompt =
         '  ## Implementation\n\n- **Add tests**\n\n```dart\nfinal ready = true;\n```\n';
@@ -1411,17 +1553,28 @@ void main() {
             .widget<TextField>(find.byType(TextField).first)
             .decoration
             ?.hintText,
-        isNull);
+        'Write a message...');
     await tester.enterText(find.byType(TextField).first, markdownPrompt);
     expect(
-        tester.getTopLeft(find.byTooltip('Send request')).dy,
+        tester
+            .getTopLeft(
+                find.byKey(const ValueKey('composer-send-Send request')))
+            .dy,
         greaterThanOrEqualTo(
             tester.getBottomLeft(find.byType(TextField).first).dy));
-    expect(tester.getCenter(find.byTooltip('Send request')).dy,
-        closeTo(tester.getCenter(find.byTooltip('Choose workflow')).dy, 1));
+    expect(
+        tester
+            .getCenter(find.byKey(const ValueKey('composer-send-Send request')))
+            .dy,
+        closeTo(
+            tester
+                .getCenter(find.byKey(const ValueKey('work-choose-workflow')))
+                .dy,
+            1));
     expect(submittedWork, isNull);
-    await tester.ensureVisible(find.byTooltip('Send request'));
-    await tester.tap(find.byTooltip('Send request'));
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('composer-send-Send request')));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
     await tester.pumpAndSettle();
 
     expect(submittedWork, markdownPrompt);

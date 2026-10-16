@@ -198,7 +198,7 @@ void main() {
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Run with Auto');
-    await tester.tap(find.byTooltip('Send request'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
     await tester.pumpAndSettle();
     expect(submitted, 1);
     expect(submittedSelection, {
@@ -335,7 +335,10 @@ Future<void> requestChoice(
     WidgetTester tester, String label, String text) async {
   final picker = find.byWidgetPredicate((w) =>
       w is DropdownButtonFormField<String> &&
-      (w.key as ValueKey<String>).value.startsWith('work-composer-$label-'));
+          (w.key as ValueKey<String>)
+              .value
+              .startsWith('work-composer-$label-') ||
+      w is MenuAnchor && w.key == ValueKey('work-composer-$label-menu'));
   if (picker.evaluate().isEmpty) {
     await tester.tap(find.byKey(const ValueKey('work-composer-open')));
     await tester.pumpAndSettle();
