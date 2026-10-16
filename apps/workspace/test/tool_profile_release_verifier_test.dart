@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
     show
@@ -9,15 +8,15 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
+import 'support/worker_profile_fixture.dart';
+
 void main() {
   late Map<String, Object?> profile;
   late Map<String, Object?> release;
   late String workerTypeId;
 
   setUp(() {
-    profile = jsonDecode(File(
-      '../../packages/tool-profile/test/fixtures/fixture-cli.v1.json',
-    ).readAsStringSync()) as Map<String, Object?>;
+    profile = buildTestWorkerProfile();
     workerTypeId = profile['logicalWorkerTypeId']! as String;
     final providerTool = profile['providerTool']! as Map<String, Object?>;
     release = {

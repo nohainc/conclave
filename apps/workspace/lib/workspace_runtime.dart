@@ -209,10 +209,17 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
 
   workerCatalogCoordinator?.addListener(() => unawaited(warmLaunchPlans()));
   unawaited(warmLaunchPlans());
-  final activeWorkerIds = (await localWorkerRegistry.list())
-      .where((worker) => worker.status == LocalWorkerStatus.ready)
-      .map((worker) => worker.id)
-      .toList();
+  List<String> activeWorkerIds;
+  try {
+    activeWorkerIds = (await localWorkerRegistry.list())
+        .where((worker) => worker.status == LocalWorkerStatus.ready)
+        .map((worker) => worker.id)
+        .toList();
+  } on Object catch (error) {
+    stderr.writeln(
+        'Workspace local Worker registry unavailable at startup: $error');
+    activeWorkerIds = const <String>[];
+  }
   final workRoot = await config.workRootResolver.resolve();
   workspacePaths.validateWorkRootSeparation(workRoot);
   final spaceDirectoryLifecycle = SpaceDirectoryLifecycle(

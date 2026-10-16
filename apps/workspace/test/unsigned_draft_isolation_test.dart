@@ -4,6 +4,8 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/worker_profile_fixture.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -30,64 +32,12 @@ void main() {
     test(
         'Unsigned Profile Lab draft candidate is explicitly rejected by Workspace trusted Profile store',
         () async {
-      final draftPayload = <String, Object?>{
-        'schemaVersion': 1,
-        'profileDefinitionId': 'codex-cli',
-        'releaseVersion': 1,
-        'logicalWorkerTypeId': 'codex',
-        'engineFamily': 'cli',
-        'engineCompatibility': {'min': '1.0.0', 'maxExclusive': '2.0.0'},
-        'providerTool': {
-          'name': 'codex',
-          'executableCandidates': ['codex'],
-          'discovery': {'standardLocations': [], 'allowPathSearch': true},
-          'versionProbe': {
-            'arguments': ['--version'],
-            'timeoutMs': 10000,
-            'source': 'stdout',
-            'extract': {'kind': 'regex_capture', 'patternId': 'semver'}
-          },
-          'supportedVersions': [
-            {'min': '0.0.1', 'maxExclusive': '99.0.0'}
-          ],
-        },
-        'environment': {
-          'passthrough': ['PATH', 'HOME'],
-          'set': {}
-        },
-        'probe': {
-          'passive': {'checks': [], 'configChecks': []}
-        },
-        'execution': {
-          'arguments': ['exec', '{{prompt}}'],
-          'stdin': {'mode': 'raw_text', 'value': '{{prompt}}'},
-          'output': {'mode': 'plain_text'},
-          'events': []
-        },
-        'session': {
-          'supported': false,
-          'formatId': 'session-v1',
-          'compatibleFormatIds': ['session-v1'],
-          'resumeArguments': [],
-          'requireObservedIdMatch': false
-        },
-        'model': {
-          'supported': false,
-          'arguments': [],
-          'unknownModelPolicy': 'pass_through'
-        },
-        'timeout': {'providerArguments': [], 'providerReserveMs': 0},
-        'sandbox': {
-          'mappings': {
-            'restricted': [],
-            'provider_default': [],
-            'full_access': []
-          }
-        },
-        'progress': [],
-        'errors': {'mappings': []},
-        'compatibilityOverrides': [],
-      };
+      final draftPayload = buildTestWorkerProfile(
+        profileDefinitionId: 'codex-cli',
+        logicalWorkerTypeId: 'codex',
+        providerToolName: 'codex',
+        executableCandidates: ['codex'],
+      );
 
       // Profile Lab candidate (unsigned)
       final candidate = LocalDraftProfileCandidate.fromProfileMap(draftPayload);

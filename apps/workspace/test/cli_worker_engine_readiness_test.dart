@@ -17,183 +17,271 @@ import 'support/repository_root.dart';
 import 'support/worker_profile_snapshot_fixture.dart';
 
 void main() {
-  test(
-      'live readiness runs the Worker Profile through the generic Engine and keeps a disabled Worker disabled',
-      () async {
-    final repository = repositoryRoot;
-    final root = await Directory.systemTemp.createTemp('profile-live-test-');
-    addTearDown(() => root.delete(recursive: true));
-    final signing = await Ed25519ReleaseFixture.create();
-    final profileStore = WorkerProfileStore(
-      profilesRoot: Directory('${root.path}/Profiles'),
-      trustPolicy: signing.trustPolicy,
-    );
-    final profile = jsonDecode(
-      await File(
-        '$repository/packages/tool-profile/test/fixtures/chatgpt-codex.v1.json',
-      ).readAsString(),
-    ) as Map<String, Object?>;
-    final providerScript =
-        '$repository/packages/tool-profile/test/fixtures/provider-cli/fixture_provider.dart';
-    final provider = profile['providerTool']! as Map<String, Object?>;
-    provider['executableCandidates'] = ['dart'];
-    (provider['discovery']! as Map<String, Object?>)['standardLocations'] =
-        <String>[];
-    (provider['versionProbe']! as Map<String, Object?>)['arguments'] = [
-      'run',
-      providerScript,
-      '--version',
-    ];
-    (provider['versionProbe']! as Map<String, Object?>)['timeoutMs'] = 10000;
-    provider['supportedVersions'] = [
-      {'min': '0.0.0', 'maxExclusive': '1.0.0'},
-    ];
-    profile['environment'] = {
-      'passthrough': ['PATH', 'HOME'],
-      'set': <String, String>{},
-    };
-    final passive = (profile['probe']! as Map<String, Object?>)['passive']!
-        as Map<String, Object?>;
-    passive['checks'] = <Object?>[];
-    passive['configChecks'] = <Object?>[];
-    profile['execution'] = {
-      'arguments': ['run', providerScript, 'echo', '{{prompt}}'],
-      'stdin': {'mode': 'raw_text', 'value': '{{prompt}}'},
-      'output': {'mode': 'plain_text'},
-      'events': <Object?>[],
-    };
-    final first = await workerProfileSnapshotFixture(
-      signing: signing,
-      profile: profile,
-      workerTypeId: 'chatgpt',
-      revision: 1,
-    );
-    await profileStore.activateWorkerProfile(
-      await profileStore.stageWorkerProfile(first),
-    );
-    final candidateProfile =
-        jsonDecode(jsonEncode(profile)) as Map<String, Object?>;
-    candidateProfile['releaseVersion'] = 2;
-    final second = await workerProfileSnapshotFixture(
-      signing: signing,
-      profile: candidateProfile,
-      workerTypeId: 'chatgpt',
-      revision: 2,
-    );
-    await profileStore.activateWorkerProfile(
-      await profileStore.stageWorkerProfile(second),
-    );
+  for (final testCase in _readinessCases) {
+    test(testCase.description, () async {
+      final repository = repositoryRoot;
+      final root = await Directory.systemTemp.createTemp(
+        'profile-${testCase.workerTypeId}-live-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      final signing = await Ed25519ReleaseFixture.create();
+      final profileStore = WorkerProfileStore(
+        profilesRoot: Directory('${root.path}/Profiles'),
+        trustPolicy: signing.trustPolicy,
+      );
+      final profile = jsonDecode(
+        await File('$repository/${testCase.fixturePath}').readAsString(),
+      ) as Map<String, Object?>;
+      final providerScript = await testCase.prepareProviderScript(
+        repository: repository,
+        root: root,
+      );
+      _applyCommonFixtureProviderOverrides(profile, providerScript);
+      testCase.applyProviderSpecificOverrides(profile, providerScript);
 
-    final registry = LocalWorkerRegistry(
-      dataDirectory: Directory('${root.path}/Registry'),
-      workspaceId: 'workspace-profile-live',
-      idGenerator: () => 'disabled-chatgpt',
-    );
-    final worker = await registry.create(
-      catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
-      status: LocalWorkerStatus.disabled,
-    );
-    final catalog = ToolProfileCatalogClient(
-      cloudUri: Uri.parse('https://catalog.test'),
-      store: profileStore,
-      trustPolicy: signing.trustPolicy,
-      workerCatalogLoader: () async => [
-        logicalWorkerCatalogFixture('chatgpt').toJson(),
-      ],
-    );
-    await catalog.syncCatalog();
-    addTearDown(catalog.close);
-    final bundledEngine = File(
-      '$repository/apps/workspace/assets/engines/'
-      'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
-    );
-    final engine = CliWorkerEngineSupervisor(
-      engineExecutable: bundledEngine.existsSync()
-          ? bundledEngine.path
-          : Platform.environment['DART_EXECUTABLE'] ??
-              Platform.resolvedExecutable,
-      engineArgumentsPrefix: bundledEngine.existsSync()
-          ? const []
-          : ['$repository/engines/cli_worker/bin/conclave_cli_worker.dart'],
-    );
-    final profileDiagnostics = WorkerDiagnosticStore(
-      directory: Directory('${root.path}/Diagnostics'),
-    );
-    final coordinator = WorkerCatalogCoordinator(
-      catalog: catalog,
-      releaseStore: profileStore,
-      registry: registry,
-    );
-    final monitor = WorkerReadinessMonitor(
-      registry: registry,
-      toolProfileReleaseStore: profileStore,
-      workerCatalogCoordinator: coordinator,
-      cliWorkerEngineSupervisor: engine,
-      workerStateDirectory: (workerId) =>
-          Directory('${root.path}/Workers/$workerId/state'),
-      profileDiagnosticStoreForWorker: (_) => profileDiagnostics,
-    );
+      final first = await workerProfileSnapshotFixture(
+        signing: signing,
+        profile: profile,
+        workerTypeId: testCase.workerTypeId,
+        revision: 1,
+      );
+      await profileStore.activateWorkerProfile(
+        await profileStore.stageWorkerProfile(first),
+      );
+      if (testCase.verifyRollbackAndDiagnostics) {
+        final candidateProfile =
+            jsonDecode(jsonEncode(profile)) as Map<String, Object?>;
+        candidateProfile['releaseVersion'] = 2;
+        final second = await workerProfileSnapshotFixture(
+          signing: signing,
+          profile: candidateProfile,
+          workerTypeId: testCase.workerTypeId,
+          revision: 2,
+        );
+        await profileStore.activateWorkerProfile(
+          await profileStore.stageWorkerProfile(second),
+        );
+      }
 
-    expect(await monitor.rollbackToolProfile('chatgpt'), isTrue);
-    expect((await profileStore.currentWorkerProfile('chatgpt'))?.revision, 1);
-    expect(
-      (await profileStore.lastKnownGoodWorkerProfile('chatgpt'))?.revision,
-      2,
-    );
-    expect((await registry.find(worker.id))!.lastLiveTestAt, isNull,
-        reason: 'Profile rollback must use only a passive probe.');
+      final registry = LocalWorkerRegistry(
+        dataDirectory: Directory('${root.path}/Registry'),
+        workspaceId: 'workspace-${testCase.workerTypeId}-profile-live',
+        idGenerator: () => 'disabled-${testCase.workerTypeId}',
+      );
+      final worker = await registry.create(
+        catalogEntry: logicalWorkerCatalogFixture(testCase.workerTypeId),
+        status: LocalWorkerStatus.disabled,
+      );
+      final catalog = ToolProfileCatalogClient(
+        cloudUri: Uri.parse('https://catalog.test'),
+        store: profileStore,
+        trustPolicy: signing.trustPolicy,
+        workerCatalogLoader: () async => [
+          logicalWorkerCatalogFixture(testCase.workerTypeId).toJson(),
+        ],
+      );
+      await catalog.syncCatalog();
+      addTearDown(catalog.close);
+      final bundledEngine = File(
+        '$repository/apps/workspace/assets/engines/'
+        'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
+      );
+      final engine = CliWorkerEngineSupervisor(
+        engineExecutable: bundledEngine.existsSync()
+            ? bundledEngine.path
+            : Platform.environment['DART_EXECUTABLE'] ??
+                Platform.resolvedExecutable,
+        engineArgumentsPrefix: bundledEngine.existsSync()
+            ? const []
+            : ['$repository/engines/cli_worker/bin/conclave_cli_worker.dart'],
+        environmentOverrides: {'HOME': root.path},
+      );
+      final profileDiagnostics = WorkerDiagnosticStore(
+        directory: Directory('${root.path}/Diagnostics'),
+      );
+      final coordinator = WorkerCatalogCoordinator(
+        catalog: catalog,
+        releaseStore: profileStore,
+        registry: registry,
+      );
+      final monitor = WorkerReadinessMonitor(
+        registry: registry,
+        toolProfileReleaseStore: profileStore,
+        workerCatalogCoordinator: coordinator,
+        cliWorkerEngineSupervisor: engine,
+        workerStateDirectory: (workerId) =>
+            Directory('${root.path}/Workers/$workerId/state'),
+        profileDiagnosticStoreForWorker: (_) => profileDiagnostics,
+      );
+      addTearDown(monitor.dispose);
 
-    await monitor.checkNow(
-      mode: LocalWorkerProbeMode.live,
-      workerTypeId: 'chatgpt',
-    );
+      if (testCase.verifyRollbackAndDiagnostics) {
+        expect(
+          await monitor.rollbackToolProfile(testCase.workerTypeId),
+          isTrue,
+        );
+        expect(
+          (await profileStore.currentWorkerProfile(testCase.workerTypeId))
+              ?.revision,
+          1,
+        );
+        expect(
+          (await profileStore.lastKnownGoodWorkerProfile(testCase.workerTypeId))
+              ?.revision,
+          2,
+        );
+        expect(
+          (await registry.find(worker.id))!.lastLiveTestAt,
+          isNull,
+          reason: 'Profile rollback must use only a passive probe.',
+        );
+      }
 
-    final tested = (await registry.find(worker.id))!;
-    expect(
-      tested.lastLiveTestPassed,
-      isTrue,
-      reason: '${tested.lastLiveTestIssueCode}: ${tested.lastLiveTestDetails} '
-          'version=${tested.toolVersion}',
-    );
-    expect(tested.lastLiveTestAt, isNotNull);
-    expect(tested.activationState, LocalWorkerActivationState.disabled);
-    expect(tested.status, LocalWorkerStatus.disabled);
-    final diagnostic = jsonDecode(
-      (await profileDiagnostics.currentFile.readAsLines()).last,
-    ) as Map<String, Object?>;
-    expect(diagnostic['workspaceVersion'], isNotNull);
-    expect(diagnostic['engineVersion'], isNotNull);
-    expect(diagnostic['workerTypeId'], 'chatgpt');
-    expect(diagnostic['profileDefinitionId'], 'chatgpt-codex');
-    expect(diagnostic['profileReleaseVersion'], 1);
-    expect(diagnostic['profileResolutionSource'], 'active');
-    expect(diagnostic['probeStage'], 'live');
-    expect(diagnostic['providerToolName'], isNotNull);
-    expect(diagnostic['providerToolVersion'], '0.3.0');
-    expect(diagnostic['durationMs'], isA<int>());
-    expect(diagnostic['failureLayer'], isNull);
-    expect(jsonEncode(diagnostic), isNot(contains('profilePayload')));
-    await monitor.dispose();
+      await monitor.checkNow(
+        mode: LocalWorkerProbeMode.live,
+        workerTypeId: testCase.workerTypeId,
+      );
+
+      final tested = (await registry.find(worker.id))!;
+      expect(
+        tested.lastLiveTestPassed,
+        isTrue,
+        reason:
+            '${tested.lastLiveTestIssueCode}: ${tested.lastLiveTestDetails} '
+            'version=${tested.toolVersion}',
+      );
+      expect(tested.lastLiveTestAt, isNotNull);
+      expect(tested.toolVersion, '0.3.0');
+      expect(tested.activationState, LocalWorkerActivationState.disabled);
+      expect(tested.status, LocalWorkerStatus.disabled);
+
+      if (testCase.verifyRollbackAndDiagnostics) {
+        final diagnostic = jsonDecode(
+          (await profileDiagnostics.currentFile.readAsLines()).last,
+        ) as Map<String, Object?>;
+        expect(diagnostic['workspaceVersion'], isNotNull);
+        expect(diagnostic['engineVersion'], isNotNull);
+        expect(diagnostic['workerTypeId'], testCase.workerTypeId);
+        expect(
+          diagnostic['profileDefinitionId'],
+          testCase.profileDefinitionId,
+        );
+        expect(diagnostic['profileReleaseVersion'], 1);
+        expect(diagnostic['profileResolutionSource'], 'active');
+        expect(diagnostic['probeStage'], 'live');
+        expect(diagnostic['providerToolName'], isNotNull);
+        expect(diagnostic['providerToolVersion'], '0.3.0');
+        expect(diagnostic['durationMs'], isA<int>());
+        expect(diagnostic['failureLayer'], isNull);
+        expect(jsonEncode(diagnostic), isNot(contains('profilePayload')));
+      }
+    });
+  }
+}
+
+void _applyCommonFixtureProviderOverrides(
+  Map<String, Object?> profile,
+  String providerScript,
+) {
+  final provider = profile['providerTool']! as Map<String, Object?>;
+  provider['executableCandidates'] = ['dart'];
+  (provider['discovery']! as Map<String, Object?>)['standardLocations'] =
+      <String>[];
+  (provider['versionProbe']! as Map<String, Object?>)
+    ..['arguments'] = ['run', providerScript, '--version']
+    ..['timeoutMs'] = 10000;
+  provider['supportedVersions'] = [
+    {'min': '0.0.0', 'maxExclusive': '1.0.0'},
+  ];
+  profile['environment'] = {
+    'passthrough': ['PATH', 'HOME'],
+    'set': <String, String>{},
+  };
+  (profile['probe']! as Map<String, Object?>)['passive']!
+      as Map<String, Object?>
+    ..['checks'] = <Object?>[]
+    ..['configChecks'] = <Object?>[];
+}
+
+final class _ProviderReadinessCase {
+  const _ProviderReadinessCase({
+    required this.description,
+    required this.workerTypeId,
+    required this.profileDefinitionId,
+    required this.fixturePath,
+    required this.verifyRollbackAndDiagnostics,
+    required this.prepareProviderScript,
+    required this.applyProviderSpecificOverrides,
   });
 
-  test(
-      'Gemini live readiness uses stream-json through the generic Engine and keeps a disabled Worker disabled',
-      () async {
-    final repository = repositoryRoot;
-    final root = await Directory.systemTemp.createTemp('profile-gemini-live-');
-    addTearDown(() => root.delete(recursive: true));
-    final signing = await Ed25519ReleaseFixture.create();
-    final profileStore = WorkerProfileStore(
-      profilesRoot: Directory('${root.path}/Profiles'),
-      trustPolicy: signing.trustPolicy,
-    );
-    final profile = jsonDecode(
-      await File(
-        '$repository/packages/tool-profile/test/fixtures/gemini-antigravity.v1.json',
-      ).readAsString(),
-    ) as Map<String, Object?>;
-    final providerScript = '${root.path}/fixture_agy.dart';
-    await File(providerScript).writeAsString(r'''import 'dart:convert';
+  final String description;
+  final String workerTypeId;
+  final String profileDefinitionId;
+  final String fixturePath;
+  final bool verifyRollbackAndDiagnostics;
+  final Future<String> Function({
+    required String repository,
+    required Directory root,
+  }) prepareProviderScript;
+  final void Function(Map<String, Object?> profile, String providerScript)
+      applyProviderSpecificOverrides;
+}
+
+final _readinessCases = <_ProviderReadinessCase>[
+  _ProviderReadinessCase(
+    description:
+        'live readiness runs the Worker Profile through the generic Engine and keeps a disabled Worker disabled',
+    workerTypeId: 'chatgpt',
+    profileDefinitionId: 'chatgpt-codex',
+    fixturePath: 'packages/tool-profile/test/fixtures/chatgpt-codex.v1.json',
+    verifyRollbackAndDiagnostics: true,
+    prepareProviderScript: ({
+      required String repository,
+      required Directory root,
+    }) async =>
+        '$repository/packages/tool-profile/test/fixtures/provider-cli/fixture_provider.dart',
+    applyProviderSpecificOverrides: (profile, providerScript) {
+      profile['execution'] = {
+        'arguments': ['run', providerScript, 'echo', '{{prompt}}'],
+        'stdin': {'mode': 'raw_text', 'value': '{{prompt}}'},
+        'output': {'mode': 'plain_text'},
+        'events': <Object?>[],
+      };
+    },
+  ),
+  _ProviderReadinessCase(
+    description:
+        'Gemini live readiness uses stream-json through the generic Engine and keeps a disabled Worker disabled',
+    workerTypeId: 'gemini',
+    profileDefinitionId: 'gemini-antigravity',
+    fixturePath:
+        'packages/tool-profile/test/fixtures/gemini-antigravity.v1.json',
+    verifyRollbackAndDiagnostics: false,
+    prepareProviderScript: ({
+      required String repository,
+      required Directory root,
+    }) async {
+      final providerScript = '${root.path}/fixture_agy.dart';
+      await File(providerScript).writeAsString(_geminiFixtureScript);
+      return providerScript;
+    },
+    applyProviderSpecificOverrides: (profile, providerScript) {
+      final execution = profile['execution']! as Map<String, Object?>;
+      execution['arguments'] = [
+        'run',
+        providerScript,
+        ...(execution['arguments']! as List<Object?>),
+      ];
+      profile['model'] = Map<String, Object?>.from(profile['model']! as Map)
+        ..['supported'] = false
+        ..['arguments'] = []
+        ..remove('discovery')
+        ..remove('selectionMapping');
+    },
+  ),
+];
+
+const _geminiFixtureScript = r'''import 'dart:convert';
 import 'dart:io';
 
 Future<void> main(List<String> arguments) async {
@@ -214,114 +302,4 @@ Future<void> main(List<String> arguments) async {
       'conversation_id': 'fixture-gemini-session',
     },
   }));
-}''');
-
-    final provider = profile['providerTool']! as Map<String, Object?>;
-    provider['executableCandidates'] = ['dart'];
-    (provider['discovery']! as Map<String, Object?>)['standardLocations'] =
-        <String>[];
-    (provider['versionProbe']! as Map<String, Object?>)['arguments'] = [
-      'run',
-      providerScript,
-      '--version',
-    ];
-    (provider['versionProbe']! as Map<String, Object?>)['timeoutMs'] = 10000;
-    provider['supportedVersions'] = [
-      {'min': '0.0.0', 'maxExclusive': '1.0.0'},
-    ];
-    profile['environment'] = {
-      'passthrough': ['PATH', 'HOME'],
-      'set': <String, String>{},
-    };
-    final passive = (profile['probe']! as Map<String, Object?>)['passive']!
-        as Map<String, Object?>;
-    passive['checks'] = <Object?>[];
-    passive['configChecks'] = <Object?>[];
-    final execution = profile['execution']! as Map<String, Object?>;
-    execution['arguments'] = [
-      'run',
-      providerScript,
-      ...(execution['arguments']! as List<Object?>),
-    ];
-    final model = Map<String, Object?>.from(profile['model']! as Map)
-      ..['supported'] = false
-      ..['arguments'] = []
-      ..remove('discovery')
-      ..remove('selectionMapping');
-    profile['model'] = model;
-    final snapshot = await workerProfileSnapshotFixture(
-      signing: signing,
-      profile: profile,
-      workerTypeId: 'gemini',
-      revision: 1,
-    );
-    await profileStore.activateWorkerProfile(
-      await profileStore.stageWorkerProfile(snapshot),
-    );
-
-    final registry = LocalWorkerRegistry(
-      dataDirectory: Directory('${root.path}/Registry'),
-      workspaceId: 'workspace-gemini-profile-live',
-      idGenerator: () => 'disabled-gemini',
-    );
-    final worker = await registry.create(
-      catalogEntry: logicalWorkerCatalogFixture('gemini'),
-      status: LocalWorkerStatus.disabled,
-    );
-    final catalog = ToolProfileCatalogClient(
-      cloudUri: Uri.parse('https://catalog.test'),
-      store: profileStore,
-      trustPolicy: signing.trustPolicy,
-      workerCatalogLoader: () async => [
-        logicalWorkerCatalogFixture('gemini').toJson(),
-      ],
-    );
-    await catalog.syncCatalog();
-    addTearDown(catalog.close);
-    final bundledEngine = File(
-      '$repository/apps/workspace/assets/engines/'
-      'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
-    );
-    final engine = CliWorkerEngineSupervisor(
-      engineExecutable: bundledEngine.existsSync()
-          ? bundledEngine.path
-          : Platform.environment['DART_EXECUTABLE'] ??
-              Platform.resolvedExecutable,
-      engineArgumentsPrefix: bundledEngine.existsSync()
-          ? const []
-          : ['$repository/engines/cli_worker/bin/conclave_cli_worker.dart'],
-      environmentOverrides: {'HOME': root.path},
-    );
-    final coordinator = WorkerCatalogCoordinator(
-      catalog: catalog,
-      releaseStore: profileStore,
-      registry: registry,
-    );
-    final monitor = WorkerReadinessMonitor(
-      registry: registry,
-      toolProfileReleaseStore: profileStore,
-      workerCatalogCoordinator: coordinator,
-      cliWorkerEngineSupervisor: engine,
-      workerStateDirectory: (workerId) =>
-          Directory('${root.path}/Workers/$workerId/state'),
-    );
-
-    await monitor.checkNow(
-      mode: LocalWorkerProbeMode.live,
-      workerTypeId: 'gemini',
-    );
-
-    final tested = (await registry.find(worker.id))!;
-    expect(
-      tested.lastLiveTestPassed,
-      isTrue,
-      reason: '${tested.lastLiveTestIssueCode}: ${tested.lastLiveTestDetails} '
-          'version=${tested.toolVersion}',
-    );
-    expect(tested.lastLiveTestAt, isNotNull);
-    expect(tested.toolVersion, '0.3.0');
-    expect(tested.activationState, LocalWorkerActivationState.disabled);
-    expect(tested.status, LocalWorkerStatus.disabled);
-    await monitor.dispose();
-  });
-}
+}''';

@@ -113,7 +113,7 @@ class _WorkersTabState extends State<_WorkersTab> {
             const SizedBox(height: 16),
           ],
           if (widget.onLoadSlots != null && widget.serviceAvailable)
-            _WorkerSlotsCard(
+            WorkerSlotsCard(
               load: widget.onLoadSlots!,
               reset: widget.onResetSlots,
               setSlots: widget.onSetParallelSlots,
@@ -485,11 +485,11 @@ class _WorkersTabState extends State<_WorkersTab> {
       await action();
       await widget.catalogCoordinator?.refreshLocalWorkers();
       if (mounted) setState(() {});
-    } on Object {
+    } on Object catch (error) {
       if (mounted) {
         showCopyableErrorSnackBar(
           context,
-          'Could not complete setup for ${entry.displayName}. Try again or review the Worker status.',
+          'Could not complete setup for ${entry.displayName}. Try again or review the Worker status.\n$error',
         );
       }
     } finally {
@@ -611,18 +611,24 @@ const _highParallelSlots = 8;
 
 /// Shows the shared parallel execution slots in use and lets the user reset them when
 /// work was abandoned (for example during a disconnect) and slots stay busy.
-class _WorkerSlotsCard extends StatefulWidget {
-  const _WorkerSlotsCard({required this.load, this.reset, this.setSlots});
+@visibleForTesting
+class WorkerSlotsCard extends StatefulWidget {
+  const WorkerSlotsCard({
+    required this.load,
+    this.reset,
+    this.setSlots,
+    super.key,
+  });
 
   final Future<Map<String, Object?>> Function() load;
   final Future<Map<String, Object?>> Function()? reset;
   final Future<Map<String, Object?>> Function(int slots)? setSlots;
 
   @override
-  State<_WorkerSlotsCard> createState() => _WorkerSlotsCardState();
+  State<WorkerSlotsCard> createState() => _WorkerSlotsCardState();
 }
 
-class _WorkerSlotsCardState extends State<_WorkerSlotsCard> {
+class _WorkerSlotsCardState extends State<WorkerSlotsCard> {
   Map<String, Object?>? _slots;
   String? _error;
   bool _resetting = false;

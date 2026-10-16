@@ -197,7 +197,7 @@ private enum WorkspaceBackgroundService {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/log")
     process.arguments = ["show", "--last", "2m", "--style", "compact", "--predicate",
-      "eventMessage CONTAINS \"OS_REASON_CODESIGNING\" OR (process == \"launchd\" AND eventMessage CONTAINS \"\(launchAgentLabel)\")"]
+      "process != \"log\" AND ((eventMessage CONTAINS \"OS_REASON_CODESIGNING\" AND eventMessage CONTAINS \"conclave\") OR (process == \"launchd\" AND eventMessage CONTAINS \"\(launchAgentLabel)\"))"]
     let output = Pipe()
     process.standardOutput = output
     process.standardError = Pipe()

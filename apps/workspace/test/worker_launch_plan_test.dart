@@ -8,6 +8,8 @@ import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
+import 'support/worker_profile_fixture.dart';
+
 const _engineVersion = '1.3.0';
 const _workerType = 'fixture-worker';
 const _definition = 'fixture-cli';
@@ -25,10 +27,7 @@ void main() {
       trustPolicy: WorkerTrustPolicy(),
     );
     cache = WorkerLaunchPlanCache(store: store, engineVersion: _engineVersion);
-    profile = jsonDecode(
-      File('../../packages/tool-profile/test/fixtures/fixture-cli.v1.json')
-          .readAsStringSync(),
-    ) as Map<String, Object?>;
+    profile = buildTestWorkerProfile();
   });
 
   tearDown(() => temporary.delete(recursive: true));

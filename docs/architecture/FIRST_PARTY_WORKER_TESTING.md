@@ -46,8 +46,8 @@ it does not replace live-provider sandbox qualification. Historical evidence
 continues to use the Workflow names and versions that were tested.
 
 ~~~sh
-CONCLAVE_TEST_REAL_PROFILE_CHATGPT=1 \
-CONCLAVE_TEST_REAL_PROFILE_GEMINI=1 \
+CONCLAVE_TEST_ASSIGNMENT_PROFILE_CHATGPT=1 \
+CONCLAVE_TEST_ASSIGNMENT_PROFILE_GEMINI=1 \
   dart test test/tool_profile_assignment_acceptance_test.dart
 ~~~
 

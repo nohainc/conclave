@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/ed25519_release_fixture.dart';
 import 'support/repository_root.dart';
+import 'support/worker_profile_fixture.dart';
 
 void main() {
   late Directory root;
@@ -29,9 +30,7 @@ void main() {
         profilesRoot: Directory('${root.path}/Signed'),
         trustPolicy: signing.trustPolicy,
         developmentProfiles: development);
-    profile = jsonDecode(await File(
-            '../../packages/tool-profile/test/fixtures/fixture-cli.v1.json')
-        .readAsString()) as Map<String, Object?>;
+    profile = buildTestWorkerProfile();
     await Directory('${development.draftsRoot.path}/fixture-cli')
         .create(recursive: true);
     await File('${development.draftsRoot.path}/fixture-cli/draft.json')

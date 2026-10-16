@@ -871,7 +871,10 @@ CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/secure/path/profile-evidence \
 flutter test test/tool_profile_real_acceptance_test.dart
 ~~~
 
-Use `CONCLAVE_TEST_REAL_PROFILE_GEMINI=1` for the Gemini Profile. The evidence
+Use `CONCLAVE_TEST_REAL_PROFILE_GEMINI=1` for the Gemini Profile. Live
+assignment acceptance (`test/tool_profile_assignment_acceptance_test.dart`) uses
+separate `CONCLAVE_TEST_ASSIGNMENT_PROFILE_CHATGPT=1` and
+`CONCLAVE_TEST_ASSIGNMENT_PROFILE_GEMINI=1` opt-in variables. The evidence
 artifact contains version and scenario metadata only; it does not retain
 credentials, prompts, provider output, or Thread file contents.
 

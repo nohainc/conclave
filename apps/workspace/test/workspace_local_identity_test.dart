@@ -36,5 +36,19 @@ void main() {
     expect(await identityStore.getOrCreate(initialIdentity: 'cloud-workspace'),
         localId);
     expect((await registry.find(worker.id))?.workspaceId, localId);
+
+    // If local-workspace-id was cleared or overwritten during an account release
+    // and re-claim while configured-workers.json was preserved, getOrCreate
+    // reconciles back to the preserved Worker records' workspaceId so startup
+    // does not fail with LocalWorkerRegistryCorrupt.
+    await identityStore.file.writeAsString('ws-new-cloud-id', flush: true);
+    final reconciledId =
+        await identityStore.getOrCreate(initialIdentity: 'ws-new-cloud-id');
+    expect(reconciledId, localId);
+    final reloadedRegistry = LocalWorkerRegistry(
+      dataDirectory: dataDirectory,
+      workspaceId: reconciledId,
+    );
+    expect((await reloadedRegistry.list()).single.id, worker.id);
   });
 }

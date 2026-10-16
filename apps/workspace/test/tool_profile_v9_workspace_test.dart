@@ -7,6 +7,8 @@ import 'package:crypto/crypto.dart';
 import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:test/test.dart';
 
+import 'support/worker_profile_fixture.dart';
+
 void main() {
   late Directory temporary;
   late WorkerProfileStore store;
@@ -18,10 +20,7 @@ void main() {
       profilesRoot: Directory('${temporary.path}/Profiles'),
       trustPolicy: WorkerTrustPolicy(),
     );
-    profile = jsonDecode(
-      File('../../packages/tool-profile/test/fixtures/fixture-cli.v1.json')
-          .readAsStringSync(),
-    ) as Map<String, Object?>;
+    profile = buildTestWorkerProfile();
   });
 
   tearDown(() => temporary.delete(recursive: true));

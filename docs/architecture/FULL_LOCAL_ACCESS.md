@@ -100,6 +100,10 @@ CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/tmp/conclave-profile-evidence \
 flutter test test/tool_profile_real_acceptance_test.dart
 ```
 
-Use `CONCLAVE_TEST_REAL_PROFILE_GEMINI=1` instead for the Gemini profile. These
-real-provider checks are intentionally opt-in and should run only on an
-explicitly designated development machine.
+Use `CONCLAVE_TEST_REAL_PROFILE_GEMINI=1` instead for the Gemini profile. Live
+assignment workflows in `test/tool_profile_assignment_acceptance_test.dart` use
+separate `CONCLAVE_TEST_ASSIGNMENT_PROFILE_CHATGPT=1` and
+`CONCLAVE_TEST_ASSIGNMENT_PROFILE_GEMINI=1` flags so release-evidence runs do
+not trigger multi-step assignment suites implicitly. These real-provider checks
+are intentionally opt-in and should run only on an explicitly designated
+development machine.

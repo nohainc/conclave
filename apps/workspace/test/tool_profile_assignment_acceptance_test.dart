@@ -7,23 +7,18 @@ import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
+import 'support/repository_root.dart';
+
 void main() {
-  for (final worker in ['chatgpt', 'gemini']) {
+  for (final profile in _profiles) {
+    final profileJson = _loadProfileJson(profile);
     for (final effort in ['low', 'high']) {
-      final profile = _Profile(
-        definitionId:
-            worker == 'chatgpt' ? 'chatgpt-codex' : 'gemini-antigravity',
-        workerTypeId: worker,
-        profilePath:
-            'docs/profile-templates/${worker == 'chatgpt' ? 'chatgpt-codex' : 'gemini-antigravity'}-runtime-catalog.v1.json',
-        optInVariable: worker == 'chatgpt'
-            ? 'CONCLAVE_TEST_REAL_PROFILE_CHATGPT'
-            : 'CONCLAVE_TEST_REAL_PROFILE_GEMINI',
-      );
-      test('live normalized selection $worker $effort',
-          skip: Platform.environment[profile.optInVariable] != '1',
+      final selection = _selectModelForEffort(profileJson, effort);
+      test('live normalized selection ${profile.workerTypeId} $effort',
+          skip: Platform.environment[profile.optInVariable] == '1'
+              ? false
+              : 'Set ${profile.optInVariable}=1 to use provider allowance',
           timeout: const Timeout(Duration(minutes: 5)), () async {
-        final model = worker == 'chatgpt' ? 'gpt-6.1-sol' : 'gemini-3.8-flash';
         await _withRuntime(profile, (run, directory) async {
           final response =
               await run('selection', 'Reply with exactly SELECTION_OK.');
@@ -39,13 +34,15 @@ void main() {
           final snapshot =
               jsonDecode(await File(snapshots.single.path).readAsString())
                   as Map;
-          expect(snapshot['modelId'], model);
+          expect(snapshot['modelId'], selection.modelId);
           expect(snapshot['effort'], effort);
-          expect(snapshot['resolvedNativeModelId'],
-              worker == 'chatgpt' ? model : '$model-$effort');
+          expect(
+            snapshot['resolvedNativeModelId'],
+            selection.resolvedNativeModelId,
+          );
           expect(
               snapshot['catalogRevision'], matches(RegExp(r'^[a-f0-9]{64}$')));
-        }, modelId: model, effort: effort);
+        }, modelId: selection.modelId, effort: effort);
       });
     }
   }
@@ -169,8 +166,8 @@ Future<void> _withRuntime(
   String? modelId,
   String? effort,
 }) async {
-  final root = _repositoryRoot();
-  final profileFile = File('${root.path}/${profile.profilePath}');
+  final root = repositoryRoot;
+  final profileFile = File('$root/${profile.profilePath}');
   final bytes = await profileFile.readAsBytes();
   final profileJson =
       Map<String, Object?>.from(jsonDecode(utf8.decode(bytes)) as Map);
@@ -190,7 +187,7 @@ Future<void> _withRuntime(
     engineExecutable:
         Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
     engineArgumentsPrefix: [
-      '${root.path}/engines/cli_worker/bin/conclave_cli_worker.dart',
+      '$root/engines/cli_worker/bin/conclave_cli_worker.dart',
     ],
   );
   try {
@@ -242,19 +239,53 @@ Future<void> _withRuntime(
   }
 }
 
-Directory _repositoryRoot() {
-  var current = Directory.current;
-  while (true) {
-    if (File('${current.path}/engines/cli_worker/bin/conclave_cli_worker.dart')
-        .existsSync()) {
-      return current;
+Map<String, Object?> _loadProfileJson(_Profile profile) {
+  final root = repositoryRoot;
+  final profileFile = File('$root/${profile.profilePath}');
+  return Map<String, Object?>.from(
+    jsonDecode(profileFile.readAsStringSync()) as Map,
+  );
+}
+
+({String modelId, String resolvedNativeModelId}) _selectModelForEffort(
+  Map<String, Object?> profileJson,
+  String effort,
+) {
+  final model = Map<String, Object?>.from(profileJson['model'] as Map);
+  final selectionMapping = model['selectionMapping'];
+  if (selectionMapping is Map) {
+    final models = (selectionMapping['models'] as List).cast<Map>();
+    for (final entry in models) {
+      final modelId = entry['id'] as String;
+      final variants = (entry['variants'] as List).cast<Map>();
+      for (final variant in variants) {
+        if (variant['effort'] == effort) {
+          return (
+            modelId: modelId,
+            resolvedNativeModelId: variant['nativeId'] as String,
+          );
+        }
+      }
     }
-    final parent = current.parent;
-    if (parent.path == current.path) {
-      throw StateError('Could not locate the Conclave repository root.');
-    }
-    current = parent;
   }
+  final catalog = model['catalog'];
+  if (catalog is List && catalog.isNotEmpty) {
+    for (final entry in catalog.cast<Map>()) {
+      final efforts =
+          (entry['supportedReasoningEfforts'] as List?)?.cast<String>() ??
+              const <String>[];
+      if (efforts.isEmpty || efforts.contains(effort)) {
+        final modelId = entry['id'] as String;
+        return (modelId: modelId, resolvedNativeModelId: modelId);
+      }
+    }
+  }
+  final allowlist = (model['allowlist'] as List?)?.cast<String>() ?? const [];
+  if (allowlist.isNotEmpty) {
+    final modelId = allowlist.first;
+    return (modelId: modelId, resolvedNativeModelId: modelId);
+  }
+  throw StateError('No model supporting effort "$effort" found in Profile.');
 }
 
 final class _Profile {
@@ -276,13 +307,13 @@ const _profiles = <_Profile>[
     definitionId: 'chatgpt-codex',
     workerTypeId: 'chatgpt',
     profilePath: 'packages/tool-profile/test/fixtures/chatgpt-codex.v1.json',
-    optInVariable: 'CONCLAVE_TEST_REAL_PROFILE_CHATGPT',
+    optInVariable: 'CONCLAVE_TEST_ASSIGNMENT_PROFILE_CHATGPT',
   ),
   _Profile(
     definitionId: 'gemini-antigravity',
     workerTypeId: 'gemini',
     profilePath:
         'packages/tool-profile/test/fixtures/gemini-antigravity.v1.json',
-    optInVariable: 'CONCLAVE_TEST_REAL_PROFILE_GEMINI',
+    optInVariable: 'CONCLAVE_TEST_ASSIGNMENT_PROFILE_GEMINI',
   ),
 ];

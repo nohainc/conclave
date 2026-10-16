@@ -15,6 +15,7 @@ import 'package:conclave_workspace/workspace_worker_view.dart';
 import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
 
 import 'support/ed25519_release_fixture.dart';
+import 'support/worker_profile_fixture.dart';
 
 void main() {
   late Directory directory;
@@ -169,12 +170,10 @@ void main() {
 
   test('keeps verified cached catalog and Worker Profile when Cloud is offline',
       () async {
-    final profile = jsonDecode(
-      File('../../packages/tool-profile/test/fixtures/fixture-cli.v1.json')
-          .readAsStringSync(),
-    ) as Map<String, Object?>;
-    profile['profileDefinitionId'] = 'fixture-profile';
-    profile['logicalWorkerTypeId'] = 'fixture-cli';
+    final profile = buildTestWorkerProfile(
+      profileDefinitionId: 'fixture-profile',
+      logicalWorkerTypeId: 'fixture-cli',
+    );
     final current = await _snapshot(signing, profile, revision: 1);
     await store.activateWorkerProfile(
       await store.stageWorkerProfile(current),

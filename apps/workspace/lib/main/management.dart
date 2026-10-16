@@ -307,7 +307,6 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       );
       await lifecycle.credentialStore.delete(registration.workspaceRuntimeId);
       await WorkspaceRegistrationStore(dataDirectory).clear();
-      await LocalWorkspaceIdentityStore(dataDirectory).clear();
       final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
       final preferences = preferenceStore.readSync();
       await preferenceStore.write(WorkspaceLifecyclePreferences(

@@ -331,6 +331,18 @@ class LocalWorkspaceIdentityStore {
       File('${dataDirectory.path}${Platform.pathSeparator}local-workspace-id');
 
   Future<String> getOrCreate({String? initialIdentity}) async {
+    final registryWorkspaceId = _readExistingWorkerRegistryWorkspaceId();
+    if (registryWorkspaceId != null) {
+      if (await file.exists()) {
+        final existing = (await file.readAsString()).trim();
+        if (existing == registryWorkspaceId) return existing;
+      }
+      await dataDirectory.create(recursive: true);
+      await file.writeAsString(registryWorkspaceId, flush: true);
+      await (platform ?? currentPlatformRuntime)
+          .restrictPermissions(file.path, directory: false);
+      return registryWorkspaceId;
+    }
     if (await file.exists()) {
       final existing = (await file.readAsString()).trim();
       if (existing.isNotEmpty) return existing;
@@ -343,6 +355,33 @@ class LocalWorkspaceIdentityStore {
     await (platform ?? currentPlatformRuntime)
         .restrictPermissions(file.path, directory: false);
     return identity;
+  }
+
+  String? _readExistingWorkerRegistryWorkspaceId() {
+    final registryFile = File(
+      '${dataDirectory.path}${Platform.pathSeparator}configured-workers.json',
+    );
+    if (!registryFile.existsSync()) return null;
+    try {
+      final decoded = jsonDecode(registryFile.readAsStringSync());
+      if (decoded is! Map) return null;
+      final workers = decoded['workers'];
+      if (workers is! List || workers.isEmpty) return null;
+      String? sharedWorkspaceId;
+      for (final item in workers) {
+        if (item is! Map) return null;
+        final candidate = item['workspaceId'];
+        if (candidate is! String || candidate.trim().isEmpty) return null;
+        if (sharedWorkspaceId == null) {
+          sharedWorkspaceId = candidate.trim();
+        } else if (sharedWorkspaceId != candidate.trim()) {
+          return null;
+        }
+      }
+      return sharedWorkspaceId;
+    } on Object {
+      return null;
+    }
   }
 
   Future<void> clear() async {

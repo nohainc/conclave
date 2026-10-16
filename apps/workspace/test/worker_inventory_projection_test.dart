@@ -10,6 +10,8 @@ import 'package:conclave_workspace/worker_inventory_projection.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/worker_profile_fixture.dart';
+
 void main() {
   late Directory directory;
   late LocalWorkerRegistry registry;
@@ -66,11 +68,7 @@ void main() {
 
   test('reports Ready only with a signed eligible Profile and Engine',
       () async {
-    final profile = jsonDecode(
-      File('../../packages/tool-profile/test/fixtures/fixture-cli.v1.json')
-          .readAsStringSync(),
-    ) as Map<String, Object?>;
-    profile['releaseVersion'] = 1;
+    final profile = buildTestWorkerProfile(releaseVersion: 1);
     final release = <String, Object?>{
       'profileDefinitionId': 'fixture-cli',
       'workerTypeId': 'fixture-worker',

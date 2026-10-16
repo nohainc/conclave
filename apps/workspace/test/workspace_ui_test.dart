@@ -22,6 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support/ed25519_release_fixture.dart';
 import 'support/logical_worker_catalog_fixture.dart';
+import 'support/worker_profile_fixture.dart';
 import 'support/worker_profile_snapshot_fixture.dart';
 
 Future<void> _installTestToolProfile({
@@ -33,21 +34,16 @@ Future<void> _installTestToolProfile({
   int version = 1,
   Map<String, Object?>? model,
 }) async {
-  final baseFile =
-      File('../../packages/tool-profile/test/fixtures/fixture-cli.v1.json');
-  final baseContent = baseFile.existsSync()
-      ? baseFile.readAsStringSync()
-      : File('packages/tool-profile/test/fixtures/fixture-cli.v1.json')
-          .readAsStringSync();
-  final profile = jsonDecode(baseContent) as Map<String, Object?>;
-  profile['profileDefinitionId'] = profileDefinitionId;
-  profile['logicalWorkerTypeId'] = workerTypeId;
-  profile['releaseVersion'] = version;
-  if (model != null) profile['model'] = model;
-  (profile['providerTool']! as Map<String, Object?>)['name'] = toolName;
-  (profile['providerTool']! as Map<String, Object?>)['supportedVersions'] = [
-    {'min': '0.0.0', 'maxExclusive': '99.0.0'},
-  ];
+  final profile = buildTestWorkerProfile(
+    profileDefinitionId: profileDefinitionId,
+    logicalWorkerTypeId: workerTypeId,
+    releaseVersion: version,
+    providerToolName: toolName,
+    supportedVersions: [
+      {'min': '0.0.0', 'maxExclusive': '99.0.0'},
+    ],
+    model: model,
+  );
 
   final snapshot = await workerProfileSnapshotFixture(
     signing: signing,
