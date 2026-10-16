@@ -140,8 +140,8 @@ void main() {
   test('Space edit response keeps the pin and indicators already in the list',
       () async {
     store.spaces.replace([
-      store.spaces.items.first
-          .copyWith(pinnedAt: '2026-10-01T00:00:00Z', hasUnread: true),
+      store.spaces.items.first.copyWith(
+          pinnedAt: '2026-10-01T00:00:00Z', pinPosition: -3, hasUnread: true),
       ...store.spaces.items.skip(1),
     ]);
     final write = store.collaboration.editSpace(store.spaces.items.first,
@@ -150,6 +150,7 @@ void main() {
     source.spaceEdits.single.complete(space('P', 'Original'));
     await write;
     expect(store.spaces.items.first.isPinned, isTrue);
+    expect(store.spaces.items.first.pinPosition, -3);
     expect(store.spaces.items.first.hasUnread, isTrue);
   });
 
@@ -198,6 +199,29 @@ void main() {
     source.streamCreates[0].completeError(StateError('denied'));
     await check;
     expect(store.spaceThreads.peek('P').map((w) => w.id), ['A', 'B', 'C']);
+  });
+
+  test('Thread view state edits preserve pins and manual order', () async {
+    final threads = store.spaceThreads.peek('P');
+    store.syncEngine.update(
+        store.spaceThreads.query('P'),
+        (_) => [
+              threads[0]
+                  .copyWith(pinnedAt: '2026-10-01T00:00:00Z', pinPosition: -3),
+              threads[1]
+                  .copyWith(pinnedAt: '2026-10-02T00:00:00Z', pinPosition: -2),
+            ]);
+    for (final id in ['A', 'B', 'A']) {
+      final current =
+          store.spaceThreads.peek('P').firstWhere((t) => t.id == id);
+      final write = store.collaboration
+          .editThread(current, viewState: {'selected': true});
+      source.streamEdits.last.complete(stream(id, current.name));
+      await write;
+      expect(applyAxThreadPins(store.spaceThreads.peek('P')).map((t) => t.id),
+          ['A', 'B']);
+    }
+    expect(store.spaceThreads.peek('P').first.pinPosition, -3);
   });
 
   test('Thread edits preserve position and unrelated realtime entities',

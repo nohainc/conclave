@@ -133,6 +133,7 @@ class AxCollaborationMutations {
                   ? saved
                   : saved.copyWith(
                       pinnedAt: current.pinnedAt,
+                      pinPosition: current.pinPosition,
                       hasActiveWork: current.hasActiveWork,
                       hasUnread: current.hasUnread),
               (s) => s.id);
@@ -239,8 +240,20 @@ class AxCollaborationMutations {
         }
         return value;
       },
-      commit: (saved, change) => change
-          .commit((state) => _replace(state.data ?? [], saved, (t) => t.id)),
+      commit: (saved, change) => change.commit((state) {
+        final values = state.data ?? const <AxThread>[];
+        final current = values.where((t) => t.id == saved.id).firstOrNull;
+        // Edit responses omit per-user pins and unread indicators.
+        return _replace(
+            values,
+            current == null
+                ? saved
+                : saved.copyWith(
+                    pinnedAt: current.pinnedAt,
+                    pinPosition: current.pinPosition,
+                    hasUnread: current.hasUnread),
+            (t) => t.id);
+      }),
       rollback: (_, __, change) => change.rollback(),
       invalidate: (_, __) async {
         engine.invalidate(AxQueryKey(['space', original.spaceId, 'audit']));
