@@ -512,13 +512,15 @@ class CliWorkerEngine {
             null,
           );
           final liveStdout = StringBuffer();
+          final liveArguments = _expandArguments(
+            _list(_profile.execution['arguments']),
+            liveContext,
+          );
+          final liveEnvironment = _environment(liveContext);
           final liveResult = await _streamingRunner.run(
             executable,
-            _expandArguments(
-              _list(_profile.execution['arguments']),
-              liveContext,
-            ),
-            environment: _environment(liveContext),
+            liveArguments,
+            environment: liveEnvironment,
             workingDirectory: liveContext['workingDirectory']!,
             stdinText: _expandStdin(
               _map(_profile.execution['stdin']),
@@ -545,7 +547,14 @@ class CliWorkerEngine {
                   : ProbeCheckStatus.failed,
               message: livePassed
                   ? 'Provider completed the live check.'
-                  : 'Provider did not complete the expected live check.',
+                  : 'Provider did not complete the expected live check '
+                        '(exit ${liveResult.exitCode}, '
+                        'issue ${liveOutput.issueCode ?? 'none'}, '
+                        'final text '
+                        '${liveOutput.finalText == null ? 'missing' : liveOutput.finalText?.trim() == _liveProbeExpectedText ? 'matched' : 'differed'}). '
+                        'Arguments: ${liveArguments.join(' ')}. '
+                        'Environment keys: ${(liveEnvironment.keys.toList()..sort()).join(',')}. '
+                        'Stderr: ${_liveStderrExcerpt(liveResult.stderr)}',
             ),
           );
           if (!livePassed)
@@ -611,6 +620,14 @@ class CliWorkerEngine {
         issueCode: issue,
       ),
     );
+  }
+
+  /// Bounded single-line stderr excerpt for probe diagnostics. The protocol
+  /// redacts credential-looking values when the check message is built.
+  String _liveStderrExcerpt(String stderr) {
+    final text = stderr.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (text.isEmpty) return '(empty)';
+    return text.length <= 300 ? text : '${text.substring(0, 300)}...';
   }
 
   Future<DiscoveredModelCatalog> _discoverModels(

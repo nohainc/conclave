@@ -268,6 +268,17 @@ Map<String, Object?> _loadProfileJson(_Profile profile) {
       }
     }
   }
+  final discovery = model['discovery'];
+  if (discovery is Map && discovery['effortVariants'] is Map) {
+    // The Profile lists no models; efforts come from the installed CLI. The
+    // opt-in live run uses a model known to expose every tested effort.
+    const modelId = 'gemini-3.8-flash';
+    final separator = (discovery['effortVariants'] as Map)['separator'];
+    return (
+      modelId: modelId,
+      resolvedNativeModelId: '$modelId$separator$effort',
+    );
+  }
   final catalog = model['catalog'];
   if (catalog is List && catalog.isNotEmpty) {
     for (final entry in catalog.cast<Map>()) {

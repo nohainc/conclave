@@ -30,7 +30,9 @@ Future<void> main(List<String> args) async {
   if (args.contains('models')) {
     for (final version in ['3.8','3.7','3.6','3.1']) {
       for (final effort in version == '3.1' ? ['low','high'] : ['low','medium','high']) {
-        stdout.writeln('gemini-$version-${version == '3.1' ? 'pro' : 'flash'}-$effort\tGemini $version $effort');
+        final kind = version == '3.1' ? 'pro' : 'flash';
+        final label = effort[0].toUpperCase() + effort.substring(1);
+        stdout.writeln('gemini-$version-$kind-$effort\tGemini $version ${kind[0].toUpperCase()}${kind.substring(1)} ($label)');
       }
     }
     return;

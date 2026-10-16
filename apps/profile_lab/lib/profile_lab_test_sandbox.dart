@@ -976,7 +976,8 @@ class ProfileLabTestSandbox {
               status: 'failed',
               durationMs: s6Timer.elapsedMilliseconds,
               diagnostics:
-                  'Live probe issue: ${probeRes.issueCode ?? "live_probe_failed"}',
+                  'Live probe issue: ${probeRes.issueCode ?? "live_probe_failed"}'
+                  '${probeRes.checks.where((c) => c.status == ProbeCheckStatus.failed).map((c) => '\n${c.code}: ${c.message}').join()}',
               consumesQuota: true,
               issueCode: probeRes.issueCode ?? 'live_probe_failed',
             );
