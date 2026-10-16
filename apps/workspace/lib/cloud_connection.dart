@@ -964,8 +964,14 @@ class WorkspaceCloudConnection {
   /// Sends the Workspace-owned inventory projection. Secrets, credential
   /// references, and local paths must not be included by the caller.
   void reportWorkerInventory(List<Map<String, Object?>> workers) {
+    // Every Worker record carries the same Workspace-wide slot total.
+    final slots = workers
+        .map((worker) => worker['localConcurrencyLimit'])
+        .whereType<int>()
+        .firstOrNull;
     _sendIfConnected('worker.inventory', {
       'fullSnapshot': true,
+      if (slots != null) 'parallelSlots': slots,
       'workers': workers,
     });
   }

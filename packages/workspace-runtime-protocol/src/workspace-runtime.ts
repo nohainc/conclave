@@ -357,6 +357,9 @@ export const WorkspaceWorkerInventoryEntrySchema = z
 export const WorkerInventoryPayloadSchema = z
   .object({
     workers: z.array(WorkspaceWorkerInventoryEntrySchema).max(500),
+    // Workspace-wide parallel execution slots, shared by all Workers. Optional
+    // so older Services remain valid; they report it per Worker only.
+    parallelSlots: z.number().int().min(1).max(1024).optional(),
     fullSnapshot: z.boolean(),
   })
   .strict();

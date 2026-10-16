@@ -221,4 +221,66 @@ describe("v8 Workspace inventory recovery", () => {
     ).toBeUndefined();
     database.close();
   });
+  it("stores the Workspace-wide parallel slot total and ignores invalid values", async () => {
+    const database = new DatabaseSync(":memory:");
+    database.exec("PRAGMA foreign_keys = ON");
+    for (const migration of [
+      "0001_conclave_v8.sql",
+      "0029_worker_model_discovery.sql",
+      "0070_workspace_parallel_slots.sql",
+    ]) {
+      database.exec(
+        readFileSync(
+          fileURLToPath(new URL(`../migrations-v8/${migration}`, import.meta.url)),
+          "utf8",
+        ),
+      );
+    }
+    database.exec(`
+      INSERT INTO users (id, email, display_name, created_at, updated_at)
+        VALUES ('owner-a', 'a@example.test', 'Owner A', '2026-01-01', '2026-01-01');
+      INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at)
+        VALUES ('workspace-a', 'owner-a', 'Workspace A', 'online', '2026-01-01', '2026-01-01');
+    `);
+    const gateway = new WorkspaceGateway(
+      {} as never,
+      { CONCLAVE_DB: new LocalD1(database) } as never,
+    );
+    const internal = gateway as unknown as {
+      executionWorkspaceId: string;
+      recordWorkerInventory(payload: unknown): Promise<void>;
+    };
+    internal.executionWorkspaceId = "workspace-a";
+    const slots = () =>
+      (
+        database
+          .prepare("SELECT parallel_slots FROM execution_workspaces WHERE id = 'workspace-a'")
+          .get() as { parallel_slots: number | null }
+      ).parallel_slots;
+
+    // An older Service omits the field: Cloud keeps the per-Worker fallback.
+    await internal.recordWorkerInventory({ fullSnapshot: true, workers: [] });
+    expect(slots()).toBeNull();
+    await internal.recordWorkerInventory({
+      fullSnapshot: true,
+      parallelSlots: 5,
+      workers: [],
+    });
+    expect(slots()).toBe(5);
+    await internal.recordWorkerInventory({
+      fullSnapshot: true,
+      parallelSlots: 3,
+      workers: [],
+    });
+    expect(slots()).toBe(3);
+    for (const invalid of [0, 1025, 2.5, "7", null]) {
+      await internal.recordWorkerInventory({
+        fullSnapshot: true,
+        parallelSlots: invalid,
+        workers: [],
+      });
+      expect(slots()).toBe(3);
+    }
+    database.close();
+  });
 });

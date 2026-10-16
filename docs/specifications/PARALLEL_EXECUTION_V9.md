@@ -14,13 +14,24 @@ Parallel execution is a single Workspace-wide total ("parallel slots", default
 user sees one "N of M slots in use" figure and sets one number.
 
 The Workspace stores the total as `localConcurrencyLimit` on every Worker
-record and reports it unchanged in the inventory (no wire change). Changing it
-(`execution.setParallelSlots`) rewrites every record and advances each Worker
-revision so Cloud accepts the new inventory. The Service applies only this
-total when admitting work; `maxConcurrentAssignments` in the assignment payload
-is no longer used to size the pool (Cloud grant and scheduling limits are
-enforced at dispatch). Existing installations keep their stored value (3) until
-the user changes it.
+record. Changing it (`execution.setParallelSlots`) rewrites every record and
+advances each Worker revision. The Service applies only this total when
+admitting work; `maxConcurrentAssignments` in the assignment payload is no
+longer used to size the pool (Cloud grant and scheduling limits are enforced
+at dispatch). Existing installations keep their stored value (3) until the user
+changes it.
+
+The `worker.inventory` payload also carries the total once as `parallelSlots`
+(optional, 1-1024, additive in protocol 5.1). Cloud stores it on the Workspace
+(`execution_workspaces.parallel_slots`, migration
+`0070_workspace_parallel_slots.sql`, backfilled from the reported Worker
+values) and the scheduler reads that single value, falling back to the
+per-Worker `local_concurrency_limit` only for a Service that has not reported
+it. The per-Worker field and column are a rollout-compatibility detail, not a
+product concept: there is no hidden per-Worker cap, and the UI shows only the
+Workspace total. Remove the per-Worker field once every deployed Service sends
+`parallelSlots`. Deploy order: migration 0070, then Cloud, then the Workspace
+app.
 
 Cloud counts queued and active assignments for Worker load balancing. When
 queueing is not allowed it rejects dispatch when the Workspace-wide active count

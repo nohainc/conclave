@@ -24,6 +24,22 @@ export async function recordWorkspaceWorkerInventory(
   const fullSnapshot =
     (payload as Record<string, unknown>).fullSnapshot === true;
   const reportedWorkerIds = new Set<string>();
+  // The Workspace-wide parallel slot total. Older Services omit it; Cloud then
+  // keeps using the per-Worker value.
+  const parallelSlots = (payload as Record<string, unknown>).parallelSlots;
+  if (
+    typeof parallelSlots === "number" &&
+    Number.isInteger(parallelSlots) &&
+    parallelSlots >= 1 &&
+    parallelSlots <= 1024
+  ) {
+    await env.CONCLAVE_DB.prepare(
+      `UPDATE execution_workspaces SET parallel_slots = ?2, updated_at = ?3
+        WHERE id = ?1 AND (parallel_slots IS NULL OR parallel_slots != ?2)`,
+    )
+      .bind(workspaceId, parallelSlots, now)
+      .run();
+  }
   for (const raw of reports) {
     if (!raw || typeof raw !== "object") continue;
     const item = raw as Record<string, unknown>;

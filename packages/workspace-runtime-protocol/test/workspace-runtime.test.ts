@@ -339,6 +339,26 @@ describe("Workspace Runtime protocol", () => {
     ).toBe("thread.status");
   });
 
+  it("accepts an optional bounded Workspace-wide parallelSlots total", () => {
+    const parse = (payload: unknown) =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "worker.inventory",
+        payload,
+      });
+    expect(parse({ workers: [], fullSnapshot: true }).type).toBe(
+      "worker.inventory",
+    );
+    expect(
+      parse({ workers: [], parallelSlots: 5, fullSnapshot: true }).type,
+    ).toBe("worker.inventory");
+    for (const parallelSlots of [0, -1, 1.5, 1025, "5"]) {
+      expect(() =>
+        parse({ workers: [], parallelSlots, fullSnapshot: true }),
+      ).toThrow();
+    }
+  });
+
   it("accepts only bounded safe Worker inventory projections", () => {
     const worker = {
       workerId: "worker-a",

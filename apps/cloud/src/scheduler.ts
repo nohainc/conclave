@@ -291,7 +291,10 @@ export async function selectSpaceExecutionTarget(
             i.readiness_state AS local_worker_readiness_state,
             vs.state AS cloud_scheduling_state,
             vs.cloud_concurrency_limit,
-            i.local_concurrency_limit AS local_concurrency_limit,
+            -- One Workspace-wide slot total; the per-Worker value is only a
+            -- fallback for a Service that has not reported it yet.
+            COALESCE(ew.parallel_slots, i.local_concurrency_limit)
+              AS local_concurrency_limit,
             (SELECT COUNT(*) FROM worker_assignments wa
              WHERE wa.execution_workspace_id = g.workspace_id
                AND wa.workspace_worker_id = i.worker_id
