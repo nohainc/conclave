@@ -890,6 +890,17 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    const workRequestFileMatch = url.pathname.match(
+      /^\/api\/threads\/([^/]+)\/work-request-files$/,
+    );
+    if (request.method === "POST" && workRequestFileMatch?.[1]) {
+      return await handlers.handleUploadWorkRequestFile!(
+        request,
+        env,
+        workRequestFileMatch[1],
+        ctx,
+      );
+    }
     const validateWorkRequestMatch = url.pathname.match(
       /^\/api\/threads\/([^/]+)\/work-requests\/validate$/,
     );

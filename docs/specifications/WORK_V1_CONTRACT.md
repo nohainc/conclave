@@ -612,10 +612,15 @@ interface WorkRequestSnapshot {
 
 Attachments are inputs to a Work Request, not Workflow definitions. A request
 may include local files and `http`/`https` references. The v1 composer accepts
-up to 10 attachments and at most 1 MiB of local file content in total; each
-file is also limited to 1 MiB. Links are limited to 2,048 characters and may
-not embed URL credentials. Cloud stores bounded file bytes in the Work Request
-input and stores only safe metadata/URL references in the immutable snapshot.
+up to 10 attachments; each file is limited to 2 MiB and there is no total
+limit. Links are limited to 2,048 characters and may
+not embed URL credentials. The client uploads each file to
+`POST /api/threads/{threadId}/work-request-files`, which stores the bytes in R2
+bound to the uploading user and Thread and returns a server-generated `fileId`.
+Work Request creation accepts only `fileId` references that match that user,
+Thread, and size; D1 stores metadata/URL references and `fileId`, never bytes.
+Cloud reads the bytes from R2 when it sends `assignment.start`, so they are
+transient on the wire and never persisted in D1.
 
 Attachments are validated as bounded request inputs and are materialized inside
 the authorized Space work directory. Worker/Profile capability metadata is not

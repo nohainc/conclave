@@ -22,6 +22,12 @@ import {
   type WorkflowId,
 } from "@conclave/core";
 
+import {
+  MAX_WORK_REQUEST_FILES,
+  MAX_WORK_REQUEST_FILE_BYTES,
+  isWorkRequestFileId,
+  verifyWorkRequestFile,
+} from "./work-request-files.js";
 import { createEventPublisher } from "../event-publisher.js";
 import { tryLogTraceEvent } from "../observability.js";
 import {
@@ -95,7 +101,7 @@ export async function handleValidateWorkRequest(
     throw new HttpError(400, "attachments must be an array");
   }
   const attachments = Array.isArray(body.attachments) ? body.attachments : [];
-  if (attachments.length > 10)
+  if (attachments.length > MAX_WORK_REQUEST_FILES)
     throw new HttpError(400, "At most 10 attachments are allowed");
   const { issues } = await validateWorkflowWorkerEligibility(
     env,
@@ -259,91 +265,88 @@ export async function handleCreateWorkRequest(
   const rawAttachments = Array.isArray(submittedAttachments)
     ? submittedAttachments
     : [];
-  if (rawAttachments.length > 10)
+  if (rawAttachments.length > MAX_WORK_REQUEST_FILES)
     throw new HttpError(400, "At most 10 attachments are allowed");
-  let attachmentBytes = 0;
-  const normalizedAttachments = rawAttachments.map((attachment, index) => {
-    if (
-      !attachment ||
-      typeof attachment !== "object" ||
-      Array.isArray(attachment)
-    )
-      throw new HttpError(400, `Attachment ${index + 1} is invalid`);
-    const value = attachment as Record<string, unknown>;
-    const kind =
-      value.kind === "url" ? "url" : value.kind === "file" ? "file" : null;
-    const name =
-      typeof value.name === "string"
-        ? value.name.replace(/[\\/\\x00-\\x1f]/g, "_").slice(0, 255)
-        : "Attachment";
-    const mediaType =
-      typeof value.mediaType === "string" && value.mediaType.length <= 128
-        ? value.mediaType
-        : "application/octet-stream";
-    if (!kind)
-      throw new HttpError(
-        400,
-        `Attachment ${index + 1} has an unsupported type`,
-      );
-    if (kind === "url") {
-      if (typeof value.url !== "string" || value.url.length > 2048)
-        throw new HttpError(400, `Link ${index + 1} is invalid`);
-      let url: URL;
-      try {
-        url = new URL(value.url);
-      } catch {
-        throw new HttpError(400, `Link ${index + 1} is invalid`);
-      }
+  const normalizedAttachments = await Promise.all(
+    rawAttachments.map(async (attachment, index) => {
       if (
-        (url.protocol !== "http:" && url.protocol !== "https:") ||
-        url.username ||
-        url.password
+        !attachment ||
+        typeof attachment !== "object" ||
+        Array.isArray(attachment)
+      )
+        throw new HttpError(400, `Attachment ${index + 1} is invalid`);
+      const value = attachment as Record<string, unknown>;
+      const kind =
+        value.kind === "url" ? "url" : value.kind === "file" ? "file" : null;
+      const name =
+        typeof value.name === "string"
+          ? value.name.replace(/[\\/\\x00-\\x1f]/g, "_").slice(0, 255)
+          : "Attachment";
+      const mediaType =
+        typeof value.mediaType === "string" && value.mediaType.length <= 128
+          ? value.mediaType
+          : "application/octet-stream";
+      if (!kind)
+        throw new HttpError(
+          400,
+          `Attachment ${index + 1} has an unsupported type`,
+        );
+      if (kind === "url") {
+        if (typeof value.url !== "string" || value.url.length > 2048)
+          throw new HttpError(400, `Link ${index + 1} is invalid`);
+        let url: URL;
+        try {
+          url = new URL(value.url);
+        } catch {
+          throw new HttpError(400, `Link ${index + 1} is invalid`);
+        }
+        if (
+          (url.protocol !== "http:" && url.protocol !== "https:") ||
+          url.username ||
+          url.password
+        )
+          throw new HttpError(
+            400,
+            `Link ${index + 1} must be an http or https URL without embedded credentials`,
+          );
+        return {
+          kind,
+          name,
+          mediaType: "text/uri-list",
+          sizeBytes: 0,
+          url: url.toString(),
+        };
+      }
+      if (!isWorkRequestFileId(value.fileId))
+        throw new HttpError(400, `File ${index + 1} is invalid`);
+      if (
+        typeof value.sizeBytes !== "number" ||
+        !Number.isSafeInteger(value.sizeBytes) ||
+        value.sizeBytes > MAX_WORK_REQUEST_FILE_BYTES
       )
         throw new HttpError(
           400,
-          `Link ${index + 1} must be an http or https URL without embedded credentials`,
+          `File ${index + 1} exceeds the 2 MB limit or has an invalid size`,
         );
+      const stored = await verifyWorkRequestFile(
+        env,
+        value.fileId,
+        threadId,
+        context.userId,
+        value.sizeBytes,
+      );
       return {
         kind,
         name,
-        mediaType: "text/uri-list",
-        sizeBytes: 0,
-        url: url.toString(),
+        mediaType,
+        sizeBytes: value.sizeBytes,
+        fileId: value.fileId,
+        contentDigest: stored.digest,
       };
-    }
-    if (
-      typeof value.contentBase64 !== "string" ||
-      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-        value.contentBase64,
-      )
-    )
-      throw new HttpError(400, `File ${index + 1} is invalid`);
-    let decodedLength: number;
-    try {
-      decodedLength = atob(value.contentBase64).length;
-    } catch {
-      throw new HttpError(400, `File ${index + 1} is invalid`);
-    }
-    if (decodedLength > 1024 * 1024 || value.sizeBytes !== decodedLength)
-      throw new HttpError(
-        400,
-        `File ${index + 1} exceeds the 1 MB limit or has an invalid size`,
-      );
-    attachmentBytes += decodedLength;
-    if (attachmentBytes > 1024 * 1024)
-      throw new HttpError(400, "Attachments exceed the 1 MB total limit");
-    return {
-      kind,
-      name,
-      mediaType,
-      sizeBytes: decodedLength,
-      contentBase64: value.contentBase64,
-    };
-  });
-  requestInput.attachments = normalizedAttachments;
-  const attachmentReferences = normalizedAttachments.map(
-    ({ contentBase64: _contentBase64, ...reference }) => reference,
+    }),
   );
+  requestInput.attachments = normalizedAttachments;
+  const attachmentReferences = normalizedAttachments;
   const configuredBindings =
     workConfig.bindings &&
     typeof workConfig.bindings === "object" &&

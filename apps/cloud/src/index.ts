@@ -164,6 +164,7 @@ export const routeHandlers = {
   handleCreateWorkRequest: handlers.handleCreateWorkRequest,
   handleRetryWorkRequest: handlers.handleRetryWorkRequest,
   handleValidateWorkRequest: handlers.handleValidateWorkRequest,
+  handleUploadWorkRequestFile: handlers.handleUploadWorkRequestFile,
   handleCancelWorkRequest: handlers.handleCancelWorkRequest,
   handleClearWorkHistory: handlers.handleClearWorkHistory,
   handleGetWorkRequest: handlers.handleGetWorkRequest,

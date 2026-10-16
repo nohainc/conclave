@@ -1296,6 +1296,8 @@ class _ThreadPageState extends State<ThreadPage>
       return _DiscussionItem(
           id: message.id,
           author: displayAuthor,
+          authorId: message.authorUserId,
+          date: date,
           text: message.body,
           sentAt: date == null ? null : _chatTimestamp(date),
           editedAt: edited == null ? null : _chatTimestamp(edited),
@@ -1444,7 +1446,10 @@ class _ThreadPageState extends State<ThreadPage>
                   ],
                   itemCount: messages.length,
                   empty: empty,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
+                  separatorBuilder: (_, index) => SizedBox(
+                    height:
+                        _continuesDiscussionGroup(messages, index + 1) ? 4 : 12,
+                  ),
                   findChildIndexCallback: (key) {
                     if (key is! ValueKey<String>) return null;
                     final index = messages
@@ -1457,15 +1462,21 @@ class _ThreadPageState extends State<ThreadPage>
                       key: ValueKey(message.id),
                       child: KeyedSubtree(
                         key: _chatIncomingAnchor.keyFor(message.id),
-                        child: _DiscussionMessageBubble(
-                          item: message,
-                          onCopy: () {
-                            Clipboard.setData(
-                                ClipboardData(text: message.text));
-                          },
-                          onEdit: (newText) =>
-                              _editDiscussion(message.id, newText),
-                          onDelete: () => _deleteDiscussion(message.id),
+                        child: MessageDayBoundary(
+                          date: message.date,
+                          previousDate:
+                              index == 0 ? null : messages[index - 1].date,
+                          child: _DiscussionMessageBubble(
+                            item: message,
+                            grouped: _continuesDiscussionGroup(messages, index),
+                            onCopy: () {
+                              Clipboard.setData(
+                                  ClipboardData(text: message.text));
+                            },
+                            onEdit: (newText) =>
+                                _editDiscussion(message.id, newText),
+                            onDelete: () => _deleteDiscussion(message.id),
+                          ),
                         ),
                       ),
                     );

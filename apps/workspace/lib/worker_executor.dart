@@ -62,6 +62,11 @@ WorkerExecutionPolicy assignmentExecutionPolicy(
       : WorkerExecutionPolicy.restricted;
 }
 
+/// Per-file limit only; Cloud enforces the same 2 MB and sets no total limit.
+const _maxWorkRequestFileBytes = 2 * 1024 * 1024;
+const _maxWorkRequestFileEncodedChars =
+    ((_maxWorkRequestFileBytes + 2) ~/ 3) * 4;
+
 Future<void> _materializeWorkRequestInputs({
   required Directory threadDirectory,
   required Map<String, Object?> payload,
@@ -95,12 +100,12 @@ Future<void> _materializeWorkRequestInputs({
     }
     if (type == FileSystemEntityType.notFound) await directory.create();
   }
-  var totalBytes = 0;
   for (var index = 0; index < attachments.length; index++) {
     final value = attachments[index];
     if (value is! Map || value['kind'] != 'file') continue;
     final encoded = value['contentBase64'];
-    if (encoded is! String || encoded.length > 2 * 1024 * 1024) {
+    if (encoded is! String ||
+        encoded.length > _maxWorkRequestFileEncodedChars) {
       throw StateError('invalid Work Request file input');
     }
     late final List<int> bytes;
@@ -109,12 +114,9 @@ Future<void> _materializeWorkRequestInputs({
     } on FormatException {
       throw StateError('invalid Work Request file input');
     }
-    if (bytes.length > 1024 * 1024 || value['sizeBytes'] != bytes.length) {
+    if (bytes.length > _maxWorkRequestFileBytes ||
+        value['sizeBytes'] != bytes.length) {
       throw StateError('Work Request file input exceeds size limits');
-    }
-    totalBytes += bytes.length;
-    if (totalBytes > 1024 * 1024) {
-      throw StateError('Work Request file inputs exceed total size limit');
     }
     final target = File(
         '${requestDirectory.path}${Platform.pathSeparator}file-${(index + 1).toString().padLeft(3, '0')}');

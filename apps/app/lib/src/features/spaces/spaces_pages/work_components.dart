@@ -320,29 +320,36 @@ class _WorkComposer extends StatelessWidget {
           listenable: activityStore.listenableForRequest(request),
           builder: (context, _) => KeyedSubtree(
             key: incomingAnchor.keyFor((request.id, 'request')),
-            child: _WorkTimelineCard(
-              responseAnchorKey:
-                  incomingAnchor.keyFor((request.id, 'response')),
-              request: request,
-              activities: activityStore.forRequest(request),
-              clockOffset: activityStore.clockOffsetForRequest(request),
-              realtimeStatus: realtimeStatus,
-              progressText: localWorkProgress[request.id],
-              currentUserId: currentUserId,
-              currentUserName: currentUserName,
-              workflowCatalog: workflowCatalog,
-              onReportIssue: localWorkProgress.containsKey(request.id)
+            child: MessageDayBoundary(
+              date: DateTime.tryParse(request.createdAt)?.toLocal(),
+              previousDate: index == 0
                   ? null
-                  : onReportIssue,
-              reportedIssue: reportedIssues[request.id],
-              reportingIssue: reportingIssueIds.contains(request.id),
-              issueReportError: issueReportErrors[request.id],
-              onRetryStep: localWorkProgress.containsKey(request.id)
-                  ? null
-                  : onRetryStep,
-              onCancelRun: localWorkProgress.containsKey(request.id)
-                  ? null
-                  : onCancelRun,
+                  : DateTime.tryParse(workTimeline[index - 1].createdAt)
+                      ?.toLocal(),
+              child: _WorkTimelineCard(
+                responseAnchorKey:
+                    incomingAnchor.keyFor((request.id, 'response')),
+                request: request,
+                activities: activityStore.forRequest(request),
+                clockOffset: activityStore.clockOffsetForRequest(request),
+                realtimeStatus: realtimeStatus,
+                progressText: localWorkProgress[request.id],
+                currentUserId: currentUserId,
+                currentUserName: currentUserName,
+                workflowCatalog: workflowCatalog,
+                onReportIssue: localWorkProgress.containsKey(request.id)
+                    ? null
+                    : onReportIssue,
+                reportedIssue: reportedIssues[request.id],
+                reportingIssue: reportingIssueIds.contains(request.id),
+                issueReportError: issueReportErrors[request.id],
+                onRetryStep: localWorkProgress.containsKey(request.id)
+                    ? null
+                    : onRetryStep,
+                onCancelRun: localWorkProgress.containsKey(request.id)
+                    ? null
+                    : onCancelRun,
+              ),
             ),
           ),
         );
@@ -707,7 +714,7 @@ class _WorkComposer extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                'Up to 10 file attachments. Files total 1 MB.',
+                'Up to 10 file attachments, 2 MB each.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
@@ -1863,11 +1870,27 @@ class _AxLiveTickerState extends State<AxLiveTicker> {
   Widget build(BuildContext context) => widget.builder(context, _now);
 }
 
+bool _continuesDiscussionGroup(List<_DiscussionItem> items, int index) {
+  if (index <= 0) return false;
+  final item = items[index];
+  final previous = items[index - 1];
+  return continuesMessageGroup(
+    authorId: item.authorId,
+    previousAuthorId: previous.authorId,
+    sentAt: item.date,
+    previousSentAt: previous.date,
+    confirmed: !item.id.startsWith('temp-'),
+    previousConfirmed: !previous.id.startsWith('temp-'),
+  );
+}
+
 class _DiscussionItem {
   const _DiscussionItem({
     required this.id,
     required this.author,
     required this.text,
+    this.authorId,
+    this.date,
     this.sentAt,
     this.editedAt,
     this.isMe = true,
@@ -1875,6 +1898,8 @@ class _DiscussionItem {
 
   final String id;
   final String author;
+  final String? authorId;
+  final DateTime? date;
   final String text;
   final String? sentAt;
   final String? editedAt;
@@ -1886,10 +1911,12 @@ class _DiscussionMessageBubble extends StatefulWidget {
     required this.item,
     required this.onCopy,
     required this.onEdit,
+    this.grouped = false,
     this.onDelete,
   });
 
   final _DiscussionItem item;
+  final bool grouped;
   final VoidCallback onCopy;
   final ValueChanged<String> onEdit;
   final VoidCallback? onDelete;
@@ -1995,7 +2022,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                     isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (!isMe) ...[
+                  if (!isMe && !widget.grouped) ...[
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

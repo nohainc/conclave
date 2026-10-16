@@ -1,4 +1,5 @@
 import { signalAssignmentTerminal } from "./assignment-workflow-signal.js";
+import { hydrateWorkRequestFiles } from "./routes/work-request-files.js";
 import {
   parseWorkspaceRuntimeMessage,
   serializeWorkspaceRuntimeMessage,
@@ -2579,6 +2580,15 @@ export class WorkspaceGateway implements DurableObject {
       });
     }
     let assignmentMessage: WorkspaceRuntimeMessage;
+    let hydratedPayload: unknown;
+    try {
+      hydratedPayload = await hydrateWorkRequestFiles(this.env, body.payload);
+    } catch {
+      return Response.json(
+        { error: "Attached file content is unavailable" },
+        { status: 409 },
+      );
+    }
     try {
       assignmentMessage = parseWorkspaceRuntimeMessage({
         protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
@@ -2587,7 +2597,7 @@ export class WorkspaceGateway implements DurableObject {
         timestamp: new Date().toISOString(),
         type: "assignment.start",
         ...body,
-        payload: withStartPermitRequirement(body.payload),
+        payload: withStartPermitRequirement(hydratedPayload),
       });
     } catch {
       return Response.json(

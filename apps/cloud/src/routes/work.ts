@@ -10,3 +10,4 @@ export {
   handleCancelWorkRequest,
   handleClearWorkHistory,
 } from "./work-lifecycle.js";
+export { handleUploadWorkRequestFile } from "./work-request-files.js";

@@ -119,20 +119,11 @@ extension _ThreadActions on _ThreadPageState {
   Future<void> _addWorkFiles() async {
     try {
       final selected = await work_request_files.pickWorkRequestFiles();
-      final currentBytes = _workAttachments.fold<int>(
-        0,
-        (sum, item) => sum + (item['sizeBytes'] as int? ?? 0),
-      );
-      final selectedBytes = selected.fold<int>(
-        0,
-        (sum, item) => sum + (item['sizeBytes'] as int? ?? 0),
-      );
       if (_workAttachments.length + selected.length > 10 ||
-          currentBytes + selectedBytes > 1024 * 1024 ||
-          selected
-              .any((item) => (item['sizeBytes'] as int? ?? 0) > 1024 * 1024)) {
+          selected.any(
+              (item) => (item['sizeBytes'] as int? ?? 0) > 2 * 1024 * 1024)) {
         throw const FormatException(
-          'Choose up to 10 files, with each file and the total under 1 MB.',
+          'Choose up to 10 files, each under 2 MB.',
         );
       }
       if (mounted && selected.isNotEmpty) {

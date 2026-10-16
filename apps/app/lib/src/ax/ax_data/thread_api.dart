@@ -213,6 +213,65 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
     }
   }
 
+  /// Uploads picked file bytes to Cloud storage and returns file references.
+  /// Each picked map is updated in place with its `fileId`, so a retried
+  /// submission reuses the upload and keeps the same idempotent request body.
+  Future<List<Map<String, dynamic>>> _uploadWorkRequestFiles(
+    String threadId,
+    List<Map<String, dynamic>> attachments,
+  ) async {
+    final references = <Map<String, dynamic>>[];
+    for (final attachment in attachments) {
+      if (attachment['kind'] != 'file') {
+        references.add(attachment);
+        continue;
+      }
+      if (attachment['fileId'] is! String) {
+        final encoded = attachment['contentBase64'];
+        if (encoded is! String) {
+          throw const AxApiException('Attached file content is missing');
+        }
+        final name = Uri.encodeQueryComponent(
+            attachment['name']?.toString() ?? 'Attachment');
+        final response = await client.post(
+          Uri.parse('$baseUrl/threads/$threadId/work-request-files?name=$name'),
+          headers: _headers(
+              contentType: attachment['mediaType']?.toString() ??
+                  'application/octet-stream'),
+          body: base64Decode(encoded),
+        );
+        dynamic body;
+        try {
+          body = jsonDecode(response.body);
+        } on FormatException {
+          body = null;
+        }
+        final file = body is Map ? body['file'] : null;
+        if (response.statusCode < 200 ||
+            response.statusCode >= 300 ||
+            file is! Map ||
+            file['fileId'] is! String) {
+          final detail = body is Map && body['error'] is String
+              ? ': ${body['error']}'
+              : '';
+          throw AxApiException(
+            'File upload failed (${response.statusCode})$detail',
+            statusCode: response.statusCode,
+          );
+        }
+        attachment['fileId'] = file['fileId'];
+      }
+      references.add({
+        'kind': 'file',
+        'name': attachment['name'],
+        'mediaType': attachment['mediaType'],
+        'sizeBytes': attachment['sizeBytes'],
+        'fileId': attachment['fileId'],
+      });
+    }
+    return references;
+  }
+
   @override
   Future<String> createWorkRequest({
     required String threadId,
@@ -223,6 +282,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
   }) async {
     final submissionId = idempotencyKey ?? newAxIdempotencyKey();
     AxWorkLatencyTrace.instance.submitted(submissionId);
+    attachments = await _uploadWorkRequestFiles(threadId, attachments);
     final response = await client.post(
       Uri.parse('$baseUrl/threads/$threadId/work-requests'),
       headers: {
@@ -293,6 +353,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
   }) async {
     final submissionId = idempotencyKey ?? newAxIdempotencyKey();
     AxWorkLatencyTrace.instance.submitted(submissionId);
+    attachments = await _uploadWorkRequestFiles(threadId, attachments);
     final response = await client.post(
       Uri.parse('$baseUrl/threads/$threadId/work-requests'),
       headers: {

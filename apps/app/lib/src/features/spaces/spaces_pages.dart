@@ -38,6 +38,7 @@ import '../workflows/workflow_visibility.dart';
 import '../common/markdown_composer.dart';
 import '../common/conclave_markdown_body.dart';
 import '../common/collapsible_own_message.dart';
+import '../common/message_grouping.dart';
 import 'thread_presentation_controller.dart';
 import 'timeline_follow_anchor.dart';
 import 'timeline_scroll_overlay.dart';

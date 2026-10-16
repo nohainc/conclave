@@ -57,3 +57,18 @@ Focused tests cover duplicate cosmetic cache updates, immediate terminal
 publication and stale callbacks from a previous Thread generation. Existing
 activity-store selector tests cover the requirement that an activity update
 notifies only the matching assignment timeline.
+
+## Message grouping and day boundaries
+
+Chat visually groups adjacent confirmed messages from the same stable user ID
+when their timestamps are at most ten minutes apart on the viewer's same local
+calendar day. Another author, unknown identity/date, reversed timestamp, or an
+optimistic message breaks the group. Continuations use tighter spacing and omit
+repeated participant headers. Every message retains its key, timestamp, content,
+edit/delete/copy actions and pagination/incoming-message anchor; grouping never
+merges persisted records or requests.
+
+Chat and Work histories show localized date separators at local day boundaries,
+including the first known date in the loaded history. Work cards retain separate
+request/response boundaries and all status and retry controls. Grouping is a pure
+presentation decision and requires no schema or API migration.

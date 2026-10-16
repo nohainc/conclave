@@ -100,6 +100,8 @@ export function normalizeWorkspaceWorkerInstallationStatus(
 export interface WorkspaceGatewayEnv {
   CONCLAVE_DB: D1Database;
   CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
+  /** Holds Work Request input files delivered with `assignment.start`. */
+  CONCLAVE_ARTIFACTS?: R2Bucket;
   /** Used to wake the Workflow that waits for a terminal assignment. */
   CONCLAVE_RUN_WORKFLOW?: WorkflowSignalEnv["CONCLAVE_RUN_WORKFLOW"];
 }

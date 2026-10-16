@@ -9,11 +9,9 @@ Future<List<Map<String, dynamic>>> pickWorkRequestFiles() async {
   input.click();
   await input.onChange.first;
   final files = input.files ?? const <html.File>[];
-  if (files.length > 10 ||
-      files.any((file) => file.size > 1024 * 1024) ||
-      files.fold<int>(0, (sum, file) => sum + file.size) > 1024 * 1024) {
+  if (files.length > 10 || files.any((file) => file.size > 2 * 1024 * 1024)) {
     throw const FormatException(
-      'Choose up to 10 files, with each file and the total under 1 MB.',
+      'Choose up to 10 files, each under 2 MB.',
     );
   }
   final result = <Map<String, dynamic>>[];
