@@ -352,7 +352,9 @@ class WorkspaceCloudConnection {
     this.syncTimeout = const Duration(seconds: 20),
     this.terminalRedeliveryInterval = const Duration(seconds: 20),
     this.webSocketProbeInterval = const Duration(minutes: 5),
-    this.webSocketProbeMaxInterval = const Duration(hours: 1),
+    // A probe is one cheap WSS handshake; keep retrying often enough that a
+    // temporary WebSocket block does not leave the Service on HTTPS for hours.
+    this.webSocketProbeMaxInterval = const Duration(minutes: 15),
     this.webSocketFailureLimit = 3,
     this.credentialAvailable = true,
     MonotonicCloudClock? startPermitClock,
