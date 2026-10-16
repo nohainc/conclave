@@ -94,8 +94,8 @@ class SpaceDirectoryResolver {
         final markerFile = File(_join(directory.path, _markerFileName));
         final hasMarker = await markerFile.exists();
         final foreign = hasMarker && !await _markerMatches(directory, spaceId);
-        final unmarkedWithFiles = !hasMarker &&
-            !await directory.list(followLinks: false).isEmpty;
+        final unmarkedWithFiles =
+            !hasMarker && !await directory.list(followLinks: false).isEmpty;
         if (foreign || unmarkedWithFiles) {
           final folderName = _relativeToRoot(directory.path);
           if (!adoptExistingFolder) {

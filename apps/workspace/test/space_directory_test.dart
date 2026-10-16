@@ -278,7 +278,8 @@ void main() {
       workRoot: work,
       registryDirectory: Directory('${root.path}/state'),
     );
-    final folder = await resolver.resolve(spaceId: 'space-a', spaceName: 'Plan');
+    final folder =
+        await resolver.resolve(spaceId: 'space-a', spaceName: 'Plan');
     File('${folder.path}/notes.txt').writeAsStringSync('keep');
     // Another environment sharing the work root claims the folder.
     File('${folder.path}/.conclave-space.json').writeAsStringSync(

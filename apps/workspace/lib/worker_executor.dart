@@ -603,7 +603,8 @@ class WorkerAssignmentHandler {
     );
   }
 
-  AssignmentExecutionFailure _spaceFolderFailure() => AssignmentExecutionFailure(
+  AssignmentExecutionFailure _spaceFolderFailure() =>
+      AssignmentExecutionFailure(
         code: 'space_folder_exists',
         message: executionErrorMessage('space_folder_exists'),
         retryable: false,

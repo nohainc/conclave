@@ -166,8 +166,8 @@ void main() {
       status: AssignmentStatus.running,
       updatedAt: DateTime.utc(2026, 1, 1, 0, 0, 1),
     ));
-    expect((await journal.find('assignment-1'))!.status,
-        AssignmentStatus.running);
+    expect(
+        (await journal.find('assignment-1'))!.status, AssignmentStatus.running);
   });
 
   test('notices a record written to the file outside this instance', () async {
@@ -180,8 +180,8 @@ void main() {
       status: AssignmentStatus.running,
       updatedAt: DateTime.utc(2026, 1, 1),
     ));
-    expect((await journal.find('assignment-1'))!.status,
-        AssignmentStatus.running);
+    expect(
+        (await journal.find('assignment-1'))!.status, AssignmentStatus.running);
     await file.writeAsString(
       '{"assignmentId":"assignment-1","status":"completed",'
       '"updatedAt":"2026-01-02T00:00:00Z"}\n',
