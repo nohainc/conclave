@@ -21,7 +21,9 @@ void main() {
 
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('lab_ctrl_test_');
-    paths = ProfileLabPaths(homeDirectory: temp.path, repositoryRoot: Directory('${temp.path}/repo'));
+    paths = ProfileLabPaths(
+        homeDirectory: temp.path,
+        repositoryRoot: Directory('${temp.path}/repo'));
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(sessionChannel, (call) async {
       final account = (call.arguments as Map)['account'] as String;

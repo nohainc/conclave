@@ -16,7 +16,9 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('profile_lab_integration_');
-    paths = ProfileLabPaths(homeDirectory: tempDir.path, repositoryRoot: Directory('${tempDir.path}/repo'));
+    paths = ProfileLabPaths(
+        homeDirectory: tempDir.path,
+        repositoryRoot: Directory('${tempDir.path}/repo'));
     await paths.ensureDirectoriesExist();
     controller = ProfileLabController(
       paths: paths,

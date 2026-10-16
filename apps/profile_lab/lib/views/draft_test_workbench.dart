@@ -227,7 +227,8 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
       final name = c.selectedWorkerState.displayName;
       return EmptyState(
         title: 'No Profile file is loaded for $name',
-        description: 'Profile Lab loads ${c.selectedCloudWorker?['workerTypeId']}.json '
+        description:
+            'Profile Lab loads ${c.selectedCloudWorker?['workerTypeId']}.json '
             'from ${c.profileFilePath ?? 'the repository'}.',
         action: Column(
           mainAxisSize: MainAxisSize.min,

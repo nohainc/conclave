@@ -29,7 +29,8 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
         profileFileError = 'No Profile file found: ${file.path}';
         return;
       }
-      final profile = _parseProfileFile(await file.readAsString(), workerTypeId);
+      final profile =
+          _parseProfileFile(await file.readAsString(), workerTypeId);
       final profileDefinitionId = profile['profileDefinitionId'] as String;
       if (selectedDefinitionId != null &&
           selectedDefinitionId != profileDefinitionId) {
