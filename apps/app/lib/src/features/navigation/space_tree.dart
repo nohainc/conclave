@@ -486,20 +486,18 @@ class SpaceTree extends StatelessWidget {
       [List<String> visibleOrder = const [],
       List<String> pinnedOrder = const []]) {
     final isPinnedHere = thread.isPinned && pinnedOrder.contains(thread.id);
-    // Pinned Threads move among pinned ones (your own order); the rest move
-    // among the unpinned ones (the Space's shared order).
-    final group = isPinnedHere
-        ? pinnedOrder
-        : visibleOrder.where((id) => !pinnedOrder.contains(id)).toList();
-    final canReorder =
-        isPinnedHere ? onReorderPinnedThreads != null : onReorderThreads != null;
+    // Only pinned Threads move, among the pinned ones (your own order).
+    final group = isPinnedHere ? pinnedOrder : const <String>[];
+    final canReorder = isPinnedHere && onReorderPinnedThreads != null;
     final position = group.indexOf(thread.id);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = ThemeData.estimateBrightnessForColor(
+            ConclaveColors.navigationBackgroundDark) ==
+        Brightness.dark;
     final isArchived =
         thread.archived || thread.status.toLowerCase() == 'archived';
     final menuStyle = MenuStyle(
       backgroundColor: WidgetStatePropertyAll(
-        ConclaveColors.navigationRaised(isDark),
+        ConclaveColors.navigationBackground(isDark),
       ),
       surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
       elevation: const WidgetStatePropertyAll(12),
@@ -522,6 +520,8 @@ class SpaceTree extends StatelessWidget {
 
     ButtonStyle itemStyle({bool isDestructive = false}) {
       return ButtonStyle(
+        foregroundColor:
+            WidgetStatePropertyAll(ConclaveColors.navigationText(isDark)),
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         ),
@@ -562,45 +562,53 @@ class SpaceTree extends StatelessWidget {
       child: MenuAnchor(
         style: menuStyle,
         builder: (context, controller, child) {
-          return IconButton(
-            tooltip: 'Thread menu',
-            icon: const Icon(
-              Icons.more_vert,
-              color: Colors.white60,
-              size: 18,
-            ),
-            splashRadius: 14,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-            onPressed: () {
-              if (controller.isOpen) {
-                controller.close();
-              } else {
-                controller.open();
-              }
-            },
-          );
+          return Semantics(
+              label: 'Thread menu',
+              child: Tooltip(
+                  message: 'Thread menu',
+                  excludeFromSemantics: true,
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.more_vert,
+                      color: Colors.white60,
+                      size: 18,
+                    ),
+                    splashRadius: 14,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: () {
+                      if (controller.isOpen) {
+                        controller.close();
+                      } else {
+                        controller.open();
+                      }
+                    },
+                  )));
         },
         menuChildren: [
-          if (canReorder && position > 0)
+          // Pinned Threads always list both moves; an edge disables its move.
+          if (canReorder)
             MenuItemButton(
               style: itemStyle(),
               leadingIcon: Icon(Icons.arrow_upward_rounded,
                   size: 16, color: menuIconColor),
-              onPressed: () => _moveThread(
-                  space, visibleOrder, group, position, -1, isPinnedHere),
+              onPressed: position > 0
+                  ? () => _moveThread(space, group, position, -1)
+                  : null,
               child: const Text(
                 'Move Up',
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
               ),
             ),
-          if (canReorder && position >= 0 && position < group.length - 1)
+          if (canReorder)
             MenuItemButton(
               style: itemStyle(),
               leadingIcon: Icon(Icons.arrow_downward_rounded,
                   size: 16, color: menuIconColor),
-              onPressed: () => _moveThread(
-                  space, visibleOrder, group, position, 1, isPinnedHere),
+              onPressed: position >= 0 && position < group.length - 1
+                  ? () => _moveThread(space, group, position, 1)
+                  : null,
               child: const Text(
                 'Move Down',
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
@@ -689,7 +697,9 @@ class SpaceTree extends StatelessWidget {
   }
 
   Widget _spaceMenu(BuildContext context, AxSpace space) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = ThemeData.estimateBrightnessForColor(
+            ConclaveColors.navigationBackgroundDark) ==
+        Brightness.dark;
     final pinnedOrder = ([
       for (final item in shellContext.spaces)
         if (item.isPinned) item
@@ -700,7 +710,7 @@ class SpaceTree extends StatelessWidget {
     final canReorderPins = space.isPinned && onReorderPinnedSpaces != null;
     final menuStyle = MenuStyle(
       backgroundColor: WidgetStatePropertyAll(
-        ConclaveColors.navigationRaised(isDark),
+        ConclaveColors.navigationBackground(isDark),
       ),
       surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
       elevation: const WidgetStatePropertyAll(12),
@@ -722,6 +732,8 @@ class SpaceTree extends StatelessWidget {
     );
 
     ButtonStyle itemStyle({bool isDestructive = false}) => ButtonStyle(
+          foregroundColor:
+              WidgetStatePropertyAll(ConclaveColors.navigationText(isDark)),
           padding: const WidgetStatePropertyAll(
             EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           ),
@@ -775,37 +787,46 @@ class SpaceTree extends StatelessWidget {
       height: 28,
       child: MenuAnchor(
         style: menuStyle,
-        builder: (context, controller, child) => IconButton(
-          tooltip: 'Space menu',
-          icon: const Icon(Icons.more_vert, color: Colors.white60, size: 18),
-          splashRadius: 14,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-          onPressed: () {
-            if (controller.isOpen) {
-              controller.close();
-            } else {
-              controller.open();
-            }
-          },
-        ),
+        builder: (context, controller, child) => Semantics(
+            label: 'Space menu',
+            child: Tooltip(
+                message: 'Space menu',
+                excludeFromSemantics: true,
+                child: IconButton(
+                  icon: const Icon(Icons.more_vert,
+                      color: Colors.white60, size: 18),
+                  splashRadius: 14,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  onPressed: () {
+                    if (controller.isOpen) {
+                      controller.close();
+                    } else {
+                      controller.open();
+                    }
+                  },
+                ))),
         menuChildren: [
-          if (canReorderPins && pinnedPosition > 0)
+          if (canReorderPins)
             MenuItemButton(
               style: itemStyle(),
               leadingIcon:
                   Icon(Icons.arrow_upward_rounded, size: 16, color: iconColor),
-              onPressed: () => _moveSpace(pinnedOrder, pinnedPosition, -1),
+              onPressed: pinnedPosition > 0
+                  ? () => _moveSpace(pinnedOrder, pinnedPosition, -1)
+                  : null,
               child: const Text('Move Up'),
             ),
-          if (canReorderPins &&
-              pinnedPosition >= 0 &&
-              pinnedPosition < pinnedOrder.length - 1)
+          if (canReorderPins)
             MenuItemButton(
               style: itemStyle(),
               leadingIcon: Icon(Icons.arrow_downward_rounded,
                   size: 16, color: iconColor),
-              onPressed: () => _moveSpace(pinnedOrder, pinnedPosition, 1),
+              onPressed:
+                  pinnedPosition >= 0 && pinnedPosition < pinnedOrder.length - 1
+                      ? () => _moveSpace(pinnedOrder, pinnedPosition, 1)
+                      : null,
               child: const Text('Move Down'),
             ),
           if (onSetSpacePinned != null)
@@ -852,22 +873,11 @@ class SpaceTree extends StatelessWidget {
     );
   }
 
-  void _moveThread(AxSpace space, List<String> order, List<String> group,
-      int position, int delta, bool pinned) {
-    if (pinned) {
-      final next = [...group];
-      next.insert(position + delta, next.removeAt(position));
-      unawaited(onReorderPinnedThreads!(space, next));
-      return;
-    }
-    // Swap with the neighbouring unpinned Thread inside the full shared order.
-    final next = [...order];
-    final a = next.indexOf(group[position]);
-    final b = next.indexOf(group[position + delta]);
-    final moved = next[a];
-    next[a] = next[b];
-    next[b] = moved;
-    unawaited(onReorderThreads!(space, next).catchError((Object _) {}));
+  void _moveThread(
+      AxSpace space, List<String> pinnedOrder, int position, int delta) {
+    final next = [...pinnedOrder];
+    next.insert(position + delta, next.removeAt(position));
+    unawaited(onReorderPinnedThreads!(space, next));
   }
 
   void _moveSpace(List<String> order, int position, int delta) {
@@ -1301,18 +1311,21 @@ class _ActivityIndicatorsState extends State<SidebarActivityIndicators> {
       padding: EdgeInsets.only(left: widget.gap),
       child: Semantics(
         label: label,
-        child: Tooltip(
-          message: label,
-          child: wrap(Container(
-            key: key,
-            width: 9,
-            height: 9,
-            decoration: const BoxDecoration(
-              color: ConclaveBrand.accent,
-              shape: BoxShape.circle,
-            ),
-          )),
-        ),
+        child: Semantics(
+            label: label,
+            child: Tooltip(
+              excludeFromSemantics: true,
+              message: label,
+              child: wrap(Container(
+                key: key,
+                width: 9,
+                height: 9,
+                decoration: const BoxDecoration(
+                  color: ConclaveBrand.accent,
+                  shape: BoxShape.circle,
+                ),
+              )),
+            )),
       ),
     );
   }

@@ -112,7 +112,13 @@ class WorkspaceWorkerSubsystem {
   Future<bool> cancelAssignment(String assignmentId) =>
       cancel(assignmentId, 'Cancelled by Workspace Service');
 
-  /// Slot usage per Worker for the Workspace UI.
+  /// Workspace-wide parallel slot total shared by every Worker.
+  Future<int> parallelSlots() => registry.parallelSlots();
+
+  /// Changes the total; the registry advances Worker revisions so Cloud sees it.
+  Future<int> setParallelSlots(int slots) => registry.setParallelSlots(slots);
+
+  /// Shared slot pool usage, with a per-Worker breakdown, for the Workspace UI.
   Map<String, Object?> slotSnapshot() =>
       engineSupervisor?.slotSnapshot() ??
       const {'workers': <Object?>[], 'busySessions': 0};

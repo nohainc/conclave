@@ -36,13 +36,17 @@ final class CliWorkerEngineSupervisor {
   final Map<String, Process> _activeAssignments = {};
   final Map<String, String> _activeWorkerByAssignment = {};
   final Map<String, String> _reservedWorkerByAssignment = {};
+  /// Slot admission is one Workspace-wide pool: every Worker draws from the
+  /// same [_pool] entry, so the limit is total parallel executions regardless
+  /// of which Worker runs them. Per-Worker views are derived for telemetry.
+  static const _pool = 'workspace';
   final Map<String, int> _activeByWorker = {};
   final Map<String, List<_QueuedEngineAssignment>> _waitersByWorker = {};
   final Map<String, _QueuedEngineAssignment> _queuedAssignments = {};
   final Set<String> _reservedAssignmentIds = {};
   final Set<String> _cancelledAssignments = {};
 
-  /// The effective concurrency limit most recently applied to each Worker.
+  /// The Workspace-wide parallel slot limit most recently applied.
   /// Every admission restates it and every state change re-evaluates the
   /// queue against it, so lowering or raising a limit takes effect at once.
   final Map<String, int> _limitByWorker = {};
@@ -58,12 +62,20 @@ final class CliWorkerEngineSupervisor {
   int get queuedAssignmentCount => _queuedAssignments.length;
 
   /// Assignments of [workerId] waiting for a slot or session. Telemetry only.
-  int queuedAssignmentCountFor(String workerId) =>
-      _waitersByWorker[workerId]?.length ?? 0;
+  int queuedAssignmentCountFor(String workerId) => _queuedAssignments.values
+      .where((queued) => queued.workerId == workerId)
+      .length;
 
   /// Slots of [workerId] currently reserved or running. Telemetry only.
-  int activeAssignmentCountFor(String workerId) =>
-      _activeByWorker[workerId] ?? 0;
+  int activeAssignmentCountFor(String workerId) => {
+        for (final entry in _reservedWorkerByAssignment.entries)
+          if (entry.value == workerId) entry.key,
+        for (final entry in _activeWorkerByAssignment.entries)
+          if (entry.value == workerId) entry.key,
+      }.length;
+
+  /// Slots of the shared pool currently reserved or running. Telemetry only.
+  int get activeSlotCount => _activeByWorker[_pool] ?? 0;
 
   /// Reaps Engine processes left behind if the owning Workspace Service died.
   /// A PID is acted on only when its command line still identifies this exact
@@ -637,7 +649,7 @@ final class CliWorkerEngineSupervisor {
         await _deleteProcessRecord(processRecord);
         await channel?.dispose();
       } finally {
-        _releaseSlot(workerId, assignmentId);
+        _releaseSlot(assignmentId);
       }
     }
   }
@@ -645,8 +657,7 @@ final class CliWorkerEngineSupervisor {
   Future<bool> cancel(String assignmentId) async {
     final queued = _queuedAssignments.remove(assignmentId);
     if (queued != null) {
-      final workerId = queued.workerId;
-      _removeWaiter(workerId, queued);
+      _removeWaiter(queued);
       // A cancelled waiter never received a slot, so it must not release one.
       if (!queued.permit.isCompleted) {
         queued.permit.completeError(const WorkerAssignmentCancelledException());
@@ -680,24 +691,25 @@ final class CliWorkerEngineSupervisor {
     }
   }
 
-  /// Point-in-time view of Worker slots for the Workspace UI. Telemetry only.
+  /// Point-in-time view of the shared slot pool for the Workspace UI, with a
+  /// per-Worker breakdown of who holds the slots. Telemetry only.
   Map<String, Object?> slotSnapshot() {
     final workerIds = <String>{
-      ..._activeByWorker.keys,
-      ..._waitersByWorker.keys,
+      ..._queuedAssignments.values.map((queued) => queued.workerId),
       ..._reservedWorkerByAssignment.values,
       ..._activeWorkerByAssignment.values,
     }.toList()
       ..sort();
     return {
+      'active': _activeByWorker[_pool] ?? 0,
+      'queued': _waitersByWorker[_pool]?.length ?? 0,
+      if (_limitByWorker[_pool] != null) 'limit': _limitByWorker[_pool],
       'workers': [
         for (final workerId in workerIds)
           {
             'workerId': workerId,
-            'active': _activeByWorker[workerId] ?? 0,
-            'queued': _waitersByWorker[workerId]?.length ?? 0,
-            if (_limitByWorker[workerId] != null)
-              'limit': _limitByWorker[workerId],
+            'active': activeAssignmentCountFor(workerId),
+            'queued': queuedAssignmentCountFor(workerId),
             'assignmentIds': ({
               for (final entry in _reservedWorkerByAssignment.entries)
                 if (entry.value == workerId) entry.key,
@@ -761,7 +773,7 @@ final class CliWorkerEngineSupervisor {
   Future<void> _acquireSlot(
     String workerId,
     String assignmentId,
-    int maxConcurrentAssignments, {
+    int parallelSlots, {
     String? sessionGate,
     required Duration timeout,
     void Function(WorkerQueueSnapshot queue)? onQueued,
@@ -769,32 +781,31 @@ final class CliWorkerEngineSupervisor {
     // Everything up to the first `await` below is synchronous and atomic:
     // the check, the reservation or the queue insertion cannot interleave
     // with another assignment's admission, release or cancellation.
-    _limitByWorker[workerId] = maxConcurrentAssignments;
+    _limitByWorker[_pool] = parallelSlots;
     // A raised limit admits earlier waiters before a new arrival, so a later
     // request can never overtake the queue.
-    _promoteWaiters(workerId);
+    _promoteWaiters();
     final sessionFree =
         sessionGate == null || !_busySessionGates.contains(sessionGate);
-    if ((_activeByWorker[workerId] ?? 0) < maxConcurrentAssignments &&
-        sessionFree) {
+    if ((_activeByWorker[_pool] ?? 0) < parallelSlots && sessionFree) {
       _reserve(workerId, assignmentId, sessionGate);
       return;
     }
     final queued = _QueuedEngineAssignment(workerId, assignmentId, sessionGate);
     _queuedAssignments[assignmentId] = queued;
-    _waitersByWorker.putIfAbsent(workerId, () => []).add(queued);
+    _waitersByWorker.putIfAbsent(_pool, () => []).add(queued);
     // A raised limit may already admit earlier waiters (and this one).
-    _promoteWaiters(workerId);
+    _promoteWaiters();
     if (!queued.permit.isCompleted) {
-      final waiters = _waitersByWorker[workerId] ?? const [];
+      final waiters = _waitersByWorker[_pool] ?? const [];
       _observe(
         () => onQueued?.call(
           WorkerQueueSnapshot(
             workerId: workerId,
             assignmentId: assignmentId,
             position: waiters.indexOf(queued) + 1,
-            active: _activeByWorker[workerId] ?? 0,
-            limit: maxConcurrentAssignments,
+            active: _activeByWorker[_pool] ?? 0,
+            limit: parallelSlots,
             waitingForSession:
                 sessionGate != null && _busySessionGates.contains(sessionGate),
             queueWaitTimeout: timeout,
@@ -812,7 +823,7 @@ final class CliWorkerEngineSupervisor {
           _reservedAssignmentIds.contains(assignmentId)) {
         return;
       }
-      _removeWaiter(workerId, queued);
+      _removeWaiter(queued);
       throw CliWorkerEngineProbeException(
         WorkerIssueCode.deadlineExceeded,
         'Assignment execution exceeded its deadline while waiting for a Worker slot.',
@@ -827,9 +838,10 @@ final class CliWorkerEngineSupervisor {
     }
   }
 
-  /// Takes one slot of [workerId] for [assignmentId] and its session gate.
+  /// Takes one pool slot for [assignmentId] (run by [workerId]) and its
+  /// session gate.
   void _reserve(String workerId, String assignmentId, String? sessionGate) {
-    _activeByWorker[workerId] = (_activeByWorker[workerId] ?? 0) + 1;
+    _activeByWorker[_pool] = (_activeByWorker[_pool] ?? 0) + 1;
     _reservedAssignmentIds.add(assignmentId);
     _reservedWorkerByAssignment[assignmentId] = workerId;
     if (sessionGate != null) {
@@ -838,26 +850,26 @@ final class CliWorkerEngineSupervisor {
     }
   }
 
-  void _removeWaiter(String workerId, _QueuedEngineAssignment queued) {
+  void _removeWaiter(_QueuedEngineAssignment queued) {
     _queuedAssignments.remove(queued.assignmentId);
-    final waiters = _waitersByWorker[workerId];
+    final waiters = _waitersByWorker[_pool];
     if (waiters == null) return;
     waiters.remove(queued);
-    if (waiters.isEmpty) _waitersByWorker.remove(workerId);
+    if (waiters.isEmpty) _waitersByWorker.remove(_pool);
   }
 
   /// Hands free capacity to waiting assignments, oldest first. A waiter whose
   /// provider session is busy is skipped rather than blocking the ones behind
-  /// it, so one busy session never stalls unrelated work of the same Worker.
+  /// it, so one busy session never stalls unrelated work.
   /// The reservation is transferred before the waiter's future completes, so
   /// a cancellation that races the wake-up still finds a reservation to
   /// cancel and stops before a process is created.
-  void _promoteWaiters(String workerId) {
-    final waiters = _waitersByWorker[workerId];
+  void _promoteWaiters() {
+    final waiters = _waitersByWorker[_pool];
     if (waiters == null) return;
-    final limit = _limitByWorker[workerId] ?? 1;
+    final limit = _limitByWorker[_pool] ?? 1;
     var index = 0;
-    while (index < waiters.length && (_activeByWorker[workerId] ?? 0) < limit) {
+    while (index < waiters.length && (_activeByWorker[_pool] ?? 0) < limit) {
       final next = waiters[index];
       final gate = next.sessionGate;
       if (gate != null && _busySessionGates.contains(gate)) {
@@ -866,27 +878,27 @@ final class CliWorkerEngineSupervisor {
       }
       waiters.removeAt(index);
       _queuedAssignments.remove(next.assignmentId);
-      _reserve(workerId, next.assignmentId, gate);
+      _reserve(next.workerId, next.assignmentId, gate);
       if (!next.permit.isCompleted) {
         next.permit.complete();
       }
     }
-    if (waiters.isEmpty) _waitersByWorker.remove(workerId);
+    if (waiters.isEmpty) _waitersByWorker.remove(_pool);
   }
 
-  void _releaseSlot(String workerId, String assignmentId) {
-    final active = _activeByWorker[workerId] ?? 0;
+  void _releaseSlot(String assignmentId) {
+    final active = _activeByWorker[_pool] ?? 0;
     if (active <= 1) {
-      _activeByWorker.remove(workerId);
+      _activeByWorker.remove(_pool);
     } else {
-      _activeByWorker[workerId] = active - 1;
+      _activeByWorker[_pool] = active - 1;
     }
     final gate = _sessionGateByAssignment.remove(assignmentId);
     if (gate != null) _busySessionGates.remove(gate);
-    _promoteWaiters(workerId);
-    if ((_activeByWorker[workerId] ?? 0) == 0 &&
-        !_waitersByWorker.containsKey(workerId)) {
-      _limitByWorker.remove(workerId);
+    _promoteWaiters();
+    if ((_activeByWorker[_pool] ?? 0) == 0 &&
+        !_waitersByWorker.containsKey(_pool)) {
+      _limitByWorker.remove(_pool);
     }
   }
 
@@ -1073,13 +1085,13 @@ final class WorkerQueueSnapshot {
   final String workerId;
   final String assignmentId;
 
-  /// One-based position among this Worker's waiting assignments.
+  /// One-based position in the shared queue.
   final int position;
 
-  /// Slots of the Worker in use when the assignment queued.
+  /// Pool slots in use when the assignment queued.
   final int active;
 
-  /// The Worker's effective concurrency limit.
+  /// The Workspace-wide parallel slot limit.
   final int limit;
 
   /// Whether the assignment is also blocked by a busy provider session.

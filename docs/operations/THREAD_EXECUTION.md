@@ -20,6 +20,19 @@ Use **Show more** to view the full Markdown and **Hide more** to collapse again.
 Copy and edit actions retain the complete source.
 Chat and Work composer Send, Preview/Write, and Show/Hide Markdown controls
 use the theme text color. Work keeps its Markdown toolbar hidden in both layouts. The expanded Markdown toolbar has no top divider.
+Sidebar and collapsed-tray controls suppress hover hints while retaining
+accessibility labels, including menu controls and activity indicators.
+Application, Space, and Thread menus match the sidebar background, including
+the collapsed sidebar’s Space/Thread switcher and search popup. Composer
+attachment, workflow, and execution popups match the input background in each theme.
+The Work execution popup applies preferences immediately, without Cancel/Done.
+Completing an effort slider gesture accepts the selection and closes the popup.
+Its discrete effort slider sits above the model list; available Worker icons sit
+at the bottom. Selecting a Worker refreshes its model and effort choices, and
+selecting a model retains only a supported effort. Workflow selection permissions
+still govern each control. Dismissing the popup keeps the applied preferences. The restore icon at the
+bottom right restores the complete selection from when the popup was opened,
+including its Worker, model, effort, and catalog revision, then closes the popup.
 In both composers, Enter sends and Shift+Enter inserts a new line. Ctrl/Cmd+Enter
 also sends. Editing an existing discussion retains Enter for a new line and
 Ctrl/Cmd+Enter to save.

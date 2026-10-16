@@ -9,6 +9,7 @@ class AxThreadViewState {
     this.tabIndex = 0,
     this.workflowReference,
     this.workerId,
+    this.workerTypeId,
     this.model,
     this.reasoningEffort,
     this.catalogRevision,
@@ -19,6 +20,9 @@ class AxThreadViewState {
   final int tabIndex;
   final String? workflowReference;
   final String? workerId;
+
+  /// Stable Worker code; unlike [workerId] it survives a Worker rebuild.
+  final String? workerTypeId;
   final String? model;
   final String? reasoningEffort;
   final String? catalogRevision;
@@ -30,6 +34,7 @@ class AxThreadViewState {
         'tabIndex': tabIndex.clamp(0, 1),
         if (workflowReference != null) 'workflowReference': workflowReference,
         if (workerId != null) 'workerId': workerId,
+        if (workerTypeId != null) 'workerTypeId': workerTypeId,
         if (model != null) 'model': model,
         if (reasoningEffort != null) 'reasoningEffort': reasoningEffort,
         if (catalogRevision != null) 'catalogRevision': catalogRevision,
@@ -54,6 +59,7 @@ class AxThreadViewState {
       tabIndex: tab is int ? tab.clamp(0, 1) : 0,
       workflowReference: string('workflowReference'),
       workerId: string('workerId'),
+      workerTypeId: string('workerTypeId'),
       model: string('model'),
       reasoningEffort: string('reasoningEffort'),
       catalogRevision: string('catalogRevision'),

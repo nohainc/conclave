@@ -69,18 +69,57 @@ Future<T?> _showAnchoredMenu<T>({
   final isDark = Theme.of(buttonContext).brightness == Brightness.dark;
   final box = buttonContext.findRenderObject()! as RenderBox;
   // showMenu positions against the Navigator's overlay, so measure there.
-  final overlay = Navigator.of(buttonContext).overlay!.context.findRenderObject()!
-      as RenderBox;
+  final overlay = Navigator.of(buttonContext)
+      .overlay!
+      .context
+      .findRenderObject()! as RenderBox;
   final rect = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
   final anchorBottom = rect.top - 8;
   final availableHeight = (anchorBottom - 8).clamp(0.0, overlay.size.height);
-  final itemCount = items.length - dividerCount;
-  final exactHeight = (itemCount * itemHeight) + (dividerCount * 16.0) + 12.0;
-  final menuHeight = exactHeight.clamp(0.0, availableHeight);
+  // Measure the real rows offstage; fixed per-row estimates drift with
+  // density and icon sizes.
+  final measureKey = GlobalKey();
+  final entry = OverlayEntry(
+    builder: (_) => Offstage(
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Material(
+          child: Theme(
+            data: Theme.of(buttonContext),
+            child: Padding(
+              key: measureKey,
+              padding: ConclaveMenuStyle.padding,
+              child: IntrinsicWidth(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final item in items)
+                      item is ConclaveMenuEntry<T>
+                          ? item.child
+                          : SizedBox(height: item.height),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  Overlay.of(buttonContext).insert(entry);
+  await WidgetsBinding.instance.endOfFrame;
+  final measured = (measureKey.currentContext?.findRenderObject() as RenderBox?)
+          ?.size
+          .height ??
+      (items.length - dividerCount) * itemHeight + 12.0;
+  entry.remove();
+  entry.dispose();
+  if (!buttonContext.mounted) return null;
+  final menuHeight = measured.clamp(0.0, availableHeight);
   return showMenu<T>(
     context: buttonContext,
     popUpAnimationStyle: AnimationStyle.noAnimation,
-    color: ConclaveMenuStyle.background(isDark),
+    color: ConclaveColors.composerBackground(isDark),
     surfaceTintColor: Colors.transparent,
     elevation: 12,
     shadowColor: ConclaveMenuStyle.shadow(isDark),
@@ -477,6 +516,18 @@ class _WorkComposer extends StatelessWidget {
           const SizedBox(width: 6),
           ModelEffortSelector(
             scope: 'work-composer',
+            immediatePopup: true,
+            workerIconBuilder: (capability) {
+              final worker = eligibleWorkers
+                  .where((w) => w.id == capability.id)
+                  .firstOrNull;
+              final asset = WorkerPresentation.resolve(
+                      worker?.workerTypeId, capability.name)
+                  .iconAsset;
+              return asset == null
+                  ? const Icon(Icons.smart_toy_outlined, size: 22)
+                  : Image.asset(asset, width: 22, height: 22);
+            },
             helperMessage: eligibleWorkers
                         .where((worker) => worker.id == selectedWorkerId)
                         .firstOrNull

@@ -87,7 +87,12 @@ class AppSidebar extends StatelessWidget {
   final bool compact;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TooltipVisibility(
+        visible: false,
+        child: Builder(builder: _buildSidebar),
+      );
+
+  Widget _buildSidebar(BuildContext context) {
     return LayoutBuilder(
       builder: (sidebarContext, constraints) {
         final width =
@@ -105,70 +110,78 @@ class AppSidebar extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Tooltip(
-                      message: 'Conclave AX — Home',
-                      child: InkWell(
-                        onTap: () {
-                          onNavigateTo(const AxNavigation.home());
-                          if (compact) {
-                            Scaffold.maybeOf(sidebarContext)?.closeDrawer();
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(ConclaveRadius.sm),
-                        hoverColor: ConclaveColors.navigationHoverDark,
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                              horizontal: narrow ? 2 : 6, vertical: 6),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: [
-                              ConclaveBrand.logoMark(size: 28),
-                              if (!narrow) const SizedBox(width: 10),
-                              if (!narrow)
-                                Flexible(
-                                  child: Text(
-                                    'Conclave AX',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: ConclaveTypography.wordmark.copyWith(
-                                      color: Colors.white,
+                    child: Semantics(
+                        label: 'Conclave AX — Home',
+                        child: Tooltip(
+                          excludeFromSemantics: true,
+                          message: 'Conclave AX — Home',
+                          child: InkWell(
+                            onTap: () {
+                              onNavigateTo(const AxNavigation.home());
+                              if (compact) {
+                                Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                              }
+                            },
+                            borderRadius:
+                                BorderRadius.circular(ConclaveRadius.sm),
+                            hoverColor: ConclaveColors.navigationHoverDark,
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: narrow ? 2 : 6, vertical: 6),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                children: [
+                                  ConclaveBrand.logoMark(size: 28),
+                                  if (!narrow) const SizedBox(width: 10),
+                                  if (!narrow)
+                                    Flexible(
+                                      child: Text(
+                                        'Conclave AX',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: ConclaveTypography.wordmark
+                                            .copyWith(
+                                          color: Colors.white,
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
-                            ],
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
+                        )),
                   ),
                   const SizedBox(width: 4),
-                  Tooltip(
-                    message: compact ? 'Close sidebar' : 'Hide sidebar',
-                    child: IconButton(
-                      onPressed: () {
-                        if (compact) {
-                          Scaffold.maybeOf(sidebarContext)?.closeDrawer();
-                        } else if (onToggleCollapse != null) {
-                          onToggleCollapse!();
-                        }
-                      },
-                      icon: const Icon(
-                        Icons.menu_open_rounded,
-                        size: 20,
-                        color: Colors.white70,
-                      ),
-                      splashRadius: 16,
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 32, minHeight: 32),
-                      style: IconButton.styleFrom(
-                        hoverColor: ConclaveColors.navigationHoverDark,
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(ConclaveRadius.sm),
+                  Semantics(
+                      label: compact ? 'Close sidebar' : 'Hide sidebar',
+                      child: Tooltip(
+                        excludeFromSemantics: true,
+                        message: compact ? 'Close sidebar' : 'Hide sidebar',
+                        child: IconButton(
+                          onPressed: () {
+                            if (compact) {
+                              Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                            } else if (onToggleCollapse != null) {
+                              onToggleCollapse!();
+                            }
+                          },
+                          icon: const Icon(
+                            Icons.menu_open_rounded,
+                            size: 20,
+                            color: Colors.white70,
+                          ),
+                          splashRadius: 16,
+                          padding: EdgeInsets.zero,
+                          constraints:
+                              const BoxConstraints(minWidth: 32, minHeight: 32),
+                          style: IconButton.styleFrom(
+                            hoverColor: ConclaveColors.navigationHoverDark,
+                            shape: RoundedRectangleBorder(
+                              borderRadius:
+                                  BorderRadius.circular(ConclaveRadius.sm),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
+                      )),
                 ],
               ),
               const SizedBox(height: 10),
@@ -182,141 +195,155 @@ class AppSidebar extends StatelessWidget {
                   children: [
                     SizedBox(
                       width: width - sidePadding * 2 - 4 - (narrow ? 0 : 76),
-                      child: Tooltip(
-                        message: 'Search or jump to...',
-                        child: Container(
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: ConclaveColors.navigationBackgroundDark,
-                            borderRadius:
-                                BorderRadius.circular(ConclaveRadius.sm),
-                            border:
-                                Border.all(color: ConclaveColors.borderDark),
-                          ),
-                          child: ListenableBuilder(
-                            listenable:
-                                searchController ?? TextEditingController(),
-                            builder: (context, _) {
-                              final hasText =
-                                  searchController?.text.isNotEmpty ?? false;
-                              return Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  const Padding(
-                                    padding: EdgeInsets.only(left: 8, right: 4),
-                                    child: Icon(
-                                      Icons.search_rounded,
-                                      size: 15,
-                                      color: Colors.white54,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: CallbackShortcuts(
-                                      bindings: {
-                                        const SingleActivator(
-                                            LogicalKeyboardKey.escape): () {
-                                          searchController?.clear();
-                                          onSearchChanged?.call('');
-                                          onClearSearch?.call();
-                                        },
-                                      },
-                                      child: TextField(
-                                        controller: searchController,
-                                        focusNode: searchFocusNode,
-                                        onChanged: onSearchChanged,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.white,
-                                        ),
-                                        cursorColor: ConclaveBrand.accent,
-                                        cursorHeight: 14,
-                                        decoration: const InputDecoration(
-                                          filled: true,
-                                          fillColor: Colors.transparent,
-                                          hoverColor: Colors.transparent,
-                                          focusColor: Colors.transparent,
-                                          hintText: 'Search...',
-                                          hintStyle: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.white38,
-                                          ),
-                                          isDense: true,
-                                          contentPadding:
-                                              EdgeInsets.symmetric(vertical: 7),
-                                          border: InputBorder.none,
-                                          focusedBorder: InputBorder.none,
-                                          enabledBorder: InputBorder.none,
-                                          errorBorder: InputBorder.none,
-                                          disabledBorder: InputBorder.none,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  if (hasText)
-                                    InkWell(
-                                      onTap: onClearSearch,
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: const Padding(
-                                        padding: EdgeInsets.symmetric(
-                                            horizontal: 6, vertical: 4),
+                      child: Semantics(
+                          label: 'Search or jump to...',
+                          child: Tooltip(
+                            excludeFromSemantics: true,
+                            message: 'Search or jump to...',
+                            child: Container(
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: ConclaveColors.navigationBackgroundDark,
+                                borderRadius:
+                                    BorderRadius.circular(ConclaveRadius.sm),
+                                border: Border.all(
+                                    color: ConclaveColors.borderDark),
+                              ),
+                              child: ListenableBuilder(
+                                listenable:
+                                    searchController ?? TextEditingController(),
+                                builder: (context, _) {
+                                  final hasText =
+                                      searchController?.text.isNotEmpty ??
+                                          false;
+                                  return Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      const Padding(
+                                        padding:
+                                            EdgeInsets.only(left: 8, right: 4),
                                         child: Icon(
-                                          Icons.close_rounded,
-                                          size: 14,
+                                          Icons.search_rounded,
+                                          size: 15,
                                           color: Colors.white54,
                                         ),
                                       ),
-                                    ),
-                                ],
-                              );
-                            },
-                          ),
-                        ),
-                      ),
+                                      Expanded(
+                                        child: CallbackShortcuts(
+                                          bindings: {
+                                            const SingleActivator(
+                                                LogicalKeyboardKey.escape): () {
+                                              searchController?.clear();
+                                              onSearchChanged?.call('');
+                                              onClearSearch?.call();
+                                            },
+                                          },
+                                          child: TextField(
+                                            controller: searchController,
+                                            focusNode: searchFocusNode,
+                                            onChanged: onSearchChanged,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                            ),
+                                            cursorColor: ConclaveBrand.accent,
+                                            cursorHeight: 14,
+                                            decoration: const InputDecoration(
+                                              filled: true,
+                                              fillColor: Colors.transparent,
+                                              hoverColor: Colors.transparent,
+                                              focusColor: Colors.transparent,
+                                              hintText: 'Search...',
+                                              hintStyle: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.white38,
+                                              ),
+                                              isDense: true,
+                                              contentPadding:
+                                                  EdgeInsets.symmetric(
+                                                      vertical: 7),
+                                              border: InputBorder.none,
+                                              focusedBorder: InputBorder.none,
+                                              enabledBorder: InputBorder.none,
+                                              errorBorder: InputBorder.none,
+                                              disabledBorder: InputBorder.none,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (hasText)
+                                        InkWell(
+                                          onTap: onClearSearch,
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          child: const Padding(
+                                            padding: EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 4),
+                                            child: Icon(
+                                              Icons.close_rounded,
+                                              size: 14,
+                                              color: Colors.white54,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          )),
                     ),
-                    Tooltip(
-                      message: 'New Space',
-                      child: IconButton(
-                        onPressed: onCreateSpace,
-                        icon: const Icon(
-                          Icons.add_rounded,
-                          size: 18,
-                          color: Colors.white60,
-                        ),
-                        splashRadius: 14,
-                        padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
-                        style: IconButton.styleFrom(
-                          hoverColor: ConclaveColors.navigationHoverDark,
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(ConclaveRadius.sm),
+                    Semantics(
+                        label: 'New Space',
+                        child: Tooltip(
+                          excludeFromSemantics: true,
+                          message: 'New Space',
+                          child: IconButton(
+                            onPressed: onCreateSpace,
+                            icon: const Icon(
+                              Icons.add_rounded,
+                              size: 18,
+                              color: Colors.white60,
+                            ),
+                            splashRadius: 14,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 32, minHeight: 32),
+                            style: IconButton.styleFrom(
+                              hoverColor: ConclaveColors.navigationHoverDark,
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(ConclaveRadius.sm),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    Tooltip(
-                      message: 'Notifications',
-                      child: IconButton(
-                        onPressed: onOpenNotifications,
-                        icon: const Icon(
-                          Icons.notifications_none_rounded,
-                          size: 18,
-                          color: Colors.white60,
-                        ),
-                        splashRadius: 14,
-                        padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
-                        style: IconButton.styleFrom(
-                          hoverColor: ConclaveColors.navigationHoverDark,
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(ConclaveRadius.sm),
+                        )),
+                    Semantics(
+                        label: 'Notifications',
+                        child: Tooltip(
+                          excludeFromSemantics: true,
+                          message: 'Notifications',
+                          child: IconButton(
+                            onPressed: onOpenNotifications,
+                            icon: const Icon(
+                              Icons.notifications_none_rounded,
+                              size: 18,
+                              color: Colors.white60,
+                            ),
+                            splashRadius: 14,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 32, minHeight: 32),
+                            style: IconButton.styleFrom(
+                              hoverColor: ConclaveColors.navigationHoverDark,
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(ConclaveRadius.sm),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
+                        )),
                   ],
                 ),
               ),
@@ -364,75 +391,83 @@ class AppSidebar extends StatelessWidget {
               Row(
                 children: [
                   Expanded(
-                    child: Tooltip(
-                      message: 'Profile & Settings',
-                      waitDuration: const Duration(milliseconds: 600),
-                      child: InkWell(
-                        onTap: () {
-                          onNavigateTo(const AxNavigation.profileSecurity());
-                          if (compact) {
-                            Scaffold.maybeOf(sidebarContext)?.closeDrawer();
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(ConclaveRadius.sm),
-                        hoverColor: ConclaveColors.navigationHoverDark,
-                        focusColor: ConclaveColors.navigationSelected,
-                        child: Container(
-                          padding: EdgeInsets.symmetric(
-                              horizontal: narrow ? 2 : 6, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: shellContext.isNavActive(
-                                    const AxNavigation.profileSecurity())
-                                ? ConclaveColors.navigationSelected
-                                : Colors.transparent,
+                    child: Semantics(
+                        label: 'Profile & Settings',
+                        child: Tooltip(
+                          excludeFromSemantics: true,
+                          message: 'Profile & Settings',
+                          waitDuration: const Duration(milliseconds: 600),
+                          child: InkWell(
+                            onTap: () {
+                              onNavigateTo(
+                                  const AxNavigation.profileSecurity());
+                              if (compact) {
+                                Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                              }
+                            },
                             borderRadius:
                                 BorderRadius.circular(ConclaveRadius.sm),
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 13,
-                                backgroundColor: ConclaveColors.primarySoft,
-                                backgroundImage: shellContext.viewerAvatarImage,
-                                child: shellContext.viewerAvatarImage == null
-                                    ? Text(
-                                        shellContext.viewerInitials,
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: ConclaveColors.primaryPressed,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      )
-                                    : null,
+                            hoverColor: ConclaveColors.navigationHoverDark,
+                            focusColor: ConclaveColors.navigationSelected,
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                  horizontal: narrow ? 2 : 6, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: shellContext.isNavActive(
+                                        const AxNavigation.profileSecurity())
+                                    ? ConclaveColors.navigationSelected
+                                    : Colors.transparent,
+                                borderRadius:
+                                    BorderRadius.circular(ConclaveRadius.sm),
                               ),
-                              if (!narrow) const SizedBox(width: 8),
-                              if (!narrow)
-                                Expanded(
-                                  child: Text(
-                                    shellContext.viewerDisplayName ??
-                                        shellContext.viewerEmail ??
-                                        'Not signed in',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: shellContext.isNavActive(
-                                              const AxNavigation
-                                                  .profileSecurity())
-                                          ? Colors.white
-                                          : Colors.white70,
-                                      fontSize: 11.5,
-                                      fontWeight: shellContext.isNavActive(
-                                              const AxNavigation
-                                                  .profileSecurity())
-                                          ? FontWeight.w600
-                                          : FontWeight.w400,
-                                    ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 13,
+                                    backgroundColor: ConclaveColors.primarySoft,
+                                    backgroundImage:
+                                        shellContext.viewerAvatarImage,
+                                    child: shellContext.viewerAvatarImage ==
+                                            null
+                                        ? Text(
+                                            shellContext.viewerInitials,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color:
+                                                  ConclaveColors.primaryPressed,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          )
+                                        : null,
                                   ),
-                                ),
-                            ],
+                                  if (!narrow) const SizedBox(width: 8),
+                                  if (!narrow)
+                                    Expanded(
+                                      child: Text(
+                                        shellContext.viewerDisplayName ??
+                                            shellContext.viewerEmail ??
+                                            'Not signed in',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: shellContext.isNavActive(
+                                                  const AxNavigation
+                                                      .profileSecurity())
+                                              ? Colors.white
+                                              : Colors.white70,
+                                          fontSize: 11.5,
+                                          fontWeight: shellContext.isNavActive(
+                                                  const AxNavigation
+                                                      .profileSecurity())
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
+                        )),
                   ),
                   const SizedBox(width: 4),
                   GlobalAppMenu(
@@ -573,22 +608,25 @@ class AppIconRail extends StatelessWidget {
     required VoidCallback? onPressed,
     Widget? iconWidget,
   }) {
-    return Tooltip(
-      message: tooltip,
-      child: IconButton(
-        onPressed: onPressed,
-        icon: iconWidget ?? Icon(icon, size: 20, color: Colors.white70),
-        splashRadius: 16,
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-        style: IconButton.styleFrom(
-          hoverColor: ConclaveColors.navigationHoverDark,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+    return Semantics(
+        label: tooltip,
+        child: Tooltip(
+          excludeFromSemantics: true,
+          message: tooltip,
+          child: IconButton(
+            onPressed: onPressed,
+            icon: iconWidget ?? Icon(icon, size: 20, color: Colors.white70),
+            splashRadius: 16,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            style: IconButton.styleFrom(
+              hoverColor: ConclaveColors.navigationHoverDark,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 
   List<AxThread> _threads(AxSpace space) =>
@@ -604,54 +642,22 @@ class AppIconRail extends StatelessWidget {
       _threads(space).any((thread) => thread.hasActiveWork);
 
   @override
-  Widget build(BuildContext context) =>
-      SidebarPulse(child: Builder(builder: _buildContent));
+  Widget build(BuildContext context) => TooltipVisibility(
+        visible: false,
+        child: SidebarPulse(child: Builder(builder: _buildContent)),
+      );
 
   Widget _buildContent(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final menuStyle = MenuStyle(
-      backgroundColor: WidgetStatePropertyAll(
-        ConclaveColors.surface(isDark),
-      ),
-      surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-      elevation: const WidgetStatePropertyAll(12),
-      shadowColor: WidgetStatePropertyAll(
-        Colors.black.withValues(alpha: isDark ? 0.7 : 0.18),
-      ),
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(ConclaveRadius.lg),
-          side: BorderSide(
-            color: ConclaveColors.border(isDark),
-            width: 1,
-          ),
-        ),
-      ),
-      padding: const WidgetStatePropertyAll(
-        EdgeInsets.symmetric(vertical: 6, horizontal: 6),
-      ),
-    );
+    // The collapsed rail shares the sidebar's fixed dark navigation surface.
+    final menuStyle = ConclaveMenuStyle.surface(true);
 
-    ButtonStyle itemStyle() {
-      return ButtonStyle(
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        ),
-        minimumSize: const WidgetStatePropertyAll(Size(200, 36)),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(ConclaveRadius.sm)),
-        ),
-        overlayColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.hovered) ||
-              states.contains(WidgetState.focused)) {
-            return ConclaveColors.surfaceHover(isDark);
-          }
-          return null;
-        }),
-      );
-    }
+    ButtonStyle itemStyle() => ConclaveMenuStyle.item(true).copyWith(
+          foregroundColor:
+              const WidgetStatePropertyAll(ConclaveColors.navigationTextDark),
+          minimumSize: const WidgetStatePropertyAll(Size(200, 36)),
+        );
 
     return Container(
       width: 50,
@@ -660,18 +666,21 @@ class AppIconRail extends StatelessWidget {
       child: Column(
         children: [
           // Logo navigates to Home
-          Tooltip(
-            message: 'Conclave AX — Home',
-            child: InkWell(
-              onTap: () => onNavigateTo(const AxNavigation.home()),
-              borderRadius: BorderRadius.circular(ConclaveRadius.sm),
-              hoverColor: ConclaveColors.navigationHoverDark,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: ConclaveBrand.logoMark(size: 32),
-              ),
-            ),
-          ),
+          Semantics(
+              label: 'Conclave AX — Home',
+              child: Tooltip(
+                excludeFromSemantics: true,
+                message: 'Conclave AX — Home',
+                child: InkWell(
+                  onTap: () => onNavigateTo(const AxNavigation.home()),
+                  borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+                  hoverColor: ConclaveColors.navigationHoverDark,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: ConclaveBrand.logoMark(size: 32),
+                  ),
+                ),
+              )),
           if (onToggleCollapse != null) ...[
             const SizedBox(height: 6),
             _railIconButton(
@@ -993,26 +1002,29 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
       controller: _menuController,
       style: widget.menuStyle,
       builder: (context, controller, child) {
-        return Tooltip(
-          message: 'Search...',
-          child: IconButton(
-            onPressed: _openSearchMenu,
-            icon: const Icon(
-              Icons.search_rounded,
-              size: 20,
-              color: Colors.white70,
-            ),
-            splashRadius: 16,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            style: IconButton.styleFrom(
-              hoverColor: ConclaveColors.navigationHoverDark,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+        return Semantics(
+            label: 'Search...',
+            child: Tooltip(
+              excludeFromSemantics: true,
+              message: 'Search...',
+              child: IconButton(
+                onPressed: _openSearchMenu,
+                icon: const Icon(
+                  Icons.search_rounded,
+                  size: 20,
+                  color: Colors.white70,
+                ),
+                splashRadius: 16,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                style: IconButton.styleFrom(
+                  hoverColor: ConclaveColors.navigationHoverDark,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+                  ),
+                ),
               ),
-            ),
-          ),
-        );
+            ));
       },
       menuChildren: [
         Container(
@@ -1093,19 +1105,24 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                           ),
                         ),
                         if (hasText)
-                          IconButton(
-                            onPressed: _handleClearAndClose,
-                            tooltip: 'Clear and close',
-                            icon: const Icon(
-                              Icons.close_rounded,
-                              size: 14,
-                              color: Colors.white54,
-                            ),
-                            splashRadius: 14,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            constraints: const BoxConstraints(
-                                minWidth: 24, minHeight: 24),
-                          ),
+                          Semantics(
+                              label: 'Clear and close',
+                              child: Tooltip(
+                                  message: 'Clear and close',
+                                  excludeFromSemantics: true,
+                                  child: IconButton(
+                                    onPressed: _handleClearAndClose,
+                                    icon: const Icon(
+                                      Icons.close_rounded,
+                                      size: 14,
+                                      color: Colors.white54,
+                                    ),
+                                    splashRadius: 14,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4),
+                                    constraints: const BoxConstraints(
+                                        minWidth: 24, minHeight: 24),
+                                  ))),
                       ],
                     );
                   },

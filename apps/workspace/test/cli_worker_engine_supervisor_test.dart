@@ -175,6 +175,38 @@ void main() {
     expect((await third).output, 'third');
   });
 
+  test('slots are one pool shared by every Worker', () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final first = _execute(setup, 'first',
+        prompt: 'barrier', workerId: 'worker-a', maxConcurrentAssignments: 2);
+    final second = _execute(setup, 'second',
+        prompt: 'barrier', workerId: 'worker-b', maxConcurrentAssignments: 2);
+    await _waitFor(() =>
+        File('${setup.state.path}/started-first').existsSync() &&
+        File('${setup.state.path}/started-second').existsSync());
+    final queued = Completer<void>();
+    final third = _execute(setup, 'third',
+        workerId: 'worker-c',
+        maxConcurrentAssignments: 2,
+        onQueued: (_) {
+          if (!queued.isCompleted) queued.complete();
+        });
+    await queued.future;
+    expect(File('${setup.state.path}/started-third').existsSync(), isFalse);
+    final snapshot = setup.supervisor.slotSnapshot();
+    expect(snapshot['active'], 2);
+    expect(snapshot['queued'], 1);
+    expect(snapshot['limit'], 2);
+    expect(setup.supervisor.activeAssignmentCountFor('worker-a'), 1);
+    expect(setup.supervisor.queuedAssignmentCountFor('worker-c'), 1);
+    await File('${setup.state.path}/release-barrier').writeAsString('release');
+    expect((await first).output, 'barrier');
+    expect((await second).output, 'barrier');
+    expect((await third).output, 'third');
+    expect(setup.supervisor.slotSnapshot()['active'], 0);
+  });
+
   test('cancels the active Engine process tree as an assignment failure',
       () async {
     final setup = await _setup();
@@ -455,6 +487,7 @@ Future<WorkerResult> _execute(
   Duration timeout = const Duration(seconds: 10),
   Duration? queueWaitTimeout,
   int maxConcurrentAssignments = 1,
+  String workerId = 'worker-1',
   String? sessionKey,
   FutureOr<void> Function()? onSlotReserved,
   void Function(WorkerQueueSnapshot queue)? onQueued,
@@ -467,7 +500,7 @@ Future<WorkerResult> _execute(
       profileFile: setup.profileFile,
       stateDirectory: setup.state,
       workingDirectory: setup.thread,
-      workerId: 'worker-1',
+      workerId: workerId,
       maxConcurrentAssignments: maxConcurrentAssignments,
       assignmentId: assignmentId,
       attemptId: setup.attemptId,

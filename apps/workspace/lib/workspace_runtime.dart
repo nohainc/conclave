@@ -439,12 +439,11 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       final queueWaitTimeout = queueWaitTimeoutValue is int
           ? Duration(milliseconds: queueWaitTimeoutValue)
           : CliWorkerEngineSupervisor.defaultQueueWaitTimeout;
-      final requestedConcurrency = payload['maxConcurrentAssignments'];
-      final effectiveConcurrency = requestedConcurrency is int
-          ? requestedConcurrency < worker.localConcurrencyLimit
-              ? requestedConcurrency
-              : worker.localConcurrencyLimit
-          : worker.localConcurrencyLimit;
+      // Parallel slots are one Workspace-wide pool shared by every Worker.
+      // `localConcurrencyLimit` carries that total on each Worker record, and
+      // it is the only limit the Service applies; Cloud has already enforced
+      // grant and scheduling limits at dispatch.
+      final effectiveConcurrency = worker.localConcurrencyLimit;
       if (effectiveConcurrency < 1) {
         throw AssignmentExecutionFailure(
           code: 'worker_not_ready',

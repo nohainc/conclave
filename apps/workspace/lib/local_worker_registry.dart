@@ -363,11 +363,8 @@ class LocalWorker {
       workspaceId: required('workspaceId'),
       workerTypeId: required('productWorkerTypeId'),
       localPermissions: strings('localPermissions'),
-      // Records written when the default was 1 are raised to the current
-      // default; the limit has no user-facing setting.
-      localConcurrencyLimit: concurrency < defaultLocalWorkerConcurrency
-          ? defaultLocalWorkerConcurrency
-          : concurrency,
+      // The Workspace-wide parallel slot total, stored on every Worker.
+      localConcurrencyLimit: concurrency,
       fullLocalAccessAuthorized: fullLocalAccessAuthorized,
       status: activationState == LocalWorkerActivationState.disabled
           ? LocalWorkerStatus.disabled
@@ -478,6 +475,43 @@ class LocalWorkerRegistry {
               includeRemoved || worker.status != LocalWorkerStatus.removed)
           .toList());
 
+  /// The Workspace-wide parallel slot total (shared by all Workers).
+  Future<int> parallelSlots() => _locked(() async =>
+      (await _read())
+          .where((worker) => worker.status != LocalWorkerStatus.removed)
+          .map((worker) => worker.localConcurrencyLimit)
+          .firstOrNull ??
+      defaultLocalWorkerConcurrency);
+
+  /// Sets the Workspace-wide parallel slot total on every Worker record and
+  /// advances each revision so Cloud accepts the new inventory.
+  Future<int> setParallelSlots(int slots) {
+    if (slots < minParallelSlots || slots > maxParallelSlots) {
+      throw ArgumentError.value(slots, 'slots',
+          'must be between $minParallelSlots and $maxParallelSlots');
+    }
+    return _locked(() async {
+      final workers = await _read();
+      final now = clock().toUtc().toIso8601String();
+      var changed = false;
+      final next = <LocalWorker>[];
+      for (final worker in workers) {
+        if (worker.localConcurrencyLimit == slots) {
+          next.add(worker);
+          continue;
+        }
+        changed = true;
+        next.add(worker.copyWith(
+          localConcurrencyLimit: slots,
+          revision: worker.revision + 1,
+          updatedAt: now,
+        ));
+      }
+      if (changed) await _write(next);
+      return slots;
+    });
+  }
+
   Future<LocalWorker?> find(String workerId) => _locked(() async {
         for (final worker in await _read()) {
           if (worker.id == workerId) return worker;
@@ -514,8 +548,12 @@ class LocalWorkerRegistry {
           workspaceId: workspaceId,
           workerTypeId: normalizedTypeId,
           localPermissions: List.unmodifiable(localPermissions),
-          localConcurrencyLimit:
-              localConcurrencyLimit ?? defaultLocalWorkerConcurrency,
+          localConcurrencyLimit: localConcurrencyLimit ??
+              workers
+                  .where((worker) => worker.status != LocalWorkerStatus.removed)
+                  .map((worker) => worker.localConcurrencyLimit)
+                  .firstOrNull ??
+              defaultLocalWorkerConcurrency,
           status: status,
           readinessState: readinessState,
           revision: (previous?.revision ?? 0) + 1,

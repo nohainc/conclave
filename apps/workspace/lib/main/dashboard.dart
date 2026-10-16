@@ -26,6 +26,7 @@ class WorkspaceDashboard extends StatefulWidget {
     this.onReadinessCheck,
     this.onLoadWorkerSlots,
     this.onResetWorkerSlots,
+    this.onSetParallelSlots,
     this.workerRevision = 0,
     this.credentialStore = const PlatformSecureCredentialStore(),
     this.workerCatalogCoordinator,
@@ -61,6 +62,7 @@ class WorkspaceDashboard extends StatefulWidget {
       {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
   final Future<Map<String, Object?>> Function()? onLoadWorkerSlots;
   final Future<Map<String, Object?>> Function()? onResetWorkerSlots;
+  final Future<Map<String, Object?>> Function(int slots)? onSetParallelSlots;
   final int workerRevision;
   final SecureCredentialStore credentialStore;
   final WorkspaceWorkerCatalogClient? workerCatalogCoordinator;
@@ -347,6 +349,7 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                         onReadinessCheck: widget.onReadinessCheck,
                         onLoadSlots: widget.onLoadWorkerSlots,
                         onResetSlots: widget.onResetWorkerSlots,
+                        onSetParallelSlots: widget.onSetParallelSlots,
                         onConfigureWorker: widget.onConfigureWorker,
                         onSetWorkerEnabled: widget.onSetWorkerEnabled,
                         onSetFullLocalAccess: widget.onSetFullLocalAccess,

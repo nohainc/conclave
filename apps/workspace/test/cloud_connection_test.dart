@@ -1586,6 +1586,82 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test(
+      'delivers a result on the new session when the Service reconnected mid-run',
+      () async {
+    final first = FakeSocket();
+    final second = FakeSocket();
+    final sockets = [first, second];
+    final release = Completer<void>();
+    final directory =
+        await Directory.systemTemp.createTemp('workspace-reconnect-run-');
+    final journal =
+        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => sockets.removeAt(0),
+      assignmentHandler: (context) async {
+        await release.future;
+        return const WorkspaceAssignmentResult(
+          summary: 'completed after reconnect',
+          output: {'text': 'durable result payload'},
+        );
+      },
+      assignmentJournal: journal,
+      heartbeat: const Duration(hours: 1),
+      reconnectBaseDelay: const Duration(milliseconds: 5),
+      reconnectMaxDelay: const Duration(milliseconds: 10),
+      terminalRedeliveryInterval: const Duration(milliseconds: 40),
+    );
+    await connection.connect();
+    await completeHandshake(connection, first);
+    first.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'server-assignment-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'assignment.start',
+      'workspaceId': 'workspace-1',
+      'workspaceRuntimeId': 'workspace-1',
+      'workerId': 'worker-1',
+      'runId': 'run-1',
+      'taskId': 'task-1',
+      'attemptId': 'attempt-1',
+      'assignmentId': 'assignment-1',
+      'idempotencyKey': 'idem-1',
+      'payload': {
+        'objective': 'inspect',
+        'role': 'research',
+        'workerId': 'conclave.echo',
+        'engineVersion': '1.0.0',
+        'profileDefinitionId': 'chatgpt-codex',
+        'profileReleaseVersion': 1,
+        'input': {},
+        'contextArtifactIds': [],
+        'timeoutMs': 5000,
+      },
+    }));
+    await waitFor(() => first.sent.any((message) =>
+        (jsonDecode(message as String) as Map)['type'] == 'assignment.ack'));
+
+    // The connection drops while the Worker is still running.
+    await first.close();
+    await completeHandshake(connection, second, sessionId: 'session-2');
+
+    release.complete();
+    await waitFor(
+      () => second.sent.any((message) =>
+          (jsonDecode(message as String) as Map)['type'] ==
+          'assignment.result'),
+      timeout: const Duration(seconds: 5),
+    );
+    await connection.close();
+    await directory.delete(recursive: true);
+  });
+
   test('replays a terminal journal result when Cloud still has it active',
       () async {
     final socket = FakeSocket();

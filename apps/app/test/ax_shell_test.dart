@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/brand.dart';
 import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
@@ -14,6 +15,95 @@ import 'package:conclave_app/src/ax/ax_models.dart';
 import 'ax_fixture_data.dart';
 
 void main() {
+  for (final collapsed in [false, true]) {
+    testWidgets('sidebar suppresses hover hints collapsed=$collapsed',
+        (tester) async {
+      const shell = AxShellContext(navigation: AxNavigation.home(), spaces: []);
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+        body: collapsed
+            ? AxIconRail(
+                shellContext: shell,
+                onNavigateTo: (_) {},
+                onOpenDrawer: () {},
+                onLogout: () {},
+                onOpenAbout: () {},
+                onOpenExternal: (_) {})
+            : SizedBox(
+                width: 250,
+                child: AxSidebar(
+                    shellContext: shell,
+                    onNavigateTo: (_) {},
+                    onLogout: () {},
+                    onOpenAbout: () {},
+                    onOpenExternal: (_) {})),
+      )));
+      await tester.pumpAndSettle();
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: const Offset(799, 599));
+      final applicationMenu = find.byTooltip('Application menu');
+      expect(TooltipVisibility.of(tester.element(applicationMenu)), isFalse);
+      await mouse.moveTo(tester.getCenter(applicationMenu));
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('Application menu'), findsNothing);
+      final semantics = tester.ensureSemantics();
+      expect(find.bySemanticsLabel('Application menu'), findsOneWidget);
+      semantics.dispose();
+      await tester.tap(applicationMenu);
+      await tester.pumpAndSettle();
+      expect(find.text('Workspaces'), findsOneWidget);
+      for (final tooltip in find.byType(Tooltip).evaluate()) {
+        expect(TooltipVisibility.of(tooltip), isFalse);
+      }
+      await mouse.removePointer();
+    });
+  }
+
+  for (final dark in [false, true]) {
+    testWidgets('collapsed sidebar menu surfaces match sidebar dark=$dark',
+        (tester) async {
+      const testSpace = AxSpace(
+          id: 'menu-space',
+          name: 'Menu Space',
+          branch: '',
+          lastActivity: '',
+          role: 'owner');
+      await tester.pumpWidget(MaterialApp(
+        theme: dark ? ConclaveBrand.darkTheme() : ConclaveBrand.lightTheme(),
+        home: Scaffold(
+            body: AxIconRail(
+          shellContext: AxShellContext(
+            navigation: const AxNavigation.home(),
+            spaces: [testSpace],
+            threadsBySpace: {testSpace.id: testSpace.threads},
+          ),
+          onNavigateTo: (_) {},
+          onOpenDrawer: () {},
+          onLogout: () {},
+          onOpenAbout: () {},
+          onOpenExternal: (_) {},
+        )),
+      ));
+      await tester.pumpAndSettle();
+      final anchors = tester.widgetList<MenuAnchor>(find.byType(MenuAnchor));
+      expect(anchors.length, greaterThan(1));
+      for (final anchor in anchors) {
+        expect(anchor.style?.backgroundColor?.resolve({}),
+            ConclaveColors.navigationBackgroundDark);
+        expect(anchor.style?.surfaceTintColor?.resolve({}), Colors.transparent);
+      }
+      await tester.tap(find.byTooltip('YOUR SPACES'));
+      await tester.pumpAndSettle();
+      expect(
+          find.byWidgetPredicate((widget) =>
+              widget is Material &&
+              widget.elevation == 12 &&
+              widget.color == ConclaveColors.navigationBackgroundDark),
+          findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
     // Layout/menu tests settle finite transitions; pulse timing is tested separately.
@@ -610,6 +700,14 @@ void main() {
       // Open menu in sidebar
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
+
+      expect(
+          tester
+              .widget<MenuAnchor>(find.byType(MenuAnchor).last)
+              .style
+              ?.backgroundColor
+              ?.resolve({}),
+          ConclaveColors.navigationBackgroundDark);
 
       // Test 1: Appearance Submenu
       await tester.tap(find.text('Appearance'));

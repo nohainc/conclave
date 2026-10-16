@@ -23,6 +23,7 @@ import 'workspace_manager_ipc.dart';
 import 'workspace_manager_worker_catalog.dart';
 import 'local_management_authenticator.dart';
 import 'copyable_messages.dart';
+import 'local_worker_permissions.dart' show minParallelSlots, maxParallelSlots;
 import 'worker_readiness.dart';
 import 'workspace_worker_view.dart';
 

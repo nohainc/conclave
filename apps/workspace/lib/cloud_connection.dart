@@ -2170,11 +2170,13 @@ class WorkspaceCloudConnection {
   Future<void> _redeliverPendingTerminals() async {
     final journal = assignmentJournal;
     final socket = _transport;
-    if (_closing ||
-        journal == null ||
-        socket == null ||
+    if (_closing || journal == null) return;
+    if (socket == null ||
         sessionId == null ||
         connectionStage != WorkspaceConnectionStage.ready) {
+      // Mid-reconnect: keep the timer alive so an outcome recorded while the
+      // connection was down is still delivered once the session is ready.
+      _scheduleTerminalRedelivery();
       return;
     }
     final generation = _transportGeneration;

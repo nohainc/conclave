@@ -95,6 +95,8 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
               mainAxisSize: MainAxisSize.min,
               children: [
                 PopupMenuButton<String>(
+                  color: ConclaveColors.navigationBackgroundDark,
+                  surfaceTintColor: Colors.transparent,
                   tooltip: 'Thread actions',
                   onSelected: (action) {
                     if (action == 'edit') {
@@ -110,14 +112,20 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                   itemBuilder: (context) => [
                     if (!archived)
                       const PopupMenuItem(
+                        textStyle: const TextStyle(
+                            color: ConclaveColors.navigationTextDark),
                         value: 'edit',
                         child: Text('Rename'),
                       ),
                     PopupMenuItem(
+                      textStyle: const TextStyle(
+                          color: ConclaveColors.navigationTextDark),
                       value: archived ? 'restore' : 'archive',
                       child: Text(archived ? 'Restore' : 'Archive'),
                     ),
                     const PopupMenuItem(
+                      textStyle: const TextStyle(
+                          color: ConclaveColors.navigationTextDark),
                       value: 'delete',
                       child: Text('Delete'),
                     ),

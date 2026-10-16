@@ -635,6 +635,13 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     return result is Map ? Map<String, Object?>.from(result) : const {};
   }
 
+  /// Sets the Workspace-wide number of parallel execution slots.
+  Future<Map<String, Object?>> setParallelSlots(int slots) async {
+    final result =
+        await request('execution.setParallelSlots', payload: {'slots': slots});
+    return result is Map ? Map<String, Object?>.from(result) : const {};
+  }
+
   /// Stops running and waiting work and clears stuck slot bookkeeping.
   Future<Map<String, Object?>> resetWorkerSlots() async {
     final result = await request('execution.resetSlots',

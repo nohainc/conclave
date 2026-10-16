@@ -9,7 +9,7 @@ abstract final class ConclaveMenuStyle {
       TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500);
 
   static Color background(bool isDark) =>
-      ConclaveColors.navigationRaised(isDark);
+      ConclaveColors.navigationBackground(isDark);
 
   static Color shadow(bool isDark) =>
       Colors.black.withValues(alpha: isDark ? 0.7 : 0.18);
@@ -19,8 +19,10 @@ abstract final class ConclaveMenuStyle {
         side: BorderSide(color: ConclaveColors.navigationBorder(isDark)),
       );
 
-  static MenuStyle surface(bool isDark) => MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(background(isDark)),
+  static MenuStyle surface(bool isDark, {bool composer = false}) => MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(composer
+            ? ConclaveColors.composerBackground(isDark)
+            : background(isDark)),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         elevation: const WidgetStatePropertyAll(12),
         shadowColor: WidgetStatePropertyAll(shadow(isDark)),

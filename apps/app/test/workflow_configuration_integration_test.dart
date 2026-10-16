@@ -177,7 +177,7 @@ void main() {
     expect(find.textContaining('Analysis model'), findsOneWidget);
     expect(find.text('obsolete-model'), findsNothing);
     await requestChoice(tester, 'Worker', 'Second');
-    await tester.tap(find.text('Done'));
+    await tester.tapAt(const Offset(790, 5));
     await tester.pumpAndSettle();
     expect(find.textContaining('Second'), findsNothing);
     expect(find.textContaining('Auto'), findsOneWidget);
@@ -195,7 +195,7 @@ void main() {
     await requestChoice(tester, 'Worker', 'Second');
     await requestChoice(tester, 'Model', 'Other model');
     await requestChoice(tester, 'Effort', 'Careful');
-    await tester.tap(find.text('Done'));
+    await tester.tapAt(const Offset(790, 5));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Run with Auto');
     await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
@@ -333,18 +333,18 @@ void main() {
 
 Future<void> requestChoice(
     WidgetTester tester, String label, String text) async {
-  final picker = find.byWidgetPredicate((w) =>
-      w is DropdownButtonFormField<String> &&
-          (w.key as ValueKey<String>)
-              .value
-              .startsWith('work-composer-$label-') ||
-      w is MenuAnchor && w.key == ValueKey('work-composer-$label-menu'));
-  if (picker.evaluate().isEmpty) {
+  if (find.byKey(const ValueKey('work-composer-popup')).evaluate().isEmpty) {
     await tester.tap(find.byKey(const ValueKey('work-composer-open')));
     await tester.pumpAndSettle();
   }
-  await tester.tap(picker);
-  await tester.pumpAndSettle();
-  await tester.tap(find.text(text).last);
+  if (label == 'Worker') {
+    final id = text == 'Second' ? 'b' : 'a';
+    await tester.tap(find.byKey(ValueKey('work-composer-worker-$id')));
+  } else if (label == 'Effort') {
+    final slider = tester.widget<Slider>(find.byType(Slider));
+    slider.onChanged!(slider.max);
+  } else {
+    await tester.tap(find.text(text).last);
+  }
   await tester.pumpAndSettle();
 }

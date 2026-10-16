@@ -81,6 +81,7 @@ export function normalizeThreadWorkConfig(value: unknown): {
 const VIEW_STATE_STRING_KEYS = [
   "workflowReference",
   "workerId",
+  "workerTypeId",
   "model",
   "reasoningEffort",
   "catalogRevision",

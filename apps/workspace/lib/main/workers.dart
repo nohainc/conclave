@@ -8,6 +8,7 @@ class _WorkersTab extends StatefulWidget {
     this.onReadinessCheck,
     this.onLoadSlots,
     this.onResetSlots,
+    this.onSetParallelSlots,
     this.onConfigureWorker,
     this.onSetWorkerEnabled,
     this.onSetFullLocalAccess,
@@ -28,6 +29,7 @@ class _WorkersTab extends StatefulWidget {
       {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
   final Future<Map<String, Object?>> Function()? onLoadSlots;
   final Future<Map<String, Object?>> Function()? onResetSlots;
+  final Future<Map<String, Object?>> Function(int slots)? onSetParallelSlots;
 
   @override
   State<_WorkersTab> createState() => _WorkersTabState();
@@ -114,6 +116,7 @@ class _WorkersTabState extends State<_WorkersTab> {
             _WorkerSlotsCard(
               load: widget.onLoadSlots!,
               reset: widget.onResetSlots,
+              setSlots: widget.onSetParallelSlots,
             ),
           Builder(
             builder: (context) {
@@ -603,13 +606,14 @@ class _WorkspaceRecoveryPanel extends StatelessWidget {
 }
 
 
-/// Shows how many Worker slots are in use and lets the user reset them when
+/// Shows the shared parallel execution slots in use and lets the user reset them when
 /// work was abandoned (for example during a disconnect) and slots stay busy.
 class _WorkerSlotsCard extends StatefulWidget {
-  const _WorkerSlotsCard({required this.load, this.reset});
+  const _WorkerSlotsCard({required this.load, this.reset, this.setSlots});
 
   final Future<Map<String, Object?>> Function() load;
   final Future<Map<String, Object?>> Function()? reset;
+  final Future<Map<String, Object?>> Function(int slots)? setSlots;
 
   @override
   State<_WorkerSlotsCard> createState() => _WorkerSlotsCardState();
@@ -652,13 +656,29 @@ class _WorkerSlotsCardState extends State<_WorkerSlotsCard> {
     }
   }
 
+  Future<void> _changeSlots(int slots) async {
+    final setSlots = widget.setSlots;
+    if (setSlots == null) return;
+    try {
+      final result = await setSlots(slots);
+      if (!mounted) return;
+      setState(() {
+        _slots = result;
+        _error = null;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _error = 'Could not change parallel slots: $error');
+    }
+  }
+
   Future<void> _confirmReset() async {
     final reset = widget.reset;
     if (reset == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Reset Worker slots?'),
+        title: const Text('Reset parallel slots?'),
         content: const Text(
           'Running and waiting requests on this Workspace are stopped and all '
           'slots are freed. Your Space folders and files are not touched. '
@@ -707,10 +727,9 @@ class _WorkerSlotsCardState extends State<_WorkerSlotsCard> {
     final workers = slots == null
         ? const <Map>[]
         : ((slots['workers'] as List?) ?? const []).whereType<Map>().toList();
-    final active = workers.fold<int>(
-        0, (sum, worker) => sum + ((worker['active'] as int?) ?? 0));
-    final queued = workers.fold<int>(
-        0, (sum, worker) => sum + ((worker['queued'] as int?) ?? 0));
+    final active = (slots?['active'] as int?) ?? 0;
+    final queued = (slots?['queued'] as int?) ?? 0;
+    final limit = slots?['limit'] as int?;
     final trackedIds = slots == null
         ? 0
         : ((slots['activeAssignmentIds'] as List?) ?? const []).length;
@@ -728,7 +747,7 @@ class _WorkerSlotsCardState extends State<_WorkerSlotsCard> {
             Row(
               children: [
                 Expanded(
-                  child: Text('Worker slots',
+                  child: Text('Parallel executions',
                       style: theme.textTheme.titleSmall
                           ?.copyWith(fontWeight: FontWeight.w700)),
                 ),
@@ -746,11 +765,46 @@ class _WorkerSlotsCardState extends State<_WorkerSlotsCard> {
               ],
             ),
             const SizedBox(height: 6),
+            if (widget.setSlots != null && limit != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'How many requests can run at the same time on this '
+                        'computer, whichever Worker runs them.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    DropdownButton<int>(
+                      key: const ValueKey('parallel-slots-select'),
+                      value: limit.clamp(minParallelSlots, maxParallelSlots),
+                      items: [
+                        for (var n = minParallelSlots;
+                            n <= maxParallelSlots;
+                            n++)
+                          DropdownMenuItem(value: n, child: Text('$n')),
+                      ],
+                      onChanged: _resetting
+                          ? null
+                          : (value) {
+                              if (value != null && value != limit) {
+                                unawaited(_changeSlots(value));
+                              }
+                            },
+                    ),
+                  ],
+                ),
+              ),
             Text(
               slots == null
                   ? 'Reading slots…'
-                  : '$active in use · $queued waiting · $trackedIds tracked '
-                      'request(s)',
+                  : '$active${limit == null ? '' : ' of $limit'} slots in use'
+                      ' · $queued waiting · $trackedIds tracked request(s)',
+
               style: theme.textTheme.bodyMedium,
             ),
             for (final worker in workers)
@@ -758,9 +812,7 @@ class _WorkerSlotsCardState extends State<_WorkerSlotsCard> {
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
                   '${worker['workerTypeId'] ?? worker['workerId']}: '
-                  '${worker['active']}'
-                  '${worker['limit'] != null ? ' of ${worker['limit']}' : ''}'
-                  ' in use, ${worker['queued']} waiting',
+                  '${worker['active']} running, ${worker['queued']} waiting',
                   style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant),
                 ),

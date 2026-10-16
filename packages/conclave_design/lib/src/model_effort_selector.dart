@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:conclave_protocol/conclave_protocol.dart';
 
 import 'menu_style.dart';
+import 'colors.dart';
 
 /// Controlled selector: catalog refreshes never modify a saved selection.
 class ModelEffortSelector extends StatefulWidget {
@@ -20,6 +21,8 @@ class ModelEffortSelector extends StatefulWidget {
       this.loading = false,
       this.compact = false,
       this.menuPickers = false,
+      this.immediatePopup = false,
+      this.workerIconBuilder,
       this.scope = 'execution',
       this.validationMessage,
       this.helperMessage,
@@ -41,6 +44,10 @@ class ModelEffortSelector extends StatefulWidget {
 
   /// Use application menus for fields inside the compact settings popup.
   final bool menuPickers;
+
+  /// Content-sized Work composer popup with immediately applied selections.
+  final bool immediatePopup;
+  final Widget Function(WorkerSelectionCapability worker)? workerIconBuilder;
   final bool allowWorkerChange, allowModelChange, allowEffortChange;
 
   /// Keeps validation available to callers without rendering duplicate inline
@@ -277,7 +284,7 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                   : 'Select $label...';
       return MenuAnchor(
         key: ValueKey('${widget.scope}-$label-menu'),
-        style: ConclaveMenuStyle.surface(isDark),
+        style: ConclaveMenuStyle.surface(isDark, composer: true),
         menuChildren: [
           for (final entry in {'': defaultLabel, ...items}.entries)
             MenuItemButton(
@@ -365,7 +372,212 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
           child: Text(text,
               style: TextStyle(
                   color: error ? Theme.of(context).colorScheme.error : null))));
+  Future<void> _openImmediate(BuildContext context) async {
+    final overlay =
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final box = context.findRenderObject()! as RenderBox;
+    final anchor = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
+    final openingSelection = widget.value;
+    var value = openingSelection;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    await showDialog<void>(
+      context: context,
+      useSafeArea: false,
+      barrierColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(builder: (context, update) {
+        final effective = widget.inherited.overlay(value);
+        final worker = widget.catalog.worker(effective.worker);
+        final enabled =
+            !widget.readOnly && !widget.loading && widget.onChanged != null;
+        final ready = worker != null &&
+            worker.state != CapabilityState.loading &&
+            worker.state != CapabilityState.unavailable;
+        final efforts =
+            worker?.effortsForModel(effective.model) ?? const <String>[];
+        final levels = <String?>[
+          if (worker?.allowsAutoEffort(effective.model) ?? true) null,
+          ...efforts,
+        ];
+        final index = levels.indexOf(effective.effort);
+        void change(ExecutionSelection next) {
+          update(() => value = next);
+          widget.onChanged?.call(next);
+        }
+
+        final models = <String, String>{
+          for (final model
+              in worker?.models ?? const <ExecutionModelCapability>[])
+            model.id: model.name,
+          for (final id in worker?.allowedModelIds ?? const <String>[])
+            id: worker?.model(id)?.name ?? id,
+        };
+        return CustomSingleChildLayout(
+          delegate: _ExecutionPopupLayout(anchor),
+          child: Material(
+            key: ValueKey('${widget.scope}-popup'),
+            color: ConclaveColors.composerBackground(isDark),
+            surfaceTintColor: Colors.transparent,
+            elevation: 12,
+            shadowColor: ConclaveMenuStyle.shadow(isDark),
+            shape: ConclaveMenuStyle.shape(isDark),
+            clipBehavior: Clip.antiAlias,
+            child: SingleChildScrollView(
+              padding: ConclaveMenuStyle.padding,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (widget.showEffort) ...[
+                    Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+                        child: Text(
+                            'Effort · ${index < 0 ? 'Select effort' : levels[index] == null ? 'Auto' : executionEffortDisplayName(levels[index])}',
+                            style: ConclaveMenuStyle.textStyle)),
+                    Slider(
+                      key: ValueKey(
+                          '${widget.scope}-effort-${effective.worker}-${effective.model}'),
+                      value: math.max(0, index).toDouble(),
+                      min: 0,
+                      max: math.max(1, levels.length - 1).toDouble(),
+                      divisions: math.max(1, levels.length - 1),
+                      semanticFormatterCallback: (position) => levels.isEmpty
+                          ? 'Unavailable'
+                          : levels[position
+                                      .round()
+                                      .clamp(0, levels.length - 1)] ==
+                                  null
+                              ? 'Auto'
+                              : executionEffortDisplayName(levels[position
+                                  .round()
+                                  .clamp(0, levels.length - 1)]),
+                      onChanged: enabled &&
+                              ready &&
+                              widget.allowEffortChange &&
+                              levels.length > 1
+                          ? (position) => change(ExecutionSelection(
+                              worker: effective.worker,
+                              model: effective.model,
+                              effort: levels[
+                                  position.round().clamp(0, levels.length - 1)],
+                              catalogRevision: worker.catalogRevision))
+                          : null,
+                      onChangeEnd: enabled &&
+                              ready &&
+                              widget.allowEffortChange &&
+                              levels.length > 1
+                          ? (_) => Navigator.of(context).pop()
+                          : null,
+                    ),
+                  ],
+                  if (widget.showModel) ...[
+                    if (worker?.allowsAutoModel == true)
+                      _modelRow(
+                          'Auto',
+                          effective.model == null,
+                          enabled && ready && widget.allowModelChange
+                              ? () => change(widget.catalog.changeModel(
+                                  value, null,
+                                  inherited: widget.inherited))
+                              : null),
+                    for (final model in models.entries)
+                      _modelRow(
+                          model.value,
+                          model.key == effective.model,
+                          enabled &&
+                                  ready &&
+                                  widget.allowModelChange &&
+                                  worker.modelSupported &&
+                                  worker.supportsModel(model.key)
+                              ? () => change(widget.catalog.changeModel(
+                                  value, model.key,
+                                  inherited: widget.inherited))
+                              : null),
+                    if (models.isEmpty)
+                      const Padding(
+                          padding: EdgeInsets.all(10),
+                          child: Text('No models available')),
+                  ],
+                  if (widget.helperMessage != null)
+                    _message(widget.helperMessage!),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                          child: widget.showWorker
+                              ? Wrap(spacing: 4, children: [
+                                  for (final candidate in widget.catalog.workers
+                                      .where((w) =>
+                                          w.state == CapabilityState.ready ||
+                                          w.state == CapabilityState.stale))
+                                    Semantics(
+                                        label: candidate.name,
+                                        selected:
+                                            candidate.id == effective.worker,
+                                        child: IconButton(
+                                          key: ValueKey(
+                                              '${widget.scope}-worker-${candidate.id}'),
+                                          isSelected:
+                                              candidate.id == effective.worker,
+                                          onPressed: enabled &&
+                                                  widget.allowWorkerChange
+                                              ? () => change(ExecutionSelection(
+                                                  worker: candidate.id,
+                                                  catalogRevision: candidate
+                                                      .catalogRevision))
+                                              : null,
+                                          icon: widget.workerIconBuilder
+                                                  ?.call(candidate) ??
+                                              const Icon(
+                                                  Icons.smart_toy_outlined),
+                                        )),
+                                ])
+                              : const SizedBox.shrink()),
+                      Semantics(
+                        label: 'Restore opening selection',
+                        child: IconButton(
+                          key: ValueKey('${widget.scope}-restore'),
+                          icon:
+                              const Icon(Icons.settings_backup_restore_rounded),
+                          onPressed: enabled &&
+                                  (value.worker != openingSelection.worker ||
+                                      value.model != openingSelection.model ||
+                                      value.effort != openingSelection.effort ||
+                                      value.catalogRevision !=
+                                          openingSelection.catalogRevision)
+                              ? () {
+                                  change(openingSelection);
+                                  Navigator.of(context).pop();
+                                }
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _modelRow(String name, bool selected, VoidCallback? onPressed) =>
+      MenuItemButton(
+        style: ConclaveMenuStyle.item(
+            Theme.of(context).brightness == Brightness.dark),
+        leadingIcon: Icon(
+            selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+            size: 15),
+        onPressed: onPressed,
+        child: Text(name, style: ConclaveMenuStyle.textStyle),
+      );
+
   Future<void> _open(BuildContext context) async {
+    if (widget.immediatePopup) {
+      await _openImmediate(context);
+      return;
+    }
     var value = widget.value;
     final box = context.findRenderObject()! as RenderBox;
     // showMenu positions against the Navigator's overlay, so measure there.
@@ -374,91 +586,91 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
     final rect = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
     final menuWidth = math.min(320.0, math.max(260.0, overlay.size.width - 32));
     final availableAbove = rect.top - 16;
-    final maxMenuHeight = math.min(
-        520.0,
+    final maxMenuHeight = math.min(520.0,
         availableAbove >= 120 ? availableAbove : overlay.size.height - 16);
     final left =
         rect.left.clamp(8.0, overlay.size.width - menuWidth - 8).toDouble();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    Widget body(BuildContext menuContext, StateSetter setMenuState) =>
-        SizedBox(
+    Widget body(BuildContext menuContext, StateSetter setMenuState) => SizedBox(
           width: menuWidth,
           child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: math.max(0, maxMenuHeight - 44),
-                  ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+            padding: const EdgeInsets.all(16),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: math.max(0, maxMenuHeight - 44),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ModelEffortSelector(
+                      menuPickers: true,
+                      catalog: widget.catalog,
+                      value: value,
+                      inherited: widget.inherited,
+                      scope: widget.scope,
+                      showWorker: widget.showWorker,
+                      showModel: widget.showModel,
+                      showEffort: widget.showEffort,
+                      readOnly: widget.readOnly,
+                      showCatalog: widget.showCatalog,
+                      allowWorkerChange: widget.allowWorkerChange,
+                      allowModelChange: widget.allowModelChange,
+                      allowEffortChange: widget.allowEffortChange,
+                      showValidationMessage: widget.showValidationMessage,
+                      hideExplicitModelRequirement:
+                          widget.hideExplicitModelRequirement,
+                      hiddenValidationMessages: widget.hiddenValidationMessages,
+                      showSelectionStateText: false,
+                      showModelEffortGuidance: false,
+                      showWorkerInCompactSummary:
+                          widget.showWorkerInCompactSummary,
+                      loading: widget.loading,
+                      validationMessage: widget.validationMessage,
+                      helperMessage: widget.helperMessage,
+                      onChanged: widget.onChanged == null
+                          ? null
+                          : (next) {
+                              setMenuState(() => value = next);
+                            },
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        ModelEffortSelector(
-                          menuPickers: true,
-                          catalog: widget.catalog,
-                          value: value,
-                          inherited: widget.inherited,
-                          scope: widget.scope,
-                          showWorker: widget.showWorker,
-                          showModel: widget.showModel,
-                          showEffort: widget.showEffort,
-                          readOnly: widget.readOnly,
-                          showCatalog: widget.showCatalog,
-                          allowWorkerChange: widget.allowWorkerChange,
-                          allowModelChange: widget.allowModelChange,
-                          allowEffortChange: widget.allowEffortChange,
-                          showValidationMessage: widget.showValidationMessage,
-                          hideExplicitModelRequirement:
-                              widget.hideExplicitModelRequirement,
-                          hiddenValidationMessages:
-                              widget.hiddenValidationMessages,
-                          showSelectionStateText: false,
-                          showModelEffortGuidance: false,
-                          showWorkerInCompactSummary:
-                              widget.showWorkerInCompactSummary,
-                          loading: widget.loading,
-                          validationMessage: widget.validationMessage,
-                          helperMessage: widget.helperMessage,
-                          onChanged: widget.onChanged == null
-                              ? null
-                              : (next) {
-                                  setMenuState(() => value = next);
-                                },
+                        TextButton(
+                          onPressed: () => Navigator.pop(menuContext),
+                          child: const Text('Cancel'),
                         ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(menuContext),
-                              child: const Text('Cancel'),
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton(
-                              onPressed: () =>
-                                  Navigator.pop(menuContext, value),
-                              child: const Text('Done'),
-                            ),
-                          ],
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(menuContext, value),
+                          child: const Text('Done'),
                         ),
                       ],
                     ),
-                  ),
+                  ],
                 ),
               ),
+            ),
+          ),
         );
     // Measure the content offstage so the popup is exactly as tall as its
     // controls, then anchor its bottom edge above the button.
     final measureKey = GlobalKey();
     final entry = OverlayEntry(
       builder: (_) => Offstage(
-        child: Material(
-          child: StatefulBuilder(
-            builder: (c, set) => KeyedSubtree(
-              key: measureKey,
-              child: Theme(
-                data: Theme.of(context),
-                child: body(c, set),
+        // Overlay entries get tight constraints; loosen them to measure.
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            child: StatefulBuilder(
+              builder: (c, set) => KeyedSubtree(
+                key: measureKey,
+                child: Theme(
+                  data: Theme.of(context),
+                  child: body(c, set),
+                ),
               ),
             ),
           ),
@@ -475,8 +687,8 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
     entry.remove();
     entry.dispose();
     if (!context.mounted) return;
-    final menuHeight = math.min(
-        maxMenuHeight, measured + ConclaveMenuStyle.padding.vertical);
+    final menuHeight =
+        math.min(maxMenuHeight, measured + ConclaveMenuStyle.padding.vertical);
     final top = math.max(8.0, rect.top - 8 - menuHeight);
     final result = await showMenu<ExecutionSelection>(
       context: context,
@@ -491,7 +703,7 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
         minHeight: menuHeight,
         maxHeight: menuHeight,
       ),
-      color: ConclaveMenuStyle.background(isDark),
+      color: ConclaveColors.composerBackground(isDark),
       surfaceTintColor: Colors.transparent,
       elevation: 12,
       shadowColor: ConclaveMenuStyle.shadow(isDark),
@@ -520,4 +732,24 @@ String executionEffortDisplayName(String? effort) {
   if (value.isEmpty) return '';
   if (value == 'xhigh' || value == 'extra-high') return 'Extra High';
   return '${value[0].toUpperCase()}${value.substring(1)}';
+}
+
+/// Positions the measured surface above its button without estimated heights.
+class _ExecutionPopupLayout extends SingleChildLayoutDelegate {
+  _ExecutionPopupLayout(this.anchor);
+  final Rect anchor;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints.tightFor(width: math.min(320, constraints.maxWidth - 16))
+          .copyWith(minHeight: 0, maxHeight: math.max(0, anchor.top - 16));
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) => Offset(
+      anchor.left.clamp(8.0, math.max(8, size.width - childSize.width - 8)),
+      math.max(8, anchor.top - childSize.height - 8));
+
+  @override
+  bool shouldRelayout(_ExecutionPopupLayout oldDelegate) =>
+      anchor != oldDelegate.anchor;
 }

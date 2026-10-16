@@ -13,6 +13,9 @@ const defaultLocalWorkerPermissions = <String>[
   'shell:execute',
 ];
 
-/// Parallel assignments one local Worker accepts. Cloud grants and Cloud
-/// scheduling can only lower this further.
-const defaultLocalWorkerConcurrency = 3;
+/// Default total parallel execution slots for the Workspace, shared by all
+/// Workers. The user can change it between [minParallelSlots] and
+/// [maxParallelSlots].
+const defaultLocalWorkerConcurrency = 5;
+const minParallelSlots = 1;
+const maxParallelSlots = 10;

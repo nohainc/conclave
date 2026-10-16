@@ -140,6 +140,29 @@ void main() {
     );
   });
 
+  test('parallel slots are one Workspace total stored on every Worker',
+      () async {
+    final a = await registry.create(
+        catalogEntry: logicalWorkerCatalogFixture('chatgpt'));
+    expect(a.localConcurrencyLimit, 5);
+    expect(await registry.parallelSlots(), 5);
+    final b = await registry.create(
+        catalogEntry: logicalWorkerCatalogFixture('claude'));
+    await registry.setParallelSlots(8);
+    expect(await registry.parallelSlots(), 8);
+    for (final worker in await registry.list()) {
+      expect(worker.localConcurrencyLimit, 8);
+    }
+    expect((await registry.find(a.id))!.revision, a.revision + 1);
+    expect((await registry.find(b.id))!.revision, b.revision + 1);
+    // A Worker added later joins the same total.
+    final c = await registry.create(
+        catalogEntry: logicalWorkerCatalogFixture('gemini'));
+    expect(c.localConcurrencyLimit, 8);
+    expect(() => registry.setParallelSlots(0), throwsArgumentError);
+    expect(() => registry.setParallelSlots(11), throwsArgumentError);
+  });
+
   test('keeps one local Worker slot per logical Worker Type', () async {
     final chatgpt = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),

@@ -1076,10 +1076,10 @@ pins. Pins have a per-user manual order (`position`, migration
 on top, and ties fall back to newest pin first. `PUT /api/pins/order`
 (`{kind, ids, spaceId?}`) stores the order of the caller's own pins; threads
 send their `spaceId`. Lists return `pinPosition` next to `pinnedAt`. Move
-Up / Move Down in the Space menu apply to pinned Spaces only, and for Threads
-they move a pinned Thread among the pinned ones (your own order) or an
-unpinned Thread among the unpinned ones (the Space's shared `threadOrder`,
-owner-only as before). Unpinned Spaces stay newest-activity first. Space settings stay owner-only and are not used for pins. No wire
+Up / Move Down appear only on pinned Spaces and pinned Threads, and move the
+item among the pinned ones. Both are always listed for a pinned item; the move
+that is not possible (first, last, or only pinned item) is disabled. Unpinned Spaces and Threads have no Move items (they stay in activity order;
+the shared `threadOrder` setting is no longer edited from the sidebar). Unpinned Spaces stay newest-activity first. Space settings stay owner-only and are not used for pins. No wire
 version change; the field is additive.
 
 ## Phase 9: Persisted sidebar and Thread view state
@@ -1089,8 +1089,8 @@ through execution paths:
 
 - **Thread** (`threads.metadata_json`, migration 0066, returned as
   `thread.metadata`): `viewState` holds `tabIndex` (0 Chat, 1 Work),
-  `workflowReference`, `workerId`, `model`, `reasoningEffort`, and
-  `catalogRevision`. `PATCH /threads/:id` accepts
+  `workflowReference`, `workerId`, `workerTypeId`, `model`,
+  `reasoningEffort`, and `catalogRevision`. `PATCH /threads/:id` accepts
   `{ "metadata": { "viewState": { ... } } }` as a JSON merge patch (`null`
   clears a key). The route validates keys and bounds values, and a
   metadata-only write does not change `updatedAt`, so it never reorders the
@@ -1103,3 +1103,11 @@ The app applies the stored selection once the workflow and Worker catalogs
 load, and never writes defaults over a stored choice while it is pending. The
 stored Space order places Threads missing from it (new ones) first, then the
 listed Threads in order; reordering uses the Thread menu's Move Up/Down.
+
+Restore rules: when the stored `workerId` no longer exists (Worker rebuilt or
+re-registered), the app re-binds by the stable `workerTypeId` and refreshes
+`catalogRevision`; model and effort codes are kept as saved. A stored
+`workflowReference` whose version was superseded resolves to the current version
+of the same workflow id. Leaving a Thread writes its Cloud `viewState` for that
+Thread, and a selection still waiting for the catalogs is saved as-is rather
+than replaced by defaults.

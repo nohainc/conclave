@@ -226,6 +226,11 @@ class WorkspaceManagerService {
       names[worker.id] = worker.workerTypeId;
     }
     return {
+      'active': slots['active'] ?? 0,
+      'queued': slots['queued'] ?? 0,
+      // The configured total, not the last limit applied to an admission.
+      'limit': await (subsystem?.parallelSlots() ??
+          Future.value(defaultLocalWorkerConcurrency)),
       'workers': [
         for (final raw in (slots['workers'] as List).whereType<Map>())
           {
@@ -632,6 +637,18 @@ class WorkspaceManagerService {
         return {'passed': passed, 'snapshot': await snapshot()};
       case 'execution.getSlots':
         return _slotSnapshot();
+      case 'execution.setParallelSlots':
+        {
+          final slots = payload['slots'];
+          if (slots is! int ||
+              slots < minParallelSlots ||
+              slots > maxParallelSlots) {
+            throw WorkspaceManagerProtocolException('invalid_request',
+                'slots must be between $minParallelSlots and $maxParallelSlots.');
+          }
+          await workerSubsystem?.setParallelSlots(slots);
+          return _slotSnapshot();
+        }
       case 'execution.resetSlots':
         {
           // Stop what is running or waiting, then discard bookkeeping that did

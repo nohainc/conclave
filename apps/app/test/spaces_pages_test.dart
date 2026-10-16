@@ -1515,6 +1515,10 @@ void main() {
                 8,
             1));
     expect(
+        tester.widget<Material>(menu).color,
+        ConclaveColors.composerBackground(
+            Theme.of(tester.element(menu)).brightness == Brightness.dark));
+    expect(
         (tester.widget<Material>(menu).shape as RoundedRectangleBorder)
             .borderRadius,
         BorderRadius.circular(14));
@@ -1525,6 +1529,11 @@ void main() {
     await tester.pumpAndSettle();
     final workflowSurface = find.byWidgetPredicate(
         (widget) => widget is Material && widget.elevation == 12);
+    expect(
+        tester.widget<Material>(workflowSurface).color,
+        ConclaveColors.composerBackground(
+            Theme.of(tester.element(workflowSurface)).brightness ==
+                Brightness.dark));
     expect(
         tester.getBottomLeft(workflowSurface).dy,
         closeTo(

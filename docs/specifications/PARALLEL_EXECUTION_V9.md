@@ -7,18 +7,29 @@ it atomically reserves a local slot, starts one isolated Engine process per
 assignment, and transfers a released slot to the next waiter without changing
 the assignment identity.
 
-## Effective capacity
+## Effective capacity: one shared slot pool
 
-The immutable `maxConcurrentAssignments` in an assignment snapshot is the
-intersection of the Cloud scheduling limit, the active Space grant, and the
-Workspace-reported local limit. Workspace applies the smaller of that value
-and its current local registry value. A missing legacy field falls back to the
-local limit; a malformed value is rejected before Engine launch.
+Parallel execution is a single Workspace-wide total ("parallel slots", default
+5, range 1-10), not a per-Worker count. Any Worker can use any free slot; the
+user sees one "N of M slots in use" figure and sets one number.
 
-Cloud admission queue depth is durable in `worker_assignments.status =
-'created'`. Queued assignments are counted for Worker load balancing but do
-not claim a provider process. The Service owns the final slot reservation and
-therefore remains the only place that can claim a live process slot.
+The Workspace stores the total as `localConcurrencyLimit` on every Worker
+record and reports it unchanged in the inventory (no wire change). Changing it
+(`execution.setParallelSlots`) rewrites every record and advances each Worker
+revision so Cloud accepts the new inventory. The Service applies only this
+total when admitting work; `maxConcurrentAssignments` in the assignment payload
+is no longer used to size the pool (Cloud grant and scheduling limits are
+enforced at dispatch). Existing installations keep their stored value (3) until
+the user changes it.
+
+Cloud counts queued and active assignments for Worker load balancing. When
+queueing is not allowed it rejects dispatch when the Workspace-wide active count
+reaches the reported total, or when a Worker reaches its Cloud scheduling or
+Space grant limit. Queued assignments are durable in
+`worker_assignments.status = 'created'` and do not claim a provider process.
+The Service owns the final slot reservation and is the only place that claims a
+live process slot. Waiters are admitted first-in-first-out; one whose provider
+session is busy is skipped rather than blocking the others.
 
 ## Deadlines
 

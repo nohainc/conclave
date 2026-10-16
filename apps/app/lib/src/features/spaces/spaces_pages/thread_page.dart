@@ -365,22 +365,40 @@ class _ThreadPageState extends State<ThreadPage>
     return value is String && value.isNotEmpty ? value : null;
   }
 
-  AxThreadViewState _currentThreadViewState() => AxThreadViewState(
-        tabIndex: _tabController.index,
-        workflowReference:
-            _effectiveWorkflow.isEmpty ? null : _effectiveWorkflow,
-        workerId: _selectionValue('workerId'),
-        model: _selectionValue('model'),
-        reasoningEffort: _selectionValue('reasoningEffort'),
-        catalogRevision: _selectionValue('catalogRevision'),
-        chatDraft: _discussionController.text,
-        workDraft: _requestController.text,
-      );
+  AxThreadViewState _currentThreadViewState() {
+    final pending = _pendingThreadViewState;
+    final workerId = _selectionValue('workerId');
+    final workerTypeId = _spaceWorkers
+            .where((worker) => worker.id == workerId)
+            .firstOrNull
+            ?.workerTypeId ??
+        (pending?.workerId == workerId ? pending?.workerTypeId : null);
+    return AxThreadViewState(
+      tabIndex: _tabController.index,
+      // A selection still waiting for the catalogs must survive a save made
+      // before it is applied; the live values are only defaults at that point.
+      workflowReference: pending != null
+          ? pending.workflowReference
+          : (_effectiveWorkflow.isEmpty ? null : _effectiveWorkflow),
+      workerId: pending != null ? pending.workerId : workerId,
+      workerTypeId: pending != null ? pending.workerTypeId : workerTypeId,
+      model: pending != null ? pending.model : _selectionValue('model'),
+      reasoningEffort: pending != null
+          ? pending.reasoningEffort
+          : _selectionValue('reasoningEffort'),
+      catalogRevision: pending != null
+          ? pending.catalogRevision
+          : _selectionValue('catalogRevision'),
+      chatDraft: _discussionController.text,
+      workDraft: _requestController.text,
+    );
+  }
 
   Map<String, dynamic> _remoteViewStatePayload(AxThreadViewState state) => {
         'tabIndex': state.tabIndex.clamp(0, 1),
         'workflowReference': state.workflowReference,
         'workerId': state.workerId,
+        'workerTypeId': state.workerTypeId,
         'model': state.model,
         'reasoningEffort': state.reasoningEffort,
         'catalogRevision': state.catalogRevision,
@@ -401,6 +419,8 @@ class _ThreadPageState extends State<ThreadPage>
       tabIndex: tab is int ? tab.clamp(0, 1) : local?.tabIndex ?? 0,
       workflowReference: string('workflowReference'),
       workerId: string('workerId'),
+      workerTypeId: string('workerTypeId') ??
+          (local?.workerId == string('workerId') ? local?.workerTypeId : null),
       model: string('model'),
       reasoningEffort: string('reasoningEffort'),
       catalogRevision: string('catalogRevision'),
@@ -422,13 +442,14 @@ class _ThreadPageState extends State<ThreadPage>
     _persistRemoteViewState(state);
   }
 
-  void _persistRemoteViewState(AxThreadViewState state) {
-    final callback = widget.onViewStateChanged;
+  void _persistRemoteViewState(AxThreadViewState state, [ThreadPage? owner]) {
+    final source = owner ?? widget;
+    final callback = source.onViewStateChanged;
     // While a saved selection is still waiting for the catalogs, the current
     // state is only defaults and must not replace the stored choice.
     if (callback == null ||
-        !widget.thread.canConfigureWork ||
-        _pendingThreadViewState != null) {
+        !source.thread.canConfigureWork ||
+        (owner == null && _pendingThreadViewState != null)) {
       return;
     }
     final payload = _remoteViewStatePayload(state);
@@ -450,20 +471,52 @@ class _ThreadPageState extends State<ThreadPage>
         !_catalogs.engine.peek(_catalogs.workers).hasData) {
       return;
     }
+    // Match the exact reference first, then the same workflow code at its
+    // current version so a version bump keeps the stored choice.
+    final savedId = saved.workflowReference?.split(':').first;
     final workflow = _availableWorkflows
-        .where((item) => item.reference == saved.workflowReference)
-        .firstOrNull;
+            .where((item) => item.reference == saved.workflowReference)
+            .firstOrNull ??
+        (savedId == null
+            ? null
+            : _currentWorkflowVersions(_availableWorkflows)
+                .where((item) => item.id == savedId)
+                .firstOrNull);
     if (workflow == null) {
       if (!_loadingWorkflows) _pendingThreadViewState = null;
       return;
     }
     _workflow = workflow.reference;
+    var workerId = saved.workerId;
+    var catalogRevision = saved.catalogRevision;
+    if (workerId != null && _spaceWorkers.isNotEmpty) {
+      // Worker IDs can change when a Worker is rebuilt or re-registered; the
+      // Worker type code does not. Re-bind by code when the ID is gone.
+      var worker = _spaceWorkers.where((w) => w.id == workerId).firstOrNull;
+      if (worker == null && saved.workerTypeId != null) {
+        final sameType = _spaceWorkers
+            .where((w) => w.workerTypeId == saved.workerTypeId)
+            .toList();
+        final ready = sameType.where((w) => w.isReady).toList();
+        worker = ready.length == 1
+            ? ready.single
+            : sameType.length == 1
+                ? sameType.single
+                : null;
+        if (worker != null) workerId = worker.id;
+      }
+      // The catalog revision changes with every rebuilt Worker catalog; model
+      // and effort codes stay as saved.
+      final current = worker?.executionOptions?.catalogRevision;
+      if (current != null) catalogRevision = current;
+    }
     // Restoring preferences never silently replaces unavailable saved choices.
     final selection = <String, dynamic>{
-      if (saved.workerId != null) 'workerId': saved.workerId,
+      if (workerId != null) 'workerId': workerId,
       if (saved.model != null) 'model': saved.model,
       if (saved.reasoningEffort != null)
         'reasoningEffort': saved.reasoningEffort,
+      if (catalogRevision != null) 'catalogRevision': catalogRevision,
     };
     _workExecutionSelection = selection;
     _pendingThreadViewState = null;
@@ -675,7 +728,8 @@ class _ThreadPageState extends State<ThreadPage>
         workflows.data ?? const <AxBuiltinWorkflow>[],
         viewerEmail: widget.viewerEmail);
     _loadingWorkflows = !workflows.hasData;
-    if (_workflowCatalog.isNotEmpty) {
+    if (_workflowCatalog.isNotEmpty &&
+        !_workflowCatalog.any((item) => item.reference == _workflow)) {
       _workflow = _threadDefaultReference(_workflowCatalog,
           preferredId: _workflowDefaultId);
     }
@@ -731,10 +785,12 @@ class _ThreadPageState extends State<ThreadPage>
         _workflowCatalogError = visibleWorkflows.isEmpty
             ? 'No built-in Workflows are available.'
             : null;
-        _workflow = visibleWorkflows.isEmpty
-            ? ''
-            : _threadDefaultReference(visibleWorkflows,
-                preferredId: _workflowDefaultId);
+        if (visibleWorkflows.isEmpty) {
+          _workflow = '';
+        } else if (!visibleWorkflows.any((item) => item.reference == _workflow)) {
+          _workflow = _threadDefaultReference(visibleWorkflows,
+              preferredId: _workflowDefaultId);
+        }
         _reconcilePendingThreadViewState();
       });
     } catch (_) {
@@ -827,11 +883,15 @@ class _ThreadPageState extends State<ThreadPage>
         oldWidget.currentUserId != null &&
         oldWidget.currentUserId == widget.currentUserId) {
       _threadViewStateSaveTimer?.cancel();
+      final leaving = _currentThreadViewState();
       unawaited(_threadViewStateStore.save(
         userId: oldWidget.currentUserId!,
         threadId: oldWidget.thread.id,
-        state: _currentThreadViewState(),
+        state: leaving,
       ));
+      // Persist the Cloud copy for the thread being left; otherwise the stale
+      // Cloud metadata wins over the newer local copy when returning to it.
+      _persistRemoteViewState(leaving, oldWidget);
     }
     if (oldWidget.thread.id != widget.thread.id ||
         oldWidget.space.id != widget.space.id ||
@@ -891,6 +951,7 @@ class _ThreadPageState extends State<ThreadPage>
       _threadViewReady = false;
       _threadViewRevealScheduled = false;
       _pendingThreadViewState = null;
+      _lastRemoteViewState = null;
       _discussionController.clear();
       _requestController.clear();
       _workExecutionSelection = {};

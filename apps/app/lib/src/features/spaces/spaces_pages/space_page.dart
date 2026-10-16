@@ -255,6 +255,9 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                               alignment: Alignment.topRight,
                               child: isOwner
                                   ? PopupMenuButton<String>(
+                                      color: ConclaveColors
+                                          .navigationBackgroundDark,
+                                      surfaceTintColor: Colors.transparent,
                                       icon: const Icon(Icons.more_vert),
                                       tooltip: 'Space actions',
                                       splashRadius: 18,
@@ -273,10 +276,15 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                                       },
                                       itemBuilder: (context) => const [
                                         PopupMenuItem(
+                                          textStyle: TextStyle(
+                                              color: ConclaveColors
+                                                  .navigationTextDark),
                                           value: 'edit',
                                           child: Row(
                                             children: [
                                               Icon(Icons.edit_outlined,
+                                                  color: ConclaveColors
+                                                      .navigationTextDark,
                                                   size: 18),
                                               SizedBox(width: 8),
                                               Text('Edit'),
@@ -284,10 +292,15 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                                           ),
                                         ),
                                         PopupMenuItem(
+                                          textStyle: TextStyle(
+                                              color: ConclaveColors
+                                                  .navigationTextDark),
                                           value: 'archive',
                                           child: Row(
                                             children: [
                                               Icon(Icons.archive_outlined,
+                                                  color: ConclaveColors
+                                                      .navigationTextDark,
                                                   size: 18),
                                               SizedBox(width: 8),
                                               Text('Archive'),
@@ -295,6 +308,9 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                                           ),
                                         ),
                                         PopupMenuItem(
+                                          textStyle: TextStyle(
+                                              color: ConclaveColors
+                                                  .navigationTextDark),
                                           value: 'delete',
                                           child: Row(
                                             children: [

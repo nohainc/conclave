@@ -818,6 +818,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       onReadinessCheck: lifecycle.checkWorkerReadiness,
       onLoadWorkerSlots: lifecycle.loadWorkerSlots,
       onResetWorkerSlots: lifecycle.resetWorkerSlots,
+      onSetParallelSlots: lifecycle.setParallelSlots,
       onConfigureWorker: (worker) =>
           lifecycle.workerCatalog.configureWorker(worker.workerTypeId),
       onSetWorkerEnabled: lifecycle.workerCatalog.setEnabled,

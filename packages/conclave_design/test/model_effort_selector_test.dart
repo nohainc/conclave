@@ -21,6 +21,217 @@ Future<void> choose(WidgetTester tester, String label, String text) async {
 }
 
 void main() {
+  testWidgets('effort gesture applies selection and closes Work popup',
+      (tester) async {
+    var selection = const ExecutionSelection(
+        worker: 'worker', model: 'one', effort: 'deep');
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Align(
+          alignment: Alignment.bottomLeft,
+          child: StatefulBuilder(builder: (context, update) {
+            return ModelEffortSelector(
+              compact: true,
+              immediatePopup: true,
+              catalog: const ExecutionSelectionCatalog([worker]),
+              value: selection,
+              onChanged: (next) => update(() => selection = next),
+            );
+          }),
+        ),
+      ),
+    ));
+    final trigger = find.byKey(const ValueKey('execution-open'));
+    final popup = find.byKey(const ValueKey('execution-popup'));
+    await tester.tap(trigger);
+    await tester.pumpAndSettle();
+    final slider = find.byType(Slider);
+    final gesture = await tester.startGesture(tester.getCenter(slider));
+    await gesture.moveTo(tester.getTopRight(slider) + const Offset(-24, 24));
+    await tester.pump();
+    expect(popup, findsOneWidget);
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(selection.effort, 'brief');
+    expect(popup, findsNothing);
+    await tester.tap(trigger);
+    await tester.pumpAndSettle();
+    expect(find.text('Effort · Brief'), findsOneWidget);
+    await tester
+        .tapAt(tester.getTopLeft(find.byType(Slider)) + const Offset(24, 24));
+    await tester.pumpAndSettle();
+    expect(selection.effort, isNull);
+    expect(popup, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Work popup applies effort model and worker choices immediately',
+      (tester) async {
+    const other =
+        WorkerSelectionCapability(id: 'other', name: 'Other', models: [
+      ExecutionModelCapability(
+          id: 'other-model', name: 'Other model', efforts: ['low', 'high']),
+    ]);
+    final changes = <ExecutionSelection>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Align(
+      alignment: Alignment.bottomLeft,
+      child: ModelEffortSelector(
+        compact: true,
+        immediatePopup: true,
+        catalog: const ExecutionSelectionCatalog([
+          worker,
+          other,
+          WorkerSelectionCapability(
+              id: 'offline',
+              name: 'Offline',
+              state: CapabilityState.unavailable)
+        ]),
+        value: const ExecutionSelection(
+            worker: 'worker', model: 'one', effort: 'deep'),
+        onChanged: changes.add,
+      ),
+    ))));
+    final trigger = find.byKey(const ValueKey('execution-open'));
+    await tester.tap(trigger);
+    await tester.pumpAndSettle();
+    expect(find.text('Cancel'), findsNothing);
+    expect(find.text('Done'), findsNothing);
+    final surface = find.byKey(const ValueKey('execution-popup'));
+    expect(tester.widget<Material>(surface).color,
+        ConclaveColors.composerBackground(false));
+    expect(tester.getBottomLeft(surface).dy,
+        closeTo(tester.getTopLeft(trigger).dy - 8, 1));
+    expect(tester.getTopLeft(find.byType(Slider)).dy,
+        lessThan(tester.getTopLeft(find.text('One')).dy));
+    expect(
+        tester.getTopLeft(find.text('One')).dy,
+        lessThan(tester
+            .getTopLeft(find.byKey(const ValueKey('execution-worker-worker')))
+            .dy));
+    expect(
+        find.byKey(const ValueKey('execution-worker-offline')), findsNothing);
+    tester.widget<Slider>(find.byType(Slider)).onChanged!(2);
+    await tester.pumpAndSettle();
+    expect(changes.last.effort, 'brief');
+    await tester.tap(find.text('Two'));
+    await tester.pumpAndSettle();
+    expect(changes.last.model, 'two');
+    expect(changes.last.effort, isNull);
+    await tester.tap(find.byKey(const ValueKey('execution-worker-other')));
+    await tester.pumpAndSettle();
+    expect(changes.last.worker, 'other');
+    expect(find.text('One'), findsNothing);
+    await tester.tap(find.text('Other model'));
+    await tester.pumpAndSettle();
+    expect(changes.last.model, 'other-model');
+    final restore = find.byKey(const ValueKey('execution-restore'));
+    expect(
+        tester.getCenter(restore).dx,
+        greaterThan(tester
+            .getCenter(find.byKey(const ValueKey('execution-worker-other')))
+            .dx));
+    await tester.tap(restore);
+    await tester.pumpAndSettle();
+    expect(changes.last.worker, 'worker');
+    expect(changes.last.model, 'one');
+    expect(changes.last.effort, 'deep');
+    expect(find.byKey(const ValueKey('execution-popup')), findsNothing);
+    await tester.tap(trigger);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('execution-worker-other')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Other model'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(790, 5));
+    await tester.pumpAndSettle();
+    expect(changes.last.model, 'other-model');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('restore snapshots each opening including catalog metadata',
+      (tester) async {
+    var selection = const ExecutionSelection(
+        worker: 'worker',
+        model: 'one',
+        effort: 'deep',
+        catalogRevision: 'saved');
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Align(
+      alignment: Alignment.bottomLeft,
+      child: StatefulBuilder(
+          builder: (context, update) => ModelEffortSelector(
+                compact: true,
+                immediatePopup: true,
+                catalog: const ExecutionSelectionCatalog([worker]),
+                value: selection,
+                onChanged: (next) => update(() => selection = next),
+              )),
+    ))));
+    final open = find.byKey(const ValueKey('execution-open'));
+    final restore = find.byKey(const ValueKey('execution-restore'));
+    await tester.tap(open);
+    await tester.pumpAndSettle();
+    tester.widget<Slider>(find.byType(Slider)).onChanged!(2);
+    await tester.pumpAndSettle();
+    await tester.tap(restore);
+    await tester.pumpAndSettle();
+    expect(selection.catalogRevision, 'saved');
+    expect(selection.effort, 'deep');
+    expect(find.byKey(const ValueKey('execution-popup')), findsNothing);
+    await tester.tap(open);
+    await tester.pumpAndSettle();
+    tester.widget<Slider>(find.byType(Slider)).onChanged!(2);
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(790, 5));
+    await tester.pumpAndSettle();
+    expect(selection.effort, 'brief');
+    await tester.tap(open);
+    await tester.pumpAndSettle();
+    tester.widget<Slider>(find.byType(Slider)).onChanged!(1);
+    await tester.pumpAndSettle();
+    await tester.tap(restore);
+    await tester.pumpAndSettle();
+    expect(selection.effort, 'brief');
+    expect(selection.catalogRevision, isNull);
+    expect(find.byKey(const ValueKey('execution-popup')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Work popup respects field permissions', (tester) async {
+    final changes = <ExecutionSelection>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Align(
+      alignment: Alignment.bottomLeft,
+      child: ModelEffortSelector(
+          compact: true,
+          immediatePopup: true,
+          allowWorkerChange: false,
+          allowModelChange: false,
+          allowEffortChange: false,
+          catalog: const ExecutionSelectionCatalog([worker]),
+          value: const ExecutionSelection(worker: 'worker', model: 'one'),
+          onChanged: changes.add),
+    ))));
+    await tester.tap(find.byKey(const ValueKey('execution-open')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Slider>(find.byType(Slider)).onChanged, isNull);
+    expect(
+        tester
+            .widget<IconButton>(
+                find.byKey(const ValueKey('execution-worker-worker')))
+            .onPressed,
+        isNull);
+    for (final row
+        in tester.widgetList<MenuItemButton>(find.byType(MenuItemButton))) {
+      expect(row.onPressed, isNull);
+    }
+    expect(changes, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'catalog refresh preserves supported choices and exposes removed efforts',
     (tester) async {
@@ -291,7 +502,7 @@ void main() {
     expect(result?.model, 'two');
   });
   for (final brightness in Brightness.values) {
-    testWidgets('compact popup uses application menu surface in $brightness',
+    testWidgets('compact popup uses composer surface in $brightness',
         (tester) async {
       await tester.pumpWidget(MaterialApp(
         theme: ThemeData(brightness: brightness),
@@ -314,7 +525,7 @@ void main() {
       expect(
         find.byWidgetPredicate((widget) =>
             widget is Material &&
-            widget.color == ConclaveMenuStyle.background(isDark) &&
+            widget.color == ConclaveColors.composerBackground(isDark) &&
             widget.shape == ConclaveMenuStyle.shape(isDark) &&
             widget.elevation == 12 &&
             widget.surfaceTintColor == Colors.transparent),
@@ -338,7 +549,7 @@ void main() {
         expect(
             anchor.style?.shape?.resolve({}), ConclaveMenuStyle.shape(isDark));
         expect(anchor.style?.backgroundColor?.resolve({}),
-            ConclaveMenuStyle.background(isDark));
+            ConclaveColors.composerBackground(isDark));
         final option = anchor.menuChildren.whereType<MenuItemButton>().last;
         expect(option.style?.overlayColor?.resolve({WidgetState.hovered}),
             ConclaveColors.navigationHover(isDark));
@@ -386,5 +597,30 @@ void main() {
     expect(find.textContaining('Auto'), findsNothing);
     expect(find.textContaining('Select model'), findsOneWidget);
     expect(find.textContaining('Select effort'), findsOneWidget);
+  });
+
+  testWidgets('compact popup height hugs its content', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Align(
+          alignment: Alignment.bottomLeft,
+          child: ModelEffortSelector(
+            compact: true,
+            catalog: const ExecutionSelectionCatalog([worker]),
+            value: const ExecutionSelection(
+                worker: 'worker', model: 'one', effort: 'deep'),
+            onChanged: (_) {},
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.byKey(const ValueKey('execution-open')));
+    await tester.pumpAndSettle();
+    final surface = find.byWidgetPredicate(
+        (w) => w is Material && w.shape == ConclaveMenuStyle.shape(false));
+    final done = tester.getBottomLeft(find.text('Done')).dy;
+    final bottom = tester.getBottomLeft(surface).dy;
+    // Done button + 16 padding + 6 menu padding, with small slack.
+    expect(bottom - done, lessThan(40));
   });
 }

@@ -34,11 +34,17 @@ class GlobalAppMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activeThemeMode = shellContext.themeMode;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // The sidebar uses its dark navigation surface in both app themes.
+    final isDark = ThemeData.estimateBrightnessForColor(
+            ConclaveColors.navigationBackgroundDark) ==
+        Brightness.dark;
 
     final menuStyle = ConclaveMenuStyle.surface(isDark);
     ButtonStyle itemStyle({bool isDestructive = false}) =>
-        ConclaveMenuStyle.item(isDark, isDestructive: isDestructive);
+        ConclaveMenuStyle.item(isDark, isDestructive: isDestructive).copyWith(
+          foregroundColor:
+              WidgetStatePropertyAll(ConclaveColors.navigationText(isDark)),
+        );
 
     Widget divider() => Padding(
           padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
@@ -54,24 +60,29 @@ class GlobalAppMenu extends StatelessWidget {
     return MenuAnchor(
       style: menuStyle,
       builder: (context, controller, child) {
-        return IconButton(
-          tooltip: 'Application menu',
-          icon: const Icon(
-            Icons.menu_rounded,
-            color: Colors.white60,
-            size: 18,
-          ),
-          splashRadius: 14,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-          onPressed: () {
-            if (controller.isOpen) {
-              controller.close();
-            } else {
-              controller.open();
-            }
-          },
-        );
+        return Semantics(
+            label: 'Application menu',
+            child: Tooltip(
+                message: 'Application menu',
+                excludeFromSemantics: true,
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.menu_rounded,
+                    color: Colors.white60,
+                    size: 18,
+                  ),
+                  splashRadius: 14,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  onPressed: () {
+                    if (controller.isOpen) {
+                      controller.close();
+                    } else {
+                      controller.open();
+                    }
+                  },
+                )));
       },
       menuChildren: [
         // 1. Application destinations

@@ -453,6 +453,15 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
     Map<String, Object?> payload,
   ) async {
     try {
+      // The handler captured its transport when the assignment started. If the
+      // Service reconnected while the Worker ran, that transport is closed and
+      // its sends are dropped without an error, so a result "sent" on it never
+      // reaches Cloud. Treat a replaced transport as a failed delivery and let
+      // the journal-driven redelivery send the recorded outcome on the live
+      // session.
+      if (!identical(_transport, socket)) {
+        throw StateError('Workspace transport was replaced during execution');
+      }
       await socket
           .sendAndWait(
               jsonEncode(_assignmentEnvelope(type, correlation, payload)))
