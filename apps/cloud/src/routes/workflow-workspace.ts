@@ -1,4 +1,5 @@
 import { publishCollaborationEvent } from "../collaboration-events.js";
+import { loadEffectiveMemberAccess } from "./workspace-member-access.js";
 import {
   securityContext,
   HttpError,
@@ -48,7 +49,40 @@ export async function resolveUserWorkflowWorkspace(
   return requested;
 }
 
-/** Selection is restricted to Workspaces and Spaces owned by this user. */
+/** Workspaces lent to this person by an active Person Grant (ADR-020). */
+export async function loadBorrowedWorkspaces(
+  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  userId: string,
+) {
+  const rows = await env.CONCLAVE_DB.prepare(
+    `SELECT ew.id, ew.name, ew.owner_user_id AS ownerUserId
+     FROM workspace_person_grants g
+     JOIN execution_workspaces ew ON ew.id = g.workspace_id AND ew.status != 'revoked'
+     WHERE g.user_id = ?1 AND g.status = 'active' ORDER BY ew.name, ew.id`,
+  )
+    .bind(userId)
+    .all<{ id: string; name: string; ownerUserId: string }>();
+  return rows.results ?? [];
+}
+
+/** Permissions a Space may use on a borrowed Workspace, from the borrower's mode. */
+async function borrowedPermissions(
+  env: SecurityEnv,
+  workspaceId: string,
+  userId: string,
+): Promise<string[]> {
+  const policy = await loadEffectiveMemberAccess(env, workspaceId, userId);
+  if (policy?.mode === "chat") return ["repository:read"];
+  if (policy?.mode === "work") return ["repository:read", "repository:write"];
+  return ["repository:read", "repository:write", "shell:execute"];
+}
+
+/**
+ * Selection is restricted to Workspaces owned by this user, or lent to them by
+ * an active Person Grant, and to Spaces they own. A lent Workspace never has
+ * its Worker scheduling changed by the borrower, and its Space grant is made
+ * by the lender with permissions capped by the borrower's mode.
+ */
 export async function prepareWorkflowWorkspaceGrant(
   env: SecurityEnv,
   ownerUserId: string,
@@ -61,7 +95,12 @@ export async function prepareWorkflowWorkspaceGrant(
   )
     .bind(workspaceId, ownerUserId)
     .first();
-  if (!owned)
+  const lent = owned
+    ? null
+    : (await loadBorrowedWorkspaces(env, ownerUserId)).find(
+        (workspace) => workspace.id === workspaceId,
+      );
+  if (!owned && !lent)
     throw new HttpError(
       403,
       "Workspace is unavailable or not owned by the settings owner",
@@ -79,6 +118,31 @@ export async function prepareWorkflowWorkspaceGrant(
       409,
       "The selected Workspace grant is suspended or expired",
     );
+  if (lent) {
+    if (existing) return [];
+    return [
+      env.CONCLAVE_DB.prepare(
+        "INSERT INTO workspace_space_grants(id,space_id,workspace_id,granted_by_user_id,status,allowed_permissions_json,concurrency_json,created_at,updated_at) VALUES(?1,?2,?3,?4,'active',?5,'{\"maxConcurrentAssignments\":1}',?6,?6)",
+      ).bind(
+        crypto.randomUUID(),
+        spaceId,
+        workspaceId,
+        lent.ownerUserId,
+        JSON.stringify(await borrowedPermissions(env, workspaceId, ownerUserId)),
+        now,
+      ),
+      env.CONCLAVE_DB.prepare(
+        "INSERT INTO space_audit_log(id,space_id,actor_type,actor_id,action,target_type,target_id,details_json,created_at) VALUES(?1,?2,'user',?3,'workflow.workspace.authorized','execution_workspace',?4,?5,?6)",
+      ).bind(
+        crypto.randomUUID(),
+        spaceId,
+        ownerUserId,
+        workspaceId,
+        JSON.stringify({ workspaceId, lent: true }),
+        now,
+      ),
+    ];
+  }
   const statements: D1PreparedStatement[] = [
     // Selecting a Workflow Workspace is the user-facing execution boundary.
     // Ready, locally enabled Workers there are available to Cloud scheduling;
@@ -144,22 +208,40 @@ export async function handleWorkflowWorkspace(
       );
   }
   const current = await loadWorkflowWorkspace(env, ownerUserId, spaceId);
-  const choices = await env.CONCLAVE_DB.prepare(
+  const owned = await env.CONCLAVE_DB.prepare(
     "SELECT id, name FROM execution_workspaces WHERE owner_user_id = ?1 AND status != 'revoked' ORDER BY name, id",
   )
     .bind(ownerUserId)
     .all<{ id: string; name: string }>();
+  // A Space may also run on a Workspace lent to its owner. The user-level
+  // default stays limited to Workspaces the user owns.
+  const choices = {
+    results: [
+      ...owned.results,
+      ...(spaceId
+        ? (await loadBorrowedWorkspaces(env, ownerUserId)).map(
+            ({ id, name }) => ({ id, name }),
+          )
+        : []),
+    ],
+  };
   if (request.method === "GET") {
     if (current.workspaceId && spaceId) {
-      await env.CONCLAVE_DB.batch(
-        await prepareWorkflowWorkspaceGrant(
-          env,
-          ownerUserId,
-          spaceId,
-          current.workspaceId,
-          new Date().toISOString(),
-        ),
-      );
+      try {
+        await env.CONCLAVE_DB.batch(
+          await prepareWorkflowWorkspaceGrant(
+            env,
+            ownerUserId,
+            spaceId,
+            current.workspaceId,
+            new Date().toISOString(),
+          ),
+        );
+      } catch (error) {
+        // A lent Workspace whose grant was revoked stays readable so the owner
+        // can see and change the selection.
+        if (!(error instanceof HttpError && error.status === 403)) throw error;
+      }
     }
     return json({
       ...current,

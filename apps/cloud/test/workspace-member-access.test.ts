@@ -20,6 +20,7 @@ vi.mock("../src/routes/handlers.js", async (original) => ({
 }));
 import {
   handleWorkspaceMemberAccess,
+  memberModeError,
   memberSelectionError,
   parseWorkspaceMemberAccessPolicy,
 } from "../src/routes/workspace-member-access.js";
@@ -189,6 +190,85 @@ it("restricts members, not the owner, when Work resolves its Worker, model and e
   } finally {
     sqlite.close();
   }
+});
+
+it("lets a per-person override replace the default and enforces the mode ceiling", async () => {
+  const { sqlite, env, call, bind } = fixture();
+  const person = (method: string, user: string, id: string, body?: unknown) =>
+    handleWorkspaceMemberAccess(
+      new Request(
+        `https://cloud.test/api/workspaces/workspace/member-access/people/${id}`,
+        {
+          method,
+          headers: { authorization: user },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        },
+      ),
+      env,
+      "workspace",
+      undefined,
+      id,
+    );
+  try {
+    const all = { models: null, efforts: null };
+    // Default policy: chat only. Direct needs thread_write, so members are refused.
+    await call("PUT", "owner", "workspace", {
+      restricted: true,
+      mode: "chat",
+      workers: { "worker-a": all },
+    });
+    await expect(bind("member")).rejects.toMatchObject({ status: 403 });
+    // Only the owner manages overrides.
+    await expect(
+      person("PUT", "member", "member", { mode: "work", workers: {} }),
+    ).rejects.toMatchObject({ status: 404 });
+    // An override replaces the default (no merge) and lifts the ceiling.
+    await person("PUT", "owner", "member", {
+      mode: "work",
+      workers: { "worker-a": all },
+    });
+    expect((await bind("member")).direct).toMatchObject({
+      workerId: "worker-a",
+    });
+    expect(
+      await (await person("GET", "owner", "member")).json(),
+    ).toMatchObject({ custom: true, policy: { mode: "work" } });
+    // An override that drops the Worker blocks it even though the default lists it.
+    await person("PUT", "owner", "member", {
+      mode: "work",
+      workers: { "worker-b": all },
+    });
+    await expect(bind("member")).rejects.toMatchObject({ status: 403 });
+    // Reset returns the person to the default.
+    expect(
+      await (await person("DELETE", "owner", "member")).json(),
+    ).toMatchObject({ custom: false, policy: { mode: "chat" } });
+    await expect(bind("member")).rejects.toMatchObject({ status: 403 });
+    // Invalid input and unknown people are rejected; the owner is never restricted.
+    await expect(
+      person("PUT", "owner", "member", { mode: "root", workers: {} }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      person("PUT", "owner", "ghost", { workers: {} }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect((await bind("owner")).direct).toBeDefined();
+  } finally {
+    sqlite.close();
+  }
+});
+
+it("blocks commands in work mode but allows them in work+shell", () => {
+  const policy = (mode?: "chat" | "work" | "work+shell") =>
+    parseWorkspaceMemberAccessPolicy({ workers: {}, mode });
+  expect(memberModeError(null, ["test_execution"])).toBeNull();
+  expect(memberModeError(policy(), ["test_execution"])).toBeNull();
+  expect(memberModeError(policy("chat"), ["thread_write"])).toMatch(/chat/);
+  expect(memberModeError(policy("chat"), ["read"])).toBeNull();
+  expect(memberModeError(policy("work"), ["thread_write"])).toBeNull();
+  expect(memberModeError(policy("work"), ["test_execution"])).toMatch(
+    /commands/,
+  );
+  expect(memberModeError(policy("work+shell"), ["test_execution"])).toBeNull();
 });
 
 describe("shared Worker inventory", () => {

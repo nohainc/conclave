@@ -66,6 +66,47 @@ void main() {
     expect(const AxWorkspaceMemberAccess().toJson(), {'restricted': false});
   });
 
+  test('mode and person access parse; unknown modes are ignored', () {
+    final access = AxWorkspaceMemberAccess.fromJson({
+      'restricted': true,
+      'policy': {'mode': 'work', 'workers': {}}
+    });
+    expect(access.mode, 'work');
+    expect(access.toJson()['mode'], 'work');
+    expect(
+        AxWorkspaceMemberAccess.fromJson({
+          'restricted': true,
+          'policy': {'mode': 'root', 'workers': {}}
+        }).mode,
+        isNull);
+    final person = AxPersonAccess.fromJson({
+      'custom': true,
+      'policy': {'mode': 'chat', 'workers': {}}
+    });
+    expect(person.custom, isTrue);
+    expect(person.access.mode, 'chat');
+    expect(AxPersonAccess.fromJson({'custom': false, 'policy': null}).access.restricted,
+        isFalse);
+  });
+
+  testWidgets('limiting access starts at chat only and saves the chosen mode',
+      (tester) async {
+    final source = AccessSource();
+    await pump(tester, source);
+    await tester.tap(find.byKey(const ValueKey('member-access-restricted')));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<ChoiceChip>(find.byKey(const ValueKey('member-mode-chat')))
+            .selected,
+        isTrue);
+    await tester.tap(find.byKey(const ValueKey('member-mode-work')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('member-access-save')));
+    await tester.pumpAndSettle();
+    expect(source.saves.single.mode, 'work');
+  });
+
   testWidgets(
       'unrestricted by default; shows only this Workspace Workers once limited',
       (tester) async {

@@ -34,6 +34,7 @@ class _WorkspaceMemberAccessSectionState
   Object? _error;
   AxWorkspaceMemberAccess _saved = const AxWorkspaceMemberAccess();
   bool _restricted = false;
+  String? _mode;
   Map<String, AxSharedWorker> _workers = {};
 
   @override
@@ -72,12 +73,14 @@ class _WorkspaceMemberAccessSectionState
   void _adopt(AxWorkspaceMemberAccess access) {
     _saved = access;
     _restricted = access.restricted;
+    _mode = access.mode;
     _workers = Map.of(access.workers);
   }
 
   bool get _dirty =>
       _restricted != _saved.restricted ||
-      (_restricted && !_sameWorkers(_workers, _saved.workers));
+      (_restricted &&
+          (_mode != _saved.mode || !_sameWorkers(_workers, _saved.workers)));
 
   static bool _sameWorkers(
       Map<String, AxSharedWorker> a, Map<String, AxSharedWorker> b) {
@@ -103,6 +106,7 @@ class _WorkspaceMemberAccessSectionState
           widget.workspaceId,
           AxWorkspaceMemberAccess(
               restricted: _restricted,
+              mode: _restricted ? _mode : null,
               workers: _restricted ? _workers : const {}));
       if (mounted) setState(() => _adopt(access));
     } catch (error) {
@@ -162,8 +166,13 @@ class _WorkspaceMemberAccessSectionState
               value: _restricted,
               onChanged: _saving
                   ? null
-                  : (value) => setState(() => _restricted = value)),
+                  : (value) => setState(() {
+                      _restricted = value;
+                      // New limits start at the safest mode (ADR-020).
+                      if (value) _mode ??= 'chat';
+                    })),
           if (_restricted) ...[
+            _modeSelector(context),
             if (workers.isEmpty)
               Text('This Workspace has no Workers to share yet.',
                   style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
@@ -180,6 +189,26 @@ class _WorkspaceMemberAccessSectionState
       ],
     );
   }
+
+  static const _modeLabels = {
+    'chat': 'Chat only',
+    'work': 'Chat and work',
+    'work+shell': 'Work and commands',
+  };
+
+  /// The ceiling on what members may run: read-only chat, file changes, or
+  /// also shell commands.
+  Widget _modeSelector(BuildContext context) => Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Wrap(spacing: 8, runSpacing: 4, children: [
+        const Text('Members can:'),
+        for (final mode in axWorkspaceAccessModes)
+          ChoiceChip(
+              key: ValueKey('member-mode-$mode'),
+              label: Text(_modeLabels[mode]!),
+              selected: _mode == mode,
+              onSelected: _saving ? null : (_) => setState(() => _mode = mode)),
+      ]));
 
   Widget _workerTile(BuildContext context, AxWorker worker) {
     final shared = _workers[worker.id];

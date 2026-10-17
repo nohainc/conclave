@@ -355,6 +355,10 @@ extension _AxAppViews on _AxAppStateMixin {
                     widget.dataSource is AxWorkspaceMemberAccessDataSource
                         ? widget.dataSource as AxWorkspaceMemberAccessDataSource
                         : null,
+                sharingSource:
+                    widget.dataSource is AxWorkspaceSharingDataSource
+                        ? widget.dataSource as AxWorkspaceSharingDataSource
+                        : null,
               )));
 
   Widget _profileSecurityView() => ListenableBuilder(

@@ -55,6 +55,7 @@ function fixture(
             if (
               !sql.includes("workspace_worker_inventory") &&
               !sql.includes("workspace_member_access") &&
+              !sql.includes("workspace_member_overrides") &&
               !sql.includes("FROM execution_workspaces")
             )
               expect(user).toBe(
@@ -71,7 +72,11 @@ function fixture(
             return this;
           },
           async first() {
-            if (sql.includes("workspace_member_access")) return null;
+            if (
+              sql.includes("workspace_member_access") ||
+              sql.includes("workspace_member_overrides")
+            )
+              return null;
             if (sql.includes("space_workflow_settings")) return null;
             if (sql.includes("user_workflow_settings")) return { workspaceId };
             return { ownerUserId: "user" };

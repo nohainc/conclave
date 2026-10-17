@@ -6,6 +6,7 @@ import '../../ax/sync/ax_workflow_configurations.dart';
 import '../../ax/ax_workspace_member_access.dart';
 import '../workflows/workflows_page.dart';
 import 'workspace_member_access_section.dart';
+import 'workspace_sharing_section.dart';
 
 export 'workspaces_overview.dart';
 
@@ -23,6 +24,7 @@ class WorkspacesPage extends StatefulWidget {
     this.workflowConfigurations,
     this.viewerEmail,
     this.memberAccessSource,
+    this.sharingSource,
     // Retained as optional compatibility inputs while callers are audited.
     VoidCallback? onAdd,
     ValueChanged<AxWorkspace>? onRename,
@@ -42,6 +44,9 @@ class WorkspacesPage extends StatefulWidget {
 
   /// Enables the owner's "Member access" section of each Workspace tab.
   final AxWorkspaceMemberAccessDataSource? memberAccessSource;
+
+  /// Enables lending: the owner's sharing section and the invited person's banner.
+  final AxWorkspaceSharingDataSource? sharingSource;
 
   @override
   State<WorkspacesPage> createState() => _WorkspacesPageState();
@@ -119,6 +124,10 @@ class _WorkspacesPageState extends State<WorkspacesPage>
           style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
         ),
         const SizedBox(height: 12),
+        if (widget.sharingSource != null)
+          WorkspaceInvitationsBanner(
+              key: const ValueKey('workspace-invitations-banner'),
+              source: widget.sharingSource!),
         if (tabs == null)
           const _EmptyWorkspaces()
         else ...[
@@ -188,6 +197,14 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             configurations: configurations.forWorkspace(workspace.id),
             viewerEmail: widget.viewerEmail,
             workspaceId: workspace.id,
+          ),
+        ],
+        if (widget.sharingSource != null) ...[
+          const SizedBox(height: 24),
+          WorkspaceSharingSection(
+            key: ValueKey('workspace-sharing-${workspace.id}'),
+            workspaceId: workspace.id,
+            source: widget.sharingSource!,
           ),
         ],
         if (widget.memberAccessSource != null) ...[

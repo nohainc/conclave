@@ -11,7 +11,7 @@ import { listWorkerProfiles } from "../worker-profile-registry.js";
 import { HttpError, json, securityContext } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
 import {
-  loadWorkspaceMemberAccess,
+  loadEffectiveMemberAccess,
   restrictExecutionOptions,
   type WorkspaceMemberAccessPolicy,
 } from "./workspace-member-access.js";
@@ -83,7 +83,7 @@ export async function handleListWorkspaceWorkerInventory(
     for (const row of sharedRows.results ?? []) {
       const id = String(row.workspace_id);
       if (!policies.has(id))
-        policies.set(id, await loadWorkspaceMemberAccess(env, id));
+        policies.set(id, await loadEffectiveMemberAccess(env, id, context.userId));
       const policy = policies.get(id)!;
       const entry = policy?.workers[String(row.worker_id)];
       // A restricted Workspace shares only the Workers it lists.

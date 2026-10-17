@@ -121,6 +121,111 @@ mixin _CatalogApi on _AxApiClientCore {
         Map<String, dynamic>.from(jsonDecode(response.body) as Map));
   }
 
+  Uri _personAccessUri(String workspaceId, String userId) => Uri.parse(
+      '${_memberAccessUrl(workspaceId)}/people/${Uri.encodeComponent(userId)}');
+
+  AxPersonAccess _personAccessResponse(http.Response response) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException(
+          'Person access failed (${response.statusCode}): ${response.body}',
+          statusCode: response.statusCode);
+    }
+    return AxPersonAccess.fromJson(
+        Map<String, dynamic>.from(jsonDecode(response.body) as Map));
+  }
+
+  Future<AxPersonAccess> loadPersonAccess(
+          String workspaceId, String userId) async =>
+      AxPersonAccess.fromJson(
+          await _getJson(_personAccessUri(workspaceId, userId)));
+
+  Future<AxPersonAccess> savePersonAccess(String workspaceId, String userId,
+          AxWorkspaceMemberAccess access) async =>
+      _personAccessResponse(await client.put(
+          _personAccessUri(workspaceId, userId),
+          headers: _headers(contentType: 'application/json'),
+          body: jsonEncode({
+            if (access.mode != null) 'mode': access.mode,
+            'workers': {
+              for (final entry in access.workers.entries)
+                entry.key: entry.value.toJson(),
+            },
+          })));
+
+  Future<AxPersonAccess> resetPersonAccess(
+          String workspaceId, String userId) async =>
+      _personAccessResponse(await client.delete(
+          _personAccessUri(workspaceId, userId),
+          headers: _headers()));
+
+  Future<void> _sharingSend(String method, String path, [Object? body]) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final headers = _headers(contentType: 'application/json');
+    final response = method == 'PUT'
+        ? await client.put(uri, headers: headers, body: jsonEncode(body))
+        : await client.post(uri,
+            headers: headers, body: body == null ? null : jsonEncode(body));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException(
+          'Sharing request failed (${response.statusCode}): ${response.body}',
+          statusCode: response.statusCode);
+    }
+  }
+
+  String _workspacePath(String workspaceId) =>
+      '/workspaces/${Uri.encodeComponent(workspaceId)}';
+
+  Future<List<AxPersonWithAccess>> loadPeopleWithAccess(
+      String workspaceId) async {
+    final body = await _getJson(Uri.parse(
+        '$baseUrl${_workspacePath(workspaceId)}/people-with-access'));
+    return [
+      for (final item in (body['people'] as List? ?? const []))
+        AxPersonWithAccess.fromJson(Map<String, dynamic>.from(item as Map)),
+    ];
+  }
+
+  Future<List<AxSharedWorkspaceInvitation>> loadSharedWorkspaceInvitations(
+      String workspaceId) async {
+    final body = await _getJson(
+        Uri.parse('$baseUrl${_workspacePath(workspaceId)}/invitations'));
+    return [
+      for (final item in (body['invitations'] as List? ?? const []))
+        AxSharedWorkspaceInvitation.fromJson(Map<String, dynamic>.from(item as Map)),
+    ];
+  }
+
+  Future<void> createWorkspaceInvitation(String workspaceId, String email) =>
+      _sharingSend(
+          'POST', '${_workspacePath(workspaceId)}/invitations', {'email': email});
+
+  Future<void> revokeWorkspaceInvitation(
+          String workspaceId, String invitationId) =>
+      _sharingSend('POST',
+          '${_workspacePath(workspaceId)}/invitations/${Uri.encodeComponent(invitationId)}/revoke');
+
+  Future<void> revokePersonGrant(String workspaceId, String userId) =>
+      _sharingSend('POST',
+          '${_workspacePath(workspaceId)}/person-grants/${Uri.encodeComponent(userId)}/revoke');
+
+  Future<void> setPersonQuota(String workspaceId, String userId, int limit) =>
+      _sharingSend(
+          'PUT',
+          '${_workspacePath(workspaceId)}/person-grants/${Uri.encodeComponent(userId)}/quota',
+          {'maxConcurrentRequests': limit});
+
+  Future<List<AxMyWorkspaceInvitation>> loadMyWorkspaceInvitations() async {
+    final body = await _getJson(Uri.parse('$baseUrl/workspace-invitations'));
+    return [
+      for (final item in (body['invitations'] as List? ?? const []))
+        AxMyWorkspaceInvitation.fromJson(
+            Map<String, dynamic>.from(item as Map)),
+    ];
+  }
+
+  Future<void> acceptWorkspaceInvitation(String invitationId) => _sharingSend(
+      'POST', '/workspace-invitations/${Uri.encodeComponent(invitationId)}/accept');
+
   AxUserWorkflowConfiguration _configurationResponse(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AxApiException(

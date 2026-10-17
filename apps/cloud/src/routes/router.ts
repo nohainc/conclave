@@ -4,6 +4,14 @@ import { handleWorkflowWorkspace } from "./workflow-workspace.js";
 import { handleWorkflowConfigurations } from "./workflow-configurations.js";
 import { handleWorkflowDefault } from "./workflow-default.js";
 import { handleWorkspaceMemberAccess } from "./workspace-member-access.js";
+import { handlePeopleWithAccess } from "./workspace-people-with-access.js";
+import {
+  handleAcceptWorkspaceInvitation,
+  handleMyWorkspaceInvitations,
+  handlePersonGrantQuota,
+  handleRevokePersonGrant,
+  handleWorkspaceInvitations,
+} from "./workspace-invitations.js";
 import { conditionalJson } from "./conditional-read.js";
 import { BUILTIN_WORKFLOW_CATALOG, workflowCatalogEntry } from "@conclave/core";
 
@@ -274,13 +282,73 @@ export async function routeWorkerRequest(
       return await handlers.handleListWorkspaces!(request, env, ctx);
     }
     const memberAccessMatch = url.pathname.match(
-      /^\/api\/workspaces\/([^/]+)\/member-access$/,
+      /^\/api\/workspaces\/([^/]+)\/member-access(?:\/people\/([^/]+))?$/,
     );
     if (memberAccessMatch)
       return await handleWorkspaceMemberAccess(
         request,
         env,
         decodeURIComponent(memberAccessMatch[1]!),
+        ctx,
+        memberAccessMatch[2]
+          ? decodeURIComponent(memberAccessMatch[2])
+          : undefined,
+      );
+    const workspaceInvitationsMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/invitations(?:\/([^/]+)\/revoke)?$/,
+    );
+    if (workspaceInvitationsMatch)
+      return await handleWorkspaceInvitations(
+        request,
+        env,
+        decodeURIComponent(workspaceInvitationsMatch[1]!),
+        workspaceInvitationsMatch[2]
+          ? decodeURIComponent(workspaceInvitationsMatch[2])
+          : undefined,
+        ctx,
+      );
+    const peopleWithAccessMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/people-with-access$/,
+    );
+    if (peopleWithAccessMatch)
+      return await handlePeopleWithAccess(
+        request,
+        env,
+        decodeURIComponent(peopleWithAccessMatch[1]!),
+        ctx,
+      );
+    const personGrantQuotaMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/person-grants\/([^/]+)\/quota$/,
+    );
+    if (personGrantQuotaMatch)
+      return await handlePersonGrantQuota(
+        request,
+        env,
+        decodeURIComponent(personGrantQuotaMatch[1]!),
+        decodeURIComponent(personGrantQuotaMatch[2]!),
+        ctx,
+      );
+    const personGrantRevokeMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/person-grants\/([^/]+)\/revoke$/,
+    );
+    if (personGrantRevokeMatch)
+      return await handleRevokePersonGrant(
+        request,
+        env,
+        decodeURIComponent(personGrantRevokeMatch[1]!),
+        decodeURIComponent(personGrantRevokeMatch[2]!),
+        ctx,
+      );
+    if (url.pathname === "/api/workspace-invitations")
+      return await handleMyWorkspaceInvitations(request, env, ctx);
+    const workspaceInvitationAcceptMatch = url.pathname.match(
+      /^\/api\/workspace-invitations\/([^/]+)\/accept$/,
+    );
+    if (workspaceInvitationAcceptMatch)
+      return await handleAcceptWorkspaceInvitation(
+        request,
+        env,
+        decodeURIComponent(workspaceInvitationAcceptMatch[1]!),
         ctx,
       );
     const workspaceSettingsMatch = url.pathname.match(

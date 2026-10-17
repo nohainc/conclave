@@ -8,7 +8,8 @@ import {
 import { HttpError, type SecurityEnv } from "./http-security.js";
 import { validateWorkflowWorkerEligibility } from "./handlers.js";
 import {
-  loadWorkspaceMemberAccess,
+  loadEffectiveMemberAccess,
+  memberModeError,
   memberSelectionError,
 } from "./workspace-member-access.js";
 
@@ -118,9 +119,44 @@ export async function resolveWorkflowExecutionBindings(
   )
     .bind(space.workspaceId)
     .first<{ ownerUserId: string }>();
+  // A Workspace lent to the Space owner is used only by people who hold their
+  // own Person Grant (ADR-020); Space membership and the Space owner's grant
+  // never extend to other members.
+  const spaceOwner = await env.CONCLAVE_DB.prepare(
+    "SELECT owner_user_id AS ownerUserId FROM spaces WHERE id = ?1",
+  )
+    .bind(spaceId)
+    .first<{ ownerUserId: string }>();
+  if (
+    workspaceOwner &&
+    spaceOwner &&
+    workspaceOwner.ownerUserId !== spaceOwner.ownerUserId &&
+    workspaceOwner.ownerUserId !== userId
+  ) {
+    const grant = await env.CONCLAVE_DB.prepare(
+      "SELECT max_concurrent_requests AS maxConcurrent FROM workspace_person_grants WHERE workspace_id = ?1 AND user_id = ?2 AND status = 'active'",
+    )
+      .bind(space.workspaceId, userId)
+      .first<{ maxConcurrent: number }>();
+    if (!grant)
+      throw new HttpError(
+        403,
+        "You do not have access to this Workspace; ask its owner to invite you",
+      );
+    const inFlight = await env.CONCLAVE_DB.prepare(
+      "SELECT COUNT(*) AS n FROM work_requests WHERE requested_by_user_id = ?1 AND primary_workspace_id = ?2 AND status IN ('queued','running','waiting')",
+    )
+      .bind(userId, space.workspaceId)
+      .first<{ n: number }>();
+    if ((inFlight?.n ?? 0) >= grant.maxConcurrent)
+      throw new HttpError(
+        429,
+        `You already have ${grant.maxConcurrent} request(s) running on this Workspace; wait for one to finish`,
+      );
+  }
   const memberPolicy =
     workspaceOwner && workspaceOwner.ownerUserId !== userId
-      ? await loadWorkspaceMemberAccess(env, space.workspaceId)
+      ? await loadEffectiveMemberAccess(env, space.workspaceId, userId)
       : null;
   const requested: Record<
     string,
@@ -171,7 +207,9 @@ export async function resolveWorkflowExecutionBindings(
         422,
         `${step.kind}: Configured Worker is unavailable for this Space`,
       );
-    const notShared = memberSelectionError(memberPolicy, selection);
+    const notShared =
+      memberSelectionError(memberPolicy, selection) ??
+      memberModeError(memberPolicy, step.requiredCapabilities);
     if (notShared) throw new HttpError(403, `${step.kind}: ${notShared}`);
     // Preferences and composer choices are intent. Admission validates against
     // current capabilities, then pins that revision for acceptance and dispatch.

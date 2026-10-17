@@ -417,3 +417,46 @@ read-only. `WorkflowsPage` now requires a `workspaceId` and only renders inside
 a Workspace tab (no standalone title, Workspace picker or per-Space reset).
 Cloud's Space override routes and tables are unchanged and still resolve for
 existing data; removing them is a separate, breaking Cloud change.
+
+### Default policy, per-person overrides and Person Grants (ADR-020)
+
+Migrations `0074`-`0076`. The Member access policy above is the Workspace
+**default**. Optional fields and rules added on top of it:
+
+- `mode`: `chat` (read-only Workflows), `work` (also file changes) or
+  `work+shell` (also commands). Absent means no ceiling beyond Space role
+  permissions, so policies saved earlier behave as before. The AX editor starts
+  new limits at `chat`. Enforced per Workflow step in
+  `resolveWorkflowExecutionBindings` using the step's required capabilities.
+- Per-person override (`workspace_member_overrides`): replaces the default for
+  one person, never merges. Owner-only
+  `GET|PUT|DELETE /api/workspaces/:id/member-access/people/:userId`
+  (`DELETE` resets to the default).
+- Workspace invitations (`workspace_invitations`) and Person Grants
+  (`workspace_person_grants`). A Workspace owner invites by email
+  (`GET|POST /api/workspaces/:id/invitations`,
+  `POST .../invitations/:invitationId/revoke`); the invitee lists
+  (`GET /api/workspace-invitations`) and accepts
+  (`POST /api/workspace-invitations/:id/accept`). Invitations last 7 days, are
+  single use, need the signed-in email to match, and are capped at 20 pending
+  per Workspace. Accepting creates only the grant and never a people
+  relationship. With no default policy the person starts as chat-only with no
+  Workers shared.
+- A Space owner may select a Workspace lent to them; the user-level default
+  still accepts only owned Workspaces. The Space grant is created by the lender,
+  capped by the borrower's mode, with concurrency 1, and never changes the
+  lender's Worker scheduling. On a lent Workspace every requester except its
+  owner needs their own active grant, so other members of the borrower's Space
+  are refused with 403 (strict, non-transferable, no re-lending).
+- `POST /api/workspaces/:id/person-grants/:userId/revoke` ends a grant, revokes
+  the borrower's Space grants on that Workspace and is audited. Steps already
+  running finish; new and queued dispatch stops.
+- `PUT /api/workspaces/:id/person-grants/:userId/quota` sets
+  `{maxConcurrentRequests: 1-10}` (default 1), enforced at admission with 429.
+- `GET /api/workspaces/:id/people-with-access` is the owner-only list with mode,
+  quota and usage-only figures (requests, approximate seconds, Worker ids, last
+  used); the borrower's content is never returned.
+
+Not implemented: a total run-time quota and a per-grant Work Root (the Work Root
+is local to the Workspace Service). AX screens for per-person overrides,
+invitations and the access list are pending; the API above is complete.

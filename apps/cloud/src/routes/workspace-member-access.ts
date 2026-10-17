@@ -12,6 +12,11 @@ import {
  */
 export interface WorkspaceMemberAccessPolicy {
   readonly schemaVersion: 1;
+  /**
+   * Ceiling on the work a person may run. Absent means no ceiling beyond Space
+   * role and grant permissions (policies saved before ADR-020).
+   */
+  readonly mode?: WorkspaceAccessMode;
   readonly workers: Readonly<
     Record<
       string,
@@ -22,6 +27,9 @@ export interface WorkspaceMemberAccessPolicy {
     >
   >;
 }
+
+export const WORKSPACE_ACCESS_MODES = ["chat", "work", "work+shell"] as const;
+export type WorkspaceAccessMode = (typeof WORKSPACE_ACCESS_MODES)[number];
 
 const MAX_WORKERS = 50;
 const MAX_VALUES = 200;
@@ -45,7 +53,12 @@ export function parseWorkspaceMemberAccessPolicy(
 ): WorkspaceMemberAccessPolicy {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new HttpError(400, "Invalid member access policy");
-  const workers = (value as { workers?: unknown }).workers;
+  const { workers, mode } = value as { workers?: unknown; mode?: unknown };
+  if (
+    mode !== undefined &&
+    !WORKSPACE_ACCESS_MODES.includes(mode as WorkspaceAccessMode)
+  )
+    throw new HttpError(400, "mode must be chat, work or work+shell");
   if (!workers || typeof workers !== "object" || Array.isArray(workers))
     throw new HttpError(400, "workers must be an object");
   const entries = Object.entries(workers as Record<string, unknown>);
@@ -66,7 +79,11 @@ export function parseWorkspaceMemberAccessPolicy(
       efforts: stringList(object.efforts, "efforts"),
     };
   }
-  return { schemaVersion: 1, workers: parsed };
+  return {
+    schemaVersion: 1,
+    ...(mode ? { mode: mode as WorkspaceAccessMode } : {}),
+    workers: parsed,
+  };
 }
 
 export async function loadWorkspaceMemberAccess(
@@ -81,6 +98,38 @@ export async function loadWorkspaceMemberAccess(
   return row
     ? (JSON.parse(row.policyJson) as WorkspaceMemberAccessPolicy)
     : null;
+}
+
+/**
+ * The policy that applies to one person: their override when the owner set
+ * one, otherwise the Workspace default. Overrides replace, never merge.
+ */
+export async function loadEffectiveMemberAccess(
+  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  workspaceId: string,
+  userId: string,
+): Promise<WorkspaceMemberAccessPolicy | null> {
+  const override = await env.CONCLAVE_DB.prepare(
+    "SELECT policy_json AS policyJson FROM workspace_member_overrides WHERE workspace_id = ?1 AND user_id = ?2",
+  )
+    .bind(workspaceId, userId)
+    .first<{ policyJson: string }>();
+  return override
+    ? (JSON.parse(override.policyJson) as WorkspaceMemberAccessPolicy)
+    : loadWorkspaceMemberAccess(env, workspaceId);
+}
+
+/** Why the policy's mode forbids a step needing these capabilities, or null. */
+export function memberModeError(
+  policy: WorkspaceMemberAccessPolicy | null,
+  requiredCapabilities: readonly string[],
+): string | null {
+  if (!policy?.mode || policy.mode === "work+shell") return null;
+  if (requiredCapabilities.includes("test_execution"))
+    return "Your access to this Workspace does not allow running commands";
+  if (policy.mode === "chat" && requiredCapabilities.includes("thread_write"))
+    return "Your access to this Workspace is chat only";
+  return null;
 }
 
 /** Why a member may not run this selection, or null when it is shared. */
@@ -184,6 +233,7 @@ export async function handleWorkspaceMemberAccess(
   env: SecurityEnv,
   workspaceId: string,
   ctx?: ExecutionContext,
+  personId?: string,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   const workspace = await env.CONCLAVE_DB.prepare(
@@ -192,6 +242,7 @@ export async function handleWorkspaceMemberAccess(
     .bind(workspaceId, context.userId)
     .first();
   if (!workspace) throw new HttpError(404, "Workspace not found");
+  if (personId !== undefined) return handlePersonOverride(request, env, workspaceId, personId);
   if (request.method === "GET") {
     const policy = await loadWorkspaceMemberAccess(env, workspaceId);
     return json({ restricted: policy !== null, policy });
@@ -204,7 +255,7 @@ export async function handleWorkspaceMemberAccess(
   if (
     !body ||
     typeof body.restricted !== "boolean" ||
-    Object.keys(body).some((key) => !["restricted", "workers"].includes(key))
+    Object.keys(body).some((key) => !["restricted", "workers", "mode"].includes(key))
   )
     throw new HttpError(400, "Invalid member access request");
   if (!body.restricted) {
@@ -215,7 +266,25 @@ export async function handleWorkspaceMemberAccess(
       .run();
     return json({ restricted: false, policy: null });
   }
-  const policy = parseWorkspaceMemberAccessPolicy({ workers: body.workers });
+  const policy = parseWorkspaceMemberAccessPolicy({
+    workers: body.workers,
+    mode: body.mode,
+  });
+  await assertWorkersInWorkspace(env, workspaceId, policy);
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO workspace_member_access(workspace_id,policy_json,updated_at) VALUES(?1,?2,?3)
+     ON CONFLICT(workspace_id) DO UPDATE SET policy_json=excluded.policy_json,updated_at=excluded.updated_at`,
+  )
+    .bind(workspaceId, JSON.stringify(policy), new Date().toISOString())
+    .run();
+  return json({ restricted: true, policy });
+}
+
+async function assertWorkersInWorkspace(
+  env: SecurityEnv,
+  workspaceId: string,
+  policy: WorkspaceMemberAccessPolicy,
+) {
   const inventory = await env.CONCLAVE_DB.prepare(
     "SELECT worker_id AS workerId FROM workspace_worker_inventory WHERE workspace_id = ?1",
   )
@@ -224,11 +293,60 @@ export async function handleWorkspaceMemberAccess(
   const known = new Set(inventory.results.map((row) => row.workerId));
   if (Object.keys(policy.workers).some((id) => !known.has(id)))
     throw new HttpError(400, "Worker is outside this Workspace");
-  await env.CONCLAVE_DB.prepare(
-    `INSERT INTO workspace_member_access(workspace_id,policy_json,updated_at) VALUES(?1,?2,?3)
-     ON CONFLICT(workspace_id) DO UPDATE SET policy_json=excluded.policy_json,updated_at=excluded.updated_at`,
+}
+
+/**
+ * Owner-only per-person override: GET reads it (and the default it replaces),
+ * PUT {workers, mode} replaces the default for this person, DELETE resets to
+ * the Workspace default.
+ */
+async function handlePersonOverride(
+  request: Request,
+  env: SecurityEnv,
+  workspaceId: string,
+  personId: string,
+): Promise<Response> {
+  const person = await env.CONCLAVE_DB.prepare(
+    "SELECT id FROM users WHERE id = ?1",
   )
-    .bind(workspaceId, JSON.stringify(policy), new Date().toISOString())
+    .bind(personId)
+    .first();
+  if (!person) throw new HttpError(404, "Person not found");
+  const read = async () => {
+    const policy = await loadEffectiveMemberAccess(env, workspaceId, personId);
+    const override = await env.CONCLAVE_DB.prepare(
+      "SELECT 1 AS found FROM workspace_member_overrides WHERE workspace_id = ?1 AND user_id = ?2",
+    )
+      .bind(workspaceId, personId)
+      .first();
+    return json({ custom: override !== null, policy });
+  };
+  if (request.method === "GET") return read();
+  if (request.method === "DELETE") {
+    await env.CONCLAVE_DB.prepare(
+      "DELETE FROM workspace_member_overrides WHERE workspace_id = ?1 AND user_id = ?2",
+    )
+      .bind(workspaceId, personId)
+      .run();
+    return read();
+  }
+  if (request.method !== "PUT") throw new HttpError(405, "Unsupported method");
+  const body = (await request.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  if (
+    !body ||
+    Object.keys(body).some((key) => !["workers", "mode"].includes(key))
+  )
+    throw new HttpError(400, "Invalid member access request");
+  const policy = parseWorkspaceMemberAccessPolicy(body);
+  await assertWorkersInWorkspace(env, workspaceId, policy);
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO workspace_member_overrides(workspace_id,user_id,policy_json,updated_at) VALUES(?1,?2,?3,?4)
+     ON CONFLICT(workspace_id,user_id) DO UPDATE SET policy_json=excluded.policy_json,updated_at=excluded.updated_at`,
+  )
+    .bind(workspaceId, personId, JSON.stringify(policy), new Date().toISOString())
     .run();
-  return json({ restricted: true, policy });
+  return read();
 }
