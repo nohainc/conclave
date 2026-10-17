@@ -523,4 +523,85 @@ void main() {
       );
     },
   );
+
+  group('agy presentation', () {
+    final adapter = ProviderActivityAdapter.fromProfile({
+      'providerTool': {'name': 'agy'},
+      'activity': {'adapter': 'agy-stream-json', 'mappings': <Object?>[]},
+    })!;
+
+    Map<String, Object?> tool(String name, Map<String, Object?> params) => {
+      'event': 'step_update',
+      'step_update': {
+        'conversation_id': 'c1',
+        'step_index': 1,
+        'state': 'DONE',
+        'step_type': 'tool',
+        'tool_name': name,
+        'tool_info': {'name': name, 'parameters': params},
+      },
+    };
+
+    test('tool rows say what was done, with a short masked summary', () {
+      final file = adapter.agyToolPresentation(
+        tool('write_to_file', {'TargetFile': '/tmp/work/a.txt'}),
+        'tool.completed',
+      )!;
+      expect(file.title, 'Wrote a file');
+      expect(file.summary, 'a.txt');
+
+      final command = adapter.agyToolPresentation(
+        tool('run_command', {'CommandLine': 'curl -H "token=abcdef123456" x'}),
+        'tool.completed',
+      )!;
+      expect(command.title, 'Ran a command');
+      expect(command.summary, contains('[redacted]'));
+      expect(command.summary, isNot(contains('abcdef123456')));
+
+      expect(
+        adapter
+            .agyToolPresentation(tool('run_command', {}), 'tool.failed')!
+            .title,
+        'Command failed',
+      );
+      expect(
+        adapter
+            .agyToolPresentation(tool('mystery', {}), 'tool.completed')!
+            .title,
+        'Tool completed',
+      );
+    });
+
+    test('answer drops narration already streamed', () {
+      Map<String, Object?> step(int index, String text) => {
+        'event': 'step_update',
+        'step_update': {
+          'conversation_id': 'c1',
+          'step_index': index,
+          'state': 'ACTIVE',
+          'step_type': 'agent_response',
+          'text_delta': text,
+        },
+      };
+      final events = <Object?>[
+        step(1, 'I am checking runs.'),
+        step(3, 'I am fixing format.'),
+        step(5, 'Summary: all fixed.'),
+      ];
+      expect(
+        adapter.answerAfterNarration(
+          events,
+          'I am checking runs.\nI am fixing format.\nSummary: all fixed.',
+        ),
+        'Summary: all fixed.',
+      );
+      // Text that does not start with the narration is left alone.
+      expect(adapter.answerAfterNarration(events, 'Something else'), isNull);
+      // A single step has nothing to remove.
+      expect(
+        adapter.answerAfterNarration([step(1, 'Only')], 'Only'),
+        isNull,
+      );
+    });
+  });
 }

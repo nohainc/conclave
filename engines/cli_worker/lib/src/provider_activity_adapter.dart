@@ -688,6 +688,141 @@ class ProviderActivityAdapter {
     return out;
   }
 
+  /// Friendlier title and one short `summary` for an agy tool row that the
+  /// Profile mapping produced. Returns null for non-agy adapters and events
+  /// that are not tool steps. The summary is one line, secret-masked and
+  /// bounded: a file name, a search term or the start of a shell command.
+  ({String title, String? summary})? agyToolPresentation(
+    Map event,
+    String mappedType,
+  ) {
+    if (kind != 'agy-stream-json' || event['event'] != 'step_update') {
+      return null;
+    }
+    final step = event['step_update'];
+    if (step is! Map || !mappedType.startsWith('tool.')) return null;
+    final name = _safeText(step['tool_name']) ?? '';
+    final (running, done, failed) = switch (name) {
+      'run_command' || 'command_status' || 'send_command_input' => (
+        'Running a command',
+        'Ran a command',
+        'Command failed',
+      ),
+      'view_file' || 'view_file_outline' || 'read_url_content' => (
+        'Reading a file',
+        'Read a file',
+        'Reading a file failed',
+      ),
+      'write_to_file' => (
+        'Writing a file',
+        'Wrote a file',
+        'Writing a file failed',
+      ),
+      'replace_file_content' || 'multi_replace_file_content' || 'edit_file' => (
+        'Editing a file',
+        'Edited a file',
+        'Editing a file failed',
+      ),
+      'grep_search' || 'find_by_name' || 'list_dir' || 'codebase_search' => (
+        'Searching files',
+        'Searched files',
+        'Search failed',
+      ),
+      'search_web' => (
+        'Searching the web',
+        'Searched the web',
+        'Web search failed',
+      ),
+      _ => ('Running a tool', 'Tool completed', 'Tool failed'),
+    };
+    final title = switch (mappedType) {
+      'tool.started' => running,
+      'tool.failed' => failed,
+      _ => done,
+    };
+    final info = step['tool_info'];
+    final params = info is Map && info['parameters'] is Map
+        ? info['parameters'] as Map
+        : const <Object?, Object?>{};
+    String? summary;
+    for (final key in const [
+      'CommandLine',
+      'TargetFile',
+      'AbsolutePath',
+      'FilePath',
+      'Path',
+      'SearchPath',
+      'DirectoryPath',
+      'Query',
+      'Pattern',
+      'Url',
+    ]) {
+      final value = params[key];
+      if (value is! String || value.trim().isEmpty) continue;
+      final isPath = key.endsWith('File') || key.endsWith('Path');
+      var text = value.replaceAll(RegExp(r'[\u0000-\u001f\u007f]+'), ' ').trim();
+      if (isPath) {
+        final parts = text.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty);
+        if (parts.isNotEmpty) text = parts.last;
+      }
+      text = _redactSecrets(text);
+      if (text.length > 100) text = '${text.substring(0, 99).trimRight()}…';
+      summary = text;
+      break;
+    }
+    return (title: title, summary: summary);
+  }
+
+  /// agy's final `response` repeats the text of every earlier assistant step
+  /// (the narration already shown live). Returns [finalText] without that
+  /// leading narration, or null when nothing can be safely removed.
+  String? answerAfterNarration(List<Object?> events, String finalText) {
+    if (kind != 'agy-stream-json') return null;
+    final order = <String>[];
+    final texts = <String, StringBuffer>{};
+    for (final event in events) {
+      if (event is! Map || event['event'] != 'step_update') continue;
+      final step = event['step_update'];
+      if (step is! Map || step['step_type'] != 'agent_response') continue;
+      final index = step['step_index'];
+      if (index is! int || index < 0) continue;
+      final key = '${_safeText(step['conversation_id']) ?? ''}:$index';
+      final buffer = texts.putIfAbsent(key, () {
+        order.add(key);
+        return StringBuffer();
+      });
+      final delta = step['text_delta'];
+      if (delta is String) buffer.write(delta);
+    }
+    if (order.length < 2) return null;
+    final earlier = order
+        .take(order.length - 1)
+        .map((key) => texts[key].toString())
+        .join();
+    // Compare ignoring whitespace: the CLI joins steps with its own spacing.
+    var i = 0;
+    var j = 0;
+    bool space(int unit) =>
+        unit == 0x20 || unit == 0x0a || unit == 0x0d || unit == 0x09;
+    while (true) {
+      while (j < earlier.length && space(earlier.codeUnitAt(j))) {
+        j++;
+      }
+      if (j >= earlier.length) break;
+      while (i < finalText.length && space(finalText.codeUnitAt(i))) {
+        i++;
+      }
+      if (i >= finalText.length ||
+          finalText.codeUnitAt(i) != earlier.codeUnitAt(j)) {
+        return null;
+      }
+      i++;
+      j++;
+    }
+    final rest = finalText.substring(i).trim();
+    return rest.isEmpty ? null : rest;
+  }
+
   /// Ids of Claude background commands that are running right now.
   final Set<String> _claudeBackgroundTasks = <String>{};
 

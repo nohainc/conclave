@@ -2089,6 +2089,15 @@ class CliWorkerEngine {
       }
       final sequence = (_activitySequences[request.requestId] ?? 0) + 1;
       _activitySequences[request.requestId] = sequence;
+      final presentation = decoded is Map
+          ? _providerActivityAdapter?.agyToolPresentation(decoded, mapping.type)
+          : null;
+      final details = presentation?.summary == null
+          ? mapping.details
+          : <String, Object?>{
+              ...mapping.details,
+              'summary': presentation!.summary,
+            };
       events.add(
         WorkerActivity(
           requestId: request.requestId,
@@ -2100,7 +2109,7 @@ class CliWorkerEngine {
           timestamp: DateTime.now().toUtc().toIso8601String(),
           eventType: mapping.type,
           status: mapping.status,
-          title: mapping.title,
+          title: presentation?.title ?? mapping.title,
           activityId: mapping.activityId,
           percentage: mapping.percentage?.toDouble(),
           toolId: mapping.type.startsWith('tool.') ? mapping.activityId : null,
@@ -2109,7 +2118,7 @@ class CliWorkerEngine {
               : mapping.details['toolKind'] is String
               ? mapping.details['toolKind'] as String
               : null,
-          details: mapping.details.isEmpty ? null : mapping.details,
+          details: details.isEmpty ? null : details,
         ),
       );
     }
@@ -2309,6 +2318,12 @@ class CliWorkerEngine {
           if (type == 'mark_failure') markedFailure = true;
         }
       }
+    }
+    if (finalText is String && _providerActivityAdapter != null) {
+      // The live narration was already shown; do not repeat it in the answer.
+      finalText =
+          _providerActivityAdapter!.answerAfterNarration(events, finalText) ??
+          finalText;
     }
     if (mode == 'single_json' && finalText == null) finalText = stdout;
     terminalObserved =
