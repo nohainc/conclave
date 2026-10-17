@@ -210,7 +210,9 @@ it("migrates existing user configuration to the selected Workspace", () => {
     ).toEqual([{ user_id: "U", workspace_id: "A", workflow_id: "direct" }]);
     expect(
       sqlite
-        .prepare("SELECT user_id,workspace_id,workflow_id FROM user_workflow_defaults")
+        .prepare(
+          "SELECT user_id,workspace_id,workflow_id FROM user_workflow_defaults",
+        )
         .all(),
     ).toEqual([{ user_id: "U", workspace_id: "A", workflow_id: "direct" }]);
   } finally {

@@ -17,7 +17,8 @@ Future<bool> hasRunningChildProcesses(int pid) async {
   if (Platform.isWindows) return true;
   try {
     final result = await Process.run('pgrep', ['-P', '$pid']);
-    if (result.exitCode == 0) return (result.stdout as String).trim().isNotEmpty;
+    if (result.exitCode == 0)
+      return (result.stdout as String).trim().isNotEmpty;
     // pgrep exits 1 when nothing matches; any other code means it failed.
     return result.exitCode != 1;
   } on Object {

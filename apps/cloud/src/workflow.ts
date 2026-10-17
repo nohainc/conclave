@@ -1013,10 +1013,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           await waitForTerminalEvent(
             workflowStep,
             `workflow:${task.step.kind}:assignment-wait:${attempt}:${wakeup}`,
-            nextWakeupMs(
-              terminal,
-              effectiveStepTimeoutMs(task.step.timeoutMs),
-            ),
+            nextWakeupMs(terminal, effectiveStepTimeoutMs(task.step.timeoutMs)),
           );
         }
         if (!isTerminalRow(terminal)) {

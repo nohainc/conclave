@@ -199,7 +199,9 @@ void main() {
           },
         }, declarativeMatched: false);
 
-    final first = delta('**Step 1:** Creating [a.txt](file:///var/x/a.txt) and ');
+    final first = delta(
+      '**Step 1:** Creating [a.txt](file:///var/x/a.txt) and ',
+    );
     expect(first.single.type, 'message.updated');
     expect(first.single.activityId, 'agy-msg-c1:1');
     expect(first.single.details['preview'], 'Step 1: Creating a.txt and');
@@ -616,10 +618,7 @@ void main() {
       // Text that does not start with the narration is left alone.
       expect(adapter.answerAfterNarration(events, 'Something else'), isNull);
       // A single step has nothing to remove.
-      expect(
-        adapter.answerAfterNarration([step(1, 'Only')], 'Only'),
-        isNull,
-      );
+      expect(adapter.answerAfterNarration([step(1, 'Only')], 'Only'), isNull);
     });
   });
 

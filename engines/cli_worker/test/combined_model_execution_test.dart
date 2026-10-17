@@ -247,7 +247,10 @@ Future<void> main(List<String> args) async {
         ),
       );
       expect(denied, isA<WorkerErrorFrame>());
-      expect((denied as WorkerErrorFrame).code, WorkerIssueCode.permissionDenied);
+      expect(
+        (denied as WorkerErrorFrame).code,
+        WorkerIssueCode.permissionDenied,
+      );
       final emptyDenied = await exchange(
         ExecuteRequest(
           requestId: 'empty-denied',
@@ -289,7 +292,10 @@ Future<void> main(List<String> args) async {
         ),
       );
       expect(stillEmpty, isA<WorkerErrorFrame>());
-      expect((stillEmpty as WorkerErrorFrame).message, contains('empty answer'));
+      expect(
+        (stillEmpty as WorkerErrorFrame).message,
+        contains('empty answer'),
+      );
       final refreshed =
           await exchange(
                 ProbeRequest(

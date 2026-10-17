@@ -46,7 +46,11 @@ export async function loadSpaceWorkflowDefault(
     .bind(spaceId)
     .first<{ workflowId: string }>();
   if (row) return row.workflowId;
-  const { workspaceId } = await loadWorkflowWorkspace(env, ownerUserId, spaceId);
+  const { workspaceId } = await loadWorkflowWorkspace(
+    env,
+    ownerUserId,
+    spaceId,
+  );
   return loadUserWorkflowDefault(env, ownerUserId, workspaceId);
 }
 

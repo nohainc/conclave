@@ -79,23 +79,27 @@ void main() {
     skip: Platform.isWindows ? 'POSIX shell required' : false,
   );
 
-  test('output keeps resetting the stall clock', () async {
-    final runner = CliStreamingRunner(
-      stallCheckInterval: const Duration(milliseconds: 100),
-    );
-    final lines = <String>[];
-    final result = await runner.run(
-      '/bin/sh',
-      ['-c', 'for i in 1 2 3 4; do echo tick; sleep 0.2; done'],
-      environment: const {'PATH': '/usr/bin:/bin'},
-      workingDirectory: Directory.systemTemp.path,
-      stdinText: '',
-      timeout: const Duration(seconds: 20),
-      onStdoutLine: lines.add,
-      stallLimit: const Duration(milliseconds: 500),
-      childProcessProbe: (_) async => false,
-    );
-    expect(result.exitCode, 0);
-    expect(lines.length, 4);
-  }, skip: Platform.isWindows ? 'POSIX shell required' : false);
+  test(
+    'output keeps resetting the stall clock',
+    () async {
+      final runner = CliStreamingRunner(
+        stallCheckInterval: const Duration(milliseconds: 100),
+      );
+      final lines = <String>[];
+      final result = await runner.run(
+        '/bin/sh',
+        ['-c', 'for i in 1 2 3 4; do echo tick; sleep 0.2; done'],
+        environment: const {'PATH': '/usr/bin:/bin'},
+        workingDirectory: Directory.systemTemp.path,
+        stdinText: '',
+        timeout: const Duration(seconds: 20),
+        onStdoutLine: lines.add,
+        stallLimit: const Duration(milliseconds: 500),
+        childProcessProbe: (_) async => false,
+      );
+      expect(result.exitCode, 0);
+      expect(lines.length, 4);
+    },
+    skip: Platform.isWindows ? 'POSIX shell required' : false,
+  );
 }

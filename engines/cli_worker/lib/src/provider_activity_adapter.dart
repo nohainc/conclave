@@ -297,15 +297,13 @@ class ProviderActivityAdapter {
     final raw = item['text'];
     String? text = raw is String ? raw : null;
     if (text == null && item['content'] is List) {
-      text = (item['content'] as List)
-          .map((entry) {
-            if (entry is String) return entry;
-            if (entry is Map && entry['text'] is String) {
-              return entry['text'] as String;
-            }
-            return '';
-          })
-          .join();
+      text = (item['content'] as List).map((entry) {
+        if (entry is String) return entry;
+        if (entry is Map && entry['text'] is String) {
+          return entry['text'] as String;
+        }
+        return '';
+      }).join();
     }
     final narration = _narrationExcerpt(text);
     if (narration == null) return const [];
@@ -745,7 +743,11 @@ class ProviderActivityAdapter {
         'Ran a command',
         'Command failed',
       ),
-      'file_change' => ('Editing files', 'Edited files', 'Editing files failed'),
+      'file_change' => (
+        'Editing files',
+        'Edited files',
+        'Editing files failed',
+      ),
       'web_search' || 'web_search_call' => (
         'Searching the web',
         'Searched the web',
@@ -859,7 +861,9 @@ class ProviderActivityAdapter {
       final value = params[key];
       if (value is! String || value.trim().isEmpty) continue;
       final isPath = key.endsWith('File') || key.endsWith('Path');
-      var text = value.replaceAll(RegExp(r'[\u0000-\u001f\u007f]+'), ' ').trim();
+      var text = value
+          .replaceAll(RegExp(r'[\u0000-\u001f\u007f]+'), ' ')
+          .trim();
       if (isPath) {
         final parts = text.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty);
         if (parts.isNotEmpty) text = parts.last;

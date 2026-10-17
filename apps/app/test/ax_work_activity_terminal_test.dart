@@ -55,17 +55,17 @@ void main() {
   test('lifecycle rows of a completed request are not shown as failed', () {
     final store = AxWorkActivityStore();
     Map<String, Object?> row(String id, String type, String status, int n) => {
-      'eventId': id,
-      'assignmentId': 'assignment-1',
-      'attemptId': 'attempt-1',
-      'executionId': 'execution-1',
-      'workerId': 'chatgpt',
-      'activitySequence': n,
-      'activityType': type,
-      'activityStatus': status,
-      'title': id,
-      'timestamp': '2026-10-13T00:00:0${n}Z',
-    };
+          'eventId': id,
+          'assignmentId': 'assignment-1',
+          'attemptId': 'attempt-1',
+          'executionId': 'execution-1',
+          'workerId': 'chatgpt',
+          'activitySequence': n,
+          'activityType': type,
+          'activityStatus': status,
+          'title': id,
+          'timestamp': '2026-10-13T00:00:0${n}Z',
+        };
     final request = AxWorkRequest.fromJson({
       'id': 'request-2',
       'prompt': 'say hi',

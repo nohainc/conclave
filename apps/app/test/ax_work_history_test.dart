@@ -100,10 +100,13 @@ void main() {
       () async {
     await seed();
     cache.patchRequest('w', request('31', status: 'queued'));
-    cache.replace('w', [
-      ...cache.peek('w').requests,
-      request('32', status: 'queued'),
-    ], fenceReads: false);
+    cache.replace(
+        'w',
+        [
+          ...cache.peek('w').requests,
+          request('32', status: 'queued'),
+        ],
+        fenceReads: false);
     final read = cache.refreshRequest('w', '32');
     final expectation = expectLater(read, throwsA(isA<AxApiException>()));
     source.detailPending.last

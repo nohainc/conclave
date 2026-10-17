@@ -429,6 +429,7 @@ class WorkspaceCloudConnection {
   final int webSocketFailureLimit;
   final bool credentialAvailable;
   WorkspaceTransport? _transport;
+
   /// Assignments whose Engine process is gone. Null when the Service cannot
   /// tell, in which case no liveness is reported.
   final Set<String> Function()? deadAssignmentIdsProvider;
