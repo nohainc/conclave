@@ -2458,8 +2458,46 @@ class CliWorkerEngine {
         if (terminalStatus != null) 'status=$terminalStatus',
         if (!terminalObserved) 'no terminal event',
         if (text == null || text.isEmpty) 'empty final text',
+        if (text == null || text.isEmpty) _eventShape(events),
       ].join(', '),
     );
+  }
+
+  /// Counts only: which event kinds the provider sent and what its result
+  /// reported. Never contains provider text.
+  String _eventShape(List<Object?> events) {
+    final kinds = <String, int>{};
+    Map? result;
+    for (final event in events) {
+      if (event is! Map) continue;
+      final name = _safeShapeName(event['event'] ?? event['type']);
+      final step = event['step_update'];
+      final kind = step is Map
+          ? '$name/${_safeShapeName(step['step_type'])}'
+          : name;
+      kinds[kind] = (kinds[kind] ?? 0) + 1;
+      if (event['event'] == 'result' && event['result'] is Map) {
+        result = event['result'] as Map;
+      }
+    }
+    final usage = result?['usage'];
+    final parts = <String>[
+      'events: ${kinds.entries.map((e) => '${e.key}=${e.value}').join(' ')}',
+      if (result != null) 'result keys: ${result.keys.take(12).join(',')}',
+      if (result?['response'] is String)
+        'response chars: ${(result!['response'] as String).length}',
+      if (result?['num_turns'] is int) 'turns: ${result!['num_turns']}',
+      if (usage is Map && usage['output_tokens'] is int)
+        'output tokens: ${usage['output_tokens']}',
+      if (usage is Map && usage['thinking_tokens'] is int)
+        'thinking tokens: ${usage['thinking_tokens']}',
+    ];
+    return parts.join('; ');
+  }
+
+  String _safeShapeName(Object? value) {
+    final text = value is String ? value : 'unknown';
+    return RegExp(r'^[A-Za-z0-9_.:-]{1,40}$').hasMatch(text) ? text : 'other';
   }
 
   List<String> _deniedActionNames(List<Object?> entries) {
