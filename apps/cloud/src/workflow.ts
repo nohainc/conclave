@@ -292,6 +292,43 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       .run();
   }
 
+  /** Extends the active Thread lease of this Work Request. Best effort. */
+  private async renewThreadLease(
+    params: ConclaveWorkflowParams,
+  ): Promise<void> {
+    if (!params.workRequestId || !params.threadId) return;
+    try {
+      const runtimeEnv = this.env as ExecutionEnv;
+      const db = runtimeEnv.CONCLAVE_DB;
+      const namespace = runtimeEnv.CONCLAVE_THREAD_COORDINATOR;
+      if (!db || !namespace) return;
+      const lease = await db
+        .prepare(
+          `SELECT id, fencing_token AS fencingToken FROM thread_runtime_leases
+         WHERE work_request_id = ?1 AND thread_id = ?2 AND status = 'active' LIMIT 1`,
+        )
+        .bind(params.workRequestId, params.threadId)
+        .first<{ id: string; fencingToken: number }>();
+      if (!lease) return;
+      await namespace
+        .getByName(params.threadId)
+        .fetch("https://thread-coordinator/heartbeat", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-thread-id": params.threadId,
+          },
+          body: JSON.stringify({
+            workRequestId: params.workRequestId,
+            leaseId: lease.id,
+            fencingToken: lease.fencingToken,
+          }),
+        });
+    } catch {
+      // The lease is only extended opportunistically; the next wake-up retries.
+    }
+  }
+
   private async finishWorkRequest(
     params: ConclaveWorkflowParams,
     status: "completed" | "failed" | "cancelled",
@@ -909,6 +946,11 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             { ...stepConfig, timeout: "30 seconds" },
             async () => {
               const row = await readAssignment();
+              // The Thread lease is a liveness lease, not a time limit: keep
+              // it alive for as long as this Workflow is still watching the
+              // assignment, so a long run is not failed after 20 minutes.
+              if (row && !isTerminalRow(row))
+                await this.renewThreadLease(params);
               // Work waiting for a Service that was not ready is flushed by
               // the Gateway when it becomes ready. Nudging here makes a lost
               // or hibernation-missed readiness event harmless.

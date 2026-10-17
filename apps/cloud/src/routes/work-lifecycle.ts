@@ -76,7 +76,11 @@ async function loadWorkRequestActivityHistory(
                 h.occurred_at AS timestamp
            FROM worker_activity_history h
            JOIN worker_assignments a ON a.id = h.assignment_id
-          WHERE a.work_request_id = ?1
+          WHERE COALESCE(
+                  a.work_request_id,
+                  (SELECT wt.work_request_id FROM workflow_tasks wt
+                    WHERE wt.id = a.task_id)
+                ) = ?1
           ORDER BY h.occurred_at DESC, h.provider_sequence DESC, h.history_id DESC
           LIMIT 256
        )
