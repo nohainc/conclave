@@ -1752,7 +1752,6 @@ class _ThreadPageState extends State<ThreadPage>
         reportingIssueIds: _reportingIssueIds,
         issueReportErrors: _issueReportErrors,
         onRetryStep: widget.dataSource == null ? null : _retryWorkRequestStep,
-        onRerun: _canExecute ? _rerunWorkRequest : null,
         onCancelRun: widget.dataSource == null ? null : _cancelWorkRequest,
         onWorkflowChanged: (value) {
           _updateState(() {
