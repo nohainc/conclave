@@ -128,3 +128,19 @@ and that seeded secrets do not appear. AX list UI is part of Phase 3b/AX work.
 - Still not built: per-person editing of Workers/models/mode in AX (the API
   `member-access/people/:userId` and `AxWorkspacePersonAccessDataSource` exist),
   total run-time quota, and a per-grant Work Root.
+
+## Per-person editor and run-time quota (written, not yet run)
+
+- AX: "Edit access" on each person opens `WorkspaceMemberAccessSection` in person
+  mode (`personSource` + `userId`): Workers, models, efforts and mode, saved as the
+  person's override, with "Reset to default". A person with no policy starts at
+  chat only with nothing shared.
+- Cloud: `max_run_seconds_per_month` on `workspace_person_grants` (migration
+  `0077`, NULL = no limit), set with
+  `PUT /api/workspaces/:id/person-grants/:userId/quota {maxRunSecondsPerMonth}`
+  (60 s to 31 days, or null). Enforced at admission (429) against the person's
+  approximate run seconds in the current UTC month, the same figure shown in
+  "People with access" (`usage.monthSeconds`). It is approximate: running
+  assignments count their time so far, and a request already running is not
+  interrupted when the limit is passed.
+- AX shows "Run time per month" (No limit, 1-100 h) and used-of-limit.
