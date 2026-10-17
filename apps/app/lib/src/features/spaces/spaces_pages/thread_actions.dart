@@ -116,6 +116,32 @@ extension _ThreadActions on _ThreadPageState {
     }
   }
 
+  /// Prompts of this Thread's earlier requests, newest first.
+  List<String> get _requestHistoryPrompts => [
+        for (final request in _workTimeline.reversed)
+          if (!request.id.startsWith('local-') &&
+              request.prompt.trim().isNotEmpty)
+            request.prompt
+      ];
+
+  bool _openRequestHistory(int direction) {
+    if (_requestHistoryOpen) return true;
+    _updateState(() => _requestHistoryOpen = true);
+    return true;
+  }
+
+  void _closeRequestHistory() {
+    if (_requestHistoryOpen) _updateState(() => _requestHistoryOpen = false);
+  }
+
+  void _selectHistoryPrompt(String prompt) {
+    _requestController.value = TextEditingValue(
+      text: prompt,
+      selection: TextSelection.collapsed(offset: prompt.length),
+    );
+    _closeRequestHistory();
+  }
+
   Future<void> _addWorkFiles() async {
     try {
       final selected = await work_request_files.pickWorkRequestFiles();

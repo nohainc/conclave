@@ -173,6 +173,10 @@ class _WorkComposer extends StatelessWidget {
     required this.onCancelRun,
     required this.onWorkflowChanged,
     required this.onRun,
+    this.onHistoryNavigate,
+    this.historyPrompts,
+    this.onHistorySelected,
+    this.onHistoryClosed,
     this.usageController,
   });
 
@@ -214,6 +218,12 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
   final Future<void> Function() onRun;
+  final bool Function(int direction)? onHistoryNavigate;
+
+  /// Newest-first prompts shown in the history panel; null when closed.
+  final List<String>? historyPrompts;
+  final ValueChanged<String>? onHistorySelected;
+  final VoidCallback? onHistoryClosed;
 
   /// Local view state for the Worker usage card; null when the data source
   /// cannot read usage.
@@ -665,6 +675,12 @@ class _WorkComposer extends StatelessWidget {
                 _runComposerCommand(command);
               },
             ),
+          if (historyPrompts != null)
+            _RequestHistoryPanel(
+              prompts: historyPrompts!,
+              onSelected: onHistorySelected ?? (_) {},
+              onClosed: onHistoryClosed ?? () {},
+            ),
           MarkdownComposer(
             controller: requestController,
             hintText: 'Write a message...',
@@ -672,6 +688,7 @@ class _WorkComposer extends StatelessWidget {
             minLines: 1,
             maxLines: 6,
             enabled: canExecute,
+            onHistoryNavigate: onHistoryNavigate,
             onSend: () {
               if (_tryRunSlashCommand()) return;
               onRun();
@@ -2340,4 +2357,131 @@ Widget _messageFooter(Widget? toggle, List<Widget> meta) {
     const SizedBox(width: 8),
     Expanded(child: items),
   ]);
+}
+
+/// Keyboard-driven list of earlier requests, opened with Arrow Up/Down in an
+/// empty composer. Enter copies the highlighted prompt into the composer.
+class _RequestHistoryPanel extends StatefulWidget {
+  const _RequestHistoryPanel({
+    required this.prompts,
+    required this.onSelected,
+    required this.onClosed,
+  });
+
+  final List<String> prompts;
+  final ValueChanged<String> onSelected;
+  final VoidCallback onClosed;
+
+  @override
+  State<_RequestHistoryPanel> createState() => _RequestHistoryPanelState();
+}
+
+class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
+  final _focus = FocusNode(debugLabel: 'request-history');
+  final _scroll = ScrollController();
+  FocusNode? _previousFocus;
+  int _selected = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _previousFocus = FocusManager.instance.primaryFocus;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _previousFocus?.requestFocus();
+    _focus.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _move(int delta) {
+    if (widget.prompts.isEmpty) return;
+    setState(() {
+      _selected = (_selected + delta).clamp(0, widget.prompts.length - 1);
+    });
+    const itemExtent = 48.0;
+    final target = _selected * itemExtent;
+    if (!_scroll.hasClients) return;
+    final position = _scroll.position;
+    if (target < position.pixels) {
+      _scroll.jumpTo(target);
+    } else if (target + itemExtent >
+        position.pixels + position.viewportDimension) {
+      _scroll.jumpTo(target + itemExtent - position.viewportDimension);
+    }
+  }
+
+  void _select(int index) {
+    if (index < 0 || index >= widget.prompts.length) return;
+    widget.onSelected(widget.prompts[index]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Focus(
+        focusNode: _focus,
+        onKeyEvent: (_, event) {
+          if (event is KeyUpEvent) return KeyEventResult.ignored;
+          final key = event.logicalKey;
+          if (key == LogicalKeyboardKey.arrowUp) {
+            _move(1);
+          } else if (key == LogicalKeyboardKey.arrowDown) {
+            _move(-1);
+          } else if (key == LogicalKeyboardKey.enter ||
+              key == LogicalKeyboardKey.numpadEnter) {
+            _select(_selected);
+          } else if (key == LogicalKeyboardKey.escape) {
+            widget.onClosed();
+          } else {
+            return KeyEventResult.ignored;
+          }
+          return KeyEventResult.handled;
+        },
+        child: Container(
+          constraints: const BoxConstraints(maxHeight: 192),
+          decoration: BoxDecoration(
+            border: Border.all(color: colors.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: widget.prompts.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text('No earlier requests in this thread.',
+                      style: TextStyle(fontSize: 12)),
+                )
+              : ListView.builder(
+                  controller: _scroll,
+                  shrinkWrap: true,
+                  itemExtent: 48,
+                  itemCount: widget.prompts.length,
+                  itemBuilder: (context, index) => InkWell(
+                    onTap: () => _select(index),
+                    child: Container(
+                      color: index == _selected
+                          ? colors.primary.withValues(alpha: 0.12)
+                          : null,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        widget.prompts[index].trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
 }

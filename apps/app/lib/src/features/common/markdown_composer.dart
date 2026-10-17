@@ -105,11 +105,16 @@ class MarkdownComposer extends StatefulWidget {
       this.maxLines = 8,
       this.showMarkdownControls = true,
       this.showMarkdownControlsInSuffix = true,
-      this.showSendInSuffix = true});
+      this.showSendInSuffix = true,
+      this.onHistoryNavigate});
 
   final TextEditingController controller;
   final VoidCallback? onSend;
   final VoidCallback? onSubmit;
+
+  /// Called for Arrow Up (-1) / Arrow Down (1) while the input is empty.
+  /// Returns true when it handled the key (e.g. opened request history).
+  final bool Function(int direction)? onHistoryNavigate;
   final Widget Function(GlobalKey inputKey)? additionalControlsBuilder;
   final Widget Function(GlobalKey inputKey)? executionControlsBuilder;
   final bool sendEnabled;
@@ -312,81 +317,108 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                       meta: modifier, control: !modifier): _submit,
               },
             },
-            child: TextField(
-              controller: widget.controller,
-              enabled: widget.enabled,
-              focusNode: _focus,
-              autofocus: widget.autofocus,
-              keyboardType: TextInputType.multiline,
-              textInputAction: TextInputAction.newline,
-              style: widget.chatStyle
-                  ? ConclaveMessageTypography.fromTheme(Theme.of(context))
-                  : null,
-              minLines:
-                  widget.chatStyle || widget.compact ? 1 : widget.minLines,
-              maxLines: widget.maxLines,
-              decoration: InputDecoration(
-                labelText: widget.labelText,
-                hintText: widget.hintText,
-                // Same muted color as the message date/time.
-                hintStyle: TextStyle(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white38
-                      : Colors.black45,
-                ),
-                isDense: widget.chatStyle,
-                hoverColor: Colors.transparent,
-                contentPadding: widget.chatStyle
-                    ? const EdgeInsets.fromLTRB(14, 12, 10, 12)
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: (_, event) {
+                final navigate = widget.onHistoryNavigate;
+                if (navigate == null || event is KeyUpEvent) {
+                  return KeyEventResult.ignored;
+                }
+                final up = event.logicalKey == LogicalKeyboardKey.arrowUp;
+                final down = event.logicalKey == LogicalKeyboardKey.arrowDown;
+                final keyboard = HardwareKeyboard.instance;
+                if ((!up && !down) ||
+                    keyboard.isShiftPressed ||
+                    keyboard.isMetaPressed ||
+                    keyboard.isControlPressed ||
+                    keyboard.isAltPressed) {
+                  return KeyEventResult.ignored;
+                }
+                if (widget.controller.text.isNotEmpty) {
+                  return KeyEventResult.ignored;
+                }
+                return navigate(up ? -1 : 1)
+                    ? KeyEventResult.handled
+                    : KeyEventResult.ignored;
+              },
+              child: TextField(
+                controller: widget.controller,
+                enabled: widget.enabled,
+                focusNode: _focus,
+                autofocus: widget.autofocus,
+                keyboardType: TextInputType.multiline,
+                textInputAction: TextInputAction.newline,
+                style: widget.chatStyle
+                    ? ConclaveMessageTypography.fromTheme(Theme.of(context))
                     : null,
-                suffixIcon: widget.chatStyle &&
-                        ((widget.showMarkdownControls &&
-                                widget.showMarkdownControlsInSuffix) ||
-                            (widget.onSend != null &&
-                                !widget.sendInToolbar &&
-                                widget.showSendInSuffix))
-                    ? Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (widget.showMarkdownControls &&
-                              widget.showMarkdownControlsInSuffix)
-                            IconButton(
-                              tooltip: _showFormatting
-                                  ? 'Hide Markdown controls'
-                                  : 'Show Markdown controls',
-                              icon: Icon(
-                                Icons.text_format,
-                                size: 18,
-                                color: _controlColor,
-                              ),
-                              onPressed: () => setState(
-                                  () => _showFormatting = !_showFormatting),
-                            ),
-                          if (widget.onSend != null &&
-                              !widget.sendInToolbar &&
-                              widget.showSendInSuffix)
-                            IconButton(
-                              key: ValueKey(
-                                  'composer-send-${widget.sendTooltip}'),
-                              tooltip: widget.showSendTooltip
-                                  ? widget.sendTooltip
-                                  : null,
-                              onPressed: widget.enabled && widget.sendEnabled
-                                  ? widget.onSend
-                                  : null,
-                              color: _controlColor,
-                              icon: Icon(Icons.send_rounded,
+                minLines:
+                    widget.chatStyle || widget.compact ? 1 : widget.minLines,
+                maxLines: widget.maxLines,
+                decoration: InputDecoration(
+                  labelText: widget.labelText,
+                  hintText: widget.hintText,
+                  // Same muted color as the message date/time.
+                  hintStyle: TextStyle(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white38
+                        : Colors.black45,
+                  ),
+                  isDense: widget.chatStyle,
+                  hoverColor: Colors.transparent,
+                  contentPadding: widget.chatStyle
+                      ? const EdgeInsets.fromLTRB(14, 12, 10, 12)
+                      : null,
+                  suffixIcon: widget.chatStyle &&
+                          ((widget.showMarkdownControls &&
+                                  widget.showMarkdownControlsInSuffix) ||
+                              (widget.onSend != null &&
+                                  !widget.sendInToolbar &&
+                                  widget.showSendInSuffix))
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (widget.showMarkdownControls &&
+                                widget.showMarkdownControlsInSuffix)
+                              IconButton(
+                                tooltip: _showFormatting
+                                    ? 'Hide Markdown controls'
+                                    : 'Show Markdown controls',
+                                icon: Icon(
+                                  Icons.text_format,
                                   size: 18,
-                                  semanticLabel: widget.showSendTooltip
-                                      ? null
-                                      : widget.sendTooltip),
-                            ),
-                        ],
-                      )
-                    : null,
-                border: widget.chatStyle ? InputBorder.none : InputBorder.none,
-                enabledBorder: widget.chatStyle ? InputBorder.none : null,
-                focusedBorder: widget.chatStyle ? InputBorder.none : null,
+                                  color: _controlColor,
+                                ),
+                                onPressed: () => setState(
+                                    () => _showFormatting = !_showFormatting),
+                              ),
+                            if (widget.onSend != null &&
+                                !widget.sendInToolbar &&
+                                widget.showSendInSuffix)
+                              IconButton(
+                                key: ValueKey(
+                                    'composer-send-${widget.sendTooltip}'),
+                                tooltip: widget.showSendTooltip
+                                    ? widget.sendTooltip
+                                    : null,
+                                onPressed: widget.enabled && widget.sendEnabled
+                                    ? widget.onSend
+                                    : null,
+                                color: _controlColor,
+                                icon: Icon(Icons.send_rounded,
+                                    size: 18,
+                                    semanticLabel: widget.showSendTooltip
+                                        ? null
+                                        : widget.sendTooltip),
+                              ),
+                          ],
+                        )
+                      : null,
+                  border:
+                      widget.chatStyle ? InputBorder.none : InputBorder.none,
+                  enabledBorder: widget.chatStyle ? InputBorder.none : null,
+                  focusedBorder: widget.chatStyle ? InputBorder.none : null,
+                ),
               ),
             ),
           ),
