@@ -1135,7 +1135,8 @@ class _ThreadPageState extends State<ThreadPage>
       _followWork = _followChat = true;
       _chatSeenId = _workSeenId = null;
       _openChatPending = _openWorkPending = true;
-      _workActivityStore.clear();
+      // Activity is keyed by assignment, so it is kept: returning to a Thread
+      // shows its earlier operations immediately while details reload.
       _cancelTerminalActivityChecks();
       unawaited(_restoreThreadViewState());
     } else if (oldWidget.currentUserId != widget.currentUserId) {

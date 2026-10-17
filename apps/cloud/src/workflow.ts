@@ -61,6 +61,13 @@ const REVOCATION_CONFIRMATION_ROUND_MS = 10_000;
  * assignment in D1. Bounds the delay caused by a lost event.
  */
 export const ASSIGNMENT_RECONCILIATION_INTERVAL_MS = 30_000;
+/**
+ * A long run is re-read less often: an 8 hour step at 30 seconds would exceed
+ * the Workflow step budget. Terminal events still wake the Workflow at once;
+ * this only bounds the delay after a lost event.
+ */
+export const LONG_RUN_RECONCILIATION_INTERVAL_MS = 120_000;
+const LONG_RUN_AFTER_MS = 10 * 60_000;
 const WAKEUP_SLACK = 20;
 
 interface WakeupRow {
@@ -101,6 +108,14 @@ export function nextWakeupMs(
   now = Date.now(),
 ): number {
   let wait = ASSIGNMENT_RECONCILIATION_INTERVAL_MS;
+  const runningSince = row?.runningAt ? Date.parse(row.runningAt) : NaN;
+  if (
+    row?.status === "running" &&
+    Number.isFinite(runningSince) &&
+    now - runningSince > LONG_RUN_AFTER_MS
+  ) {
+    wait = LONG_RUN_RECONCILIATION_INTERVAL_MS;
+  }
   const deadline = row ? phaseDeadline(row, timeoutMs) : null;
   if (deadline) {
     const started = Date.parse(deadline.startedAt);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ASSIGNMENT_RECONCILIATION_INTERVAL_MS,
+  LONG_RUN_RECONCILIATION_INTERVAL_MS,
   nextWakeupMs,
   providerExecutionOverrun,
 } from "../src/workflow.js";
@@ -15,6 +16,13 @@ describe("Workflow terminal wait", () => {
     const row = { ...base, status: "running", runningAt: iso(0) };
     expect(nextWakeupMs(row, 600_000, t0 + 1_000)).toBe(
       ASSIGNMENT_RECONCILIATION_INTERVAL_MS,
+    );
+  });
+
+  it("re-reads a long run less often to stay inside the Workflow step budget", () => {
+    const row = { ...base, status: "running", runningAt: iso(0) };
+    expect(nextWakeupMs(row, 8 * 3_600_000, t0 + 11 * 60_000)).toBe(
+      LONG_RUN_RECONCILIATION_INTERVAL_MS,
     );
   });
 

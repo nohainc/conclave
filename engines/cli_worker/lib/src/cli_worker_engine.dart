@@ -86,7 +86,7 @@ class CliWorkerEngine {
     ),
     CliStreamingRunner? streamingRunner,
     EngineLogger logger = const EngineLogger(),
-    this.providerStallLimit = const Duration(minutes: 15),
+    this.providerStallLimit = const Duration(minutes: 60),
   }) : _locator = locator,
        _commandRunner = commandRunner,
        _streamingRunner =

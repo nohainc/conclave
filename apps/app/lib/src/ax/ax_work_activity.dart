@@ -311,6 +311,11 @@ class AxWorkActivityStore extends ChangeNotifier {
   static Set<String> assignmentIdsFor(AxWorkRequest request) => {
         ...request.steps.map((step) => step.assignmentId).whereType<String>(),
         ...request.turns.map((turn) => turn.assignmentId).whereType<String>(),
+        // Persisted history names its assignment, so it still resolves when a
+        // detail read returns steps without one.
+        ...request.activityHistory
+            .map((item) => item['assignmentId'])
+            .whereType<String>(),
       };
 
   /// Fires only when activity for one of this request's assignments changes,

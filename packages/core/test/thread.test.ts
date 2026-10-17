@@ -352,7 +352,7 @@ describe("Thread domain", () => {
 
 describe("step hard cap", () => {
   it("raises the declared 15 minute timeout to the 2 hour cap at dispatch", () => {
-    expect(STEP_HARD_CAP_MS).toBe(2 * 60 * 60 * 1000);
+    expect(STEP_HARD_CAP_MS).toBe(8 * 60 * 60 * 1000);
     expect(effectiveStepTimeoutMs(15 * 60 * 1000)).toBe(STEP_HARD_CAP_MS);
     expect(effectiveStepTimeoutMs(STEP_HARD_CAP_MS + 1)).toBe(
       STEP_HARD_CAP_MS + 1,

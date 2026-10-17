@@ -112,7 +112,7 @@ export interface WorkRequestSnapshot {
  * Workflow definition, because existing Work Request snapshots must keep
  * matching their canonical definition.
  */
-export const STEP_HARD_CAP_MS = 2 * 60 * 60 * 1000;
+export const STEP_HARD_CAP_MS = 8 * 60 * 60 * 1000;
 
 export function effectiveStepTimeoutMs(declaredMs: number): number {
   return Math.max(declaredMs, STEP_HARD_CAP_MS);

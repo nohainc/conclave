@@ -30,7 +30,7 @@ export type CoordinatorLeaseRow = {
   expiresAt: string;
 };
 
-export const THREAD_LEASE_MS = 20 * 60_000;
+export const THREAD_LEASE_MS = 30 * 60_000;
 
 export function selectNextStatefulRequest(
   rows: readonly CoordinatorRequestRow[],
