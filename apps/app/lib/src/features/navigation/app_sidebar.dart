@@ -319,18 +319,33 @@ class AppSidebar extends StatelessWidget {
                             ),
                           ),
                         )),
-                    Semantics(
-                        label: 'Notifications',
+                    shellContext.watchNotifications(() {
+                      final count = shellContext.unreadNotificationCount;
+                      return Semantics(
+                        label: count > 0
+                            ? '$count unread notifications'
+                            : 'Notifications',
                         child: Tooltip(
                           excludeFromSemantics: true,
-                          message: 'Notifications',
+                          message: count > 0
+                              ? '$count unread notifications'
+                              : 'Notifications',
                           child: IconButton(
                             onPressed: onOpenNotifications,
-                            icon: const Icon(
-                              Icons.notifications_none_rounded,
-                              size: 18,
-                              color: Colors.white60,
-                            ),
+                            icon: count > 0
+                                ? Badge.count(
+                                    count: count,
+                                    child: const Icon(
+                                      Icons.notifications_none_rounded,
+                                      size: 18,
+                                      color: Colors.white60,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.notifications_none_rounded,
+                                    size: 18,
+                                    color: Colors.white60,
+                                  ),
                             splashRadius: 14,
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(
@@ -343,7 +358,9 @@ class AppSidebar extends StatelessWidget {
                               ),
                             ),
                           ),
-                        )),
+                        ),
+                      );
+                    }),
                   ],
                 ),
               ),
@@ -722,26 +739,28 @@ class AppIconRail extends StatelessWidget {
           ],
 
           // Notifications Alarm icon
-          _railIconButton(
-            icon: Icons.notifications_outlined,
-            tooltip: 'Notifications',
-            onPressed: onOpenNotifications,
-            iconWidget: shellContext.watchNotifications(
-                () => shellContext.unreadNotificationCount > 0
-                    ? Badge.count(
-                        count: shellContext.unreadNotificationCount,
-                        child: const Icon(
-                          Icons.notifications_outlined,
-                          size: 20,
-                          color: Colors.white70,
-                        ),
-                      )
-                    : const Icon(
+          shellContext.watchNotifications(() {
+            final count = shellContext.unreadNotificationCount;
+            return _railIconButton(
+              icon: Icons.notifications_outlined,
+              tooltip: count > 0 ? '$count unread notifications' : 'Notifications',
+              onPressed: onOpenNotifications,
+              iconWidget: count > 0
+                  ? Badge.count(
+                      count: count,
+                      child: const Icon(
                         Icons.notifications_outlined,
                         size: 20,
                         color: Colors.white70,
-                      )),
-          ),
+                      ),
+                    )
+                  : const Icon(
+                      Icons.notifications_outlined,
+                      size: 20,
+                      color: Colors.white70,
+                    ),
+            );
+          }),
           const SizedBox(height: 6),
 
           // Space & Thread Switcher MenuAnchor using matching popup style

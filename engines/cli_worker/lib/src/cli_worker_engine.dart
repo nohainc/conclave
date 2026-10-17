@@ -2090,7 +2090,7 @@ class CliWorkerEngine {
       final sequence = (_activitySequences[request.requestId] ?? 0) + 1;
       _activitySequences[request.requestId] = sequence;
       final presentation = decoded is Map
-          ? _providerActivityAdapter?.agyToolPresentation(decoded, mapping.type)
+          ? _providerActivityAdapter?.toolPresentation(decoded, mapping.type)
           : null;
       final details = presentation?.summary == null
           ? mapping.details

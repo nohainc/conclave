@@ -503,6 +503,7 @@ class ProviderActivityAdapter {
       // A new run: nothing from an earlier one carries over.
       _claudeBackgroundTasks.clear();
       _claudeToolTitles.clear();
+      _claudeToolSummaries.clear();
       return const <ProviderActivityObservation>[
         ProviderActivityObservation(
           type: 'model.started',
@@ -559,9 +560,19 @@ class ProviderActivityAdapter {
             final id = _safeText(block['id']);
             final name = _safeText(block['name']) ?? 'tool';
             if (id != null) {
-              if (_claudeToolTitles.length >= 256) _claudeToolTitles.clear();
+              if (_claudeToolTitles.length >= 256) {
+                _claudeToolTitles.clear();
+                _claudeToolSummaries.clear();
+              }
               _claudeToolTitles[id] = _claudeToolTitle(name);
+              final summary = _claudeToolSummary(block['input']);
+              if (summary != null) {
+                _claudeToolSummaries[id] = summary;
+              } else {
+                _claudeToolSummaries.remove(id);
+              }
             }
+            final startSummary = _claudeToolSummary(block['input']);
             observations.add(
               ProviderActivityObservation(
                 type: 'tool.started',
@@ -577,6 +588,7 @@ class ProviderActivityAdapter {
                     ),
                 details: {
                   ..._toolDetails(name),
+                  if (startSummary != null) 'summary': startSummary,
                   if (id == null) 'identifierSource': 'generated',
                 },
               ),
@@ -622,6 +634,10 @@ class ProviderActivityAdapter {
               failed: failed,
             ),
             activityId: id,
+            details: {
+              if (_claudeToolSummaries.remove(id) case final summary?)
+                'summary': summary,
+            },
           ),
         );
       }
@@ -686,6 +702,89 @@ class ProviderActivityAdapter {
       });
     }
     return out;
+  }
+
+  /// Title and short `summary` for a tool row the Profile mapping produced.
+  /// Dispatches by provider; null when the adapter has nothing better to say.
+  ({String title, String? summary})? toolPresentation(
+    Map event,
+    String mappedType,
+  ) {
+    if (!mappedType.startsWith('tool.')) return null;
+    return switch (kind) {
+      'agy-stream-json' => agyToolPresentation(event, mappedType),
+      'codex-jsonl' => _codexToolPresentation(event, mappedType),
+      _ => null,
+    };
+  }
+
+  /// One line, control characters removed, secrets masked, at most 100
+  /// characters. Paths keep only their last segment.
+  String? _shortSummary(Object? raw, {bool path = false}) {
+    if (raw is! String) return null;
+    var text = raw.replaceAll(RegExp(r'[\u0000-\u001f\u007f]+'), ' ').trim();
+    if (text.isEmpty) return null;
+    if (path) {
+      final parts = text.split(RegExp(r'[\\/]')).where((p) => p.isNotEmpty);
+      if (parts.isNotEmpty) text = parts.last;
+    }
+    text = _redactSecrets(text);
+    if (text.length > 100) text = '${text.substring(0, 99).trimRight()}…';
+    return text;
+  }
+
+  ({String title, String? summary})? _codexToolPresentation(
+    Map event,
+    String mappedType,
+  ) {
+    final item = event['item'];
+    if (item is! Map) return null;
+    final (running, done, failed) = switch (item['type']) {
+      'command_execution' => (
+        'Running a command',
+        'Ran a command',
+        'Command failed',
+      ),
+      'file_change' => ('Editing files', 'Edited files', 'Editing files failed'),
+      'web_search' || 'web_search_call' => (
+        'Searching the web',
+        'Searched the web',
+        'Web search failed',
+      ),
+      'mcp_tool_call' => (
+        'Using a connected tool',
+        'Used a connected tool',
+        'Connected tool failed',
+      ),
+      _ => ('Running a tool', 'Tool completed', 'Tool failed'),
+    };
+    final title = switch (mappedType) {
+      'tool.started' => running,
+      'tool.failed' => failed,
+      _ => done,
+    };
+    String? summary;
+    switch (item['type']) {
+      case 'command_execution':
+        summary = _shortSummary(item['command']);
+      case 'file_change':
+        final changes = item['changes'];
+        if (changes is List && changes.isNotEmpty) {
+          final first = changes.first;
+          summary = _shortSummary(
+            first is Map ? first['path'] : null,
+            path: true,
+          );
+          if (summary != null && changes.length > 1) {
+            summary = '$summary +${changes.length - 1} more';
+          }
+        }
+      case 'web_search' || 'web_search_call':
+        summary = _shortSummary(item['query']);
+      case 'mcp_tool_call':
+        summary = _shortSummary(item['tool']);
+    }
+    return (title: title, summary: summary);
   }
 
   /// Friendlier title and one short `summary` for an agy tool row that the
@@ -829,6 +928,24 @@ class ProviderActivityAdapter {
   /// Running tool titles by `tool_use` id, so the completion row can say what
   /// finished instead of a generic "Tool finished".
   final Map<String, String> _claudeToolTitles = <String, String>{};
+
+  /// Short descriptions of running Claude tools, for the completion row.
+  final Map<String, String> _claudeToolSummaries = <String, String>{};
+
+  /// A file name, search term or the start of a command from a `tool_use`
+  /// input. Only these well-known keys are read; the result is masked.
+  String? _claudeToolSummary(Object? input) {
+    if (input is! Map) return null;
+    for (final key in const ['command', 'pattern', 'query', 'url']) {
+      final value = _shortSummary(input[key]);
+      if (value != null) return value;
+    }
+    for (final key in const ['file_path', 'path', 'notebook_path']) {
+      final value = _shortSummary(input[key], path: true);
+      if (value != null) return value;
+    }
+    return _shortSummary(input['description']);
+  }
 
   String _claudeFinishedTitle(String? runningTitle, {required bool failed}) {
     final done = switch (runningTitle) {

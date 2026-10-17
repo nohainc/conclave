@@ -604,4 +604,60 @@ void main() {
       );
     });
   });
+
+  test('Claude tool rows carry a short summary on start and finish', () {
+    final adapter = ProviderActivityAdapter.fromProfile({
+      'providerTool': {'name': 'claude'},
+      'activity': {'adapter': 'claude-stream-json', 'mappings': <Object?>[]},
+    })!;
+    final started = adapter.normalizeEvent({
+      'type': 'assistant',
+      'message': {
+        'id': 'm1',
+        'content': [
+          {
+            'type': 'tool_use',
+            'id': 't1',
+            'name': 'Bash',
+            'input': {'command': 'git status'},
+          },
+        ],
+      },
+    }, declarativeMatched: false);
+    expect(started.single.details['summary'], 'git status');
+    final finished = adapter.normalizeEvent({
+      'type': 'user',
+      'message': {
+        'content': [
+          {'type': 'tool_result', 'tool_use_id': 't1', 'content': 'ok'},
+        ],
+      },
+    }, declarativeMatched: false);
+    expect(finished.single.title, 'Ran a command');
+    expect(finished.single.details['summary'], 'git status');
+  });
+
+  test('Codex tool rows get a title and summary', () {
+    final adapter = ProviderActivityAdapter.fromProfile({
+      'providerTool': {'name': 'codex'},
+      'activity': {'adapter': 'codex-jsonl', 'mappings': <Object?>[]},
+    })!;
+    final done = adapter.toolPresentation({
+      'type': 'item.completed',
+      'item': {'type': 'command_execution', 'command': 'ls -la'},
+    }, 'tool.completed')!;
+    expect(done.title, 'Ran a command');
+    expect(done.summary, 'ls -la');
+    final edit = adapter.toolPresentation({
+      'type': 'item.completed',
+      'item': {
+        'type': 'file_change',
+        'changes': [
+          {'path': '/repo/lib/a.dart'},
+          {'path': '/repo/lib/b.dart'},
+        ],
+      },
+    }, 'tool.completed')!;
+    expect(edit.summary, 'a.dart +1 more');
+  });
 }
