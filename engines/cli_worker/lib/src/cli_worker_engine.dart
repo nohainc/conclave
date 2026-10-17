@@ -551,7 +551,11 @@ class CliWorkerEngine {
                         '(exit ${liveResult.exitCode}, '
                         'issue ${liveOutput.issueCode ?? 'none'}, '
                         'final text '
-                        '${liveOutput.finalText == null ? 'missing' : liveOutput.finalText?.trim() == _liveProbeExpectedText ? 'matched' : 'differed'}). '
+                        '${liveOutput.finalText == null
+                            ? 'missing'
+                            : liveOutput.finalText?.trim() == _liveProbeExpectedText
+                            ? 'matched'
+                            : 'differed'}). '
                         'Arguments: ${liveArguments.join(' ')}. '
                         'Environment keys: ${(liveEnvironment.keys.toList()..sort()).join(',')}. '
                         'Stderr: ${_liveStderrExcerpt(liveResult.stderr)}',
@@ -2616,6 +2620,7 @@ class _InterpretedOutput {
 bool _isSemver(String value) => RegExp(
   r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$',
 ).hasMatch(value);
+
 /// Removes terminal control sequences so a CLI report renders as plain text.
 String _stripAnsi(String value) => value.replaceAll(
   RegExp(r'\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\))'),

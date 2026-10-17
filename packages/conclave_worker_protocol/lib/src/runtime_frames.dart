@@ -103,7 +103,8 @@ final class UsageRequest extends WorkerFrame {
       'requestId',
       WorkerProtocolLimits.maxRequestIdLength,
     );
-    if (timeoutMs < 1000 || timeoutMs > WorkerProtocolLimits.maxUsageTimeoutMs) {
+    if (timeoutMs < 1000 ||
+        timeoutMs > WorkerProtocolLimits.maxUsageTimeoutMs) {
       throw const FormatException('usage timeout is outside the allowed range');
     }
   }
