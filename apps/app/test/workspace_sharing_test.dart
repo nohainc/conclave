@@ -1,6 +1,7 @@
 import 'package:conclave_app/src/ax/ax_workspace_member_access.dart';
 import 'package:conclave_app/src/features/workspace/workspace_sharing_section.dart';
 import 'package:flutter/material.dart';
+import 'workflow_editor_test.dart' show worker;
 import 'package:flutter_test/flutter_test.dart';
 
 class SharingSource implements AxWorkspaceSharingDataSource {
@@ -45,12 +46,51 @@ class SharingSource implements AxWorkspaceSharingDataSource {
   Future<void> setPersonQuota(String w, String userId, int limit) async =>
       calls.add('quota:$userId:$limit');
   @override
+  Future<void> setPersonRunTimeLimit(String w, String userId, int? s) async =>
+      calls.add('runtime:$userId:$s');
+  @override
   Future<List<AxMyWorkspaceInvitation>> loadMyWorkspaceInvitations() async =>
       mine;
   @override
   Future<void> acceptWorkspaceInvitation(String id) async {
     calls.add('accept:$id');
     mine = const [];
+  }
+}
+
+class AccessOnlySource implements AxWorkspaceMemberAccessDataSource {
+  @override
+  Future<AxWorkspaceMemberAccess> loadWorkspaceMemberAccess(String w) async =>
+      const AxWorkspaceMemberAccess();
+  @override
+  Future<AxWorkspaceMemberAccess> saveWorkspaceMemberAccess(
+          String w, AxWorkspaceMemberAccess next) async =>
+      next;
+}
+
+class PersonAccessSource implements AxWorkspacePersonAccessDataSource {
+  final saved = <AxWorkspaceMemberAccess>[];
+  int resets = 0;
+  bool custom = false;
+  @override
+  Future<AxPersonAccess> loadPersonAccess(String w, String userId) async =>
+      AxPersonAccess(
+          custom: custom,
+          access: const AxWorkspaceMemberAccess(
+              restricted: true, mode: 'chat', workers: {}));
+  @override
+  Future<AxPersonAccess> savePersonAccess(
+      String w, String userId, AxWorkspaceMemberAccess next) async {
+    saved.add(next);
+    custom = true;
+    return AxPersonAccess(custom: true, access: next);
+  }
+
+  @override
+  Future<AxPersonAccess> resetPersonAccess(String w, String userId) async {
+    resets++;
+    custom = false;
+    return loadPersonAccess(w, userId);
   }
 }
 
@@ -106,6 +146,45 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('sharing-confirm-revoke')));
     await tester.pumpAndSettle();
     expect(source.calls, ['invite:a@b.test', 'cancel:i1', 'revoke:guest']);
+  });
+
+  testWidgets('owner sets a monthly run-time limit', (tester) async {
+    final source = SharingSource();
+    await pump(tester,
+        WorkspaceSharingSection(workspaceId: 'ws', source: source));
+    await tester.tap(find.byKey(const ValueKey('sharing-runtime-guest')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('10 h').last);
+    await tester.pumpAndSettle();
+    expect(source.calls, ['runtime:guest:36000']);
+  });
+
+  testWidgets('owner edits one person: Workers and mode, then resets',
+      (tester) async {
+    final source = SharingSource();
+    final access = PersonAccessSource();
+    await pump(
+        tester,
+        WorkspaceSharingSection(
+            workspaceId: 'ws',
+            source: source,
+            memberAccessSource: AccessOnlySource(),
+            personAccessSource: access,
+            workers: [worker('a')]));
+    await tester.tap(find.byKey(const ValueKey('sharing-edit-guest')));
+    await tester.pumpAndSettle();
+    expect(find.text('Access for Guest'), findsOneWidget);
+    // No Workers shared yet, and the default mode is the safest one.
+    await tester.tap(find.byKey(const ValueKey('share-worker-a')));
+    await tester.tap(find.byKey(const ValueKey('member-mode-work')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('member-access-save')));
+    await tester.pumpAndSettle();
+    expect(access.saved.single.mode, 'work');
+    expect(access.saved.single.workers.keys, ['a']);
+    await tester.tap(find.byKey(const ValueKey('person-access-reset')));
+    await tester.pumpAndSettle();
+    expect(access.resets, 1);
   });
 
   testWidgets('an invited person accepts and the banner clears',

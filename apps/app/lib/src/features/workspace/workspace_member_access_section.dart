@@ -16,11 +16,21 @@ class WorkspaceMemberAccessSection extends StatefulWidget {
     required this.workspaceId,
     required this.workers,
     required this.source,
-  });
+    this.personSource,
+    this.userId,
+    this.personName,
+  }) : assert((personSource == null) == (userId == null));
 
   final String workspaceId;
   final List<AxWorker> workers;
   final AxWorkspaceMemberAccessDataSource source;
+
+  /// When set, edits one person's access instead of the Workspace default:
+  /// the policy always applies (no "limit" switch) and can be reset to the
+  /// default.
+  final AxWorkspacePersonAccessDataSource? personSource;
+  final String? userId;
+  final String? personName;
 
   @override
   State<WorkspaceMemberAccessSection> createState() =>
@@ -56,7 +66,11 @@ class _WorkspaceMemberAccessSectionState
     });
     final workspaceId = widget.workspaceId;
     try {
-      final access = await widget.source.loadWorkspaceMemberAccess(workspaceId);
+      final person = widget.personSource;
+      final access = person == null
+          ? await widget.source.loadWorkspaceMemberAccess(workspaceId)
+          : await _personAccess(
+              await person.loadPersonAccess(workspaceId, widget.userId!));
       if (!mounted || workspaceId != widget.workspaceId) return;
       setState(() => _adopt(access));
     } catch (error) {
@@ -67,6 +81,35 @@ class _WorkspaceMemberAccessSectionState
       if (mounted && workspaceId == widget.workspaceId) {
         setState(() => _loading = false);
       }
+    }
+  }
+
+  /// A person's policy always applies, so it is edited as a restricted one that
+  /// starts at the safest mode.
+  AxWorkspaceMemberAccess _personAccess(AxPersonAccess person) {
+    _custom = person.custom;
+    return AxWorkspaceMemberAccess(
+        restricted: true,
+        mode: person.access.mode ?? 'chat',
+        workers: person.access.workers);
+  }
+
+  bool _custom = false;
+  bool get _isPerson => widget.personSource != null;
+
+  Future<void> _reset() async {
+    setState(() => _saving = true);
+    try {
+      final next = await widget.personSource!
+          .resetPersonAccess(widget.workspaceId, widget.userId!);
+      if (mounted) setState(() => _adopt(_personAccess(next)));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showNotice(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -102,12 +145,16 @@ class _WorkspaceMemberAccessSectionState
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final access = await widget.source.saveWorkspaceMemberAccess(
-          widget.workspaceId,
-          AxWorkspaceMemberAccess(
-              restricted: _restricted,
-              mode: _restricted ? _mode : null,
-              workers: _restricted ? _workers : const {}));
+      final next = AxWorkspaceMemberAccess(
+          restricted: _restricted,
+          mode: _restricted ? _mode : null,
+          workers: _restricted ? _workers : const {});
+      final person = widget.personSource;
+      final access = person == null
+          ? await widget.source
+              .saveWorkspaceMemberAccess(widget.workspaceId, next)
+          : _personAccess(await person.savePersonAccess(
+              widget.workspaceId, widget.userId!, next));
       if (mounted) setState(() => _adopt(access));
     } catch (error) {
       if (mounted) {
@@ -138,12 +185,16 @@ class _WorkspaceMemberAccessSectionState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Member access',
+        Text(_isPerson ? 'Access for ${widget.personName ?? 'this person'}' : 'Member access',
             style: theme.textTheme.titleMedium
                 ?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
         Text(
-            'Choose what invited Space members can use on this Workspace. You are never limited.',
+            _isPerson
+                ? (_custom
+                    ? 'Custom access replaces the Workspace default for this person.'
+                    : 'This person follows the Workspace default until you save custom access.')
+                : 'Choose what invited Space members can use on this Workspace. You are never limited.',
             style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
         const SizedBox(height: 8),
         if (_loading)
@@ -156,6 +207,7 @@ class _WorkspaceMemberAccessSectionState
             TextButton(onPressed: _load, child: const Text('Retry')),
           ])
         else ...[
+          if (!_isPerson)
           SwitchListTile(
               key: const ValueKey('member-access-restricted'),
               contentPadding: EdgeInsets.zero,
@@ -185,6 +237,13 @@ class _WorkspaceMemberAccessSectionState
                   key: const ValueKey('member-access-save'),
                   onPressed: _dirty && !_saving ? _save : null,
                   child: const Text('Save access'))),
+          if (_isPerson && _custom)
+            Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                    key: const ValueKey('person-access-reset'),
+                    onPressed: _saving ? null : _reset,
+                    child: const Text('Reset to default'))),
         ],
       ],
     );

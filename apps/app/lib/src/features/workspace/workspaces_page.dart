@@ -25,6 +25,7 @@ class WorkspacesPage extends StatefulWidget {
     this.viewerEmail,
     this.memberAccessSource,
     this.sharingSource,
+    this.personAccessSource,
     // Retained as optional compatibility inputs while callers are audited.
     VoidCallback? onAdd,
     ValueChanged<AxWorkspace>? onRename,
@@ -47,6 +48,9 @@ class WorkspacesPage extends StatefulWidget {
 
   /// Enables lending: the owner's sharing section and the invited person's banner.
   final AxWorkspaceSharingDataSource? sharingSource;
+
+  /// Enables editing one person's Workers, models and mode.
+  final AxWorkspacePersonAccessDataSource? personAccessSource;
 
   @override
   State<WorkspacesPage> createState() => _WorkspacesPageState();
@@ -205,6 +209,9 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             key: ValueKey('workspace-sharing-${workspace.id}'),
             workspaceId: workspace.id,
             source: widget.sharingSource!,
+            memberAccessSource: widget.memberAccessSource,
+            personAccessSource: widget.personAccessSource,
+            workers: widget.workspaceWorkers,
           ),
         ],
         if (widget.memberAccessSource != null) ...[

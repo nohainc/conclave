@@ -82,15 +82,20 @@ abstract interface class AxWorkspacePersonAccessDataSource {
 class AxPersonUsage {
   const AxPersonUsage(
       {this.requests = 0,
+      this.monthSeconds = 0,
       this.approxSeconds = 0,
       this.lastUsedAt,
       this.workerIds = const []});
   final int requests;
+
+  /// Approximate run seconds in the current UTC month.
+  final int monthSeconds;
   final int approxSeconds;
   final String? lastUsedAt;
   final List<String> workerIds;
   factory AxPersonUsage.fromJson(Map<String, dynamic> json) => AxPersonUsage(
         requests: (json['requests'] as num?)?.toInt() ?? 0,
+        monthSeconds: (json['monthSeconds'] as num?)?.toInt() ?? 0,
         approxSeconds: (json['approxSeconds'] as num?)?.toInt() ?? 0,
         lastUsedAt: json['lastUsedAt'] as String?,
         workerIds: (json['workerIds'] as List?)?.whereType<String>().toList() ??
@@ -108,6 +113,7 @@ class AxPersonWithAccess {
       this.custom = false,
       this.mode,
       this.maxConcurrentRequests = 1,
+      this.maxRunSecondsPerMonth,
       this.usage = const AxPersonUsage()});
   final String userId;
   final String displayName;
@@ -116,6 +122,9 @@ class AxPersonWithAccess {
   final bool custom;
   final String? mode;
   final int maxConcurrentRequests;
+
+  /// Null means no monthly run-time limit.
+  final int? maxRunSecondsPerMonth;
   final AxPersonUsage usage;
   bool get active => status == 'active';
   factory AxPersonWithAccess.fromJson(Map<String, dynamic> json) =>
@@ -130,6 +139,8 @@ class AxPersonWithAccess {
             : null,
         maxConcurrentRequests:
             (json['maxConcurrentRequests'] as num?)?.toInt() ?? 1,
+        maxRunSecondsPerMonth:
+            (json['maxRunSecondsPerMonth'] as num?)?.toInt(),
         usage: json['usage'] is Map
             ? AxPersonUsage.fromJson(
                 Map<String, dynamic>.from(json['usage'] as Map))
@@ -187,6 +198,10 @@ abstract interface class AxWorkspaceSharingDataSource {
       String workspaceId, String invitationId);
   Future<void> revokePersonGrant(String workspaceId, String userId);
   Future<void> setPersonQuota(String workspaceId, String userId, int limit);
+
+  /// Sets the monthly run-time limit in seconds; null removes it.
+  Future<void> setPersonRunTimeLimit(
+      String workspaceId, String userId, int? seconds);
   Future<List<AxMyWorkspaceInvitation>> loadMyWorkspaceInvitations();
   Future<void> acceptWorkspaceInvitation(String invitationId);
 }

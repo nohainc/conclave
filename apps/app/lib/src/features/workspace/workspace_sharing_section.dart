@@ -2,8 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../ax/ax_models.dart';
 import '../../ax/ax_workspace_member_access.dart';
+import 'workspace_member_access_section.dart';
 import '../common/quiet_notices.dart';
+
+/// Monthly run-time limits offered to the owner, in hours (null = no limit).
+const _runTimeHours = <int?>[null, 1, 5, 10, 25, 50, 100];
 
 const _modeLabels = {
   'chat': 'Chat only',
@@ -25,10 +30,19 @@ class WorkspaceSharingSection extends StatefulWidget {
     super.key,
     required this.workspaceId,
     required this.source,
+    this.memberAccessSource,
+    this.personAccessSource,
+    this.workers = const [],
   });
 
   final String workspaceId;
   final AxWorkspaceSharingDataSource source;
+
+  /// Enable "Edit access" for each person: which Workers, models, efforts and
+  /// mode they get. Both sources are needed, plus the Workspace's Workers.
+  final AxWorkspaceMemberAccessDataSource? memberAccessSource;
+  final AxWorkspacePersonAccessDataSource? personAccessSource;
+  final List<AxWorker> workers;
 
   @override
   State<WorkspaceSharingSection> createState() =>
@@ -110,6 +124,25 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
       await widget.source.createWorkspaceInvitation(widget.workspaceId, email);
       _email.clear();
     });
+  }
+
+  Future<void> _editAccess(AxPersonWithAccess person) async {
+    await showDialog<void>(
+        context: context,
+        builder: (context) => Dialog(
+            child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: WorkspaceMemberAccessSection(
+                        key: ValueKey('person-access-${person.userId}'),
+                        workspaceId: widget.workspaceId,
+                        workers: widget.workers,
+                        source: widget.memberAccessSource!,
+                        personSource: widget.personAccessSource,
+                        userId: person.userId,
+                        personName: person.displayName)))));
+    if (mounted) await _load();
   }
 
   Future<void> _revokePerson(AxPersonWithAccess person) async {
@@ -199,6 +232,10 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
     );
   }
 
+  int? _hours(AxPersonWithAccess person) => person.maxRunSecondsPerMonth == null
+      ? null
+      : person.maxRunSecondsPerMonth! ~/ 3600;
+
   Widget _personTile(AxPersonWithAccess person, TextStyle muted) {
     final mode = person.mode == null ? 'Default access' : _modeLabels[person.mode]!;
     final usage = person.usage;
@@ -221,6 +258,15 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
               '$mode${person.custom ? ' (custom)' : ''} · ${usage.requests} request${usage.requests == 1 ? '' : 's'} · about ${_duration(usage.approxSeconds)}'
               '${usage.lastUsedAt == null ? '' : ' · last used ${usage.lastUsedAt}'}',
               style: muted),
+          if (person.active &&
+              widget.memberAccessSource != null &&
+              widget.personAccessSource != null)
+            Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                    key: ValueKey('sharing-edit-${person.userId}'),
+                    onPressed: _busy ? null : () => _editAccess(person),
+                    child: const Text('Edit access'))),
           if (person.active)
             Row(children: [
               Text('At once:', style: muted),
@@ -239,7 +285,31 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
                           unawaited(_act(() => widget.source.setPersonQuota(
                               widget.workspaceId, person.userId, value)));
                         }),
+              const SizedBox(width: 16),
+              Text('Run time per month:', style: muted),
+              const SizedBox(width: 8),
+              DropdownButton<int?>(
+                  key: ValueKey('sharing-runtime-${person.userId}'),
+                  value: _runTimeHours.contains(_hours(person))
+                      ? _hours(person)
+                      : null,
+                  items: [
+                    for (final hours in _runTimeHours)
+                      DropdownMenuItem<int?>(
+                          value: hours,
+                          child: Text(
+                              hours == null ? 'No limit' : '$hours h'))
+                  ],
+                  onChanged: _busy
+                      ? null
+                      : (hours) => unawaited(_act(() => widget.source
+                          .setPersonRunTimeLimit(widget.workspaceId,
+                              person.userId, hours == null ? null : hours * 3600)))),
             ]),
+          if (person.active && person.maxRunSecondsPerMonth != null)
+            Text(
+                'Used this month: about ${_duration(person.usage.monthSeconds)} of ${_duration(person.maxRunSecondsPerMonth!)}',
+                style: muted),
         ]));
   }
 }

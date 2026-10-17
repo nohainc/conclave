@@ -214,6 +214,13 @@ mixin _CatalogApi on _AxApiClientCore {
           '${_workspacePath(workspaceId)}/person-grants/${Uri.encodeComponent(userId)}/quota',
           {'maxConcurrentRequests': limit});
 
+  Future<void> setPersonRunTimeLimit(
+          String workspaceId, String userId, int? seconds) =>
+      _sharingSend(
+          'PUT',
+          '${_workspacePath(workspaceId)}/person-grants/${Uri.encodeComponent(userId)}/quota',
+          {'maxRunSecondsPerMonth': seconds});
+
   Future<List<AxMyWorkspaceInvitation>> loadMyWorkspaceInvitations() async {
     final body = await _getJson(Uri.parse('$baseUrl/workspace-invitations'));
     return [
