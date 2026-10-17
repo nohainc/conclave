@@ -175,6 +175,7 @@ class _WorkComposer extends StatelessWidget {
     required this.onRun,
     this.onHistoryNavigate,
     this.historyPrompts,
+    this.historyOpenDirection = 1,
     this.onHistorySelected,
     this.onHistoryClosed,
     this.usageController,
@@ -222,6 +223,10 @@ class _WorkComposer extends StatelessWidget {
 
   /// Newest-first prompts shown in the history panel; null when closed.
   final List<String>? historyPrompts;
+
+  /// Key that opened the panel: -1 (Up) starts on the last item, 1 (Down) on
+  /// the first.
+  final int historyOpenDirection;
   final ValueChanged<String>? onHistorySelected;
   final VoidCallback? onHistoryClosed;
 
@@ -678,6 +683,7 @@ class _WorkComposer extends StatelessWidget {
           if (historyPrompts != null)
             _RequestHistoryPanel(
               prompts: historyPrompts!,
+              openDirection: historyOpenDirection,
               onSelected: onHistorySelected ?? (_) {},
               onClosed: onHistoryClosed ?? () {},
             ),
@@ -2364,11 +2370,13 @@ Widget _messageFooter(Widget? toggle, List<Widget> meta) {
 class _RequestHistoryPanel extends StatefulWidget {
   const _RequestHistoryPanel({
     required this.prompts,
+    required this.openDirection,
     required this.onSelected,
     required this.onClosed,
   });
 
   final List<String> prompts;
+  final int openDirection;
   final ValueChanged<String> onSelected;
   final VoidCallback onClosed;
 
@@ -2386,8 +2394,15 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
   void initState() {
     super.initState();
     _previousFocus = FocusManager.instance.primaryFocus;
+    if (widget.openDirection < 0 && widget.prompts.isNotEmpty) {
+      _selected = widget.prompts.length - 1;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focus.requestFocus();
+      if (!mounted) return;
+      _focus.requestFocus();
+      if (_scroll.hasClients) {
+        _scroll.jumpTo(_selected == 0 ? 0 : _scroll.position.maxScrollExtent);
+      }
     });
   }
 
@@ -2426,60 +2441,63 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
     final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Focus(
-        focusNode: _focus,
-        onKeyEvent: (_, event) {
-          if (event is KeyUpEvent) return KeyEventResult.ignored;
-          final key = event.logicalKey;
-          if (key == LogicalKeyboardKey.arrowUp) {
-            _move(1);
-          } else if (key == LogicalKeyboardKey.arrowDown) {
-            _move(-1);
-          } else if (key == LogicalKeyboardKey.enter ||
-              key == LogicalKeyboardKey.numpadEnter) {
-            _select(_selected);
-          } else if (key == LogicalKeyboardKey.escape) {
-            widget.onClosed();
-          } else {
-            return KeyEventResult.ignored;
-          }
-          return KeyEventResult.handled;
-        },
-        child: Container(
-          constraints: const BoxConstraints(maxHeight: 192),
-          decoration: BoxDecoration(
-            border: Border.all(color: colors.outlineVariant),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: widget.prompts.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text('No earlier requests in this thread.',
-                      style: TextStyle(fontSize: 12)),
-                )
-              : ListView.builder(
-                  controller: _scroll,
-                  shrinkWrap: true,
-                  itemExtent: 48,
-                  itemCount: widget.prompts.length,
-                  itemBuilder: (context, index) => InkWell(
-                    onTap: () => _select(index),
-                    child: Container(
-                      color: index == _selected
-                          ? colors.primary.withValues(alpha: 0.12)
-                          : null,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        widget.prompts[index].trim(),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12),
+      child: TapRegion(
+        onTapOutside: (_) => widget.onClosed(),
+        child: Focus(
+          focusNode: _focus,
+          onKeyEvent: (_, event) {
+            if (event is KeyUpEvent) return KeyEventResult.ignored;
+            final key = event.logicalKey;
+            if (key == LogicalKeyboardKey.arrowUp) {
+              _move(-1);
+            } else if (key == LogicalKeyboardKey.arrowDown) {
+              _move(1);
+            } else if (key == LogicalKeyboardKey.enter ||
+                key == LogicalKeyboardKey.numpadEnter) {
+              _select(_selected);
+            } else if (key == LogicalKeyboardKey.escape) {
+              widget.onClosed();
+            } else {
+              return KeyEventResult.ignored;
+            }
+            return KeyEventResult.handled;
+          },
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 192),
+            decoration: BoxDecoration(
+              border: Border.all(color: colors.outlineVariant),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: widget.prompts.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text('No earlier requests in this thread.',
+                        style: TextStyle(fontSize: 12)),
+                  )
+                : ListView.builder(
+                    controller: _scroll,
+                    shrinkWrap: true,
+                    itemExtent: 48,
+                    itemCount: widget.prompts.length,
+                    itemBuilder: (context, index) => InkWell(
+                      onTap: () => _select(index),
+                      child: Container(
+                        color: index == _selected
+                            ? colors.primary.withValues(alpha: 0.12)
+                            : null,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          widget.prompts[index].trim(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                       ),
                     ),
                   ),
-                ),
+          ),
         ),
       ),
     );

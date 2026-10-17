@@ -83,6 +83,7 @@ class _ThreadPageState extends State<ThreadPage>
   Map<String, dynamic>? _lastRemoteViewState;
   final _requestController = TextEditingController();
   bool _requestHistoryOpen = false;
+  int _requestHistoryDirection = 1;
   final _workHistoryController = ScrollController();
   late final AxWorkerUsageController _workerUsage = AxWorkerUsageController(
       widget.dataSource is AxWorkerUsageDataSource
@@ -1756,6 +1757,7 @@ class _ThreadPageState extends State<ThreadPage>
         onCancelRun: widget.dataSource == null ? null : _cancelWorkRequest,
         onHistoryNavigate: _openRequestHistory,
         historyPrompts: _requestHistoryOpen ? _requestHistoryPrompts : null,
+        historyOpenDirection: _requestHistoryDirection,
         onHistorySelected: _selectHistoryPrompt,
         onHistoryClosed: _closeRequestHistory,
         onWorkflowChanged: (value) {

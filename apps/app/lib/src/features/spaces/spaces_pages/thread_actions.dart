@@ -126,7 +126,10 @@ extension _ThreadActions on _ThreadPageState {
 
   bool _openRequestHistory(int direction) {
     if (_requestHistoryOpen) return true;
-    _updateState(() => _requestHistoryOpen = true);
+    _updateState(() {
+      _requestHistoryDirection = direction;
+      _requestHistoryOpen = true;
+    });
     return true;
   }
 
