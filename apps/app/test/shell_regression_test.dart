@@ -158,6 +158,55 @@ void main() {
       expect(find.text('ACTIVE GOALS'), findsNothing);
     });
 
+    testWidgets(
+        'expanded sidebar displays unread notification badge count when notifications > 0',
+        (tester) async {
+      final unreadNotifier = ValueNotifier<int>(5);
+      addTearDown(unreadNotifier.dispose);
+      final shellContext = AxShellContext(
+        navigation: const AxNavigation.thread('p-1', 'ws-1'),
+        spaces: const [testSpace],
+        threadsBySpace: const {
+          'p-1': [wsRunning, wsIdle]
+        },
+        selectedSpace: testSpace,
+        selectedThread: wsRunning,
+        expandedSpaceIds: const {'p-1'},
+        viewerDisplayName: 'Vitalii Noha',
+        viewerEmail: 'vitalii@conclave.ax',
+        workspaces: const [testWorkspace],
+        unreadNotifications: unreadNotifier,
+      );
+
+      await tester.pumpWidget(
+        wrapWithMaterial(
+          SizedBox(
+            width: 248,
+            child: AppSidebar(
+              shellContext: shellContext,
+              onNavigateTo: (_) {},
+              onLogout: () {},
+              onOpenAbout: () {},
+              onOpenExternal: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Badge), findsOneWidget);
+      expect(find.text('5'), findsOneWidget);
+      expect(find.bySemanticsLabel('5 unread notifications'), findsOneWidget);
+
+      // Updates dynamically when count changes
+      unreadNotifier.value = 0;
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Badge), findsNothing);
+      expect(find.text('5'), findsNothing);
+      expect(find.bySemanticsLabel('Notifications'), findsOneWidget);
+    });
+
     testWidgets('avatar and name click navigates to Profile & Security',
         (tester) async {
       AxNavigation? target;

@@ -327,9 +327,7 @@ class AppSidebar extends StatelessWidget {
                             : 'Notifications',
                         child: Tooltip(
                           excludeFromSemantics: true,
-                          message: count > 0
-                              ? '$count unread notifications'
-                              : 'Notifications',
+                          message: 'Notifications',
                           child: IconButton(
                             onPressed: onOpenNotifications,
                             icon: count > 0
@@ -743,7 +741,7 @@ class AppIconRail extends StatelessWidget {
             final count = shellContext.unreadNotificationCount;
             return _railIconButton(
               icon: Icons.notifications_outlined,
-              tooltip: count > 0 ? '$count unread notifications' : 'Notifications',
+              tooltip: 'Notifications',
               onPressed: onOpenNotifications,
               iconWidget: count > 0
                   ? Badge.count(

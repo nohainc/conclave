@@ -412,6 +412,18 @@ class AxWorkActivityStore extends ChangeNotifier {
       }
       result.addAll(currentAttempt.map((activity) {
         if (activity.isFinished) return activity;
+        // Lifecycle and status rows ("Execution started", "Thinking", a
+        // message in progress) never get their own end event. When the
+        // execution is over they are simply done, not failed. A tool that
+        // never reported back is only an error if the request did not
+        // complete.
+        if (!activity.type.startsWith('tool.') ||
+            request.status == 'completed') {
+          return activity.copyWith(
+            status: 'completed',
+            details: {...activity.details, 'reconciled': true},
+          );
+        }
         return activity.copyWith(
           status: 'interrupted',
           title: 'Activity ended when the execution terminated',
