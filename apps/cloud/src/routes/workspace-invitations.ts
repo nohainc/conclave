@@ -6,6 +6,18 @@ import {
   type SecurityEnv,
 } from "./http-security.js";
 
+/** First instant of the current UTC month, as an ISO timestamp. */
+export function monthStartIso(now = new Date()): string {
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  ).toISOString();
+}
+
+/** Approximate run seconds a person used on a Workspace this UTC month. */
+export const MONTHLY_RUN_SECONDS_SQL = `SELECT COALESCE(ROUND(SUM(MAX(0, (julianday(updated_at) - julianday(created_at)) * 86400))), 0) AS seconds
+   FROM worker_assignments
+   WHERE execution_workspace_id = ?1 AND requested_by_user_id = ?2 AND created_at >= ?3`;
+
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_PENDING_PER_WORKSPACE = 20;
 
@@ -269,21 +281,49 @@ export async function handlePersonGrantQuota(
     string,
     unknown
   > | null;
+  const allowed = ["maxConcurrentRequests", "maxRunSecondsPerMonth"];
   const limit = body?.maxConcurrentRequests;
+  const runSeconds = body?.maxRunSecondsPerMonth;
   if (
     !body ||
-    Object.keys(body).some((key) => key !== "maxConcurrentRequests") ||
-    typeof limit !== "number" ||
-    !Number.isInteger(limit) ||
-    limit < 1 ||
-    limit > 10
+    Object.keys(body).length === 0 ||
+    Object.keys(body).some((key) => !allowed.includes(key)) ||
+    (limit !== undefined &&
+      (typeof limit !== "number" ||
+        !Number.isInteger(limit) ||
+        limit < 1 ||
+        limit > 10)) ||
+    (runSeconds !== undefined &&
+      runSeconds !== null &&
+      (typeof runSeconds !== "number" ||
+        !Number.isInteger(runSeconds) ||
+        runSeconds < 60 ||
+        runSeconds > 31 * 24 * 3600))
   )
-    throw new HttpError(400, "maxConcurrentRequests must be a whole number from 1 to 10");
+    throw new HttpError(
+      400,
+      "maxConcurrentRequests must be 1-10 and maxRunSecondsPerMonth null or 60 to 2678400",
+    );
   const updated = await env.CONCLAVE_DB.prepare(
-    "UPDATE workspace_person_grants SET max_concurrent_requests=?3,updated_at=?4 WHERE workspace_id=?1 AND user_id=?2 AND status='active'",
+    `UPDATE workspace_person_grants
+        SET max_concurrent_requests = COALESCE(?3, max_concurrent_requests),
+            max_run_seconds_per_month = CASE WHEN ?4 = 1 THEN ?5 ELSE max_run_seconds_per_month END,
+            updated_at = ?6
+      WHERE workspace_id=?1 AND user_id=?2 AND status='active'`,
   )
-    .bind(workspaceId, personId, limit, new Date().toISOString())
+    .bind(
+      workspaceId,
+      personId,
+      limit ?? null,
+      runSeconds === undefined ? 0 : 1,
+      runSeconds ?? null,
+      new Date().toISOString(),
+    )
     .run();
-  if (!updated.meta?.changes) throw new HttpError(404, "Active grant not found");
-  return json({ maxConcurrentRequests: limit });
+  if (!updated.meta?.changes)
+    throw new HttpError(404, "Active grant not found");
+  return json({
+    ...(limit !== undefined ? { maxConcurrentRequests: limit } : {}),
+    ...(runSeconds !== undefined ? { maxRunSecondsPerMonth: runSeconds } : {}),
+  });
 }

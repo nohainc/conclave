@@ -92,6 +92,7 @@ export function sqliteD1(
     "0074_workspace_member_overrides.sql",
     "0075_workspace_invitations.sql",
     "0076_person_grant_quota.sql",
+    "0077_person_grant_run_time_quota.sql",
   ]) {
     sqlite.exec(
       readFileSync(

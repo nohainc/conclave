@@ -8,6 +8,10 @@ import {
 import { HttpError, type SecurityEnv } from "./http-security.js";
 import { validateWorkflowWorkerEligibility } from "./handlers.js";
 import {
+  MONTHLY_RUN_SECONDS_SQL,
+  monthStartIso,
+} from "./workspace-invitations.js";
+import {
   loadEffectiveMemberAccess,
   memberModeError,
   memberSelectionError,
@@ -134,10 +138,10 @@ export async function resolveWorkflowExecutionBindings(
     workspaceOwner.ownerUserId !== userId
   ) {
     const grant = await env.CONCLAVE_DB.prepare(
-      "SELECT max_concurrent_requests AS maxConcurrent FROM workspace_person_grants WHERE workspace_id = ?1 AND user_id = ?2 AND status = 'active'",
+      "SELECT max_concurrent_requests AS maxConcurrent, max_run_seconds_per_month AS maxRunSeconds FROM workspace_person_grants WHERE workspace_id = ?1 AND user_id = ?2 AND status = 'active'",
     )
       .bind(space.workspaceId, userId)
-      .first<{ maxConcurrent: number }>();
+      .first<{ maxConcurrent: number; maxRunSeconds: number | null }>();
     if (!grant)
       throw new HttpError(
         403,
@@ -148,6 +152,16 @@ export async function resolveWorkflowExecutionBindings(
     )
       .bind(userId, space.workspaceId)
       .first<{ n: number }>();
+    if (grant.maxRunSeconds !== null) {
+      const used = await env.CONCLAVE_DB.prepare(MONTHLY_RUN_SECONDS_SQL)
+        .bind(space.workspaceId, userId, monthStartIso())
+        .first<{ seconds: number }>();
+      if ((used?.seconds ?? 0) >= grant.maxRunSeconds)
+        throw new HttpError(
+          429,
+          "You have used this month's run time on this Workspace; ask its owner for more",
+        );
+    }
     if ((inFlight?.n ?? 0) >= grant.maxConcurrent)
       throw new HttpError(
         429,

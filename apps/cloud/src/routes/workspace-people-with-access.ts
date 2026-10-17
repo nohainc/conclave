@@ -4,6 +4,7 @@ import {
   securityContext,
   type SecurityEnv,
 } from "./http-security.js";
+import { monthStartIso } from "./workspace-invitations.js";
 import { loadEffectiveMemberAccess } from "./workspace-member-access.js";
 
 /**
@@ -29,7 +30,7 @@ export async function handlePeopleWithAccess(
   if (!workspace) throw new HttpError(404, "Workspace not found");
   const grants = await env.CONCLAVE_DB.prepare(
     `SELECT g.user_id AS userId, u.display_name AS displayName, u.email, g.status,
-            g.created_at AS grantedAt, g.max_concurrent_requests AS maxConcurrentRequests,
+            g.created_at AS grantedAt, g.max_concurrent_requests AS maxConcurrentRequests, g.max_run_seconds_per_month AS maxRunSecondsPerMonth,
             EXISTS (SELECT 1 FROM workspace_member_overrides o
                      WHERE o.workspace_id = g.workspace_id AND o.user_id = g.user_id) AS custom
      FROM workspace_person_grants g JOIN users u ON u.id = g.user_id
@@ -43,6 +44,7 @@ export async function handlePeopleWithAccess(
       status: string;
       grantedAt: string;
       maxConcurrentRequests: number;
+      maxRunSecondsPerMonth: number | null;
       custom: number;
     }>();
   const usage = await env.CONCLAVE_DB.prepare(
@@ -61,6 +63,18 @@ export async function handlePeopleWithAccess(
       approxSeconds: number | null;
       lastUsedAt: string | null;
     }>();
+  const monthRows = await env.CONCLAVE_DB.prepare(
+    `SELECT requested_by_user_id AS userId,
+            ROUND(SUM(MAX(0, (julianday(updated_at) - julianday(created_at)) * 86400))) AS seconds
+     FROM worker_assignments
+     WHERE execution_workspace_id = ?1 AND requested_by_user_id IS NOT NULL AND created_at >= ?2
+     GROUP BY requested_by_user_id`,
+  )
+    .bind(workspaceId, monthStartIso())
+    .all<{ userId: string; seconds: number | null }>();
+  const monthSeconds = new Map(
+    monthRows.results.map((row) => [row.userId, row.seconds ?? 0]),
+  );
   const workers = await env.CONCLAVE_DB.prepare(
     `SELECT DISTINCT requested_by_user_id AS userId, workspace_worker_id AS workerId
      FROM worker_assignments
@@ -84,12 +98,14 @@ export async function handlePeopleWithAccess(
       status: grant.status,
       grantedAt: grant.grantedAt,
       maxConcurrentRequests: grant.maxConcurrentRequests,
+      maxRunSecondsPerMonth: grant.maxRunSecondsPerMonth,
       custom: grant.custom === 1,
       mode: policy?.mode ?? null,
       usage: {
         requests: used?.requests ?? 0,
         approxSeconds: used?.approxSeconds ?? 0,
         lastUsedAt: used?.lastUsedAt ?? null,
+        monthSeconds: monthSeconds.get(grant.userId) ?? 0,
         workerIds: workers.results
           .filter((row) => row.userId === grant.userId)
           .map((row) => row.workerId)

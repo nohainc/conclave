@@ -209,12 +209,14 @@ it("shows the lender usage only, never the borrower's content", async () => {
       status: "active",
       grantedAt: "now",
       maxConcurrentRequests: 1,
+      maxRunSecondsPerMonth: null,
       custom: true,
       mode: "work",
       usage: {
         requests: 2,
         approxSeconds: 90,
         lastUsedAt: "2026-01-02T00:00:00.000Z",
+        monthSeconds: 0,
         workerIds: ["worker-a"],
       },
     });
@@ -248,6 +250,43 @@ it("limits the borrower's concurrent requests, set by the owner", async () => {
     expect((await bind("guest")).direct).toBeDefined();
     busy("r3", "queued");
     await expect(bind("guest")).rejects.toMatchObject({ status: 429 });
+  } finally {
+    sqlite.close();
+  }
+});
+
+it("limits the borrower's run time per month, set by the owner", async () => {
+  const { sqlite, bind, grantGuest, setQuota } = fixture();
+  try {
+    grantGuest();
+    sqlite.exec("PRAGMA foreign_keys = OFF");
+    const row = (id: string, created: string, updated: string) =>
+      sqlite.exec(`INSERT INTO worker_assignments(id,space_id,execution_workspace_id,runtime_identity_id,worker_type_id,status,created_at,updated_at,requested_by_user_id,workspace_worker_id)
+        VALUES('${id}','G','lent','rt','chatgpt','completed','${created}','${updated}','guest','worker-a')`);
+    const month = new Date();
+    const start = new Date(
+      Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1, 0, 1),
+    );
+    const iso = (offsetSeconds: number) =>
+      new Date(start.getTime() + offsetSeconds * 1000).toISOString();
+    // Time used in earlier months does not count.
+    row("old", "2020-01-01T00:00:00.000Z", "2020-01-01T05:00:00.000Z");
+    await setQuota("lender", { maxRunSecondsPerMonth: 120 });
+    expect((await bind("guest")).direct).toBeDefined();
+    row("now1", iso(0), iso(100));
+    expect((await bind("guest")).direct).toBeDefined();
+    row("now2", iso(200), iso(260));
+    await expect(bind("guest")).rejects.toMatchObject({ status: 429 });
+    // The owner can raise or clear the limit; the concurrent limit is untouched.
+    await setQuota("lender", { maxRunSecondsPerMonth: 600 });
+    expect((await bind("guest")).direct).toBeDefined();
+    await setQuota("lender", { maxRunSecondsPerMonth: null });
+    row("now3", iso(300), iso(5000));
+    expect((await bind("guest")).direct).toBeDefined();
+    await expect(
+      setQuota("lender", { maxRunSecondsPerMonth: 10 }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(setQuota("lender", {})).rejects.toMatchObject({ status: 400 });
   } finally {
     sqlite.close();
   }
