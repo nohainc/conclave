@@ -57,7 +57,6 @@ void main() {
       const AxNavigation.home(),
       const AxNavigation.spaces(),
       const AxNavigation.archivedSpaces(),
-      const AxNavigation.workflows(),
       const AxNavigation.workspaces(),
       const AxNavigation.profileSecurity(),
     ];
@@ -67,6 +66,9 @@ void main() {
     }
     expect(AxNavigation.fromUri(Uri.parse('/archived-spaces')).kind,
         AxRouteKind.archivedSpaces);
+    // Workflows live inside Workspace tabs; the old route opens Workspaces.
+    expect(AxNavigation.fromUri(Uri.parse('/workflows')),
+        const AxNavigation.workspaces());
   });
 
   test('preserves desktop auth approval through the browser sign-in route', () {

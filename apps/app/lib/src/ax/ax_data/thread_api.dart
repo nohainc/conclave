@@ -894,7 +894,9 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
 
   @override
   Future<List<AxWorker>> loadWorkspaceWorkerInventory() async {
-    final body = await _getJson(Uri.parse('$baseUrl/workers'));
+    // Members also receive the Workers their Workspace owner shares with them.
+    final body =
+        await _getJson(Uri.parse('$baseUrl/workers?includeShared=true'));
     return (body['workers'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => AxWorker.fromJson(Map<String, dynamic>.from(item)))

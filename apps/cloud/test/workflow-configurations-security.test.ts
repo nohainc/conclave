@@ -27,7 +27,7 @@ it("authenticates actual human sessions and isolates GET/PUT/DELETE ownership", 
       "INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('one','one@test','One','now','now'),('two','two@test','Two','now','now')",
     );
     sqlite.exec(
-      "INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('ws','one','Workspace','now','now'); INSERT INTO user_workflow_settings VALUES('one','ws','now');",
+      "INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('ws','one','Workspace','now','now'); INSERT INTO user_workflow_settings VALUES('one','ws','now'); INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('ws-two','two','Workspace','now','now'); INSERT INTO user_workflow_settings VALUES('two','ws-two','now');",
     );
     const configuration = (enabled: boolean) => ({
       schemaVersion: 1,
@@ -38,7 +38,7 @@ it("authenticates actual human sessions and isolates GET/PUT/DELETE ownership", 
     });
     sqlite
       .prepare(
-        "INSERT INTO user_workflow_configurations VALUES('two','direct',1,?,'now')",
+        "INSERT INTO user_workflow_configurations VALUES('two','ws-two','direct',1,?,'now')",
       )
       .run(JSON.stringify(configuration(false)));
     const env = {

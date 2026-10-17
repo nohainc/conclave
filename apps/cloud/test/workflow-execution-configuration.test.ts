@@ -52,7 +52,11 @@ function fixture(
           values: [] as unknown[],
           bind(user: string, ...rest: unknown[]) {
             this.values = [user, ...rest];
-            if (!sql.includes("workspace_worker_inventory"))
+            if (
+              !sql.includes("workspace_worker_inventory") &&
+              !sql.includes("workspace_member_access") &&
+              !sql.includes("FROM execution_workspaces")
+            )
               expect(user).toBe(
                 sql.includes("WHERE id = ?1") ||
                   sql.includes("workspace_space_grants") ||
@@ -67,6 +71,7 @@ function fixture(
             return this;
           },
           async first() {
+            if (sql.includes("workspace_member_access")) return null;
             if (sql.includes("space_workflow_settings")) return null;
             if (sql.includes("user_workflow_settings")) return { workspaceId };
             return { ownerUserId: "user" };

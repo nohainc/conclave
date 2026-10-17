@@ -282,8 +282,6 @@ class AxShellContext {
         return navigation.kind == AxRouteKind.people;
       case AxRouteKind.archivedSpaces:
         return navigation.kind == AxRouteKind.archivedSpaces;
-      case AxRouteKind.workflows:
-        return navigation.kind == AxRouteKind.workflows;
       case AxRouteKind.workspaces:
         return navigation.kind == AxRouteKind.workspaces;
       case AxRouteKind.profileSecurity:

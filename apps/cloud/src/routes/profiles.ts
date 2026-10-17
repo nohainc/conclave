@@ -10,6 +10,11 @@ import { extractBearerToken } from "@conclave/security";
 import { listWorkerProfiles } from "../worker-profile-registry.js";
 import { HttpError, json, securityContext } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
+import {
+  loadWorkspaceMemberAccess,
+  restrictExecutionOptions,
+  type WorkspaceMemberAccessPolicy,
+} from "./workspace-member-access.js";
 import { WorkspaceRuntimeAuthenticator } from "../workspace-gateway/runtime-authenticator.js";
 
 export async function handleListWorkspaceWorkerInventory(
@@ -18,9 +23,9 @@ export async function handleListWorkspaceWorkerInventory(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  const workspaceId = new URL(request.url).searchParams.get("workspaceId");
-  const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT i.worker_id, i.workspace_id, ew.name AS workspace_name,
+  const params = new URL(request.url).searchParams;
+  const workspaceId = params.get("workspaceId");
+  const columns = `SELECT i.worker_id, i.workspace_id, ew.name AS workspace_name,
             i.worker_type_id, i.activation_state, i.readiness_state,
             i.readiness_issue_code, i.local_concurrency_limit,
             i.engine_version, i.profile_definition_id,
@@ -41,73 +46,124 @@ export async function handleListWorkspaceWorkerInventory(
         AND current_profile.revision = i.profile_release_version
        LEFT JOIN worker_profile_history history
          ON history.worker_type_id = i.worker_type_id
-        AND history.revision = i.profile_release_version
+        AND history.revision = i.profile_release_version`;
+  const rows = await env.CONCLAVE_DB.prepare(
+    `${columns}
       WHERE i.owner_user_id = ?1
         AND (?2 IS NULL OR i.workspace_id = ?2)
       ORDER BY i.workspace_id, i.worker_type_id, i.worker_id`,
   )
     .bind(context.userId, workspaceId)
     .all<Record<string, unknown>>();
-  return json({
-    workers: (rows.results ?? []).map((row) => ({
-      executionOptions: spaceWorkerExecutionOptions(
-        row.model_profile_json,
-        row.provider_tool_version,
-        row.model_catalog_json,
-        row.model_profile_digest,
-      ),
-      modelOptions: spaceModelOptions(
-        row.model_profile_json,
-        row.provider_tool_version,
-        row.model_catalog_json,
-        row.model_profile_digest,
-      ),
-      id: String(row.worker_id),
-      workspaceId: String(row.workspace_id),
-      workspaceName: String(row.workspace_name),
-      workerTypeId: String(row.worker_type_id),
-      displayName:
-        row.catalog_display_name == null
-          ? String(row.worker_type_id)
-          : String(row.catalog_display_name),
-      description:
-        row.catalog_description == null
-          ? null
-          : String(row.catalog_description),
-      catalogLifecycleState:
-        row.catalog_lifecycle_state == null
-          ? "retired"
-          : String(row.catalog_lifecycle_state),
-      catalogVisibilityState:
-        row.catalog_visibility_state == null
-          ? "hidden"
-          : String(row.catalog_visibility_state),
-      activationState: String(row.activation_state),
-      readinessState: String(row.readiness_state),
-      readinessIssueCode:
-        row.readiness_issue_code == null
-          ? null
-          : String(row.readiness_issue_code),
-      localConcurrencyLimit: Number(row.local_concurrency_limit),
-      engineVersion:
-        row.engine_version == null ? null : String(row.engine_version),
-      profileDefinitionId:
-        row.profile_definition_id == null
-          ? null
-          : String(row.profile_definition_id),
-      profileReleaseVersion:
-        row.profile_release_version == null
-          ? null
-          : Number(row.profile_release_version),
-      providerToolName:
-        row.provider_tool_name == null ? null : String(row.provider_tool_name),
-      providerToolVersion:
-        row.provider_tool_version == null
-          ? null
-          : String(row.provider_tool_version),
-      lastSeenAt: String(row.last_seen_at),
-    })),
-  });
+  const owned = (rows.results ?? []).map((row) =>
+    projectInventoryRow(row, null),
+  );
+  // Space members also see what the Workspace owner shares with them: the
+  // Workers of the Workspace their Spaces run on, limited by the owner's
+  // member-access policy. Only clients that ask for it receive them.
+  const shared: unknown[] = [];
+  if (params.get("includeShared") === "true") {
+    const sharedRows = await env.CONCLAVE_DB.prepare(
+      `${columns}
+        WHERE ew.status != 'revoked'
+          AND i.owner_user_id <> ?1
+          AND (?2 IS NULL OR i.workspace_id = ?2)
+          AND i.workspace_id IN (
+            SELECT CASE WHEN sws.space_id IS NOT NULL THEN sws.workspace_id ELSE uws.workspace_id END
+              FROM space_memberships m
+              JOIN spaces s ON s.id = m.space_id
+              LEFT JOIN space_workflow_settings sws ON sws.space_id = s.id
+              LEFT JOIN user_workflow_settings uws ON uws.user_id = s.owner_user_id
+             WHERE m.user_id = ?1 AND s.owner_user_id <> ?1)
+        ORDER BY i.workspace_id, i.worker_type_id, i.worker_id`,
+    )
+      .bind(context.userId, workspaceId)
+      .all<Record<string, unknown>>();
+    const policies = new Map<string, WorkspaceMemberAccessPolicy | null>();
+    for (const row of sharedRows.results ?? []) {
+      const id = String(row.workspace_id);
+      if (!policies.has(id))
+        policies.set(id, await loadWorkspaceMemberAccess(env, id));
+      const policy = policies.get(id)!;
+      const entry = policy?.workers[String(row.worker_id)];
+      // A restricted Workspace shares only the Workers it lists.
+      if (policy && !entry) continue;
+      shared.push(projectInventoryRow(row, entry ?? null, true));
+    }
+  }
+  return json({ workers: [...owned, ...shared] });
+}
+
+function projectInventoryRow(
+  row: Record<string, unknown>,
+  shared: WorkspaceMemberAccessPolicy["workers"][string] | null,
+  masked = false,
+) {
+  const executionOptions = spaceWorkerExecutionOptions(
+    row.model_profile_json,
+    row.provider_tool_version,
+    row.model_catalog_json,
+    row.model_profile_digest,
+  );
+  return {
+    executionOptions: shared
+      ? restrictExecutionOptions(executionOptions, shared)
+      : executionOptions,
+    // The legacy projection is unused by clients; do not widen what members see.
+    modelOptions: masked
+      ? null
+      : spaceModelOptions(
+          row.model_profile_json,
+          row.provider_tool_version,
+          row.model_catalog_json,
+          row.model_profile_digest,
+        ),
+    id: String(row.worker_id),
+    workspaceId: String(row.workspace_id),
+    workspaceName: String(row.workspace_name),
+    workerTypeId: String(row.worker_type_id),
+    displayName:
+      row.catalog_display_name == null
+        ? String(row.worker_type_id)
+        : String(row.catalog_display_name),
+    description:
+      row.catalog_description == null ? null : String(row.catalog_description),
+    catalogLifecycleState:
+      row.catalog_lifecycle_state == null
+        ? "retired"
+        : String(row.catalog_lifecycle_state),
+    catalogVisibilityState:
+      row.catalog_visibility_state == null
+        ? "hidden"
+        : String(row.catalog_visibility_state),
+    activationState: String(row.activation_state),
+    readinessState: String(row.readiness_state),
+    readinessIssueCode:
+      row.readiness_issue_code == null
+        ? null
+        : String(row.readiness_issue_code),
+    localConcurrencyLimit: Number(row.local_concurrency_limit),
+    // Machine and provider details stay with the Workspace owner.
+    engineVersion:
+      masked || row.engine_version == null ? null : String(row.engine_version),
+    profileDefinitionId:
+      row.profile_definition_id == null
+        ? null
+        : String(row.profile_definition_id),
+    profileReleaseVersion:
+      row.profile_release_version == null
+        ? null
+        : Number(row.profile_release_version),
+    providerToolName:
+      masked || row.provider_tool_name == null
+        ? null
+        : String(row.provider_tool_name),
+    providerToolVersion:
+      masked || row.provider_tool_version == null
+        ? null
+        : String(row.provider_tool_version),
+    lastSeenAt: String(row.last_seen_at),
+  };
 }
 
 async function requireWorkspaceRuntime(

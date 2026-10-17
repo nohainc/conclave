@@ -7,6 +7,10 @@ import {
 } from "@conclave/core";
 import { HttpError, type SecurityEnv } from "./http-security.js";
 import { validateWorkflowWorkerEligibility } from "./handlers.js";
+import {
+  loadWorkspaceMemberAccess,
+  memberSelectionError,
+} from "./workspace-member-access.js";
 
 export interface WorkflowExecutionSelectionOverride {
   readonly workerId?: string | null;
@@ -108,6 +112,16 @@ export async function resolveWorkflowExecutionBindings(
   )
     .bind(space.workspaceId)
     .all<{ workerId: string; workspaceId: string }>();
+  // Invited members may only use what the Workspace owner shares with them.
+  const workspaceOwner = await env.CONCLAVE_DB.prepare(
+    "SELECT owner_user_id AS ownerUserId FROM execution_workspaces WHERE id = ?1",
+  )
+    .bind(space.workspaceId)
+    .first<{ ownerUserId: string }>();
+  const memberPolicy =
+    workspaceOwner && workspaceOwner.ownerUserId !== userId
+      ? await loadWorkspaceMemberAccess(env, space.workspaceId)
+      : null;
   const requested: Record<
     string,
     {
@@ -157,6 +171,8 @@ export async function resolveWorkflowExecutionBindings(
         422,
         `${step.kind}: Configured Worker is unavailable for this Space`,
       );
+    const notShared = memberSelectionError(memberPolicy, selection);
+    if (notShared) throw new HttpError(403, `${step.kind}: ${notShared}`);
     // Preferences and composer choices are intent. Admission validates against
     // current capabilities, then pins that revision for acceptance and dispatch.
     const value: (typeof requested)[string] = {

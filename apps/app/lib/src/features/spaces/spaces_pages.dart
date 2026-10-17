@@ -28,6 +28,7 @@ import '../../ax/sync/ax_work_history.dart';
 import '../../ax/sync/ax_work_realtime_sync.dart';
 import '../../ax/sync/ax_session_catalogs.dart';
 import '../../ax/sync/ax_workflow_configurations.dart';
+import '../../ax/sync/ax_query_builder.dart';
 import '../../ax/sync/ax_space_tab_queries.dart';
 import '../../ax/sync/ax_sync_engine.dart';
 import '../../ax/sync/persistence/ax_thread_view_state.dart';
@@ -49,6 +50,7 @@ import '../../ax/work_request_file_picker_stub.dart'
 part 'spaces_pages/space_page.dart';
 part 'spaces_pages/space_actions.dart';
 part 'spaces_pages/space_tabs.dart';
+part 'spaces_pages/space_workspace_selector.dart';
 part 'spaces_pages/thread_page.dart';
 part 'spaces_pages/new_thread_page.dart';
 part 'spaces_pages/thread_actions.dart';

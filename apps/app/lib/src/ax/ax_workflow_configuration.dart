@@ -69,30 +69,28 @@ class AxUserWorkflowConfiguration {
 }
 
 abstract interface class AxWorkflowConfigurationDataSource {
-  Future<List<AxUserWorkflowConfiguration>> loadWorkflowConfigurations();
+  Future<List<AxUserWorkflowConfiguration>> loadWorkflowConfigurations(
+      {String? workspaceId});
   Future<AxUserWorkflowConfiguration> saveWorkflowConfiguration(
-      AxUserWorkflowConfiguration configuration);
+      AxUserWorkflowConfiguration configuration,
+      {String? workspaceId});
   Future<AxUserWorkflowConfiguration> resetWorkflowConfiguration(
-      String workflowId);
+      String workflowId,
+      {String? workspaceId});
 }
 
 /// Scope-level default workflow selection. This is deliberately separate from
 /// execution fields so changing a workflow's Worker/model/effort does not
 /// change which workflow a new request starts with.
 abstract interface class AxWorkflowDefaultDataSource {
-  Future<String> loadWorkflowDefault();
-  Future<String> saveWorkflowDefault(String workflowId);
+  Future<String> loadWorkflowDefault({String? workspaceId});
+  Future<String> saveWorkflowDefault(String workflowId, {String? workspaceId});
   Future<String> loadSpaceWorkflowDefault(String spaceId);
-  Future<String> saveSpaceWorkflowDefault(String spaceId, String workflowId);
 }
 
 abstract interface class AxSpaceWorkflowConfigurationDataSource {
   Future<List<AxUserWorkflowConfiguration>> loadSpaceWorkflowConfigurations(
       String spaceId);
-  Future<AxUserWorkflowConfiguration> saveSpaceWorkflowConfiguration(
-      String spaceId, AxUserWorkflowConfiguration configuration);
-  Future<AxUserWorkflowConfiguration> resetSpaceWorkflowConfiguration(
-      String spaceId, String workflowId);
 }
 
 class AxWorkflowWorkspace {

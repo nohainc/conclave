@@ -183,6 +183,8 @@ extension _AxAppViews on _AxAppStateMixin {
       spaceThreads: store.spaceThreads,
       tabQueries: store.spaceTabs,
       mutations: store.collaboration,
+      workflowConfigurations: AxWorkflowConfigurations(widget.dataSource,
+          engine: store.syncEngine, spaceId: space.id),
       space: space,
       dataSource: widget.dataSource,
       viewerEmail: store.auth.viewer?.email,
@@ -346,6 +348,13 @@ extension _AxAppViews on _AxAppStateMixin {
                 workspaces: _workspaceCards(),
                 workspaceWorkers: workspaceWorkers,
                 initialWorkspaceId: navigation.workspaceId,
+                workflowCatalogs: store.catalogs,
+                workflowConfigurations: store.workflowConfigurations,
+                viewerEmail: store.auth.viewer?.email,
+                memberAccessSource:
+                    widget.dataSource is AxWorkspaceMemberAccessDataSource
+                        ? widget.dataSource as AxWorkspaceMemberAccessDataSource
+                        : null,
               )));
 
   Widget _profileSecurityView() => ListenableBuilder(

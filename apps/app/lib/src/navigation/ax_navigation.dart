@@ -7,7 +7,6 @@ enum AxRouteKind {
   run,
   people,
   archivedSpaces,
-  workflows,
   workspaces,
   profileSecurity,
   login,
@@ -52,8 +51,6 @@ class AxNavigation {
 
   const AxNavigation.archivedSpaces()
       : this._(kind: AxRouteKind.archivedSpaces);
-
-  const AxNavigation.workflows() : this._(kind: AxRouteKind.workflows);
 
   const AxNavigation.workspaces({String? workspaceId})
       : this._(kind: AxRouteKind.workspaces, workspaceId: workspaceId);
@@ -104,7 +101,8 @@ class AxNavigation {
     if (parts case ['archived-spaces']) {
       return const AxNavigation.archivedSpaces();
     }
-    if (parts case ['workflows']) return const AxNavigation.workflows();
+    // Workflows are configured inside each Workspace tab.
+    if (parts case ['workflows']) return const AxNavigation.workspaces();
     if (parts.length == 3 && parts[0] == 'spaces') {
       // Space-level Workflow settings were removed; old links open the Space.
       if (parts[2] == 'workflows') {
@@ -156,7 +154,6 @@ class AxNavigation {
           : Uri(path: '/spaces/$spaceId/runs/$runId'),
       AxRouteKind.people => Uri(path: '/people'),
       AxRouteKind.archivedSpaces => Uri(path: '/archived-spaces'),
-      AxRouteKind.workflows => Uri(path: '/workflows'),
       AxRouteKind.workspaces => workspaceId != null
           ? Uri(path: '/workspaces/$workspaceId')
           : Uri(path: '/workspaces'),

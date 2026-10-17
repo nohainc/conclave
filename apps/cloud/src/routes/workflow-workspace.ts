@@ -28,6 +28,26 @@ export async function loadWorkflowWorkspace(
     inherited: Boolean(spaceId && !space),
   };
 }
+/**
+ * Workspace a user-level workflow request addresses: the explicit one when
+ * given, otherwise the user's selected Workspace. An explicit Workspace must be
+ * owned by the user and not revoked.
+ */
+export async function resolveUserWorkflowWorkspace(
+  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  userId: string,
+  requested: string | null,
+): Promise<string | null> {
+  if (!requested) return (await loadWorkflowWorkspace(env, userId)).workspaceId;
+  const owned = await env.CONCLAVE_DB.prepare(
+    "SELECT id FROM execution_workspaces WHERE id=?1 AND owner_user_id=?2 AND status != 'revoked'",
+  )
+    .bind(requested, userId)
+    .first();
+  if (!owned) throw new HttpError(404, "Workspace not found");
+  return requested;
+}
+
 /** Selection is restricted to Workspaces and Spaces owned by this user. */
 export async function prepareWorkflowWorkspaceGrant(
   env: SecurityEnv,
@@ -188,10 +208,21 @@ export async function handleWorkflowWorkspace(
   const resetToGlobal = Boolean(body.inherit && spaceId && current.inherited);
   if (!changed && !resetToGlobal)
     return json({ ...current, workspaces: choices.results });
-  if (body.confirmReset !== true)
+  // User configuration is stored per Workspace, so a global switch only
+  // discards overrides of Spaces that inherit the global Workspace.
+  const inheritingOverrides = spaceId
+    ? 0
+    : ((
+        await env.CONCLAVE_DB.prepare(
+          "SELECT COUNT(*) AS n FROM space_workflow_configurations WHERE space_id IN (SELECT s.id FROM spaces s WHERE s.owner_user_id=?1 AND NOT EXISTS (SELECT 1 FROM space_workflow_settings ws WHERE ws.space_id=s.id))",
+        )
+          .bind(ownerUserId)
+          .first<{ n: number }>()
+      )?.n ?? 0);
+  if ((spaceId || inheritingOverrides > 0) && body.confirmReset !== true)
     throw new HttpError(
       409,
-      "Changing Workspace resets all workflows; confirmReset is required",
+      "Changing Workspace resets Space workflow overrides; confirmReset is required",
     );
   const db = env.CONCLAVE_DB;
   const now = new Date().toISOString();
@@ -240,16 +271,6 @@ export async function handleWorkflowWorkspace(
           "INSERT INTO user_workflow_settings(user_id,workspace_id,updated_at) VALUES(?1,?2,?3) ON CONFLICT(user_id) DO UPDATE SET workspace_id=excluded.workspace_id,updated_at=excluded.updated_at",
         )
         .bind(ownerUserId, selected, now),
-    );
-    statements.push(
-      db
-        .prepare("DELETE FROM user_workflow_configurations WHERE user_id = ?1")
-        .bind(ownerUserId),
-    );
-    statements.push(
-      db
-        .prepare("DELETE FROM user_workflow_defaults WHERE user_id = ?1")
-        .bind(ownerUserId),
     );
     statements.push(
       db

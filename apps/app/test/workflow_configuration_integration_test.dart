@@ -45,30 +45,6 @@ class IntegrationSource extends WorkflowSource
       spaceDefaults[spaceId] ?? super.loadSpaceWorkflowDefault(spaceId);
 
   @override
-  Future<String> saveSpaceWorkflowDefault(
-      String spaceId, String workflowId) async {
-    spaceDefaults[spaceId] = workflowId;
-    return workflowId;
-  }
-
-  @override
-  Future<AxUserWorkflowConfiguration> saveSpaceWorkflowConfiguration(
-      String spaceId, AxUserWorkflowConfiguration configuration) async {
-    (spaceValues[spaceId] ??= {})[configuration.workflowId] = configuration;
-    return configuration;
-  }
-
-  @override
-  Future<AxUserWorkflowConfiguration> resetSpaceWorkflowConfiguration(
-      String spaceId, String workflowId) async {
-    spaceValues[spaceId]?.remove(workflowId);
-    return (!selectedSpaceWorkspaces.containsKey(spaceId)
-            ? values.where((c) => c.workflowId == workflowId).firstOrNull
-            : null) ??
-        AxUserWorkflowConfiguration(workflowId: workflowId);
-  }
-
-  @override
   Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async =>
       (await super.loadBuiltinWorkflowCatalog())
           .map((workflow) => AxBuiltinWorkflow.fromJson({

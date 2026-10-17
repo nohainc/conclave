@@ -17,8 +17,12 @@ class SpacePage extends StatelessWidget {
     this.tabQueries,
     this.mutations,
     this.viewerEmail,
+    this.workflowConfigurations,
   });
 
+  /// Space-scoped workflow preferences; used for the Workspace selector. When
+  /// omitted one is created from [dataSource] if it supports Workspace choice.
+  final AxWorkflowConfigurations? workflowConfigurations;
   final AxSpace space;
   final AxDataSource dataSource;
   final ValueChanged<String> onOpenThread;
@@ -47,6 +51,7 @@ class SpacePage extends StatelessWidget {
         tabQueries: tabQueries,
         mutations: mutations,
         viewerEmail: viewerEmail,
+        workflowConfigurations: workflowConfigurations,
       );
 }
 
@@ -65,8 +70,10 @@ class _SpaceWorkspace extends StatefulWidget {
     this.tabQueries,
     this.mutations,
     this.viewerEmail,
+    this.workflowConfigurations,
   });
 
+  final AxWorkflowConfigurations? workflowConfigurations;
   final AxSpace space;
   final AxDataSource dataSource;
   final ValueChanged<String> onOpenThread;
@@ -96,6 +103,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
   late AxPeople _people;
   late AxSpaceThreads _streams;
   late AxCollaborationMutations _collaboration;
+  AxWorkflowConfigurations? _workflows;
   final _tabCancels = <void Function()>[];
   bool get canManage => widget.space.effectivePermissions.manageOwnThreads;
   bool get canInvite => widget.space.role == 'owner';
@@ -122,6 +130,11 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
           .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
     }
     threads = _streams.peek(widget.space.id);
+    _workflows = widget.workflowConfigurations ??
+        (widget.dataSource is AxWorkflowWorkspaceDataSource
+            ? AxWorkflowConfigurations(widget.dataSource,
+                engine: _streams.engine, spaceId: widget.space.id)
+            : null);
   }
 
   void _cancelTab() {
@@ -248,6 +261,10 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                                       ),
                                     ),
                                   ],
+                                  if (_workflows != null)
+                                    _SpaceWorkspaceSelector(
+                                        configurations: _workflows!,
+                                        isOwner: isOwner),
                                 ],
                               ),
                             ),

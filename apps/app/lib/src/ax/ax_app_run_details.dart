@@ -10,11 +10,6 @@ extension _AxAppRunDetails on _AxAppStateMixin {
           archivedSpaces: store.archivedSpaces,
           mutations: store.collaboration,
         );
-      case AxRouteKind.workflows:
-        return WorkflowsPage(
-            catalogs: store.catalogs,
-            viewerEmail: store.auth.viewer?.email,
-            configurations: store.workflowConfigurations);
       case AxRouteKind.workspaces:
         return _workspacesView();
       case AxRouteKind.profileSecurity:

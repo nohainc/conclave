@@ -328,3 +328,92 @@ state. Cloud still resolves and honors any existing Space override rows and
 Space Workflow Workspace selections; their endpoints, tables and runtime
 precedence are scheduled for removal separately, because a Space's Workspace
 grant depends on that selection.
+
+## Workflows move into Workspace tabs (2026-10-17)
+
+The standalone Workflows page and menu item are removed; `/workflows` opens
+Workspaces. The Workspaces page shows one tab per registered Workspace (Thread
+tab style) with its machine info, Workers and Workflows.
+
+### Per-Workspace storage (migration `0072`)
+
+`user_workflow_configurations` is keyed `(user_id, workspace_id, workflow_id)`
+and `user_workflow_defaults` `(user_id, workspace_id)`. Existing rows move to the
+user's selected Workspace; rows of users without one are dropped (they had
+nothing to attach to).
+
+- `GET|PUT|DELETE /api/user/workflow-configurations[/:id]` and
+  `GET|PUT /api/user/workflow-default` accept `?workspaceId=`. Without it they
+  address the selected Workspace. The Workspace must be owned by the caller and
+  not revoked (404 otherwise); Workers must belong to the addressed Workspace.
+  The configuration list response includes `workspaceId`.
+- The selected Workspace (`user_workflow_settings`) now only decides which
+  Workspace new Work runs on. Changing it no longer deletes configuration.
+  `confirmReset` is required only when Spaces inheriting the global Workspace
+  have their own overrides, which are still reset because they reference the
+  previous Workspace's Workers.
+- Space resolution reads the owner's rows for the Space's effective Workspace
+  (its own selection, otherwise the global one), including Spaces with their own
+  Workspace.
+- AX: each Workspace tab edits its own workflows through
+  `AxWorkflowConfigurations.forWorkspace`; the tab shows "Active" or a
+  "Use this Workspace" action for the selected Workspace.
+
+### Space Workspace selector
+
+The Space page header shows a Workspace control backed by the existing
+`/api/spaces/:id/workflow-workspace` endpoint. The owner chooses "Default
+Workspace" (follow the owner's selected Workspace) or one of their Workspaces;
+other members see the current Workspace read-only. Changing it asks for
+confirmation and resets that Space's own workflow overrides and default (they
+reference the previous Workspace's Workers); the chosen Workspace is authorized
+for the Space. Threads then use that Workspace's Workers and workflows.
+
+### Member access (migration `0073`)
+
+`workspace_member_access(workspace_id, policy_json)` optionally limits what
+invited Space members can run on a Workspace. No row means no limit. A row holds
+`{schemaVersion:1, workers:{<workerId>:{models:[…]|null, efforts:[…]|null}}}`:
+a listed Worker is shared, a null list shares every model or effort, and an
+unlisted Worker is not shared.
+
+- `GET|PUT /api/workspaces/:id/member-access` is owner-only (404 otherwise).
+  `PUT {restricted:false}` removes the row; `PUT {restricted:true, workers}`
+  replaces it, and every Worker must belong to the Workspace.
+- Enforcement is in `resolveWorkflowExecutionBindings`, so it covers request
+  validation and creation. For a requester who does not own the Space's
+  effective Workspace, each step's Worker, model and effort (configured or
+  composer override) must be shared; otherwise the request fails with 403.
+  When models or efforts are limited, Auto is not shared, because the Worker
+  could pick an unshared value. The owner configures an explicit model/effort in
+  the workflow, or members choose one.
+- AX: each Workspace tab has an owner-only "Member access" section (limit switch,
+  per-Worker share, model and effort chips; Save access).
+
+### Member choices
+
+`GET /api/workers?includeShared=true` (sent by AX) returns the caller's own
+Workers plus, for Spaces they belong to but do not own, the Workers of the
+Workspace those Spaces run on (the Space's own selection, otherwise the owner's
+global one; revoked Workspaces excluded). With a member-access policy only the
+listed Workers appear, and their `executionOptions` are narrowed to the shared
+models and efforts (custom models are disabled when models are limited). Shared
+rows hide the owner's machine details (`providerToolName`, `providerToolVersion`,
+`engineVersion`) and the unused legacy `modelOptions`. Without
+`includeShared` the endpoint is unchanged, so Cloud's own configuration
+validation never sees other owners' Workers.
+
+The Thread composer therefore offers members exactly the choices the server will
+accept; the check in `resolveWorkflowExecutionBindings` remains the authority.
+
+## Space workflow editing removed from AX (2026-10-17)
+
+AX no longer has any screen that writes workflow settings for a Space: workflows
+are edited per Workspace in its tab, and a Space follows the Workspace it runs
+on. The Dart client therefore dropped its Space write paths
+(`saveSpaceWorkflowConfiguration`, `resetSpaceWorkflowConfiguration`,
+`saveSpaceWorkflowDefault`), and a Space-scoped `AxWorkflowConfigurations` is
+read-only. `WorkflowsPage` now requires a `workspaceId` and only renders inside
+a Workspace tab (no standalone title, Workspace picker or per-Space reset).
+Cloud's Space override routes and tables are unchanged and still resolve for
+existing data; removing them is a separate, breaking Cloud change.

@@ -33,9 +33,9 @@ it("requires ownership and confirmation, scopes Workspace selection, resets work
         env,
         spaceId,
       );
-    await expect(handle({ workspaceId: "a" })).rejects.toMatchObject({
-      status: 409,
-    });
+    // Configuration is per Workspace, so a global switch needs no reset
+    // confirmation while no inheriting Space has overrides.
+    await handle({ workspaceId: "a" });
     await expect(
       handle({ workspaceId: "foreign", confirmReset: true }),
     ).rejects.toMatchObject({ status: 403 });
@@ -96,7 +96,7 @@ it("requires ownership and confirmation, scopes Workspace selection, resets work
     });
     sqlite
       .prepare(
-        "INSERT INTO user_workflow_configurations VALUES('owner','chat',1,?,'now')",
+        "INSERT INTO user_workflow_configurations VALUES('owner','a','chat',1,?,'now')",
       )
       .run(config);
     expect(
@@ -138,11 +138,12 @@ it("requires ownership and confirmation, scopes Workspace selection, resets work
       )
       .run(config);
     await handle({ workspaceId: "b", confirmReset: true });
+    // Switching the global Workspace keeps every Workspace's configuration.
     expect(
       sqlite
-        .prepare("SELECT COUNT(*) AS n FROM user_workflow_configurations")
-        .get(),
-    ).toEqual({ n: 0 });
+        .prepare("SELECT workspace_id FROM user_workflow_configurations")
+        .all(),
+    ).toEqual([{ workspace_id: "a" }]);
     expect(
       sqlite
         .prepare(
@@ -159,11 +160,11 @@ it("requires ownership and confirmation, scopes Workspace selection, resets work
     });
     sqlite
       .prepare(
-        "INSERT INTO user_workflow_configurations VALUES('owner','direct',1,?,'now')",
+        "INSERT INTO user_workflow_configurations VALUES('owner','b','direct',1,?,'now')",
       )
       .run(enabledDirect);
     sqlite.exec(
-      "INSERT INTO user_workflow_defaults VALUES('owner','direct','now'); INSERT INTO space_workflow_configurations VALUES('s','direct',1,'{\"schemaVersion\":1,\"workflowId\":\"direct\",\"enabled\":false,\"defaults\":{},\"stepOverrides\":{}}','now'); INSERT INTO space_workflow_defaults VALUES('s','direct','now');",
+      "INSERT INTO user_workflow_defaults VALUES('owner','b','direct','now'); INSERT INTO space_workflow_configurations VALUES('s','direct',1,'{\"schemaVersion\":1,\"workflowId\":\"direct\",\"enabled\":false,\"defaults\":{},\"stepOverrides\":{}}','now'); INSERT INTO space_workflow_defaults VALUES('s','direct','now');",
     );
     expect(
       (await loadSpaceWorkflowConfigurations(env, "s")).configurations.find(

@@ -3,6 +3,7 @@ import { handleGetAvatar, handleUploadAvatar } from "./profile.js";
 import { handleWorkflowWorkspace } from "./workflow-workspace.js";
 import { handleWorkflowConfigurations } from "./workflow-configurations.js";
 import { handleWorkflowDefault } from "./workflow-default.js";
+import { handleWorkspaceMemberAccess } from "./workspace-member-access.js";
 import { conditionalJson } from "./conditional-read.js";
 import { BUILTIN_WORKFLOW_CATALOG, workflowCatalogEntry } from "@conclave/core";
 
@@ -272,6 +273,16 @@ export async function routeWorkerRequest(
     if (request.method === "GET" && url.pathname === "/api/workspaces") {
       return await handlers.handleListWorkspaces!(request, env, ctx);
     }
+    const memberAccessMatch = url.pathname.match(
+      /^\/api\/workspaces\/([^/]+)\/member-access$/,
+    );
+    if (memberAccessMatch)
+      return await handleWorkspaceMemberAccess(
+        request,
+        env,
+        decodeURIComponent(memberAccessMatch[1]!),
+        ctx,
+      );
     const workspaceSettingsMatch = url.pathname.match(
       /^\/api\/(user|spaces\/([^/]+))\/workflow-workspace$/,
     );

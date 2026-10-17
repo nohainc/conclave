@@ -1,5 +1,8 @@
 import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
-import { loadWorkflowWorkspace } from "./workflow-workspace.js";
+import {
+  loadWorkflowWorkspace,
+  resolveUserWorkflowWorkspace,
+} from "./workflow-workspace.js";
 import { loadSpaceWorkflowConfigurations } from "./space-workflow-configurations.js";
 import {
   HttpError,
@@ -21,11 +24,13 @@ function definitionFor(id: string) {
 export async function loadUserWorkflowDefault(
   env: Pick<SecurityEnv, "CONCLAVE_DB">,
   userId: string,
+  workspaceId: string | null,
 ) {
+  if (!workspaceId) return CHAT_WORKFLOW_ID;
   const row = await env.CONCLAVE_DB.prepare(
-    "SELECT workflow_id AS workflowId FROM user_workflow_defaults WHERE user_id = ?1",
+    "SELECT workflow_id AS workflowId FROM user_workflow_defaults WHERE user_id = ?1 AND workspace_id = ?2",
   )
-    .bind(userId)
+    .bind(userId, workspaceId)
     .first<{ workflowId: string }>();
   return row?.workflowId ?? CHAT_WORKFLOW_ID;
 }
@@ -40,7 +45,9 @@ export async function loadSpaceWorkflowDefault(
   )
     .bind(spaceId)
     .first<{ workflowId: string }>();
-  return row?.workflowId ?? loadUserWorkflowDefault(env, ownerUserId);
+  if (row) return row.workflowId;
+  const { workspaceId } = await loadWorkflowWorkspace(env, ownerUserId, spaceId);
+  return loadUserWorkflowDefault(env, ownerUserId, workspaceId);
 }
 
 export async function handleWorkflowDefault(
@@ -67,10 +74,18 @@ export async function handleWorkflowDefault(
       throw new HttpError(403, "Only the Space owner can configure workflows");
   }
 
+  const userWorkspaceId = spaceId
+    ? null
+    : await resolveUserWorkflowWorkspace(
+        env,
+        ownerUserId,
+        new URL(request.url).searchParams.get("workspaceId"),
+      );
+
   if (request.method === "GET") {
     const selected = spaceId
       ? await loadSpaceWorkflowDefault(env, spaceId, ownerUserId)
-      : await loadUserWorkflowDefault(env, ownerUserId);
+      : await loadUserWorkflowDefault(env, ownerUserId, userWorkspaceId);
     const configuration = spaceId
       ? (
           await loadSpaceWorkflowConfigurations(env, spaceId)
@@ -78,9 +93,9 @@ export async function handleWorkflowDefault(
       : JSON.parse(
           (
             await env.CONCLAVE_DB.prepare(
-              "SELECT configuration_json AS configurationJson FROM user_workflow_configurations WHERE user_id = ?1 AND workflow_id = ?2",
+              "SELECT configuration_json AS configurationJson FROM user_workflow_configurations WHERE user_id = ?1 AND workflow_id = ?2 AND workspace_id = ?3",
             )
-              .bind(ownerUserId, selected)
+              .bind(ownerUserId, selected, userWorkspaceId)
               .first<{ configurationJson: string }>()
           )?.configurationJson ?? "null",
         );
@@ -104,8 +119,10 @@ export async function handleWorkflowDefault(
   const workflowId = body.defaultWorkflowId;
   definitionFor(workflowId);
   if (workflowId !== CHAT_WORKFLOW_ID) {
-    const workspace = await loadWorkflowWorkspace(env, ownerUserId, spaceId);
-    if (!workspace.workspaceId)
+    const workspaceId = spaceId
+      ? (await loadWorkflowWorkspace(env, ownerUserId, spaceId)).workspaceId
+      : userWorkspaceId;
+    if (!workspaceId)
       throw new HttpError(
         400,
         "Choose a Workspace before selecting a workflow",
@@ -118,9 +135,9 @@ export async function handleWorkflowDefault(
     : JSON.parse(
         (
           await env.CONCLAVE_DB.prepare(
-            "SELECT configuration_json AS configurationJson FROM user_workflow_configurations WHERE user_id = ?1 AND workflow_id = ?2",
+            "SELECT configuration_json AS configurationJson FROM user_workflow_configurations WHERE user_id = ?1 AND workflow_id = ?2 AND workspace_id = ?3",
           )
-            .bind(ownerUserId, workflowId)
+            .bind(ownerUserId, workflowId, userWorkspaceId)
             .first<{ configurationJson: string }>()
         )?.configurationJson ?? "null",
       );
@@ -140,11 +157,11 @@ export async function handleWorkflowDefault(
       .run();
   } else {
     await env.CONCLAVE_DB.prepare(
-      `INSERT INTO user_workflow_defaults(user_id,workflow_id,updated_at)
-       VALUES(?1,?2,?3)
-       ON CONFLICT(user_id) DO UPDATE SET workflow_id=excluded.workflow_id,updated_at=excluded.updated_at`,
+      `INSERT INTO user_workflow_defaults(user_id,workspace_id,workflow_id,updated_at)
+       VALUES(?1,?4,?2,?3)
+       ON CONFLICT(user_id,workspace_id) DO UPDATE SET workflow_id=excluded.workflow_id,updated_at=excluded.updated_at`,
     )
-      .bind(ownerUserId, workflowId, now)
+      .bind(ownerUserId, workflowId, now, userWorkspaceId)
       .run();
   }
   return json({ schemaVersion: 1, defaultWorkflowId: workflowId });

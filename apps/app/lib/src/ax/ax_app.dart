@@ -1,6 +1,5 @@
 import '../features/people/people_page.dart';
 import '../features/common/quiet_notices.dart';
-import '../features/workflows/workflows_page.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';

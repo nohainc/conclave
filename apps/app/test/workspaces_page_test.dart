@@ -111,7 +111,7 @@ void main() {
             'Workspaces are connected execution environments. Workers are the AI integrations configured on each Workspace.'),
         findsOneWidget,
       );
-      expect(find.byType(TabBar), findsNothing);
+      expect(find.byType(TabBar), findsOneWidget);
       expect(find.text(snapshot.workspaces.first.name), findsOneWidget);
       expect(find.textContaining('AI Account'), findsNothing);
       expect(find.textContaining('Credential Profile'), findsNothing);
@@ -132,7 +132,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Workspaces'), findsOneWidget);
-      expect(find.byType(TabBar), findsNothing);
+      expect(find.byType(TabBar), findsOneWidget);
       expect(find.text(snapshot.workspaces.first.name), findsOneWidget);
 
       expect(find.byTooltip('Connect Workspace'), findsNothing);
@@ -159,7 +159,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Workspaces'), findsOneWidget);
-      expect(find.byType(TabBar), findsNothing);
+      expect(find.byType(TabBar), findsOneWidget);
       expect(find.text('Add AI Account'), findsNothing);
       expect(find.text('Workers from your Workspaces'), findsNothing);
     });
@@ -251,98 +251,46 @@ void main() {
           find.textContaining('development-workspace.local'), findsOneWidget);
     });
 
-    testWidgets('shows all Workspace cards without a Workspace expansion',
+    testWidgets('each Workspace is a tab that switches the detail',
         (tester) async {
       AxWorkspace workspace(String id) => AxWorkspace(
             id: id,
             name: 'Workspace $id',
             hostname: '$id.local',
             status: 'online',
-            appVersion: '1.0.0',
-            workerCount: 0,
-            activeTaskCount: 0,
           );
 
-      WorkspacesPage page(int count) => WorkspacesPage(
-            workspaces: List.generate(count, (index) => workspace('$index')),
-            onAdd: () {},
-            onRename: (_) {},
-            onUpdate: (_) {},
-            onRevoke: (_) {},
-          );
-
-      await tester.pumpWidget(buildTestScaffold(page(2)));
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: List.generate(3, (index) => workspace('$index')),
+      )));
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('workspace-tab-0')), findsOneWidget);
+      expect(find.byKey(const Key('workspace-tab-2')), findsOneWidget);
       expect(find.text('0.local'), findsOneWidget);
+      expect(find.text('1.local'), findsNothing);
+
+      await tester.tap(find.byKey(const Key('workspace-tab-1')));
+      await tester.pumpAndSettle();
       expect(find.text('1.local'), findsOneWidget);
-
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pumpAndSettle();
-      await tester.pumpWidget(buildTestScaffold(page(3)));
-      await tester.pumpAndSettle();
-      expect(find.text('2.local'), findsOneWidget);
+      expect(find.text('0.local'), findsNothing);
     });
 
-    testWidgets(
-        'Workspace cards are informational and use two columns when wide',
-        (tester) async {
+    testWidgets('Workspace deep link selects the target tab', (tester) async {
       AxWorkspace workspace(String id) => AxWorkspace(
             id: id,
             name: 'Workspace $id',
             hostname: '$id.local',
             status: 'online',
-          );
-
-      await tester.pumpWidget(MaterialApp(
-        home: MediaQuery(
-          data: const MediaQueryData(size: Size(1000, 800)),
-          child: Scaffold(
-            body: SingleChildScrollView(
-              child: WorkspacesPage(
-                workspaces: [workspace('one'), workspace('two')],
-              ),
-            ),
-          ),
-        ),
-      ));
-      await tester.pumpAndSettle();
-
-      final header = tester.widget<ListTile>(find.byType(ListTile).first);
-      expect(header.onTap, isNull);
-
-      final cards = find.byType(Card);
-      expect(cards, findsNWidgets(2));
-      expect(tester.getTopLeft(cards.at(1)).dx,
-          greaterThan(tester.getTopLeft(cards.at(0)).dx));
-      expect(tester.getTopLeft(cards.at(1)).dy,
-          closeTo(tester.getTopLeft(cards.at(0)).dy, 1));
-    });
-
-    testWidgets('Workspace deep link focuses the target card', (tester) async {
-      AxWorkspace workspace(String id) => AxWorkspace(
-            id: id,
-            name: 'Workspace $id',
-            hostname: '$id.local',
-            status: 'online',
-            appVersion: '1.0.0',
-            workerCount: 0,
-            activeTaskCount: 0,
           );
 
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: List.generate(3, (index) => workspace('$index')),
         initialWorkspaceId: '2',
-        onAdd: () {},
-        onRename: (_) {},
-        onUpdate: (_) {},
-        onRevoke: (_) {},
       )));
       await tester.pumpAndSettle();
 
       expect(find.text('2.local'), findsOneWidget);
-      final targetCard = tester.widget<Card>(find.byType(Card).last);
-      final targetShape = targetCard.shape! as RoundedRectangleBorder;
-      expect(targetShape.side.color, isNot(Colors.transparent));
+      expect(find.text('0.local'), findsNothing);
     });
 
     testWidgets('expanded Workspace lists its Worker projections',
@@ -502,16 +450,12 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      final cards = find.byType(Card);
-      final firstCard = tester.widget<Card>(cards.at(0));
-      final secondCard = tester.widget<Card>(cards.at(1));
-      expect(firstCard, isNot(same(secondCard)));
-      expect(find.descendant(of: cards.at(0), matching: find.text('ChatGPT')),
-          findsOneWidget);
-      expect(find.descendant(of: cards.at(0), matching: find.text('Gemini')),
-          findsNothing);
-      expect(find.descendant(of: cards.at(1), matching: find.text('Gemini')),
-          findsOneWidget);
+      expect(find.text('ChatGPT'), findsOneWidget);
+      expect(find.text('Gemini'), findsNothing);
+      await tester.tap(find.byKey(const Key('workspace-tab-two')));
+      await tester.pumpAndSettle();
+      expect(find.text('Gemini'), findsOneWidget);
+      expect(find.text('ChatGPT'), findsNothing);
     });
 
     testWidgets('needs-attention stays concise and avoids internal details',

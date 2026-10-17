@@ -89,7 +89,6 @@ class AppBreadcrumb extends StatelessWidget {
       AxRouteKind.archivedSpaces => [
           _breadcrumbText('Archived Spaces', isCurrent: true)
         ],
-      AxRouteKind.workflows => [_breadcrumbText('Workflows', isCurrent: true)],
       AxRouteKind.workspaces => nav.workspaceId != null
           ? [
               _breadcrumbLink(

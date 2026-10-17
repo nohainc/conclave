@@ -20,10 +20,10 @@ export async function loadSpaceWorkflowConfigurations(
     spaceId,
   );
   const rows = await env.CONCLAVE_DB.prepare(
-    `SELECT workflow_id, configuration_json FROM user_workflow_configurations WHERE user_id = ?1 AND (?2 IS NULL OR workflow_id = ?2) AND NOT EXISTS (SELECT 1 FROM space_workflow_settings WHERE space_id = ?3)
+    `SELECT workflow_id, configuration_json FROM user_workflow_configurations WHERE user_id = ?1 AND workspace_id = ?4 AND (?2 IS NULL OR workflow_id = ?2)
     UNION ALL SELECT workflow_id, configuration_json FROM space_workflow_configurations WHERE space_id = ?3 AND (?2 IS NULL OR workflow_id = ?2)`,
   )
-    .bind(space.ownerUserId, workflowId ?? null, spaceId)
+    .bind(space.ownerUserId, workflowId ?? null, spaceId, workspace.workspaceId)
     .all<{ workflow_id: string; configuration_json: string }>();
   // Space rows deliberately replace an entire workflow, including Worker and Auto model/effort fields.
   const configurations = new Map(
@@ -45,9 +45,9 @@ export async function loadSpaceWorkflowConfigurations(
       )?.workflowId ??
       (
         await env.CONCLAVE_DB.prepare(
-          "SELECT workflow_id AS workflowId FROM user_workflow_defaults WHERE user_id = ?1",
+          "SELECT workflow_id AS workflowId FROM user_workflow_defaults WHERE user_id = ?1 AND workspace_id = ?2",
         )
-          .bind(space.ownerUserId)
+          .bind(space.ownerUserId, workspace.workspaceId)
           .first<{ workflowId: string }>()
       )?.workflowId ??
       "chat",

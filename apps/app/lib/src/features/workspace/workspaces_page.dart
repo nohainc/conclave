@@ -1,18 +1,28 @@
 import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
+import '../../ax/sync/ax_session_catalogs.dart';
+import '../../ax/sync/ax_workflow_configurations.dart';
+import '../../ax/ax_workspace_member_access.dart';
+import '../workflows/workflows_page.dart';
+import 'workspace_member_access_section.dart';
 
 export 'workspaces_overview.dart';
 
-/// Workspace-owned execution capacity and the Workers configured on it.
+/// Workspace-owned execution capacity, its Workers, and its Workflows.
 ///
-/// Workspace collection page. Workspace routes always render this view.
+/// Each registered Workspace is a tab; Workflows are configured inside the tab
+/// of the Workspace they run on. Workspace routes always render this view.
 class WorkspacesPage extends StatefulWidget {
   const WorkspacesPage({
     super.key,
     required this.workspaces,
     this.workspaceWorkers = const [],
     this.initialWorkspaceId,
+    this.workflowCatalogs,
+    this.workflowConfigurations,
+    this.viewerEmail,
+    this.memberAccessSource,
     // Retained as optional compatibility inputs while callers are audited.
     VoidCallback? onAdd,
     ValueChanged<AxWorkspace>? onRename,
@@ -25,19 +35,28 @@ class WorkspacesPage extends StatefulWidget {
   final List<AxWorker> workspaceWorkers;
   final String? initialWorkspaceId;
 
+  /// Workflow inputs. When either is null the Workflows section is hidden.
+  final AxSessionCatalogs? workflowCatalogs;
+  final AxWorkflowConfigurations? workflowConfigurations;
+  final String? viewerEmail;
+
+  /// Enables the owner's "Member access" section of each Workspace tab.
+  final AxWorkspaceMemberAccessDataSource? memberAccessSource;
+
   @override
   State<WorkspacesPage> createState() => _WorkspacesPageState();
 }
 
-class _WorkspacesPageState extends State<WorkspacesPage> {
-  final Map<String, GlobalKey> _workspaceCardKeys = <String, GlobalKey>{};
+class _WorkspacesPageState extends State<WorkspacesPage>
+    with TickerProviderStateMixin {
+  TabController? _tabs;
+  String? _selectedId;
 
   @override
   void initState() {
     super.initState();
-    if (widget.initialWorkspaceId != null) {
-      _focusWorkspaceCard(widget.initialWorkspaceId!);
-    }
+    _selectedId = widget.initialWorkspaceId;
+    _syncTabs();
   }
 
   @override
@@ -45,124 +64,143 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialWorkspaceId != widget.initialWorkspaceId &&
         widget.initialWorkspaceId != null) {
-      _focusWorkspaceCard(widget.initialWorkspaceId!);
+      _selectedId = widget.initialWorkspaceId;
     }
+    _syncTabs();
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-        builder: (context, constraints) {
-          final wideLayout = MediaQuery.sizeOf(context).width >= 760;
+  void dispose() {
+    _tabs?.dispose();
+    super.dispose();
+  }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Workspaces',
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3)),
-              const SizedBox(height: 6),
-              Text(
-                'Workspaces are connected execution environments. Workers are the AI integrations configured on each Workspace.',
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
-              const SizedBox(height: 12),
-              if (widget.workspaces.isEmpty)
-                const _EmptyWorkspaces()
-              else
-                LayoutBuilder(
-                    builder: (context, cardConstraints) => Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: widget.workspaces
-                              .map((workspace) {
-                                final localWorkers = widget.workspaceWorkers
-                                    .where((worker) =>
-                                        worker.workspaceId == workspace.id &&
-                                        worker.status != 'removed')
-                                    .toList(growable: false);
-                                final isTarget =
-                                    widget.initialWorkspaceId == workspace.id;
-                                return Card(
-                                  key: _workspaceCardKeys.putIfAbsent(
-                                      workspace.id, GlobalKey.new),
-                                  margin: EdgeInsets.zero,
-                                  clipBehavior: Clip.antiAlias,
-                                  shape: RoundedRectangleBorder(
-                                    side: BorderSide(
-                                      color: isTarget
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                          : Colors.transparent,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      ListTile(
-                                        title: Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(workspace.name,
-                                                  style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w700)),
-                                            ),
-                                          ],
-                                        ),
-                                        subtitle: Text(
-                                          _workspaceSubtitle(workspace),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        trailing: SizedBox(
-                                          width: 96,
-                                          child: Center(
-                                            child: _StatusPill(
-                                                status:
-                                                    _statusLabel(workspace)),
-                                          ),
-                                        ),
-                                      ),
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                            16, 0, 16, 16),
-                                        child: _WorkspaceCardBody(
-                                          workers: localWorkers,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              })
-                              .map((card) => SizedBox(
-                                    width: wideLayout &&
-                                            widget.workspaces.length > 1
-                                        ? (cardConstraints.maxWidth - 12) / 2
-                                        : cardConstraints.maxWidth,
-                                    child: card,
-                                  ))
-                              .toList(),
-                        )),
+  void _syncTabs() {
+    final count = widget.workspaces.length;
+    if (count == 0) {
+      _tabs?.dispose();
+      _tabs = null;
+      return;
+    }
+    var index = widget.workspaces.indexWhere((w) => w.id == _selectedId);
+    if (index < 0) index = 0;
+    if (_tabs?.length != count) {
+      _tabs?.dispose();
+      _tabs = TabController(length: count, vsync: this, initialIndex: index)
+        ..addListener(_onTabChanged);
+    } else if (_tabs!.index != index) {
+      _tabs!.index = index;
+    }
+    _selectedId = widget.workspaces[index].id;
+  }
+
+  void _onTabChanged() {
+    final tabs = _tabs;
+    if (tabs == null || tabs.indexIsChanging) return;
+    final id = widget.workspaces[tabs.index].id;
+    if (id != _selectedId) setState(() => _selectedId = id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tabs = _tabs;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Workspaces',
+            style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3)),
+        const SizedBox(height: 6),
+        Text(
+          'Workspaces are connected execution environments. Workers are the AI integrations configured on each Workspace.',
+          style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 12),
+        if (tabs == null)
+          const _EmptyWorkspaces()
+        else ...[
+          TabBar(
+            key: const Key('workspace-tabs'),
+            controller: tabs,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            labelColor: theme.colorScheme.onSurface,
+            unselectedLabelColor: theme.brightness == Brightness.dark
+                ? Colors.white38
+                : Colors.black45,
+            indicatorColor: theme.colorScheme.onSurface,
+            dividerHeight: 0,
+            tabs: [
+              for (final workspace in widget.workspaces)
+                Tab(
+                    key: Key('workspace-tab-${workspace.id}'),
+                    text: workspace.name),
             ],
-          );
-        },
-      );
+          ),
+          const Divider(height: 1, thickness: 1),
+          const SizedBox(height: 16),
+          _workspaceDetail(context, widget.workspaces[tabs.index]),
+        ],
+      ],
+    );
+  }
 
-  void _focusWorkspaceCard(String workspaceId) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final cardContext = _workspaceCardKeys[workspaceId]?.currentContext;
-      if (cardContext == null) return;
-      Scrollable.ensureVisible(
-        cardContext,
-        alignment: 0.08,
-        duration: const Duration(milliseconds: 220),
-      );
-    });
+  Widget _workspaceDetail(BuildContext context, AxWorkspace workspace) {
+    final workers = widget.workspaceWorkers
+        .where((worker) =>
+            worker.workspaceId == workspace.id && worker.status != 'removed')
+        .toList(growable: false);
+    final catalogs = widget.workflowCatalogs;
+    final configurations = widget.workflowConfigurations;
+    return Column(
+      key: Key('workspace-detail-${workspace.id}'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Card(
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              ListTile(
+                title: Text(_workspaceSubtitle(workspace),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                trailing: SizedBox(
+                  width: 96,
+                  child: Center(
+                      child: _StatusPill(status: _statusLabel(workspace))),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: _WorkspaceCardBody(workers: workers),
+              ),
+            ],
+          ),
+        ),
+        if (catalogs != null && configurations != null) ...[
+          const SizedBox(height: 24),
+          WorkflowsPage(
+            key: ValueKey('workspace-workflows-${workspace.id}'),
+            catalogs: catalogs,
+            configurations: configurations.forWorkspace(workspace.id),
+            viewerEmail: widget.viewerEmail,
+            workspaceId: workspace.id,
+          ),
+        ],
+        if (widget.memberAccessSource != null) ...[
+          const SizedBox(height: 24),
+          WorkspaceMemberAccessSection(
+            key: ValueKey('workspace-member-access-${workspace.id}'),
+            workspaceId: workspace.id,
+            workers: widget.workspaceWorkers,
+            source: widget.memberAccessSource!,
+          ),
+        ],
+      ],
+    );
   }
 }
 

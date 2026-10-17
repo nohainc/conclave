@@ -16,8 +16,15 @@ class WorkflowsPage extends StatefulWidget {
       required this.catalogs,
       required this.configurations,
       this.viewerEmail,
+      required this.workspaceId,
       this.canEdit = true});
   final bool canEdit;
+
+  /// The Workspace whose workflows this section edits, shown in its tab.
+  /// [configurations] must be scoped to the same Workspace
+  /// (`AxWorkflowConfigurations.forWorkspace`). Whether the Workspace is the
+  /// one new Work runs on is shown and changed here.
+  final String workspaceId;
   final AxSessionCatalogs catalogs;
   final AxWorkflowConfigurations configurations;
   final String? viewerEmail;
@@ -26,7 +33,6 @@ class WorkflowsPage extends StatefulWidget {
 }
 
 class _WorkflowsPageState extends State<WorkflowsPage> {
-  int _workspacePickerRevision = 0;
   bool _changingWorkspace = false;
   @override
   void initState() {
@@ -111,41 +117,18 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                   }
                 }
                 final workers = (inventory.data ?? const <AxWorker>[])
-                    .where((worker) =>
-                        worker.workspaceId == workspaceState.data?.workspaceId)
+                    .where((worker) => worker.workspaceId == widget.workspaceId)
                     .toList();
-                final isSpaceWorkflows = widget.configurations.spaceId != null;
-                final description = isSpaceWorkflows
-                    ? 'All Threads use these workflows. Start with global defaults; customize them for this Space.'
-                    : 'Configure how Conclave performs tasks by default.';
                 return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(children: [
-                        if (!isSpaceWorkflows)
-                          const Expanded(
-                              child: Text('Workflows',
-                                  style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: -0.3)))
-                        else
-                          Expanded(
-                              child: Text(description,
-                                  style: TextStyle(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant))),
-                        if (isSpaceWorkflows && workspaceState.hasData)
-                          IconButton(
-                              key: const ValueKey('reset-global-workflows'),
-                              tooltip: 'Reset workflows to global settings',
-                              onPressed: widget.canEdit && !_changingWorkspace
-                                  ? () => _selectWorkspace(
-                                      null, workspaceState.data!,
-                                      inherit: true)
-                                  : null,
-                              icon: const Icon(Icons.settings_backup_restore)),
+                        Expanded(
+                            child: Text('Workflows',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700))),
                         IconButton(
                             tooltip: 'Refresh workflows',
                             onPressed: definitions.isFetching ||
@@ -155,75 +138,14 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                                 : _refresh,
                             icon: const Icon(Icons.refresh)),
                       ]),
-                      if (!isSpaceWorkflows)
-                        Text(description,
-                            style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant)),
-                      const SizedBox(height: 18),
                       if (workspaceState.hasData) ...[
-                        LayoutBuilder(builder: (context, constraints) {
-                          final workspacePicker = KeyedSubtree(
-                              key: ValueKey(_workspacePickerRevision),
-                              child: DropdownButtonFormField<String>(
-                                  key: const ValueKey('workflow-workspace'),
-                                  initialValue:
-                                      workspaceState.data!.workspaceId ?? '',
-                                  decoration: const InputDecoration(
-                                      labelText: 'Workspace'),
-                                  items: [
-                                    const DropdownMenuItem(
-                                        value: '',
-                                        child: Text('Select a Workspace')),
-                                    for (final workspace
-                                        in workspaceState.data!.workspaces)
-                                      DropdownMenuItem(
-                                          value: workspace.id,
-                                          child: Text(workspace.name)),
-                                    if (workspaceState.data!.workspaceId !=
-                                            null &&
-                                        !workspaceState.data!.workspaces.any(
-                                            (w) =>
-                                                w.id ==
-                                                workspaceState
-                                                    .data!.workspaceId))
-                                      DropdownMenuItem(
-                                          value:
-                                              workspaceState.data!.workspaceId,
-                                          child: const Text(
-                                              'Unavailable Workspace')),
-                                  ],
-                                  onChanged:
-                                      widget.canEdit && !_changingWorkspace
-                                          ? (id) => _selectWorkspace(
-                                              id == '' ? null : id,
-                                              workspaceState.data!)
-                                          : null));
-                          final defaultPicker =
-                              workflows.isNotEmpty && preferences.data != null
-                                  ? _defaultPicker(
-                                      context,
-                                      defaultState,
-                                      workflows,
-                                      preferences.data!,
-                                      workspaceState.data!.workspaceId != null)
-                                  : const SizedBox.shrink();
-                          final inline = constraints.maxWidth >= 760;
-                          return Column(children: [
-                            if (inline)
-                              Row(children: [
-                                Expanded(child: workspacePicker),
-                                const SizedBox(width: 12),
-                                Expanded(child: defaultPicker),
-                              ])
-                            else ...[
-                              workspacePicker,
-                              const SizedBox(height: 16),
-                              defaultPicker,
-                            ],
-                          ]);
-                        }),
+                        _activeRow(context, workspaceState.data!),
+                        if (workflows.isNotEmpty &&
+                            preferences.data != null) ...[
+                          const SizedBox(height: 12),
+                          _defaultPicker(context, defaultState, workflows,
+                              preferences.data!),
+                        ],
                       ] else if (workspaceState.error != null)
                         const Text(
                             'Workspace settings could not be loaded. Refresh to retry.'),
@@ -257,10 +179,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                                     _configuration(
                                         preferences.data!, definition.id),
                                     workers,
-                                    workspaceState.data?.workspaceId != null,
                                     defaultState.data == definition.id &&
-                                        workspaceState.data?.workspaceId !=
-                                            null &&
                                         (definition.id == 'chat' ||
                                             _configuration(preferences.data!,
                                                     definition.id)
@@ -290,8 +209,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
       BuildContext context,
       AxQueryState<String> state,
       Map<String, AxBuiltinWorkflow> workflows,
-      List<AxUserWorkflowConfiguration> configurations,
-      bool hasWorkspace) {
+      List<AxUserWorkflowConfiguration> configurations) {
     final enabled = workflows.values
         .where((definition) =>
             _configuration(configurations, definition.id).enabled ||
@@ -311,7 +229,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
             DropdownMenuItem(
                 value: definition.id, child: Text(definition.name)),
         ],
-        onChanged: widget.canEdit && hasWorkspace && !state.isFetching
+        onChanged: widget.canEdit && !state.isFetching
             ? (id) async {
                 if (id == null || id.isEmpty || id == selected) return;
                 try {
@@ -326,6 +244,40 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
             : null);
   }
 
+  /// Embedded tab header: whether new Work runs on this Workspace, or a way to
+  /// make it so.
+  Widget _activeRow(
+      BuildContext context, AxWorkflowWorkspaceSettings settings) {
+    final active = settings.workspaceId == widget.workspaceId;
+    final colors = Theme.of(context).colorScheme;
+    return Row(children: [
+      Expanded(
+          child: Text(
+              active
+                  ? 'New Work runs on this Workspace and uses these workflows.'
+                  : 'New Work runs on another Workspace. These workflows apply once this one is in use.',
+              style: TextStyle(color: colors.onSurfaceVariant))),
+      if (active)
+        Container(
+            key: const ValueKey('workspace-workflows-active'),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+                color: colors.primaryContainer,
+                borderRadius: BorderRadius.circular(999)),
+            child: Text('Active',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colors.onPrimaryContainer,
+                    fontWeight: FontWeight.w700)))
+      else
+        OutlinedButton(
+            key: const ValueKey('use-workspace-for-workflows'),
+            onPressed: widget.canEdit && !_changingWorkspace
+                ? () => _selectWorkspace(settings)
+                : null,
+            child: const Text('Use this Workspace')),
+    ]);
+  }
+
   AxUserWorkflowConfiguration _configuration(
           List<AxUserWorkflowConfiguration> values, String id) =>
       values.firstWhere((value) => value.workflowId == id,
@@ -334,7 +286,6 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
       AxBuiltinWorkflow definition,
       AxUserWorkflowConfiguration configuration,
       List<AxWorker> workers,
-      bool hasWorkspace,
       bool isDefault) {
     final selection = definition.steps.length == 1
         ? configuration.selectionFor(definition.steps.first.kind)
@@ -350,156 +301,132 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
       return workerId == null ||
           !workers.any((worker) => worker.id == workerId);
     });
-    final status = !hasWorkspace
-        ? 'Select a Workspace'
-        : definition.id != 'chat' && !configuration.enabled
-            ? 'Disabled'
-            : unresolvedWorker
-                ? 'Select a Worker'
-                : null;
-    return Opacity(
-        opacity: hasWorkspace ? 1 : 0.58,
-        child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 210),
-            child: Card(
-                key: ValueKey('workflow-${definition.id}'),
-                margin: EdgeInsets.zero,
-                child: InkWell(
-                    key: ValueKey('open-workflow-${definition.id}'),
-                    onTap: widget.canEdit && hasWorkspace && !_changingWorkspace
-                        ? () => _edit(definition, configuration)
-                        : null,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(children: [
-                              Expanded(
-                                  child: Text(definition.name,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(
-                                              fontWeight: FontWeight.w700))),
-                              if (isDefault)
-                                Container(
-                                    key: ValueKey(
-                                        'workflow-default-${definition.id}'),
-                                    margin: const EdgeInsets.only(right: 6),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                        color: colors.primaryContainer,
-                                        borderRadius:
-                                            BorderRadius.circular(999)),
-                                    child: Text('Default',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                                color:
-                                                    colors.onPrimaryContainer,
-                                                fontWeight: FontWeight.w700))),
-                              if (status != null)
-                                Container(
-                                    key: ValueKey(
-                                        'workflow-status-${definition.id}'),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                        color: !hasWorkspace || unresolvedWorker
-                                            ? colors.errorContainer
-                                            : colors.surfaceContainerHighest,
-                                        borderRadius:
-                                            BorderRadius.circular(999)),
-                                    child: Text(status,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                                color: !hasWorkspace ||
-                                                        unresolvedWorker
-                                                    ? colors.onErrorContainer
-                                                    : colors.onSurfaceVariant,
-                                                fontWeight: FontWeight.w700)))
-                            ]),
-                            const SizedBox(height: 4),
-                            Text(definition.description,
-                                style: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant)),
-                            if (definition.steps.length > 1) ...[
-                              const SizedBox(height: 8),
-                              Text(
-                                  '${definition.steps.length} steps${configuration.stepOverrides.isEmpty ? '' : ' · ${configuration.stepOverrides.length} step overrides'}'),
-                            ],
-                            const SizedBox(height: 14),
-                            for (final row in summary)
-                              Padding(
-                                  padding: const EdgeInsets.only(bottom: 6),
-                                  child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        SizedBox(
-                                            width: 76,
-                                            child: Text(row.$1,
-                                                style: TextStyle(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onSurfaceVariant))),
-                                        Expanded(child: Text(row.$2)),
-                                      ])),
-                          ]),
-                    )))));
+    final status = definition.id != 'chat' && !configuration.enabled
+        ? 'Disabled'
+        : unresolvedWorker
+            ? 'Select a Worker'
+            : null;
+    return ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 210),
+        child: Card(
+            key: ValueKey('workflow-${definition.id}'),
+            margin: EdgeInsets.zero,
+            child: InkWell(
+                key: ValueKey('open-workflow-${definition.id}'),
+                onTap: widget.canEdit && !_changingWorkspace
+                    ? () => _edit(definition, configuration)
+                    : null,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Expanded(
+                              child: Text(definition.name,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w700))),
+                          if (isDefault)
+                            Container(
+                                key: ValueKey(
+                                    'workflow-default-${definition.id}'),
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                    color: colors.primaryContainer,
+                                    borderRadius: BorderRadius.circular(999)),
+                                child: Text('Default',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                            color: colors.onPrimaryContainer,
+                                            fontWeight: FontWeight.w700))),
+                          if (status != null)
+                            Container(
+                                key: ValueKey(
+                                    'workflow-status-${definition.id}'),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                    color: unresolvedWorker
+                                        ? colors.errorContainer
+                                        : colors.surfaceContainerHighest,
+                                    borderRadius: BorderRadius.circular(999)),
+                                child: Text(status,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                            color: unresolvedWorker
+                                                ? colors.onErrorContainer
+                                                : colors.onSurfaceVariant,
+                                            fontWeight: FontWeight.w700)))
+                        ]),
+                        const SizedBox(height: 4),
+                        Text(definition.description,
+                            style: TextStyle(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant)),
+                        if (definition.steps.length > 1) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                              '${definition.steps.length} steps${configuration.stepOverrides.isEmpty ? '' : ' · ${configuration.stepOverrides.length} step overrides'}'),
+                        ],
+                        const SizedBox(height: 14),
+                        for (final row in summary)
+                          Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    SizedBox(
+                                        width: 76,
+                                        child: Text(row.$1,
+                                            style: TextStyle(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onSurfaceVariant))),
+                                    Expanded(child: Text(row.$2)),
+                                  ])),
+                      ]),
+                ))));
   }
 
-  Future<void> _selectWorkspace(
-      String? workspaceId, AxWorkflowWorkspaceSettings current,
-      {bool inherit = false}) async {
-    if (workspaceId == current.workspaceId &&
-        inherit == current.inherited &&
-        !(inherit && widget.configurations.spaceId != null)) {
-      return;
-    }
-    if (_changingWorkspace) return;
+  /// Makes this Workspace the one new Work runs on. Workflow settings are kept
+  /// per Workspace, so nothing of the other Workspaces is lost.
+  Future<void> _selectWorkspace(AxWorkflowWorkspaceSettings current) async {
+    if (widget.workspaceId == current.workspaceId || _changingWorkspace) return;
     setState(() => _changingWorkspace = true);
     try {
       final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-                  title: Text(
-                      inherit ? 'Reset Space workflows?' : 'Change Workspace?'),
-                  content: Text(inherit
-                      ? 'This will discard this Space’s workflow settings and use the global user workflow settings. Existing runs will keep their recorded settings.'
-                      : 'All workflows will reset with explicit Worker selections, Auto model and effort defaults, and inherited steps. Existing runs will keep their recorded settings.${widget.configurations.spaceId == null ? ' Spaces using the global Workspace will also reset.' : ' The selected Workspace will be authorized to execute Work in this Space.'}'),
+                  title: const Text('Use this Workspace?'),
+                  content: const Text(
+                      'New Work will run on this Workspace using its own workflow settings. Workflow settings of other Workspaces are kept. Workflow overrides of Spaces using the global Workspace are reset, and existing runs keep their recorded settings.'),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.pop(context, false),
                         child: const Text('Cancel')),
                     FilledButton(
                         onPressed: () => Navigator.pop(context, true),
-                        child: Text(
-                            inherit ? 'Reset workflows' : 'Change and reset'))
+                        child: const Text('Use Workspace'))
                   ]));
       if (confirmed != true || !mounted) return;
-      await widget.configurations
-          .selectWorkspace(workspaceId, inherit: inherit);
+      await widget.configurations.selectWorkspace(widget.workspaceId);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showNotice(SnackBar(content: Text(error.toString())));
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _changingWorkspace = false;
-          _workspacePickerRevision++;
-        });
-      }
+      if (mounted) setState(() => _changingWorkspace = false);
     }
   }
 
@@ -511,10 +438,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
               definition: definition,
               configuration: configuration,
               catalogs: widget.catalogs,
-              workspaceId: widget.configurations.engine
-                  .peek(widget.configurations.workspaceQuery)
-                  .data
-                  ?.workspaceId,
+              workspaceId: widget.workspaceId,
               cache: widget.configurations,
             ));
   }

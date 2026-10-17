@@ -10,8 +10,8 @@ import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
 import 'package:conclave_app/src/ax/sync/ax_workflow_configurations.dart';
 import 'package:conclave_app/src/brand.dart';
 import 'package:conclave_app/src/features/workflows/workflows_page.dart';
+import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
 import 'package:conclave_app/src/navigation/ax_browser_navigation.dart';
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
 import 'package:conclave_app/src/platform/platform_services.dart';
 import 'ax_fixture_data.dart';
 import 'workflow_editor_test.dart' show worker, choices;
@@ -79,12 +79,24 @@ class WorkflowSource extends AxFixtureDataSource
   List<AxWorker> workers = [];
   List<AxUserWorkflowConfiguration> values = [];
   String defaultWorkflow = 'chat';
+
+  /// Per-Workspace state used when a request addresses a Workspace.
+  final scopedValues = <String, List<AxUserWorkflowConfiguration>>{};
+  final scopedDefaults = <String, String>{};
   @override
-  Future<String> loadWorkflowDefault() async => defaultWorkflow;
+  Future<String> loadWorkflowDefault({String? workspaceId}) async =>
+      workspaceId == null
+          ? defaultWorkflow
+          : scopedDefaults[workspaceId] ?? 'chat';
 
   @override
-  Future<String> saveWorkflowDefault(String workflowId) async {
-    defaultWorkflow = workflowId;
+  Future<String> saveWorkflowDefault(String workflowId,
+      {String? workspaceId}) async {
+    if (workspaceId == null) {
+      defaultWorkflow = workflowId;
+    } else {
+      scopedDefaults[workspaceId] = workflowId;
+    }
     return workflowId;
   }
 
@@ -93,24 +105,24 @@ class WorkflowSource extends AxFixtureDataSource
       defaultWorkflow;
 
   @override
-  Future<String> saveSpaceWorkflowDefault(
-      String spaceId, String workflowId) async {
-    defaultWorkflow = workflowId;
-    return workflowId;
-  }
-
-  @override
-  Future<List<AxUserWorkflowConfiguration>> loadWorkflowConfigurations() async {
+  Future<List<AxUserWorkflowConfiguration>> loadWorkflowConfigurations(
+      {String? workspaceId}) async {
     reads++;
     if (fail) throw StateError('Read failed');
+    if (workspaceId != null) return scopedValues[workspaceId] ?? const [];
     return pending?.future ?? values;
   }
 
   @override
   Future<AxUserWorkflowConfiguration> saveWorkflowConfiguration(
-      AxUserWorkflowConfiguration configuration) async {
+      AxUserWorkflowConfiguration configuration,
+      {String? workspaceId}) async {
     writes++;
     if (fail) throw StateError('Write failed');
+    if (workspaceId != null) {
+      scopedValues[workspaceId] = [configuration];
+      return configuration;
+    }
     if (pendingSave != null) return pendingSave!.future;
     values = [configuration];
     return configuration;
@@ -118,8 +130,13 @@ class WorkflowSource extends AxFixtureDataSource
 
   @override
   Future<AxUserWorkflowConfiguration> resetWorkflowConfiguration(
-      String workflowId) async {
-    values = [];
+      String workflowId,
+      {String? workspaceId}) async {
+    if (workspaceId == null) {
+      values = [];
+    } else {
+      scopedValues.remove(workspaceId);
+    }
     return AxUserWorkflowConfiguration(workflowId: workflowId);
   }
 
@@ -187,6 +204,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: WorkflowsPage(
+                workspaceId: 'ws',
                 catalogs: AxSessionCatalogs(source, engine: engine),
                 configurations:
                     AxWorkflowConfigurations(source, engine: engine)))));
@@ -200,65 +218,65 @@ void main() {
   });
 
   testWidgets(
-      'Workspace switch warns, cancellation preserves preferences, confirmation resets and filters Workers',
+      'using another Workspace asks first, keeps every Workspace\'s workflows and filters Workers',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    final saved = AxUserWorkflowConfiguration(
+        workflowId: 'chat',
+        enabled: false,
+        defaults: const AxWorkflowSelection(
+            worker: 'a', model: 'analysis', effort: 'high'),
+        stepOverrides: const {'chat': AxWorkflowSelection(effort: 'low')});
     final source = WorkflowSource()
       ..workers = [worker('a'), worker('b', workspaceId: 'other')]
-      ..values = [
-        AxUserWorkflowConfiguration(
-            workflowId: 'chat',
-            enabled: false,
-            defaults: const AxWorkflowSelection(
-                worker: 'a', model: 'analysis', effort: 'high'),
-            stepOverrides: const {'chat': AxWorkflowSelection(effort: 'low')})
-      ];
+      ..scopedValues['ws'] = [saved];
     final engine = AxSyncEngine();
-    final cache = AxWorkflowConfigurations(source, engine: engine);
-    Widget page() => MaterialApp(
+    final root = AxWorkflowConfigurations(source, engine: engine);
+    Widget page(String workspaceId) => MaterialApp(
         home: Scaffold(
             body: SingleChildScrollView(
                 child: WorkflowsPage(
+                    key: ValueKey(workspaceId),
+                    workspaceId: workspaceId,
                     catalogs: AxSessionCatalogs(source, engine: engine),
-                    configurations: cache))));
-    await tester.pumpWidget(page());
+                    configurations: root.forWorkspace(workspaceId)))));
+    await tester.pumpWidget(page('ws'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('open-workflow-chat')));
     await tester.pumpAndSettle();
+    // Only this Workspace's Workers can be chosen.
     expect(choices(tester, 'defaults', 'Worker'), ['', 'a']);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    Future<void> switchWorkspace() async {
-      await tester.tap(find.byKey(const ValueKey('workflow-workspace')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Second Workspace').last);
-      await tester.pumpAndSettle();
-      expect(find.text('Change Workspace?'), findsOneWidget);
-    }
 
-    await switchWorkspace();
-    await tester.tap(find.text('Cancel'));
+    await tester.pumpWidget(page('other'));
     await tester.pumpAndSettle();
-    expect(source.workspaceWrites, 0);
-    expect(source.values.single.enabled, isFalse);
-    await switchWorkspace();
-    await tester.tap(find.text('Change and reset'));
-    await tester.pumpAndSettle();
-    expect(source.workspaceWrites, 1);
-    expect(source.selectedWorkspace, 'other');
-    expect(source.values, isEmpty);
-    expect(cache.engine.peek(cache.query).data, isEmpty);
     await tester.tap(find.byKey(const ValueKey('open-workflow-chat')));
     await tester.pumpAndSettle();
     expect(choices(tester, 'defaults', 'Worker'), ['', 'b']);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    final reads = source.workspaceReads;
-    await tester.pumpWidget(const SizedBox());
-    await tester.pumpWidget(page());
+
+    Future<void> askToUse() async {
+      await tester
+          .tap(find.byKey(const ValueKey('use-workspace-for-workflows')));
+      await tester.pumpAndSettle();
+      expect(find.text('Use this Workspace?'), findsOneWidget);
+    }
+
+    await askToUse();
+    await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
-    expect(source.workspaceReads, reads);
+    expect(source.workspaceWrites, 0);
+    await askToUse();
+    await tester.tap(find.text('Use Workspace'));
+    await tester.pumpAndSettle();
+    expect(source.workspaceWrites, 1);
+    expect(source.selectedWorkspace, 'other');
+    // Selecting a Workspace no longer resets anyone's workflows.
+    expect(source.scopedValues['ws'], [saved]);
+    expect(root.engine.peek(root.forWorkspace('ws').query).data, [saved]);
   });
   testWidgets(
       'edit choices come from owned Profile capabilities and preserve offline selections',
@@ -301,6 +319,7 @@ void main() {
         home: Scaffold(
             body: SingleChildScrollView(
                 child: WorkflowsPage(
+                    workspaceId: 'ws',
                     catalogs: AxSessionCatalogs(source, engine: engine),
                     configurations:
                         AxWorkflowConfigurations(source, engine: engine))))));
@@ -336,7 +355,7 @@ void main() {
     expect(source.values.single.defaults.effort, 'thorough');
   });
   testWidgets(
-      'unselected Workspace disables cards and wide pages use two columns',
+      'cards are editable for any Workspace and wide pages use two columns',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -346,31 +365,28 @@ void main() {
         home: Scaffold(
             body: SingleChildScrollView(
                 child: WorkflowsPage(
+                    workspaceId: 'ws',
                     catalogs: AxSessionCatalogs(source, engine: engine),
                     configurations:
-                        AxWorkflowConfigurations(source, engine: engine),
+                        AxWorkflowConfigurations(source, engine: engine)
+                            .forWorkspace('ws'),
                     viewerEmail: 'vitalii@nohainc.com')))));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('workflow-status-chat')), findsOneWidget);
+    // No Workspace is active, yet this Workspace's workflows can be edited.
+    expect(find.byKey(const ValueKey('use-workspace-for-workflows')),
+        findsOneWidget);
     expect(
         find.byKey(const ValueKey('workflow-status-direct')), findsOneWidget);
-    expect(find.byKey(const ValueKey('workflow-status-implement_verify')),
-        findsOneWidget);
     expect(
         tester
             .widget<InkWell>(find.byKey(const ValueKey('open-workflow-chat')))
             .onTap,
-        isNull);
+        isNotNull);
     final chat = tester.getRect(find.byKey(const ValueKey('workflow-chat')));
     final work = tester.getRect(find.byKey(const ValueKey('workflow-direct')));
     expect(chat.width, closeTo(work.width, 1));
     expect(chat.width, greaterThan(400));
-    final workspace =
-        tester.getRect(find.byKey(const ValueKey('workflow-workspace')));
-    final defaultWorkflow =
-        tester.getRect(find.byKey(const ValueKey('workflow-default')));
-    expect(workspace.center.dy, closeTo(defaultWorkflow.center.dy, 1));
   });
   testWidgets('default workflow is selectable only from enabled workflows',
       (tester) async {
@@ -384,6 +400,7 @@ void main() {
         home: Scaffold(
             body: SingleChildScrollView(
                 child: WorkflowsPage(
+                    workspaceId: 'ws',
                     catalogs: AxSessionCatalogs(source, engine: engine),
                     configurations: cache,
                     viewerEmail: 'vitalii@nohainc.com')))));
@@ -503,6 +520,7 @@ void main() {
         home: Scaffold(
             body: SingleChildScrollView(
                 child: WorkflowsPage(
+                    workspaceId: 'ws',
                     catalogs: catalogs,
                     configurations: cache,
                     viewerEmail: 'vitalii@nohainc.com'))));
@@ -541,6 +559,7 @@ void main() {
         home: Scaffold(
             body: SingleChildScrollView(
                 child: WorkflowsPage(
+                    workspaceId: 'ws',
                     catalogs: AxSessionCatalogs(source, engine: engine),
                     configurations:
                         AxWorkflowConfigurations(source, engine: engine))))));
@@ -552,48 +571,101 @@ void main() {
     expect(find.text('Chat'), findsAtLeastNWidgets(1));
     expect(source.reads, 2);
   });
-  testWidgets(
-      'global navigation stays in the application menu and page returns do not reload preferences',
+  testWidgets('Workflows no longer have an application menu destination',
       (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final source = WorkflowSource();
     final browser = MemoryAxBrowserNavigation(Uri.parse('/workflows'));
     await tester.pumpWidget(ConclaveAppShell(
         services: const DefaultPlatformServices(),
-        dataSource: source,
+        dataSource: WorkflowSource(),
         browserNavigation: browser,
         realtimeClient: TestRealtime()));
     await tester.pumpAndSettle();
-    expect(find.byType(WorkflowsPage), findsOneWidget);
-    expect(find.text('Workspaces'), findsNothing);
-    expect(source.reads, 1);
-    await tester.tap(find.byTooltip('Hide sidebar'));
-    await tester.pumpAndSettle();
-    expect(find.byTooltip('Workflows'), findsNothing);
-    expect(find.byTooltip('Workspaces'), findsNothing);
+    // The legacy route opens the Workspaces page, which hosts Workflows.
+    expect(find.byType(WorkspacesPage), findsOneWidget);
     await tester.tap(find.byTooltip('Application menu'));
     await tester.pumpAndSettle();
-    expect(find.text('Workflows'), findsNWidgets(2));
-    await tester.tap(find.text('Workflows').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Expand sidebar'));
-    await tester.pumpAndSettle();
-    expect(source.reads, 1);
-    browser.emit(Uri.parse('/spaces/space-auth'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    browser.emit(Uri.parse('/spaces/space-auth/threads/thread-auth'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    browser.emit(Uri.parse('/workflows'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(source.reads, 1);
-    expect(find.byType(WorkflowsPage), findsOneWidget);
-    expect(AxNavigation.fromUri(Uri.parse('/workflows')).spaceId, isNull);
+    expect(find.widgetWithText(MenuItemButton, 'Workspaces'), findsOneWidget);
+    expect(find.widgetWithText(MenuItemButton, 'Workflows'), findsNothing);
     await tester.pumpWidget(const SizedBox());
+  });
+
+  Future<void> pumpEmbedded(
+      WidgetTester tester, WorkflowSource source, String workspaceId) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final engine = AxSyncEngine();
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: WorkflowsPage(
+                    workspaceId: workspaceId,
+                    catalogs: AxSessionCatalogs(source, engine: engine),
+                    configurations:
+                        AxWorkflowConfigurations(source, engine: engine),
+                    viewerEmail: 'vitalii@nohainc.com')))));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('embedded page hides the Workspace picker for the active one',
+      (tester) async {
+    await pumpEmbedded(tester, WorkflowSource(), 'ws');
+    expect(find.byKey(const ValueKey('workflow-workspace')), findsNothing);
+    expect(find.byKey(const ValueKey('use-workspace-for-workflows')),
+        findsNothing);
+    expect(find.byKey(const ValueKey('workspace-workflows-active')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('workflow-chat')), findsOneWidget);
+    expect(find.byKey(const ValueKey('workflow-default')), findsOneWidget);
+  });
+
+  testWidgets(
+      'another Workspace keeps editable workflows and can be made active',
+      (tester) async {
+    final source = WorkflowSource();
+    await pumpEmbedded(tester, source, 'other');
+    // Its workflows are editable although it is not the active Workspace.
+    expect(find.byKey(const ValueKey('workflow-chat')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('workspace-workflows-active')), findsNothing);
+    expect(
+        tester
+            .widget<InkWell>(find.byKey(const ValueKey('open-workflow-chat')))
+            .onTap,
+        isNotNull);
+    await tester.tap(find.byKey(const ValueKey('use-workspace-for-workflows')));
+    await tester.pumpAndSettle();
+    expect(find.text('Use this Workspace?'), findsOneWidget);
+    await tester.tap(find.text('Use Workspace'));
+    await tester.pumpAndSettle();
+    expect(source.selectedWorkspace, 'other');
+    expect(find.byKey(const ValueKey('workspace-workflows-active')),
+        findsOneWidget);
+  });
+
+  testWidgets('Workspace tabs load workflow settings per Workspace',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source = WorkflowSource()
+      ..scopedValues['other'] = [
+        AxUserWorkflowConfiguration(workflowId: 'chat', enabled: true)
+      ]
+      ..scopedDefaults['other'] = 'implement_verify';
+    final engine = AxSyncEngine();
+    final configurations = AxWorkflowConfigurations(source, engine: engine);
+    final other = configurations.forWorkspace('other');
+    expect(identical(other, configurations.forWorkspace('other')), isTrue);
+    expect(other.queryKey, isNot(configurations.queryKey));
+    expect(await other.ensure(), hasLength(1));
+    expect(await other.ensureDefault(), 'implement_verify');
+    expect(await configurations.forWorkspace('ws').ensure(), isEmpty);
+    await other.save(
+        AxUserWorkflowConfiguration(workflowId: 'direct', enabled: false));
+    expect(source.scopedValues['other']!.single.workflowId, 'direct');
+    expect(source.values, isEmpty);
   });
 }
