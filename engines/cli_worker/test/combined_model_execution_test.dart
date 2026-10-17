@@ -38,6 +38,17 @@ Future<void> main(List<String> args) async {
     stdout.writeln(jsonEncode({'event':'result','result':{'status':'SUCCESS','response':'I will create the files.','conversation_id':'fixture','denied_actions':[{'action':'write_file','display_name':'WriteToFile'}]}}));
     return;
   }
+  if (input.contains('empty-once')) {
+    final marker = File('${Platform.script.toFilePath()}.empty-seen');
+    final first = !marker.existsSync();
+    if (first) marker.writeAsStringSync('seen');
+    stdout.writeln(jsonEncode({'event':'result','result':{'status':'SUCCESS','response': first ? '' : 'hi again','conversation_id':'fixture'}}));
+    return;
+  }
+  if (input.contains('empty-always')) {
+    stdout.writeln(jsonEncode({'event':'result','result':{'status':'SUCCESS','response':'','conversation_id':'fixture'}}));
+    return;
+  }
   if (input.contains('empty-denied')) {
     stdout.writeln(jsonEncode({'event':'result','result':{'status':'SUCCESS','response':'done','conversation_id':'fixture','denied_actions':[]}}));
     return;
@@ -250,6 +261,35 @@ Future<void> main(List<String> args) async {
         ),
       );
       expect(emptyDenied, isA<WorkerResult>());
+      // An empty "success" is retried once; a second empty answer is a clear
+      // error rather than a generic provider failure.
+      final retried = await exchange(
+        ExecuteRequest(
+          requestId: 'empty-once',
+          assignmentId: 'assignment',
+          prompt: 'empty-once',
+          model: 'gemini-3.8-flash',
+          reasoningEffort: 'low',
+          sessionPolicy: WorkerSessionPolicy.stateless,
+          timeoutMs: 20000,
+          executionPolicy: WorkerExecutionPolicy.providerDefault,
+        ),
+      );
+      expect(retried, isA<WorkerResult>());
+      final stillEmpty = await exchange(
+        ExecuteRequest(
+          requestId: 'empty-always',
+          assignmentId: 'assignment',
+          prompt: 'empty-always',
+          model: 'gemini-3.8-flash',
+          reasoningEffort: 'low',
+          sessionPolicy: WorkerSessionPolicy.stateless,
+          timeoutMs: 20000,
+          executionPolicy: WorkerExecutionPolicy.providerDefault,
+        ),
+      );
+      expect(stillEmpty, isA<WorkerErrorFrame>());
+      expect((stillEmpty as WorkerErrorFrame).message, contains('empty answer'));
       final refreshed =
           await exchange(
                 ProbeRequest(

@@ -1384,6 +1384,7 @@ class CliWorkerEngine {
 
     final executionClock = Stopwatch()..start();
     var reconstructed = false;
+    var emptyRetried = false;
     var providerStarted = false;
     var acceptingProviderEvents = true;
     try {
@@ -1397,6 +1398,7 @@ class CliWorkerEngine {
         final args = _expandArguments(_list(execution['arguments']), context);
         final stdinText = _expandStdin(_map(execution['stdin']), context);
         final eventProgress = <String>{};
+        var toolSeen = false;
         final stdout = StringBuffer();
         var stdoutBytes = 0;
         final result = await _streamingRunner.run(
@@ -1432,6 +1434,7 @@ class CliWorkerEngine {
             }
             stdout.writeln(line);
             for (final activity in _activitiesForLine(line, request)) {
+              if (activity.eventType.startsWith('tool.')) toolSeen = true;
               await _write(sink, activity);
             }
             for (final progress in _progressActivitiesForLine(
@@ -1469,6 +1472,24 @@ class CliWorkerEngine {
               processExitCode: result.exitCode,
             ),
           );
+        }
+        if (interpreted.emptyResponse && !emptyRetried && !toolSeen) {
+          // The provider said "success" but answered with nothing, and it did
+          // not touch anything: running it once more is safe. A second empty
+          // answer is reported as such below.
+          emptyRetried = true;
+          _logger.log(
+            'warning',
+            'engine.assignment.empty_response_retry',
+            context: _diagnosticContext(
+              requestId: request.requestId,
+              assignmentId: request.assignmentId,
+              errorCode: 'empty_provider_response',
+              failureLayer: 'provider_tool',
+              processExitCode: result.exitCode,
+            ),
+          );
+          continue;
         }
         if (interpreted.nativeSessionUnavailable &&
             result.exitCode != 0 &&
@@ -1542,7 +1563,9 @@ class CliWorkerEngine {
             _executionError(
               request,
               code: interpreted.issueCode ?? WorkerIssueCode.providerFailure,
-              message: 'Provider CLI execution failed',
+              message: interpreted.emptyResponse
+                  ? 'The provider returned an empty answer${emptyRetried ? ' twice' : ''}. Please retry.'
+                  : 'Provider CLI execution failed',
               stage: 'provider_execution',
               detail: failureDetail.isEmpty ? null : failureDetail,
               providerStarted: providerStarted,
@@ -2414,6 +2437,12 @@ class CliWorkerEngine {
       null,
       null,
       WorkerIssueCode.providerFailure,
+      emptyResponse:
+          exitCode == 0 &&
+          (markedSuccess || implicitTextSuccess) &&
+          !markedFailure &&
+          !providerError &&
+          (text == null || text.isEmpty),
       reason: [
         'exit=$exitCode',
         if (markedFailure) 'provider marked failure',
@@ -2687,7 +2716,11 @@ class _InterpretedOutput {
     this.nativeSessionUnavailable = false,
     this.terminalObserved = false,
     this.reason,
+    this.emptyResponse = false,
   });
+
+  /// The provider reported success with no answer text and no error.
+  final bool emptyResponse;
 
   /// Why the output was not accepted; goes into the failure diagnostic.
   final String? reason;
