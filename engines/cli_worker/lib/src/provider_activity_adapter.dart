@@ -872,6 +872,33 @@ class ProviderActivityAdapter {
     return (title: title, summary: summary);
   }
 
+  /// The text of the last assistant step, for providers whose final result can
+  /// arrive empty although the answer was streamed (agy). Null otherwise.
+  String? streamedAnswer(List<Object?> events) {
+    if (kind != 'agy-stream-json') return null;
+    final order = <String>[];
+    final texts = <String, StringBuffer>{};
+    for (final event in events) {
+      if (event is! Map || event['event'] != 'step_update') continue;
+      final step = event['step_update'];
+      if (step is! Map || step['step_type'] != 'agent_response') continue;
+      final index = step['step_index'];
+      if (index is! int || index < 0) continue;
+      final key = '${_safeText(step['conversation_id']) ?? ''}:$index';
+      final buffer = texts.putIfAbsent(key, () {
+        order.add(key);
+        return StringBuffer();
+      });
+      final delta = step['text_delta'];
+      if (delta is String) buffer.write(delta);
+    }
+    for (final key in order.reversed) {
+      final text = texts[key].toString().trim();
+      if (text.isNotEmpty) return text;
+    }
+    return null;
+  }
+
   /// agy's final `response` repeats the text of every earlier assistant step
   /// (the narration already shown live). Returns [finalText] without that
   /// leading narration, or null when nothing can be safely removed.

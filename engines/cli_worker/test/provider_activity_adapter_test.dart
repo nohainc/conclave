@@ -572,6 +572,24 @@ void main() {
       );
     });
 
+    test('streamed answer is the last non-empty assistant step', () {
+      Map<String, Object?> step(int index, String text) => {
+        'event': 'step_update',
+        'step_update': {
+          'conversation_id': 'c1',
+          'step_index': index,
+          'state': 'ACTIVE',
+          'step_type': 'agent_response',
+          'text_delta': text,
+        },
+      };
+      expect(
+        adapter.streamedAnswer([step(1, 'Hi'), step(3, ' there'), step(5, '')]),
+        'there',
+      );
+      expect(adapter.streamedAnswer(<Object?>[]), isNull);
+    });
+
     test('answer drops narration already streamed', () {
       Map<String, Object?> step(int index, String text) => {
         'event': 'step_update',

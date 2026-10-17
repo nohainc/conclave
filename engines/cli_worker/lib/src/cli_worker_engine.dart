@@ -1532,6 +1532,11 @@ class CliWorkerEngine {
             'acceptedEffort': null,
             'selectionObservation': 'unavailable',
           }, completion: true);
+          final failureDetail = [
+            if (_safeProviderStderr(result.stderr) case final stderr?) stderr,
+            if (interpreted.reason case final reason?)
+              'interpretation: $reason',
+          ].join(' | ');
           await _write(
             sink,
             _executionError(
@@ -1539,7 +1544,7 @@ class CliWorkerEngine {
               code: interpreted.issueCode ?? WorkerIssueCode.providerFailure,
               message: 'Provider CLI execution failed',
               stage: 'provider_execution',
-              detail: _safeProviderStderr(result.stderr),
+              detail: failureDetail.isEmpty ? null : failureDetail,
               providerStarted: providerStarted,
             ),
           );
@@ -2319,6 +2324,14 @@ class CliWorkerEngine {
         }
       }
     }
+    if (markedSuccess &&
+        !markedFailure &&
+        !providerError &&
+        (finalText is! String || finalText.trim().isEmpty)) {
+      // The provider reported success with an empty result although it
+      // streamed an answer; use what it streamed.
+      finalText = _providerActivityAdapter?.streamedAnswer(events) ?? finalText;
+    }
     if (finalText is String && _providerActivityAdapter != null) {
       // The live narration was already shown; do not repeat it in the answer.
       finalText =
@@ -2353,6 +2366,9 @@ class CliWorkerEngine {
         null,
         WorkerIssueCode.providerFailure,
         terminalObserved: terminalObserved,
+        reason: sessionId == null
+            ? 'no session id observed'
+            : 'observed session id differs from the prior session',
       );
     }
     if (successful) {
@@ -2394,10 +2410,19 @@ class CliWorkerEngine {
           terminalObserved: terminalObserved,
         );
     }
-    return const _InterpretedOutput(
+    return _InterpretedOutput(
       null,
       null,
       WorkerIssueCode.providerFailure,
+      reason: [
+        'exit=$exitCode',
+        if (markedFailure) 'provider marked failure',
+        if (providerError) 'provider error reported',
+        if (!markedSuccess && !implicitTextSuccess) 'no success marker',
+        if (terminalStatus != null) 'status=$terminalStatus',
+        if (!terminalObserved) 'no terminal event',
+        if (text == null || text.isEmpty) 'empty final text',
+      ].join(', '),
     );
   }
 
@@ -2661,7 +2686,11 @@ class _InterpretedOutput {
     this.issueCode, {
     this.nativeSessionUnavailable = false,
     this.terminalObserved = false,
+    this.reason,
   });
+
+  /// Why the output was not accepted; goes into the failure diagnostic.
+  final String? reason;
   final bool nativeSessionUnavailable;
   final bool terminalObserved;
   final String? finalText;
