@@ -64,7 +64,7 @@ void main() {
     expect(loads['spaces'], 2);
     expect(loads['space:A:threads'], 2);
   });
-  test('activity in the viewed Thread skips the indicator refresh', () async {
+  test('activity in the viewed Thread refreshes sidebar ordering', () async {
     final spaces = query(['spaces']);
     await engine.ensure(spaces);
     final viewed = <String>[];
@@ -82,7 +82,7 @@ void main() {
     });
     await Future<void>.delayed(const Duration(milliseconds: 40));
     expect(viewed, ['W']);
-    expect(loads['spaces'], 1);
+    expect(loads['spaces'], 2);
   });
   test('a newly accepted request refreshes ordering for a viewed Thread',
       () async {
