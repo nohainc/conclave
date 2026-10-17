@@ -1491,11 +1491,18 @@ class CliWorkerEngine {
           );
           continue;
         }
-        if (interpreted.nativeSessionUnavailable &&
-            result.exitCode != 0 &&
+        // A resumed provider conversation can get stuck answering nothing
+        // (seen with long Gemini threads). After the plain retry also came
+        // back empty, rebuild the conversation from Conclave's own history
+        // exactly as for an unavailable session.
+        final emptyAfterRetry =
+            interpreted.emptyResponse && emptyRetried && !toolSeen;
+        if (((interpreted.nativeSessionUnavailable &&
+                    result.exitCode != 0 &&
+                    eventProgress.isEmpty) ||
+                emptyAfterRetry) &&
             priorSession != null &&
-            !reconstructed &&
-            eventProgress.isEmpty) {
+            !reconstructed) {
           // Validate the replacement prompt before invalidating any local state.
           final restoredPrompt =
               bootstrap == null || request.workerSession == null
@@ -1564,7 +1571,7 @@ class CliWorkerEngine {
               request,
               code: interpreted.issueCode ?? WorkerIssueCode.providerFailure,
               message: interpreted.emptyResponse
-                  ? 'The provider returned an empty answer${emptyRetried ? ' twice' : ''}. Please retry.'
+                  ? 'The provider returned an empty answer${emptyRetried ? ' repeatedly' : ''}. Please retry.'
                   : 'Provider CLI execution failed',
               stage: 'provider_execution',
               detail: failureDetail.isEmpty ? null : failureDetail,
