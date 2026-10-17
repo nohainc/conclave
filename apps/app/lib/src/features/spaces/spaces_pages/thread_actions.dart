@@ -116,6 +116,17 @@ extension _ThreadActions on _ThreadPageState {
     }
   }
 
+  Future<void> _rerunWorkRequest(AxWorkRequest request) async {
+    if (_submittingWork || request.prompt.trim().isEmpty) return;
+    _updateState(() {
+      _workflow = '${request.workflowId}:v${request.workflowVersion}';
+      _workExecutionSelection = {};
+      _workAttachments = [];
+    });
+    _requestController.text = request.prompt;
+    await _runWork();
+  }
+
   Future<void> _addWorkFiles() async {
     try {
       final selected = await work_request_files.pickWorkRequestFiles();

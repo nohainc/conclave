@@ -170,6 +170,7 @@ class _WorkComposer extends StatelessWidget {
     required this.reportingIssueIds,
     required this.issueReportErrors,
     required this.onRetryStep,
+    this.onRerun,
     required this.onCancelRun,
     required this.onWorkflowChanged,
     required this.onRun,
@@ -211,6 +212,7 @@ class _WorkComposer extends StatelessWidget {
   final Set<String> reportingIssueIds;
   final Map<String, String> issueReportErrors;
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
+  final Future<void> Function(AxWorkRequest)? onRerun;
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
   final Future<void> Function() onRun;
@@ -346,6 +348,9 @@ class _WorkComposer extends StatelessWidget {
                 onRetryStep: localWorkProgress.containsKey(request.id)
                     ? null
                     : onRetryStep,
+                onRerun: localWorkProgress.containsKey(request.id) || submitting
+                    ? null
+                    : onRerun,
                 onCancelRun: localWorkProgress.containsKey(request.id)
                     ? null
                     : onCancelRun,
@@ -1112,6 +1117,7 @@ class _WorkTimelineCard extends StatelessWidget {
     required this.reportingIssue,
     required this.issueReportError,
     required this.onRetryStep,
+    this.onRerun,
     required this.onCancelRun,
   });
 
@@ -1129,6 +1135,7 @@ class _WorkTimelineCard extends StatelessWidget {
   final bool reportingIssue;
   final String? issueReportError;
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
+  final Future<void> Function(AxWorkRequest)? onRerun;
   final Future<void> Function(String)? onCancelRun;
 
   String get _workflowName =>
@@ -1657,6 +1664,14 @@ class _WorkTimelineCard extends StatelessWidget {
                                     icon: Icons.refresh_rounded,
                                     onPressed: () =>
                                         onRetryStep!(request.id, failedStep),
+                                  ),
+                                if (onRerun != null &&
+                                    const {'completed', 'failed', 'cancelled'}
+                                        .contains(request.status))
+                                  compactAction(
+                                    tooltip: 'Run this request again',
+                                    icon: Icons.replay_rounded,
+                                    onPressed: () => onRerun!(request),
                                   ),
                                 if (request.status == 'failed' &&
                                     onReportIssue != null)
