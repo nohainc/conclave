@@ -474,6 +474,20 @@ extension _AxAppController on _AxAppStateMixin {
         .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
   }
 
+  /// Drops notifications whose Space or Thread was removed or cleared, so the
+  /// bell never links to content that no longer exists. Server-backed entries
+  /// are also marked read so a feed reload does not bring them back.
+  void _discardNotificationsFor({String? spaceId, String? threadId}) {
+    bool matches(AxNotification n) =>
+        (threadId != null && n.threadId == threadId) ||
+        (spaceId != null && n.spaceId == spaceId);
+    final removedIds =
+        notifications.where(matches).map((n) => n.id).toList();
+    if (removedIds.isEmpty) return;
+    _persistNotificationsRead(ids: removedIds);
+    _updateNotifications(() => notifications.removeWhere(matches));
+  }
+
   void _recordNotification(Map<String, dynamic> event) {
     final notification = notificationFromRealtimeEvent(event,
         viewerId: store.auth.session?.viewer?.id);

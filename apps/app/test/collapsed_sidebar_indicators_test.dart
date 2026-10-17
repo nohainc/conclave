@@ -1,3 +1,4 @@
+import 'package:conclave_app/src/brand.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/features/navigation/app_sidebar.dart';
 import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
@@ -47,6 +48,24 @@ Widget rail(AxShellContext context,
     );
 
 void main() {
+  testWidgets('collapsed notification badge uses the premium brand color',
+      (tester) async {
+    final unread = ValueNotifier<int>(5);
+    addTearDown(unread.dispose);
+    await tester.pumpWidget(rail(AxShellContext(
+      navigation: const AxNavigation.home(),
+      spaces: const [],
+      unreadNotifications: unread,
+    )));
+    final badge = tester.widget<Badge>(find.byType(Badge));
+    expect(badge.backgroundColor, ConclaveColors.primary);
+    expect(badge.textColor, Colors.white);
+    expect(find.text('5'), findsOneWidget);
+    unread.value = 0;
+    await tester.pump();
+    expect(find.byType(Badge), findsNothing);
+  });
+
   testWidgets(
       'collapsed groups roll up cached Thread activity and Space unread',
       (tester) async {

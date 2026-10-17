@@ -2753,28 +2753,23 @@ void main() {
     test(
         'thread.completed triggers For You review item and Running Now suppression',
         () {
-      final event = {
-        'type': 'thread.completed',
-        'spaceId': 'space-1',
-        'threadId': 'ws-1',
-        'payload': {
+      // Completed Threads no longer create notifications.
+      expect(
+        notificationFromRealtimeEvent({
+          'type': 'thread.completed',
           'spaceId': 'space-1',
           'threadId': 'ws-1',
-          'summary': 'Backend refactoring completed',
-        },
-      };
+        }),
+        isNull,
+      );
 
-      final notification = notificationFromRealtimeEvent(event);
-      expect(notification, isNotNull);
-      expect(notification!.kind, AxNotificationKind.threadCompleted);
-
-      final rawItem = AxHomeAttentionItem(
-        id: notification.id,
+      const rawItem = AxHomeAttentionItem(
+        id: 'thread-completed-1',
         kind: AxHomeAttentionType.executionCompleted,
-        title: notification.title,
-        subtitle: notification.message,
-        spaceId: notification.spaceId,
-        threadId: notification.threadId,
+        title: 'Thread completed',
+        subtitle: 'Backend refactoring completed',
+        spaceId: 'space-1',
+        threadId: 'ws-1',
         isUnread: true,
         isActionable: false,
       );

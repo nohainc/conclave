@@ -165,10 +165,37 @@ void main() {
     await tester.tap(find.text('Two'));
     await tester.pumpAndSettle();
     expect(changes.last.model, 'two');
-    expect(changes.last.effort, 'deep');
+    expect(
+        tester
+            .widget<Opacity>(find.descendant(
+                of: find.byKey(const ValueKey('execution-worker-worker')),
+                matching: find.byType(Opacity)))
+            .opacity,
+        1.0);
+    expect(
+        tester
+            .widget<Opacity>(find.descendant(
+                of: find.byKey(const ValueKey('execution-worker-other')),
+                matching: find.byType(Opacity)))
+            .opacity,
+        0.45);
     await tester.tap(find.byKey(const ValueKey('execution-worker-other')));
     await tester.pumpAndSettle();
     expect(changes.last.worker, 'other');
+    expect(
+        tester
+            .widget<Opacity>(find.descendant(
+                of: find.byKey(const ValueKey('execution-worker-other')),
+                matching: find.byType(Opacity)))
+            .opacity,
+        1.0);
+    expect(
+        tester
+            .widget<Opacity>(find.descendant(
+                of: find.byKey(const ValueKey('execution-worker-worker')),
+                matching: find.byType(Opacity)))
+            .opacity,
+        0.45);
     expect(find.text('One'), findsNothing);
     await tester.tap(find.text('Other model'));
     await tester.pumpAndSettle();

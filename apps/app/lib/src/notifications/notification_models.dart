@@ -177,11 +177,10 @@ AxNotification? notificationFromRealtimeEvent(
   final payloadMap = payload is Map
       ? Map<String, dynamic>.from(payload)
       : const <String, dynamic>{};
-  // You asked for it, so a success needs no announcement; failures still do.
-  if (kind == AxNotificationKind.threadCompleted &&
-      type == 'work_request.completed' &&
-      viewerId != null &&
-      payloadMap['requestedByUserId'] == viewerId) {
+  // Successful completions are not announced; only input requests, failures
+  // and problems reach the Notification Center.
+  if (kind == AxNotificationKind.threadCompleted ||
+      kind == AxNotificationKind.workflowRunCompleted) {
     return null;
   }
   final runId =

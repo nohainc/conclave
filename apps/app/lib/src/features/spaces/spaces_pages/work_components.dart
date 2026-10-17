@@ -1532,10 +1532,19 @@ class _WorkTimelineCard extends StatelessWidget {
                           ],
                         ],
                       ),
-                      if (activities.isNotEmpty) ...[
+                      // The trail is the only place that shows live progress;
+                      // it goes away once the request has finished.
+                      // A streamed answer or error also retires it, so the
+                      // text never lands inside the trail before it hides.
+                      if (!progress.isTerminal &&
+                          response?.isNotEmpty != true &&
+                          error?.isNotEmpty != true &&
+                          (activities.isNotEmpty ||
+                              progress.currentAction != null)) ...[
                         const SizedBox(height: 8),
                         _WorkActivityTrail(
                           activities: activities,
+                          fallbackAction: progress.currentAction,
                           color: metaColor,
                           accentColor: colors.primary,
                         ),
@@ -1568,9 +1577,6 @@ class _WorkTimelineCard extends StatelessWidget {
                                                 'The connection to the worker was lost. Please retry your request.',
                                               _ => null,
                                             };
-                        final showLiveStatus = message == null &&
-                            !progress.isTerminal &&
-                            realtimeStatus != AxWorkRealtimeStatus.checking;
                         final isError = error?.isNotEmpty == true;
                         Widget compactAction({
                           required String tooltip,
@@ -1595,48 +1601,6 @@ class _WorkTimelineCard extends StatelessWidget {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (showLiveStatus) ...[
-                              AxLiveTicker(
-                                active: progress.isTicking &&
-                                    realtimeStatus !=
-                                        AxWorkRealtimeStatus.checking,
-                                builder: (context, now) {
-                                  final live = resolveProgress(now);
-                                  final text = live.currentAction ?? '';
-                                  // The label only adds information while
-                                  // the request is waiting. Once the Worker
-                                  // is starting or running, the action says
-                                  // it ("Working…"), so repeating "Running ·"
-                                  // would be noise.
-                                  final labelled = AxExecutionPhase.isKnown(
-                                              executionPhase) &&
-                                          !live.isExecuting &&
-                                          executionPhase !=
-                                              AxExecutionPhase.starting
-                                      ? '${live.statusLabel} · $text'
-                                      : text;
-                                  return AxSettledStatusText(
-                                    key: const ValueKey('work-live-status'),
-                                    text: live.isStale
-                                        ? '$labelled · no recent updates'
-                                        : labelled,
-                                    // Pre-start phases change within a few
-                                    // hundred milliseconds; settle them. A
-                                    // running provider, new Worker activity
-                                    // and recovery notices show at once.
-                                    urgent: live.isExecuting || !isPreStart,
-                                    style: ConclaveMessageTypography.fromTheme(
-                                            Theme.of(context))
-                                        .copyWith(
-                                      color: isDark
-                                          ? Colors.white60
-                                          : Colors.black54,
-                                    ),
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 8),
-                            ],
                             if (message != null) ...[
                               KeyedSubtree(
                                 key: responseAnchorKey,
@@ -1783,21 +1747,42 @@ class _WorkActivityTrail extends StatelessWidget {
     required this.activities,
     required this.color,
     required this.accentColor,
+    this.fallbackAction,
   });
 
   final List<AxWorkActivity> activities;
   final Color color;
   final Color accentColor;
 
+  /// Shown as the active row before the Worker reports any activity.
+  final String? fallbackAction;
+
+  /// Earlier rows kept above the active one.
+  static const _history = 8;
+
   @override
   Widget build(BuildContext context) {
-    final active = activities.where((item) => !item.isFinished).lastOrNull;
-    final completedAll = activities.where((item) => item.isFinished).toList();
-    final completed = completedAll.length <= 4
-        ? completedAll
-        : completedAll.sublist(completedAll.length - 4);
-    if (active == null && completed.isEmpty) return const SizedBox.shrink();
+    final activeIndex = activities.lastIndexWhere((item) => !item.isFinished);
+    final active = activeIndex < 0 ? null : activities[activeIndex];
+    // Oldest first, the active row last. Narration the Worker moved on from
+    // never gets an end event, but it is a message to keep, not to drop.
+    final earlier = <AxWorkActivity>[
+      for (var i = 0; i < activities.length; i++)
+        if (i != activeIndex &&
+            (activities[i].isFinished ||
+                activities[i].details['preview'] is String))
+          activities[i],
+    ];
+    final completed = earlier.length <= _history
+        ? earlier
+        : earlier.sublist(earlier.length - _history);
+    final activeLabel =
+        active != null ? _activityLabel(active) : fallbackAction;
+    if (activeLabel == null && completed.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.06),
@@ -1806,21 +1791,59 @@ class _WorkActivityTrail extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (active != null)
+          if (earlier.length > completed.length)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                '+${earlier.length - completed.length} earlier steps',
+                key: const ValueKey('work-earlier-activities'),
+                style: TextStyle(fontSize: 11, color: color),
+              ),
+            ),
+          for (final item in completed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    item.isError
+                        ? Icons.error_outline_rounded
+                        : Icons.check_circle_outline_rounded,
+                    size: 14,
+                    color: item.isError ? Colors.redAccent : color,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      _activityLabel(item),
+                      key: ValueKey('work-completed-${item.eventId}'),
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, color: color),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (activeLabel != null)
             Row(
               children: [
-                SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.8,
-                    color: accentColor,
+                // Before the Worker reports anything there is nothing to
+                // animate yet; a still icon also keeps idle screens settled.
+                if (active == null)
+                  Icon(Icons.more_horiz_rounded, size: 14, color: accentColor)
+                else
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.8,
+                      color: accentColor,
+                    ),
                   ),
-                ),
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    _activityLabel(active),
+                    activeLabel,
                     key: const ValueKey('work-active-activity'),
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -1832,33 +1855,6 @@ class _WorkActivityTrail extends StatelessWidget {
                 ),
               ],
             ),
-          if (completed.isNotEmpty) ...[
-            if (active != null) const SizedBox(height: 6),
-            for (final item in completed)
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Row(
-                  children: [
-                    Icon(
-                      item.isError
-                          ? Icons.error_outline_rounded
-                          : Icons.check_circle_outline_rounded,
-                      size: 14,
-                      color: item.isError ? Colors.redAccent : color,
-                    ),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        _activityLabel(item),
-                        key: ValueKey('work-completed-${item.eventId}'),
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 11, color: color),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
         ],
       ),
     );

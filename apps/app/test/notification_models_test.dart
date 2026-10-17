@@ -16,25 +16,25 @@ void main() {
     expect(isMeaningfulRealtimeNotification('thread.lease.status'), isFalse);
   });
 
-  test('maps Workflow Run events to normalized notification', () {
-    final notification = notificationFromRealtimeEvent({
-      'eventId': 'event-1',
-      'type': 'workflow_run.completed',
-      'timestamp': '2026-09-23T12:00:00Z',
-      'spaceId': 'space-1',
-      'runId': 'run-1',
-      'payload': {'summary': 'Verification passed.'},
-    });
-
-    expect(notification, isNotNull);
-    expect(notification!.kind, AxNotificationKind.workflowRunCompleted);
-    expect(notification.title, 'Workflow Run completed');
-    expect(notification.message, 'Verification passed.');
-    expect(notification.read, isFalse);
-    expect(notification.spaceId, 'space-1');
-    expect(notification.runId, 'run-1');
-    expect(notification.target, AxNotificationTarget.workflowRun);
-    expect(notification.priority, AxNotificationPriority.low);
+  test('completed Workflow Runs and Threads are not announced', () {
+    for (final type in [
+      'workflow_run.completed',
+      'run.completed',
+      'assignment.completed',
+      'thread.completed',
+      'work_request.completed',
+    ]) {
+      expect(
+        notificationFromRealtimeEvent({
+          'eventId': 'e-$type',
+          'type': type,
+          'spaceId': 'space-1',
+          'payload': {'summary': 'Done.', 'threadId': 't'},
+        }),
+        isNull,
+        reason: type,
+      );
+    }
   });
 
   test('maps Thread input events to normalized thread notification', () {
@@ -115,16 +115,14 @@ void main() {
     expect(notifications[3].kind, AxNotificationKind.spaceInvitationReceived);
   });
 
-  test('finished and failed Work Requests notify on their Thread', () {
+  test('failed Work Requests notify on their Thread', () {
     final done = notificationFromRealtimeEvent({
       'eventId': 'e-done',
       'type': 'work_request.completed',
       'spaceId': 'space-1',
       'payload': {'workRequestId': 'wr-1', 'threadId': 'thread-1'},
     });
-    expect(done!.kind, AxNotificationKind.threadCompleted);
-    expect(done.target, AxNotificationTarget.thread);
-    expect(done.threadId, 'thread-1');
+    expect(done, isNull);
     final failed = notificationFromRealtimeEvent({
       'eventId': 'e-fail',
       'type': 'work_request.failed',
@@ -157,33 +155,13 @@ void main() {
         'read': false,
       },
     ]);
-    expect(feed.map((n) => n.id), ['work-request:wr-1', 'work-request:wr-2']);
-    expect(feed.map((n) => n.read), [true, false]);
+    expect(feed.map((n) => n.id), ['work-request:wr-2']);
+    expect(feed.map((n) => n.read), [false]);
     final live = notificationFromRealtimeEvent({
       'eventId': 'other',
-      'type': 'work_request.completed',
-      'payload': {'workRequestId': 'wr-1', 'threadId': 'thread-1'},
+      'type': 'work_request.failed',
+      'payload': {'workRequestId': 'wr-2', 'threadId': 'thread-2'},
     });
     expect(live!.id, feed.first.id);
-  });
-
-  test('your own successful Work is not announced, failures are', () {
-    Map<String, dynamic> event(String type) => {
-          'eventId': type,
-          'type': type,
-          'payload': {'threadId': 't', 'requestedByUserId': 'me'},
-        };
-    expect(
-        notificationFromRealtimeEvent(event('work_request.completed'),
-            viewerId: 'me'),
-        isNull);
-    expect(
-        notificationFromRealtimeEvent(event('work_request.completed'),
-            viewerId: 'other'),
-        isNotNull);
-    expect(
-        notificationFromRealtimeEvent(event('work_request.failed'),
-            viewerId: 'me'),
-        isNotNull);
   });
 }

@@ -96,6 +96,23 @@ void main() {
     expect(cache.peek('w').requests, isEmpty);
   });
 
+  test('a 404 on a just-created Work Request keeps the optimistic row',
+      () async {
+    await seed();
+    cache.patchRequest('w', request('31', status: 'queued'));
+    cache.replace('w', [
+      ...cache.peek('w').requests,
+      request('32', status: 'queued'),
+    ], fenceReads: false);
+    final read = cache.refreshRequest('w', '32');
+    final expectation = expectLater(read, throwsA(isA<AxApiException>()));
+    source.detailPending.last
+        .completeError(const AxApiException('Not found', statusCode: 404));
+    await expectation;
+    expect(cache.peek('w').requests.map((r) => r.id), ['30', '31', '32']);
+    expect(cache.dirtyIds('w'), contains('32'));
+  });
+
   test('failed remote clear preserves history', () async {
     await seed();
     source.clearError = const AxApiException('Clear failed');

@@ -242,6 +242,7 @@ extension _AxAppViews on _AxAppStateMixin {
           onArchive: () async {
             try {
               await store.collaboration.deleteThread(thread);
+              _discardNotificationsFor(threadId: thread.id);
               if (!mounted) return;
               _showSnackBar('Thread deleted.');
               _navigateTo(AxNavigation.space(space.id));

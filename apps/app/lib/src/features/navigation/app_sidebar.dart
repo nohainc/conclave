@@ -333,6 +333,8 @@ class AppSidebar extends StatelessWidget {
                             icon: count > 0
                                 ? Badge.count(
                                     count: count,
+                                    backgroundColor: ConclaveColors.primary,
+                                    textColor: Colors.white,
                                     child: const Icon(
                                       Icons.notifications_none_rounded,
                                       size: 18,
@@ -746,6 +748,8 @@ class AppIconRail extends StatelessWidget {
               iconWidget: count > 0
                   ? Badge.count(
                       count: count,
+                      backgroundColor: ConclaveColors.primary,
+                      textColor: Colors.white,
                       child: const Icon(
                         Icons.notifications_outlined,
                         size: 20,

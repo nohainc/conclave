@@ -534,27 +534,32 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                                       .where((w) =>
                                           w.state == CapabilityState.ready ||
                                           w.state == CapabilityState.stale))
-                                    Semantics(
-                                        label: candidate.name,
-                                        selected:
-                                            candidate.id == effective.worker,
-                                        child: IconButton(
-                                          key: ValueKey(
-                                              '${widget.scope}-worker-${candidate.id}'),
-                                          isSelected:
-                                              candidate.id == effective.worker,
-                                          onPressed: enabled &&
-                                                  widget.allowWorkerChange
-                                              ? () => change(ExecutionSelection(
-                                                  worker: candidate.id,
-                                                  catalogRevision: candidate
-                                                      .catalogRevision))
-                                              : null,
-                                          icon: widget.workerIconBuilder
-                                                  ?.call(candidate) ??
-                                              const Icon(
-                                                  Icons.smart_toy_outlined),
-                                        )),
+                                    Builder(builder: (context) {
+                                      final isSelected =
+                                          candidate.id == effective.worker;
+                                      final rawIcon = widget.workerIconBuilder
+                                              ?.call(candidate) ??
+                                          const Icon(Icons.smart_toy_outlined);
+                                      return Semantics(
+                                          label: candidate.name,
+                                          selected: isSelected,
+                                          child: IconButton(
+                                            key: ValueKey(
+                                                '${widget.scope}-worker-${candidate.id}'),
+                                            isSelected: isSelected,
+                                            onPressed: enabled &&
+                                                    widget.allowWorkerChange
+                                                ? () => change(ExecutionSelection(
+                                                    worker: candidate.id,
+                                                    catalogRevision: candidate
+                                                        .catalogRevision))
+                                                : null,
+                                            icon: Opacity(
+                                              opacity: isSelected ? 1.0 : 0.45,
+                                              child: rawIcon,
+                                            ),
+                                          ));
+                                    })
                                 ])
                               : const SizedBox.shrink()),
                       Semantics(

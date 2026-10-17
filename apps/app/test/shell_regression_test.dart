@@ -196,6 +196,9 @@ void main() {
 
       expect(find.byType(Badge), findsOneWidget);
       expect(find.text('5'), findsOneWidget);
+      final badge = tester.widget<Badge>(find.byType(Badge));
+      expect(badge.backgroundColor, ConclaveColors.primary);
+      expect(badge.textColor, Colors.white);
       expect(find.bySemanticsLabel('5 unread notifications'), findsOneWidget);
 
       // Updates dynamically when count changes

@@ -205,6 +205,24 @@ class _ThreadPageState extends State<ThreadPage>
     _scheduleThreadViewStateSave();
   }
 
+  /// Scrolls to the end once the new row is laid out; a second pass covers
+  /// rows whose height settles a frame later.
+  void _jumpToLatest(ScrollController controller, {int pass = 0}) {
+    final generation = _interactionGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          generation != _interactionGeneration ||
+          !controller.hasClients ||
+          !controller.position.hasContentDimensions) {
+        return;
+      }
+      final max = controller.position.maxScrollExtent;
+      if (controller.position.pixels != max) controller.jumpTo(max);
+      if (pass < 2) _jumpToLatest(controller, pass: pass + 1);
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
   void _scheduleFollowLatest(ScrollController controller, {int attempt = 0}) {
     final isWork = controller == _workHistoryController;
     final follow = isWork ? _followWork : _followChat;
@@ -248,14 +266,23 @@ class _ThreadPageState extends State<ThreadPage>
     final ids = state.messages.map((message) => message.id).toList();
     final previous = _previousChatIds;
     _chatIncomingAnchor.retainMessages(ids);
-    if (_followChat && previous != null) {
+    if (previous != null) {
       // Only appended entries count: older-page prepends and edits retain
       // the reader's position and never become incoming-message anchors.
       final frontier = previous.isEmpty ? -1 : ids.indexOf(previous.last);
       for (final id in ids.skip(frontier + 1)) {
         if (!previous.contains(id)) {
-          _anchorIncoming(_chatIncomingAnchor, _chatHistoryController,
-              List<Object>.of(ids), id);
+          final own = state.messages.any((m) => m.id == id && m.isMe);
+          if (own) {
+            // A message you just sent: jump to the latest content even when
+            // the reader had scrolled up.
+            _followChat = true;
+            _chatIncomingAnchor.reset();
+            _jumpToLatest(_chatHistoryController);
+          } else if (_followChat) {
+            _anchorIncoming(_chatIncomingAnchor, _chatHistoryController,
+                List<Object>.of(ids), id);
+          }
           break;
         }
       }
@@ -282,17 +309,29 @@ class _ThreadPageState extends State<ThreadPage>
           ? null
           : (response, request.error, request.status == 'failed');
       replies[request.id] = reply;
-      if (_followWork && previous != null) {
+      if (previous != null) {
         if (!previous.containsKey(request.id)) {
           // Prepending a history page must not move the viewport.
           if (previous.isEmpty || index > frontier) {
+            final viewerId = widget.currentUserId;
+            if (viewerId != null && request.requestedByUserId == viewerId) {
+              // A request you just sent: jump to the latest content even
+              // when the reader had scrolled up.
+              _followWork = true;
+              _workIncomingAnchor.reset();
+              _jumpToLatest(_workHistoryController);
+              continue;
+            }
+            if (!_followWork) continue;
             _anchorIncoming(
                 _workIncomingAnchor,
                 _workHistoryController,
                 [for (final item in _workSequence()) item.$2],
                 (request.id, 'request'));
           }
-        } else if (reply != null && reply != previous[request.id]) {
+        } else if (_followWork &&
+            reply != null &&
+            reply != previous[request.id]) {
           _anchorIncoming(
               _workIncomingAnchor,
               _workHistoryController,

@@ -730,10 +730,15 @@ class AxWorkHistoryCache {
         read.completer.complete();
       } catch (error, stack) {
         if (identical(_contexts[id], context)) {
-          if (error is AxApiException && error.statusCode == 404) {
-            // The Work Request no longer exists: another session cleared the
-            // history while this one missed the realtime event. Drop retained
-            // pages rather than showing an error for a row that cannot return.
+          if (error is AxApiException &&
+              error.statusCode == 404 &&
+              peek(id).confirmedIds.contains(requestId)) {
+            // A request the server already returned no longer exists: another
+            // session cleared the history while this one missed the realtime
+            // event. Drop retained pages rather than showing an error for a
+            // row that cannot return. A just-created request the server cannot
+            // read yet is not a clear; resetting would wipe the new row until
+            // it completed.
             resetHistory(id);
           } else {
             context.detailErrors[requestId] = error;

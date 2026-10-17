@@ -633,6 +633,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   Future<void> _clearChatHistoryFromSidebar(AxThread thread) async {
     try {
       await store.discussion.clearHistory(thread.id);
+      _discardNotificationsFor(threadId: thread.id);
       if (mounted) _showSnackBar('Chat history cleared.');
     } catch (error) {
       if (mounted) {
@@ -647,6 +648,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   Future<void> _clearWorkHistoryFromSidebar(AxThread thread) async {
     try {
       await store.workHistory.clearHistory(thread.id);
+      _discardNotificationsFor(threadId: thread.id);
       if (mounted) _showSnackBar('Work history cleared.');
     } catch (error) {
       if (mounted) {
@@ -661,6 +663,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   Future<void> _deleteThreadFromSidebar(AxThread thread) async {
     try {
       await store.collaboration.deleteThread(thread);
+      _discardNotificationsFor(threadId: thread.id);
       if (!mounted) return;
       _showSnackBar('Thread deleted.');
       if (navigation.threadId == thread.id) {
@@ -797,6 +800,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     if (!confirmed) return;
     try {
       await widget.dataSource.deleteSpace(spaceId: spaceId);
+      _discardNotificationsFor(spaceId: spaceId);
       unawaited(store.archivedSpaces
           .refresh()
           .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
