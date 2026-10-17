@@ -16,9 +16,7 @@ void main() {
     expect(profile['model']['selectionMapping'], isNull);
     final rule = profile['model']['discovery']['effortVariants'];
     final models = parseDiscoveredModels(
-      File(
-        'test/fixtures/agy-models-1.4.0.tsv',
-      ).readAsStringSync(),
+      File('test/fixtures/agy-models-1.4.0.tsv').readAsStringSync(),
       '',
     );
     final grouped = normalizeCombinedModels(
@@ -376,13 +374,6 @@ Future<void> main() async {
   test(
     'signed combined mapping intersects native discovery and resolves all AGY pairs',
     () async {
-      final profile =
-          jsonDecode(
-                await File(
-                  '../../apps/profile_lab/assets/profiles/gemini.json',
-                ).readAsString(),
-              )
-              as Map;
       final mapping = {
         'schemaVersion': 1,
         'models': [

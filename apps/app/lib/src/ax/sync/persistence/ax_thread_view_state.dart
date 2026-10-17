@@ -15,6 +15,8 @@ class AxThreadViewState {
     this.catalogRevision,
     this.chatDraft = '',
     this.workDraft = '',
+    this.chatSeenId,
+    this.workSeenId,
   });
 
   final int tabIndex;
@@ -29,6 +31,11 @@ class AxThreadViewState {
   final String chatDraft;
   final String workDraft;
 
+  /// Last Chat message / Work item the reader had fully seen. Local only;
+  /// opening a tab scrolls to the item before the first one after it.
+  final String? chatSeenId;
+  final String? workSeenId;
+
   Map<String, dynamic> toJson() => {
         'schemaVersion': 1,
         'tabIndex': tabIndex.clamp(0, 1),
@@ -40,6 +47,8 @@ class AxThreadViewState {
         if (catalogRevision != null) 'catalogRevision': catalogRevision,
         if (chatDraft.isNotEmpty) 'chatDraft': _bounded(chatDraft),
         if (workDraft.isNotEmpty) 'workDraft': _bounded(workDraft),
+        if (chatSeenId != null) 'chatSeenId': chatSeenId,
+        if (workSeenId != null) 'workSeenId': workSeenId,
       };
 
   factory AxThreadViewState.fromJson(Map<String, dynamic> json) {
@@ -65,6 +74,8 @@ class AxThreadViewState {
       catalogRevision: string('catalogRevision'),
       chatDraft: draft('chatDraft'),
       workDraft: draft('workDraft'),
+      chatSeenId: string('chatSeenId'),
+      workSeenId: string('workSeenId'),
     );
   }
 

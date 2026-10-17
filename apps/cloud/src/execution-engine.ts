@@ -1,7 +1,8 @@
-import type {
-  StepResult,
-  BuiltinWorkflowStep,
-  ThreadBindingId,
+import {
+  effectiveStepTimeoutMs,
+  type StepResult,
+  type BuiltinWorkflowStep,
+  type ThreadBindingId,
 } from "@conclave/core";
 import type { TaskToDispatch } from "./assignment-dispatcher.js";
 import { workStepSessionKey } from "./work-session-key.js";
@@ -57,7 +58,7 @@ export function prepareWorkerStepExecution(
         prompt: input.prompt,
         effectiveWorkerPrompt: input.prompt,
       },
-      timeoutMs: step.timeoutMs,
+      timeoutMs: effectiveStepTimeoutMs(step.timeoutMs),
       sessionPolicy: "durable_session",
       sessionKey: workStepSessionKey({
         workBindingId: input.bindingId,

@@ -374,7 +374,10 @@ const passiveCommand = z
  */
 const usageCommand = z
   .object({
-    arguments: z.array(templatedString).min(1).max(TOOL_PROFILE_LIMITS.arguments),
+    arguments: z
+      .array(templatedString)
+      .min(1)
+      .max(TOOL_PROFILE_LIMITS.arguments),
     timeoutMs: z.number().int().min(1000).max(60_000),
     // When present, `arguments` start a JSON-RPC server over stdio (for
     // example Codex app-server); the Engine calls this method once and

@@ -22,18 +22,34 @@ Chat message IDs and Work request IDs are used as stable `ValueKey`s. The
 sliver delegate maps those keys back to their current item indexes so updates,
 insertions, and pagination do not unnecessarily discard child state.
 
-Older-page loading retains the existing anchor calculation: it records the
-scroll offset and extent before the page is fetched, then compensates for the
-new extent after older entries are prepended. Following incoming content is conditional on the user being near the bottom,
-and follow callbacks are coalesced per tab. After the initial history load,
-Chat anchors the first appended message; Work anchors a new request or the
-response inside an existing request. Short content remains fully visible above
-the composer. Content taller than the viewport aligns its beginning with the
-top of the history viewport, rather than jumping to its end. The first anchor
-is retained through response growth and subsequent arrivals until the reader
-scrolls, so later updates cannot skip the opening of unread content. Older-page
-prepends and Chat edits do not create incoming-message anchors. Anchors use
-rendered positions and retain the existing virtualized list; keys are pruned
+Older-page loading records the scroll offset and extent before the page is
+fetched, then compensates for the new extent after older entries are prepended,
+so prepends never move the reader.
+
+## Scroll rules (identical for Chat and Work)
+
+A Chat item is a message. A Work item is a request or a response, so a response
+arriving later counts as new. Each tab remembers the last item the reader fully
+saw (`chatSeenId` / `workSeenId` in the local `AxThreadViewState`; never sent to
+Cloud). An item is seen when the tab is active and the viewport is at the bottom.
+
+1. **Opening a tab** (Thread open, tab switch, Thread switch), once the Thread
+   view state and history are loaded:
+   - no new items after the last-seen item (or no stored marker): scroll to the
+     bottom;
+   - new items exist: scroll so the last-seen item, i.e. the message before the
+     first new one, is at the top of the viewport (short content is clamped).
+2. **Incoming items while the tab is active and the reader is near the bottom**
+   scroll down to show the new item: short items fit fully above the composer;
+   an item taller than the viewport aligns its beginning with the top. The anchor
+   is kept through response growth and later arrivals until the reader scrolls.
+3. A manual scroll cancels pending corrections; a reader scrolled away from the
+   bottom is not pulled down by new items.
+4. Older-page prepends and Chat edits never create anchors.
+
+Anchors use rendered positions (`AxTimelineFollowAnchor`). When the anchored row
+is virtualized away, the scroll position is first estimated from the item's
+fraction of the content and then corrected as the row mounts. Keys are pruned
 when their messages leave cached history.
 
 Each timeline has a centered floating down-arrow just above the composer. It

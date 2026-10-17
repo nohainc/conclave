@@ -21,6 +21,53 @@ Future<void> choose(WidgetTester tester, String label, String text) async {
 }
 
 void main() {
+  testWidgets(
+      'unset combined effort accepts first point and model initializes effort',
+      (tester) async {
+    const combined =
+        WorkerSelectionCapability(id: 'combined', name: 'Combined', models: [
+      ExecutionModelCapability(
+          id: 'model',
+          name: 'Model',
+          selectionMode: 'combined',
+          efforts: ['low', 'high']),
+      ExecutionModelCapability(id: 'plain', name: 'Plain'),
+    ]);
+    var selection =
+        const ExecutionSelection(worker: 'combined', model: 'model');
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Align(
+      alignment: Alignment.bottomLeft,
+      child: StatefulBuilder(
+          builder: (context, update) => ModelEffortSelector(
+                compact: true,
+                immediatePopup: true,
+                catalog: const ExecutionSelectionCatalog([combined]),
+                value: selection,
+                onChanged: (next) => update(() => selection = next),
+              )),
+    ))));
+    final open = find.byKey(const ValueKey('execution-open'));
+    await tester.tap(open);
+    await tester.pumpAndSettle();
+    await tester
+        .tapAt(tester.getTopLeft(find.byType(Slider)) + const Offset(24, 24));
+    await tester.pumpAndSettle();
+    expect(selection.effort, 'low');
+    expect(find.byKey(const ValueKey('execution-popup')), findsNothing);
+    await tester.tap(open);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Plain'));
+    await tester.pumpAndSettle();
+    expect(selection.effort, isNull);
+    await tester.tap(find.text('Model'));
+    await tester.pumpAndSettle();
+    expect(selection.effort, 'low');
+    expect(find.text('Effort · Low'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('effort gesture applies selection and closes Work popup',
       (tester) async {
     var selection = const ExecutionSelection(
@@ -118,7 +165,7 @@ void main() {
     await tester.tap(find.text('Two'));
     await tester.pumpAndSettle();
     expect(changes.last.model, 'two');
-    expect(changes.last.effort, isNull);
+    expect(changes.last.effort, 'deep');
     await tester.tap(find.byKey(const ValueKey('execution-worker-other')));
     await tester.pumpAndSettle();
     expect(changes.last.worker, 'other');

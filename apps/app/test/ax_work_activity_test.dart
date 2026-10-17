@@ -14,6 +14,7 @@ Map<String, dynamic> activityEvent({
   String activityId = 'tool-1',
   String title = 'Running repository checks',
   String attemptId = 'attempt-1',
+  String? preview,
 }) =>
     {
       'eventId': eventId,
@@ -39,6 +40,7 @@ Map<String, dynamic> activityEvent({
         'activityStatus': status,
         'title': title,
         if (type == 'tool.started') 'details': {'toolName': 'shell'},
+        if (preview != null) 'details': {'preview': preview},
       },
     };
 
@@ -352,6 +354,84 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(notified, 2);
     expect(store.forAssignment('assignment-1').single.title, 'Thinking 5');
+  });
+
+  test('keeps the narration row when a thinking status follows it', () {
+    final store = AxWorkActivityStore();
+    store.handle(
+      activityEvent(
+        eventId: 'narration-1',
+        streamSequence: 1,
+        activitySequence: 1,
+        type: 'message.updated',
+        status: 'updated',
+        activityId: 'claude-msg-1',
+        title: 'Step 1: listing files',
+      ),
+      threadId: 'thread-1',
+    );
+    store.handle(
+      activityEvent(
+        eventId: 'thinking-1',
+        streamSequence: 2,
+        activitySequence: 2,
+        type: 'model.status',
+        status: 'updated',
+        activityId: 'thinking',
+        title: 'Thinking',
+      ),
+      threadId: 'thread-1',
+    );
+    store.handle(
+      activityEvent(
+        eventId: 'narration-2',
+        streamSequence: 3,
+        activitySequence: 3,
+        type: 'message.updated',
+        status: 'updated',
+        activityId: 'claude-msg-2',
+        title: 'Step 2: reading the README',
+      ),
+      threadId: 'thread-1',
+    );
+    final rows = store.forAssignment('assignment-1');
+    expect(rows.map((row) => row.title), [
+      'Thinking',
+      'Step 2: reading the README',
+    ]);
+  });
+
+  test('a profile milestone does not overwrite a narration row', () {
+    final store = AxWorkActivityStore();
+    store.handle(
+      activityEvent(
+        eventId: 'narration-1',
+        streamSequence: 0,
+        activitySequence: 1,
+        type: 'message.updated',
+        status: 'updated',
+        activityId: 'codex-msg-1',
+        title: 'Reading the config',
+        preview: 'Reading the config',
+      ),
+      threadId: 'thread-1',
+    );
+    store.handle(
+      activityEvent(
+        eventId: 'milestone-1',
+        streamSequence: 0,
+        activitySequence: 2,
+        type: 'message.updated',
+        status: 'updated',
+        activityId: 'milestone',
+        title: 'provider_response_received',
+      ),
+      threadId: 'thread-1',
+    );
+    expect(
+      store.forAssignment('assignment-1').map((row) => row.title).toSet(),
+      {'Reading the config', 'provider_response_received'},
+    );
   });
 
   test('estimates clock skew from live events and ignores late replays', () {

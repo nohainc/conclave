@@ -621,6 +621,11 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           diagnosticStoreForWorkerType: diagnosticStoreForWorkerType,
           localQueueLengthProvider: () =>
               cliWorkerEngineSupervisor?.queuedAssignmentCount ?? 0,
+          deadAssignmentIdsProvider: cliWorkerEngineSupervisor == null
+              ? null
+              : () =>
+                  cliWorkerEngineSupervisor?.deadAssignmentIds ??
+                  const <String>{},
           workerInventoryProvider: () async {
             final localWorkers = await localWorkerRegistry.list();
             return workerCatalogCoordinator?.inventoryForWorkers(

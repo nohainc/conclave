@@ -4,6 +4,7 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers";
 import {
+  effectiveStepTimeoutMs,
   markWorkflowTaskResult,
   planWorkflowTasks,
   readyWorkflowTasks,
@@ -898,7 +899,8 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         // valve; the time bound is the D1-derived provider deadline.
         const maxWakeups =
           Math.ceil(
-            (task.step.timeoutMs + 2 * DEFAULT_QUEUE_WAIT_TIMEOUT_MS) /
+            (effectiveStepTimeoutMs(task.step.timeoutMs) +
+              2 * DEFAULT_QUEUE_WAIT_TIMEOUT_MS) /
               ASSIGNMENT_RECONCILIATION_INTERVAL_MS,
           ) + WAKEUP_SLACK;
         for (let wakeup = 0; wakeup < maxWakeups; wakeup += 1) {
@@ -1003,12 +1005,18 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           const providerOverrun =
             !!terminal &&
             terminal.status === "running" &&
-            providerExecutionOverrun(terminal, task.step.timeoutMs);
+            providerExecutionOverrun(
+              terminal,
+              effectiveStepTimeoutMs(task.step.timeoutMs),
+            );
           if (providerOverrun) break;
           await waitForTerminalEvent(
             workflowStep,
             `workflow:${task.step.kind}:assignment-wait:${attempt}:${wakeup}`,
-            nextWakeupMs(terminal, task.step.timeoutMs),
+            nextWakeupMs(
+              terminal,
+              effectiveStepTimeoutMs(task.step.timeoutMs),
+            ),
           );
         }
         if (!isTerminalRow(terminal)) {

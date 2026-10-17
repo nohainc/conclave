@@ -454,7 +454,8 @@ String resolveNativeSelection(
       model.selectionMode == 'combined' &&
       model.supportedReasoningEfforts.isNotEmpty) {
     final selected = effort ?? model.defaultReasoningEffort;
-    if (selected == null || !model.supportedReasoningEfforts.contains(selected)) {
+    if (selected == null ||
+        !model.supportedReasoningEfforts.contains(selected)) {
       throw const FormatException('Explicit supported effort required');
     }
     return '${model.id}${effortVariants['separator']}$selected';

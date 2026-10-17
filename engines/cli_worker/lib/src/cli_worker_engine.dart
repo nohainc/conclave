@@ -86,6 +86,7 @@ class CliWorkerEngine {
     ),
     CliStreamingRunner? streamingRunner,
     EngineLogger logger = const EngineLogger(),
+    this.providerStallLimit = const Duration(minutes: 15),
   }) : _locator = locator,
        _commandRunner = commandRunner,
        _streamingRunner =
@@ -94,6 +95,11 @@ class CliWorkerEngine {
        _logger = logger;
 
   final EngineOptions options;
+
+  /// A provider CLI that writes nothing and runs no child process for this
+  /// long is considered stuck and stopped. Output, or a running command,
+  /// keeps it alive up to the request's overall deadline.
+  final Duration providerStallLimit;
   final CliExecutableLocator _locator;
   final CliCommandRunner _commandRunner;
   final CliStreamingRunner _streamingRunner;
@@ -551,7 +557,11 @@ class CliWorkerEngine {
                         '(exit ${liveResult.exitCode}, '
                         'issue ${liveOutput.issueCode ?? 'none'}, '
                         'final text '
-                        '${liveOutput.finalText == null ? 'missing' : liveOutput.finalText?.trim() == _liveProbeExpectedText ? 'matched' : 'differed'}). '
+                        '${liveOutput.finalText == null
+                            ? 'missing'
+                            : liveOutput.finalText?.trim() == _liveProbeExpectedText
+                            ? 'matched'
+                            : 'differed'}). '
                         'Arguments: ${liveArguments.join(' ')}. '
                         'Environment keys: ${(liveEnvironment.keys.toList()..sort()).join(',')}. '
                         'Stderr: ${_liveStderrExcerpt(liveResult.stderr)}',
@@ -1396,6 +1406,10 @@ class CliWorkerEngine {
           workingDirectory: context['workingDirectory']!,
           stdinText: stdinText,
           timeout: Duration(milliseconds: remainingMs),
+          // The step limit is a generous hard cap. A CLI that is silent and
+          // has nothing running is stopped sooner; one that is running a
+          // command is left alone.
+          stallLimit: providerStallLimit,
           onStarted: () {
             providerStarted = true;
             return _write(
@@ -2270,7 +2284,19 @@ class CliWorkerEngine {
           if (type == 'set_final_text' && value is String) finalText = value;
           if (type == 'set_terminal_status' && value is String)
             terminalStatus = value;
-          if (type == 'set_provider_error' &&
+          if (type == 'set_provider_error' && value is List) {
+            // A list-valued provider error is a list of actions the provider
+            // refused to run (for example agy's `denied_actions`). The turn
+            // may still report success, but the requested work was not done.
+            // An empty list is not an error.
+            if (value.isNotEmpty) {
+              providerError = true;
+              final names = _deniedActionNames(value);
+              providerErrorText =
+                  'Permission denied for: '
+                  '${names.isEmpty ? 'an action' : names.join(', ')}';
+            }
+          } else if (type == 'set_provider_error' &&
               value != null &&
               value != false &&
               value != '') {
@@ -2358,6 +2384,21 @@ class CliWorkerEngine {
       null,
       WorkerIssueCode.providerFailure,
     );
+  }
+
+  List<String> _deniedActionNames(List<Object?> entries) {
+    final safe = RegExp(r'^[A-Za-z0-9_.:-]{1,64}$');
+    final names = <String>[];
+    for (final entry in entries) {
+      final candidate = entry is Map
+          ? (entry['display_name'] ?? entry['action'])
+          : entry;
+      if (candidate is String && safe.hasMatch(candidate)) {
+        if (!names.contains(candidate)) names.add(candidate);
+      }
+      if (names.length >= 8) break;
+    }
+    return names;
   }
 
   bool _stderrPattern(String patternId, String text) {
@@ -2616,6 +2657,7 @@ class _InterpretedOutput {
 bool _isSemver(String value) => RegExp(
   r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$',
 ).hasMatch(value);
+
 /// Removes terminal control sequences so a CLI report renders as plain text.
 String _stripAnsi(String value) => value.replaceAll(
   RegExp(r'\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1B]*(?:\x07|\x1B\\))'),

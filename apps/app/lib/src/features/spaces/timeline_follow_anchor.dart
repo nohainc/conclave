@@ -9,8 +9,16 @@ class AxTimelineFollowAnchor {
   Object? _message;
   GlobalKey? _key;
   double? _fallbackOffset;
+  double? _fallbackFraction;
+  bool _once = false;
+  GlobalKey? _nextKey;
 
-  GlobalKey? keyFor(Object message) => _keys[message];
+  /// Whether an anchor is currently owned (and not yet released).
+  bool get active => _message != null;
+
+  /// Every row owns a stable key from its first build, so anchoring a row
+  /// later never re-parents (and rebuilds) an already-rendered message.
+  GlobalKey keyFor(Object message) => _keys.putIfAbsent(message, GlobalKey.new);
 
   void retainMessages(Iterable<Object> messages) {
     final retained = messages.toSet();
@@ -33,6 +41,23 @@ class AxTimelineFollowAnchor {
             : _lastContentEnd;
   }
 
+  /// Anchors the already-read message before the first new one so it is shown
+  /// at the top of the viewport. [next] is the first new message; when the
+  /// previous message is so tall that [next] would start far below the
+  /// viewport, the view starts at [next] instead so it stays visible.
+  /// [fraction] estimates the row's position so a virtualized, unmounted row
+  /// can be approached before it is measured. With [once] the anchor releases
+  /// after the reveal so later arrivals can anchor again.
+  void anchorAt(Object message,
+      {Object? next, required double fraction, bool once = true}) {
+    reset();
+    _message = message;
+    _key = _keys.putIfAbsent(message, GlobalKey.new);
+    _nextKey = next == null ? null : _keys.putIfAbsent(next, GlobalKey.new);
+    _fallbackFraction = fraction.clamp(0.0, 1.0);
+    _once = once;
+  }
+
   void reset({bool clearKeys = false}) {
     if (clearKeys) {
       _keys.clear();
@@ -41,6 +66,9 @@ class AxTimelineFollowAnchor {
     _message = null;
     _key = null;
     _fallbackOffset = null;
+    _fallbackFraction = null;
+    _once = false;
+    _nextKey = null;
   }
 
   /// Returns true if another layout is needed to mount a virtualized anchor.
@@ -57,16 +85,28 @@ class AxTimelineFollowAnchor {
     final context = _key!.currentContext;
     final render = context is Element ? context.renderObject : null;
     if (render == null || !render.attached) {
-      controller.jumpTo((_fallbackOffset ?? position.maxScrollExtent)
-          .clamp(position.minScrollExtent, position.maxScrollExtent));
+      final estimate = _fallbackFraction != null
+          ? _fallbackFraction! * position.maxScrollExtent
+          : _fallbackOffset ?? position.maxScrollExtent;
+      controller.jumpTo(
+          estimate.clamp(position.minScrollExtent, position.maxScrollExtent));
       return true;
     }
     final viewport = RenderAbstractViewport.of(render);
-    final start = viewport.getOffsetToReveal(render, 0).offset;
+    var start = viewport.getOffsetToReveal(render, 0).offset;
+    final nextContext = _nextKey?.currentContext;
+    final nextRender = nextContext is Element ? nextContext.renderObject : null;
+    if (nextRender != null && nextRender.attached) {
+      final nextStart = viewport.getOffsetToReveal(nextRender, 0).offset;
+      if (nextStart - start > position.viewportDimension * 0.7) {
+        start = nextStart;
+      }
+    }
     // Short messages can remain fully visible above the composer. Long
     // messages stop at their opening line instead of their final line.
     controller.jumpTo(
         start.clamp(position.minScrollExtent, position.maxScrollExtent));
+    if (_once) reset();
     return false;
   }
 }

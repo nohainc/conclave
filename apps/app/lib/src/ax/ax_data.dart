@@ -4,6 +4,7 @@ import 'ax_workflow_configuration.dart';
 export 'ax_workflow_configuration.dart';
 import 'worker_usage.dart';
 export 'worker_usage.dart';
+export 'worker_usage_parser.dart';
 import 'dart:convert';
 import 'sync/ax_idempotency.dart';
 

@@ -117,6 +117,15 @@ class AxWorkProgress {
             a.details['diagnostic'] == null)
         .lastOrNull;
 
+    // The model's own narration ("Step 2: reading the config") says more than
+    // a generic tool title, so it stays the headline while a tool runs.
+    final narration = attempt
+        .where((a) =>
+            a.type == 'message.updated' &&
+            a.details['preview'] is String &&
+            (a.details['preview'] as String).isNotEmpty)
+        .lastOrNull;
+
     DateTime shift(DateTime value) => value.add(clockOffset);
 
     final startActivity =
@@ -149,7 +158,7 @@ class AxWorkProgress {
       } else if (wrappingUp) {
         action = 'Wrapping up…';
       } else if (unfinished != null) {
-        action = unfinished.title;
+        action = _headline(unfinished, narration);
       } else {
         action = switch (status) {
           'queued' || 'starting' || 'acknowledged' => 'Starting worker…',
@@ -188,6 +197,21 @@ class AxWorkProgress {
           const {'failed', 'timed_out', 'lost'}.contains(requestStatus) &&
               activities.isEmpty,
     );
+  }
+
+  /// Picks the headline. Narration is live-only, so the store sorts it before
+  /// every stored event (stream sequence 0); the Engine's own activity
+  /// sequence is what tells whether it is newer than [current].
+  static String _headline(AxWorkActivity current, AxWorkActivity? narration) {
+    if (narration == null || narration.eventId == current.eventId) {
+      return current.title;
+    }
+    if (current.type.startsWith('tool.')) {
+      return '${narration.title} · ${current.title}';
+    }
+    return narration.activitySequence > current.activitySequence
+        ? narration.title
+        : current.title;
   }
 
   /// Elapsed time at [now]. Never negative, even with clock skew.

@@ -311,6 +311,31 @@
       {
         "actions": [
           {
+            "selector": "$.result.denied_actions",
+            "type": "set_provider_error"
+          }
+        ],
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.event",
+            "value": "result"
+          },
+          {
+            "kind": "equals",
+            "selector": "$.result.status",
+            "value": "SUCCESS"
+          },
+          {
+            "kind": "exists",
+            "selector": "$.result.denied_actions",
+            "exists": true
+          }
+        ]
+      },
+      {
+        "actions": [
+          {
             "selector": "$.result.conversation_id",
             "type": "set_session"
           },

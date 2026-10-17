@@ -519,13 +519,23 @@ class AxWorkActivityStore extends ChangeNotifier {
     if (incoming.isReplaceable) {
       for (var index = list.length - 1; index >= 0; index--) {
         final item = list[index];
-        if (item.attemptId == incoming.attemptId && item.isReplaceable) {
+        // A status line and the model's narration are separate rows: a later
+        // "Thinking" must not overwrite the narration, nor the reverse.
+        if (item.attemptId == incoming.attemptId &&
+            item.isReplaceable &&
+            item.type == incoming.type &&
+            // A profile milestone (no narration text) must not overwrite a
+            // narration row, nor the reverse.
+            _hasNarration(item) == _hasNarration(incoming)) {
           return index;
         }
       }
     }
     return -1;
   }
+
+  static bool _hasNarration(AxWorkActivity activity) =>
+      activity.details['preview'] is String;
 
   int _compare(AxWorkActivity left, AxWorkActivity right) {
     final stream = left.streamSequence.compareTo(right.streamSequence);

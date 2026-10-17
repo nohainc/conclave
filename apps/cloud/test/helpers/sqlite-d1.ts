@@ -86,6 +86,7 @@ export function sqliteD1(
     "0068_user_pins.sql",
     "0069_user_pin_position.sql",
     "0070_workspace_parallel_slots.sql",
+    "0071_assignment_engine_liveness.sql",
   ]) {
     sqlite.exec(
       readFileSync(

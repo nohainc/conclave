@@ -94,6 +94,12 @@ class _ThreadPageState extends State<ThreadPage>
   Map<String, Object?>? _previousWorkReplies;
   bool _followWork = true;
   bool _followChat = true;
+  // Opening a tab positions it once the Thread view state and history exist:
+  // bottom when nothing is new, otherwise the last-seen item at the top.
+  bool _openChatPending = true;
+  bool _openWorkPending = true;
+  String? _chatSeenId;
+  String? _workSeenId;
   bool _chatFollowScheduled = false;
   bool _workFollowScheduled = false;
   int _interactionGeneration = 0;
@@ -106,12 +112,103 @@ class _ThreadPageState extends State<ThreadPage>
     _previousWorkReplies = null;
     _chatFollowScheduled = false;
     _workFollowScheduled = false;
+    _openChatPending = _openWorkPending = true;
+  }
+
+  List<(String, Object)> _chatSequence() => [
+        for (final message in _chatPresentation.messages)
+          (message.id, message.id),
+      ];
+
+  /// Work reads as request/response items so a response arriving later in an
+  /// already-seen request counts as new.
+  List<(String, Object)> _workSequence() {
+    final items = <(String, Object)>[];
+    for (final request in _workPresentation.requests) {
+      items.add(('${request.id}|request', (request.id, 'request')));
+      if (_workResponseText(request) != null || request.status == 'failed') {
+        items.add(('${request.id}|response', (request.id, 'response')));
+      }
+    }
+    return items;
+  }
+
+  /// A new item scrolls to the message before it so the reader sees where the
+  /// new content starts; the first item has no predecessor and anchors itself.
+  void _anchorIncoming(AxTimelineFollowAnchor anchor,
+      ScrollController controller, List<Object> sequence, Object target) {
+    if (anchor.active) return;
+    final index = sequence.indexOf(target);
+    if (index <= 0) {
+      anchor.observe(target, controller);
+      return;
+    }
+    anchor.anchorAt(sequence[index - 1],
+        next: target, fraction: index / sequence.length, once: false);
+  }
+
+  bool _tabActive(bool isWork) => _tabController.index == (isWork ? 1 : 0);
+
+  /// Returns true when the opening step ran and a rebuilt frame must reveal it.
+  bool _openTab(bool isWork, ScrollController controller) {
+    if (!(isWork ? _openWorkPending : _openChatPending)) return false;
+    final hasData =
+        isWork ? _workPresentation.hasData : _chatPresentation.hasData;
+    if (!_threadViewStateRestored ||
+        !hasData ||
+        !_tabActive(isWork) ||
+        !controller.hasClients ||
+        !controller.position.hasContentDimensions) {
+      return false;
+    }
+    final items = isWork ? _workSequence() : _chatSequence();
+    final seen = isWork ? _workSeenId : _chatSeenId;
+    final seenIndex =
+        seen == null ? -1 : items.indexWhere((item) => item.$1 == seen);
+    final anchor = isWork ? _workIncomingAnchor : _chatIncomingAnchor;
+    if (isWork) {
+      _openWorkPending = false;
+      _followWork = true;
+    } else {
+      _openChatPending = false;
+      _followChat = true;
+    }
+    if (seenIndex < 0 || seenIndex >= items.length - 1) {
+      anchor.reset();
+      return false;
+    }
+    anchor.anchorAt(items[seenIndex].$2,
+        next: items[seenIndex + 1].$2,
+        fraction: (seenIndex + 1) / items.length);
+    // The anchored row needs its GlobalKey attached by a rebuild first.
+    setState(() {});
+    return true;
+  }
+
+  void _markSeen(bool isWork, ScrollController controller) {
+    if (isWork ? _openWorkPending : _openChatPending) return;
+    if (!_tabActive(isWork) ||
+        !controller.hasClients ||
+        !controller.position.hasContentDimensions ||
+        controller.position.extentAfter > 24) {
+      return;
+    }
+    final items = isWork ? _workSequence() : _chatSequence();
+    if (items.isEmpty) return;
+    final last = items.last.$1;
+    if (last == (isWork ? _workSeenId : _chatSeenId)) return;
+    if (isWork) {
+      _workSeenId = last;
+    } else {
+      _chatSeenId = last;
+    }
+    _scheduleThreadViewStateSave();
   }
 
   void _scheduleFollowLatest(ScrollController controller, {int attempt = 0}) {
     final isWork = controller == _workHistoryController;
     final follow = isWork ? _followWork : _followChat;
-    if (!follow) return;
+    if (!follow && !(isWork ? _openWorkPending : _openChatPending)) return;
     if (isWork ? _workFollowScheduled : _chatFollowScheduled) return;
     final generation = _interactionGeneration;
     if (isWork) {
@@ -127,15 +224,22 @@ class _ThreadPageState extends State<ThreadPage>
         _chatFollowScheduled = false;
       }
       if (!mounted || !controller.hasClients) return;
+      if (_openTab(isWork, controller)) {
+        _scheduleFollowLatest(controller);
+        WidgetsBinding.instance.scheduleFrame();
+        return;
+      }
       final stillFollowing =
           controller == _workHistoryController ? _followWork : _followChat;
-      if (stillFollowing) {
+      if (stillFollowing && !(isWork ? _openWorkPending : _openChatPending)) {
         final anchor = isWork ? _workIncomingAnchor : _chatIncomingAnchor;
-        if (anchor.reveal(controller) && attempt < 3) {
+        if (anchor.reveal(controller) && attempt < 6) {
           _scheduleFollowLatest(controller, attempt: attempt + 1);
           WidgetsBinding.instance.scheduleFrame();
+          return;
         }
       }
+      _markSeen(isWork, controller);
     });
   }
 
@@ -150,7 +254,8 @@ class _ThreadPageState extends State<ThreadPage>
       final frontier = previous.isEmpty ? -1 : ids.indexOf(previous.last);
       for (final id in ids.skip(frontier + 1)) {
         if (!previous.contains(id)) {
-          _chatIncomingAnchor.observe(id, _chatHistoryController);
+          _anchorIncoming(_chatIncomingAnchor, _chatHistoryController,
+              List<Object>.of(ids), id);
           break;
         }
       }
@@ -181,12 +286,18 @@ class _ThreadPageState extends State<ThreadPage>
         if (!previous.containsKey(request.id)) {
           // Prepending a history page must not move the viewport.
           if (previous.isEmpty || index > frontier) {
-            _workIncomingAnchor
-                .observe((request.id, 'request'), _workHistoryController);
+            _anchorIncoming(
+                _workIncomingAnchor,
+                _workHistoryController,
+                [for (final item in _workSequence()) item.$2],
+                (request.id, 'request'));
           }
         } else if (reply != null && reply != previous[request.id]) {
-          _workIncomingAnchor
-              .observe((request.id, 'response'), _workHistoryController);
+          _anchorIncoming(
+              _workIncomingAnchor,
+              _workHistoryController,
+              [for (final item in _workSequence()) item.$2],
+              (request.id, 'response'));
         }
       }
     }
@@ -201,9 +312,13 @@ class _ThreadPageState extends State<ThreadPage>
   void _onWorkHistoryScroll() {
     if (!_workHistoryController.hasClients) return;
     final position = _workHistoryController.position;
-    if (position.userScrollDirection == ScrollDirection.idle) return;
+    if (position.userScrollDirection == ScrollDirection.idle) {
+      _markSeen(true, _workHistoryController);
+      return;
+    }
     _followWork = position.extentAfter <= 24;
     _workIncomingAnchor.reset();
+    _markSeen(true, _workHistoryController);
     if (position.userScrollDirection == ScrollDirection.forward &&
         position.extentBefore <= 24 &&
         _workHistoryCache.peek(widget.thread.id).olderCursor != null &&
@@ -216,9 +331,13 @@ class _ThreadPageState extends State<ThreadPage>
   void _onChatHistoryScroll() {
     if (!_chatHistoryController.hasClients) return;
     final position = _chatHistoryController.position;
-    if (position.userScrollDirection == ScrollDirection.idle) return;
+    if (position.userScrollDirection == ScrollDirection.idle) {
+      _markSeen(false, _chatHistoryController);
+      return;
+    }
     _followChat = position.extentAfter <= 24;
     _chatIncomingAnchor.reset();
+    _markSeen(false, _chatHistoryController);
     if (position.userScrollDirection == ScrollDirection.forward &&
         position.extentBefore <= 24) {
       final state = _discussionCache.peek(widget.thread.id);
@@ -395,6 +514,8 @@ class _ThreadPageState extends State<ThreadPage>
           : _selectionValue('catalogRevision'),
       chatDraft: _discussionController.text,
       workDraft: _requestController.text,
+      chatSeenId: _chatSeenId,
+      workSeenId: _workSeenId,
     );
   }
 
@@ -430,6 +551,8 @@ class _ThreadPageState extends State<ThreadPage>
       catalogRevision: string('catalogRevision'),
       chatDraft: local?.chatDraft ?? '',
       workDraft: local?.workDraft ?? '',
+      chatSeenId: local?.chatSeenId,
+      workSeenId: local?.workSeenId,
     );
   }
 
@@ -570,6 +693,8 @@ class _ThreadPageState extends State<ThreadPage>
           selection: TextSelection.collapsed(offset: saved.workDraft.length),
         );
       }
+      _chatSeenId = saved.chatSeenId;
+      _workSeenId = saved.workSeenId;
       _pendingThreadViewState = saved;
       final targetIndex = saved.tabIndex.clamp(0, _tabController.length - 1);
       if (_tabController.index != targetIndex) {
@@ -579,6 +704,8 @@ class _ThreadPageState extends State<ThreadPage>
     }
     if (mounted) setState(() {});
     _scheduleThreadViewStateSave();
+    _scheduleFollowLatest(_chatHistoryController);
+    _scheduleFollowLatest(_workHistoryController);
   }
 
   void _onThreadTabChanged() {
@@ -589,11 +716,16 @@ class _ThreadPageState extends State<ThreadPage>
       mounted: mounted,
       disposed: false,
     );
-    if (_tabController.index == 1) {
-      _scheduleFollowLatest(_workHistoryController);
-    } else {
-      _scheduleFollowLatest(_chatHistoryController);
+    final isWork = _tabController.index == 1;
+    if (!_tabController.indexIsChanging) {
+      if (isWork) {
+        _openWorkPending = true;
+      } else {
+        _openChatPending = true;
+      }
     }
+    _scheduleFollowLatest(
+        isWork ? _workHistoryController : _chatHistoryController);
     if (!_tabController.indexIsChanging) _scheduleThreadViewStateSave();
   }
 
@@ -962,6 +1094,8 @@ class _ThreadPageState extends State<ThreadPage>
       _workExecutionSelection = {};
       _workflow = '';
       _followWork = _followChat = true;
+      _chatSeenId = _workSeenId = null;
+      _openChatPending = _openWorkPending = true;
       _workActivityStore.clear();
       _cancelTerminalActivityChecks();
       unawaited(_restoreThreadViewState());

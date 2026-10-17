@@ -10,6 +10,8 @@ import {
   BUILTIN_WORKFLOWS,
   BUILTIN_WORKFLOW_CATALOG,
   STEP_KINDS,
+  STEP_HARD_CAP_MS,
+  effectiveStepTimeoutMs,
   WORKFLOW_IDS,
   THREAD_BINDING_IDS,
   deserializeEntity,
@@ -345,5 +347,23 @@ describe("Thread domain", () => {
     const stored = deserializeEntity<WorkRequest>(serializeEntity(historical));
     expect(stored.workflowSnapshot.name).toBe("Direct");
     expect(() => validateWorkRequest(stored, statefulPolicy)).not.toThrow();
+  });
+});
+
+describe("step hard cap", () => {
+  it("raises the declared 15 minute timeout to the 2 hour cap at dispatch", () => {
+    expect(STEP_HARD_CAP_MS).toBe(2 * 60 * 60 * 1000);
+    expect(effectiveStepTimeoutMs(15 * 60 * 1000)).toBe(STEP_HARD_CAP_MS);
+    expect(effectiveStepTimeoutMs(STEP_HARD_CAP_MS + 1)).toBe(
+      STEP_HARD_CAP_MS + 1,
+    );
+  });
+
+  it("does not change the canonical built-in definitions", () => {
+    for (const definition of Object.values(BUILTIN_WORKFLOWS)) {
+      for (const step of definition.steps) {
+        expect(step.timeoutMs).toBe(15 * 60 * 1000);
+      }
+    }
   });
 });

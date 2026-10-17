@@ -29,7 +29,9 @@ The Work execution popup applies preferences immediately, without Cancel/Done.
 Completing an effort slider gesture accepts the selection and closes the popup.
 Its discrete effort slider sits above the model list; available Worker icons sit
 at the bottom. Selecting a Worker refreshes its model and effort choices, and
-selecting a model retains only a supported effort. Workflow selection permissions
+selecting a model retains a supported effort or initializes it to the first
+available effort when effort selection is permitted. Tapping the leftmost slider
+point explicitly accepts that value even when no effort was previously selected. Workflow selection permissions
 still govern each control. Dismissing the popup keeps the applied preferences. The restore icon at the
 bottom right restores the complete selection from when the popup was opened,
 including its Worker, model, effort, and catalog revision, then closes the popup.

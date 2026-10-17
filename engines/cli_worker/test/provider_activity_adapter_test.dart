@@ -152,6 +152,78 @@ void main() {
     expect(searchUpdate.single.activityId, 'search-1');
   });
 
+  test('Codex adapter reports agent messages as narration', () {
+    final adapter = ProviderActivityAdapter.fromProfile({
+      'providerTool': {'name': 'Codex CLI'},
+      'activity': {'adapter': 'codex-jsonl', 'mappings': <Object?>[]},
+    })!;
+    final narration = adapter.normalizeEvent({
+      'type': 'item.completed',
+      'item': {
+        'id': 'item_2',
+        'type': 'agent_message',
+        'text': 'I\u2019ll run `sleep 25 && echo done` and wait.\n',
+      },
+    }, declarativeMatched: true);
+    expect(narration.single.type, 'message.updated');
+    expect(narration.single.activityId, 'codex-msg-item_2');
+    expect(
+      narration.single.details['preview'],
+      'I\u2019ll run `sleep 25 && echo done` and wait.',
+    );
+    expect(
+      adapter.normalizeEvent({
+        'type': 'item.completed',
+        'item': {'id': 'item_3', 'type': 'agent_message', 'text': '  '},
+      }, declarativeMatched: true),
+      isEmpty,
+    );
+  });
+
+  test('agy adapter joins text deltas and reports at most every interval', () {
+    final adapter = ProviderActivityAdapter.fromProfile({
+      'providerTool': {'name': 'agy'},
+      'activity': {'adapter': 'agy-stream-json', 'mappings': <Object?>[]},
+    })!;
+    var now = DateTime.utc(2026, 10, 17, 12);
+    adapter.clock = () => now;
+    List<ProviderActivityObservation> delta(String text, {String? state}) =>
+        adapter.normalizeEvent({
+          'event': 'step_update',
+          'step_update': {
+            'conversation_id': 'c1',
+            'step_index': 1,
+            'state': state ?? 'ACTIVE',
+            'step_type': 'agent_response',
+            'text_delta': text,
+          },
+        }, declarativeMatched: false);
+
+    final first = delta('**Step 1:** Creating [a.txt](file:///var/x/a.txt) and ');
+    expect(first.single.type, 'message.updated');
+    expect(first.single.activityId, 'agy-msg-c1:1');
+    expect(first.single.details['preview'], 'Step 1: Creating a.txt and');
+
+    // Inside the interval nothing is sent.
+    now = now.add(const Duration(milliseconds: 500));
+    expect(delta('b.txt in the '), isEmpty);
+    now = now.add(const Duration(milliseconds: 500));
+    expect(delta('current folder'), isEmpty);
+
+    // Past the interval the whole text so far is reported again.
+    now = now.add(const Duration(seconds: 2));
+    final next = delta(', each with a [partial](file:///va');
+    expect(
+      next.single.details['preview'],
+      'Step 1: Creating a.txt and b.txt in the current folder, each with a',
+    );
+
+    // The finished step is reported once more, then forgotten.
+    final done = delta('th).\n', state: 'DONE');
+    expect(done.single.details['preview'], endsWith('each with a partial.'));
+    expect(delta('', state: 'DONE'), isEmpty);
+  });
+
   test('agy adapter pairs documented tool steps by step index', () {
     final adapter = ProviderActivityAdapter.fromProfile({
       'providerTool': {'name': 'agy'},
@@ -239,7 +311,7 @@ void main() {
         'message': {
           'content': [
             {'type': 'thinking', 'thinking': 'secret reasoning'},
-            {'type': 'text', 'text': 'secret answer'},
+            {'type': 'text', 'text': 'Checking the project files'},
             {
               'type': 'tool_use',
               'id': 'toolu_01',
@@ -272,6 +344,7 @@ void main() {
       });
       expect(done.single.type, 'tool.completed');
       expect(done.single.activityId, 'toolu_01');
+      expect(done.single.title, 'Ran a command');
 
       final failed = line(claude, {
         'type': 'user',
@@ -286,10 +359,13 @@ void main() {
           ],
         },
       });
+      expect(failed.single.title, 'Tool failed');
       expect(failed.single.type, 'tool.failed');
       expect(failed.single.status, 'failed');
       expect(failed.single.activityId, 'toolu_02');
 
+      expect(started[1].title, 'Checking the project files');
+      expect(started[1].details['preview'], 'Checking the project files');
       // Nothing from prompts, reasoning, input or output crosses the boundary.
       final everything = [
         ...started,
@@ -297,6 +373,87 @@ void main() {
         ...failed,
       ].map((e) => '${e.title} ${e.details} ${e.activityId}').join(' ');
       expect(everything, isNot(contains('secret')));
+    });
+
+    test('reports bounded, redacted narration keyed by the message id', () {
+      final claude = adapter();
+      List<ProviderActivityObservation> narrate(String text, {String? id}) =>
+          line(claude, {
+            'type': 'assistant',
+            'message': {
+              if (id != null) 'id': id,
+              'content': [
+                {'type': 'text', 'text': text},
+              ],
+            },
+          });
+
+      final first = narrate('Step 1:\nCreating files', id: 'msg_01AbC');
+      expect(first.single.type, 'message.updated');
+      expect(first.single.activityId, 'claude-msg-msg_01AbC');
+      expect(first.single.title, 'Step 1: Creating files');
+      expect(first.single.details['preview'], 'Step 1: Creating files');
+      expect(first.single.details.containsKey('previewTruncated'), isFalse);
+
+      // The same message id replaces the earlier row.
+      expect(
+        narrate('Step 1: Done', id: 'msg_01AbC').single.activityId,
+        first.single.activityId,
+      );
+
+      final secrets = narrate(
+        'key sk-abcdefghijklmnopqrstuvwx and token=abcdef123456 and '
+        'Bearer abcdefghijklmnop1234',
+      ).single;
+      expect(secrets.details['preview'], isNot(contains('abcdefghijkl')));
+      expect(secrets.details['preview'], isNot(contains('abcdef123456')));
+      expect(secrets.details['preview'], contains('[redacted]'));
+      expect(secrets.activityId, isNull);
+
+      final long = narrate('x' * 5000).single;
+      expect((long.details['preview'] as String).length, 1500);
+      expect(long.details['previewTruncated'], isTrue);
+      expect(long.title.length, 160);
+
+      final blank = narrate('   ').single;
+      expect(blank.title, 'Writing the response');
+      expect(blank.details, isEmpty);
+    });
+
+    test('reports background commands still running when the turn ends', () {
+      final claude = adapter();
+      expect(
+        line(claude, {
+          'type': 'system',
+          'subtype': 'background_tasks_changed',
+          'tasks': [
+            {'task_id': 'bmn2h4bpp', 'description': 'Wait then print done'},
+          ],
+        }),
+        isEmpty,
+      );
+      final ended = line(claude, {'type': 'result', 'is_error': false});
+      expect(ended.single.type, 'tool.failed');
+      expect(ended.single.activityId, 'claude-bg-bmn2h4bpp');
+      expect(
+        ended.single.title,
+        'Background command stopped when the agent finished',
+      );
+      // Reported once; a later result or an empty list reports nothing.
+      expect(line(claude, {'type': 'result', 'is_error': false}), isEmpty);
+      line(claude, {
+        'type': 'system',
+        'subtype': 'background_tasks_changed',
+        'tasks': [
+          {'task_id': 'b1'},
+        ],
+      });
+      line(claude, {
+        'type': 'system',
+        'subtype': 'background_tasks_changed',
+        'tasks': <Object?>[],
+      });
+      expect(line(claude, {'type': 'result', 'is_error': false}), isEmpty);
     });
 
     test('titles tools by name and ignores unrelated events silently', () {

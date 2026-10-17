@@ -6,6 +6,25 @@ import 'worker_process_cleanup.dart';
 
 typedef CliLineHandler = FutureOr<void> Function(String line);
 
+/// Whether the CLI process [pid] currently has running child processes (a
+/// shell command, a build, a test run). Used to tell a quiet but busy agent
+/// from a stuck one.
+typedef CliChildProcessProbe = Future<bool> Function(int pid);
+
+/// Default probe: direct children via `pgrep -P`. When the platform cannot
+/// answer, the agent is assumed busy so it is never stopped wrongly.
+Future<bool> hasRunningChildProcesses(int pid) async {
+  if (Platform.isWindows) return true;
+  try {
+    final result = await Process.run('pgrep', ['-P', '$pid']);
+    if (result.exitCode == 0) return (result.stdout as String).trim().isNotEmpty;
+    // pgrep exits 1 when nothing matches; any other code means it failed.
+    return result.exitCode != 1;
+  } on Object {
+    return true;
+  }
+}
+
 class CliStreamResult {
   const CliStreamResult({required this.exitCode, required this.stderr});
 
@@ -22,6 +41,7 @@ class CliStreamingRunner {
     this.maxStderrBytes = 1024 * 1024,
     this.cleanup = const WorkerProcessCleanup(),
     this.drainGrace = const Duration(seconds: 3),
+    this.stallCheckInterval = const Duration(seconds: 30),
   });
 
   final int maxStdoutBytes;
@@ -34,6 +54,9 @@ class CliStreamingRunner {
   /// waiting for end-of-stream would hold the assignment until its deadline.
   final Duration drainGrace;
 
+  /// How often a run with a `stallLimit` is checked for a stall.
+  final Duration stallCheckInterval;
+
   Future<CliStreamResult> run(
     String executable,
     List<String> arguments, {
@@ -43,6 +66,13 @@ class CliStreamingRunner {
     required Duration timeout,
     required CliLineHandler onStdoutLine,
     FutureOr<void> Function()? onStarted,
+
+    /// When set, the run is stopped as stalled once the CLI has written
+    /// nothing to stdout or stderr for this long and has no running child
+    /// process. A quiet agent that is running a command is not stalled; the
+    /// overall [timeout] still bounds it.
+    Duration? stallLimit,
+    CliChildProcessProbe? childProcessProbe,
   }) async {
     final process = await Process.start(
       executable,
@@ -57,12 +87,17 @@ class CliStreamingRunner {
     var stdoutBytes = 0;
     Object? streamError;
     var drainAbandoned = false;
+    final sinceOutput = Stopwatch()..start();
+    Duration? stalledFor;
+    Timer? stallTimer;
+    var stallCheckRunning = false;
     final stdoutTask = () async {
       try {
         var pending = '';
         var pendingBytes = 0;
         await for (final chunk in process.stdout.transform(utf8.decoder)) {
           if (drainAbandoned) break;
+          sinceOutput.reset();
           final chunkBytes = utf8.encode(chunk).length;
           stdoutBytes += chunkBytes;
           if (stdoutBytes > maxStdoutBytes) {
@@ -96,6 +131,7 @@ class CliStreamingRunner {
     final stderrTask = () async {
       await for (final chunk in process.stderr) {
         if (drainAbandoned) break;
+        sinceOutput.reset();
         final remaining = maxStderrBytes - stderrBytes;
         if (remaining > 0) {
           final accepted = chunk.length <= remaining
@@ -106,6 +142,23 @@ class CliStreamingRunner {
         }
       }
     }();
+    if (stallLimit != null) {
+      final probe = childProcessProbe ?? hasRunningChildProcesses;
+      stallTimer = Timer.periodic(stallCheckInterval, (_) async {
+        if (stallCheckRunning || stalledFor != null) return;
+        if (sinceOutput.elapsed < stallLimit) return;
+        stallCheckRunning = true;
+        try {
+          if (await probe(process.pid)) return;
+          // Re-check: output may have arrived while the probe ran.
+          if (sinceOutput.elapsed < stallLimit) return;
+          stalledFor = sinceOutput.elapsed;
+          process.kill(ProcessSignal.sigterm);
+        } finally {
+          stallCheckRunning = false;
+        }
+      });
+    }
     try {
       final timer = Stopwatch()..start();
       final started = onStarted;
@@ -122,6 +175,12 @@ class CliStreamingRunner {
         }
       }();
       final code = await process.exitCode.timeout(_remaining(timeout, timer));
+      if (stalledFor != null) {
+        throw TimeoutException(
+          'CLI produced no output for ${stalledFor!.inMinutes} minutes and '
+          'had no running child process',
+        );
+      }
       await stdinTask.timeout(_remaining(timeout, timer));
       final drainBudget = _remaining(timeout, timer);
       try {
@@ -147,6 +206,8 @@ class CliStreamingRunner {
     } on Object {
       await cleanup.terminate(process);
       rethrow;
+    } finally {
+      stallTimer?.cancel();
     }
   }
 

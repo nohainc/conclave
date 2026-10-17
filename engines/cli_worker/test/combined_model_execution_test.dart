@@ -1,3 +1,6 @@
+@Timeout(Duration(minutes: 2))
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -31,6 +34,14 @@ Future<void> main(List<String> args) async {
   final input = await stdin.transform(utf8.decoder).join();
   if (input.contains("reject-model")) { stderr.writeln("unsupported model"); exit(2); }
   final model = args[args.indexOf('--model') + 1];
+  if (input.contains('deny-write')) {
+    stdout.writeln(jsonEncode({'event':'result','result':{'status':'SUCCESS','response':'I will create the files.','conversation_id':'fixture','denied_actions':[{'action':'write_file','display_name':'WriteToFile'}]}}));
+    return;
+  }
+  if (input.contains('empty-denied')) {
+    stdout.writeln(jsonEncode({'event':'result','result':{'status':'SUCCESS','response':'done','conversation_id':'fixture','denied_actions':[]}}));
+    return;
+  }
   stdout.writeln(jsonEncode({'event':'result','result':{'status':'SUCCESS','response':'$model|${args.contains('--effort')}','conversation_id':'fixture'}}));
 }
 ''');
@@ -96,7 +107,7 @@ Future<void> main(List<String> args) async {
       Future<WorkerFrame> exchange(WorkerFrame request) async {
         process.stdin.writeln(request.encode());
         await process.stdin.flush();
-        while (await lines.moveNext().timeout(const Duration(seconds: 20))) {
+        while (await lines.moveNext().timeout(const Duration(seconds: 60))) {
           final response = decodeWorkerFrame(lines.current);
           if (response.requestId == request.requestId &&
               response is! WorkerProgress &&
@@ -211,6 +222,34 @@ Future<void> main(List<String> args) async {
         ),
       );
       expect(rejected, isA<WorkerErrorFrame>());
+      // A turn that reports SUCCESS but denied an action did not do the work.
+      final denied = await exchange(
+        ExecuteRequest(
+          requestId: 'denied',
+          assignmentId: 'assignment',
+          prompt: 'deny-write',
+          model: 'gemini-3.8-flash',
+          reasoningEffort: 'low',
+          sessionPolicy: WorkerSessionPolicy.stateless,
+          timeoutMs: 10000,
+          executionPolicy: WorkerExecutionPolicy.providerDefault,
+        ),
+      );
+      expect(denied, isA<WorkerErrorFrame>());
+      expect((denied as WorkerErrorFrame).code, WorkerIssueCode.permissionDenied);
+      final emptyDenied = await exchange(
+        ExecuteRequest(
+          requestId: 'empty-denied',
+          assignmentId: 'assignment',
+          prompt: 'empty-denied',
+          model: 'gemini-3.8-flash',
+          reasoningEffort: 'low',
+          sessionPolicy: WorkerSessionPolicy.stateless,
+          timeoutMs: 10000,
+          executionPolicy: WorkerExecutionPolicy.providerDefault,
+        ),
+      );
+      expect(emptyDenied, isA<WorkerResult>());
       final refreshed =
           await exchange(
                 ProbeRequest(

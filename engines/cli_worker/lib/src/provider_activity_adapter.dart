@@ -185,6 +185,9 @@ class ProviderActivityAdapter {
         ),
       ];
     }
+    if (type == 'item.completed' && itemType == 'agent_message') {
+      return _codexNarration(itemMap);
+    }
     if (type == 'item.started' || type == 'item.completed') {
       if (!isTool) return const [];
       if (itemMap['id'] is! String || (itemMap['id'] as String).isEmpty) {
@@ -250,11 +253,8 @@ class ProviderActivityAdapter {
       if (stepType == 'tool' || stepType == 'tool_execution') {
         return _normalizeAgyTool(step, declarativeMatched: declarativeMatched);
       }
-      if (const {
-        'agent_response',
-        'user_input',
-        'checkpoint',
-      }.contains(stepType)) {
+      if (stepType == 'agent_response') return _agyNarration(step);
+      if (const {'user_input', 'checkpoint'}.contains(stepType)) {
         return const [];
       }
       return _diagnostic('unsupported_step_type');
@@ -290,6 +290,99 @@ class ProviderActivityAdapter {
     if (eventName == 'init') return const [];
     return _diagnostic('unsupported_event');
   }
+
+  /// Codex reports each narration as a whole `agent_message` item. The text
+  /// is bounded and secret-masked; the item id keeps one row per message.
+  List<ProviderActivityObservation> _codexNarration(Map item) {
+    final raw = item['text'];
+    String? text = raw is String ? raw : null;
+    if (text == null && item['content'] is List) {
+      text = (item['content'] as List)
+          .map((entry) {
+            if (entry is String) return entry;
+            if (entry is Map && entry['text'] is String) {
+              return entry['text'] as String;
+            }
+            return '';
+          })
+          .join();
+    }
+    final narration = _narrationExcerpt(text);
+    if (narration == null) return const [];
+    final id = _safeText(item['id']);
+    return <ProviderActivityObservation>[
+      _narrationObservation(
+        narration,
+        activityId: id == null ? null : 'codex-msg-$id',
+      ),
+    ];
+  }
+
+  /// How often a still-growing agy answer is re-reported. agy streams text in
+  /// many tiny `text_delta` pieces; the adapter joins them per step and
+  /// reports the whole text so far at most once per interval, plus once more
+  /// when the step ends. Unchanged text is never re-sent.
+  Duration narrationInterval = const Duration(seconds: 2);
+
+  /// Clock used for [narrationInterval]; replaceable in tests.
+  DateTime Function() clock = DateTime.now;
+
+  static const int _maxNarrationBuffer = 20000;
+  static const int _maxOpenNarrations = 64;
+  final Map<String, _NarrationBuffer> _agyNarrations =
+      <String, _NarrationBuffer>{};
+
+  List<ProviderActivityObservation> _agyNarration(Map step) {
+    final index = step['step_index'];
+    if (index is! int || index < 0) return const [];
+    final conversation = _safeText(step['conversation_id']) ?? 'session';
+    final key = '$conversation:$index';
+    if (_agyNarrations.length >= _maxOpenNarrations &&
+        !_agyNarrations.containsKey(key)) {
+      _agyNarrations.remove(_agyNarrations.keys.first);
+    }
+    final buffer = _agyNarrations.putIfAbsent(key, _NarrationBuffer.new);
+    final delta = step['text_delta'];
+    if (delta is String && buffer.text.length < _maxNarrationBuffer) {
+      buffer.text.write(delta);
+    }
+    final state = step['state'];
+    final finished =
+        state == 'DONE' ||
+        state == 'COMPLETED' ||
+        state == 'ERROR' ||
+        state == 'FAILED';
+    final now = clock();
+    final last = buffer.lastEmittedAt;
+    final due = last == null || now.difference(last) >= narrationInterval;
+    if (!finished && !due) return const [];
+    if (finished) _agyNarrations.remove(key);
+    final narration = _narrationExcerpt(buffer.text.toString());
+    if (narration == null || narration == buffer.lastEmitted) return const [];
+    buffer.lastEmittedAt = now;
+    buffer.lastEmitted = narration;
+    final id = 'agy-msg-$key';
+    return <ProviderActivityObservation>[
+      _narrationObservation(
+        narration,
+        activityId: id.length > 128 ? id.substring(0, 128) : id,
+      ),
+    ];
+  }
+
+  ProviderActivityObservation _narrationObservation(
+    String narration, {
+    String? activityId,
+  }) => ProviderActivityObservation(
+    type: 'message.updated',
+    status: 'updated',
+    title: _narrationTitle(narration),
+    activityId: activityId,
+    details: {
+      'preview': narration,
+      if (narration.endsWith('…')) 'previewTruncated': true,
+    },
+  );
 
   /// A tool step runs as ACTIVE and then ends with DONE (or COMPLETED in older
   /// captures). The DONE event carries `tool_info.error` when the tool failed.
@@ -386,24 +479,30 @@ class ProviderActivityAdapter {
 
   /// Claude Code `--output-format stream-json` carries tool calls inside the
   /// `content` array of whole `assistant` and `user` messages, which the
-  /// bounded selector grammar cannot index. The adapter reads only block
-  /// types, tool names and tool identifiers: never text, thinking, tool input
-  /// or tool results.
+  /// bounded selector grammar cannot index. The adapter reads block types,
+  /// tool names and tool identifiers, plus a bounded, secret-masked excerpt of
+  /// assistant `text` blocks (the model's own narration). It never reads
+  /// thinking, tool input or tool results.
   ///
   /// * `assistant` message: a `tool_use` block starts a tool (keyed by its
-  ///   `id`), a `thinking` block reports thinking, a `text` block reports that
-  ///   the response is being written.
+  ///   `id`), a `thinking` block reports thinking, a `text` block reports the
+  ///   narration (title and `preview` detail), keyed by the message id.
   /// * `user` message: a `tool_result` block finishes the tool named by its
   ///   `tool_use_id`, failed when `is_error` is true.
   ///
   /// The session `init` message reports that the model has started. The final
-  /// `result` stays with the Profile's execution events; every other event type
+  /// `result` stays with the Profile's execution events (the adapter only adds
+  /// a row for background commands that were still running at that point);
+  /// every other event type
   /// (`stream_event`, other `system` notices, rate limits) is progress noise
   /// and is ignored without a diagnostic.
   List<ProviderActivityObservation> _normalizeClaude(Map event) {
     final type = event['type'];
     if (type is! String) return _diagnostic('missing_event_type');
     if (type == 'system' && event['subtype'] == 'init') {
+      // A new run: nothing from an earlier one carries over.
+      _claudeBackgroundTasks.clear();
+      _claudeToolTitles.clear();
       return const <ProviderActivityObservation>[
         ProviderActivityObservation(
           type: 'model.started',
@@ -412,10 +511,44 @@ class ProviderActivityAdapter {
         ),
       ];
     }
+    if (type == 'system' && event['subtype'] == 'background_tasks_changed') {
+      // The authoritative list of commands the agent has running in the
+      // background right now (empty when none).
+      _claudeBackgroundTasks.clear();
+      final tasks = event['tasks'];
+      if (tasks is List) {
+        for (final task in tasks) {
+          final id = task is Map ? _safeText(task['task_id']) : null;
+          if (id != null && _claudeBackgroundTasks.length < 16) {
+            _claudeBackgroundTasks.add(id);
+          }
+        }
+      }
+      return const [];
+    }
+    if (type == 'result') {
+      // The agent ended its turn while background commands were still
+      // running; Claude Code stops them right after. Say so, because the
+      // work they were doing did not finish. The result itself still stands:
+      // a server left running at the end is a normal way to finish.
+      final stopped = _claudeBackgroundTasks.take(5).toList(growable: false);
+      _claudeBackgroundTasks.clear();
+      return <ProviderActivityObservation>[
+        for (final id in stopped)
+          ProviderActivityObservation(
+            type: 'tool.failed',
+            status: 'failed',
+            title: 'Background command stopped when the agent finished',
+            activityId: 'claude-bg-$id',
+            details: const {'toolKind': 'background_task'},
+          ),
+      ];
+    }
     if (type != 'assistant' && type != 'user') return const [];
     final message = event['message'];
     final content = message is Map ? message['content'] : null;
     if (content is! List) return const [];
+    final messageId = message is Map ? _safeText(message['id']) : null;
     final observations = <ProviderActivityObservation>[];
     for (final block in content) {
       if (block is! Map) continue;
@@ -425,6 +558,10 @@ class ProviderActivityAdapter {
           case 'tool_use':
             final id = _safeText(block['id']);
             final name = _safeText(block['name']) ?? 'tool';
+            if (id != null) {
+              if (_claudeToolTitles.length >= 256) _claudeToolTitles.clear();
+              _claudeToolTitles[id] = _claudeToolTitle(name);
+            }
             observations.add(
               ProviderActivityObservation(
                 type: 'tool.started',
@@ -453,11 +590,22 @@ class ProviderActivityAdapter {
               ),
             );
           case 'text':
+            final narration = _narrationExcerpt(block['text']);
             observations.add(
-              const ProviderActivityObservation(
+              ProviderActivityObservation(
                 type: 'message.updated',
                 status: 'updated',
-                title: 'Writing the response',
+                title: narration == null
+                    ? 'Writing the response'
+                    : _narrationTitle(narration),
+                // One id per Claude message: later updates of the same
+                // message replace it instead of adding another row.
+                activityId: messageId == null ? null : 'claude-msg-$messageId',
+                details: {
+                  if (narration != null) 'preview': narration,
+                  if (narration != null && narration.endsWith('…'))
+                    'previewTruncated': true,
+                },
               ),
             );
         }
@@ -469,13 +617,101 @@ class ProviderActivityAdapter {
           ProviderActivityObservation(
             type: failed ? 'tool.failed' : 'tool.completed',
             status: failed ? 'failed' : 'completed',
-            title: failed ? 'Tool failed' : 'Tool finished',
+            title: _claudeFinishedTitle(
+              _claudeToolTitles.remove(id),
+              failed: failed,
+            ),
             activityId: id,
           ),
         );
       }
     }
     return observations;
+  }
+
+  static const int _narrationPreviewLimit = 1500;
+  static const int _narrationTitleLimit = 160;
+
+  /// A bounded, single-line, secret-masked excerpt of the model's own
+  /// narration. Tool input and tool results are never read; only assistant
+  /// `text` blocks reach this method. Returns null for blank text.
+  String? _narrationExcerpt(Object? raw) {
+    if (raw is! String) return null;
+    var text = raw.replaceAll(RegExp(r'[\u0000-\u001f\u007f]+'), ' ').trim();
+    if (text.isEmpty) return null;
+    // Keep the words, drop markdown noise: [name](file:///long/path) -> name.
+    text = text
+        .replaceAllMapped(
+          RegExp(r'\[([^\]]+)\]\([^)]*\)'),
+          (match) => match.group(1)!,
+        )
+        // A link cut off by a partial stream: "[name](file:///va" or "[na".
+        .replaceFirst(RegExp(r'\[[^\]]*(\]\([^)]*)?$'), '')
+        .replaceAll('**', '')
+        .replaceAll(RegExp(r' {2,}'), ' ')
+        .trim();
+    if (text.isEmpty) return null;
+    text = _redactSecrets(text);
+    if (text.length > _narrationPreviewLimit) {
+      text = '${text.substring(0, _narrationPreviewLimit - 1).trimRight()}…';
+    }
+    return text;
+  }
+
+  String _narrationTitle(String narration) {
+    if (narration.length <= _narrationTitleLimit) return narration;
+    return '${narration.substring(0, _narrationTitleLimit - 1).trimRight()}…';
+  }
+
+  static final List<RegExp> _secretPatterns = <RegExp>[
+    RegExp(r'sk-[A-Za-z0-9_-]{16,}'),
+    RegExp(r'gh[pousr]_[A-Za-z0-9]{20,}'),
+    RegExp(r'AKIA[0-9A-Z]{16}'),
+    RegExp(r'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'),
+    RegExp(r'Bearer\s+[A-Za-z0-9._~+/=-]{16,}', caseSensitive: false),
+    RegExp(
+      r'(api[_-]?key|secret|token|password|passwd)(\s*[:=]\s*)\S{6,}',
+      caseSensitive: false,
+    ),
+  ];
+
+  String _redactSecrets(String text) {
+    var out = text;
+    for (final pattern in _secretPatterns) {
+      out = out.replaceAllMapped(pattern, (match) {
+        if (match.groupCount >= 2 && match.group(1) != null) {
+          return '${match.group(1)}${match.group(2)}[redacted]';
+        }
+        return '[redacted]';
+      });
+    }
+    return out;
+  }
+
+  /// Ids of Claude background commands that are running right now.
+  final Set<String> _claudeBackgroundTasks = <String>{};
+
+  /// Running tool titles by `tool_use` id, so the completion row can say what
+  /// finished instead of a generic "Tool finished".
+  final Map<String, String> _claudeToolTitles = <String, String>{};
+
+  String _claudeFinishedTitle(String? runningTitle, {required bool failed}) {
+    final done = switch (runningTitle) {
+      'Running a command' => 'Ran a command',
+      'Reading files' => 'Read files',
+      'Editing files' => 'Edited files',
+      'Searching the web' => 'Searched the web',
+      'Working with a sub-agent' => 'Sub-agent finished',
+      'Updating the plan' => 'Updated the plan',
+      'Using a connected tool' => 'Used a connected tool',
+      _ => 'Tool finished',
+    };
+    if (!failed) return done;
+    return switch (runningTitle) {
+      'Running a command' => 'Command failed',
+      null => 'Tool failed',
+      _ => '${done == 'Tool finished' ? 'Tool' : done} failed',
+    };
   }
 
   /// A fixed, user-facing title for a Claude Code tool name. Only the tool
@@ -544,4 +780,10 @@ class ProviderActivityAdapter {
     if (!RegExp(r'^[A-Za-z0-9._:-]+$').hasMatch(value)) return null;
     return value.length > 128 ? value.substring(0, 128) : value;
   }
+}
+
+class _NarrationBuffer {
+  final StringBuffer text = StringBuffer();
+  DateTime? lastEmittedAt;
+  String? lastEmitted;
 }

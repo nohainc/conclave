@@ -226,4 +226,67 @@ void main() {
     );
     expect(resolve('running', [diagnostic]).currentAction, 'Working…');
   });
+
+  test('keeps the model narration as the headline while a tool runs', () {
+    final narration = AxWorkActivity(
+      eventId: 'narration-1',
+      assignmentId: 'assignment-1',
+      attemptId: 'attempt-1',
+      executionId: 'execution-1',
+      workerId: 'claude',
+      activitySequence: 2,
+      streamSequence: 2,
+      type: 'message.updated',
+      status: 'updated',
+      title: 'Step 4: running sleep 20',
+      timestamp: _base.add(const Duration(seconds: 2)),
+      activityId: 'claude-msg-1',
+      details: const {'preview': 'Step 4: running sleep 20'},
+    );
+
+    expect(
+      resolve('running', [
+        activity(1, 'execution.started'),
+        narration,
+      ]).currentAction,
+      'Step 4: running sleep 20',
+    );
+    expect(
+      resolve('running', [
+        activity(1, 'execution.started'),
+        narration,
+        activity(3, 'tool.started', title: 'Running a command', atSeconds: 3),
+      ]).currentAction,
+      'Step 4: running sleep 20 · Running a command',
+    );
+  });
+
+  test('shows narration over an older thinking marker, not a newer one', () {
+    AxWorkActivity narrationAt(int sequence) => AxWorkActivity(
+          eventId: 'narration-$sequence',
+          assignmentId: 'assignment-1',
+          attemptId: 'attempt-1',
+          executionId: 'execution-1',
+          workerId: 'claude',
+          activitySequence: sequence,
+          // Live-only events carry stream sequence 0.
+          streamSequence: 0,
+          type: 'message.updated',
+          status: 'updated',
+          title: 'Step 2: reading the README',
+          timestamp: _base.add(Duration(seconds: sequence)),
+          activityId: 'claude-msg-$sequence',
+          details: const {'preview': 'Step 2: reading the README'},
+        );
+    final thinking = activity(1, 'model.started', title: 'Thinking');
+
+    expect(
+      resolve('running', [narrationAt(5), thinking]).currentAction,
+      'Step 2: reading the README',
+    );
+    expect(
+      resolve('running', [narrationAt(0), thinking]).currentAction,
+      'Thinking',
+    );
+  });
 }

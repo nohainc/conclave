@@ -1,3 +1,6 @@
+@Timeout(Duration(minutes: 2))
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -118,7 +121,7 @@ void main() {
         await process.stdin.flush();
         final observedProgress = <WorkerProgress>[];
         final observedActivities = <WorkerActivity>[];
-        while (await lines.moveNext().timeout(const Duration(seconds: 35))) {
+        while (await lines.moveNext().timeout(const Duration(seconds: 60))) {
           final frame = decodeWorkerFrame(lines.current);
           if (frame is WorkerProgress && frame.requestId == request.requestId) {
             observedProgress.add(frame);

@@ -513,6 +513,11 @@ mark_failure
 
 No arbitrary state mutation is permitted.
 
+`set_provider_error` also accepts a selector that yields a list. A non-empty list
+is a list of actions the provider refused to run (for example AGY's
+`denied_actions`) and is reported as `permission_denied` even when the provider
+turn says success; an empty list is ignored.
+
 ## 16. Terminal result contract
 
 A Profile makes terminal success/failure unambiguous.
@@ -995,8 +1000,24 @@ A Profile may declare a top-level `usage` object:
   on a `usage.request` frame and answers with `usage.result` (`output`,
   `errorOutput`, `exitCode`, `truncated`). Terminal escape sequences are removed
   and each stream is capped at 64 KiB; nothing else is changed.
-- **Conclave never parses the report.** Providers calculate usage differently,
-  so the Profile owns how usage is read and AX shows the text as received.
+- **Cloud, Workspace and the Engine never parse the report.** Providers
+  calculate usage differently, so the Profile owns how usage is read and the
+  text travels unchanged. AX alone may normalize it for display
+  (`worker_usage_parser.dart`): the format is detected from the text (Claude
+  `Current session/week` lines, Codex `rateLimits` JSON, Gemini tab-separated
+  rows) and shown as per-window used percent and a live reset countdown.
+  Session/5-hour windows use `Resets in 1 hr 29 min`; weekly windows use
+  `Resets in 2 d 2 hr 30 min`. Countdown minutes round up; elapsed resets
+  prompt a usage refresh. Claude named-zone reset text is resolved with the
+  bundled IANA timezone database against the report fetch date (next occurrence
+  when the year or date is omitted); unrecognized reset text stays as printed.
+  Missing reset times stay unlabelled. Summary notes omit Claude's local
+  seven-day request statistics and Codex's plan; the Original view retains both.
+  Usage bars use the theme-aware brand foreground fill and a neutral track in
+  light/dark themes. Original/Summary is a keyboard-accessible text link styled
+  like the adjacent fetch timestamp. A report that does
+  not match a known format exactly is never partially shown; AX displays the
+  original text, and `Original` always shows it for a normalized report.
 - A Profile without `usage` yields status `unavailable`. The starter Claude
   Profile declares `-p /usage`; Gemini declares `-p /usage` (agy) and ChatGPT
   uses the Codex app-server rate-limit call.

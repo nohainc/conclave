@@ -2,10 +2,10 @@ import 'package:flutter/foundation.dart';
 
 /// Raw usage report printed by a Worker's provider CLI.
 ///
-/// The report is deliberately opaque: each provider calculates usage
-/// differently and the command that produces it lives in the Worker's Tool
-/// Profile, so the app displays [output] exactly as received and never parses
-/// it into limits or percentages.
+/// Each provider calculates usage differently and the command that produces it
+/// lives in the Worker's Tool Profile. [output] is kept exactly as received;
+/// `parseWorkerUsage` may normalize it for display, and the original text is
+/// shown whenever that fails.
 @immutable
 class AxWorkerUsageReport {
   const AxWorkerUsageReport({
@@ -73,6 +73,9 @@ class AxWorkerUsageController extends ChangeNotifier {
   bool loading = false;
   bool visible = false;
 
+  /// Shows the provider's original text even when it could be normalized.
+  bool showOriginal = false;
+
   /// A local notice shown instead of a report (for example, no Worker chosen).
   String? message;
   int _generation = 0;
@@ -88,6 +91,7 @@ class AxWorkerUsageController extends ChangeNotifier {
     this.workerName = workerName;
     visible = true;
     loading = true;
+    showOriginal = false;
     message = null;
     notifyListeners();
     AxWorkerUsageReport result;
@@ -113,6 +117,11 @@ class AxWorkerUsageController extends ChangeNotifier {
     report = null;
     loading = false;
     visible = true;
+    notifyListeners();
+  }
+
+  void toggleOriginal() {
+    showOriginal = !showOriginal;
     notifyListeners();
   }
 

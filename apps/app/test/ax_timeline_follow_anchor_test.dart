@@ -34,6 +34,38 @@ void main() {
     expect(retry, isTrue);
   });
 
+  testWidgets('anchorAt reveals the last-seen item at the top and releases',
+      (tester) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    final anchor = AxTimelineFollowAnchor();
+    Widget view() => MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              height: 300,
+              child: ListView(controller: controller, children: [
+                for (var i = 0; i < 20; i++)
+                  SizedBox(
+                      key: anchor.keyFor('m$i'),
+                      height: 100,
+                      child: Text('m$i')),
+              ]),
+            ),
+          ),
+        );
+    await tester.pumpWidget(view());
+    anchor.anchorAt('m12', fraction: 0.6);
+    await tester.pumpWidget(view());
+    // The unmounted row is first approached by estimate, then revealed.
+    while (anchor.reveal(controller)) {
+      await tester.pump();
+    }
+    expect(controller.offset, 1200);
+    // Released: a later arrival may anchor again.
+    anchor.observe('m19', controller);
+    expect(anchor.keyFor('m19'), isNotNull);
+  });
+
   for (final nestedResponse in [false, true]) {
     testWidgets(
         '${nestedResponse ? 'Work response' : 'Chat message'} reveals its beginning and preserves it during growth',

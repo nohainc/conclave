@@ -652,7 +652,7 @@ class _WorkComposer extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (usageController != null)
-            _WorkerUsagePanel(
+            AxWorkerUsagePanel(
               controller: usageController!,
               onRefresh: () => _runComposerCommand(_usageCommand),
             ),
@@ -840,9 +840,11 @@ class _SlashCommandPalette extends StatelessWidget {
       );
 }
 
-/// Shows the provider's usage report exactly as the Worker printed it.
-class _WorkerUsagePanel extends StatelessWidget {
-  const _WorkerUsagePanel({required this.controller, required this.onRefresh});
+/// Shows a normalized usage table, or the report exactly as the Worker printed
+/// it when it cannot be normalized or the user asks for the original.
+class AxWorkerUsagePanel extends StatelessWidget {
+  const AxWorkerUsagePanel(
+      {super.key, required this.controller, required this.onRefresh});
 
   final AxWorkerUsageController controller;
   final VoidCallback onRefresh;
@@ -862,6 +864,10 @@ class _WorkerUsagePanel extends StatelessWidget {
                   : report.status == 'unavailable'
                       ? 'This Worker does not provide a usage report.'
                       : (report.errorMessage ?? 'Usage could not be read.');
+          final parsed = report != null && report.isOk
+              ? parseWorkerUsage(report.output, now: report.fetchedAt)
+              : null;
+          final showTable = parsed != null && !controller.showOriginal;
           return Container(
             key: const ValueKey('worker-usage-panel'),
             margin: const EdgeInsets.only(bottom: 8),
@@ -888,6 +894,22 @@ class _WorkerUsagePanel extends StatelessWidget {
                       'as of ${TimeOfDay.fromDateTime(report!.fetchedAt!.toLocal()).format(context)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                  if (parsed != null && !controller.loading)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 10),
+                      child: Semantics(
+                        link: true,
+                        child: InkWell(
+                          key: const ValueKey('worker-usage-toggle-original'),
+                          onTap: controller.toggleOriginal,
+                          mouseCursor: SystemMouseCursors.click,
+                          child: Text(
+                            controller.showOriginal ? 'Summary' : 'Original',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ),
+                    ),
                   IconButton(
                     tooltip: 'Refresh usage',
                     icon: const Icon(Icons.refresh, size: 16),
@@ -906,7 +928,21 @@ class _WorkerUsagePanel extends StatelessWidget {
                   )
                 else if (message != null)
                   Text(message, style: const TextStyle(fontSize: 12))
-                else
+                else if (showTable)
+                  AxLiveTicker(
+                    active: parsed.windows.any((w) => w.resetsAt != null),
+                    builder: (context, now) =>
+                        _UsageTable(usage: parsed, now: now),
+                  )
+                else ...[
+                  if (report != null && report.isOk)
+                    Text(
+                        controller.showOriginal
+                            ? 'Original output'
+                            : 'Could not summarize this report. Original '
+                                'output:',
+                        key: const ValueKey('worker-usage-unparsed'),
+                        style: Theme.of(context).textTheme.bodySmall),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 260),
                     child: SingleChildScrollView(
@@ -923,6 +959,7 @@ class _WorkerUsagePanel extends StatelessWidget {
                       ),
                     ),
                   ),
+                ],
                 if (report?.truncated ?? false)
                   Text('Output was shortened.',
                       style: Theme.of(context).textTheme.bodySmall),
@@ -931,6 +968,72 @@ class _WorkerUsagePanel extends StatelessWidget {
           );
         },
       );
+}
+
+class _UsageTable extends StatelessWidget {
+  const _UsageTable({required this.usage, required this.now});
+
+  final AxParsedUsage usage;
+
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final small = Theme.of(context).textTheme.bodySmall;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    String? group;
+    final children = <Widget>[];
+    for (final window in usage.windows) {
+      if (window.group != null && window.group != group) {
+        group = window.group;
+        children.add(Padding(
+          padding: const EdgeInsets.only(top: 6, bottom: 2),
+          child: Text(group!,
+              style:
+                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+        ));
+      }
+      children.add(Padding(
+        key: ValueKey('worker-usage-row-${window.group ?? ''}-${window.label}'),
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [
+          SizedBox(
+              width: 70,
+              child: Text(window.label, style: const TextStyle(fontSize: 12))),
+          Expanded(
+            child: LinearProgressIndicator(
+                value: (window.usedPercent / 100).clamp(0.0, 1.0),
+                color: ConclaveColors.primaryForeground(dark),
+                backgroundColor: dark ? const Color(0xFF252525) : Colors.white,
+                stopIndicatorColor: Colors.transparent,
+                minHeight: 6,
+                semanticsLabel: '${window.group ?? ''} ${window.label} usage',
+                semanticsValue: '${window.usedPercent.round()}%'),
+          ),
+          SizedBox(
+            width: 84,
+            child: Text('${window.usedPercent.round()}% used',
+                textAlign: TextAlign.end, style: const TextStyle(fontSize: 12)),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+              flex: 2,
+              child: Text(usageResetLabel(window, now),
+                  overflow: TextOverflow.ellipsis, style: small)),
+        ]),
+      ));
+    }
+    for (final note in usage.notes) {
+      children.add(Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(note, style: small),
+      ));
+    }
+    return Column(
+        key: const ValueKey('worker-usage-table'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children);
+  }
 }
 
 /// Keeps the parsed Markdown subtree stable while the surrounding Work card

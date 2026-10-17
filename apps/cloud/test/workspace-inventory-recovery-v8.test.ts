@@ -228,6 +228,7 @@ describe("v8 Workspace inventory recovery", () => {
       "0001_conclave_v8.sql",
       "0029_worker_model_discovery.sql",
       "0070_workspace_parallel_slots.sql",
+      "0071_assignment_engine_liveness.sql",
     ]) {
       database.exec(
         readFileSync(

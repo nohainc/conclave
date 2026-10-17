@@ -404,6 +404,22 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
           widget.onChanged?.call(next);
         }
 
+        void changeModel(String? id) {
+          final next = widget.catalog
+              .changeModel(value, id, inherited: widget.inherited);
+          final choices = worker?.effortsForModel(id) ?? const <String>[];
+          change(id != null &&
+                  widget.allowEffortChange &&
+                  next.effort == null &&
+                  choices.isNotEmpty
+              ? ExecutionSelection(
+                  worker: next.worker,
+                  model: next.model,
+                  effort: choices.first,
+                  catalogRevision: next.catalogRevision)
+              : next);
+        }
+
         final models = <String, String>{
           for (final model
               in worker?.models ?? const <ExecutionModelCapability>[])
@@ -453,7 +469,7 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                       onChanged: enabled &&
                               ready &&
                               widget.allowEffortChange &&
-                              levels.length > 1
+                              levels.isNotEmpty
                           ? (position) => change(ExecutionSelection(
                               worker: effective.worker,
                               model: effective.model,
@@ -464,8 +480,21 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                       onChangeEnd: enabled &&
                               ready &&
                               widget.allowEffortChange &&
-                              levels.length > 1
-                          ? (_) => Navigator.of(context).pop()
+                              levels.isNotEmpty
+                          ? (position) {
+                              // A tap on the displayed minimum may not emit
+                              // onChanged when no effort has been selected yet.
+                              final effort = levels[
+                                  position.round().clamp(0, levels.length - 1)];
+                              if (value.effort != effort || index < 0) {
+                                change(ExecutionSelection(
+                                    worker: effective.worker,
+                                    model: effective.model,
+                                    effort: effort,
+                                    catalogRevision: worker.catalogRevision));
+                              }
+                              Navigator.of(context).pop();
+                            }
                           : null,
                     ),
                   ],
@@ -475,9 +504,7 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                           'Auto',
                           effective.model == null,
                           enabled && ready && widget.allowModelChange
-                              ? () => change(widget.catalog.changeModel(
-                                  value, null,
-                                  inherited: widget.inherited))
+                              ? () => changeModel(null)
                               : null),
                     for (final model in models.entries)
                       _modelRow(
@@ -488,9 +515,7 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                                   widget.allowModelChange &&
                                   worker.modelSupported &&
                                   worker.supportsModel(model.key)
-                              ? () => change(widget.catalog.changeModel(
-                                  value, model.key,
-                                  inherited: widget.inherited))
+                              ? () => changeModel(model.key)
                               : null),
                     if (models.isEmpty)
                       const Padding(

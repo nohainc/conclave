@@ -43,7 +43,8 @@ export type RevocationSource =
   | "workspace_disconnected"
   | "grant_expired"
   | "grant_revoked"
-  | "dispatch_failed";
+  | "dispatch_failed"
+  | "worker_process_lost";
 
 export interface RevocationIntent {
   /** The terminal status Cloud writes once the stop is confirmed. */

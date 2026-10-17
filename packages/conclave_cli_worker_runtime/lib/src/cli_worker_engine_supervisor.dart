@@ -59,6 +59,29 @@ final class CliWorkerEngineSupervisor {
   final Set<String> _busySessionGates = {};
   final Map<String, String> _sessionGateByAssignment = {};
 
+  /// Assignments the Supervisor started whose Engine process no longer exists.
+  ///
+  /// Reported to Cloud on every heartbeat so a crashed or killed Engine is
+  /// noticed even when no terminal outcome could be recorded. Queued or
+  /// reserved assignments have no process yet and are never listed. On
+  /// Windows the process cannot be probed without a signal, so none is listed.
+  Set<String> get deadAssignmentIds {
+    if (Platform.isWindows) return const {};
+    return {
+      for (final entry in _activeAssignments.entries)
+        if (!_processExists(entry.value.pid)) entry.key,
+    };
+  }
+
+  /// `SIGCONT` to a running process is harmless; a missing process is false.
+  static bool _processExists(int pid) {
+    try {
+      return Process.killPid(pid, ProcessSignal.sigcont);
+    } on Object {
+      return true;
+    }
+  }
+
   /// Assignments waiting for a local Worker slot. Telemetry only.
   int get queuedAssignmentCount => _queuedAssignments.length;
 

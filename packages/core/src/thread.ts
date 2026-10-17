@@ -102,6 +102,22 @@ export interface WorkRequestSnapshot {
   readonly promptProfileVersions: Partial<Record<StepKind, string>>;
 }
 
+/**
+ * Hard cap for one Work step's provider execution. The declared step timeout
+ * (15 minutes) is the baseline; a long goal-style task may run up to this cap
+ * as long as the agent is alive. The Engine stops a stuck agent much sooner
+ * (no output and nothing running), so this is only the outer bound.
+ *
+ * It is applied when the step is dispatched, not stored in the built-in
+ * Workflow definition, because existing Work Request snapshots must keep
+ * matching their canonical definition.
+ */
+export const STEP_HARD_CAP_MS = 2 * 60 * 60 * 1000;
+
+export function effectiveStepTimeoutMs(declaredMs: number): number {
+  return Math.max(declaredMs, STEP_HARD_CAP_MS);
+}
+
 export const STEP_KINDS = [
   "chat",
   "research",

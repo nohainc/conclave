@@ -236,3 +236,16 @@ combined selections. Mapping applies only to the evidenced 1.3.3 version interva
 See [discovery normalization](../specifications/MODEL_DISCOVERY_NORMALIZATION.md)
 for reverse resolution, availability, verification and rollout limits. Existing
 signed fixture releases and active installations were not modified.
+
+## Denied actions
+
+AGY ends a turn with `status: SUCCESS` even when it refused to run an action,
+for example a file write under `permission_mode: request-review`. The final
+`result` then carries `denied_actions`. The Profile reads that list with a
+`set_provider_error` action, and the Engine treats a non-empty list as
+`permission_denied` ("Permission denied for: WriteToFile") instead of a
+successful answer. An empty or missing list is not an error. Running AGY with
+`--dangerously-skip-permissions` (`permission_mode: always-proceed`) is what lets
+the file tools run; the `restricted` and `provider_default` sandbox mappings use
+`--mode`, which has no effect while slash commands are disabled, so those runs
+can hit this failure.

@@ -341,6 +341,7 @@ class WorkspaceCloudConnection {
     this.assignmentJournal,
     this.diagnosticStoreForWorkerType,
     this.localQueueLengthProvider,
+    this.deadAssignmentIdsProvider,
     this.workerInventoryProvider,
     this.workerUsageProvider,
     this.onSessionReady,
@@ -428,6 +429,9 @@ class WorkspaceCloudConnection {
   final int webSocketFailureLimit;
   final bool credentialAvailable;
   WorkspaceTransport? _transport;
+  /// Assignments whose Engine process is gone. Null when the Service cannot
+  /// tell, in which case no liveness is reported.
+  final Set<String> Function()? deadAssignmentIdsProvider;
   Timer? _heartbeatTimer;
   Timer? _heartbeatTimeoutTimer;
   Timer? _protocolHandshakeTimer;
@@ -1689,7 +1693,9 @@ class WorkspaceCloudConnection {
         'activeWorkers': activeWorkerIds.length,
         'activeAssignments': _activeAssignments.length,
         'readiness': _readinessPayload(),
+        ..._livenessPayload(),
       });
+      unawaited(_refreshPendingTerminalIds());
       _rememberClockProbe(heartbeatMessage['messageId'] as String);
       socket.send(jsonEncode(heartbeatMessage));
       _heartbeatCount++;
@@ -1698,6 +1704,45 @@ class WorkspaceCloudConnection {
         unawaited(_reportCurrentWorkerInventory());
       }
     });
+  }
+
+  /// Assignments with a recorded outcome that Cloud has not acknowledged.
+  /// Refreshed after each heartbeat, so it is at most one interval old.
+  Set<String> _pendingTerminalIds = const {};
+
+  Future<void> _refreshPendingTerminalIds() async {
+    final journal = assignmentJournal;
+    if (journal == null) return;
+    try {
+      _pendingTerminalIds = {
+        for (final record in (await journal.reconcile()).values)
+          if (const {
+            AssignmentStatus.completed,
+            AssignmentStatus.failed,
+            AssignmentStatus.cancelled,
+            AssignmentStatus.interrupted,
+          }.contains(record.status))
+            record.assignmentId,
+      };
+    } on Object {
+      // Keep the previous answer; liveness is best effort.
+    }
+  }
+
+  /// Which assignments still have an Engine process, so Cloud can fail a
+  /// running assignment whose process vanished without an outcome. Omitted
+  /// when the Service cannot probe processes.
+  Map<String, Object?> _livenessPayload() {
+    final provider = deadAssignmentIdsProvider;
+    if (provider == null) return const {};
+    final dead = provider();
+    return {
+      'liveAssignmentIds': [
+        for (final id in _activeAssignments)
+          if (!dead.contains(id)) id,
+      ],
+      'pendingTerminalAssignmentIds': _pendingTerminalIds.toList(),
+    };
   }
 
   Map<String, Object?> _envelope(String type, Map<String, Object?> payload) => {

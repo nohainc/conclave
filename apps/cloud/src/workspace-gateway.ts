@@ -1,3 +1,8 @@
+import {
+  applyEngineLivenessReport,
+  failLostEngineAssignments,
+  parseEngineLivenessReport,
+} from "./assignment-liveness.js";
 import { signalAssignmentTerminal } from "./assignment-workflow-signal.js";
 import { hydrateWorkRequestFiles } from "./routes/work-request-files.js";
 import {
@@ -1034,6 +1039,7 @@ export class WorkspaceGateway implements DurableObject {
               now,
             );
           }
+          await this.applyEngineLiveness(message.payload, now);
           this.queueProjectionWrite(
             () => this.sessionStore.touch(sessionId, now),
             "session_heartbeat_update_failed",
@@ -1345,7 +1351,21 @@ export class WorkspaceGateway implements DurableObject {
         const assignment = await this.env.CONCLAVE_DB.prepare(
           `SELECT id, execution_workspace_id, runtime_identity_id,
                   worker_type_id, workspace_worker_id, run_id, task_id,
-                  thread_id,
+                  -- Work Request assignments are not stamped with a thread.
+                  -- Without one the realtime event carries no threadId and the
+                  -- AX app drops every live activity as "another Thread".
+                  COALESCE(
+                    worker_assignments.thread_id,
+                    (SELECT wr.thread_id
+                       FROM workflow_tasks wt
+                       JOIN work_requests wr ON wr.id = wt.work_request_id
+                      WHERE wt.id = worker_assignments.task_id),
+                    (SELECT wr.thread_id
+                       FROM conversation_turns ct
+                       JOIN work_requests wr ON wr.id = ct.work_request_id
+                      WHERE ct.assignment_id = worker_assignments.id
+                      LIMIT 1)
+                  ) AS thread_id,
                   work_request_id, attempt_id, idempotency_key, status,
                   (
                     -- Assignments are inserted without worker_assignments
@@ -1732,6 +1752,33 @@ export class WorkspaceGateway implements DurableObject {
    * command learns here that the assignment must not run. Unconfirmed
    * revocations older than the grace period are shown as `reconciling`.
    */
+  /**
+   * Fails running assignments whose Engine process the Service has stopped
+   * reporting for several heartbeats. Never throws: liveness is best effort.
+   */
+  private async applyEngineLiveness(
+    payload: unknown,
+    now: string | number | Date,
+  ): Promise<void> {
+    const workspaceId = this.executionWorkspaceId;
+    const report = parseEngineLivenessReport(payload);
+    if (!workspaceId || !report) return;
+    try {
+      const at = new Date(now).toISOString();
+      const lost = await applyEngineLivenessReport(
+        this.env.CONCLAVE_DB,
+        workspaceId,
+        report,
+        at,
+      );
+      if (lost.length === 0) return;
+      await failLostEngineAssignments(this.env.CONCLAVE_DB, lost, at);
+      await this.resendPendingRevocations();
+    } catch {
+      // Best effort: the execution deadline still bounds the assignment.
+    }
+  }
+
   private async resendPendingRevocations(): Promise<void> {
     const workspaceId = this.executionWorkspaceId;
     if (!workspaceId) return;
