@@ -85,7 +85,10 @@ void main() {
     });
     expect(person.custom, isTrue);
     expect(person.access.mode, 'chat');
-    expect(AxPersonAccess.fromJson({'custom': false, 'policy': null}).access.restricted,
+    expect(
+        AxPersonAccess.fromJson({'custom': false, 'policy': null})
+            .access
+            .restricted,
         isFalse);
   });
 

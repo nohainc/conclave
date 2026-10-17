@@ -230,9 +230,9 @@ it("lets a per-person override replace the default and enforces the mode ceiling
     expect((await bind("member")).direct).toMatchObject({
       workerId: "worker-a",
     });
-    expect(
-      await (await person("GET", "owner", "member")).json(),
-    ).toMatchObject({ custom: true, policy: { mode: "work" } });
+    expect(await (await person("GET", "owner", "member")).json()).toMatchObject(
+      { custom: true, policy: { mode: "work" } },
+    );
     // An override that drops the Worker blocks it even though the default lists it.
     await person("PUT", "owner", "member", {
       mode: "work",

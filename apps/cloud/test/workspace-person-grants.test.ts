@@ -45,7 +45,9 @@ function fixture() {
     INSERT INTO space_workflow_configurations(space_id,workflow_id,schema_version,configuration_json,updated_at)
       VALUES('G','direct',1,'{"schemaVersion":1,"workflowId":"direct","enabled":true,"defaults":{"worker":"worker-a"},"stepOverrides":{}}','now');`);
   const env = { CONCLAVE_DB: db } as SecurityEnv;
-  const grantGuest = (policy = '{"schemaVersion":1,"mode":"work","workers":{"worker-a":{"models":null,"efforts":null}}}') =>
+  const grantGuest = (
+    policy = '{"schemaVersion":1,"mode":"work","workers":{"worker-a":{"models":null,"efforts":null}}}',
+  ) =>
     sqlite.exec(`INSERT INTO workspace_person_grants(workspace_id,user_id,granted_by_user_id,status,created_at,updated_at) VALUES('lent','guest','lender','active','now','now');
       INSERT INTO workspace_member_overrides VALUES('lent','guest','${policy}','now');`);
   const bind = (userId: string) =>
@@ -100,11 +102,15 @@ it("lets the borrower, not their Space friend, run on the lent Workspace", async
     // Without a grant even the Space owner is refused.
     await expect(bind("guest")).rejects.toMatchObject({ status: 403 });
     grantGuest();
-    expect((await bind("guest")).direct).toMatchObject({ workerId: "worker-a" });
+    expect((await bind("guest")).direct).toMatchObject({
+      workerId: "worker-a",
+    });
     // Strict: a Space member without their own grant gets nothing.
     await expect(bind("friend")).rejects.toMatchObject({ status: 403 });
     // The lender owns the Workspace and is never restricted.
-    expect((await bind("lender")).direct).toMatchObject({ workerId: "worker-a" });
+    expect((await bind("lender")).direct).toMatchObject({
+      workerId: "worker-a",
+    });
   } finally {
     sqlite.close();
   }
@@ -113,7 +119,9 @@ it("lets the borrower, not their Space friend, run on the lent Workspace", async
 it("applies the borrower's mode ceiling on a lent Workspace", async () => {
   const { sqlite, bind, grantGuest } = fixture();
   try {
-    grantGuest('{"schemaVersion":1,"mode":"chat","workers":{"worker-a":{"models":null,"efforts":null}}}');
+    grantGuest(
+      '{"schemaVersion":1,"mode":"chat","workers":{"worker-a":{"models":null,"efforts":null}}}',
+    );
     // Direct writes files, so a chat-only grant is refused.
     await expect(bind("guest")).rejects.toMatchObject({ status: 403 });
   } finally {
@@ -161,16 +169,22 @@ it("revokes a grant: owner only, ends access and the Space grant, and is audited
   try {
     grantGuest();
     await workspaceFor("GET", "guest");
-    await expect(revoke("guest", "guest")).rejects.toMatchObject({ status: 404 });
+    await expect(revoke("guest", "guest")).rejects.toMatchObject({
+      status: 404,
+    });
     await revoke("lender", "guest");
     await expect(bind("guest")).rejects.toMatchObject({ status: 403 });
     expect(
-      sqlite.prepare("SELECT status FROM workspace_space_grants WHERE space_id='G'").all(),
+      sqlite
+        .prepare("SELECT status FROM workspace_space_grants WHERE space_id='G'")
+        .all(),
     ).toEqual([{ status: "revoked" }]);
     expect(
       sqlite.prepare("SELECT action FROM workspace_audit_log").all(),
     ).toEqual([{ action: "workspace.person_grant.revoked" }]);
-    await expect(revoke("lender", "guest")).rejects.toMatchObject({ status: 404 });
+    await expect(revoke("lender", "guest")).rejects.toMatchObject({
+      status: 404,
+    });
     // The borrower can still read the selection after revocation.
     expect((await workspaceFor("GET", "guest")).status).toBe(200);
   } finally {
@@ -243,8 +257,12 @@ it("limits the borrower's concurrent requests, set by the owner", async () => {
     sqlite.exec("UPDATE work_requests SET status='completed'");
     expect((await bind("guest")).direct).toBeDefined();
     // Only the Workspace owner sets the limit, within 1-10.
-    await expect(setQuota("guest", { maxConcurrentRequests: 5 })).rejects.toMatchObject({ status: 404 });
-    await expect(setQuota("lender", { maxConcurrentRequests: 11 })).rejects.toMatchObject({ status: 400 });
+    await expect(
+      setQuota("guest", { maxConcurrentRequests: 5 }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      setQuota("lender", { maxConcurrentRequests: 11 }),
+    ).rejects.toMatchObject({ status: 400 });
     await setQuota("lender", { maxConcurrentRequests: 2 });
     busy("r2", "running");
     expect((await bind("guest")).direct).toBeDefined();

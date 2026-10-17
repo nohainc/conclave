@@ -83,7 +83,10 @@ export async function handleListWorkspaceWorkerInventory(
     for (const row of sharedRows.results ?? []) {
       const id = String(row.workspace_id);
       if (!policies.has(id))
-        policies.set(id, await loadEffectiveMemberAccess(env, id, context.userId));
+        policies.set(
+          id,
+          await loadEffectiveMemberAccess(env, id, context.userId),
+        );
       const policy = policies.get(id)!;
       const entry = policy?.workers[String(row.worker_id)];
       // A restricted Workspace shares only the Workers it lists.

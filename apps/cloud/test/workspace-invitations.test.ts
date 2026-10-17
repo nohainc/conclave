@@ -68,9 +68,9 @@ it("lets only the owner invite, and rejects bad or duplicate invitations", async
     await expect(
       manage("POST", "owner", { email: "nope" }),
     ).rejects.toMatchObject({ status: 400 });
-    expect((await manage("POST", "owner", { email: "Guest@Test" })).status).toBe(
-      201,
-    );
+    expect(
+      (await manage("POST", "owner", { email: "Guest@Test" })).status,
+    ).toBe(201);
     await expect(
       manage("POST", "owner", { email: "guest@test" }),
     ).rejects.toMatchObject({ status: 409 });
@@ -82,7 +82,9 @@ it("lets only the owner invite, and rejects bad or duplicate invitations", async
 it("accept creates only a grant (no people relationship), once, for the invited email", async () => {
   const { sqlite, manage, accept, mine } = fixture();
   try {
-    const id = await idOf(await manage("POST", "owner", { email: "guest@test" }));
+    const id = await idOf(
+      await manage("POST", "owner", { email: "guest@test" }),
+    );
     expect(
       ((await (await mine("guest")).json()) as { invitations: unknown[] })
         .invitations,
@@ -121,7 +123,10 @@ it("follows an existing default policy instead of adding an override", async () 
     sqlite.exec(
       `INSERT INTO workspace_member_access VALUES('workspace','{"schemaVersion":1,"mode":"work","workers":{}}','now')`,
     );
-    await accept("guest", await idOf(await manage("POST", "owner", { email: "guest@test" })));
+    await accept(
+      "guest",
+      await idOf(await manage("POST", "owner", { email: "guest@test" })),
+    );
     expect(
       sqlite.prepare("SELECT COUNT(*) n FROM workspace_member_overrides").get(),
     ).toEqual({ n: 0 });
@@ -133,17 +138,25 @@ it("follows an existing default policy instead of adding an override", async () 
 it("rejects revoked and expired invitations", async () => {
   const { sqlite, manage, accept } = fixture();
   try {
-    const revoked = await idOf(await manage("POST", "owner", { email: "guest@test" }));
+    const revoked = await idOf(
+      await manage("POST", "owner", { email: "guest@test" }),
+    );
     await manage("POST", "owner", undefined, revoked);
-    await expect(accept("guest", revoked)).rejects.toMatchObject({ status: 404 });
+    await expect(accept("guest", revoked)).rejects.toMatchObject({
+      status: 404,
+    });
     await expect(
       manage("POST", "owner", undefined, revoked),
     ).rejects.toMatchObject({ status: 404 });
-    const expired = await idOf(await manage("POST", "owner", { email: "guest@test" }));
+    const expired = await idOf(
+      await manage("POST", "owner", { email: "guest@test" }),
+    );
     sqlite.exec(
       `UPDATE workspace_invitations SET expires_at='2000-01-01T00:00:00.000Z' WHERE id='${expired}'`,
     );
-    await expect(accept("guest", expired)).rejects.toMatchObject({ status: 410 });
+    await expect(accept("guest", expired)).rejects.toMatchObject({
+      status: 410,
+    });
   } finally {
     sqlite.close();
   }

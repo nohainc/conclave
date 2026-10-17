@@ -139,8 +139,7 @@ class AxPersonWithAccess {
             : null,
         maxConcurrentRequests:
             (json['maxConcurrentRequests'] as num?)?.toInt() ?? 1,
-        maxRunSecondsPerMonth:
-            (json['maxRunSecondsPerMonth'] as num?)?.toInt(),
+        maxRunSecondsPerMonth: (json['maxRunSecondsPerMonth'] as num?)?.toInt(),
         usage: json['usage'] is Map
             ? AxPersonUsage.fromJson(
                 Map<String, dynamic>.from(json['usage'] as Map))

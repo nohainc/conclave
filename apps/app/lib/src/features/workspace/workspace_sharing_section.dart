@@ -163,8 +163,8 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
               ],
             ));
     if (confirmed != true) return;
-    await _act(
-        () => widget.source.revokePersonGrant(widget.workspaceId, person.userId));
+    await _act(() =>
+        widget.source.revokePersonGrant(widget.workspaceId, person.userId));
   }
 
   @override
@@ -237,7 +237,8 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
       : person.maxRunSecondsPerMonth! ~/ 3600;
 
   Widget _personTile(AxPersonWithAccess person, TextStyle muted) {
-    final mode = person.mode == null ? 'Default access' : _modeLabels[person.mode]!;
+    final mode =
+        person.mode == null ? 'Default access' : _modeLabels[person.mode]!;
     final usage = person.usage;
     return Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
@@ -297,14 +298,15 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
                     for (final hours in _runTimeHours)
                       DropdownMenuItem<int?>(
                           value: hours,
-                          child: Text(
-                              hours == null ? 'No limit' : '$hours h'))
+                          child: Text(hours == null ? 'No limit' : '$hours h'))
                   ],
                   onChanged: _busy
                       ? null
                       : (hours) => unawaited(_act(() => widget.source
-                          .setPersonRunTimeLimit(widget.workspaceId,
-                              person.userId, hours == null ? null : hours * 3600)))),
+                          .setPersonRunTimeLimit(
+                              widget.workspaceId,
+                              person.userId,
+                              hours == null ? null : hours * 3600)))),
             ]),
           if (person.active && person.maxRunSecondsPerMonth != null)
             Text(
@@ -380,7 +382,8 @@ class _WorkspaceInvitationsBannerState
                 subtitle: const Text(
                     'Accepting lets your own Spaces run on it. The owner sees usage only.'),
                 trailing: FilledButton(
-                    key: ValueKey('accept-workspace-invitation-${invitation.id}'),
+                    key: ValueKey(
+                        'accept-workspace-invitation-${invitation.id}'),
                     onPressed: _busy ? null : () => _accept(invitation),
                     child: const Text('Accept')))),
     ]);

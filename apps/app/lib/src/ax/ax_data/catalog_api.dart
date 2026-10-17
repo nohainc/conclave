@@ -141,22 +141,21 @@ mixin _CatalogApi on _AxApiClientCore {
 
   Future<AxPersonAccess> savePersonAccess(String workspaceId, String userId,
           AxWorkspaceMemberAccess access) async =>
-      _personAccessResponse(await client.put(
-          _personAccessUri(workspaceId, userId),
-          headers: _headers(contentType: 'application/json'),
-          body: jsonEncode({
-            if (access.mode != null) 'mode': access.mode,
-            'workers': {
-              for (final entry in access.workers.entries)
-                entry.key: entry.value.toJson(),
-            },
-          })));
+      _personAccessResponse(
+          await client.put(_personAccessUri(workspaceId, userId),
+              headers: _headers(contentType: 'application/json'),
+              body: jsonEncode({
+                if (access.mode != null) 'mode': access.mode,
+                'workers': {
+                  for (final entry in access.workers.entries)
+                    entry.key: entry.value.toJson(),
+                },
+              })));
 
   Future<AxPersonAccess> resetPersonAccess(
           String workspaceId, String userId) async =>
-      _personAccessResponse(await client.delete(
-          _personAccessUri(workspaceId, userId),
-          headers: _headers()));
+      _personAccessResponse(await client
+          .delete(_personAccessUri(workspaceId, userId), headers: _headers()));
 
   Future<void> _sharingSend(String method, String path, [Object? body]) async {
     final uri = Uri.parse('$baseUrl$path');
@@ -177,8 +176,8 @@ mixin _CatalogApi on _AxApiClientCore {
 
   Future<List<AxPersonWithAccess>> loadPeopleWithAccess(
       String workspaceId) async {
-    final body = await _getJson(Uri.parse(
-        '$baseUrl${_workspacePath(workspaceId)}/people-with-access'));
+    final body = await _getJson(
+        Uri.parse('$baseUrl${_workspacePath(workspaceId)}/people-with-access'));
     return [
       for (final item in (body['people'] as List? ?? const []))
         AxPersonWithAccess.fromJson(Map<String, dynamic>.from(item as Map)),
@@ -191,22 +190,23 @@ mixin _CatalogApi on _AxApiClientCore {
         Uri.parse('$baseUrl${_workspacePath(workspaceId)}/invitations'));
     return [
       for (final item in (body['invitations'] as List? ?? const []))
-        AxSharedWorkspaceInvitation.fromJson(Map<String, dynamic>.from(item as Map)),
+        AxSharedWorkspaceInvitation.fromJson(
+            Map<String, dynamic>.from(item as Map)),
     ];
   }
 
   Future<void> createWorkspaceInvitation(String workspaceId, String email) =>
-      _sharingSend(
-          'POST', '${_workspacePath(workspaceId)}/invitations', {'email': email});
+      _sharingSend('POST', '${_workspacePath(workspaceId)}/invitations',
+          {'email': email});
 
   Future<void> revokeWorkspaceInvitation(
           String workspaceId, String invitationId) =>
       _sharingSend('POST',
           '${_workspacePath(workspaceId)}/invitations/${Uri.encodeComponent(invitationId)}/revoke');
 
-  Future<void> revokePersonGrant(String workspaceId, String userId) =>
-      _sharingSend('POST',
-          '${_workspacePath(workspaceId)}/person-grants/${Uri.encodeComponent(userId)}/revoke');
+  Future<void> revokePersonGrant(String workspaceId, String userId) => _sharingSend(
+      'POST',
+      '${_workspacePath(workspaceId)}/person-grants/${Uri.encodeComponent(userId)}/revoke');
 
   Future<void> setPersonQuota(String workspaceId, String userId, int limit) =>
       _sharingSend(
@@ -231,7 +231,8 @@ mixin _CatalogApi on _AxApiClientCore {
   }
 
   Future<void> acceptWorkspaceInvitation(String invitationId) => _sharingSend(
-      'POST', '/workspace-invitations/${Uri.encodeComponent(invitationId)}/accept');
+      'POST',
+      '/workspace-invitations/${Uri.encodeComponent(invitationId)}/accept');
 
   AxUserWorkflowConfiguration _configurationResponse(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {

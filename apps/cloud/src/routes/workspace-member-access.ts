@@ -242,7 +242,8 @@ export async function handleWorkspaceMemberAccess(
     .bind(workspaceId, context.userId)
     .first();
   if (!workspace) throw new HttpError(404, "Workspace not found");
-  if (personId !== undefined) return handlePersonOverride(request, env, workspaceId, personId);
+  if (personId !== undefined)
+    return handlePersonOverride(request, env, workspaceId, personId);
   if (request.method === "GET") {
     const policy = await loadWorkspaceMemberAccess(env, workspaceId);
     return json({ restricted: policy !== null, policy });
@@ -255,7 +256,9 @@ export async function handleWorkspaceMemberAccess(
   if (
     !body ||
     typeof body.restricted !== "boolean" ||
-    Object.keys(body).some((key) => !["restricted", "workers", "mode"].includes(key))
+    Object.keys(body).some(
+      (key) => !["restricted", "workers", "mode"].includes(key),
+    )
   )
     throw new HttpError(400, "Invalid member access request");
   if (!body.restricted) {
@@ -346,7 +349,12 @@ async function handlePersonOverride(
     `INSERT INTO workspace_member_overrides(workspace_id,user_id,policy_json,updated_at) VALUES(?1,?2,?3,?4)
      ON CONFLICT(workspace_id,user_id) DO UPDATE SET policy_json=excluded.policy_json,updated_at=excluded.updated_at`,
   )
-    .bind(workspaceId, personId, JSON.stringify(policy), new Date().toISOString())
+    .bind(
+      workspaceId,
+      personId,
+      JSON.stringify(policy),
+      new Date().toISOString(),
+    )
     .run();
   return read();
 }

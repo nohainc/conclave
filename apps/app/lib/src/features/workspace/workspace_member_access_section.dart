@@ -69,7 +69,7 @@ class _WorkspaceMemberAccessSectionState
       final person = widget.personSource;
       final access = person == null
           ? await widget.source.loadWorkspaceMemberAccess(workspaceId)
-          : await _personAccess(
+          : _personAccess(
               await person.loadPersonAccess(workspaceId, widget.userId!));
       if (!mounted || workspaceId != widget.workspaceId) return;
       setState(() => _adopt(access));
@@ -185,7 +185,10 @@ class _WorkspaceMemberAccessSectionState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(_isPerson ? 'Access for ${widget.personName ?? 'this person'}' : 'Member access',
+        Text(
+            _isPerson
+                ? 'Access for ${widget.personName ?? 'this person'}'
+                : 'Member access',
             style: theme.textTheme.titleMedium
                 ?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
@@ -208,21 +211,21 @@ class _WorkspaceMemberAccessSectionState
           ])
         else ...[
           if (!_isPerson)
-          SwitchListTile(
-              key: const ValueKey('member-access-restricted'),
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Limit what members can use'),
-              subtitle: Text(_restricted
-                  ? 'Members can only use what is shared below.'
-                  : 'Members use whatever your workflows select.'),
-              value: _restricted,
-              onChanged: _saving
-                  ? null
-                  : (value) => setState(() {
-                      _restricted = value;
-                      // New limits start at the safest mode (ADR-020).
-                      if (value) _mode ??= 'chat';
-                    })),
+            SwitchListTile(
+                key: const ValueKey('member-access-restricted'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Limit what members can use'),
+                subtitle: Text(_restricted
+                    ? 'Members can only use what is shared below.'
+                    : 'Members use whatever your workflows select.'),
+                value: _restricted,
+                onChanged: _saving
+                    ? null
+                    : (value) => setState(() {
+                          _restricted = value;
+                          // New limits start at the safest mode (ADR-020).
+                          if (value) _mode ??= 'chat';
+                        })),
           if (_restricted) ...[
             _modeSelector(context),
             if (workers.isEmpty)

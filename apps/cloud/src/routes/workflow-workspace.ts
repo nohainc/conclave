@@ -128,7 +128,9 @@ export async function prepareWorkflowWorkspaceGrant(
         spaceId,
         workspaceId,
         lent.ownerUserId,
-        JSON.stringify(await borrowedPermissions(env, workspaceId, ownerUserId)),
+        JSON.stringify(
+          await borrowedPermissions(env, workspaceId, ownerUserId),
+        ),
         now,
       ),
       env.CONCLAVE_DB.prepare(

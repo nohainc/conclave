@@ -22,7 +22,10 @@ class SharingSource implements AxWorkspaceSharingDataSource {
   ];
   List<AxMyWorkspaceInvitation> mine = const [
     AxMyWorkspaceInvitation(
-        id: 'm1', workspaceName: 'Mac', ownerName: 'Lender', expiresAt: 'later'),
+        id: 'm1',
+        workspaceName: 'Mac',
+        ownerName: 'Lender',
+        expiresAt: 'later'),
   ];
   final calls = <String>[];
 
@@ -129,8 +132,8 @@ void main() {
   testWidgets('owner invites, cancels, sets the quota and revokes',
       (tester) async {
     final source = SharingSource();
-    await pump(tester,
-        WorkspaceSharingSection(workspaceId: 'ws', source: source));
+    await pump(
+        tester, WorkspaceSharingSection(workspaceId: 'ws', source: source));
     expect(find.textContaining('Guest · guest@test'), findsOneWidget);
     expect(find.textContaining('2 requests'), findsOneWidget);
     expect(find.textContaining('Chat only (custom)'), findsOneWidget);
@@ -138,8 +141,8 @@ void main() {
         find.byKey(const ValueKey('sharing-invite-email')), 'a@b.test');
     await tester.tap(find.byKey(const ValueKey('sharing-invite')));
     await tester.pumpAndSettle();
-    await tester.tap(
-        find.byKey(const ValueKey('sharing-revoke-invitation-i1')));
+    await tester
+        .tap(find.byKey(const ValueKey('sharing-revoke-invitation-i1')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('sharing-revoke-guest')));
     await tester.pumpAndSettle();
@@ -150,8 +153,8 @@ void main() {
 
   testWidgets('owner sets a monthly run-time limit', (tester) async {
     final source = SharingSource();
-    await pump(tester,
-        WorkspaceSharingSection(workspaceId: 'ws', source: source));
+    await pump(
+        tester, WorkspaceSharingSection(workspaceId: 'ws', source: source));
     await tester.tap(find.byKey(const ValueKey('sharing-runtime-guest')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('10 h').last);
@@ -191,9 +194,12 @@ void main() {
       (tester) async {
     final source = SharingSource();
     var accepted = 0;
-    await pump(tester,
-        WorkspaceInvitationsBanner(source: source, onAccepted: () => accepted++));
-    expect(find.textContaining('Lender invited you to use Mac'), findsOneWidget);
+    await pump(
+        tester,
+        WorkspaceInvitationsBanner(
+            source: source, onAccepted: () => accepted++));
+    expect(
+        find.textContaining('Lender invited you to use Mac'), findsOneWidget);
     await tester
         .tap(find.byKey(const ValueKey('accept-workspace-invitation-m1')));
     await tester.pumpAndSettle();

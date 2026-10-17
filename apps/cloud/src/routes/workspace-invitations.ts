@@ -50,7 +50,8 @@ export async function handleWorkspaceInvitations(
   await ownedWorkspace(env, workspaceId, context.userId);
   const now = new Date().toISOString();
   if (invitationId !== undefined) {
-    if (request.method !== "POST") throw new HttpError(405, "Unsupported method");
+    if (request.method !== "POST")
+      throw new HttpError(405, "Unsupported method");
     const revoked = await env.CONCLAVE_DB.prepare(
       "UPDATE workspace_invitations SET status='revoked',updated_at=?3 WHERE id=?1 AND workspace_id=?2 AND status='pending'",
     )
@@ -102,7 +103,8 @@ export async function handleWorkspaceInvitations(
   )
     .bind(workspaceId, email)
     .first<{ n: number; same: number | null }>();
-  if (pending?.same) throw new HttpError(409, "An invitation is already pending");
+  if (pending?.same)
+    throw new HttpError(409, "An invitation is already pending");
   if ((pending?.n ?? 0) >= MAX_PENDING_PER_WORKSPACE)
     throw new HttpError(429, "Too many pending invitations");
   const id = `winv-${crypto.randomUUID()}`;
