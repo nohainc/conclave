@@ -171,7 +171,16 @@ class AxWorkHistoryCache {
           Iterable<AxWorkRequest> old, Iterable<AxWorkRequest> added) =>
       {
         for (final item in old) item.id: item,
-        for (final item in added) item.id: item
+        for (final item in added)
+          // List pages carry no activity history; keep what the detail read
+          // already loaded so reopening a Thread does not show a blank history.
+          item.id: item.activityHistory.isEmpty &&
+                  old.any(
+                      (o) => o.id == item.id && o.activityHistory.isNotEmpty)
+              ? item.copyWith(
+                  activityHistory:
+                      old.firstWhere((o) => o.id == item.id).activityHistory)
+              : item
       }.values.toList()
         ..sort((a, b) {
           final time = a.createdAt.compareTo(b.createdAt);

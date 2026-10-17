@@ -27,3 +27,20 @@ export const unreadSql = (
        AND w.updated_at > ${readSince}
   )
 ))`;
+
+/** Authoritative list recency includes messages and request lifecycle changes.
+ * Read markers and UI metadata never contribute activity. */
+export const lastThreadActivitySql = (thread: string) => `MAX(
+  ${thread}.updated_at,
+  COALESCE((SELECT MAX(dm.created_at) FROM discussion_messages dm
+    WHERE dm.thread_id = ${thread}.id), ${thread}.updated_at),
+  COALESCE((SELECT MAX(w.updated_at) FROM work_requests w
+    WHERE w.thread_id = ${thread}.id), ${thread}.updated_at)
+)`;
+
+export const lastSpaceActivitySql = (space: string) => `MAX(
+  ${space}.updated_at,
+  COALESCE((SELECT MAX(${lastThreadActivitySql("activity_thread")})
+    FROM threads activity_thread WHERE activity_thread.space_id = ${space}.id),
+    ${space}.updated_at)
+)`;

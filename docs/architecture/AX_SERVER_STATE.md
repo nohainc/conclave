@@ -238,6 +238,13 @@ under the history key and are reused until explicitly invalidated. When a long
 absence creates a gap before retained history, cursor frontiers let on-demand
 pagination fill that gap and resume the original older frontier.
 
+Opening or switching a Thread refreshes the head page, then reads details for
+its active requests to restore persisted Worker operations. List pages omit
+activity history, and the page-local live activity projection is cleared on
+navigation. This restoration does not depend on realtime connection readiness;
+detail reads use the shared cache's existing deduplication and read fences.
+Completed historical requests do not incur additional detail reads.
+
 Five-second polling and matching Work events continue to request active/recently
 changed data through `activeOnly`, including its continuation pages when needed;
 they do not traverse immutable history. Cloud's active filter includes requests

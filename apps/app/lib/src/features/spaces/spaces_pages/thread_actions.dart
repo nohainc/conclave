@@ -163,6 +163,16 @@ extension _ThreadActions on _ThreadPageState {
     final id = widget.thread.id;
     try {
       await cache.refresh(id, activeOnly: activeOnly);
+      // List pages omit activity history. The page-local live projection is
+      // cleared on navigation, so restore active requests from their details
+      // after the list is available, even before realtime reports healthy.
+      // Capture the scope above so a late read cannot refresh another Thread.
+      if (!mounted || widget.thread.id != id || _workHistoryCache != cache) {
+        return;
+      }
+      await Future.wait(cache
+          .activeIds(id)
+          .map((requestId) => cache.refreshRequest(id, requestId)));
       _scheduleIssueReportStatusLoads();
     } catch (_) {
       // Query state retains cached history and exposes the existing retry UI.

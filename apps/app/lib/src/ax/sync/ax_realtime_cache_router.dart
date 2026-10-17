@@ -15,7 +15,7 @@ class AxRealtimeCacheRouter {
       this.activityDebounce = const Duration(milliseconds: 400)});
 
   /// Returns true when the Thread is open in a visible tab. Such activity is
-  /// read on arrival, so the sidebar indicators need no refresh for it.
+  /// read on arrival. Ordering still needs to refresh for this activity.
   final bool Function(String threadId)? viewedThreadActivity;
   final Duration activityDebounce;
   final Future<void> Function(String threadId, String type, String entityId)?
@@ -42,10 +42,11 @@ class AxRealtimeCacheRouter {
 
   /// Sidebar indicators come from the Space and Thread lists. A burst of
   /// Discussion and Work events shares one trailing refresh of both.
-  Future<void> _activityChanged(String threadId, String? spaceId,
-      {bool refreshViewed = false}) {
-    final isViewed = viewedThreadActivity?.call(threadId) == true;
-    if (isViewed && !refreshViewed) return Future.value();
+  Future<void> _activityChanged(
+    String threadId,
+    String? spaceId,
+  ) {
+    viewedThreadActivity?.call(threadId);
     _activityThreads.add(threadId);
     if (spaceId != null) _activitySpaces.add(spaceId);
     _activityTimer ??= Timer(activityDebounce, () {
@@ -137,7 +138,6 @@ class AxRealtimeCacheRouter {
       await _activityChanged(
         threadId,
         spaceId,
-        refreshViewed: type == 'work_request.created',
       );
       return;
     }

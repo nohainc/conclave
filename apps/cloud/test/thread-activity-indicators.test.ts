@@ -136,3 +136,44 @@ it("ignores abandoned Work older than a day", async () => {
     .run(old, old);
   expect((await flags("bob")).T1).toEqual([false, false]);
 });
+
+it("orders Thread and Space lists by messages and request lifecycle activity", async () => {
+  const { sqlite, env, as } = fixture();
+  sqlite.exec(`UPDATE spaces SET updated_at='2020-01-01T00:00:00.000Z';
+    INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at)
+      VALUES('S2','alice','Other','2021-01-01T00:00:00.000Z','2021-01-01T00:00:00.000Z');
+    INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at)
+      VALUES('m-other','S2','alice','owner','2020','2020');`);
+  async function order(stamp: string) {
+    const threadBody = (await (
+      await handleListSpaceThreads(as("alice"), env, "S")
+    ).json()) as { threads: { id: string; updatedAt: string }[] };
+    expect(threadBody.threads[0]).toMatchObject({ id: "T2", updatedAt: stamp });
+    const spaceBody = (await (
+      await handleListSpaces(as("alice"), env)
+    ).json()) as { spaces: { id: string; updatedAt: string }[] };
+    expect(spaceBody.spaces[0]).toMatchObject({ id: "S", updatedAt: stamp });
+  }
+  const sent = "2022-01-01T00:00:00.000Z";
+  sqlite
+    .prepare(
+      `INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,created_at,updated_at)
+    VALUES('recent','T2','alice','stateless','direct',1,'{}','queued',?,?)`,
+    )
+    .run(sent, sent);
+  await order(sent);
+  const message = "2023-01-01T00:00:00.000Z";
+  sqlite
+    .prepare(
+      "INSERT INTO discussion_messages(id,thread_id,author_user_id,body,created_at) VALUES('recent-message','T2','bob','hello',?)",
+    )
+    .run(message);
+  await order(message);
+  const completed = "2024-01-01T00:00:00.000Z";
+  sqlite
+    .prepare(
+      "UPDATE work_requests SET status='completed',updated_at=? WHERE id='recent'",
+    )
+    .run(completed);
+  await order(completed);
+});

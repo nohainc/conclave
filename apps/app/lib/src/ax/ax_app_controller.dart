@@ -481,8 +481,7 @@ extension _AxAppController on _AxAppStateMixin {
     bool matches(AxNotification n) =>
         (threadId != null && n.threadId == threadId) ||
         (spaceId != null && n.spaceId == spaceId);
-    final removedIds =
-        notifications.where(matches).map((n) => n.id).toList();
+    final removedIds = notifications.where(matches).map((n) => n.id).toList();
     if (removedIds.isEmpty) return;
     _persistNotificationsRead(ids: removedIds);
     _updateNotifications(() => notifications.removeWhere(matches));

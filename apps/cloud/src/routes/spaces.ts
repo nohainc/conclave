@@ -15,7 +15,11 @@ import {
   permissionJsonPath,
 } from "./space-permissions.js";
 import { conditionalJson } from "./conditional-read.js";
-import { activeWorkSql, unreadSql } from "./thread-activity.js";
+import {
+  activeWorkSql,
+  lastSpaceActivitySql,
+  unreadSql,
+} from "./thread-activity.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
   resolveAppUrl,
@@ -69,7 +73,7 @@ export async function handleListSpaces(
       new URL(request.url).searchParams.get("archived") === "true";
     const rows = await env.CONCLAVE_DB.prepare(
       `SELECT p.id, p.name, p.description, pm.role,
-              p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt,
+              p.settings_json AS settingsJson, p.created_at AS createdAt, ${lastSpaceActivitySql("p")} AS updatedAt,
               EXISTS (
                 SELECT 1 FROM threads t
                  WHERE t.space_id = p.id AND ${activeWorkSql("t")}
@@ -91,7 +95,7 @@ export async function handleListSpaces(
        JOIN space_memberships pm ON pm.space_id = p.id
        WHERE pm.user_id = ?1
          ${includeArchived ? "" : "AND COALESCE(json_extract(p.settings_json, '$.archived'), 0) = 0"}
-       ORDER BY p.updated_at DESC, p.id DESC`,
+       ORDER BY updatedAt DESC, p.id DESC`,
     )
       .bind(context.userId)
       .all<{

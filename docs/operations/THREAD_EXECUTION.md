@@ -39,7 +39,12 @@ In both composers, Enter sends and Shift+Enter inserts a new line. Ctrl/Cmd+Ente
 also sends. Editing an existing discussion retains Enter for a new line and
 Ctrl/Cmd+Enter to save.
 Selecting a different Space loads its Threads into the sidebar. Manual
-expansion/collapse is preserved during background refreshes.
+expansion/collapse is preserved during background refreshes. Pinned Spaces and
+Threads retain their manual pin order above unpinned items. Unpinned Threads
+sort by latest activity, ignoring saved `threadOrder`; unpinned Spaces sort by
+latest activity within their ownership group. Accepted requests, new discussion
+messages, and request lifecycle updates advance both the Thread and its Space,
+including while the Thread is open. Sidebar refreshes coalesce activity bursts.
 
 1. Open the Space Workflows surface and configure a Ready Worker/model for
    **Chat** and **Work**. These bindings are independent and may use different

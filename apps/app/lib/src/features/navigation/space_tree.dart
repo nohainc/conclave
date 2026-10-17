@@ -211,8 +211,7 @@ class SpaceTree extends StatelessWidget {
           AxRouteKind.spaceMembers,
         }.contains(shellContext.navigation.kind);
     final isExpanded = shellContext.isSpaceExpanded(space.id);
-    final sortedThreads = applyAxThreadPins(applyAxThreadOrder(
-        sortAxThreadsByLastUpdate(threads), space.settings['threadOrder']));
+    final sortedThreads = applyAxThreadPins(sortAxThreadsByLastUpdate(threads));
     final visibleThreads = sortedThreads
         .where((t) => t.status.toLowerCase() != 'archived')
         .toList();

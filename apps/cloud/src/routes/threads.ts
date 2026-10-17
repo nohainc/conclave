@@ -3,7 +3,11 @@ import {
   requireSpaceRight,
 } from "./space-permissions.js";
 import { conditionalJson } from "./conditional-read.js";
-import { activeWorkSql, unreadSql } from "./thread-activity.js";
+import {
+  activeWorkSql,
+  lastThreadActivitySql,
+  unreadSql,
+} from "./thread-activity.js";
 import { MutationIdempotency } from "./mutation-idempotency.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
@@ -52,7 +56,7 @@ export async function handleListSpaceThreads(
             lead.display_name AS leadDisplayName,
             creator.email AS creatorEmail,
             CASE WHEN threads.lead_user_id = space.owner_user_id THEN 1 ELSE 0 END AS creatorIsOwner,
-            threads.created_at AS createdAt, threads.updated_at AS updatedAt,
+            threads.created_at AS createdAt, ${lastThreadActivitySql("threads")} AS updatedAt,
             COALESCE(
               (SELECT m.body FROM discussion_messages m
                  WHERE m.thread_id = threads.id
@@ -81,7 +85,7 @@ export async function handleListSpaceThreads(
        ON read_state.thread_id = threads.id AND read_state.user_id = ?2
      LEFT JOIN space_memberships member
        ON member.space_id = threads.space_id AND member.user_id = ?2
-     WHERE threads.space_id = ?1 ORDER BY threads.updated_at DESC, threads.id DESC`,
+     WHERE threads.space_id = ?1 ORDER BY updatedAt DESC, threads.id DESC`,
   )
     .bind(spaceId, context.userId)
     .all<Record<string, unknown>>();
