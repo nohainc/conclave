@@ -17,9 +17,13 @@ export function workStepSessionKey(params: {
       : params.workBindingId === "chat"
         ? `thread:${params.threadId}:chat:conversation`
         : `work-request:${params.workRequestId}:${params.stepKind}`;
+  // A fresh retry of the Thread's own Work conversation bumps the Thread's
+  // session generation instead (see handleRetryWorkRequest), so later requests
+  // keep using the new session. Other scopes isolate the retry by suffix.
   const identity =
     params.retryStepKind === params.stepKind &&
-    params.retrySessionStrategy === "fresh"
+    params.retrySessionStrategy === "fresh" &&
+    params.workBindingId !== "direct"
       ? `${base}:retry-fresh-${Number(params.retryNumber) || 1}`
       : base;
   return `work-session-${createHash("sha256").update(identity).digest("hex")}`;

@@ -27,14 +27,19 @@ it("uses Engine-safe opaque keys and preserves the Work/direct conversation acro
       retryNumber: 1,
     }),
   ).toBe(key);
-  expect(
-    workStepSessionKey({
-      ...params,
-      retryStepKind: "implement",
-      retrySessionStrategy: "fresh",
-      retryNumber: 1,
-    }),
-  ).not.toBe(key);
+  // A fresh retry of the Thread's Work conversation moves to a new session
+  // through the Thread's generation, so later requests share that session.
+  const fresh = workStepSessionKey({
+    ...params,
+    retryStepKind: "implement",
+    retrySessionStrategy: "fresh",
+    retryNumber: 1,
+    workSessionGeneration: 1,
+  });
+  expect(fresh).not.toBe(key);
+  expect(workStepSessionKey({ ...params, workSessionGeneration: 1 })).toBe(
+    fresh,
+  );
 });
 
 it("keeps Chat durable within a Thread and isolated from Work", () => {

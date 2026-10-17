@@ -315,6 +315,16 @@ export async function handleRetryWorkRequest(
     throw new HttpError(409, "This Work Request is already being retried");
   try {
     await env.CONCLAVE_DB.batch([
+      // A fresh retry starts a new Work session for the whole Thread: the
+      // next requests continue it instead of falling back to the old session
+      // that just failed. The retry run reads the bumped generation.
+      ...(stepKind === "implement" && retrySessionStrategy === "fresh"
+        ? [
+            env.CONCLAVE_DB.prepare(
+              "UPDATE threads SET work_session_generation = work_session_generation + 1, updated_at = ?1 WHERE id = ?2",
+            ).bind(now, String(row.threadId)),
+          ]
+        : []),
       env.CONCLAVE_DB.prepare(
         `UPDATE workflow_tasks SET status = 'queued', output_json = NULL,
               error = NULL, started_at = NULL, finished_at = NULL, updated_at = ?1
