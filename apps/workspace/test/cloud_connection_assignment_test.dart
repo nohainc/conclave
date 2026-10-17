@@ -662,7 +662,7 @@ void main() {
     final directory =
         await Directory.systemTemp.createTemp('workspace-replay-');
     final journal =
-        AssignmentJournal(File('${directory.path}/assignments.jsonl'));
+        _ReconciliationJournal(File('${directory.path}/assignments.jsonl'));
     await journal.append(AssignmentRecord(
       assignmentId: 'assignment-1',
       status: AssignmentStatus.completed,
@@ -743,7 +743,7 @@ void main() {
       'idempotencyKey': 'idem-1',
       'payload': {'accepted': true, 'terminal': true, 'status': 'completed'},
     }));
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await journal.reconciled.future.timeout(const Duration(seconds: 5));
     expect(
       (await journal.reconcile())['assignment-1']!.status,
       AssignmentStatus.reconciled,
@@ -1559,4 +1559,20 @@ void main() {
       await live.connection.close();
     });
   });
+}
+
+// Signal durable completion rather than observing a record during its append.
+class _ReconciliationJournal extends AssignmentJournal {
+  _ReconciliationJournal(super.file);
+
+  final reconciled = Completer<void>();
+
+  @override
+  Future<void> append(AssignmentRecord record) async {
+    await super.append(record);
+    if (record.status == AssignmentStatus.reconciled &&
+        !reconciled.isCompleted) {
+      reconciled.complete();
+    }
+  }
 }
