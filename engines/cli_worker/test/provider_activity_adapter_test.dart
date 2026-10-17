@@ -318,7 +318,7 @@ void main() {
               'type': 'tool_use',
               'id': 'toolu_01',
               'name': 'Bash',
-              'input': {'command': 'secret command'},
+              'input': {'command': 'curl -H token=abcdef123456 example.test'},
             },
           ],
         },
@@ -368,13 +368,18 @@ void main() {
 
       expect(started[1].title, 'Checking the project files');
       expect(started[1].details['preview'], 'Checking the project files');
-      // Nothing from prompts, reasoning, input or output crosses the boundary.
+      // Bounded command summaries mask credentials; reasoning and tool output
+      // never cross the activity boundary.
       final everything = [
         ...started,
         ...done,
         ...failed,
       ].map((e) => '${e.title} ${e.details} ${e.activityId}').join(' ');
-      expect(everything, isNot(contains('secret')));
+      expect(everything, isNot(contains('abcdef123456')));
+      expect(everything, contains('[redacted]'));
+      expect(everything, isNot(contains('secret reasoning')));
+      expect(everything, isNot(contains('secret output')));
+      expect(everything, isNot(contains('secret error')));
     });
 
     test('reports bounded, redacted narration keyed by the message id', () {
