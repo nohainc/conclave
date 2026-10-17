@@ -152,11 +152,15 @@ void main() {
 
     expect(controller.jsonValidationError, isNotNull);
     expect(controller.jsonValidationLocation, startsWith('line '));
-    await Future<void>.delayed(const Duration(milliseconds: 850));
-    expect(
-      await controller.store.loadLatestRecoverySnapshot('recovery-profile'),
-      invalid,
-    );
+    String? recovered;
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    do {
+      recovered =
+          await controller.store.loadLatestRecoverySnapshot('recovery-profile');
+      if (recovered == invalid) break;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    } while (DateTime.now().isBefore(deadline));
+    expect(recovered, invalid);
     expect(await controller.restoreLatestRecoverySnapshot(), isTrue);
     expect(controller.currentJsonText, invalid);
   });
