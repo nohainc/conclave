@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 import '../common/quiet_notices.dart';
 import 'package:flutter/material.dart';
 import '../../ax/ax_models.dart';
+import '../../ax/worker_presentation.dart';
 import '../../ax/ax_workflow_configuration.dart';
 import '../../ax/sync/ax_session_catalogs.dart';
 import '../../ax/sync/ax_workflow_configurations.dart';
@@ -122,40 +124,38 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                 return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(children: [
-                        Expanded(
-                            child: Text('Workflows',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700))),
-                        IconButton(
-                            tooltip: 'Refresh workflows',
-                            onPressed: definitions.isFetching ||
-                                    preferences.isFetching ||
-                                    inventory.isFetching
-                                ? null
-                                : _refresh,
-                            icon: const Icon(Icons.refresh)),
-                      ]),
+                      Text('Workflows',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 12),
                       if (workspaceState.hasData) ...[
-                        _activeRow(context, workspaceState.data!),
+                        if (_activeRow(context, workspaceState.data!) !=
+                            null) ...[
+                          _activeRow(context, workspaceState.data!)!,
+                          const SizedBox(height: 12),
+                        ],
                         if (workflows.isNotEmpty &&
                             preferences.data != null) ...[
-                          const SizedBox(height: 12),
                           _defaultPicker(context, defaultState, workflows,
                               preferences.data!),
+                          const SizedBox(height: 12),
                         ],
                       ] else if (workspaceState.error != null)
-                        const Text(
-                            'Workspace settings could not be loaded. Refresh to retry.'),
+                        TextButton.icon(
+                          onPressed: _refresh,
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text(
+                              'Workspace settings could not be loaded. Tap to retry.'),
+                        ),
                       if (definitions.error != null ||
                           preferences.error != null ||
                           inventory.error != null)
                         Padding(
                             padding: const EdgeInsets.only(bottom: 12),
                             child: Text(
-                                'Some workflow data could not be loaded. Refresh to try again.',
+                                'Some workflow data could not be loaded.',
                                 style: TextStyle(
                                     color:
                                         Theme.of(context).colorScheme.error))),
@@ -166,14 +166,26 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                               padding: EdgeInsets.all(24),
                               child: Center(child: CircularProgressIndicator()))
                         else
-                          const Text('Workflow configuration is unavailable.')
+                          Row(
+                            children: [
+                              const Text(
+                                  'Workflow configuration is unavailable.'),
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                onPressed: _refresh,
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text('Retry'),
+                              ),
+                            ],
+                          )
                       else if (workflows.isEmpty)
                         const Text('No workflows are available.')
                       else
                         LayoutBuilder(
                           builder: (context, constraints) {
+                            final workflowList = workflows.values.toList();
                             final cards = [
-                              for (final definition in workflows.values)
+                              for (final definition in workflowList)
                                 _card(
                                     definition,
                                     _configuration(
@@ -185,16 +197,55 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                                                     definition.id)
                                                 .enabled)),
                             ];
-                            final twoColumns = constraints.maxWidth >= 760;
-                            final width = twoColumns
-                                ? (constraints.maxWidth - 12) / 2
-                                : constraints.maxWidth;
-                            return Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
+
+                            const double gap = 12;
+                            final double availableWidth = constraints.maxWidth;
+                            final int columns =
+                                (availableWidth / 240).floor().clamp(1, 4);
+
+                            if (columns == 1) {
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  for (int i = 0; i < cards.length; i++) ...[
+                                    if (i > 0) const SizedBox(height: gap),
+                                    cards[i],
+                                  ],
+                                ],
+                              );
+                            }
+
+                            final List<List<Widget>> rows = [];
+                            for (int i = 0; i < cards.length; i += columns) {
+                              rows.add(cards.sublist(
+                                  i,
+                                  (i + columns < cards.length)
+                                      ? i + columns
+                                      : cards.length));
+                            }
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                for (final card in cards)
-                                  SizedBox(width: width, child: card),
+                                for (int r = 0; r < rows.length; r++) ...[
+                                  if (r > 0) const SizedBox(height: gap),
+                                  IntrinsicHeight(
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        for (int c = 0; c < columns; c++) ...[
+                                          if (c > 0) const SizedBox(width: gap),
+                                          Expanded(
+                                            child: c < rows[r].length
+                                                ? rows[r][c]
+                                                : const SizedBox.shrink(),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ],
                             );
                           },
@@ -246,36 +297,21 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
 
   /// Embedded tab header: whether new Work runs on this Workspace, or a way to
   /// make it so.
-  Widget _activeRow(
+  /// Embedded tab header: whether another Workspace is active, offering a way to
+  /// make this Workspace active for new Work.
+  Widget? _activeRow(
       BuildContext context, AxWorkflowWorkspaceSettings settings) {
     final active = settings.workspaceId == widget.workspaceId;
-    final colors = Theme.of(context).colorScheme;
-    return Row(children: [
-      Expanded(
-          child: Text(
-              active
-                  ? 'New Work runs on this Workspace and uses these workflows.'
-                  : 'New Work runs on another Workspace. These workflows apply once this one is in use.',
-              style: TextStyle(color: colors.onSurfaceVariant))),
-      if (active)
-        Container(
-            key: const ValueKey('workspace-workflows-active'),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-                color: colors.primaryContainer,
-                borderRadius: BorderRadius.circular(999)),
-            child: Text('Active',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: colors.onPrimaryContainer,
-                    fontWeight: FontWeight.w700)))
-      else
-        OutlinedButton(
-            key: const ValueKey('use-workspace-for-workflows'),
-            onPressed: widget.canEdit && !_changingWorkspace
-                ? () => _selectWorkspace(settings)
-                : null,
-            child: const Text('Use this Workspace')),
-    ]);
+    if (active) return null;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: OutlinedButton(
+          key: const ValueKey('use-workspace-for-workflows'),
+          onPressed: widget.canEdit && !_changingWorkspace
+              ? () => _selectWorkspace(settings)
+              : null,
+          child: const Text('Use this Workspace')),
+    );
   }
 
   AxUserWorkflowConfiguration _configuration(
@@ -290,112 +326,551 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
     final selection = definition.steps.length == 1
         ? configuration.selectionFor(definition.steps.first.kind)
         : configuration.defaults;
-    final summary = <(String, String)>[
-      ('Worker', _workerName(selection.worker, workers)),
-      ('Model', _modelName(selection.model, selection.worker, workers)),
-      ('Effort', _label(selection.effort)),
-    ];
     final colors = Theme.of(context).colorScheme;
-    final unresolvedWorker = definition.steps.any((step) {
-      final workerId = configuration.selectionFor(step.kind).worker;
-      return workerId == null ||
-          !workers.any((worker) => worker.id == workerId);
-    });
-    final status = definition.id != 'chat' && !configuration.enabled
-        ? 'Disabled'
-        : unresolvedWorker
-            ? 'Select a Worker'
-            : null;
-    return ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 210),
-        child: Card(
-            key: ValueKey('workflow-${definition.id}'),
-            margin: EdgeInsets.zero,
-            child: InkWell(
-                key: ValueKey('open-workflow-${definition.id}'),
-                onTap: widget.canEdit && !_changingWorkspace
-                    ? () => _edit(definition, configuration)
-                    : null,
-                borderRadius: BorderRadius.circular(12),
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+
+    final selectedWorker =
+        workers.where((worker) => worker.id == selection.worker).firstOrNull;
+
+    final models = selectedWorker?.executionOptions?.models
+            .where((m) => m.status != 'unavailable')
+            .toList() ??
+        const <AxWorkerModelOption>[];
+    final allowsAutoModel = selectedWorker == null ||
+        (selectedWorker.executionOptions?.models
+                .every((m) => m.selectionMode != 'combined') ??
+            true);
+
+    final selectedModelOption =
+        models.where((m) => m.id == selection.model).firstOrNull;
+    final modelEfforts = selectedModelOption?.effort.supported == true
+        ? selectedModelOption!.effort.values
+        : (selectedWorker?.executionOptions?.effort.supported == true
+            ? selectedWorker!.executionOptions!.effort.values
+            : const <String>[]);
+
+    final isChat = definition.id == 'chat';
+    final isEnabled = isChat || configuration.enabled;
+
+    Future<void> updateSelection(AxWorkflowSelection next) async {
+      try {
+        final AxUserWorkflowConfiguration updated;
+        if (definition.steps.length == 1) {
+          final stepKind = definition.steps.first.kind;
+          final overrides = Map<String, AxWorkflowSelection>.from(
+              configuration.stepOverrides);
+          overrides[stepKind] = next;
+          updated = AxUserWorkflowConfiguration(
+            workflowId: definition.id,
+            enabled: configuration.enabled,
+            defaults: next,
+            stepOverrides: overrides,
+          );
+        } else {
+          updated = AxUserWorkflowConfiguration(
+            workflowId: definition.id,
+            enabled: configuration.enabled,
+            defaults: next,
+            stepOverrides: configuration.stepOverrides,
+          );
+        }
+        await widget.configurations.save(updated);
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showNotice(SnackBar(content: Text(error.toString())));
+        }
+      }
+    }
+
+    return Card(
+        key: ValueKey('workflow-${definition.id}'),
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    definition.name,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Transform.scale(
+                  scale: 0.8,
+                  alignment: Alignment.centerRight,
+                  child: Switch(
+                    value: isEnabled,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: widget.canEdit && !_changingWorkspace && !isChat
+                        ? (value) async {
+                            try {
+                              await widget.configurations
+                                  .save(AxUserWorkflowConfiguration(
+                                workflowId: configuration.workflowId,
+                                enabled: value,
+                                defaults: configuration.defaults,
+                                stepOverrides: configuration.stepOverrides,
+                              ));
+                            } catch (error) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showNotice(
+                                    SnackBar(content: Text(error.toString())));
+                              }
+                            }
+                          }
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            SizedBox(
+              height: 64,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(definition.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant)),
+                  if (definition.steps.length > 1) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                        '${definition.steps.length} steps${configuration.stepOverrides.isEmpty ? '' : ' · ${configuration.stepOverrides.length} step overrides'}',
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Worker selection with icons
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                for (final worker in workers)
+                  Builder(builder: (context) {
+                    final isSelected = worker.id == selection.worker;
+                    return Semantics(
+                      label: worker.displayName,
+                      selected: isSelected,
+                      child: Tooltip(
+                        message:
+                            '${worker.displayName}${worker.isReady ? '' : ' · Unavailable'}',
+                        child: Material(
+                          color: isSelected
+                              ? colors.secondaryContainer
+                              : colors.surfaceContainerHighest
+                                  .withValues(alpha: 0.5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(
+                              color: isSelected
+                                  ? colors.primary
+                                  : Colors.transparent,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: InkWell(
+                            key: ValueKey(
+                                'workflow-worker-${definition.id}-${worker.id}'),
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: widget.canEdit && !_changingWorkspace
+                                ? () {
+                                    final newWorkerId =
+                                        isSelected ? null : worker.id;
+                                    updateSelection(AxWorkflowSelection(
+                                      worker: newWorkerId,
+                                      model: null,
+                                      effort: null,
+                                    ));
+                                  }
+                                : null,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Opacity(
+                                opacity: isSelected ? 1.0 : 0.6,
+                                child: _workerIconWidget(worker),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                if (selectedWorker != null && !selectedWorker.isReady)
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: colors.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(children: [
-                          Expanded(
-                              child: Text(definition.name,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w700))),
-                          if (isDefault)
-                            Container(
-                                key: ValueKey(
-                                    'workflow-default-${definition.id}'),
-                                margin: const EdgeInsets.only(right: 6),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                    color: colors.primaryContainer,
-                                    borderRadius: BorderRadius.circular(999)),
-                                child: Text('Default',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
-                                            color: colors.onPrimaryContainer,
-                                            fontWeight: FontWeight.w700))),
-                          if (status != null)
-                            Container(
-                                key: ValueKey(
-                                    'workflow-status-${definition.id}'),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                    color: unresolvedWorker
-                                        ? colors.errorContainer
-                                        : colors.surfaceContainerHighest,
-                                    borderRadius: BorderRadius.circular(999)),
-                                child: Text(status,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
-                                            color: unresolvedWorker
-                                                ? colors.onErrorContainer
-                                                : colors.onSurfaceVariant,
-                                            fontWeight: FontWeight.w700)))
-                        ]),
-                        const SizedBox(height: 4),
-                        Text(definition.description,
-                            style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant)),
-                        if (definition.steps.length > 1) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                              '${definition.steps.length} steps${configuration.stepOverrides.isEmpty ? '' : ' · ${configuration.stepOverrides.length} step overrides'}'),
+                        const Icon(Icons.warning_amber,
+                            size: 16, color: Colors.amber),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '${selectedWorker.displayName} · Unavailable',
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                    color: colors.onErrorContainer,
+                                    fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (selection.worker != null &&
+                    selection.worker!.isNotEmpty &&
+                    !workers.any((w) => w.id == selection.worker))
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: colors.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.warning_amber,
+                            size: 16, color: Colors.amber),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '${selection.worker} · Unavailable',
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                    color: colors.onErrorContainer,
+                                    fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Model selection combobox
+            DropdownButtonFormField<String>(
+              key: ValueKey(
+                  'workflow-model-${definition.id}-${selection.worker}-${selection.model}'),
+              initialValue:
+                  (selection.model != null && selection.model!.isNotEmpty)
+                      ? selection.model
+                      : '',
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Model',
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+              items: [
+                DropdownMenuItem<String>(
+                  value: '',
+                  child: Text(allowsAutoModel ? 'Auto' : 'Select model...'),
+                ),
+                if (selection.model != null &&
+                    selection.model!.isNotEmpty &&
+                    !models.any((m) => m.id == selection.model))
+                  DropdownMenuItem<String>(
+                    value: selection.model,
+                    child:
+                        Text(selection.model!, overflow: TextOverflow.ellipsis),
+                  ),
+                for (final model in {
+                  for (final m in models) m.id: m,
+                }.values)
+                  DropdownMenuItem<String>(
+                    value: model.id,
+                    child: Text(model.name, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: widget.canEdit &&
+                      !_changingWorkspace &&
+                      selectedWorker != null
+                  ? (modelId) {
+                      final newModelId =
+                          modelId == null || modelId.isEmpty ? null : modelId;
+                      final newModel =
+                          models.where((m) => m.id == newModelId).firstOrNull;
+                      final newEfforts = newModel?.effort.supported == true
+                          ? newModel!.effort.values
+                          : modelEfforts;
+                      String? newEffort = newEfforts.contains(selection.effort)
+                          ? selection.effort
+                          : null;
+                      if (newEffort == null &&
+                          newModel != null &&
+                          newModel.selectionMode == 'combined' &&
+                          newModel.effort.supported &&
+                          newEfforts.isNotEmpty &&
+                          newModel.effort.defaultValue == null) {
+                        newEffort = newEfforts.first;
+                      }
+                      updateSelection(AxWorkflowSelection(
+                        worker: selection.worker,
+                        model: newModelId,
+                        effort: newEffort,
+                      ));
+                    }
+                  : null,
+            ),
+            const SizedBox(height: 8),
+            // Effort line
+            Builder(builder: (context) {
+              final levels = <String?>[
+                null,
+                ...modelEfforts,
+              ];
+              var activeIndex = levels.indexOf(selection.effort);
+              if (activeIndex < 0 &&
+                  selection.effort != null &&
+                  selection.effort!.isNotEmpty) {
+                levels.add(selection.effort);
+                activeIndex = levels.length - 1;
+              }
+              final sliderValue =
+                  math.max(0, activeIndex < 0 ? 0 : activeIndex).toDouble();
+              final maxDivision = math.max(1, levels.length - 1);
+              final displayEffortName = activeIndex < 0
+                  ? (selection.effort != null && selection.effort!.isNotEmpty
+                      ? _label(selection.effort)
+                      : 'Auto')
+                  : (levels[activeIndex] == null
+                      ? 'Auto'
+                      : _label(levels[activeIndex]));
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Effort · ',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          displayEffortName,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 3,
+                      thumbShape:
+                          const RoundSliderThumbShape(enabledThumbRadius: 6),
+                      overlayShape:
+                          const RoundSliderOverlayShape(overlayRadius: 14),
+                    ),
+                    child: Slider(
+                      key: ValueKey('workflow-effort-${definition.id}'),
+                      value: sliderValue,
+                      min: 0,
+                      max: maxDivision.toDouble(),
+                      divisions: maxDivision,
+                      semanticFormatterCallback: (pos) {
+                        final idx = pos.round().clamp(0, levels.length - 1);
+                        final val = levels[idx];
+                        return val == null ? 'Auto' : _label(val);
+                      },
+                      onChanged: widget.canEdit &&
+                              !_changingWorkspace &&
+                              modelEfforts.isNotEmpty
+                          ? (pos) {
+                              final idx =
+                                  pos.round().clamp(0, levels.length - 1);
+                              final nextEffort = levels[idx];
+                              updateSelection(AxWorkflowSelection(
+                                worker: selection.worker,
+                                model: selection.model,
+                                effort: nextEffort,
+                              ));
+                            }
+                          : null,
+                    ),
+                  ),
+                ],
+              );
+            }),
+            const Spacer(),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (isDefault)
+                  Flexible(
+                    child: Container(
+                      key: ValueKey('workflow-default-${definition.id}'),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: colors.primary.withValues(alpha: 0.12),
+                        border: Border.all(
+                          color: colors.primary.withValues(alpha: 0.35),
+                          width: 1,
+                        ),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check_circle_rounded,
+                              size: 13, color: colors.primary),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              'Default',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
+                                    color: colors.primary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                          ),
                         ],
-                        const SizedBox(height: 14),
-                        for (final row in summary)
-                          Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    SizedBox(
-                                        width: 76,
-                                        child: Text(row.$1,
-                                            style: TextStyle(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .onSurfaceVariant))),
-                                    Expanded(child: Text(row.$2)),
-                                  ])),
-                      ]),
-                ))));
+                      ),
+                    ),
+                  )
+                else if (!isEnabled)
+                  Flexible(
+                    child: Container(
+                      key: ValueKey('workflow-status-${definition.id}'),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        'Disabled',
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  )
+                else
+                  Flexible(
+                    child: TextButton(
+                      key: ValueKey('workflow-make-default-${definition.id}'),
+                      onPressed: widget.canEdit && !_changingWorkspace
+                          ? () async {
+                              try {
+                                await widget.configurations
+                                    .setDefault(definition.id);
+                              } catch (error) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showNotice(
+                                      SnackBar(
+                                          content: Text(error.toString())));
+                                }
+                              }
+                            }
+                          : null,
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        minimumSize: Size.zero,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 4),
+                      ),
+                      child: const Text(
+                        'Make default',
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                InkWell(
+                  key: ValueKey('open-workflow-${definition.id}'),
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: widget.canEdit && !_changingWorkspace
+                      ? () => _edit(definition, configuration)
+                      : null,
+                  child: TextButton.icon(
+                    key: ValueKey('workflow-advanced-${definition.id}'),
+                    onPressed: widget.canEdit && !_changingWorkspace
+                        ? () => _edit(definition, configuration)
+                        : null,
+                    icon: const Icon(Icons.tune, size: 14),
+                    label: const Text('Advanced'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      minimumSize: Size.zero,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 4),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ]),
+        ));
+  }
+
+  Widget _workerIconWidget(AxWorker worker) {
+    final presentation = WorkerPresentation.resolve(
+      worker.workerTypeId,
+      worker.displayName,
+    );
+    final workerIcon = presentation.iconAsset;
+    if (workerIcon != null) {
+      return Image.asset(
+        workerIcon,
+        width: 18,
+        height: 18,
+        fit: BoxFit.contain,
+        semanticLabel: '${worker.displayName} icon',
+      );
+    }
+    return Icon(
+      worker.isReady ? Icons.smart_toy_outlined : Icons.warning_amber,
+      size: 18,
+      color: worker.isReady ? null : Colors.amber,
+    );
   }
 
   /// Makes this Workspace the one new Work runs on. Workflow settings are kept
@@ -446,24 +921,3 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
 
 String _label(String? value) =>
     value == null ? 'Auto' : '${value[0].toUpperCase()}${value.substring(1)}';
-String _workerName(String? id, List<AxWorker> workers) {
-  if (id == null) return 'Select Worker...';
-  for (final worker in workers) {
-    if (worker.id == id) {
-      return '${worker.displayName}${worker.isReady ? '' : ' · Unavailable'}';
-    }
-  }
-  return '$id · Unavailable';
-}
-
-String _modelName(String? id, String? workerId, List<AxWorker> workers) {
-  if (id == null) return 'Auto';
-  for (final worker
-      in workers.where((worker) => workerId == null || worker.id == workerId)) {
-    for (final model
-        in worker.executionOptions?.models ?? const <AxWorkerModelOption>[]) {
-      if (model.id == id) return model.name;
-    }
-  }
-  return id;
-}
