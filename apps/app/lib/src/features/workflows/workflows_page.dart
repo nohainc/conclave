@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:conclave_design/conclave_design.dart';
 import 'dart:math' as math;
 import '../common/quiet_notices.dart';
 import 'package:flutter/material.dart';
@@ -19,8 +20,10 @@ class WorkflowsPage extends StatefulWidget {
       required this.configurations,
       this.viewerEmail,
       required this.workspaceId,
-      this.canEdit = true});
+      this.canEdit = true,
+      this.showWorkspaceAction = true});
   final bool canEdit;
+  final bool showWorkspaceAction;
 
   /// The Workspace whose workflows this section edits, shown in its tab.
   /// [configurations] must be scoped to the same Workspace
@@ -136,12 +139,6 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                           _activeRow(context, workspaceState.data!)!,
                           const SizedBox(height: 12),
                         ],
-                        if (workflows.isNotEmpty &&
-                            preferences.data != null) ...[
-                          _defaultPicker(context, defaultState, workflows,
-                              preferences.data!),
-                          const SizedBox(height: 12),
-                        ],
                       ] else if (workspaceState.error != null)
                         TextButton.icon(
                           onPressed: _refresh,
@@ -209,7 +206,9 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                                 children: [
                                   for (int i = 0; i < cards.length; i++) ...[
                                     if (i > 0) const SizedBox(height: gap),
-                                    cards[i],
+                                    // Cards use a Spacer, so they need a
+                                    // bounded height in this unbounded Column.
+                                    IntrinsicHeight(child: cards[i]),
                                   ],
                                 ],
                               );
@@ -256,44 +255,6 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
           ),
         ),
       );
-  Widget _defaultPicker(
-      BuildContext context,
-      AxQueryState<String> state,
-      Map<String, AxBuiltinWorkflow> workflows,
-      List<AxUserWorkflowConfiguration> configurations) {
-    final enabled = workflows.values
-        .where((definition) =>
-            _configuration(configurations, definition.id).enabled ||
-            definition.id == 'chat')
-        .toList();
-    final selected = enabled.any((definition) => definition.id == state.data)
-        ? state.data
-        : (enabled.any((definition) => definition.id == 'chat')
-            ? 'chat'
-            : enabled.firstOrNull?.id);
-    return DropdownButtonFormField<String>(
-        key: const ValueKey('workflow-default'),
-        initialValue: selected ?? '',
-        decoration: const InputDecoration(labelText: 'Default workflow'),
-        items: [
-          for (final definition in enabled)
-            DropdownMenuItem(
-                value: definition.id, child: Text(definition.name)),
-        ],
-        onChanged: widget.canEdit && !state.isFetching
-            ? (id) async {
-                if (id == null || id.isEmpty || id == selected) return;
-                try {
-                  await widget.configurations.setDefault(id);
-                } catch (error) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context)
-                        .showNotice(SnackBar(content: Text(error.toString())));
-                  }
-                }
-              }
-            : null);
-  }
 
   /// Embedded tab header: whether new Work runs on this Workspace, or a way to
   /// make it so.
@@ -302,7 +263,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
   Widget? _activeRow(
       BuildContext context, AxWorkflowWorkspaceSettings settings) {
     final active = settings.workspaceId == widget.workspaceId;
-    if (active) return null;
+    if (active || !widget.showWorkspaceAction) return null;
     return Align(
       alignment: Alignment.centerLeft,
       child: OutlinedButton(
@@ -347,6 +308,17 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
         : (selectedWorker?.executionOptions?.effort.supported == true
             ? selectedWorker!.executionOptions!.effort.values
             : const <String>[]);
+
+    final descriptionStyle = TextStyle(color: colors.onSurfaceVariant);
+    final descriptionMetrics = TextPainter(
+      text: TextSpan(
+          text: ' ',
+          style: DefaultTextStyle.of(context).style.merge(descriptionStyle)),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    );
+    final descriptionHeight = descriptionMetrics.preferredLineHeight * 2;
+    descriptionMetrics.dispose();
 
     final isChat = definition.id == 'chat';
     final isEnabled = isChat || configuration.enabled;
@@ -394,6 +366,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                 Expanded(
                   child: Text(
                     definition.name,
+                    maxLines: 1,
                     style: Theme.of(context)
                         .textTheme
                         .titleSmall
@@ -430,25 +403,13 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
               ],
             ),
             const SizedBox(height: 4),
+            // Reserve both description lines so Worker selectors align across cards.
             SizedBox(
-              height: 64,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(definition.description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant)),
-                  if (definition.steps.length > 1) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                        '${definition.steps.length} steps${configuration.stepOverrides.isEmpty ? '' : ' · ${configuration.stepOverrides.length} step overrides'}',
-                        style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                ],
-              ),
+              height: descriptionHeight,
+              child: Text(definition.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: descriptionStyle),
             ),
             const SizedBox(height: 12),
             // Worker selection with icons
@@ -571,49 +532,55 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                   ),
               ],
             ),
-            const SizedBox(height: 8),
-            // Model selection combobox
-            DropdownButtonFormField<String>(
-              key: ValueKey(
-                  'workflow-model-${definition.id}-${selection.worker}-${selection.model}'),
-              initialValue:
-                  (selection.model != null && selection.model!.isNotEmpty)
-                      ? selection.model
-                      : '',
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Model',
-                isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              ),
-              items: [
-                DropdownMenuItem<String>(
-                  value: '',
-                  child: Text(allowsAutoModel ? 'Auto' : 'Select model...'),
-                ),
-                if (selection.model != null &&
-                    selection.model!.isNotEmpty &&
-                    !models.any((m) => m.id == selection.model))
-                  DropdownMenuItem<String>(
-                    value: selection.model,
-                    child:
-                        Text(selection.model!, overflow: TextOverflow.ellipsis),
-                  ),
-                for (final model in {
-                  for (final m in models) m.id: m,
-                }.values)
-                  DropdownMenuItem<String>(
-                    value: model.id,
-                    child: Text(model.name, overflow: TextOverflow.ellipsis),
-                  ),
-              ],
-              onChanged: widget.canEdit &&
+            const SizedBox(height: 20),
+            // Compact selector shared visually with the Work composer.
+            PopupMenuButton<String>(
+              key: ValueKey('workflow-model-${definition.id}'),
+              enabled: widget.canEdit &&
+                  !_changingWorkspace &&
+                  selectedWorker != null,
+              tooltip: 'Choose model',
+              color: ConclaveColors.composerBackground(
+                  Theme.of(context).brightness == Brightness.dark),
+              surfaceTintColor: Colors.transparent,
+              elevation: 12,
+              shadowColor: ConclaveMenuStyle.shadow(
+                  Theme.of(context).brightness == Brightness.dark),
+              shape: ConclaveMenuStyle.shape(
+                  Theme.of(context).brightness == Brightness.dark),
+              menuPadding: ConclaveMenuStyle.padding,
+              itemBuilder: (context) {
+                final choices = <String, String>{
+                  '': allowsAutoModel ? 'Auto' : 'Select model...',
+                  if (selection.model?.isNotEmpty == true)
+                    selection.model!: selection.model!,
+                  for (final model in models) model.id: model.name,
+                };
+                return [
+                  for (final choice in choices.entries)
+                    ConclaveMenuEntry<String>(
+                      value: choice.key,
+                      child: MenuItemButton(
+                        style: ConclaveMenuStyle.item(
+                            Theme.of(context).brightness == Brightness.dark),
+                        leadingIcon: Icon(
+                          choice.key == (selection.model ?? '')
+                              ? Icons.check_circle_rounded
+                              : Icons.circle_outlined,
+                          size: 15,
+                        ),
+                        onPressed: () => Navigator.pop(context, choice.key),
+                        child: Text(choice.value,
+                            style: ConclaveMenuStyle.textStyle),
+                      ),
+                    ),
+                ];
+              },
+              onSelected: widget.canEdit &&
                       !_changingWorkspace &&
                       selectedWorker != null
                   ? (modelId) {
-                      final newModelId =
-                          modelId == null || modelId.isEmpty ? null : modelId;
+                      final newModelId = modelId.isEmpty ? null : modelId;
                       final newModel =
                           models.where((m) => m.id == newModelId).firstOrNull;
                       final newEfforts = newModel?.effort.supported == true
@@ -637,8 +604,31 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                       ));
                     }
                   : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                child: Row(
+                  children: [
+                    Flexible(
+                        child: Text(
+                      models
+                              .where((model) => model.id == selection.model)
+                              .firstOrNull
+                              ?.name ??
+                          selection.model ??
+                          (allowsAutoModel ? 'Auto' : 'Select model...'),
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    )),
+                    const SizedBox(width: 2),
+                    const Icon(Icons.keyboard_arrow_down, size: 14),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 20),
             // Effort line
             Builder(builder: (context) {
               final levels = <String?>[
@@ -823,28 +813,30 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                     ),
                   ),
                 const SizedBox(width: 8),
-                InkWell(
-                  key: ValueKey('open-workflow-${definition.id}'),
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: widget.canEdit && !_changingWorkspace
-                      ? () => _edit(definition, configuration)
-                      : null,
-                  child: TextButton.icon(
-                    key: ValueKey('workflow-advanced-${definition.id}'),
-                    onPressed: widget.canEdit && !_changingWorkspace
+                if (definition.steps.length > 1)
+                  InkWell(
+                    key: ValueKey('open-workflow-${definition.id}'),
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: widget.canEdit && !_changingWorkspace
                         ? () => _edit(definition, configuration)
                         : null,
-                    icon: const Icon(Icons.tune, size: 14),
-                    label: const Text('Advanced'),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      minimumSize: Size.zero,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 4),
+                    child: TextButton.icon(
+                      key: ValueKey('workflow-advanced-${definition.id}'),
+                      onPressed: widget.canEdit && !_changingWorkspace
+                          ? () => _edit(definition, configuration)
+                          : null,
+                      icon: const Icon(Icons.tune, size: 14),
+                      label: Text(
+                          '${definition.steps.length} ${definition.steps.length == 1 ? 'step' : 'steps'}'),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        minimumSize: Size.zero,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 4),
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ]),
@@ -910,6 +902,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
     await showDialog<void>(
         context: context,
         builder: (context) => WorkflowEditor(
+              stepsOnly: true,
               definition: definition,
               configuration: configuration,
               catalogs: widget.catalogs,
