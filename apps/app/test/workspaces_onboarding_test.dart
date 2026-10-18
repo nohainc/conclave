@@ -21,7 +21,6 @@ void main() {
       ),
     ));
 
-    expect(find.text('Workspaces'), findsOneWidget);
     expect(find.text('Connect Workspace'), findsNothing);
     expect(find.text('Pair Workspace'), findsNothing);
     expect(find.text('No Workspaces connected'), findsOneWidget);
@@ -61,7 +60,7 @@ void main() {
       ),
     ));
 
-    expect(find.text('Vitalii’s MacBook Pro'), findsOneWidget);
+    expect(find.text('Vitalii’s MacBook Pro'), findsWidgets);
     expect(find.textContaining('macOS'), findsOneWidget);
     expect(find.text('Pair Workspace'), findsNothing);
   });
@@ -90,7 +89,7 @@ void main() {
       ),
     ));
 
-    expect(find.text('Paired Mac'), findsOneWidget);
+    expect(find.text('Paired Mac'), findsWidgets);
     expect(find.text('Connect Machine'), findsNothing);
   });
 
@@ -148,8 +147,9 @@ void main() {
     ));
 
     expect(find.text('agy 1.2.3'), findsOneWidget);
-    expect(find.text('Profile v4'), findsOneWidget);
-    expect(find.text('Models: Gemini Pro'), findsOneWidget);
+    expect(find.text('Profile v4'), findsNothing);
+    expect(find.text('Gemini Pro'), findsOneWidget);
+    expect(find.textContaining('Models:'), findsNothing);
     expect(find.byIcon(Icons.expand_more), findsNothing);
   });
 }

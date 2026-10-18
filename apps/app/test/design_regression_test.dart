@@ -394,7 +394,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
       await tester.pumpAndSettle();
 
       // Thread tabs and panes render
-      expect(find.text('Chat'), findsAtLeastNWidgets(1));
+      expect(find.text('Discussion'), findsAtLeastNWidgets(1));
       expect(find.text('Work'), findsAtLeastNWidgets(1));
     });
 
@@ -440,7 +440,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('MacBook Pro M3'), findsOneWidget);
+      expect(find.text('MacBook Pro M3'), findsWidgets);
       expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
       expect(find.byKey(const Key('workspace-worker-row-worker-codex')),
           findsOneWidget);

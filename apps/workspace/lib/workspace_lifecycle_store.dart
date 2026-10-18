@@ -112,6 +112,7 @@ class WorkspaceLifecyclePreferencesStore {
           'desiredCloudState': preferences.desiredCloudState.name,
           'desiredRuntimeState': preferences.desiredCloudState.name,
           'launchAtLogin': preferences.launchAtLogin,
+          'preventSleep': preferences.preventSleep,
           'managementLockPreference': preferences.managementLockPreference.name,
           if (preferences.autoLockTimeout != null)
             'autoLockTimeoutSeconds': preferences.autoLockTimeout!.inSeconds,
@@ -147,6 +148,7 @@ class WorkspaceLifecyclePreferencesStore {
     return WorkspaceLifecyclePreferences(
       desiredRuntime: desiredRuntime,
       launchAtLogin: decoded['launchAtLogin'] == true,
+      preventSleep: decoded['preventSleep'] != false,
       managementLockPreference: lock,
       autoLockTimeout: timeoutSeconds is int && timeoutSeconds > 0
           ? Duration(seconds: timeoutSeconds)

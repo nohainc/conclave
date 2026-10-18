@@ -70,8 +70,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Online'), findsOneWidget);
       expect(find.text('Machine'), findsNothing);
-      expect(find.text('macOS · Apple Silicon · Vitalii-MacBook-Pro'),
-          findsOneWidget);
+      expect(find.text('MacBook Pro'), findsWidgets);
+      expect(find.text('macOS'), findsOneWidget);
+      expect(find.textContaining('Apple Silicon'), findsNothing);
       expect(find.text('Hostname'), findsNothing);
       expect(find.text('App version'), findsNothing);
       expect(find.text('1.0.3'), findsNothing);
@@ -128,11 +129,11 @@ void main() {
     testWidgets('Platform reporting maps runtime OS and architectures cleanly',
         (tester) async {
       final platforms = [
-        ('macos', 'arm64', 'macOS · Apple Silicon'),
-        ('macos', 'x64', 'macOS · x64'),
-        ('linux', 'x64', 'Linux · x64'),
-        ('windows', 'x64', 'Windows · x64'),
-        ('—', '—', '—'),
+        ('macos', 'arm64', 'macOS'),
+        ('macos', 'x64', 'macOS'),
+        ('linux', 'x64', 'Linux'),
+        ('windows', 'x64', 'Windows'),
+        ('—', '—', 'Target Machine'),
       ];
 
       for (final (os, arch, expectedLabel) in platforms) {
@@ -157,8 +158,7 @@ void main() {
         )));
         await tester.pumpAndSettle();
         expect(
-          find.textContaining(
-              expectedLabel == '—' ? 'workspace-node-1' : expectedLabel),
+          find.text(expectedLabel),
           findsWidgets,
         );
       }

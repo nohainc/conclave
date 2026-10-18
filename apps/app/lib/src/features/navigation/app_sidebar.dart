@@ -841,7 +841,9 @@ class AppIconRail extends StatelessWidget {
                                 color: shellContext.isNavActive(
                                         AxNavigation.space(space.id))
                                     ? ConclaveColors.primaryForegroundDark
-                                    : (isDark ? Colors.white : Colors.black87),
+                                    : (isDark
+                                        ? Colors.white70
+                                        : Colors.black87),
                               ),
                             ),
                           ),

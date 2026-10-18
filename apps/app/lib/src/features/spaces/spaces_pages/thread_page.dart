@@ -1381,7 +1381,6 @@ class _ThreadPageState extends State<ThreadPage>
               key: ValueKey('thread-$name-pane'),
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (widget.isDraft) const Spacer(),
                 tabHeader([name]),
                 if (widget.isDraft) content else Expanded(child: content),
               ],
@@ -1391,18 +1390,24 @@ class _ThreadPageState extends State<ThreadPage>
           content = Center(
               child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1681),
-            child:
-                Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Expanded(child: pane('Chat', _discuss(context, twoPane: true))),
-              VerticalDivider(
-                width: 1,
-                thickness: 1,
-                indent: 20,
-                endIndent: 20,
-                color: Theme.of(context).dividerColor,
-              ),
-              Expanded(child: pane('Work', _work(context))),
-            ]),
+            child: Row(
+                crossAxisAlignment: widget.isDraft
+                    ? CrossAxisAlignment.start
+                    : CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                      child:
+                          pane('Discussion', _discuss(context, twoPane: true))),
+                  if (!widget.isDraft)
+                    VerticalDivider(
+                      width: 1,
+                      thickness: 1,
+                      indent: 20,
+                      endIndent: 20,
+                      color: Theme.of(context).dividerColor,
+                    ),
+                  Expanded(child: pane('Work', _work(context))),
+                ]),
           ));
         } else {
           content = Center(
@@ -1414,8 +1419,8 @@ class _ThreadPageState extends State<ThreadPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (widget.isDraft) const Spacer(),
-                    tabHeader(['Chat', 'Work'], controller: _tabController),
+                    tabHeader(['Discussion', 'Work'],
+                        controller: _tabController),
                     if (widget.isDraft)
                       _tabController.index == 0
                           ? _discuss(context)
@@ -1745,7 +1750,6 @@ class _ThreadPageState extends State<ThreadPage>
         onRemoveAttachment: (index) => _updateState(() {
           _workAttachments.removeAt(index);
         }),
-        onRefresh: _retryWorkSync,
         hasOlder: _workPresentation.olderCursor != null,
         loadingOlder: _workPresentation.loadingOlder,
         onLoadOlder: _loadOlderWorkHistory,

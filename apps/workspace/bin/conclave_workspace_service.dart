@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
+import 'package:conclave_workspace/sleep_inhibitor.dart';
 import 'package:conclave_workspace/workspace.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/workspace_lifecycle.dart';
@@ -24,6 +25,8 @@ Future<void> main(List<String> args) async {
   final desiredCloudState = preferenceStore.readSync().desiredCloudState;
   final runtime = await buildWorkspaceRuntime(config, restartArgs: args);
   final once = args.contains('--once');
+  final sleepInhibitor = SleepInhibitor(preferenceStore);
+  if (!once) await sleepInhibitor.begin();
   try {
     await runtime.start(
       connectCloud: false,
@@ -69,6 +72,7 @@ Future<void> main(List<String> args) async {
       }
     }
   } finally {
+    await sleepInhibitor.close();
     await manager.close();
     await manager.workspace.stop();
   }

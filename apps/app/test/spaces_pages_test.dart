@@ -633,7 +633,7 @@ void main() {
         expect(find.byKey(const ValueKey('work-history-scroll')), findsNothing);
         expect(find.byType(VerticalDivider), findsNothing);
       } else {
-        for (final name in ['Chat', 'Work']) {
+        for (final name in ['Discussion', 'Work']) {
           expect(
               tester
                   .widget<Padding>(find.byKey(ValueKey('thread-$name-padding')))
@@ -656,7 +656,7 @@ void main() {
         expect(find.byTooltip('Show Markdown controls'), findsNothing);
         expect(find.byTooltip('Hide Markdown controls'), findsNothing);
         expect(find.byTooltip('Bold'), findsOneWidget);
-        final chatPane = find.byKey(const ValueKey('thread-Chat-pane'));
+        final chatPane = find.byKey(const ValueKey('thread-Discussion-pane'));
         final workPane = find.byKey(const ValueKey('thread-Work-pane'));
         expect(find.descendant(of: workPane, matching: find.byTooltip('Bold')),
             findsNothing);
@@ -1421,7 +1421,7 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Discussion'), findsOneWidget);
     expect(find.text('Work'), findsOneWidget);
     expect(find.text('Archive'), findsNothing);
     expect(find.text('What should Conclave do?'), findsNothing);

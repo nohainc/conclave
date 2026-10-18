@@ -586,28 +586,24 @@ class SpaceTree extends StatelessWidget {
                   )));
         },
         menuChildren: [
-          // Pinned Threads always list both moves; an edge disables its move.
-          if (canReorder)
+          // Only offer moves that can change the pinned order.
+          if (canReorder && position > 0)
             MenuItemButton(
               style: itemStyle(),
               leadingIcon: Icon(Icons.arrow_upward_rounded,
                   size: 16, color: menuIconColor),
-              onPressed: position > 0
-                  ? () => _moveThread(space, group, position, -1)
-                  : null,
+              onPressed: () => _moveThread(space, group, position, -1),
               child: const Text(
                 'Move Up',
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
               ),
             ),
-          if (canReorder)
+          if (canReorder && position >= 0 && position < group.length - 1)
             MenuItemButton(
               style: itemStyle(),
               leadingIcon: Icon(Icons.arrow_downward_rounded,
                   size: 16, color: menuIconColor),
-              onPressed: position >= 0 && position < group.length - 1
-                  ? () => _moveThread(space, group, position, 1)
-                  : null,
+              onPressed: () => _moveThread(space, group, position, 1),
               child: const Text(
                 'Move Down',
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
@@ -775,9 +771,6 @@ class SpaceTree extends StatelessWidget {
         case 'delete':
           unawaited(onDeleteSpace?.call(space));
           break;
-        case 'members':
-          onNavigateTo(AxNavigation.spaceMembers(space.id));
-          break;
       }
     }
 
@@ -807,25 +800,22 @@ class SpaceTree extends StatelessWidget {
                   },
                 ))),
         menuChildren: [
-          if (canReorderPins)
+          if (canReorderPins && pinnedPosition > 0)
             MenuItemButton(
               style: itemStyle(),
               leadingIcon:
                   Icon(Icons.arrow_upward_rounded, size: 16, color: iconColor),
-              onPressed: pinnedPosition > 0
-                  ? () => _moveSpace(pinnedOrder, pinnedPosition, -1)
-                  : null,
+              onPressed: () => _moveSpace(pinnedOrder, pinnedPosition, -1),
               child: const Text('Move Up'),
             ),
-          if (canReorderPins)
+          if (canReorderPins &&
+              pinnedPosition >= 0 &&
+              pinnedPosition < pinnedOrder.length - 1)
             MenuItemButton(
               style: itemStyle(),
               leadingIcon: Icon(Icons.arrow_downward_rounded,
                   size: 16, color: iconColor),
-              onPressed:
-                  pinnedPosition >= 0 && pinnedPosition < pinnedOrder.length - 1
-                      ? () => _moveSpace(pinnedOrder, pinnedPosition, 1)
-                      : null,
+              onPressed: () => _moveSpace(pinnedOrder, pinnedPosition, 1),
               child: const Text('Move Down'),
             ),
           if (onSetSpacePinned != null)
@@ -850,13 +840,6 @@ class SpaceTree extends StatelessWidget {
                 Icon(Icons.archive_outlined, size: 16, color: iconColor),
             onPressed: () => select('archive'),
             child: const Text('Archive Space'),
-          ),
-          divider(),
-          MenuItemButton(
-            style: itemStyle(),
-            leadingIcon: Icon(Icons.people_outline, size: 16, color: iconColor),
-            onPressed: () => select('members'),
-            child: const Text('Members'),
           ),
           divider(),
           MenuItemButton(

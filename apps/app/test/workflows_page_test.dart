@@ -9,6 +9,7 @@ import 'package:conclave_app/src/ax/sync/ax_session_catalogs.dart';
 import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
 import 'package:conclave_app/src/ax/sync/ax_workflow_configurations.dart';
 import 'package:conclave_app/src/brand.dart';
+import 'package:conclave_app/src/features/workflows/workflow_editor.dart';
 import 'package:conclave_app/src/features/workflows/workflows_page.dart';
 import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
 import 'package:conclave_app/src/navigation/ax_browser_navigation.dart';
@@ -18,12 +19,14 @@ import 'workflow_editor_test.dart' show worker, choices;
 import 'ax_fixture_realtime.dart';
 
 AxBuiltinWorkflow workflow(String id, String name,
-        {int version = 1, List<String> steps = const ['chat']}) =>
+        {int version = 1,
+        String? description,
+        List<String> steps = const ['chat']}) =>
     AxBuiltinWorkflow(
       id: id,
       version: version,
       name: name,
-      description: 'Description for $name',
+      description: description ?? 'Description for $name',
       steps: [
         for (var i = 0; i < steps.length; i++)
           AxBuiltinWorkflowStep(kind: steps[i], order: i)
@@ -36,6 +39,7 @@ class WorkflowSource extends AxFixtureDataSource
         AxWorkflowConfigurationDataSource,
         AxWorkflowDefaultDataSource,
         AxWorkflowWorkspaceDataSource {
+  List<AxBuiltinWorkflow>? definitions;
   String? selectedWorkspace = 'ws';
   int workspaceReads = 0, workspaceWrites = 0;
   final selectedSpaceWorkspaces = <String, String?>{};
@@ -142,6 +146,7 @@ class WorkflowSource extends AxFixtureDataSource
 
   @override
   Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() async {
+    if (definitions != null) return definitions!;
     catalogReads++;
     return [
       workflow('chat', 'Chat'),
@@ -203,11 +208,12 @@ void main() {
     final engine = AxSyncEngine();
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-            body: WorkflowsPage(
-                workspaceId: 'ws',
-                catalogs: AxSessionCatalogs(source, engine: engine),
-                configurations:
-                    AxWorkflowConfigurations(source, engine: engine)))));
+            body: SingleChildScrollView(
+                child: WorkflowsPage(
+                    workspaceId: 'ws',
+                    catalogs: AxSessionCatalogs(source, engine: engine),
+                    configurations:
+                        AxWorkflowConfigurations(source, engine: engine))))));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('workflow-chat')), findsOneWidget);
@@ -215,6 +221,72 @@ void main() {
     expect(
         find.byKey(const ValueKey('workflow-implement_verify')), findsNothing);
     expect(find.text('Implement & Verify'), findsNothing);
+  });
+
+  testWidgets('Worker selectors align below short and wrapped descriptions',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1800, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source = WorkflowSource()
+      ..workers = [worker('a')]
+      ..definitions = [
+        workflow('chat', 'Chat', description: 'Short'),
+        workflow('direct', 'Work',
+            steps: ['implement'],
+            description:
+                'A longer description that wraps onto a second line in this card, keeping the Worker selection aligned with the adjacent card.'),
+      ];
+    final engine = AxSyncEngine();
+    for (final scale in [1.0, 1.5]) {
+      await tester.pumpWidget(MaterialApp(
+          home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+              child: Scaffold(
+                  body: SingleChildScrollView(
+                      child: WorkflowsPage(
+                          workspaceId: 'ws',
+                          catalogs: AxSessionCatalogs(source, engine: engine),
+                          configurations:
+                              AxWorkflowConfigurations(source, engine: engine)
+                                  .forWorkspace('ws')))))));
+      await tester.pumpAndSettle();
+      final chat = tester
+          .getTopLeft(find.byKey(const ValueKey('workflow-worker-chat-a')));
+      final work = tester
+          .getTopLeft(find.byKey(const ValueKey('workflow-worker-direct-a')));
+      expect(chat.dy, closeTo(work.dy, 0.1));
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('disabled workflow remains configurable without enabling it',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source = WorkflowSource()
+      ..workers = [worker('a')]
+      ..scopedValues['ws'] = [
+        AxUserWorkflowConfiguration(workflowId: 'direct', enabled: false)
+      ];
+    final engine = AxSyncEngine();
+    final configurations =
+        AxWorkflowConfigurations(source, engine: engine).forWorkspace('ws');
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: WorkflowsPage(
+                    workspaceId: 'ws',
+                    catalogs: AxSessionCatalogs(source, engine: engine),
+                    configurations: configurations)))));
+    await tester.pumpAndSettle();
+    final choice = find.byKey(const ValueKey('workflow-worker-direct-a'));
+    await tester.ensureVisible(choice);
+    await tester.tap(choice);
+    await tester.pumpAndSettle();
+    final saved = source.scopedValues['ws']!
+        .singleWhere((value) => value.workflowId == 'direct');
+    expect(saved.defaults.worker, 'a');
+    expect(saved.enabled, isFalse);
   });
 
   testWidgets(
@@ -238,23 +310,34 @@ void main() {
             body: SingleChildScrollView(
                 child: WorkflowsPage(
                     key: ValueKey(workspaceId),
+                    viewerEmail: 'vitalii@nohainc.com',
                     workspaceId: workspaceId,
                     catalogs: AxSessionCatalogs(source, engine: engine),
                     configurations: root.forWorkspace(workspaceId)))));
     await tester.pumpWidget(page('ws'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('open-workflow-chat')));
+    await tester
+        .tap(find.byKey(const ValueKey('open-workflow-implement_verify')));
     await tester.pumpAndSettle();
     // Only this Workspace's Workers can be chosen.
-    expect(choices(tester, 'defaults', 'Worker'), ['', 'a']);
+    await tester.tap(find.byKey(const ValueKey('workflow-step-implement')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('override-implement')));
+    await tester.pumpAndSettle();
+    expect(choices(tester, 'implement', 'Worker'), ['', 'a']);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
     await tester.pumpWidget(page('other'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('open-workflow-chat')));
+    await tester
+        .tap(find.byKey(const ValueKey('open-workflow-implement_verify')));
     await tester.pumpAndSettle();
-    expect(choices(tester, 'defaults', 'Worker'), ['', 'b']);
+    await tester.tap(find.byKey(const ValueKey('workflow-step-implement')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('override-implement')));
+    await tester.pumpAndSettle();
+    expect(choices(tester, 'implement', 'Worker'), ['', 'b']);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
@@ -326,32 +409,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Custom Worker · Unavailable'), findsOneWidget);
     expect(find.text('Custom Model'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('open-workflow-chat')));
-    await tester.pumpAndSettle();
-    final picker = find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(DropdownButtonFormField<String>));
-    final model = tester.widget<DropdownButtonFormField<String>>(picker.at(1));
-    final effort = tester.widget<DropdownButtonFormField<String>>(picker.at(2));
-    // Inspect the dropdown items through its rendered DropdownButton.
-    final dropdowns = find.descendant(
-        of: picker, matching: find.byType(DropdownButton<String>));
-    expect(
-        tester
-            .widget<DropdownButton<String>>(dropdowns.at(1))
-            .items!
-            .map((item) => item.value),
-        ['', 'custom-model']);
-    expect(
-        tester
-            .widget<DropdownButton<String>>(dropdowns.at(2))
-            .items!
-            .map((item) => item.value),
-        ['', 'thorough']);
-    expect(model.initialValue, 'custom-model');
-    expect(effort.initialValue, 'thorough');
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('open-workflow-chat')), findsNothing);
     expect(source.values.single.defaults.effort, 'thorough');
   });
   testWidgets(
@@ -376,17 +434,18 @@ void main() {
     // No Workspace is active, yet this Workspace's workflows can be edited.
     expect(find.byKey(const ValueKey('use-workspace-for-workflows')),
         findsOneWidget);
-    expect(
-        find.byKey(const ValueKey('workflow-status-direct')), findsOneWidget);
+    expect(find.byKey(const ValueKey('workflow-make-default-direct')),
+        findsOneWidget);
     expect(
         tester
-            .widget<InkWell>(find.byKey(const ValueKey('open-workflow-chat')))
+            .widget<InkWell>(
+                find.byKey(const ValueKey('open-workflow-implement_verify')))
             .onTap,
         isNotNull);
     final chat = tester.getRect(find.byKey(const ValueKey('workflow-chat')));
     final work = tester.getRect(find.byKey(const ValueKey('workflow-direct')));
     expect(chat.width, closeTo(work.width, 1));
-    expect(chat.width, greaterThan(400));
+    expect(chat.width, greaterThan(240));
   });
   testWidgets('default workflow is selectable only from enabled workflows',
       (tester) async {
@@ -406,14 +465,9 @@ void main() {
                     viewerEmail: 'vitalii@nohainc.com')))));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('workflow-default-chat')), findsOneWidget);
-    final defaultDropdown = tester.widget<DropdownButton<String>>(
-        find.descendant(
-            of: find.byKey(const ValueKey('workflow-default')),
-            matching: find.byType(DropdownButton<String>)));
-    expect(defaultDropdown.items!.map((item) => item.value),
-        containsAll(<String?>['chat', 'implement_verify']));
-    expect(defaultDropdown.items!.map((item) => item.value),
-        isNot(contains('direct')));
+    expect(find.byKey(const ValueKey('workflow-default')), findsNothing);
+    expect(find.byKey(const ValueKey('workflow-make-default-direct')),
+        findsNothing);
     expect(source.defaultWorkflow, 'chat');
   });
   test('foreground recovery refreshes only active stale preferences', () async {
@@ -531,16 +585,23 @@ void main() {
     expect(find.text('offline · Unavailable'), findsOneWidget);
     expect(find.text('High'), findsOneWidget);
     expect(find.text('2 steps'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('open-workflow-chat')));
+    await tester
+        .tap(find.byKey(const ValueKey('open-workflow-implement_verify')));
     await tester.pumpAndSettle();
-    expect(find.byType(Switch), findsOneWidget);
-    expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
+    expect(
+        find.descendant(
+            of: find.byType(WorkflowEditor), matching: find.byType(Switch)),
+        findsNothing);
+    expect(find.text('Default execution'), findsNothing);
+    expect(find.text('Workflow steps'), findsOneWidget);
+    expect(find.text('Advanced'), findsNothing);
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(source.reads, 1);
-    await tester.tap(find.byKey(const ValueKey('open-workflow-chat')));
+    await tester
+        .tap(find.byKey(const ValueKey('open-workflow-implement_verify')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('reset-workflow')));
+    await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('Disabled'), findsNothing);
     await tester.pumpWidget(const SizedBox());
@@ -566,7 +627,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Workflow configuration is unavailable.'), findsOneWidget);
     source.fail = false;
-    await tester.tap(find.byTooltip('Refresh workflows'));
+    await tester.tap(find.widgetWithText(TextButton, 'Retry'));
     await tester.pumpAndSettle();
     expect(find.text('Chat'), findsAtLeastNWidgets(1));
     expect(source.reads, 2);
@@ -616,10 +677,11 @@ void main() {
     expect(find.byKey(const ValueKey('workflow-workspace')), findsNothing);
     expect(find.byKey(const ValueKey('use-workspace-for-workflows')),
         findsNothing);
-    expect(find.byKey(const ValueKey('workspace-workflows-active')),
-        findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('workspace-workflows-active')), findsNothing);
+    expect(find.text('Active'), findsNothing);
     expect(find.byKey(const ValueKey('workflow-chat')), findsOneWidget);
-    expect(find.byKey(const ValueKey('workflow-default')), findsOneWidget);
+    expect(find.byKey(const ValueKey('workflow-default')), findsNothing);
   });
 
   testWidgets(
@@ -633,7 +695,8 @@ void main() {
         find.byKey(const ValueKey('workspace-workflows-active')), findsNothing);
     expect(
         tester
-            .widget<InkWell>(find.byKey(const ValueKey('open-workflow-chat')))
+            .widget<InkWell>(
+                find.byKey(const ValueKey('open-workflow-implement_verify')))
             .onTap,
         isNotNull);
     await tester.tap(find.byKey(const ValueKey('use-workspace-for-workflows')));
@@ -642,8 +705,8 @@ void main() {
     await tester.tap(find.text('Use Workspace'));
     await tester.pumpAndSettle();
     expect(source.selectedWorkspace, 'other');
-    expect(find.byKey(const ValueKey('workspace-workflows-active')),
-        findsOneWidget);
+    expect(find.byKey(const ValueKey('use-workspace-for-workflows')),
+        findsNothing);
   });
 
   testWidgets('Workspace tabs load workflow settings per Workspace',
@@ -667,5 +730,129 @@ void main() {
         AxUserWorkflowConfiguration(workflowId: 'direct', enabled: false));
     expect(source.scopedValues['other']!.single.workflowId, 'direct');
     expect(source.values, isEmpty);
+  });
+
+  testWidgets(
+      'duplicate model IDs in worker execution options do not cause dropdown assertion error',
+      (tester) async {
+    const workerWithDuplicateModels = AxWorker(
+      id: 'worker-dup',
+      workspaceId: 'ws',
+      workspaceName: 'Laptop',
+      workerTypeId: 'gemini',
+      displayName: 'Duplicate Worker',
+      status: 'ready',
+      readinessState: 'ready',
+      localConcurrencyLimit: 1,
+      executionOptions: AxWorkerExecutionOptions(
+        modelDiscovery: 'profile_catalog',
+        modelSelectionSupported: true,
+        allowsCustomModel: false,
+        allowedModelIds: ['claude-opus-5-5'],
+        models: [
+          AxWorkerModelOption(
+            id: 'claude-opus-5-5',
+            name: 'Claude Opus 5.5 (Low)',
+            effort: AxWorkerEffortOptions(supported: true, values: ['low']),
+          ),
+          AxWorkerModelOption(
+            id: 'claude-opus-5-5',
+            name: 'Claude Opus 5.5 (Medium)',
+            effort: AxWorkerEffortOptions(supported: true, values: ['medium']),
+          ),
+          AxWorkerModelOption(
+            id: 'claude-opus-5-5',
+            name: 'Claude Opus 5.5 (High)',
+            effort: AxWorkerEffortOptions(supported: true, values: ['high']),
+          ),
+        ],
+        modelSwitchSupported: false,
+        effort: AxWorkerEffortOptions(supported: false, values: []),
+      ),
+    );
+
+    final saved = AxUserWorkflowConfiguration(
+      workflowId: 'chat',
+      enabled: true,
+      defaults: const AxWorkflowSelection(
+        worker: 'worker-dup',
+        model: 'claude-opus-5-5',
+      ),
+    );
+
+    final source = WorkflowSource()
+      ..workers = [workerWithDuplicateModels]
+      ..scopedValues['ws'] = [saved];
+    final engine = AxSyncEngine();
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: WorkflowsPage(
+            workspaceId: 'ws',
+            catalogs: AxSessionCatalogs(source, engine: engine),
+            configurations: AxWorkflowConfigurations(source, engine: engine),
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('workflow-model-chat')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'workflow cards show Make default button opposite to Advanced button and omit Select a Worker badge',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source = WorkflowSource()..selectedWorkspace = 'ws';
+    final engine = AxSyncEngine();
+    final configurations =
+        AxWorkflowConfigurations(source, engine: engine).forWorkspace('ws');
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: WorkflowsPage(
+            workspaceId: 'ws',
+            catalogs: AxSessionCatalogs(source, engine: engine),
+            configurations: configurations,
+            viewerEmail: 'vitalii@nohainc.com',
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Verify "Select a Worker" badge is omitted
+    expect(find.text('Select a Worker'), findsNothing);
+
+    // Chat is initial default: shows Default badge, no Make default button
+    expect(find.byKey(const ValueKey('workflow-default-chat')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('workflow-make-default-chat')), findsNothing);
+    expect(find.byKey(const ValueKey('workflow-advanced-chat')), findsNothing);
+
+    // Direct is enabled and not default: shows Make default button and Advanced button
+    expect(find.byKey(const ValueKey('workflow-make-default-direct')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('workflow-default-direct')), findsNothing);
+    expect(
+        find.byKey(const ValueKey('workflow-advanced-direct')), findsNothing);
+
+    // Tapping Make default on Direct makes Direct the default workflow
+    await tester
+        .tap(find.byKey(const ValueKey('workflow-make-default-direct')));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const ValueKey('workflow-default-direct')), findsOneWidget);
+    expect(find.byKey(const ValueKey('workflow-make-default-direct')),
+        findsNothing);
+    expect(find.byKey(const ValueKey('workflow-default-chat')), findsNothing);
+    expect(find.byKey(const ValueKey('workflow-make-default-chat')),
+        findsOneWidget);
   });
 }

@@ -429,6 +429,19 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
   }
 
+  testWidgets('failed Work sync keeps cached history without a retry button',
+      (tester) async {
+    await size(tester);
+    await seed();
+    await tester.pumpWidget(page('w'));
+    source.pending.last.completeError(Exception('Sync unavailable'));
+    await tester.pumpAndSettle();
+
+    expect(cache.error('w'), isNotNull);
+    expect(find.text('Prompt 30'), findsOneWidget);
+    expect(find.text('Retry Work sync'), findsNothing);
+  });
+
   testWidgets(
       'W1 W2 W1: cached Work history renders on the first frame with network pending',
       (tester) async {

@@ -431,12 +431,8 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
             .toList(growable: false);
         if (messages.isNotEmpty) return messages;
       }
-      var detail = '';
-      if (decoded is Map && decoded['error'] is String) {
-        detail = ': ${decoded['error']}';
-      }
       throw AxApiException(
-        'Work eligibility check failed (${response.statusCode})$detail',
+        _eligibilityFailureMessage(response.statusCode, decoded),
         statusCode: response.statusCode,
       );
     }
@@ -490,11 +486,8 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
             .toList(growable: false);
         if (messages.isNotEmpty) return messages;
       }
-      final detail = decoded is Map && decoded['error'] is String
-          ? ': ${decoded['error']}'
-          : '';
       throw AxApiException(
-          'Work eligibility check failed (${response.statusCode})$detail',
+          _eligibilityFailureMessage(response.statusCode, decoded),
           statusCode: response.statusCode);
     }
     final issues = decoded is Map ? decoded['issues'] : null;
@@ -902,4 +895,17 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
         .map((item) => AxWorker.fromJson(Map<String, dynamic>.from(item)))
         .toList();
   }
+}
+
+/// A 422 eligibility error reads like `implement: Select a Worker ...`; users
+/// only need the final sentence. Other failures keep the status prefix.
+String _eligibilityFailureMessage(int statusCode, Object? decoded) {
+  final error = decoded is Map && decoded['error'] is String
+      ? (decoded['error'] as String).trim()
+      : '';
+  if (statusCode == 422 && error.isNotEmpty) {
+    return error.substring(error.lastIndexOf(': ') + 1).trim();
+  }
+  return 'Work eligibility check failed ($statusCode)'
+      '${error.isEmpty ? '' : ': $error'}';
 }

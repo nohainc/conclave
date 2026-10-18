@@ -72,7 +72,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Chat'), findsOneWidget);
+    expect(find.text('Discussion'), findsOneWidget);
     expect(find.text('Work'), findsOneWidget);
     expect(find.text('No chat messages yet'), findsOneWidget);
     await tester.tap(find.text('Work'));

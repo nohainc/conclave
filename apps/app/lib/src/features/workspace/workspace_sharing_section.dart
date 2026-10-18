@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
+import '../../ax/ax_people.dart';
 import '../../ax/ax_workspace_member_access.dart';
 import 'workspace_member_access_section.dart';
 import '../common/quiet_notices.dart';
@@ -22,7 +23,8 @@ String _duration(int seconds) {
   return '${seconds ~/ 3600}h ${(seconds % 3600) ~/ 60}m';
 }
 
-/// Owner control for lending a Workspace to people (ADR-020): invite by email,
+/// Owner control for lending a Workspace to people (ADR-020): pick someone from
+/// People (met by sharing a Space and chatting),
 /// see who has access with usage only (never their content), set how many
 /// requests they may run at once, and revoke.
 class WorkspaceSharingSection extends StatefulWidget {
@@ -33,9 +35,13 @@ class WorkspaceSharingSection extends StatefulWidget {
     this.memberAccessSource,
     this.personAccessSource,
     this.workers = const [],
+    this.people = const [],
   });
 
   final String workspaceId;
+
+  /// People the owner already knows; new people are added by sharing a Space.
+  final List<AxPerson> people;
   final AxWorkspaceSharingDataSource source;
 
   /// Enable "Edit access" for each person: which Workers, models, efforts and
@@ -50,7 +56,6 @@ class WorkspaceSharingSection extends StatefulWidget {
 }
 
 class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
-  final _email = TextEditingController();
   bool _loading = true;
   bool _busy = false;
   Object? _error;
@@ -67,12 +72,6 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
   void didUpdateWidget(WorkspaceSharingSection oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.workspaceId != widget.workspaceId) unawaited(_load());
-  }
-
-  @override
-  void dispose() {
-    _email.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -117,13 +116,49 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
     if (mounted) await _load();
   }
 
-  Future<void> _invite() async {
-    final email = _email.text.trim();
-    if (!email.contains('@')) return;
-    await _act(() async {
-      await widget.source.createWorkspaceInvitation(widget.workspaceId, email);
-      _email.clear();
-    });
+  /// People not yet sharing this Workspace, by email.
+  List<AxPerson> get _options {
+    final taken = {
+      for (final p in _people.where((p) => p.active)) p.email.toLowerCase(),
+      for (final i in _invitations.where((i) => i.status == 'pending'))
+        i.email.toLowerCase(),
+    };
+    return [
+      for (final p in widget.people)
+        if (!taken.contains(p.email.toLowerCase())) p
+    ];
+  }
+
+  Future<void> _addPeople() async {
+    final options = _options;
+    final person = await showDialog<AxPerson>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: const Text('Add people'),
+              content: SizedBox(
+                  width: 420,
+                  child: options.isEmpty
+                      ? const Text(
+                          key: ValueKey('sharing-no-people'),
+                          'No one to add yet. Share a Space with someone from the People page to start.')
+                      : ListView(shrinkWrap: true, children: [
+                          for (final p in options)
+                            ListTile(
+                                key: ValueKey('sharing-add-${p.userId}'),
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(p.displayName),
+                                subtitle: Text(p.email),
+                                onTap: () => Navigator.pop(context, p)),
+                        ])),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel')),
+              ],
+            ));
+    if (person == null) return;
+    await _act(() => widget.source
+        .createWorkspaceInvitation(widget.workspaceId, person.email));
   }
 
   Future<void> _editAccess(AxPersonWithAccess person) async {
@@ -174,28 +209,16 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Lend this Workspace',
-            style: theme.textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 6),
-        Text(
-            'Invite someone by email. They use this Workspace from their own Spaces; you see usage only, never their Threads or prompts.',
-            style: muted),
-        const SizedBox(height: 8),
         Row(children: [
           Expanded(
-              child: TextField(
-                  key: const ValueKey('sharing-invite-email'),
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                      labelText: 'Email', border: OutlineInputBorder()),
-                  onSubmitted: (_) => _busy ? null : _invite())),
-          const SizedBox(width: 8),
-          FilledButton(
+              child: Text('Share this Workspace with people',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700))),
+          IconButton(
               key: const ValueKey('sharing-invite'),
-              onPressed: _busy ? null : _invite,
-              child: const Text('Invite')),
+              tooltip: 'Add people',
+              onPressed: _busy || _loading ? null : _addPeople,
+              icon: const Icon(Icons.add)),
         ]),
         const SizedBox(height: 8),
         if (_loading)

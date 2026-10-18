@@ -1,3 +1,6 @@
+import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:conclave_app/src/ax/sync/ax_workflow_configurations.dart';
+import 'workflows_page_test.dart' show WorkflowSource;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
@@ -16,6 +19,58 @@ void main() {
   }
 
   group('Workspaces page', () {
+    testWidgets(
+        'Make default persists the selection inherited by Spaces and shows a badge',
+        (tester) async {
+      final source = WorkflowSource();
+      final engine = AxSyncEngine();
+      final configurations = AxWorkflowConfigurations(source, engine: engine);
+      final inherited =
+          AxWorkflowConfigurations(source, engine: engine, spaceId: 'S');
+      final explicit =
+          AxWorkflowConfigurations(source, engine: engine, spaceId: 'E');
+      source.selectedSpaceWorkspaces['E'] = 'ws';
+      await inherited.ensureWorkspace();
+      await explicit.ensureWorkspace();
+      await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
+        workspaces: [
+          AxWorkspace.fromJson(
+              {'id': 'ws', 'name': 'First Workspace', 'role': 'owner'}),
+          AxWorkspace.fromJson(
+              {'id': 'other', 'name': 'Second Workspace', 'role': 'owner'}),
+        ],
+        workflowConfigurations: configurations,
+      )));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('default-workspace-badge')),
+          findsOneWidget);
+      await tester.tap(find.byKey(const Key('workspace-tab-other')));
+      await tester.pumpAndSettle();
+      expect(
+          find.byKey(const ValueKey('default-workspace-badge')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('make-default-workspace')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(source.workspaceWrites, 0);
+      await tester.tap(find.byKey(const ValueKey('make-default-workspace')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('confirm-default-workspace')));
+      await tester.pumpAndSettle();
+      expect(source.selectedWorkspace, 'other');
+      expect(source.workspaceWrites, 1);
+      expect(find.byKey(const ValueKey('default-workspace-badge')),
+          findsOneWidget);
+      expect((await inherited.ensureWorkspace()).workspaceId, 'other');
+      expect((await explicit.ensureWorkspace()).workspaceId, 'ws');
+      await tester.tap(find.byKey(const Key('workspace-tab-ws')));
+      await tester.pumpAndSettle();
+      expect(
+          find.byKey(const ValueKey('default-workspace-badge')), findsNothing);
+      expect(
+          find.byKey(const ValueKey('make-default-workspace')), findsOneWidget);
+    });
+
     test('detects an available Workspace update', () {
       expect(workspaceUpdateAvailable('1.0.2'), isTrue);
       expect(workspaceUpdateAvailable('1.0.3'), isFalse);
@@ -81,9 +136,10 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Vitalii’s MacBook Pro'), findsOneWidget);
-      expect(find.text('macOS · Apple Silicon · vitalii-macbook.local'),
-          findsOneWidget);
+      expect(find.text('Vitalii’s MacBook Pro'), findsWidgets);
+      expect(find.text('macOS'), findsOneWidget);
+      expect(find.textContaining('Apple Silicon'), findsNothing);
+      expect(find.text('Online'), findsOneWidget);
       expect(find.text('Connected · HTTPS fallback'), findsNothing);
       expect(find.text('1.4.2'), findsNothing);
       expect(find.text('dart · Up to 2 concurrent Workers'), findsNothing);
@@ -105,14 +161,13 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Workspaces'), findsOneWidget);
       expect(
         find.text(
             'Workspaces are connected execution environments. Workers are the AI integrations configured on each Workspace.'),
-        findsOneWidget,
+        findsNothing,
       );
       expect(find.byType(TabBar), findsOneWidget);
-      expect(find.text(snapshot.workspaces.first.name), findsOneWidget);
+      expect(find.text(snapshot.workspaces.first.name), findsWidgets);
       expect(find.textContaining('AI Account'), findsNothing);
       expect(find.textContaining('Credential Profile'), findsNothing);
       expect(find.textContaining('desired state'), findsNothing);
@@ -131,9 +186,8 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Workspaces'), findsOneWidget);
       expect(find.byType(TabBar), findsOneWidget);
-      expect(find.text(snapshot.workspaces.first.name), findsOneWidget);
+      expect(find.text(snapshot.workspaces.first.name), findsWidgets);
 
       expect(find.byTooltip('Connect Workspace'), findsNothing);
       expect(find.text('Rename'), findsNothing);
@@ -158,7 +212,6 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Workspaces'), findsOneWidget);
       expect(find.byType(TabBar), findsOneWidget);
       expect(find.text('Add AI Account'), findsNothing);
       expect(find.text('Workers from your Workspaces'), findsNothing);
@@ -202,7 +255,6 @@ void main() {
         onRevoke: (_) {},
       )));
       await tester.pumpAndSettle();
-      expect(find.text('Workers'), findsOneWidget);
       expect(find.text('ChatGPT'), findsOneWidget);
       expect(find.textContaining('Cloud scheduling'), findsNothing);
       expect(find.text('Auth strategy'), findsNothing);
@@ -246,9 +298,8 @@ void main() {
       expect(find.text('Connection status'), findsNothing);
       expect(find.text('Machine'), findsNothing);
       expect(find.text('Active work'), findsNothing);
-      expect(find.text('Workers'), findsOneWidget);
-      expect(
-          find.textContaining('development-workspace.local'), findsOneWidget);
+      expect(find.text('Workers'), findsNothing);
+      expect(find.text('Development Workspace'), findsWidgets);
     });
 
     testWidgets('each Workspace is a tab that switches the detail',
@@ -266,13 +317,20 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('workspace-tab-0')), findsOneWidget);
       expect(find.byKey(const Key('workspace-tab-2')), findsOneWidget);
-      expect(find.text('0.local'), findsOneWidget);
-      expect(find.text('1.local'), findsNothing);
+      final tabBar = find.byKey(const Key('workspace-tabs'));
+      final firstTab = tester.getRect(find.byKey(const Key('workspace-tab-0')));
+      final lastTab = tester.getRect(find.byKey(const Key('workspace-tab-2')));
+      expect((firstTab.left + lastTab.right) / 2,
+          closeTo(tester.getRect(tabBar).center.dx, 1));
+      expect(tester.getSize(tabBar).width,
+          tester.getSize(find.byType(WorkspacesPage)).width);
+      expect(find.byKey(const Key('workspace-detail-0')), findsOneWidget);
+      expect(find.byKey(const Key('workspace-detail-1')), findsNothing);
 
       await tester.tap(find.byKey(const Key('workspace-tab-1')));
       await tester.pumpAndSettle();
-      expect(find.text('1.local'), findsOneWidget);
-      expect(find.text('0.local'), findsNothing);
+      expect(find.byKey(const Key('workspace-detail-1')), findsOneWidget);
+      expect(find.byKey(const Key('workspace-detail-0')), findsNothing);
     });
 
     testWidgets('Workspace deep link selects the target tab', (tester) async {
@@ -289,8 +347,8 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('2.local'), findsOneWidget);
-      expect(find.text('0.local'), findsNothing);
+      expect(find.byKey(const Key('workspace-detail-2')), findsOneWidget);
+      expect(find.byKey(const Key('workspace-detail-0')), findsNothing);
     });
 
     testWidgets('expanded Workspace lists its Worker projections',
@@ -357,11 +415,15 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
+      final workerIcon = find.byWidgetPredicate((widget) =>
+          widget is Image && widget.semanticLabel == 'ChatGPT icon');
+      expect(tester.getSize(workerIcon), const Size(32, 32));
       expect(find.text('ChatGPT'), findsOneWidget);
       expect(find.text('Ready locally'), findsNothing);
       expect(find.textContaining('Cloud scheduling'), findsNothing);
-      expect(find.text('Models: Unavailable'), findsOneWidget);
-      expect(find.text('Workers'), findsOneWidget);
+      expect(find.text('Unavailable'), findsOneWidget);
+      expect(find.textContaining('Models:'), findsNothing);
+      expect(find.text('Workers'), findsNothing);
       expect(find.text('Authentication · browser_auth'), findsNothing);
 
       await tester.tap(find.text('ChatGPT').first);
@@ -408,8 +470,9 @@ void main() {
       )));
       await tester.pumpAndSettle();
       expect(find.text('Codex CLI 0.190.0'), findsOneWidget);
-      expect(find.text('Profile v4'), findsOneWidget);
-      expect(find.text('Models: Unavailable'), findsOneWidget);
+      expect(find.text('Profile v4'), findsNothing);
+      expect(find.text('Unavailable'), findsOneWidget);
+      expect(find.textContaining('Models:'), findsNothing);
     });
 
     testWidgets('Workers are grouped only under their owning Workspace ID',

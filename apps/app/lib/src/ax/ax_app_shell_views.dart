@@ -632,8 +632,14 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                     SpacePageSection.members),
                               )
                             : SingleChildScrollView(
-                                padding: EdgeInsets.fromLTRB(compact ? 18 : 34,
-                                    26, compact ? 18 : 34, 40),
+                                padding: EdgeInsets.fromLTRB(
+                                  compact ? 18 : 34,
+                                  navigation.kind == AxRouteKind.workspaces
+                                      ? 0
+                                      : 26,
+                                  compact ? 18 : 34,
+                                  40,
+                                ),
                                 child: showRunDetails
                                     ? _runDetailsView(compact)
                                     : _homeView(),

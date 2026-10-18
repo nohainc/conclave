@@ -27,8 +27,7 @@ retained execution history.
 
 `AxWorkRealtimeSync` exposes `AxWorkRealtimeStatus` to the Work surface. During
 transport loss, a scoped gap or authoritative recovery read, unfinished cards
-show `Connection interrupted — checking execution status.` and pause live
-timers. Recovery refreshes authoritative request detail and retained activity;
+pause live timers without adding any connection message to the response body. Recovery refreshes authoritative request detail and retained activity;
 it does not infer a terminal result from a missing event.
 
 ## Failure presentation

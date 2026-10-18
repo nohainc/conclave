@@ -228,7 +228,8 @@ void main() {
     expect(find.text('Cached member'), findsOneWidget);
     expect(find.text('Retry Members'), findsNothing);
     expect(
-        find.text('Members could not be loaded. Reopen this tab to try again.'),
+        find.text(
+            'Members could not be loaded. Reopen this Space to try again.'),
         findsOneWidget);
     source.failMembers = false;
     await tester.pumpWidget(page(source, queries));

@@ -25,7 +25,9 @@ AxThread _thread(String id, {int? pin}) => AxThread.fromJson({
     });
 
 Future<void> _pump(WidgetTester tester, AxNavigation navigation,
-    List<AxSpace> spaces, List<AxThread> threads) async {
+    List<AxSpace> spaces, List<AxThread> threads,
+    {bool canReorder = true,
+    void Function(List<String>)? onSpacesReordered}) async {
   await tester.pumpWidget(MaterialApp(
     home: Scaffold(
       body: SizedBox(
@@ -41,8 +43,12 @@ Future<void> _pump(WidgetTester tester, AxNavigation navigation,
             ),
             onNavigateTo: (_) {},
             onReorderThreads: (_, __) async {},
-            onReorderPinnedSpaces: (_) async {},
-            onReorderPinnedThreads: (_, __) async {},
+            onReorderPinnedSpaces: canReorder
+                ? (ids) async {
+                    onSpacesReordered?.call(ids);
+                  }
+                : null,
+            onReorderPinnedThreads: canReorder ? (_, __) async {} : null,
             onSetSpacePinned: (_, __) async {},
             onSetThreadPinned: (_, __) async {},
           ),
@@ -76,18 +82,79 @@ void main() {
     await _pump(tester, const AxNavigation.space('a'), spaces, const []);
     await _open(tester, 'Space menu');
     expect(_enabled(tester, 'Move Up'), isTrue);
-    expect(_enabled(tester, 'Move Down'), isFalse);
+    expect(find.text('Move Down'), findsNothing);
   });
 
-  testWidgets('a single pinned Space shows both moves, disabled',
-      (tester) async {
+  testWidgets('a single pinned Space hides both moves', (tester) async {
     await _pump(tester, const AxNavigation.space('a'),
         [_space('a', pin: 0), _space('b')], const []);
     await _open(tester, 'Space menu');
-    expect(find.text('Move Up'), findsOneWidget);
-    expect(find.text('Move Down'), findsOneWidget);
-    expect(_enabled(tester, 'Move Up'), isFalse);
-    expect(_enabled(tester, 'Move Down'), isFalse);
+    expect(find.text('Move Up'), findsNothing);
+    expect(find.text('Move Down'), findsNothing);
+  });
+
+  testWidgets('first pinned Space offers only Move Down', (tester) async {
+    await _pump(tester, const AxNavigation.space('a'),
+        [_space('a', pin: 0), _space('b', pin: 1)], const []);
+    await _open(tester, 'Space menu');
+    expect(find.text('Move Up'), findsNothing);
+    expect(_enabled(tester, 'Move Down'), isTrue);
+  });
+
+  testWidgets('middle pinned Space offers both moves', (tester) async {
+    await _pump(
+        tester,
+        const AxNavigation.space('a'),
+        [_space('b', pin: 0), _space('a', pin: 1), _space('c', pin: 2)],
+        const []);
+    await _open(tester, 'Space menu');
+    expect(_enabled(tester, 'Move Up'), isTrue);
+    expect(_enabled(tester, 'Move Down'), isTrue);
+  });
+
+  testWidgets('single pinned Thread hides both moves', (tester) async {
+    await _pump(tester, const AxNavigation.thread('a', '1'), [_space('a')],
+        [_thread('1', pin: 0), _thread('2')]);
+    await _open(tester, 'Thread menu');
+    expect(find.text('Move Up'), findsNothing);
+    expect(find.text('Move Down'), findsNothing);
+  });
+
+  testWidgets('first pinned Thread offers only Move Down', (tester) async {
+    await _pump(tester, const AxNavigation.thread('a', '1'), [_space('a')],
+        [_thread('1', pin: 0), _thread('2', pin: 1)]);
+    await _open(tester, 'Thread menu');
+    expect(find.text('Move Up'), findsNothing);
+    expect(_enabled(tester, 'Move Down'), isTrue);
+  });
+
+  testWidgets('move actions are hidden when reordering is unavailable',
+      (tester) async {
+    final spaces = [_space('a', pin: 0), _space('b', pin: 1)];
+    final threads = [_thread('1', pin: 0), _thread('2', pin: 1)];
+    await _pump(tester, const AxNavigation.space('a'), spaces, threads,
+        canReorder: false);
+    await _open(tester, 'Space menu');
+    expect(find.text('Move Up'), findsNothing);
+    expect(find.text('Move Down'), findsNothing);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    await _pump(tester, const AxNavigation.thread('a', '1'), spaces, threads,
+        canReorder: false);
+    await _open(tester, 'Thread menu');
+    expect(find.text('Move Up'), findsNothing);
+    expect(find.text('Move Down'), findsNothing);
+  });
+
+  testWidgets('available move submits the new pinned order', (tester) async {
+    List<String>? reordered;
+    await _pump(tester, const AxNavigation.space('a'),
+        [_space('a', pin: 0), _space('b', pin: 1)], const [],
+        onSpacesReordered: (ids) => reordered = ids);
+    await _open(tester, 'Space menu');
+    await tester.tap(find.text('Move Down'));
+    await tester.pumpAndSettle();
+    expect(reordered, ['b', 'a']);
   });
 
   testWidgets('an unpinned Space has no move items', (tester) async {
@@ -110,7 +177,7 @@ void main() {
     await _pump(tester, const AxNavigation.thread('a', '2'), spaces, threads);
     await _open(tester, 'Thread menu');
     expect(_enabled(tester, 'Move Up'), isTrue);
-    expect(_enabled(tester, 'Move Down'), isFalse);
+    expect(find.text('Move Down'), findsNothing);
     await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
 

@@ -460,3 +460,19 @@ Migrations `0074`-`0076`. The Member access policy above is the Workspace
 Not implemented: a total run-time quota and a per-grant Work Root (the Work Root
 is local to the Workspace Service). AX screens for per-person overrides,
 invitations and the access list are pending; the API above is complete.
+
+### Default Workspace action in AX
+
+Each eligible Workspace tab exposes a Make default text button; the selected
+Workspace displays a Default Workspace badge. This uses the existing global
+user workflow-Workspace setting, with confirmation of resets to overrides in
+inheriting Spaces. Spaces using Default Workspace (including new Spaces) and
+their Threads resolve that same selection. Explicit Space assignments and
+accepted runs remain unchanged. Per-Workspace workflow preferences are retained.
+The sharing action uses a + icon with an Add people tooltip.
+
+On the Space page, toggling between inherited and explicit selection of the
+same effective Workspace saves without a confirmation dialog. Returning to
+Default Workspace reads the current global selection before comparing IDs;
+selecting a different effective Workspace retains the reset warning. The
+existing selection API and inheritance/reset semantics remain unchanged.

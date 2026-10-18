@@ -440,8 +440,11 @@ extension _AxAppController on _AxAppStateMixin {
       return;
     }
     try {
-      final feed = notificationsFromFeed(
-          await (source as AxNotificationDataSource).loadNotificationFeed());
+      final feed = [
+        for (final n in notificationsFromFeed(
+            await (source as AxNotificationDataSource).loadNotificationFeed()))
+          n.withPlace(_notificationPlace(n))
+      ];
       if (!mounted) return;
       _updateNotifications(() {
         for (final item in feed) {
@@ -487,9 +490,37 @@ extension _AxAppController on _AxAppStateMixin {
     _updateNotifications(() => notifications.removeWhere(matches));
   }
 
+  /// "Space › Thread" (or the Workspace) the notification is about, from the
+  /// names already loaded; null when none is known yet.
+  String? _notificationPlace(AxNotification n) {
+    String? spaceName;
+    for (final space in store.spaces.items) {
+      if (space.id == n.spaceId) spaceName = space.name;
+    }
+    String? threadName;
+    if (n.spaceId != null && n.threadId != null) {
+      for (final thread in store.spaceThreads.peek(n.spaceId!)) {
+        if (thread.id == n.threadId) threadName = thread.name;
+      }
+    }
+    final parts = [
+      if (spaceName != null && spaceName.trim().isNotEmpty) spaceName,
+      if (threadName != null && threadName.trim().isNotEmpty) threadName,
+    ];
+    if (parts.isEmpty && n.workspaceId != null) {
+      for (final workspace in store.workspaces.items) {
+        if (workspace.id == n.workspaceId && workspace.name.isNotEmpty) {
+          return workspace.name;
+        }
+      }
+    }
+    return parts.isEmpty ? null : parts.join(' › ');
+  }
+
   void _recordNotification(Map<String, dynamic> event) {
-    final notification = notificationFromRealtimeEvent(event,
+    final raw = notificationFromRealtimeEvent(event,
         viewerId: store.auth.session?.viewer?.id);
+    final notification = raw?.withPlace(_notificationPlace(raw));
     if (notification == null ||
         notifications.any((item) => item.id == notification.id)) {
       return;

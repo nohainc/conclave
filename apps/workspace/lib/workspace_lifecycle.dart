@@ -60,6 +60,7 @@ class WorkspaceLifecyclePreferences {
     DesiredRuntimeState? desiredRuntime,
     DesiredCloudConnectionState? desiredCloudState,
     required this.launchAtLogin,
+    this.preventSleep = true,
     required this.managementLockPreference,
     this.autoLockTimeout,
     this.ownerUserId,
@@ -74,6 +75,7 @@ class WorkspaceLifecyclePreferences {
     DesiredRuntimeState? desiredRuntime,
     DesiredCloudConnectionState? desiredCloudState,
     bool? launchAtLogin,
+    bool? preventSleep,
     ManagementLockState? managementLockPreference,
     Duration? autoLockTimeout,
     String? ownerUserId,
@@ -85,6 +87,7 @@ class WorkspaceLifecyclePreferences {
         desiredRuntime:
             desiredCloudState ?? desiredRuntime ?? this.desiredRuntime,
         launchAtLogin: launchAtLogin ?? this.launchAtLogin,
+        preventSleep: preventSleep ?? this.preventSleep,
         managementLockPreference:
             managementLockPreference ?? this.managementLockPreference,
         autoLockTimeout: autoLockTimeout ?? this.autoLockTimeout,
@@ -100,6 +103,9 @@ class WorkspaceLifecyclePreferences {
   /// this value and regardless of the current Cloud transport state.
   DesiredCloudConnectionState get desiredCloudState => desiredRuntime;
   final bool launchAtLogin;
+
+  /// Keep the computer awake while the Workspace service runs. On by default.
+  final bool preventSleep;
   final ManagementLockState managementLockPreference;
   final Duration? autoLockTimeout;
   final String? ownerUserId;
@@ -115,6 +121,7 @@ class WorkspaceLifecyclePreferences {
       WorkspaceLifecyclePreferences(
         desiredRuntime: DesiredRuntimeState.disconnected,
         launchAtLogin: previous.launchAtLogin,
+        preventSleep: previous.preventSleep,
         managementLockPreference: previous.managementLockPreference,
         autoLockTimeout: previous.autoLockTimeout,
         ownerUserId: previous.ownerUserId,

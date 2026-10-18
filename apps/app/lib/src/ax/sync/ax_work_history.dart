@@ -502,7 +502,8 @@ class AxWorkHistoryCache {
                       error.statusCode! < 500 &&
                       error.statusCode != 408));
           final message = error is AxApiException &&
-                  error.message.startsWith('Cannot run ')
+                  (error.message.startsWith('Cannot run ') ||
+                      error.statusCode == 422)
               ? error.message
               : 'Could not send your request: $error${attemptedPost && !rejected ? '\nSubmission status is unknown. Sending the same request again safely retries this submission.' : ''}';
           context.localProgress[localId] = message;

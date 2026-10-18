@@ -161,7 +161,6 @@ class _WorkComposer extends StatelessWidget {
     required this.executionSelection,
     required this.onExecutionSelectionChanged,
     required this.onRemoveAttachment,
-    required this.onRefresh,
     required this.hasOlder,
     required this.loadingOlder,
     required this.onLoadOlder,
@@ -207,7 +206,6 @@ class _WorkComposer extends StatelessWidget {
   final Map<String, dynamic> executionSelection;
   final ValueChanged<Map<String, dynamic>> onExecutionSelectionChanged;
   final ValueChanged<int> onRemoveAttachment;
-  final Future<void> Function() onRefresh;
   final bool hasOlder;
   final bool loadingOlder;
   final Future<void> Function() onLoadOlder;
@@ -293,13 +291,6 @@ class _WorkComposer extends StatelessWidget {
               child: Text(loadingOlder
                   ? 'Loading older Work history…'
                   : 'Load older Work history'),
-            ),
-          ),
-        if (timelineError != null && workTimeline.isNotEmpty)
-          SliverToBoxAdapter(
-            child: TextButton(
-              onPressed: onRefresh,
-              child: const Text('Retry Work sync'),
             ),
           ),
         if (loadingTimeline && workTimeline.isEmpty)
@@ -1576,30 +1567,25 @@ class _WorkTimelineCard extends StatelessWidget {
                       Builder(builder: (context) {
                         // The body shows the Worker's live status while the
                         // request is unfinished and the real outcome at the end.
-                        final String? message = realtimeStatus ==
-                                    AxWorkRealtimeStatus.checking &&
-                                !progress.isTerminal
-                            ? 'Connection interrupted — checking execution status.'
-                            : error?.isNotEmpty == true
-                                ? error
-                                : response?.isNotEmpty == true
-                                    ? response
-                                    : request.status == 'cancelled'
-                                        ? 'Request cancelled.'
-                                        : (progress.isExecuting
-                                                ? null
-                                                : progressText) ??
-                                            switch (request.status) {
-                                              'completed' =>
-                                                'Request completed.',
-                                              'failed' =>
-                                                'Your request could not be completed.',
-                                              'timed_out' =>
-                                                'The worker took too long to respond. Please retry your request.',
-                                              'lost' =>
-                                                'The connection to the worker was lost. Please retry your request.',
-                                              _ => null,
-                                            };
+                        final String? message = error?.isNotEmpty == true
+                            ? error
+                            : response?.isNotEmpty == true
+                                ? response
+                                : request.status == 'cancelled'
+                                    ? 'Request cancelled.'
+                                    : (progress.isExecuting
+                                            ? null
+                                            : progressText) ??
+                                        switch (request.status) {
+                                          'completed' => 'Request completed.',
+                                          'failed' =>
+                                            'Your request could not be completed.',
+                                          'timed_out' =>
+                                            'The worker took too long to respond. Please retry your request.',
+                                          'lost' =>
+                                            'The connection to the worker was lost. Please retry your request.',
+                                          _ => null,
+                                        };
                         final isError = error?.isNotEmpty == true;
                         Widget compactAction({
                           required String tooltip,

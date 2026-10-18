@@ -56,6 +56,7 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       await preferenceStore.write(WorkspaceLifecyclePreferences(
         desiredRuntime: DesiredRuntimeState.disconnected,
         launchAtLogin: preferences.launchAtLogin,
+        preventSleep: preferences.preventSleep,
         managementLockPreference: preferences.managementLockPreference,
         autoLockTimeout: preferences.autoLockTimeout,
         ownerUserId: session.userId,
@@ -140,6 +141,7 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       await preferenceStore.write(WorkspaceLifecyclePreferences(
         desiredRuntime: DesiredRuntimeState.connected,
         launchAtLogin: preferences.launchAtLogin,
+        preventSleep: preferences.preventSleep,
         managementLockPreference: preferences.managementLockPreference,
         autoLockTimeout: preferences.autoLockTimeout,
         ownerUserId: session.userId,
@@ -312,6 +314,7 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       await preferenceStore.write(WorkspaceLifecyclePreferences(
         desiredRuntime: DesiredRuntimeState.disconnected,
         launchAtLogin: preferences.launchAtLogin,
+        preventSleep: preferences.preventSleep,
         managementLockPreference: preferences.managementLockPreference,
         autoLockTimeout: preferences.autoLockTimeout,
         workRootPath: preferences.workRootPath,

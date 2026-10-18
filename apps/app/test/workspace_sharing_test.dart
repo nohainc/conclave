@@ -1,3 +1,4 @@
+import 'package:conclave_app/src/ax/ax_people.dart';
 import 'package:conclave_app/src/ax/ax_workspace_member_access.dart';
 import 'package:conclave_app/src/features/workspace/workspace_sharing_section.dart';
 import 'package:flutter/material.dart';
@@ -133,13 +134,28 @@ void main() {
       (tester) async {
     final source = SharingSource();
     await pump(
-        tester, WorkspaceSharingSection(workspaceId: 'ws', source: source));
+        tester,
+        WorkspaceSharingSection(workspaceId: 'ws', source: source, people: [
+          AxPerson.fromJson({
+            'userId': 'u',
+            'displayName': 'Ann',
+            'email': 'a@b.test',
+            'establishedAt': 'x',
+            'sharedSpaceCount': 1
+          })
+        ]));
     expect(find.textContaining('Guest · guest@test'), findsOneWidget);
     expect(find.textContaining('2 requests'), findsOneWidget);
     expect(find.textContaining('Chat only (custom)'), findsOneWidget);
-    await tester.enterText(
-        find.byKey(const ValueKey('sharing-invite-email')), 'a@b.test');
+    expect(
+        tester
+            .widget<IconButton>(find.byKey(const ValueKey('sharing-invite')))
+            .tooltip,
+        'Add people');
+    expect(find.text('Add people'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('sharing-invite')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sharing-add-u')));
     await tester.pumpAndSettle();
     await tester
         .tap(find.byKey(const ValueKey('sharing-revoke-invitation-i1')));
@@ -179,11 +195,10 @@ void main() {
     expect(find.text('Access for Guest'), findsOneWidget);
     // No Workers shared yet, and the default mode is the safest one.
     await tester.tap(find.byKey(const ValueKey('share-worker-a')));
-    await tester.tap(find.byKey(const ValueKey('member-mode-work')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('member-access-save')));
     await tester.pumpAndSettle();
-    expect(access.saved.single.mode, 'work');
+    expect(access.saved.single.mode, 'chat');
     expect(access.saved.single.workers.keys, ['a']);
     await tester.tap(find.byKey(const ValueKey('person-access-reset')));
     await tester.pumpAndSettle();

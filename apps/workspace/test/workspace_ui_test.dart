@@ -1171,6 +1171,7 @@ void main() {
         find.text(
             'Your work is safe. The Workspace will not discard an assignment.'),
         findsOneWidget);
+    await tester.ensureVisible(find.text('Retry service startup'));
     await tester.tap(find.text('Retry service startup'));
     expect(retried, isTrue);
   });

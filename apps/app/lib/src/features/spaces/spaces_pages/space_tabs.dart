@@ -183,46 +183,33 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  'Choose what each member can do in this Space.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              if (canInvite)
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  tooltip: 'Share Space',
-                  splashRadius: 20,
-                  onPressed: _share,
-                ),
-            ],
+          Text('Members', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(
+            'Choose what each member can do in this Space.',
+            style: TextStyle(
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 6),
           Wrap(
             spacing: 16,
             runSpacing: 6,
             children: [
-              _permissionLegendItem(
-                  Icons.chat_bubble_outline, 'Chat workflows'),
-              _permissionLegendItem(Icons.work_outline, 'Work workflows'),
+              _permissionLegendItem(Icons.chat_bubble_outline, 'Chat workflow'),
+              _permissionLegendItem(Icons.work_outline, 'Work workflow'),
               _permissionLegendItem(Icons.forum_outlined, 'Own threads'),
             ],
           ),
           const SizedBox(height: 8),
           if (membersError != null)
             const Text(
-                'Members could not be loaded. Reopen this tab to try again.'),
+                'Members could not be loaded. Reopen this Space to try again.'),
           if (membersLoading)
             const LinearProgressIndicator()
           else ...[
-            if (members.isNotEmpty) ...[
+            if (members.isNotEmpty || canInvite) ...[
               LayoutBuilder(
                 builder: (context, constraints) => SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -234,7 +221,20 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                       dataRowMinHeight: 56,
                       dataRowMaxHeight: 64,
                       columns: [
-                        const DataColumn(label: SizedBox.shrink()),
+                        DataColumn(
+                            label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('Name / email'),
+                            if (canInvite)
+                              IconButton(
+                                icon: const Icon(Icons.add),
+                                tooltip: 'Share Space',
+                                splashRadius: 20,
+                                onPressed: _share,
+                              ),
+                          ],
+                        )),
                         _permissionColumn(Icons.chat_bubble_outline, 'Chat'),
                         _permissionColumn(Icons.work_outline, 'Work'),
                         _permissionColumn(Icons.forum_outlined, 'Own threads'),

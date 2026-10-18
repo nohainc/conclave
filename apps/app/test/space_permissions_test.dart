@@ -98,6 +98,18 @@ void main() {
     final source = PermissionSource();
     await tester.pumpWidget(page(source));
     await tester.pumpAndSettle();
+    expect(find.text('Members'), findsOneWidget);
+    expect(
+        tester.getRect(find.text('Members')).bottom,
+        lessThan(tester
+            .getRect(find.text('Choose what each member can do in this Space.'))
+            .top));
+    final table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(
+        find.descendant(
+            of: find.byWidget(table.columns.first.label),
+            matching: find.byTooltip('Share Space')),
+        findsOneWidget);
     expect(find.text('Created by member@example.test'), findsNothing);
     expect(find.text('Owner'), findsOneWidget);
     expect(find.text('Add workspace'), findsNothing);

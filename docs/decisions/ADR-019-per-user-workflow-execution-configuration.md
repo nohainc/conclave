@@ -124,3 +124,13 @@ rather than being materialized into saved preferences.
 No D1 migration or protocol version change is required. Existing observed
 revisions in preferences and local view state remain readable; historical
 request/assignment snapshots retain their original immutable revisions.
+
+### Workspace workflow controls
+
+Workspace Workflow cards expose enabled state and default Worker, model, and
+effort selections. The model selector uses the compact Work composer menu style.
+For multi-step workflows, the step-count button opens a steps-only editor for inherited execution or
+per-step overrides; enabled state and workflow defaults remain on the card.
+
+Single-step workflows are configured entirely on the card and have no step editor.
+Default workflows are selected through card actions rather than a header dropdown.

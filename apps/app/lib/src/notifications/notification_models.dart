@@ -102,6 +102,29 @@ class AxNotification {
   final AxNotificationTarget? target;
   final bool read;
 
+  /// Prefixes the message with where this happened (e.g. "Space › Thread"), so
+  /// a generic "failed" says which Space and Thread it concerns.
+  AxNotification withPlace(String? place) {
+    if (place == null || place.isEmpty || message.startsWith('$place · ')) {
+      return this;
+    }
+    return AxNotification(
+      id: id,
+      kind: kind,
+      title: title,
+      message: '$place · $message',
+      createdAt: createdAt,
+      priority: priority,
+      spaceId: spaceId,
+      threadId: threadId,
+      runId: runId,
+      workspaceId: workspaceId,
+      workerId: workerId,
+      target: target,
+      read: read,
+    );
+  }
+
   AxNotification markRead() => AxNotification(
         id: id,
         kind: kind,

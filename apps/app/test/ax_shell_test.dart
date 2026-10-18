@@ -75,7 +75,19 @@ void main() {
           shellContext: AxShellContext(
             navigation: const AxNavigation.home(),
             spaces: [testSpace],
-            threadsBySpace: {testSpace.id: testSpace.threads},
+            threadsBySpace: {
+              testSpace.id: const [
+                AxThread(
+                    id: 'menu-thread',
+                    spaceId: 'menu-space',
+                    name: 'Menu Thread',
+                    lead: '',
+                    status: 'active',
+                    brief: '',
+                    primaryWorkspace: '',
+                    queueStatus: '')
+              ]
+            },
           ),
           onNavigateTo: (_) {},
           onOpenDrawer: () {},
@@ -94,6 +106,12 @@ void main() {
       }
       await tester.tap(find.byTooltip('YOUR SPACES'));
       await tester.pumpAndSettle();
+      final spaceColor =
+          tester.widget<Text>(find.text('Menu Space')).style?.color;
+      final threadColor =
+          tester.widget<Text>(find.text('Menu Thread')).style?.color;
+      expect(spaceColor, threadColor);
+      expect(spaceColor, dark ? Colors.white70 : Colors.black87);
       expect(
           find.byWidgetPredicate((widget) =>
               widget is Material &&
@@ -354,7 +372,8 @@ void main() {
       expect(threadContext.isNavActive(const AxNavigation.spaces()), isTrue);
     });
 
-    testWidgets('active Space menu exposes actions and the Members destination',
+    testWidgets(
+        'active Space menu exposes actions without a separate Members destination',
         (tester) async {
       AxNavigation? navigatedTo;
       const space = AxSpace(
@@ -384,11 +403,8 @@ void main() {
       expect(find.text('Archive Space'), findsOneWidget);
       expect(find.text('Delete Space'), findsOneWidget);
       expect(find.text('Workflows'), findsNothing);
-      expect(find.text('Members'), findsOneWidget);
-
-      await tester.tap(find.text('Members'));
-      await tester.pumpAndSettle();
-      expect(navigatedTo, const AxNavigation.spaceMembers('space-1'));
+      expect(find.text('Members'), findsNothing);
+      expect(navigatedTo, isNull);
     });
 
     test('isNavActive covers every route kind accurately', () {

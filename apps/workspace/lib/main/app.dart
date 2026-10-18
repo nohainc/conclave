@@ -656,6 +656,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
             ? DesiredRuntimeState.disconnected
             : preferences.desiredRuntime,
         launchAtLogin: preferences.launchAtLogin,
+        preventSleep: preferences.preventSleep,
         managementLockPreference: preferences.managementLockPreference,
         autoLockTimeout: preferences.autoLockTimeout,
         ownerUserId: session.userId,
@@ -790,6 +791,16 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     }
   }
 
+  Future<void> _changePreventSleep(bool value) async {
+    final preferenceStore = WorkspaceLifecyclePreferencesStore(
+      widget.lifecycle.config.dataDirectory,
+    );
+    final preferences = preferenceStore.readSync();
+    if (preferences.preventSleep == value) return;
+    await preferenceStore.write(preferences.copyWith(preventSleep: value));
+    if (mounted) setState(() {});
+  }
+
   Widget _buildManagementDashboard() {
     final lifecycle = widget.lifecycle;
     return WorkspaceDashboard(
@@ -815,6 +826,10 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
           : _startWorkspaceService,
       onCheckForUpdates: _checkForUpdates,
       onChangeWorkRoot: _changeWorkRoot,
+      preventSleep: WorkspaceLifecyclePreferencesStore(
+        lifecycle.config.dataDirectory,
+      ).readSync().preventSleep,
+      onChangePreventSleep: _changePreventSleep,
       onReadinessCheck: lifecycle.checkWorkerReadiness,
       onLoadWorkerSlots: lifecycle.loadWorkerSlots,
       onResetWorkerSlots: lifecycle.resetWorkerSlots,

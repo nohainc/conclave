@@ -1,6 +1,11 @@
+import '../../ax/ax_people.dart';
+import '../../ax/ax_data.dart'
+    show AxWorkflowWorkspaceDataSource, AxWorkflowWorkspaceSettings;
+import '../../ax/sync/ax_query_builder.dart';
 import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
+import '../../ax/worker_presentation.dart';
 import '../../ax/sync/ax_session_catalogs.dart';
 import '../../ax/sync/ax_workflow_configurations.dart';
 import '../../ax/ax_workspace_member_access.dart';
@@ -25,6 +30,7 @@ class WorkspacesPage extends StatefulWidget {
     this.viewerEmail,
     this.memberAccessSource,
     this.sharingSource,
+    this.people = const [],
     this.personAccessSource,
     // Retained as optional compatibility inputs while callers are audited.
     VoidCallback? onAdd,
@@ -48,6 +54,9 @@ class WorkspacesPage extends StatefulWidget {
 
   /// Enables lending: the owner's sharing section and the invited person's banner.
   final AxWorkspaceSharingDataSource? sharingSource;
+
+  /// People the owner can share a Workspace with.
+  final List<AxPerson> people;
 
   /// Enables editing one person's Workers, models and mode.
   final AxWorkspacePersonAccessDataSource? personAccessSource;
@@ -117,17 +126,6 @@ class _WorkspacesPageState extends State<WorkspacesPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Workspaces',
-            style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3)),
-        const SizedBox(height: 6),
-        Text(
-          'Workspaces are connected execution environments. Workers are the AI integrations configured on each Workspace.',
-          style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: 12),
         if (widget.sharingSource != null)
           WorkspaceInvitationsBanner(
               key: const ValueKey('workspace-invitations-banner'),
@@ -135,23 +133,26 @@ class _WorkspacesPageState extends State<WorkspacesPage>
         if (tabs == null)
           const _EmptyWorkspaces()
         else ...[
-          TabBar(
-            key: const Key('workspace-tabs'),
-            controller: tabs,
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            labelColor: theme.colorScheme.onSurface,
-            unselectedLabelColor: theme.brightness == Brightness.dark
-                ? Colors.white38
-                : Colors.black45,
-            indicatorColor: theme.colorScheme.onSurface,
-            dividerHeight: 0,
-            tabs: [
-              for (final workspace in widget.workspaces)
-                Tab(
-                    key: Key('workspace-tab-${workspace.id}'),
-                    text: workspace.name),
-            ],
+          SizedBox(
+            width: double.infinity,
+            child: TabBar(
+              key: const Key('workspace-tabs'),
+              controller: tabs,
+              isScrollable: true,
+              tabAlignment: TabAlignment.center,
+              labelColor: theme.colorScheme.onSurface,
+              unselectedLabelColor: theme.brightness == Brightness.dark
+                  ? Colors.white38
+                  : Colors.black45,
+              indicatorColor: theme.colorScheme.onSurface,
+              dividerHeight: 0,
+              tabs: [
+                for (final workspace in widget.workspaces)
+                  Tab(
+                      key: Key('workspace-tab-${workspace.id}'),
+                      text: workspace.name),
+              ],
+            ),
           ),
           const Divider(height: 1, thickness: 1),
           const SizedBox(height: 16),
@@ -168,31 +169,49 @@ class _WorkspacesPageState extends State<WorkspacesPage>
         .toList(growable: false);
     final catalogs = widget.workflowCatalogs;
     final configurations = widget.workflowConfigurations;
+    final machineName =
+        workspace.hostname.isNotEmpty && workspace.hostname != '—'
+            ? workspace.hostname
+            : workspace.name;
+    final machineOs = _machine(workspace);
+
     return Column(
       key: Key('workspace-detail-${workspace.id}'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Card(
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            children: [
-              ListTile(
-                title: Text(_workspaceSubtitle(workspace),
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
-                trailing: SizedBox(
-                  width: 96,
-                  child: Center(
-                      child: _StatusPill(status: _statusLabel(workspace))),
-                ),
+        Row(
+          children: [
+            if (machineName.isNotEmpty && machineName != '—') ...[
+              Text(
+                machineName,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: _WorkspaceCardBody(workers: workers),
-              ),
+              const SizedBox(width: 8),
             ],
-          ),
+            if (machineOs != '—') ...[
+              Text(
+                machineOs,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            const Spacer(),
+            _StatusPill(status: _statusLabel(workspace)),
+          ],
         ),
+        if (configurations != null &&
+            configurations.source is AxWorkflowWorkspaceDataSource)
+          _DefaultWorkspaceControl(
+            key: ValueKey('default-workspace-${workspace.id}'),
+            configurations: configurations,
+            workspace: workspace,
+          ),
+        const SizedBox(height: 16),
+        _WorkspaceCardBody(workers: workers),
         if (catalogs != null && configurations != null) ...[
           const SizedBox(height: 24),
           WorkflowsPage(
@@ -201,6 +220,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             configurations: configurations.forWorkspace(workspace.id),
             viewerEmail: widget.viewerEmail,
             workspaceId: workspace.id,
+            showWorkspaceAction: false,
           ),
         ],
         if (widget.sharingSource != null) ...[
@@ -209,6 +229,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             key: ValueKey('workspace-sharing-${workspace.id}'),
             workspaceId: workspace.id,
             source: widget.sharingSource!,
+            people: widget.people,
             memberAccessSource: widget.memberAccessSource,
             personAccessSource: widget.personAccessSource,
             workers: widget.workspaceWorkers,
@@ -238,28 +259,69 @@ class _WorkspaceCardBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 14),
-        Text('Workers',
-            style: theme.textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        if (workers.isEmpty)
-          Text(
-              'No Workers are available for this Workspace yet. Configure Workers in Conclave Workspace on this computer.',
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
-        else
-          ...workers.map((worker) => _WorkerRow(worker: worker)),
-        const SizedBox(height: 12),
-      ],
+    if (workers.isEmpty) {
+      return Text(
+        'No Workers are available for this Workspace yet. Configure Workers in Conclave Workspace on this computer.',
+        style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Compute columns based on compact card minimum width of ~240px
+        const double gap = 12;
+        final double availableWidth = constraints.maxWidth;
+        final int columns = (availableWidth / 240).floor().clamp(1, 4);
+
+        if (columns == 1) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (int i = 0; i < workers.length; i++) ...[
+                if (i > 0) const SizedBox(height: gap),
+                _WorkerCard(worker: workers[i]),
+              ],
+            ],
+          );
+        }
+
+        // When multiple columns, group into rows and wrap in IntrinsicHeight
+        // so all worker widgets in the row share the same height.
+        final List<List<AxWorker>> rows = [];
+        for (int i = 0; i < workers.length; i += columns) {
+          rows.add(workers.sublist(i,
+              (i + columns < workers.length) ? i + columns : workers.length));
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (int r = 0; r < rows.length; r++) ...[
+              if (r > 0) const SizedBox(height: gap),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int c = 0; c < columns; c++) ...[
+                      if (c > 0) const SizedBox(width: gap),
+                      Expanded(
+                        child: c < rows[r].length
+                            ? _WorkerCard(worker: rows[r][c])
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
 
-class _WorkerRow extends StatelessWidget {
-  const _WorkerRow({required this.worker});
+class _WorkerCard extends StatelessWidget {
+  const _WorkerCard({required this.worker});
   final AxWorker worker;
 
   @override
@@ -270,38 +332,102 @@ class _WorkerRow extends StatelessWidget {
             .map((model) => model.name)
             .toList() ??
         const <String>[];
-    final providerTool = [
-      worker.providerToolName ?? 'Provider CLI',
-      worker.providerToolVersion ?? 'Not detected',
-    ].join(' ');
-    return Column(
-      children: [
-        ListTile(
-          key: Key('workspace-worker-row-${worker.id}'),
-          contentPadding: EdgeInsets.zero,
-          leading: Icon(worker.isReady
-              ? Icons.check_circle_outline
-              : Icons.warning_amber),
-          title: Text(worker.displayName),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 3),
-            child: Column(
+    final toolName = worker.providerToolName ?? 'Provider CLI';
+    final toolVersion = worker.providerToolVersion ?? 'Not detected';
+    final toolInfo = '$toolName $toolVersion';
+
+    final presentation = WorkerPresentation.resolve(
+      worker.workerTypeId,
+      worker.displayName,
+    );
+    final workerIcon = presentation.iconAsset;
+    final isDark = theme.brightness == Brightness.dark;
+
+    final Widget iconWidget = workerIcon != null
+        ? Image.asset(
+            workerIcon,
+            width: 32,
+            height: 32,
+            fit: BoxFit.contain,
+            semanticLabel: '${worker.displayName} icon',
+          )
+        : Icon(
+            worker.isReady ? Icons.smart_toy_outlined : Icons.warning_amber,
+            size: 32,
+            color: worker.isReady ? null : Colors.amber,
+          );
+
+    final modelsText = models.isEmpty ? 'Unavailable' : models.join(' · ');
+
+    return Card(
+      key: Key('workspace-worker-row-${worker.id}'),
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(providerTool, style: theme.textTheme.bodySmall),
-                if (worker.profileReleaseVersion != null)
-                  Text('Profile v${worker.profileReleaseVersion}',
-                      style: theme.textTheme.bodySmall),
-                Text(
-                  'Models: ${models.isEmpty ? 'Unavailable' : models.join(', ')}',
-                  style: theme.textTheme.bodySmall,
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: iconWidget,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              worker.displayName,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          if (!worker.isReady)
+                            const Icon(
+                              Icons.warning_amber,
+                              size: 16,
+                              color: Colors.amber,
+                            )
+                          else
+                            Icon(
+                              Icons.check_circle_outline,
+                              size: 16,
+                              color: isDark
+                                  ? const Color(0xff3ca879)
+                                  : const Color(0xff2d7a56),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        toolInfo,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              modelsText,
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
         ),
-        const Divider(height: 1),
-      ],
+      ),
     );
   }
 }
@@ -343,16 +469,6 @@ class _EmptyWorkspaces extends StatelessWidget {
       );
 }
 
-String _workspaceSubtitle(AxWorkspace workspace) {
-  final machine = _machine(workspace);
-  final hostname = _display(workspace.hostname);
-  final details = [
-    if (machine != '—') machine,
-    if (hostname != '—') hostname,
-  ];
-  return details.isEmpty ? '—' : details.join(' · ');
-}
-
 String _machine(AxWorkspace workspace) {
   final os = switch (workspace.platform.toLowerCase()) {
     'macos' => 'macOS',
@@ -360,15 +476,7 @@ String _machine(AxWorkspace workspace) {
     'linux' => 'Linux',
     _ => workspace.platform,
   };
-  final architecture = switch (workspace.architecture.toLowerCase()) {
-    'arm64' => 'Apple Silicon',
-    'x64' => 'x64',
-    _ => workspace.architecture,
-  };
-  final parts = [os, architecture]
-      .where((value) => value.isNotEmpty && value != '—')
-      .toList();
-  return parts.isEmpty ? '—' : parts.join(' · ');
+  return os.isEmpty ? '—' : os;
 }
 
 String _display(String value) => value.isEmpty ? '—' : value;
@@ -384,3 +492,89 @@ String _statusLabel(AxWorkspace workspace) =>
             'revoked' => 'Revoked',
             _ => workspace.status,
           };
+
+/// The same user selection inherited by Spaces and their Threads.
+class _DefaultWorkspaceControl extends StatefulWidget {
+  const _DefaultWorkspaceControl(
+      {super.key, required this.configurations, required this.workspace});
+  final AxWorkflowConfigurations configurations;
+  final AxWorkspace workspace;
+  @override
+  State<_DefaultWorkspaceControl> createState() =>
+      _DefaultWorkspaceControlState();
+}
+
+class _DefaultWorkspaceControlState extends State<_DefaultWorkspaceControl> {
+  bool _busy = false;
+  String? _error;
+
+  Future<void> _makeDefault() async {
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: const Text('Change default Workspace?'),
+              content: Text(
+                  'Spaces using the default Workspace, including new Spaces, will use ${widget.workspace.name}. Workflow overrides in inheriting Spaces are reset. Saved per-Workspace workflows and existing runs keep their settings.'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Cancel')),
+                FilledButton(
+                    key: const ValueKey('confirm-default-workspace'),
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Make default')),
+              ],
+            ));
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.configurations.selectWorkspace(widget.workspace.id);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      AxQueryBuilder<AxWorkflowWorkspaceSettings>(
+        engine: widget.configurations.engine,
+        query: widget.configurations.workspaceQuery,
+        builder: (context, state) {
+          final settings = state.data;
+          final selected = settings?.workspaceId == widget.workspace.id;
+          final eligible =
+              settings?.workspaces.any((w) => w.id == widget.workspace.id) ??
+                  false;
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (selected)
+                  const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Chip(
+                          key: ValueKey('default-workspace-badge'),
+                          avatar: Icon(Icons.check, size: 16),
+                          label: Text('Default Workspace')))
+                else if (eligible)
+                  TextButton(
+                      key: const ValueKey('make-default-workspace'),
+                      onPressed: _busy ? null : _makeDefault,
+                      child: const Text('Make default')),
+                if (state.error != null)
+                  TextButton(
+                      onPressed: () => widget.configurations.engine
+                          .refresh(widget.configurations.workspaceQuery),
+                      child: const Text('Retry default Workspace')),
+                if (_error != null)
+                  Text(_error!,
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.error)),
+              ]);
+        },
+      );
+}

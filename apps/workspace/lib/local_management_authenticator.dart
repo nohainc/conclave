@@ -53,6 +53,7 @@ class WorkspaceManagementLock {
     await preferences.write(WorkspaceLifecyclePreferences(
       desiredRuntime: current.desiredRuntime,
       launchAtLogin: current.launchAtLogin,
+      preventSleep: current.preventSleep,
       managementLockPreference: state,
       autoLockTimeout: current.autoLockTimeout,
       ownerUserId: current.ownerUserId,

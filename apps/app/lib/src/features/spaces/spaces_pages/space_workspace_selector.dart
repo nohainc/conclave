@@ -74,7 +74,7 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
                               labelText: 'Workspace',
                               helperText: settings.inherited
                                   ? 'Following the default Workspace${name == null ? '' : ': $name'}'
-                                  : 'Threads use this Workspace’s Workers and workflows'),
+                                  : null),
                           items: [
                             const DropdownMenuItem(
                                 value: _followDefault,
@@ -92,32 +92,44 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
                           ],
                           onChanged: _busy
                               ? null
-                              : (id) =>
-                                  _select(id ?? _followDefault, current)))));
+                              : (id) => _select(
+                                  id ?? _followDefault, current, settings)))));
         },
       );
 
-  Future<void> _select(String id, String current) async {
+  Future<void> _select(
+      String id, String current, AxWorkflowWorkspaceSettings settings) async {
     if (id == current) return;
     final inherit = id == _followDefault;
     setState(() => _busy = true);
     try {
-      final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-                  title: const Text('Change Workspace?'),
-                  content: Text(inherit
-                      ? 'This Space will follow your default Workspace. Its own workflow overrides are reset, and existing runs keep their recorded settings.'
-                      : 'Threads in this Space will use the Workers and workflows of the selected Workspace. This Space’s workflow overrides are reset, the Workspace is authorized to run Work here, and existing runs keep their recorded settings.'),
-                  actions: [
-                    TextButton(
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel')),
-                    FilledButton(
-                        key: const ValueKey('confirm-space-workspace'),
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text('Change Workspace')),
-                  ]));
+      final targetWorkspace = inherit
+          ? (await widget.configurations.engine.refresh(
+                  AxWorkflowConfigurations(widget.configurations.source,
+                          engine: widget.configurations.engine)
+                      .workspaceQuery))
+              .workspaceId
+          : id;
+      if (!mounted) return;
+      final sameWorkspace = targetWorkspace == settings.workspaceId;
+      final confirmed = sameWorkspace ||
+          (await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                          title: const Text('Change Workspace?'),
+                          content: Text(inherit
+                              ? 'This Space will follow your default Workspace. Its own workflow overrides are reset, and existing runs keep their recorded settings.'
+                              : 'Threads in this Space will use the Workers and workflows of the selected Workspace. This Space’s workflow overrides are reset, the Workspace is authorized to run Work here, and existing runs keep their recorded settings.'),
+                          actions: [
+                            TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel')),
+                            FilledButton(
+                                key: const ValueKey('confirm-space-workspace'),
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('Change Workspace')),
+                          ]))) ==
+              true;
       if (confirmed != true || !mounted) return;
       await widget.configurations
           .selectWorkspace(inherit ? null : id, inherit: inherit);

@@ -23,6 +23,8 @@ class WorkspaceDashboard extends StatefulWidget {
     this.onRetry,
     this.onCheckForUpdates,
     this.onChangeWorkRoot,
+    this.preventSleep = true,
+    this.onChangePreventSleep,
     this.onReadinessCheck,
     this.onLoadWorkerSlots,
     this.onResetWorkerSlots,
@@ -58,6 +60,8 @@ class WorkspaceDashboard extends StatefulWidget {
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onCheckForUpdates;
   final Future<void> Function(String path)? onChangeWorkRoot;
+  final bool preventSleep;
+  final Future<void> Function(bool value)? onChangePreventSleep;
   final Future<void> Function(
       {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
   final Future<Map<String, Object?>> Function()? onLoadWorkerSlots;
@@ -308,6 +312,8 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                       onConnectCloud: widget.onConnectCloud,
                       onDisconnectCloud: widget.onDisconnectCloud,
                       onChangeWorkRoot: widget.onChangeWorkRoot,
+                      preventSleep: widget.preventSleep,
+                      onChangePreventSleep: widget.onChangePreventSleep,
                       onStopService: widget.onStopService,
                       onRelease: widget.onRelease,
                       onReset: widget.onReset,
@@ -383,6 +389,8 @@ class _WorkspaceTab extends StatefulWidget {
     required this.credentialStore,
     this.onRetry,
     this.onChangeWorkRoot,
+    this.preventSleep = true,
+    this.onChangePreventSleep,
     this.onStopService,
     this.onRelease,
     this.onReset,
@@ -402,6 +410,8 @@ class _WorkspaceTab extends StatefulWidget {
   final SecureCredentialStore credentialStore;
   final Future<void> Function()? onRetry;
   final Future<void> Function(String path)? onChangeWorkRoot;
+  final bool preventSleep;
+  final Future<void> Function(bool value)? onChangePreventSleep;
   final Future<void> Function()? onStopService;
   final Future<void> Function()? onRelease;
   final VoidCallback? onReset;
@@ -600,6 +610,15 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
                     ),
                   ),
                 ),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Prevent sleep'),
+                subtitle: const Text(
+                  'Keep this computer awake while the Workspace service is running so it stays available.',
+                ),
+                value: widget.preventSleep,
+                onChanged: widget.onChangePreventSleep?.call,
               ),
               const SizedBox(height: 16),
               Row(

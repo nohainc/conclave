@@ -170,22 +170,6 @@ extension _ThreadActions on _ThreadPageState {
     }
   }
 
-  Future<void> _retryWorkSync() async {
-    final cache = _workHistoryCache;
-    final id = widget.thread.id;
-    final dirty = cache.dirtyIds(id);
-    if (dirty.isEmpty) {
-      await _refreshWorkTimeline();
-      return;
-    }
-    try {
-      await Future.wait(
-          dirty.map((requestId) => cache.refreshRequest(id, requestId)));
-    } catch (_) {
-      /* Individual request errors remain available in query state. */
-    }
-  }
-
   Future<void> _refreshWorkTimeline({bool activeOnly = false}) async {
     if (widget.isDraft) return;
     final cache = _workHistoryCache;

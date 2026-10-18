@@ -44,12 +44,10 @@ class _PeoplePageState extends State<PeoplePage> {
         return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('People', style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 8),
-          const Text('People you collaborate with in Conclave.'),
+          const Text(
+              'People you collaborate with will appear here after they accept a Space invitation.'),
           const SizedBox(height: 20),
           _PeopleReadStatus(people: widget.people, state: state),
-          if (state.hasData && people.isEmpty)
-            const Text(
-                'People you collaborate with will appear here\nafter they accept a Space invitation.'),
           if (people.isNotEmpty)
             LayoutBuilder(builder: (context, constraints) {
               final width = isTwoColumn

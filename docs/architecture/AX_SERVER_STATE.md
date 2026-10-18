@@ -1084,8 +1084,9 @@ on top, and ties fall back to newest pin first. `PUT /api/pins/order`
 (`{kind, ids, spaceId?}`) stores the order of the caller's own pins; threads
 send their `spaceId`. Lists return `pinPosition` next to `pinnedAt`. Move
 Up / Move Down appear only on pinned Spaces and pinned Threads, and move the
-item among the pinned ones. Both are always listed for a pinned item; the move
-that is not possible (first, last, or only pinned item) is disabled. Unpinned Spaces and Threads have no Move items (they stay in activity order;
+item among the pinned ones. Only moves that can change the order are shown: Move Up is hidden for the
+first item, Move Down is hidden for the last, and both are hidden for the
+only pinned item or when reordering is unavailable. Unpinned Spaces and Threads have no Move items (they stay in activity order;
 the shared `threadOrder` setting is no longer edited from the sidebar). Unpinned Spaces stay newest-activity first. Space settings stay owner-only and are not used for pins. No wire
 version change; the field is additive.
 
@@ -1118,3 +1119,21 @@ re-registered), the app re-binds by the stable `workerTypeId` and refreshes
 of the same workflow id. Leaving a Thread writes its Cloud `viewState` for that
 Thread, and a selection still waiting for the catalogs is saved as-is rather
 than replaced by defaults.
+
+The Work tab retains cached history after synchronization failures without an
+inline Retry Work sync button. Existing automatic synchronization and recovery
+continue to reconcile Work history.
+
+### Space landing composition
+
+The Space landing page starts with the Space name and description when present,
+then Workspace selection and a same-width Create a new thread field. Creation
+requires an explicit name unique within the Space (trimmed and case-insensitive,
+including archived Threads); cached Thread queries provide inline validation,
+and Cloud remains authoritative for concurrent conflicts. Errors display below
+the field. The Space page has no message composers or Discussion/Work tabs.
+Workspace selection retains owner editing and read-only display for other members.
+The Members section follows; Share Space is in the member grid’s name/email
+column header. Member permissions and invitations observe existing Space queries.
+Old Members routes render the Space landing page. Existing Thread pages retain
+their history and composer layout.

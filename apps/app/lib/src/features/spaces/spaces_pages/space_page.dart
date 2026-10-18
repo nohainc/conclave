@@ -13,6 +13,7 @@ class SpacePage extends StatelessWidget {
     required this.onDelete,
     this.onSpaceUpdated,
     this.section = SpacePageSection.threads,
+    this.embedded = false,
     this.spaceThreads,
     this.tabQueries,
     this.mutations,
@@ -31,6 +32,7 @@ class SpacePage extends StatelessWidget {
   final VoidCallback onDelete;
   final ValueChanged<AxSpace>? onSpaceUpdated;
   final SpacePageSection section;
+  final bool embedded;
   final AxSpaceThreads? spaceThreads;
   final AxSpaceTabQueries? tabQueries;
   final AxCollaborationMutations? mutations;
@@ -47,6 +49,7 @@ class SpacePage extends StatelessWidget {
         onDelete: onDelete,
         onSpaceUpdated: onSpaceUpdated,
         section: section,
+        embedded: embedded,
         spaceThreads: spaceThreads,
         tabQueries: tabQueries,
         mutations: mutations,
@@ -66,6 +69,7 @@ class _SpaceWorkspace extends StatefulWidget {
     required this.onDelete,
     this.onSpaceUpdated,
     this.section = SpacePageSection.threads,
+    this.embedded = false,
     this.spaceThreads,
     this.tabQueries,
     this.mutations,
@@ -82,6 +86,7 @@ class _SpaceWorkspace extends StatefulWidget {
   final VoidCallback onDelete;
   final ValueChanged<AxSpace>? onSpaceUpdated;
   final SpacePageSection section;
+  final bool embedded;
   final AxSpaceThreads? spaceThreads;
   final AxSpaceTabQueries? tabQueries;
   final AxCollaborationMutations? mutations;
@@ -214,7 +219,12 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
   void _updateState(VoidCallback callback) => setState(callback);
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
+  Widget build(BuildContext context) {
+    if (widget.embedded) return _membersTab();
+    return _page();
+  }
+
+  Widget _page() => LayoutBuilder(
         builder: (context, constraints) => Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 840),

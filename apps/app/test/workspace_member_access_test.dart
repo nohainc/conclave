@@ -92,38 +92,14 @@ void main() {
         isFalse);
   });
 
-  testWidgets('limiting access starts at chat only and saves the chosen mode',
-      (tester) async {
-    final source = AccessSource();
-    await pump(tester, source);
-    await tester.tap(find.byKey(const ValueKey('member-access-restricted')));
-    await tester.pumpAndSettle();
-    expect(
-        tester
-            .widget<ChoiceChip>(find.byKey(const ValueKey('member-mode-chat')))
-            .selected,
-        isTrue);
-    await tester.tap(find.byKey(const ValueKey('member-mode-work')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('member-access-save')));
-    await tester.pumpAndSettle();
-    expect(source.saves.single.mode, 'work');
-  });
-
   testWidgets(
-      'unrestricted by default; shows only this Workspace Workers once limited',
+      'always limited: shows only this Workspace Workers, no switch or mode',
       (tester) async {
     final source = AccessSource();
     await pump(tester, source);
-    expect(find.byKey(const ValueKey('share-worker-a')), findsNothing);
     expect(
-        tester
-            .widget<FilledButton>(
-                find.byKey(const ValueKey('member-access-save')))
-            .onPressed,
-        isNull);
-    await tester.tap(find.byKey(const ValueKey('member-access-restricted')));
-    await tester.pumpAndSettle();
+        find.byKey(const ValueKey('member-access-restricted')), findsNothing);
+    expect(find.byKey(const ValueKey('member-mode-chat')), findsNothing);
     expect(find.byKey(const ValueKey('share-worker-a')), findsOneWidget);
     expect(find.byKey(const ValueKey('share-worker-b')), findsNothing);
   });
@@ -132,8 +108,6 @@ void main() {
       (tester) async {
     final source = AccessSource();
     await pump(tester, source);
-    await tester.tap(find.byKey(const ValueKey('member-access-restricted')));
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('share-worker-a')));
     await tester.pumpAndSettle();
     // Deselecting one model narrows "All" to the rest.
@@ -156,20 +130,6 @@ void main() {
         isNull);
   });
 
-  testWidgets('turning the limit off saves an unrestricted policy',
-      (tester) async {
-    final source = AccessSource(const AxWorkspaceMemberAccess(
-        restricted: true, workers: {'a': AxSharedWorker()}));
-    await pump(tester, source);
-    expect(find.byKey(const ValueKey('share-worker-a')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('member-access-restricted')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('member-access-save')));
-    await tester.pumpAndSettle();
-    expect(source.saves.single.restricted, isFalse);
-    expect(source.saves.single.workers, isEmpty);
-  });
-
   testWidgets('load failure is retryable', (tester) async {
     final source = AccessSource()..failLoad = true;
     await pump(tester, source);
@@ -177,8 +137,7 @@ void main() {
     source.failLoad = false;
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
-    expect(
-        find.byKey(const ValueKey('member-access-restricted')), findsOneWidget);
+    expect(find.byKey(const ValueKey('member-access-save')), findsOneWidget);
   });
 
   test('API client reads shared Workers and manages member access', () async {

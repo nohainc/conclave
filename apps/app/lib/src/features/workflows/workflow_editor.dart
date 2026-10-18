@@ -16,7 +16,9 @@ class WorkflowEditor extends StatefulWidget {
       required this.configuration,
       required this.catalogs,
       required this.cache,
-      this.workspaceId});
+      this.workspaceId,
+      this.stepsOnly = false});
+  final bool stepsOnly;
   final String? workspaceId;
   final AxBuiltinWorkflow definition;
   final AxUserWorkflowConfiguration configuration;
@@ -125,46 +127,56 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Enabled'),
-                          value: enabled,
-                          subtitle: widget.definition.id == 'chat'
-                              ? const Text('Chat is always available.')
-                              : null,
-                          onChanged: busy || widget.definition.id == 'chat'
-                              ? null
-                              : (value) => setState(() => enabled = value)),
-                      Text('Default execution',
-                          style: Theme.of(context).textTheme.titleSmall),
-                      const SizedBox(height: 12),
-                      _selection(
-                          'defaults',
-                          defaults,
-                          const AxWorkflowSelection(),
-                          options,
-                          (value) => defaults = value),
-                      if (issues['defaults'] != null &&
-                          !_hideValidationMessage(issues['defaults']))
-                        _notice(issues['defaults']!, error: true),
-                      const SizedBox(height: 8),
-                      ExpansionTile(
-                        key: const ValueKey('workflow-advanced'),
-                        tilePadding: EdgeInsets.zero,
-                        title: const Text('Advanced'),
-                        children: [
-                          const Divider(),
-                          const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text('Workflow steps',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.w600))),
-                          const SizedBox(height: 8),
-                          for (var index = 0; index < steps.length; index++)
-                            _step(index, steps[index], options,
-                                issues[steps[index].kind]),
-                        ],
-                      ),
+                      if (!widget.stepsOnly) ...[
+                        SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Enabled'),
+                            value: enabled,
+                            subtitle: widget.definition.id == 'chat'
+                                ? const Text('Chat is always available.')
+                                : null,
+                            onChanged: busy || widget.definition.id == 'chat'
+                                ? null
+                                : (value) => setState(() => enabled = value)),
+                        Text('Default execution',
+                            style: Theme.of(context).textTheme.titleSmall),
+                        const SizedBox(height: 12),
+                        _selection(
+                            'defaults',
+                            defaults,
+                            const AxWorkflowSelection(),
+                            options,
+                            (value) => defaults = value),
+                        if (issues['defaults'] != null &&
+                            !_hideValidationMessage(issues['defaults']))
+                          _notice(issues['defaults']!, error: true),
+                        const SizedBox(height: 8),
+                      ],
+                      if (widget.stepsOnly) ...[
+                        Text('Workflow steps',
+                            style: Theme.of(context).textTheme.titleSmall),
+                        const SizedBox(height: 8),
+                        for (var index = 0; index < steps.length; index++)
+                          _step(index, steps[index], options,
+                              issues[steps[index].kind]),
+                      ] else
+                        ExpansionTile(
+                          key: const ValueKey('workflow-advanced'),
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text('Advanced'),
+                          children: [
+                            const Divider(),
+                            const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text('Workflow steps',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w600))),
+                            const SizedBox(height: 8),
+                            for (var index = 0; index < steps.length; index++)
+                              _step(index, steps[index], options,
+                                  issues[steps[index].kind]),
+                          ],
+                        ),
                       if (visibleIssues.isNotEmpty)
                         _notice(
                             'Resolve incompatible choices before saving.\n${visibleIssues.where((entry) => entry.key != 'defaults').map((entry) => '${_title(entry.key)}: ${entry.value}').join('\n')}',
@@ -176,17 +188,18 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
                     ],
                   ))),
               actions: [
-                TextButton(
-                    key: const ValueKey('reset-workflow'),
-                    onPressed: busy ? null : () => _save(reset: true),
-                    child: Text(widget.cache.spaceId == null ||
-                            widget.cache.engine
-                                    .peek(widget.cache.workspaceQuery)
-                                    .data
-                                    ?.inherited ==
-                                false
-                        ? 'Reset'
-                        : 'Use global defaults')),
+                if (!widget.stepsOnly)
+                  TextButton(
+                      key: const ValueKey('reset-workflow'),
+                      onPressed: busy ? null : () => _save(reset: true),
+                      child: Text(widget.cache.spaceId == null ||
+                              widget.cache.engine
+                                      .peek(widget.cache.workspaceQuery)
+                                      .data
+                                      ?.inherited ==
+                                  false
+                          ? 'Reset'
+                          : 'Use global defaults')),
                 TextButton(
                     onPressed: busy ? null : () => Navigator.pop(context),
                     child: const Text('Cancel')),

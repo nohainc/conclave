@@ -43,7 +43,6 @@ class _WorkspaceMemberAccessSectionState
   bool _saving = false;
   Object? _error;
   AxWorkspaceMemberAccess _saved = const AxWorkspaceMemberAccess();
-  bool _restricted = false;
   String? _mode;
   Map<String, AxSharedWorker> _workers = {};
 
@@ -115,15 +114,14 @@ class _WorkspaceMemberAccessSectionState
 
   void _adopt(AxWorkspaceMemberAccess access) {
     _saved = access;
-    _restricted = access.restricted;
-    _mode = access.mode;
+    // Limits always apply. The mode is not edited here; it keeps its saved
+    // value, starting at the safest one (ADR-020).
+    _mode = access.mode ?? 'chat';
     _workers = Map.of(access.workers);
   }
 
   bool get _dirty =>
-      _restricted != _saved.restricted ||
-      (_restricted &&
-          (_mode != _saved.mode || !_sameWorkers(_workers, _saved.workers)));
+      !_saved.restricted || !_sameWorkers(_workers, _saved.workers);
 
   static bool _sameWorkers(
       Map<String, AxSharedWorker> a, Map<String, AxSharedWorker> b) {
@@ -146,9 +144,7 @@ class _WorkspaceMemberAccessSectionState
     setState(() => _saving = true);
     try {
       final next = AxWorkspaceMemberAccess(
-          restricted: _restricted,
-          mode: _restricted ? _mode : null,
-          workers: _restricted ? _workers : const {});
+          restricted: true, mode: _mode, workers: _workers);
       final person = widget.personSource;
       final access = person == null
           ? await widget.source
@@ -197,7 +193,7 @@ class _WorkspaceMemberAccessSectionState
                 ? (_custom
                     ? 'Custom access replaces the Workspace default for this person.'
                     : 'This person follows the Workspace default until you save custom access.')
-                : 'Choose what invited Space members can use on this Workspace. You are never limited.',
+                : 'Choose which Workers, models and efforts invited Space members can use on this Workspace. You are never limited. What they may do (chat, work, commands) is set per Space.',
             style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
         const SizedBox(height: 8),
         if (_loading)
@@ -210,29 +206,10 @@ class _WorkspaceMemberAccessSectionState
             TextButton(onPressed: _load, child: const Text('Retry')),
           ])
         else ...[
-          if (!_isPerson)
-            SwitchListTile(
-                key: const ValueKey('member-access-restricted'),
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Limit what members can use'),
-                subtitle: Text(_restricted
-                    ? 'Members can only use what is shared below.'
-                    : 'Members use whatever your workflows select.'),
-                value: _restricted,
-                onChanged: _saving
-                    ? null
-                    : (value) => setState(() {
-                          _restricted = value;
-                          // New limits start at the safest mode (ADR-020).
-                          if (value) _mode ??= 'chat';
-                        })),
-          if (_restricted) ...[
-            _modeSelector(context),
-            if (workers.isEmpty)
-              Text('This Workspace has no Workers to share yet.',
-                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-            for (final worker in workers) _workerTile(context, worker),
-          ],
+          if (workers.isEmpty)
+            Text('This Workspace has no Workers to share yet.',
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+          for (final worker in workers) _workerTile(context, worker),
           const SizedBox(height: 8),
           Align(
               alignment: Alignment.centerLeft,
@@ -251,26 +228,6 @@ class _WorkspaceMemberAccessSectionState
       ],
     );
   }
-
-  static const _modeLabels = {
-    'chat': 'Chat only',
-    'work': 'Chat and work',
-    'work+shell': 'Work and commands',
-  };
-
-  /// The ceiling on what members may run: read-only chat, file changes, or
-  /// also shell commands.
-  Widget _modeSelector(BuildContext context) => Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Wrap(spacing: 8, runSpacing: 4, children: [
-        const Text('Members can:'),
-        for (final mode in axWorkspaceAccessModes)
-          ChoiceChip(
-              key: ValueKey('member-mode-$mode'),
-              label: Text(_modeLabels[mode]!),
-              selected: _mode == mode,
-              onSelected: _saving ? null : (_) => setState(() => _mode = mode)),
-      ]));
 
   Widget _workerTile(BuildContext context, AxWorker worker) {
     final shared = _workers[worker.id];
