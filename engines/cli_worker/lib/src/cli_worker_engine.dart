@@ -2244,21 +2244,30 @@ class CliWorkerEngine {
         exitCode == 0 && stdout.trim().isNotEmpty ? null : _mapExit(exitCode),
       );
     List<Object?> events;
+    var skippedLines = 0;
     try {
       if (mode == 'single_json') {
         events = [jsonDecode(stdout)];
       } else {
-        events = stdout
-            .split(RegExp(r'\r?\n'))
-            .where((line) => line.isNotEmpty)
-            .map(jsonDecode)
-            .toList();
+        // One stray non-JSON line (a warning, a progress ticker) must not
+        // discard a whole run's result: skip it and count it. Output with no
+        // valid terminal event still fails below.
+        events = <Object?>[];
+        for (final line in stdout.split(RegExp(r'\r?\n'))) {
+          if (line.isEmpty) continue;
+          try {
+            events.add(jsonDecode(line));
+          } on Object {
+            skippedLines += 1;
+          }
+        }
       }
     } on Object {
       return const _InterpretedOutput(
         null,
         null,
         WorkerIssueCode.providerFailure,
+        reason: 'provider output is not valid JSON',
       );
     }
     Object? finalText;
@@ -2287,6 +2296,7 @@ class CliWorkerEngine {
               null,
               null,
               WorkerIssueCode.providerFailure,
+              reason: 'provider reported an invalid session id',
             );
           }
           if (sessionId != null && sessionId != value) {
@@ -2294,6 +2304,7 @@ class CliWorkerEngine {
               null,
               null,
               WorkerIssueCode.providerFailure,
+              reason: 'provider reported two different session ids',
             );
           }
           sessionId = value;
@@ -2314,6 +2325,7 @@ class CliWorkerEngine {
                 null,
                 null,
                 WorkerIssueCode.providerFailure,
+                reason: 'provider reported an invalid session id',
               );
             }
             if (sessionId != null && sessionId != value) {
@@ -2321,6 +2333,7 @@ class CliWorkerEngine {
                 null,
                 null,
                 WorkerIssueCode.providerFailure,
+                reason: 'provider reported two different session ids',
               );
             }
             sessionId = value;
@@ -2457,6 +2470,7 @@ class CliWorkerEngine {
         if (!markedSuccess && !implicitTextSuccess) 'no success marker',
         if (terminalStatus != null) 'status=$terminalStatus',
         if (!terminalObserved) 'no terminal event',
+        if (skippedLines > 0) 'skipped $skippedLines non-JSON lines',
         if (text == null || text.isEmpty) 'empty final text',
         if (text == null || text.isEmpty) _eventShape(events),
       ].join(', '),
