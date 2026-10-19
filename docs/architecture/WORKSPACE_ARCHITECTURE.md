@@ -135,7 +135,15 @@ Conclave-owned runtime state is under:
 ```
 
 User-owned files are under the configured Work Root (default
-`~/Documents/Conclave`) and Space directories below it. A Worker receives the
+`~/Documents/Conclave`) and Space directories below it. Every Space owner,
+including the Workspace owner, has one folder directly under Work Root, named
+once as the first 8 characters of their user ID (longer on collision) and
+recorded in the private registry; it never changes, so a user rename moves
+nothing and no personal name appears in paths. A Space lives at `<owner-folder>/<Space name>`; a
+duplicate name inside one owner folder gets a ` (2)` suffix. The folder follows
+the Space owner (Cloud sends `spaceOwnerUserId` with each assignment), never the member who runs the Work. Paths already in the registry
+stay authoritative. Folders organize files; they are not an isolation boundary.
+Attaching external folders to a Space is a separate, postponed feature. A Worker receives the
 resolved Space directory, never Application Support as its normal working
 directory. Resetting runtime state, clearing logs/cache, deleting a Thread, or
 removing a Workspace must not delete user work. Space directory identity is

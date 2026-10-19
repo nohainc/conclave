@@ -307,4 +307,106 @@ void main() {
     ) as Map;
     expect(marker['spaceId'], 'space-a');
   });
+
+  group('owner folders', () {
+    late Directory root;
+    late Directory work;
+    late SpaceDirectoryResolver resolver;
+
+    setUp(() async {
+      root = await Directory.systemTemp.createTemp('conclave-space-');
+      work = Directory('${root.path}/work');
+      resolver = SpaceDirectoryResolver(
+        workRoot: work,
+        registryDirectory: Directory('${root.path}/state'),
+      );
+    });
+    tearDown(() => root.delete(recursive: true));
+
+    test(
+        'places every owner, including the Workspace owner, in their own folder',
+        () async {
+      final mine = await resolver.resolve(
+        spaceId: 'space-a',
+        spaceName: 'Website',
+        ownerUserId: 'user-1',
+      );
+      final theirs = await resolver.resolve(
+        spaceId: 'space-b',
+        spaceName: 'Website',
+        ownerUserId: 'user-2',
+      );
+
+      expect(mine.path, '${work.path}/user-1/Website');
+      expect(theirs.path, '${work.path}/user-2/Website');
+      expect(File('${mine.path}/.conclave-space.json').existsSync(), isTrue);
+    });
+
+    test('keeps the folder when the Space is renamed', () async {
+      final first = await resolver.resolve(
+        spaceId: 'space-a',
+        spaceName: 'Website',
+        ownerUserId: 'user-1',
+      );
+      final again = await resolver.resolve(
+        spaceId: 'space-a',
+        spaceName: 'Renamed',
+        ownerUserId: 'user-1',
+      );
+      final other = await resolver.resolve(
+        spaceId: 'space-c',
+        spaceName: 'Backend',
+        ownerUserId: 'user-1',
+      );
+
+      expect(again.path, first.path);
+      expect(other.path, '${work.path}/user-1/Backend');
+    });
+
+    test('suffixes a duplicate Space name inside one owner folder', () async {
+      await resolver.resolve(
+          spaceId: 'space-a', spaceName: 'Plan', ownerUserId: 'user-1');
+      final second = await resolver.resolve(
+          spaceId: 'space-b', spaceName: 'Plan', ownerUserId: 'user-1');
+
+      expect(second.path, '${work.path}/user-1/Plan (2)');
+    });
+
+    test('rediscovers a marked Space moved inside its owner folder', () async {
+      final first = await resolver.resolve(
+          spaceId: 'space-a', spaceName: 'Plan', ownerUserId: 'user-1');
+      final moved = Directory('${work.path}/user-1/Moved');
+      await first.rename(moved.path);
+
+      final found = await resolver.resolve(
+          spaceId: 'space-a', spaceName: 'Plan', ownerUserId: 'user-1');
+
+      expect(found.path, moved.path);
+    });
+
+    test('rejects an unsafe owner user ID', () async {
+      expect(
+        resolver.resolve(
+            spaceId: 'space-a', spaceName: 'Plan', ownerUserId: '../x'),
+        throwsArgumentError,
+      );
+    });
+
+    test('uses a short ID and lengthens it when another owner has it',
+        () async {
+      final a = await resolver.resolve(
+        spaceId: 'space-a',
+        spaceName: 'Plan',
+        ownerUserId: 'abcdefgh11112222',
+      );
+      final b = await resolver.resolve(
+        spaceId: 'space-b',
+        spaceName: 'Plan',
+        ownerUserId: 'abcdefgh33334444',
+      );
+
+      expect(a.path, '${work.path}/abcdefgh/Plan');
+      expect(b.path, '${work.path}/abcdefgh3333/Plan');
+    });
+  });
 }

@@ -347,6 +347,7 @@ class WorkerAssignmentHandler {
             spaceId: spaceId,
             spaceName: _spaceName(context.payload),
             adoptExistingFolder: _adoptSpaceFolder(context.payload),
+            ownerUserId: _optionalString(context.payload['spaceOwnerUserId']),
           );
         } on SpaceFolderExistsException {
           throw _spaceFolderFailure();
@@ -568,6 +569,7 @@ class WorkerAssignmentHandler {
               threadId: threadId,
               spaceName: _spaceName(context.payload),
               adoptExistingFolder: _adoptSpaceFolder(context.payload),
+              ownerUserId: _optionalString(context.payload['spaceOwnerUserId']),
               leaseId: leaseId,
               fencingToken: fencingToken,
               action: (_) {
@@ -699,6 +701,9 @@ class WorkerAssignmentHandler {
 
   bool _adoptSpaceFolder(Map<String, Object?> payload) =>
       payload['spaceFolderAdoptionConfirmed'] == true;
+
+  String? _optionalString(Object? value) =>
+      value is String && value.trim().isNotEmpty ? value.trim() : null;
 
   String _spaceName(Map<String, Object?> payload) {
     final value = payload['spaceName'];

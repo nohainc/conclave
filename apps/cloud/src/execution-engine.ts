@@ -19,6 +19,7 @@ export interface WorkerStepExecutionInput {
   readonly scope: {
     readonly spaceId: string;
     readonly spaceName?: string;
+    readonly spaceOwnerUserId?: string;
     readonly requesterUserId: string;
     readonly threadId: string;
     readonly workRequestId: string;
@@ -72,6 +73,9 @@ export function prepareWorkerStepExecution(
       }),
       spaceId: scope.spaceId,
       ...(scope.spaceName ? { spaceName: scope.spaceName } : {}),
+      ...(scope.spaceOwnerUserId
+        ? { spaceOwnerUserId: scope.spaceOwnerUserId }
+        : {}),
       ...(input.retry.adoptSpaceFolder === true
         ? { spaceFolderAdoptionConfirmed: true }
         : {}),
