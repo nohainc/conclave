@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'worker_check_progress.dart';
+
 import 'local_worker_registry.dart';
 import 'tool_profile_catalog.dart';
 import 'worker_catalog_coordinator.dart';
@@ -69,7 +71,8 @@ class IpcWorkspaceWorkerCatalog extends WorkspaceNotifier
       if (cacheFile != null) {
         cacheFile.parent.createSync(recursive: true);
         final temporary = File('${cacheFile.path}.tmp');
-        temporary.writeAsStringSync(jsonEncode(value));
+        // Active checks are transient service state, never display-cache evidence.
+        temporary.writeAsStringSync(jsonEncode({...value}..remove('checks')));
         temporary.renameSync(cacheFile.path);
       }
     } on Object {
@@ -175,7 +178,18 @@ class IpcWorkspaceWorkerCatalog extends WorkspaceNotifier
         ));
       }
     }
+    final rawChecks = json['checks'];
+    final checks = <String, WorkerCheckProgress>{};
+    if (rawChecks is Map) {
+      for (final entry in rawChecks.entries) {
+        final progress = WorkerCheckProgress.fromJson(entry.value);
+        if (entry.key is String && progress != null) {
+          checks[entry.key as String] = progress;
+        }
+      }
+    }
     return WorkerCatalogSnapshot(
+      checks: checks,
       descriptors: descriptors,
       workers: views,
       catalogConfirmed: json['catalogConfirmed'] == true,

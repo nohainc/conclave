@@ -271,7 +271,7 @@ describe("IdentityService", () => {
     );
     for (const message of messages) {
       expect(message).toMatchObject({
-        from: { email: "conclave@nohainc.com", name: "Conclave AX" },
+        from: { email: "conclave@conclaveax.com", name: "Conclave AX" },
         to: "person@example.com",
       });
     }
@@ -357,7 +357,7 @@ describe("IdentityService", () => {
 
     expect(send).toHaveBeenCalledTimes(2);
     expect(send.mock.calls[1]?.[0]).toMatchObject({
-      from: { email: "vitalii@nohainc.com", name: "Conclave AX" },
+      from: { email: "vitalii@conclaveax.com", name: "Conclave AX" },
     });
   });
 
@@ -582,5 +582,198 @@ describe("IdentityService", () => {
     expect(
       queries.some((query) => query.includes("workspace_memberships")),
     ).toBe(false);
+  });
+
+  describe("pre-signup email verification code flow", () => {
+    function createOtpMemoryDb(existingEmails: string[] = []) {
+      const existing = new Set(existingEmails.map((e) => e.toLowerCase()));
+      const verifications = new Map<
+        string,
+        {
+          id: string;
+          identifier: string;
+          value: string;
+          expires_at: string;
+        }
+      >();
+      let verifiedEmail: string | undefined;
+
+      const db = {
+        prepare(query: string) {
+          let bound: unknown[] = [];
+          return {
+            bind(...values: unknown[]) {
+              bound = values;
+              return this;
+            },
+            async first<T>() {
+              if (query.includes("FROM users WHERE lower(email)")) {
+                const email = String(bound[0] ?? "").toLowerCase();
+                return existing.has(email) ? ({ id: "user-1" } as T) : null;
+              }
+              if (query.includes("FROM auth_verifications")) {
+                const identifier = String(bound[0] ?? "");
+                return (verifications.get(identifier) ?? null) as T | null;
+              }
+              return null;
+            },
+            async run() {
+              if (query.includes("DELETE FROM auth_verifications WHERE identifier")) {
+                verifications.delete(String(bound[0] ?? ""));
+              } else if (query.includes("DELETE FROM auth_verifications WHERE id")) {
+                const id = String(bound[0] ?? "");
+                for (const [key, row] of verifications.entries()) {
+                  if (row.id === id) verifications.delete(key);
+                }
+              } else if (query.includes("INSERT INTO auth_verifications")) {
+                const [id, identifier, value, expires_at] = bound as [
+                  string,
+                  string,
+                  string,
+                  string,
+                ];
+                verifications.set(identifier, {
+                  id,
+                  identifier,
+                  value,
+                  expires_at,
+                });
+              } else if (query.includes("UPDATE auth_verifications")) {
+                const [value, _updatedAt, id] = bound as [
+                  string,
+                  string,
+                  string,
+                ];
+                for (const [key, row] of verifications.entries()) {
+                  if (row.id === id) {
+                    verifications.set(key, { ...row, value });
+                  }
+                }
+              } else if (query.includes("UPDATE users")) {
+                verifiedEmail = String(bound[1] ?? "");
+              }
+              return { success: true };
+            },
+          };
+        },
+      } as unknown as D1Database;
+
+      return { db, verifications, getVerifiedEmail: () => verifiedEmail };
+    }
+
+    it("sends a 6-digit verification code and stores it in auth_verifications", async () => {
+      const { db, verifications } = createOtpMemoryDb();
+      const send = vi.fn(async (_message: unknown) => ({
+        messageId: "msg-otp-1",
+      }));
+
+      const response = await handleBetterAuthRequest(
+        new Request("https://app.conclaveax.com/api/auth/sign-up/send-code", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: "newuser@example.com",
+            name: "New User",
+          }),
+        }),
+        {
+          CONCLAVE_DB: db,
+          CONCLAVE_ENVIRONMENT: "production",
+          BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
+          BETTER_AUTH_URL: "https://app.conclaveax.com",
+          CONCLAVE_EMAIL: { send },
+        },
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        sent: true,
+        expiresInSeconds: 600,
+      });
+      expect(send).toHaveBeenCalledOnce();
+      const sentMessage = send.mock.calls[0]?.[0] as {
+        to: string;
+        subject: string;
+        text?: string;
+        from: { email: string; name: string };
+      };
+      expect(sentMessage.to).toBe("newuser@example.com");
+      expect(sentMessage.from).toEqual({
+        email: "conclave@conclaveax.com",
+        name: "Conclave AX",
+      });
+      const stored = verifications.get("signup-otp:newuser@example.com");
+      expect(stored).toBeDefined();
+      const code = stored?.value.split(":")[0] ?? "";
+      expect(code).toMatch(/^\d{6}$/);
+      expect(sentMessage.subject).toContain(code);
+      expect(sentMessage.text).toContain(code);
+    });
+
+    it("rejects sending a verification code when the email is already registered", async () => {
+      const { db } = createOtpMemoryDb(["existing@example.com"]);
+      const send = vi.fn();
+
+      const response = await handleBetterAuthRequest(
+        new Request("https://app.conclaveax.com/api/auth/sign-up/send-code", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            email: "Existing@Example.com",
+            name: "Existing",
+          }),
+        }),
+        {
+          CONCLAVE_DB: db,
+          CONCLAVE_ENVIRONMENT: "production",
+          BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
+          BETTER_AUTH_URL: "https://app.conclaveax.com",
+          CONCLAVE_EMAIL: { send },
+        },
+      );
+
+      expect(response.status).toBe(409);
+      await expect(response.json()).resolves.toMatchObject({
+        code: "USER_ALREADY_EXISTS",
+      });
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it("rejects sign-up with an invalid OTP and tracks attempts", async () => {
+      const { db, verifications } = createOtpMemoryDb();
+      verifications.set("signup-otp:newuser@example.com", {
+        id: "ver-1",
+        identifier: "signup-otp:newuser@example.com",
+        value: "123456:0",
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      });
+
+      const response = await handleBetterAuthRequest(
+        new Request("https://app.conclaveax.com/api/auth/sign-up/email", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: "New User",
+            email: "newuser@example.com",
+            password: "strong-password-123",
+            otp: "000000",
+          }),
+        }),
+        {
+          CONCLAVE_DB: db,
+          CONCLAVE_ENVIRONMENT: "production",
+          BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
+          BETTER_AUTH_URL: "https://app.conclaveax.com",
+        },
+      );
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        code: "INVALID_OTP",
+      });
+      expect(
+        verifications.get("signup-otp:newuser@example.com")?.value,
+      ).toBe("123456:1");
+    });
   });
 });

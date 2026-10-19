@@ -155,10 +155,17 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
   }) async {}
 
   @override
+  Future<void> requestSignUpVerificationCode({
+    required String email,
+    String? name,
+  }) async {}
+
+  @override
   Future<void> signUpWithEmail({
     required String name,
     required String email,
     required String password,
+    String? otp,
   }) async {}
 
   @override

@@ -28,7 +28,7 @@ describe("authentication observability", () => {
       reason: "invalid_credentials",
       operation: "sign_in",
     });
-    const details = JSON.parse(String(bound[6])) as Record<string, string>;
+    const details = JSON.parse(String(bound[5])) as Record<string, string>;
     expect(details).toEqual({
       provider: "github",
       reason: "invalid_credentials",

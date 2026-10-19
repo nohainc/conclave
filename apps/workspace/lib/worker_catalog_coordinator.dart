@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'worker_check_progress.dart';
+
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
     show SafeProviderDiagnostics;
 
@@ -15,6 +17,7 @@ import 'workspace_notifier.dart';
 
 class WorkerCatalogSnapshot {
   const WorkerCatalogSnapshot({
+    this.checks = const {},
     this.descriptors = const [],
     this.workers = const [],
     this.profiles = const {},
@@ -25,6 +28,7 @@ class WorkerCatalogSnapshot {
     this.localRegistryError,
   });
 
+  final Map<String, WorkerCheckProgress> checks;
   final List<WorkerDescriptor> descriptors;
   final List<WorkerCatalogWorkerState> workers;
   final Map<String, WorkerProfileResolution> profiles;

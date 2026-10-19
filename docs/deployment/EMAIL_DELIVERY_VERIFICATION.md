@@ -13,8 +13,8 @@ not run in normal CI or deployment jobs.
 
 ## Preconditions
 
-- The `nohainc.com` domain is enabled for Cloudflare Email Sending.
-- Both `conclave@nohainc.com` and `vitalii@nohainc.com` are authorized sender
+- The `conclaveax.com` domain is enabled for Cloudflare Email Sending.
+- Both `conclave@conclaveax.com` and `vitalii@conclaveax.com` are authorized sender
   identities in the same Cloudflare account.
 - The recipient is a mailbox controlled by the operator and is suitable for a
   disposable test message.
@@ -41,7 +41,7 @@ Send one message from each identity using the Cloudflare Email Sending REST
 API:
 
 ```bash
-for sender in conclave@nohainc.com vitalii@nohainc.com; do
+for sender in conclave@conclaveax.com vitalii@conclaveax.com; do
   curl --fail-with-body \
     "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/email/sending/send" \
     --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -57,9 +57,8 @@ the following in the recipient mailbox and message headers:
 - the visible sender is `Conclave AX` with the expected address;
 - the message arrives at the intended mailbox and at an external-domain test
   mailbox when one is available;
-- SPF, DKIM, and DMARC pass for `nohainc.com`;
-- replies to `conclave@nohainc.com` reach the configured Google Workspace
-  mailbox.
+- SPF, DKIM, and DMARC pass for `conclaveax.com`;
+- replies to `conclave@conclaveax.com` reach the configured mailbox.
 
 Run the authentication verification and invitation verification separately
 through the normal application flows. Check that verification, reset, change

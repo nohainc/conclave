@@ -115,6 +115,33 @@ Engine process is started on demand for a probe or assignment and is always
 tracked by the one process supervisor. No UI polling loop or idle Engine is
 required.
 
+### Worker management and verification
+
+Workers uses a catalog-driven selector and one detail panel. Selection is keyed
+by logical Worker type and survives inventory refreshes. Availability evidence,
+activation, permissions, and model discovery remain separate. The detail panel
+shows the actual issue code, safe diagnostic details and a recovery action;
+it does not substitute a generic “Needs attention” badge for the failure.
+
+The Service readiness monitor publishes transient check progress through the
+existing authenticated `worker.catalogChanged` and snapshot path. The optional
+`workerCatalog.checks` map is keyed by Worker type. Each entry has
+`schemaVersion: 1`, `mode` (`passive` or `live`), `phase` (`profile`, `probe`,
+`save`), `outcome` (`running`, `passed`, `failed`), UTC `startedAt`, optional
+`completedAt`, and optional `issueCode`. These are actual execution boundaries:
+Profile resolution, the combined Profile-defined CLI probe, and recording a
+successful verification. Failed check evidence is still saved in the last-test
+record without marking that final success step as passed. No provider-specific
+sub-tests or synthetic percentages are inferred by the manager. Failure retains its failing stage; later steps are not
+shown as passed. Testing preserves activation and may consume provider quota.
+
+Progress is Service memory, available to newly attached IPC clients, and is never
+restored from the UI's display cache. Persisted last passive/live timestamps,
+live pass/fail and safe failure details remain visible after a test ends or the
+service stops. A stopped service is presented as stale evidence, not live
+availability. Missing progress fields from an older service are supported;
+existing IPC commands and Cloud/Engine protocols are unchanged.
+
 ## Local IPC
 
 The manager protocol is versioned, authenticated with a per-installation

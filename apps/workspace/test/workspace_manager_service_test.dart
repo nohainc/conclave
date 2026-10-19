@@ -8,8 +8,61 @@ import 'package:conclave_workspace/workspace_lifecycle_store.dart';
 import 'package:conclave_workspace/workspace_manager_ipc.dart';
 import 'package:conclave_workspace/workspace_manager_service.dart';
 import 'package:test/test.dart';
+import 'package:conclave_workspace/worker_readiness.dart';
+import 'support/logical_worker_catalog_fixture.dart';
 
 void main() {
+  test('service streams running check progress and terminal evidence over IPC',
+      () async {
+    final root = await Directory('/tmp').createTemp('ws-check-progress-');
+    addTearDown(() => root.delete(recursive: true));
+    final registry =
+        LocalWorkerRegistry(dataDirectory: root, workspaceId: 'workspace-test');
+    await registry.create(
+        catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
+        localPermissions: const ['repository:read'],
+        status: LocalWorkerStatus.ready);
+    final assessment = Completer<WorkerReadinessAssessment>();
+    final monitor = WorkerReadinessMonitor(
+        registry: registry, assessWorker: (_) => assessment.future);
+    addTearDown(monitor.dispose);
+    final workspace = Workspace(
+        config: WorkspaceConfig(dataDirectory: root),
+        localWorkerRegistry: registry,
+        workerReadinessMonitor: monitor);
+    final manager = WorkspaceManagerService(workspace);
+    await manager.start();
+    addTearDown(manager.close);
+    final key =
+        (await File('${root.path}/runtime/manager-ipc.key').readAsString())
+            .trim();
+    final client = await WorkspaceManagerIpcClient.connect(
+        socketPath: '${root.path}/runtime/manager.sock', key: key);
+    addTearDown(client.close);
+    await client.subscribe();
+    final runningEvent = client.events.firstWhere((event) {
+      final catalog = event['workerCatalog'];
+      if (event['name'] != 'worker.catalogChanged' || catalog is! Map) {
+        return false;
+      }
+      final checks = catalog['checks'];
+      return checks is Map &&
+          checks['chatgpt'] is Map &&
+          (checks['chatgpt'] as Map)['phase'] == 'probe';
+    });
+    final check = monitor.checkNow(mode: LocalWorkerProbeMode.live);
+    final event = await runningEvent.timeout(const Duration(seconds: 5));
+    expect(
+        (((event['workerCatalog'] as Map)['checks'] as Map)['chatgpt']
+            as Map)['outcome'],
+        'running');
+    assessment
+        .complete(const WorkerReadinessAssessment(WorkerReadinessState.ready));
+    await check;
+    final catalog = (await manager.snapshot())['workerCatalog'] as Map;
+    expect(((catalog['checks'] as Map)['chatgpt'] as Map)['outcome'], 'passed');
+  }, skip: Platform.isWindows ? 'POSIX only' : false);
+
   test('snapshot separates service health from persisted Cloud intent',
       () async {
     final root = await Directory('/tmp').createTemp('ws-state-');

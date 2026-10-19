@@ -6,9 +6,6 @@ class _WorkersTab extends StatefulWidget {
     this.catalogCoordinator,
     this.serviceAvailable = true,
     this.onReadinessCheck,
-    this.onLoadSlots,
-    this.onResetSlots,
-    this.onSetParallelSlots,
     this.onConfigureWorker,
     this.onSetWorkerEnabled,
     this.onSetFullLocalAccess,
@@ -27,9 +24,6 @@ class _WorkersTab extends StatefulWidget {
   final Future<bool> Function(String reason)? requireStepUp;
   final Future<void> Function(
       {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
-  final Future<Map<String, Object?>> Function()? onLoadSlots;
-  final Future<Map<String, Object?>> Function()? onResetSlots;
-  final Future<Map<String, Object?>> Function(int slots)? onSetParallelSlots;
 
   @override
   State<_WorkersTab> createState() => _WorkersTabState();
@@ -37,6 +31,10 @@ class _WorkersTab extends StatefulWidget {
 
 class _WorkersTabState extends State<_WorkersTab> {
   final Set<String> _updatingWorkerTypes = {};
+  final Map<String, String> _actionErrors = {};
+  final Map<String, String> _actionStages = {};
+  String? _selectedWorkerType;
+
   @override
   void initState() {
     super.initState();
@@ -109,15 +107,9 @@ class _WorkersTabState extends State<_WorkersTab> {
         children: [
           if (!widget.serviceAvailable) ...[
             const Text(
-                'Start the service to configure or test Workers. The last known Worker list is shown below.'),
+                'Start the service to configure or test Workers. Last saved Worker details are shown below.'),
             const SizedBox(height: 16),
           ],
-          if (widget.onLoadSlots != null && widget.serviceAvailable)
-            WorkerSlotsCard(
-              load: widget.onLoadSlots!,
-              reset: widget.onResetSlots,
-              setSlots: widget.onSetParallelSlots,
-            ),
           Builder(
             builder: (context) {
               final catalog = widget.catalogCoordinator?.snapshot ??
@@ -144,11 +136,36 @@ class _WorkersTabState extends State<_WorkersTab> {
                         ],
                       ),
                     ),
-                  for (final worker in catalog.workers)
-                    if (worker.descriptor == null)
-                      _buildRetiredWorkerCard(worker, theme)
-                    else
-                      _buildLogicalWorkerCard(worker, canConfigure, theme),
+                  if (catalog.workers.isNotEmpty) ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Wrap(spacing: 8, runSpacing: 8, children: [
+                        for (final worker in catalog.workers)
+                          ChoiceChip(
+                            key: Key(
+                                'worker-selector-${worker.descriptor?.workerTypeId ?? worker.localWorker!.workerTypeId}'),
+                            label: Text(worker.descriptor?.displayName ??
+                                worker.localWorker!.workerTypeId),
+                            selected: _selectedType(catalog) ==
+                                (worker.descriptor?.workerTypeId ??
+                                    worker.localWorker!.workerTypeId),
+                            onSelected: (_) => setState(() =>
+                                _selectedWorkerType =
+                                    worker.descriptor?.workerTypeId ??
+                                        worker.localWorker!.workerTypeId),
+                          ),
+                      ]),
+                    ),
+                    const SizedBox(height: 16),
+                    for (final worker in catalog.workers)
+                      if ((worker.descriptor?.workerTypeId ??
+                              worker.localWorker!.workerTypeId) ==
+                          _selectedType(catalog))
+                        if (worker.descriptor == null)
+                          _buildRetiredWorkerCard(worker, theme)
+                        else
+                          _buildLogicalWorkerCard(worker, canConfigure, theme),
+                  ],
                   if (catalog.descriptors.isEmpty &&
                       catalog.localRegistryLoaded)
                     Padding(
@@ -195,202 +212,248 @@ class _WorkersTabState extends State<_WorkersTab> {
     );
   }
 
+  String? _selectedType(WorkerCatalogSnapshot catalog) {
+    final types = catalog.workers.map((worker) =>
+        worker.descriptor?.workerTypeId ?? worker.localWorker!.workerTypeId);
+    return types.contains(_selectedWorkerType)
+        ? _selectedWorkerType
+        : types.firstOrNull;
+  }
+
   Widget _buildLogicalWorkerCard(
     WorkerCatalogWorkerState view,
     bool canConfigure,
     ThemeData theme,
   ) {
-    final entry = view.descriptor;
-    if (entry == null) return const SizedBox.shrink();
+    final entry = view.descriptor!;
     final worker = view.localWorker;
     final profile = view.profileAvailability.details;
-    final catalogRefreshing =
-        widget.catalogCoordinator?.snapshot.refreshing == true;
-    final pending = catalogRefreshing ||
-        _updatingWorkerTypes.contains(entry.workerTypeId) ||
-        !widget.serviceAvailable;
-    final readiness = _updatingWorkerTypes.contains(entry.workerTypeId)
-        ? catalogRefreshing
-            ? 'Refreshing…'
-            : 'Checking…'
-        : view.readinessLabel;
-    final ready = !pending && readiness == 'Ready';
+    final progress =
+        widget.catalogCoordinator?.snapshot.checks[entry.workerTypeId];
+    final busy = _updatingWorkerTypes.contains(entry.workerTypeId) ||
+        (widget.serviceAvailable &&
+            progress?.outcome == WorkerCheckOutcome.running);
+    final canAct = canConfigure && widget.serviceAvailable && !busy;
     final disabled =
         worker?.activationState == LocalWorkerActivationState.disabled;
-    final badges = pending
-        ? <String>[readiness]
-        : ready
-            ? <String>['Ready', if (disabled) 'Disabled']
-            : <String>{
-                ...view.statusBadges(),
-                view.state.label,
-              }.toList();
-    final providerToolName = worker?.toolName ?? entry.providerToolName;
-    final providerToolVersion = switch (view.providerToolState) {
-      WorkspaceProviderToolState.unknown =>
-        view.profileState != WorkspaceWorkerProfileState.ready
-            ? 'Waiting for Profile'
-            : view.localState == WorkspaceLocalWorkerState.configured
-                ? 'Not detected'
-                : 'Unknown',
-      WorkspaceProviderToolState.missing => 'Not installed',
-      WorkspaceProviderToolState.available =>
-        worker?.toolVersion ?? 'Available',
-    };
-    final profileRevision = profile?['revision'] ?? profile?['releaseVersion'];
-    final profileStatus = _profileStatusLabel(view, pending: pending);
-    final workerState = worker == null
-        ? 'Not configured'
-        : disabled
-            ? 'Disabled'
-            : 'Enabled';
-    final readinessStatus = pending
-        ? readiness
-        : ready
-            ? 'Ready'
-            : 'Needs attention';
-    final staticModelNames =
-        (profile?['staticModelNames'] as List?)?.whereType<String>().toList() ??
-            const <String>[];
-    final availableModels = profile?['hasModelDiscovery'] == false
-        ? staticModelNames
+    final models = profile?['hasModelDiscovery'] == false
+        ? (profile?['staticModelNames'] as List?)
+                ?.whereType<String>()
+                .toList() ??
+            const <String>[]
         : worker?.modelCatalog?.models
                 .where((model) => model.status != 'unavailable')
                 .map((model) => model.name)
                 .toList() ??
-            staticModelNames;
+            const <String>[];
+    final issue = view.issueCode;
     return Card(
       key: Key('worker-catalog-${entry.workerTypeId}'),
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.zero,
       color: theme.colorScheme.surfaceContainerLow,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            title: Row(
-              children: [
-                Expanded(
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(entry.displayName,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
-                      for (final badge in badges)
-                        _CatalogStatusBadge(label: badge),
-                    ],
-                  ),
-                ),
-                if (_updatingWorkerTypes.contains(entry.workerTypeId))
-                  const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                else if (worker == null)
-                  TextButton(
-                      onPressed: canConfigure
-                          ? () => _configureCatalogWorker(entry)
-                          : null,
-                      child: const Text('Configure'))
-                else ...[
-                  TextButton(
-                      onPressed: canConfigure
-                          ? () => _testCatalogWorker(entry, worker)
-                          : null,
-                      child: const Text('Test')),
-                  TextButton(
-                      onPressed: canConfigure
-                          ? () => _setActivationState(
-                              worker,
-                              worker.activationState !=
-                                  LocalWorkerActivationState.enabled)
-                          : null,
-                      child: Text(worker.activationState ==
-                              LocalWorkerActivationState.enabled
-                          ? 'Disable'
-                          : 'Enable')),
-                  TextButton(
-                    onPressed:
-                        canConfigure && widget.onSetFullLocalAccess != null
-                            ? () => _setFullLocalAccess(
-                                  worker,
-                                  !worker.fullLocalAccessAuthorized,
-                                )
-                            : null,
-                    child: Text(worker.fullLocalAccessAuthorized
-                        ? 'Disable full access'
-                        : 'Enable full access'),
-                  ),
-                ],
-              ],
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 3),
-                  child: Text('Provider tool: $providerToolName',
-                      style: theme.textTheme.bodySmall),
-                ),
-                Text('Installed CLI version: $providerToolVersion',
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Icon(
+                  widget.serviceAvailable && view.availabilityLabel == 'Ready'
+                      ? Icons.check_circle_outline
+                      : Icons.info_outline,
+                  color: widget.serviceAvailable &&
+                          view.availabilityLabel == 'Ready'
+                      ? ConclaveBrand.success
+                      : theme.colorScheme.error),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Text(
+                      widget.serviceAvailable
+                          ? view.availabilityLabel
+                          : 'Service unavailable',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600))),
+              if (worker != null)
+                _CatalogStatusBadge(label: disabled ? 'Disabled' : 'Enabled'),
+            ]),
+            const SizedBox(height: 8),
+            CopyableMessageText(widget.serviceAvailable
+                ? view.availabilityDetail
+                : 'Last saved status: ${view.availabilityLabel}. Start the service to verify current availability.'),
+            if (issue != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('Issue code: $issue',
                     style: theme.textTheme.bodySmall),
-                if (profileRevision != null)
-                  Text('Profile revision: $profileRevision',
-                      style: theme.textTheme.bodySmall),
-                Text('Profile status: $profileStatus',
-                    style: theme.textTheme.bodySmall),
-                Text('Worker state: $workerState',
-                    style: theme.textTheme.bodySmall),
-                Text('Readiness: $readinessStatus',
-                    style: theme.textTheme.bodySmall),
-                if (worker != null)
-                  Text(
-                      'Execution permissions: ${worker.fullLocalAccessAuthorized ? 'Full local access' : 'Restricted'}',
-                      style: theme.textTheme.bodySmall),
-              ],
-            ),
-          ),
-          if (worker != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 8, 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Models: ${availableModels.isEmpty ? 'Unavailable' : availableModels.join(', ')}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                ],
               ),
-            ),
-        ],
+            if (_actionErrors[entry.workerTypeId] case final error?) ...[
+              const SizedBox(height: 8),
+              CopyableMessageText(error,
+                  style: TextStyle(color: theme.colorScheme.error)),
+            ],
+            const SizedBox(height: 16),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              if (worker == null)
+                FilledButton.icon(
+                  onPressed:
+                      canAct ? () => _configureCatalogWorker(entry) : null,
+                  icon: const Icon(Icons.settings_outlined, size: 18),
+                  label: const Text('Configure'),
+                )
+              else ...[
+                FilledButton.icon(
+                  onPressed: canAct && widget.onReadinessCheck != null
+                      ? () => _testCatalogWorker(entry, worker)
+                      : null,
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: Text(busy ? 'Testing…' : 'Test'),
+                ),
+                OutlinedButton(
+                  onPressed: canAct && widget.onSetWorkerEnabled != null
+                      ? () => _runCatalogAction(
+                          entry, () => _setActivationState(worker, disabled))
+                      : null,
+                  child: Text(disabled ? 'Enable' : 'Disable'),
+                ),
+                OutlinedButton(
+                  onPressed: canAct && widget.onSetFullLocalAccess != null
+                      ? () => _runCatalogAction(
+                          entry,
+                          () => _setFullLocalAccess(
+                              worker, !worker.fullLocalAccessAuthorized))
+                      : null,
+                  child: Text(worker.fullLocalAccessAuthorized
+                      ? 'Disable full access'
+                      : 'Enable full access'),
+                ),
+              ],
+            ]),
+            const SizedBox(height: 20),
+            _buildVerification(view, progress),
+            const Divider(height: 32),
+            Text('Installation', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Text(
+                'Provider tool: ${worker?.toolName ?? entry.providerToolName}'),
+            Text(
+                'Installed CLI version: ${worker?.toolVersion ?? (view.providerToolState == WorkspaceProviderToolState.missing ? 'Not installed' : 'Not detected')}'),
+            if (profile?['revision'] ?? profile?['releaseVersion']
+                case final revision?)
+              Text('Profile revision: $revision'),
+            Text(
+                'Profile status: ${view.profileState == WorkspaceWorkerProfileState.ready ? 'Current' : view.profileState.label}'),
+            if (worker != null) ...[
+              Text(
+                  'Execution permissions: ${worker.fullLocalAccessAuthorized ? 'Full local access' : 'Restricted'}'),
+              const SizedBox(height: 8),
+              Text(
+                  'Models: ${models.isEmpty ? 'Unavailable' : models.join(', ')}'),
+              if (worker.modelCatalog?.stale == true)
+                const Text(
+                    'Model catalog is stale. The service will retry discovery.'),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  String _profileStatusLabel(
-    WorkerCatalogWorkerState view, {
-    required bool pending,
-  }) {
-    if (pending) return 'Checking…';
-    return switch (view.profileState) {
-      WorkspaceWorkerProfileState.ready =>
-        view.profileAvailability.details?['source'] == 'lastKnownGood'
-            ? 'Update available'
-            : 'Current',
-      WorkspaceWorkerProfileState.incompatible => 'Incompatible',
-      WorkspaceWorkerProfileState.resolving ||
-      WorkspaceWorkerProfileState.syncing =>
-        'Checking…',
-      WorkspaceWorkerProfileState.unavailable ||
-      WorkspaceWorkerProfileState.error =>
-        'Update available',
-    };
+  Widget _buildVerification(
+      WorkerCatalogWorkerState view, WorkerCheckProgress? progress) {
+    final worker = view.localWorker;
+    final type = view.descriptor!.workerTypeId;
+    final localPending = _updatingWorkerTypes.contains(type);
+    final serviceProgress = widget.serviceAvailable &&
+            (!localPending || progress?.outcome == WorkerCheckOutcome.running)
+        ? progress
+        : null;
+    final running = serviceProgress?.outcome == WorkerCheckOutcome.running;
+    final theme = Theme.of(context);
+    final labels = [
+      'Resolve current Profile',
+      'Run ${serviceProgress?.mode == 'passive' ? 'availability check' : 'live CLI test'}',
+      'Record successful verification'
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text('Verification', style: theme.textTheme.titleSmall),
+      const SizedBox(height: 8),
+      if (serviceProgress != null) ...[
+        Text(
+            '${serviceProgress.mode == 'live' ? 'Live test' : 'Availability check'} · ${switch (serviceProgress.outcome) {
+              WorkerCheckOutcome.running => 'Running',
+              WorkerCheckOutcome.passed => 'Passed',
+              WorkerCheckOutcome.failed => 'Failed',
+            }}',
+            key: Key('worker-check-status-$type')),
+        if (running)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: LinearProgressIndicator(
+                semanticsLabel: 'Worker verification in progress'),
+          ),
+        for (var index = 0; index < labels.length; index++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(children: [
+              Icon(
+                index < serviceProgress.phase.index ||
+                        serviceProgress.outcome == WorkerCheckOutcome.passed
+                    ? Icons.check_circle_outline
+                    : index == serviceProgress.phase.index
+                        ? serviceProgress.outcome == WorkerCheckOutcome.failed
+                            ? Icons.error_outline
+                            : Icons.hourglass_top
+                        : Icons.radio_button_unchecked,
+                size: 18,
+                color: index < serviceProgress.phase.index ||
+                        serviceProgress.outcome == WorkerCheckOutcome.passed
+                    ? ConclaveBrand.success
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Text(
+                      '${labels[index]} · ${index < serviceProgress.phase.index || serviceProgress.outcome == WorkerCheckOutcome.passed ? 'Passed' : index == serviceProgress.phase.index ? running ? 'Running' : 'Failed' : 'Not run'}')),
+            ]),
+          ),
+        if (serviceProgress.issueCode case final code?)
+          CopyableMessageText(
+              '${workerIssueLabel(code)}. ${workerIssueRecovery(code)}'),
+      ] else if (localPending) ...[
+        const LinearProgressIndicator(
+            semanticsLabel: 'Waiting for Worker service'),
+        const SizedBox(height: 8),
+        Text(_actionStages[type] ?? 'Waiting for service verification…'),
+      ] else if (!widget.serviceAvailable)
+        const Text(
+            'Service unavailable. Showing last saved verification; start the service to check again.')
+      else if (worker?.lastLiveTestAt == null)
+        const Text(
+            'No live test recorded. Test this Worker to verify it can respond.'),
+      if (worker?.lastPassiveProbeAt case final checkedAt?)
+        Text('Last availability check: ${_checkTime(checkedAt)}',
+            style: theme.textTheme.bodySmall),
+      if (worker?.lastLiveTestAt case final testedAt?) ...[
+        const SizedBox(height: 8),
+        Text(
+            'Last live test: ${worker!.lastLiveTestPassed == true ? 'Passed' : 'Failed'} · ${_checkTime(testedAt)}'),
+        if (worker.lastLiveTestPassed == false &&
+            worker.lastLiveTestDetails != null)
+          CopyableMessageText(worker.lastLiveTestDetails!,
+              tooltip: 'Copy test details'),
+      ],
+      const SizedBox(height: 6),
+      Text(
+          'A live test contacts the provider and may use your account quota. Activation is unchanged by testing.',
+          style: theme.textTheme.bodySmall),
+    ]);
+  }
+
+  String _checkTime(String value) {
+    final time = DateTime.tryParse(value)?.toLocal();
+    if (time == null) return value;
+    return '${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')} '
+        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:${time.second.toString().padLeft(2, '0')}';
   }
 
   Widget _buildRetiredWorkerCard(
@@ -420,7 +483,7 @@ class _WorkersTabState extends State<_WorkersTab> {
               runSpacing: 4,
               children: [
                 _CatalogStatusBadge(label: view.state.label),
-                _CatalogStatusBadge(label: view.readinessLabel),
+                _CatalogStatusBadge(label: view.availabilityLabel),
               ],
             ),
             Padding(
@@ -473,13 +536,18 @@ class _WorkersTabState extends State<_WorkersTab> {
   Future<WorkerDescriptor?> _refreshCatalogEntry(WorkerDescriptor entry) async {
     final coordinator = widget.catalogCoordinator;
     if (coordinator == null) return entry;
+    _actionStages[entry.workerTypeId] = 'Refreshing current Worker Profile…';
+    if (mounted) setState(() {});
     await coordinator.refresh();
+    _actionStages[entry.workerTypeId] = 'Waiting for service verification…';
+    if (mounted) setState(() {});
     return coordinator.entryForWorker(entry.workerTypeId);
   }
 
   Future<void> _runCatalogAction(
       WorkerDescriptor entry, Future<void> Function() action) async {
     if (!_updatingWorkerTypes.add(entry.workerTypeId)) return;
+    _actionErrors.remove(entry.workerTypeId);
     setState(() {});
     try {
       await action();
@@ -487,6 +555,7 @@ class _WorkersTabState extends State<_WorkersTab> {
       if (mounted) setState(() {});
     } on Object catch (error) {
       if (mounted) {
+        _actionErrors[entry.workerTypeId] = error.toString();
         showCopyableErrorSnackBar(
           context,
           'Could not complete setup for ${entry.displayName}. Try again or review the Worker status.\n$error',
@@ -494,6 +563,7 @@ class _WorkersTabState extends State<_WorkersTab> {
       }
     } finally {
       _updatingWorkerTypes.remove(entry.workerTypeId);
+      _actionStages.remove(entry.workerTypeId);
       if (mounted) setState(() {});
     }
   }
@@ -507,6 +577,7 @@ class _CatalogStatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (label) {
+      'Enabled' ||
       'Ready' ||
       'Profile ready' ||
       'Profile · Available' =>
@@ -780,7 +851,8 @@ class _WorkerSlotsCardState extends State<WorkerSlotsCard> {
                     Expanded(
                       child: Text(
                         'How many requests can run at the same time on this '
-                        'computer, whichever Worker runs them.',
+                        'computer, whichever Worker runs them. Changes apply immediately; '
+                        'running requests finish when the limit is lowered.',
                         style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant),
                       ),

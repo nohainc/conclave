@@ -206,15 +206,19 @@ extension _AxAppShellViews on _AxAppStateMixin {
         : Uri.parse(navigation.loginReturnTo!);
     final resetToken = browserNavigation.current.queryParameters['token'];
     final resetPassword = resetToken != null;
+    final awaitingSignUpCode =
+        !resetPassword && authSignUp && authSignUpAwaitingCode;
     final oauthError =
         _oauthErrorMessage(browserNavigation.current.queryParameters['error']);
     final title = resetPassword
         ? 'Choose a new password'
         : authResetRequest
             ? 'Restore your password'
-            : authSignUp
-                ? 'Create your Conclave AX account'
-                : 'Welcome to Conclave AX';
+            : awaitingSignUpCode
+                ? 'Verify your email address'
+                : authSignUp
+                    ? 'Create your Conclave AX account'
+                    : 'Welcome to Conclave AX';
     return Scaffold(
       body: Center(
         child: Card(
@@ -238,12 +242,16 @@ extension _AxAppShellViews on _AxAppStateMixin {
                             ? 'Choose a strong password for your account.'
                             : authResetRequest
                                 ? 'Enter your email and we will send a reset link if an account exists.'
-                                : authSignUp
-                                    ? 'Create an account to start using Conclave AX.'
-                                    : 'Sign in securely to access your Spaces, Workspaces, and Workers.',
+                                : awaitingSignUpCode
+                                    ? 'Enter the 6-digit verification code we sent to ${authEmailController.text.trim()}.'
+                                    : authSignUp
+                                        ? 'Create an account to start using Conclave AX. We will send a one-time code to verify your email.'
+                                        : 'Sign in securely to access your Spaces, Workspaces, and Workers.',
                         textAlign: TextAlign.center),
                     const SizedBox(height: 20),
-                    if (!resetPassword && authSignUp) ...[
+                    if (!resetPassword &&
+                        authSignUp &&
+                        !awaitingSignUpCode) ...[
                       TextField(
                         controller: authNameController,
                         autofocus: true,
@@ -252,7 +260,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                       ),
                       const SizedBox(height: 10),
                     ],
-                    if (!resetPassword) ...[
+                    if (!resetPassword && !awaitingSignUpCode) ...[
                       TextField(
                         controller: authEmailController,
                         autofocus: !authSignUp,
@@ -269,7 +277,8 @@ extension _AxAppShellViews on _AxAppStateMixin {
                       ),
                       if (!authResetRequest) const SizedBox(height: 10),
                     ],
-                    if (resetPassword || !authResetRequest) ...[
+                    if ((resetPassword || !authResetRequest) &&
+                        !awaitingSignUpCode) ...[
                       TextField(
                         controller: authPasswordController,
                         autofocus: resetPassword,
@@ -296,6 +305,21 @@ extension _AxAppShellViews on _AxAppStateMixin {
                               labelText: 'Confirm password'),
                         ),
                       ],
+                    ],
+                    if (awaitingSignUpCode) ...[
+                      TextField(
+                        controller: authVerificationCodeController,
+                        autofocus: true,
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.done,
+                        maxLength: 6,
+                        onSubmitted: (_) => _submitEmailAuth(),
+                        decoration: const InputDecoration(
+                          labelText: 'Verification code',
+                          hintText: '6-digit code',
+                          counterText: '',
+                        ),
+                      ),
                     ],
                     if (authError != null) ...[
                       const SizedBox(height: 12),
@@ -328,11 +352,35 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                 ? 'Save new password'
                                 : authResetRequest
                                     ? 'Email reset link'
-                                    : authSignUp
-                                        ? 'Create account'
-                                        : 'Sign in with email'),
+                                    : awaitingSignUpCode
+                                        ? 'Verify & create account'
+                                        : authSignUp
+                                            ? 'Create account'
+                                            : 'Sign in with email'),
                       ),
                     ),
+                    if (awaitingSignUpCode)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: authBusy ? null : _resendSignUpCode,
+                            child: const Text('Resend code'),
+                          ),
+                          const SizedBox(width: 8),
+                          TextButton(
+                            onPressed: authBusy
+                                ? null
+                                : () => _updateState(() {
+                                      authSignUpAwaitingCode = false;
+                                      authVerificationCodeController.clear();
+                                      authError = null;
+                                      authNotice = null;
+                                    }),
+                            child: const Text('Edit details'),
+                          ),
+                        ],
+                      ),
                     if (!resetPassword && !authSignUp && !authResetRequest)
                       Align(
                         alignment: Alignment.centerRight,
@@ -353,6 +401,8 @@ extension _AxAppShellViews on _AxAppStateMixin {
                             ? null
                             : () => _updateState(() {
                                   authSignUp = !authSignUp;
+                                  authSignUpAwaitingCode = false;
+                                  authVerificationCodeController.clear();
                                   authError = null;
                                   authNotice = null;
                                 }),
@@ -366,6 +416,8 @@ extension _AxAppShellViews on _AxAppStateMixin {
                             ? null
                             : () => _updateState(() {
                                   authSignUp = false;
+                                  authSignUpAwaitingCode = false;
+                                  authVerificationCodeController.clear();
                                   authResetRequest = false;
                                   authError = null;
                                   authNotice = null;

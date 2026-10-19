@@ -18,8 +18,8 @@ const parseJsonc = (source, filename) => {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LEGACY_SENDER = "auth@auth.earthuc.com";
 const EXPECTED_PRODUCTION = Object.freeze({
-  CONCLAVE_EMAIL_FROM: "conclave@nohainc.com",
-  CONCLAVE_EMAIL_FALLBACK_FROM: "vitalii@nohainc.com",
+  CONCLAVE_EMAIL_FROM: "conclave@conclaveax.com",
+  CONCLAVE_EMAIL_FALLBACK_FROM: "vitalii@conclaveax.com",
   CONCLAVE_EMAIL_FROM_NAME: "Conclave AX",
 });
 

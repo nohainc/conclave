@@ -919,6 +919,14 @@ final class CliWorkerEngineSupervisor {
     }
   }
 
+  /// Updates shared admission capacity without cancelling running assignments.
+  void setParallelSlots(int slots) {
+    if (slots < 1)
+      throw ArgumentError.value(slots, 'slots', 'must be positive');
+    _limitByWorker[_pool] = slots;
+    _promoteWaiters();
+  }
+
   Future<void> _acquireSlot(
     String workerId,
     String assignmentId,

@@ -2557,12 +2557,142 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   });
+
+  testWidgets(
+      'sign-up sends a 6-digit verification code before creating the account',
+      (tester) async {
+    tester.view.physicalSize = const Size(1800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final data = _SignUpOtpFixture();
+    await tester.pumpWidget(MaterialApp(
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: data,
+        initialUri: Uri.parse('/login'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    await tester.tap(find.text('New here? Create an account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create your Conclave AX account'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Name'),
+      'Ada Lovelace',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Email'),
+      'ada@example.com',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      'strong-password-123',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Confirm password'),
+      'strong-password-123',
+    );
+
+    final createButton = find.widgetWithText(FilledButton, 'Create account');
+    await tester.ensureVisible(createButton);
+    await tester.tap(createButton);
+    await tester.pumpAndSettle();
+
+    expect(data.codeRequestedForEmail, 'ada@example.com');
+    expect(data.codeRequestedForName, 'Ada Lovelace');
+    expect(data.signedUpOtp, isNull);
+    expect(find.text('Verify your email address'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Verification code'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Verification code'),
+      '482910',
+    );
+    final verifyButton =
+        find.widgetWithText(FilledButton, 'Verify & create account');
+    await tester.ensureVisible(verifyButton);
+    await tester.tap(verifyButton);
+    await tester.pumpAndSettle();
+
+    expect(data.signedUpEmail, 'ada@example.com');
+    expect(data.signedUpName, 'Ada Lovelace');
+    expect(data.signedUpOtp, '482910');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
 
 void _dummyNav(AxNavigation _) {}
 void _dummyToggle(String _) {}
 void _dummyAction() {}
 void _dummyExternal(Uri _) {}
+
+class _SignUpOtpFixture extends AxFixtureDataSource {
+  _SignUpOtpFixture() : super(authenticated: false);
+
+  String? codeRequestedForEmail;
+  String? codeRequestedForName;
+  String? signedUpEmail;
+  String? signedUpName;
+  String? signedUpOtp;
+
+  @override
+  Future<void> requestSignUpVerificationCode({
+    required String email,
+    String? name,
+  }) async {
+    codeRequestedForEmail = email;
+    codeRequestedForName = name;
+  }
+
+  @override
+  Future<void> signUpWithEmail({
+    required String name,
+    required String email,
+    required String password,
+    String? otp,
+  }) async {
+    signedUpName = name;
+    signedUpEmail = email;
+    signedUpOtp = otp;
+    await super.signUpWithEmail(
+      name: name,
+      email: email,
+      password: password,
+      otp: otp,
+    );
+  }
+
+  static const _spaces = [
+    AxSpace(
+      id: 'existing-proj-1',
+      name: 'Existing Space',
+      description: 'Main space',
+      branch: 'main',
+      lastActivity: '2026-10-07T10:00:00Z',
+    ),
+  ];
+
+  @override
+  Future<AxSnapshot> loadBootstrapState({
+    String? spaceId,
+    String? workspaceId,
+  }) async {
+    final base = await super.loadBootstrapState(
+      spaceId: spaceId,
+      workspaceId: workspaceId,
+    );
+    return base.copyWith(spaces: _spaces);
+  }
+
+  @override
+  Future<List<AxSpace>> loadSpaces({bool includeArchived = false}) async =>
+      _spaces;
+}
 
 class _SpaceScopedFixture extends AxFixtureDataSource {
   final selectedSpaces = <String>[];

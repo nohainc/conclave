@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'credential_backend.dart';
+import 'workspace_registration_models.dart';
 
 /// OS-backed storage for credentials used by the Workspace.
 abstract interface class SecureCredentialStore {
@@ -29,7 +30,9 @@ abstract interface class NativeSecureCredentialBridge {
 /// Unsupported platforms fail closed and return no credential.
 class PlatformSecureCredentialStore implements SecureCredentialStore {
   const PlatformSecureCredentialStore({
-    this.service = 'com.conclaveax.workspace',
+    this.service = conclaveWorkspaceIsLocalBuild
+        ? 'com.conclaveax.workspace.local'
+        : 'com.conclaveax.workspace',
     String? platform,
     this.nativeKeychain,
   }) : _platform = platform;

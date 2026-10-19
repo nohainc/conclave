@@ -19,6 +19,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   final authEmailController = TextEditingController();
   final authPasswordController = TextEditingController();
   final authConfirmPasswordController = TextEditingController();
+  final authVerificationCodeController = TextEditingController();
   final AxBrowserAlerts browserAlerts = createAxBrowserAlerts();
   List<AxNotification> get notifications => store.notifications;
   void _updateNotifications(VoidCallback callback) {
@@ -69,6 +70,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
 
   void _updateLiveState(VoidCallback callback) => callback();
   bool authSignUp = false;
+  bool authSignUpAwaitingCode = false;
   bool authResetRequest = false;
   bool authBusy = false;
   bool desktopAuthBusy = false;
@@ -453,6 +455,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     authEmailController.dispose();
     authPasswordController.dispose();
     authConfirmPasswordController.dispose();
+    authVerificationCodeController.dispose();
     promptResponseController.dispose();
     unawaited(navigationSubscription?.cancel());
     unawaited(lifecycleSubscription?.cancel());

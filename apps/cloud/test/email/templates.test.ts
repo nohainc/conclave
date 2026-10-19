@@ -20,6 +20,7 @@ describe("email template architecture", () => {
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toEqual([
       "auth.verify-email.v1",
+      "auth.verify-email-code.v1",
       "auth.reset-password.v1",
       "auth.password-changed.v1",
       "auth.confirm-email-change.v1",
@@ -233,7 +234,7 @@ describe("email template architecture", () => {
     expect(transport.messages[0]).toMatchObject({
       to: "ada@example.com",
       subject: "Welcome to Conclave AX",
-      from: { email: "conclave@nohainc.com", name: "Conclave AX" },
+      from: { email: "conclave@conclaveax.com", name: "Conclave AX" },
     });
   });
 

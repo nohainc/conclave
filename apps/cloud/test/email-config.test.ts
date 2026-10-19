@@ -9,8 +9,8 @@ import {
 describe("centralized email sender configuration", () => {
   it("uses the Conclave primary and Vitalii fallback by default", () => {
     expect(resolveEmailSenderConfig({})).toEqual({
-      primary: "conclave@nohainc.com",
-      fallback: "vitalii@nohainc.com",
+      primary: "conclave@conclaveax.com",
+      fallback: "vitalii@conclaveax.com",
       displayName: "Conclave AX",
     });
   });
@@ -62,13 +62,13 @@ describe("centralized email sender configuration", () => {
       ),
     ).resolves.toEqual({
       status: "accepted",
-      sender: "conclave@nohainc.com",
+      sender: "conclave@conclaveax.com",
       usedFallback: false,
       messageId: "message-1",
     });
     expect(send).toHaveBeenCalledWith({
       to: "person@example.com",
-      from: { email: "conclave@nohainc.com", name: "Conclave AX" },
+      from: { email: "conclave@conclaveax.com", name: "Conclave AX" },
       subject: "Subject",
       text: "Body",
     });
@@ -86,13 +86,13 @@ describe("centralized email sender configuration", () => {
       ),
     ).resolves.toEqual({
       status: "accepted",
-      sender: "vitalii@nohainc.com",
+      sender: "vitalii@conclaveax.com",
       usedFallback: true,
       messageId: "message-2",
     });
     expect(send).toHaveBeenNthCalledWith(2, {
       to: "person@example.com",
-      from: { email: "vitalii@nohainc.com", name: "Conclave AX" },
+      from: { email: "vitalii@conclaveax.com", name: "Conclave AX" },
       subject: "Subject",
     });
   });

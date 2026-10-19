@@ -42,6 +42,19 @@ The Service owns the final slot reservation and is the only place that claims a
 live process slot. Waiters are admitted first-in-first-out; one whose provider
 session is busy is skipped rather than blocking the others.
 
+## Workspace controls
+
+The Workspace section owns the shared capacity selector, usage and queue counts;
+Worker setup remains in the Workers section. Capacity is editable through local
+IPC while the service is running, independently of Cloud connectivity. Raising
+the limit immediately admits eligible waiters. Lowering it preserves running
+assignments and admits no further work until capacity is available. Reset slots
+remains a separate confirmed recovery action that stops running and waiting work.
+
+Prevent sleep remains editable with the service running or stopped, independently
+of Cloud connectivity. The saved preference applies while the service runs;
+macOS changes are picked up within the service's five-second polling interval.
+
 ## Deadlines
 
 `timeoutMs` is the provider/Engine execution deadline and starts after local

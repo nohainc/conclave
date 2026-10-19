@@ -23,6 +23,10 @@ type SocialProviderCredentials = {
 const AUTH_EMAIL_LINK_EXPIRATION_SECONDS = 60 * 60;
 const AUTH_EMAIL_LINK_EXPIRATION_MINUTES =
   AUTH_EMAIL_LINK_EXPIRATION_SECONDS / 60;
+const SIGNUP_OTP_EXPIRATION_SECONDS = 10 * 60;
+const SIGNUP_OTP_EXPIRATION_MINUTES = SIGNUP_OTP_EXPIRATION_SECONDS / 60;
+const SIGNUP_OTP_MAX_ATTEMPTS = 5;
+const SIGNUP_OTP_PREFIX = "signup-otp:";
 
 export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> &
   EmailSenderEnvironment & {
@@ -137,17 +141,87 @@ async function sendAuthEmail<
   });
 }
 
+async function sendSignUpVerificationCodeEmail(
+  env: BetterAuthRuntimeEnv,
+  recipient: { email: string; name?: string | null },
+  verificationCode: string,
+): Promise<void> {
+  if (!env.CONCLAVE_EMAIL) {
+    if (env.CONCLAVE_ENVIRONMENT === "development") {
+      console.info("auth.signup_otp.development", {
+        email: recipient.email,
+        verificationCode,
+      });
+      return;
+    }
+    throw new EmailDeliveryError(
+      "configuration_error",
+      "CONCLAVE_EMAIL is required for authentication emails",
+    );
+  }
+
+  await sendTemplateEmail(env, {
+    to: recipient.email,
+    templateId: "auth.verify-email-code.v1",
+    input: {
+      recipientName: recipient.name,
+      verificationCode,
+      expiresInMinutes: SIGNUP_OTP_EXPIRATION_MINUTES,
+    },
+  });
+}
+
+function generateSixDigitCode(): string {
+  const bytes = new Uint32Array(1);
+  crypto.getRandomValues(bytes);
+  const value = (bytes[0] ?? 0) % 1_000_000;
+  return value.toString().padStart(6, "0");
+}
+
+function signupOtpIdentifier(email: string): string {
+  return `${SIGNUP_OTP_PREFIX}${email.trim().toLowerCase()}`;
+}
+
+function parseStoredOtpValue(
+  rawValue: string,
+): { code: string; attempts: number } | null {
+  const [code, attemptsRaw] = rawValue.split(":");
+  if (!code || !/^\d{6}$/.test(code)) return null;
+  const attempts = Number.parseInt(attemptsRaw ?? "0", 10);
+  return {
+    code,
+    attempts: Number.isFinite(attempts) && attempts >= 0 ? attempts : 0,
+  };
+}
+
+function jsonAuthError(
+  status: number,
+  code: string,
+  message: string,
+): Response {
+  return new Response(JSON.stringify({ code, message, error: message }), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 /**
  * Build the Better Auth instance for one Worker request.
  *
  * Better Auth is intentionally confined to this module. The rest of Cloud
  * consumes IdentityService instead of importing Better Auth APIs.
  */
-export function createBetterAuth(env: BetterAuthRuntimeEnv) {
-  return betterAuth(buildBetterAuthOptions(env));
+export function createBetterAuth(
+  env: BetterAuthRuntimeEnv,
+  options?: { sendOnSignUp?: boolean },
+) {
+  return betterAuth(buildBetterAuthOptions(env, options));
 }
 
-export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
+export function buildBetterAuthOptions(
+  env: BetterAuthRuntimeEnv,
+  options?: { sendOnSignUp?: boolean },
+) {
   if (!env.BETTER_AUTH_SECRET) {
     throw new Error("BETTER_AUTH_SECRET is required to use Better Auth");
   }
@@ -305,7 +379,7 @@ export function buildBetterAuthOptions(env: BetterAuthRuntimeEnv) {
       },
     },
     emailVerification: {
-      sendOnSignUp: true,
+      sendOnSignUp: options?.sendOnSignUp ?? true,
       sendVerificationEmail: async (
         {
           user,
@@ -461,10 +535,7 @@ export async function handleBetterAuthRequest(
   request: Request,
   env: BetterAuthRuntimeEnv,
 ): Promise<Response> {
-  let auth: ReturnType<typeof createBetterAuth>;
-  try {
-    auth = createBetterAuth(env);
-  } catch {
+  if (!env.BETTER_AUTH_SECRET) {
     return new Response(
       JSON.stringify({
         error: "Authentication is not configured on this deployment",
@@ -477,6 +548,46 @@ export async function handleBetterAuthRequest(
     );
   }
   const url = new URL(request.url);
+  if (
+    request.method === "POST" &&
+    url.pathname.endsWith("/api/auth/sign-up/send-code")
+  ) {
+    return handleSignUpSendCode(request, env);
+  }
+
+  let verifiedSignUpEmail: string | undefined;
+  let effectiveRequest = request;
+  if (
+    request.method === "POST" &&
+    url.pathname.endsWith("/api/auth/sign-up/email")
+  ) {
+    const preVerified = await verifySignUpOtpIfProvided(request, env);
+    if (preVerified instanceof Response) {
+      return preVerified;
+    }
+    if (preVerified) {
+      verifiedSignUpEmail = preVerified.email;
+      effectiveRequest = preVerified.request;
+    }
+  }
+
+  let auth: ReturnType<typeof createBetterAuth>;
+  try {
+    auth = createBetterAuth(env, {
+      sendOnSignUp: verifiedSignUpEmail === undefined,
+    });
+  } catch {
+    return new Response(
+      JSON.stringify({
+        error: "Authentication is not configured on this deployment",
+        code: "auth_not_configured",
+      }),
+      {
+        status: 503,
+        headers: { "content-type": "application/json" },
+      },
+    );
+  }
   const socialSignIn = url.pathname.match(
     /^\/api\/auth\/sign-in\/(github|google)$/,
   );
@@ -545,10 +656,23 @@ export async function handleBetterAuthRequest(
     return redirect;
   }
 
-  const metadata = await requestMetadata(request);
-  const before = await sessionSummary(request, env);
-  const response = await auth.handler(request);
+  const metadata = await requestMetadata(effectiveRequest);
+  const before = await sessionSummary(effectiveRequest, env);
+  const response = await auth.handler(effectiveRequest);
   const statusOutcome = response.status >= 400 ? "failure" : "success";
+  if (verifiedSignUpEmail && statusOutcome === "success") {
+    try {
+      await env.CONCLAVE_DB.prepare(
+        `UPDATE users
+            SET email_verified = 1, updated_at = ?1
+          WHERE lower(email) = ?2`,
+      )
+        .bind(new Date().toISOString(), verifiedSignUpEmail)
+        .run();
+    } catch {
+      // Best-effort post-signup verification flag update.
+    }
+  }
   if (metadata.signIn) {
     if (statusOutcome === "failure") {
       recordAuthMetric(metadata.provider, "failure", "invalid_credentials");
@@ -569,6 +693,244 @@ export async function handleBetterAuthRequest(
     });
   }
   return response;
+}
+
+const SIGNUP_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function handleSignUpSendCode(
+  request: Request,
+  env: BetterAuthRuntimeEnv,
+): Promise<Response> {
+  let body: { email?: unknown; name?: unknown };
+  try {
+    body = (await request.json()) as { email?: unknown; name?: unknown };
+  } catch {
+    return jsonAuthError(
+      400,
+      "invalid_request",
+      "Enter a valid email address.",
+    );
+  }
+
+  const rawEmail = typeof body.email === "string" ? body.email.trim() : "";
+  const normalizedEmail = rawEmail.toLowerCase();
+  if (
+    !normalizedEmail ||
+    !SIGNUP_EMAIL_PATTERN.test(normalizedEmail) ||
+    /[<>"'\r\n]/.test(normalizedEmail)
+  ) {
+    return jsonAuthError(
+      400,
+      "invalid_email",
+      "Enter a valid email address.",
+    );
+  }
+  const recipientName =
+    typeof body.name === "string" && body.name.trim().length > 0
+      ? body.name.trim()
+      : null;
+
+  const existingUser = await env.CONCLAVE_DB.prepare(
+    "SELECT id FROM users WHERE lower(email) = ?1 LIMIT 1",
+  )
+    .bind(normalizedEmail)
+    .first<{ id: string }>();
+  if (existingUser) {
+    return jsonAuthError(
+      409,
+      "USER_ALREADY_EXISTS",
+      "An account with this email already exists. Sign in instead.",
+    );
+  }
+
+  const verificationCode = generateSixDigitCode();
+  const identifier = signupOtpIdentifier(normalizedEmail);
+  const now = new Date();
+  const expiresAt = new Date(
+    now.getTime() + SIGNUP_OTP_EXPIRATION_SECONDS * 1000,
+  );
+
+  await env.CONCLAVE_DB.prepare(
+    "DELETE FROM auth_verifications WHERE identifier = ?1",
+  )
+    .bind(identifier)
+    .run();
+
+  const verificationId = `ver-${crypto.randomUUID()}`;
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO auth_verifications
+       (id, identifier, value, expires_at, created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+  )
+    .bind(
+      verificationId,
+      identifier,
+      `${verificationCode}:0`,
+      expiresAt.toISOString(),
+      now.toISOString(),
+      now.toISOString(),
+    )
+    .run();
+
+  try {
+    await sendSignUpVerificationCodeEmail(
+      env,
+      { email: normalizedEmail, name: recipientName },
+      verificationCode,
+    );
+  } catch (error) {
+    await env.CONCLAVE_DB.prepare(
+      "DELETE FROM auth_verifications WHERE id = ?1",
+    )
+      .bind(verificationId)
+      .run();
+    const failure = classifyEmailDeliveryFailure(error);
+    console.error("auth.signup_otp.delivery_failed", {
+      status: failure.status,
+      providerCode: failure.providerCode,
+    });
+    const status = failure.status === "rate_limited" ? 429 : 503;
+    return jsonAuthError(
+      status,
+      `email_${failure.status}`,
+      "We could not send a verification code to that email address right now. Please check the address and try again.",
+    );
+  }
+
+  return new Response(
+    JSON.stringify({
+      sent: true,
+      expiresInSeconds: SIGNUP_OTP_EXPIRATION_SECONDS,
+    }),
+    {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    },
+  );
+}
+
+async function verifySignUpOtpIfProvided(
+  request: Request,
+  env: BetterAuthRuntimeEnv,
+): Promise<{ email: string; request: Request } | Response | null> {
+  let payload: Record<string, unknown>;
+  try {
+    payload = (await request.clone().json()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  if (!("otp" in payload) || payload.otp === undefined || payload.otp === null) {
+    return null;
+  }
+
+  const rawEmail =
+    typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
+  const rawOtp = typeof payload.otp === "string" ? payload.otp.trim() : "";
+  if (!rawEmail) {
+    return jsonAuthError(
+      400,
+      "invalid_email",
+      "Enter a valid email address.",
+    );
+  }
+  if (!/^\d{6}$/.test(rawOtp)) {
+    return jsonAuthError(
+      400,
+      "INVALID_OTP",
+      "Enter the 6-digit verification code sent to your email.",
+    );
+  }
+
+  const identifier = signupOtpIdentifier(rawEmail);
+  const record = await env.CONCLAVE_DB.prepare(
+    `SELECT id, value, expires_at
+       FROM auth_verifications
+      WHERE identifier = ?1
+      ORDER BY created_at DESC
+      LIMIT 1`,
+  )
+    .bind(identifier)
+    .first<{ id: string; value: string; expires_at: string }>();
+
+  if (!record) {
+    return jsonAuthError(
+      400,
+      "OTP_EXPIRED",
+      "That verification code has expired or was not found. Request a new code.",
+    );
+  }
+
+  const expiresAtMs = Date.parse(record.expires_at);
+  if (Number.isNaN(expiresAtMs) || expiresAtMs < Date.now()) {
+    await env.CONCLAVE_DB.prepare(
+      "DELETE FROM auth_verifications WHERE id = ?1",
+    )
+      .bind(record.id)
+      .run();
+    return jsonAuthError(
+      400,
+      "OTP_EXPIRED",
+      "That verification code has expired. Request a new code.",
+    );
+  }
+
+  const parsed = parseStoredOtpValue(record.value);
+  if (!parsed || parsed.attempts >= SIGNUP_OTP_MAX_ATTEMPTS) {
+    await env.CONCLAVE_DB.prepare(
+      "DELETE FROM auth_verifications WHERE id = ?1",
+    )
+      .bind(record.id)
+      .run();
+    return jsonAuthError(
+      400,
+      "TOO_MANY_ATTEMPTS",
+      "Too many invalid attempts. Request a new verification code.",
+    );
+  }
+
+  if (parsed.code !== rawOtp) {
+    const nextAttempts = parsed.attempts + 1;
+    if (nextAttempts >= SIGNUP_OTP_MAX_ATTEMPTS) {
+      await env.CONCLAVE_DB.prepare(
+        "DELETE FROM auth_verifications WHERE id = ?1",
+      )
+        .bind(record.id)
+        .run();
+      return jsonAuthError(
+        400,
+        "TOO_MANY_ATTEMPTS",
+        "Too many invalid attempts. Request a new verification code.",
+      );
+    }
+    await env.CONCLAVE_DB.prepare(
+      `UPDATE auth_verifications
+          SET value = ?1, updated_at = ?2
+        WHERE id = ?3`,
+    )
+      .bind(`${parsed.code}:${nextAttempts}`, new Date().toISOString(), record.id)
+      .run();
+    return jsonAuthError(
+      400,
+      "INVALID_OTP",
+      "That verification code is not valid. Check the 6-digit code and try again.",
+    );
+  }
+
+  await env.CONCLAVE_DB.prepare(
+    "DELETE FROM auth_verifications WHERE identifier = ?1",
+  )
+    .bind(identifier)
+    .run();
+
+  const forwardedPayload = { ...payload };
+  delete forwardedPayload.otp;
+  const forwardedRequest = new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: JSON.stringify(forwardedPayload),
+  });
+  return { email: rawEmail, request: forwardedRequest };
 }
 
 /** Preserve Better Auth's OAuth state/CSRF cookies across the redirect shim. */

@@ -89,6 +89,87 @@ class WorkerCatalogWorkerState {
     );
   }
 
+  /// Availability evidence is separate from activation. A disabled Worker may
+  /// pass verification but must still be enabled before accepting work.
+  bool get _latestLivePassed {
+    final worker = localWorker;
+    if (worker?.lastLiveTestPassed != true) return false;
+    final live = DateTime.tryParse(worker?.lastLiveTestAt ?? '');
+    final passive = DateTime.tryParse(worker?.lastPassiveProbeAt ?? '');
+    return live != null && (passive == null || !live.isBefore(passive));
+  }
+
+  String? get issueCode {
+    final worker = localWorker;
+    if (_latestLivePassed) return null;
+    return worker?.lastLiveTestPassed == false
+        ? worker?.lastLiveTestIssueCode ?? worker?.readinessIssueCode
+        : worker?.readinessIssueCode;
+  }
+
+  String get availabilityLabel {
+    if (catalogRetired) return 'Worker retired';
+    if (localState == WorkspaceLocalWorkerState.unavailable) {
+      return 'Local state unavailable';
+    }
+    if (profileState == WorkspaceWorkerProfileState.incompatible) {
+      return 'Profile incompatible';
+    }
+    if (profileState == WorkspaceWorkerProfileState.error ||
+        profileState == WorkspaceWorkerProfileState.unavailable) {
+      return 'Profile unavailable';
+    }
+    if (localWorker == null) return 'Setup required';
+    if (profileState != WorkspaceWorkerProfileState.ready) {
+      return 'Checking Profile';
+    }
+    if (issueCode != null &&
+        issueCode != 'setup_required' &&
+        issueCode != 'probe_required') {
+      return workerIssueLabel(issueCode!);
+    }
+    if (_latestLivePassed) return 'Ready';
+    if (localWorker!.lastLiveTestPassed == false) return 'Live test failed';
+    if (readiness == WorkerReadinessState.signInRequired) {
+      return 'CLI sign-in required';
+    }
+    if (readinessLabel == 'Ready') return 'Ready';
+    if (readiness == WorkerReadinessState.setupRequired) {
+      return 'Live test required';
+    }
+    if (readiness == WorkerReadinessState.runtimeUnavailable) {
+      return 'Worker Engine unavailable';
+    }
+    if (readiness == WorkerReadinessState.testFailed) {
+      return 'Verification failed';
+    }
+    return 'Not verified';
+  }
+
+  String get availabilityDetail {
+    if (catalogRetired) {
+      return 'This Worker is no longer published in the Cloud catalog. Existing local files are preserved.';
+    }
+    if (localState == WorkspaceLocalWorkerState.unavailable) {
+      return 'Local Worker state could not be read. Reconnect to the service and retry.';
+    }
+    if (profileState == WorkspaceWorkerProfileState.error ||
+        profileState == WorkspaceWorkerProfileState.unavailable ||
+        profileState == WorkspaceWorkerProfileState.incompatible) {
+      return profileAvailability.message ??
+          'Refresh the published Profile and check Workspace and CLI compatibility.';
+    }
+    if (localWorker == null) {
+      return 'Configure this Worker on this computer, then run a live test.';
+    }
+    if (availabilityLabel == 'Ready') {
+      return localWorker!.activationState == LocalWorkerActivationState.disabled
+          ? 'Verification passed. Enable this Worker to accept requests.'
+          : 'Verification passed. This Worker is enabled to accept requests.';
+    }
+    return workerIssueRecovery(issueCode, fallback: availabilityLabel);
+  }
+
   WorkspaceWorkerState get state => deriveWorkspaceWorkerState(this);
 }
 
@@ -225,3 +306,60 @@ String deriveLocalWorkerReadiness(LocalWorker worker) {
   }
   return 'Needs attention';
 }
+
+String workerIssueLabel(String code) => switch (code) {
+      'cli_not_found' ||
+      'provider_tool_unavailable' =>
+        'Provider CLI not found',
+      'authentication_required' ||
+      'provider_authentication_required' =>
+        'CLI sign-in required',
+      'setup_required' || 'live_probe_required' => 'Live test required',
+      'probe_required' => 'Not verified',
+      'tool_profile_unavailable' ||
+      'package_unavailable' =>
+        'Profile unavailable',
+      'profile_invalid' ||
+      'profile_identity_mismatch' =>
+        'Profile validation failed',
+      'unsupported_provider_tool_version' => 'CLI version unsupported',
+      'cli_worker_engine_unavailable' => 'Worker Engine unavailable',
+      'engine_incompatible' => 'Engine version incompatible',
+      'probe_timeout' || 'deadline_exceeded' => 'Verification timed out',
+      'provider_rate_limited' ||
+      'rate_limited' =>
+        'Provider rate limit reached',
+      'verification_save_failed' => 'Could not save verification',
+      'execution_test_failed' || 'provider_failure' => 'Live test failed',
+      _ => 'Verification failed: $code',
+    };
+
+String workerIssueRecovery(String? code, {String fallback = 'Not verified'}) =>
+    switch (code) {
+      'cli_not_found' ||
+      'provider_tool_unavailable' =>
+        'Install the provider CLI and make it available to the Workspace service, then test again.',
+      'authentication_required' ||
+      'provider_authentication_required' =>
+        'Sign in using the provider CLI on this computer, then test again.',
+      'tool_profile_unavailable' ||
+      'package_unavailable' ||
+      'profile_invalid' ||
+      'profile_identity_mismatch' =>
+        'Refresh the published Worker Profile, then test again.',
+      'unsupported_provider_tool_version' =>
+        'Install a CLI version supported by the current Worker Profile, then test again.',
+      'cli_worker_engine_unavailable' ||
+      'engine_incompatible' =>
+        'Update Workspace to restore a compatible Worker Engine, then test again.',
+      'probe_timeout' ||
+      'deadline_exceeded' =>
+        'Check the provider connection and CLI responsiveness, then retry the test.',
+      'provider_rate_limited' ||
+      'rate_limited' =>
+        'Wait for the provider limit to reset before testing again.',
+      'verification_save_failed' =>
+        'Check that Workspace can write its application state, then retry.',
+      _ =>
+        '$fallback. Run a live test to verify availability; review the test details if it fails.',
+    };

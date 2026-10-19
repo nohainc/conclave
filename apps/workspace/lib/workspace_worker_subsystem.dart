@@ -116,7 +116,11 @@ class WorkspaceWorkerSubsystem {
   Future<int> parallelSlots() => registry.parallelSlots();
 
   /// Changes the total; the registry advances Worker revisions so Cloud sees it.
-  Future<int> setParallelSlots(int slots) => registry.setParallelSlots(slots);
+  Future<int> setParallelSlots(int slots) async {
+    final applied = await registry.setParallelSlots(slots);
+    engineSupervisor?.setParallelSlots(applied);
+    return applied;
+  }
 
   /// Shared slot pool usage, with a per-Worker breakdown, for the Workspace UI.
   Map<String, Object?> slotSnapshot() =>

@@ -5,6 +5,25 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
 DIST_DIR="$ROOT/dist/conclave-workspace/macos"  # suffixed with -local for local builds below
 
+# --all builds the production app and then the local app with the remaining
+# options, so both end up in their own dist folders (and /Applications with
+# --install). Each build is a separate invocation of this script.
+PASSTHROUGH=()
+BUILD_ALL="0"
+for arg in "$@"; do
+  case "$arg" in
+    --all) BUILD_ALL="1" ;;
+    --local|--prod|--production) ;;
+    *) PASSTHROUGH+=("$arg") ;;
+  esac
+done
+if [[ "$BUILD_ALL" == "1" ]]; then
+  # --open would race two launches; open them from /Applications afterwards.
+  bash "$0" --prod ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
+  bash "$0" --local ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
+  exit 0
+fi
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "Conclave Workspace macOS builds must run on macOS." >&2
   exit 1
@@ -22,6 +41,7 @@ command -v ditto >/dev/null 2>&1 || {
 MODE="release"
 TARGET_ENV="${CONCLAVE_WORKSPACE_ENVIRONMENT:-production}"
 OPEN_APP="0"
+INSTALL_APP="0"
 PREPARED="0"
 
 plist_buddy() {
@@ -66,6 +86,13 @@ while [[ $# -gt 0 ]]; do
       CONCLAVE_MACOS_SIGN_IDENTITY="$2"
       shift 2
       ;;
+    --all)
+      shift
+      ;;
+    --install)
+      INSTALL_APP="1"
+      shift
+      ;;
     --open|-o)
       OPEN_APP="1"
       shift
@@ -85,6 +112,8 @@ while [[ $# -gt 0 ]]; do
       echo "  --prod             Production build (default): talks to https://app.conclaveax.com"
       echo "  --version, -v VER  Override workspace version"
       echo "  --sign IDENTITY    Apple signing identity"
+      echo "  --all              Build the production app, then the local app"
+      echo "  --install          Quit the running copy and install the app into /Applications"
       echo "  --open, -o         Open the built application bundle after build"
       echo "  --help, -h         Show this help message"
       echo ""
@@ -169,6 +198,21 @@ if [[ ! -d "$APP" ]]; then
   exit 1
 fi
 
+# A local build is a distinct app: own name, bundle ID, and LaunchAgent label,
+# so it can be installed and run beside the production app. Done before any
+# signing so every signature seals the final identity.
+BUNDLE_ID="com.conclaveax.workspace"
+if [[ "$TARGET_ENV" == "local" ]]; then
+  BUNDLE_ID="com.conclaveax.workspace.local"
+  LOCAL_APP="$(dirname "$APP")/Conclave Workspace Local.app"
+  rm -rf "$LOCAL_APP"
+  mv "$APP" "$LOCAL_APP"
+  APP="$LOCAL_APP"
+  plist_buddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP/Contents/Info.plist"
+  plist_buddy -c "Set :CFBundleName Conclave Workspace Local" "$APP/Contents/Info.plist"
+fi
+LAUNCH_AGENT_PLIST="$BUNDLE_ID.service.plist"
+
 # Embed the standalone Dart runtime after Flutter assembles the UI app. The
 # helper loads its Worker Engine from its adjacent assets directory, so neither
 # process depends on the current working directory or a shell profile.
@@ -200,8 +244,9 @@ fi
 cp "$ENGINE" "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
 chmod 755 "$HELPERS_DIR/conclave-service" \
   "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
-cp "$WORKSPACE_DIR/macos/Runner/LaunchAgents/com.conclaveax.workspace.service.plist" \
-  "$LAUNCH_AGENTS_DIR/com.conclaveax.workspace.service.plist"
+sed "s/com\\.conclaveax\\.workspace/$BUNDLE_ID/g" \
+  "$WORKSPACE_DIR/macos/Runner/LaunchAgents/com.conclaveax.workspace.service.plist" \
+  > "$LAUNCH_AGENTS_DIR/$LAUNCH_AGENT_PLIST"
 
 if [[ "$MODE" == "debug" ]]; then
   APP_ENTITLEMENTS="$WORKSPACE_DIR/macos/Runner/DebugProfile.entitlements"
@@ -310,10 +355,36 @@ if [[ -n "${CONCLAVE_MACOS_NOTARY_PROFILE:-}" ]]; then
   ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 fi
 
-echo "Built app bundle: $APP"
+# Keep a runnable copy next to the archive. The next build runs flutter clean
+# and deletes the Flutter build folder, so the prod and local apps would
+# otherwise overwrite each other there. Per-environment dist folders do not.
+DIST_APP="$DIST_DIR/$(basename "$APP")"
+rm -rf "$DIST_APP"
+ditto "$APP" "$DIST_APP"
+
+echo "Built app bundle: $DIST_APP"
 echo "Built distribution archive: $ZIP"
 
+OPEN_TARGET="$DIST_APP"
+if [[ "$INSTALL_APP" == "1" ]]; then
+  INSTALLED_APP="/Applications/$(basename "$APP")"
+  # Quit only this variant (matched by bundle ID) so the other one keeps running.
+  if pgrep -f "$INSTALLED_APP/Contents/MacOS/" >/dev/null 2>&1 \
+    || osascript -e "application id \"$BUNDLE_ID\" is running" 2>/dev/null | grep -q true; then
+    echo "Quitting running $(basename "$APP")"
+    osascript -e "tell application id \"$BUNDLE_ID\" to quit" >/dev/null 2>&1 || true
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      osascript -e "application id \"$BUNDLE_ID\" is running" 2>/dev/null | grep -q true || break
+      sleep 1
+    done
+  fi
+  rm -rf "$INSTALLED_APP"
+  ditto "$DIST_APP" "$INSTALLED_APP"
+  echo "Installed: $INSTALLED_APP"
+  OPEN_TARGET="$INSTALLED_APP"
+fi
+
 if [[ "$OPEN_APP" == "1" ]]; then
-  echo "Opening $APP..."
-  open "$APP"
+  echo "Opening $OPEN_TARGET..."
+  open "$OPEN_TARGET"
 fi

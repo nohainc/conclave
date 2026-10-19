@@ -775,10 +775,15 @@ abstract interface class AxDataSource {
     required String email,
     required String password,
   });
+  Future<void> requestSignUpVerificationCode({
+    required String email,
+    String? name,
+  }) async {}
   Future<void> signUpWithEmail({
     required String name,
     required String email,
     required String password,
+    String? otp,
   });
   Future<void> requestPasswordReset({required String email});
   Future<void> resetPassword({

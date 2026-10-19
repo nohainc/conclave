@@ -261,5 +261,10 @@ Local builds are produced with `--dart-define=CONCLAVE_WORKSPACE_ENVIRONMENT=loc
 show an orange "LOCAL DEVELOPMENT BUILD" banner, ignore saved or environment
 Cloud URLs, and write to a separate state directory so they never touch a
 production registration or session. Start the local API/web stack first with
-`pnpm app:run:local`. Local and production bundles share one launchd service
-label, so run only one at a time.
+`pnpm app:run:local`. Local builds are a distinct app, **Conclave Workspace Local.app**, with bundle ID
+`com.conclaveax.workspace.local`, LaunchAgent label
+`com.conclaveax.workspace.local.service`, and Keychain service
+`com.conclaveax.workspace.local`. The production and local apps can be installed
+and run at the same time on one Mac; each has its own state directory,
+per-installation lock, IPC socket, and service. The Swift host derives the
+LaunchAgent label from its bundle identifier.

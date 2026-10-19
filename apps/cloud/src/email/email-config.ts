@@ -1,5 +1,5 @@
-const DEFAULT_PRIMARY_SENDER = "conclave@nohainc.com";
-const DEFAULT_FALLBACK_SENDER = "vitalii@nohainc.com";
+const DEFAULT_PRIMARY_SENDER = "conclave@conclaveax.com";
+const DEFAULT_FALLBACK_SENDER = "vitalii@conclaveax.com";
 const DEFAULT_DISPLAY_NAME = "Conclave AX";
 const LEGACY_SENDER = "auth@auth.earthuc.com";
 

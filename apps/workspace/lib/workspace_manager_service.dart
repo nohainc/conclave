@@ -17,6 +17,7 @@ import 'workspace_registration.dart';
 import 'workspace_registration_models.dart';
 import 'workspace_service_state.dart';
 import 'worker_readiness.dart';
+import 'worker_check_progress.dart';
 import 'worker_diagnostic_store.dart';
 
 /// Runtime command boundary and event publisher for the local management UI.
@@ -40,6 +41,7 @@ class WorkspaceManagerService {
   bool _closed = false;
   WorkspaceCloudConnection? _observedConnection;
   WorkerCatalogCoordinator? _observedCatalog;
+  WorkerReadinessMonitor? _observedReadiness;
 
   Future<void> start() async {
     if (Platform.isWindows) {
@@ -64,11 +66,14 @@ class WorkspaceManagerService {
     final oldConnection = _observedConnection;
     if (oldConnection != null) oldConnection.onStateChanged = null;
     _observedCatalog?.removeListener(_handleWorkspaceChange);
+    _observedReadiness?.removeListener(_handleWorkspaceChange);
     final connection = target.cloudConnection;
     _observedConnection = connection;
     if (connection != null) connection.onStateChanged = _handleWorkspaceChange;
     _observedCatalog = target.workerCatalogCoordinator;
     _observedCatalog?.addListener(_handleWorkspaceChange);
+    _observedReadiness = target.workerReadinessMonitor;
+    _observedReadiness?.addListener(_handleWorkspaceChange);
   }
 
   void _handleWorkspaceChange() => unawaited(_publishSnapshot());
@@ -245,6 +250,9 @@ class WorkspaceManagerService {
   }
 
   Map<String, Object?> _workerCatalogSnapshot() {
+    final checks = workspace.workerReadinessMonitor?.checks ??
+        const <String, WorkerCheckProgress>{};
+    final checkJson = checks.map((key, value) => MapEntry(key, value.toJson()));
     final catalog = (workspace.workerSubsystem?.catalog ??
             workspace.workerCatalogCoordinator)
         ?.snapshot;
@@ -254,12 +262,14 @@ class WorkspaceManagerService {
                 .map((descriptor) => descriptor.toJson())
                 .toList() ??
             const [],
+        'checks': checkJson,
         'views': const [],
         'catalogConfirmed': false,
         'localRegistryLoaded': workspace.localWorkerRegistry != null,
       };
     }
     return {
+      'checks': checkJson,
       'descriptors':
           catalog.descriptors.map((descriptor) => descriptor.toJson()).toList(),
       'views': catalog.workers
@@ -836,6 +846,7 @@ class WorkspaceManagerService {
     if (connection != null) connection.onStateChanged = null;
     _observedConnection = null;
     _observedCatalog?.removeListener(_handleWorkspaceChange);
+    _observedReadiness?.removeListener(_handleWorkspaceChange);
     _observedCatalog = null;
     await _server?.close();
     _server = null;

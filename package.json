@@ -17,6 +17,7 @@
     "workspace:build:macos": "bash scripts/build-workspace-macos.sh",
     "workspace:build:macos:local": "bash scripts/build-workspace-macos.sh --local",
     "workspace:build:macos:prod": "bash scripts/build-workspace-macos.sh --prod",
+    "workspace:build:macos:all": "bash scripts/build-workspace-macos.sh --all --install",
     "workspace:test:macos": "bash scripts/test-workspace-macos.sh",
     "profile-lab:build": "bash scripts/build-profile-lab-macos.sh",
     "profile-lab:build:macos": "bash scripts/build-profile-lab-macos.sh",

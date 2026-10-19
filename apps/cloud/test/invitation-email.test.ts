@@ -133,7 +133,7 @@ describe("Invitation Email Delivery", () => {
     expect(ok).toBe(true);
     expect(send).toHaveBeenCalledTimes(2);
     expect(send.mock.calls[1]?.[0]).toMatchObject({
-      from: { email: "vitalii@nohainc.com", name: "Conclave AX" },
+      from: { email: "vitalii@conclaveax.com", name: "Conclave AX" },
     });
   });
 
@@ -228,7 +228,7 @@ describe("Invitation Email Delivery", () => {
       to: "ulikossnokia@gmail.com",
       subject: "Vitalii Noha invited you to Conclave AX Development",
       from: {
-        email: "conclave@nohainc.com",
+        email: "conclave@conclaveax.com",
         name: "Conclave AX",
       },
     });

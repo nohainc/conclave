@@ -916,4 +916,39 @@ void main() {
     expect(client.lastRequest?.headers.containsKey('x-conclave-workspace-id'),
         isFalse);
   });
+
+  test('requests sign-up verification code and includes otp in sign-up payload',
+      () async {
+    final client =
+        _JsonClient(const <String, dynamic>{'sent': true}, statusCode: 200);
+    final api = AxApiClient(
+      baseUrl: 'https://conclave.test/api',
+      client: client,
+    );
+
+    await api.requestSignUpVerificationCode(
+      email: 'newuser@example.com',
+      name: 'New User',
+    );
+    expect(client.lastRequest?.method, 'POST');
+    expect(client.lastRequest?.url.path, '/api/auth/sign-up/send-code');
+    expect(jsonDecode(client.lastBody!), {
+      'email': 'newuser@example.com',
+      'name': 'New User',
+    });
+
+    await api.signUpWithEmail(
+      name: 'New User',
+      email: 'newuser@example.com',
+      password: 'strong-password-123',
+      otp: '482910',
+    );
+    expect(client.lastRequest?.method, 'POST');
+    expect(client.lastRequest?.url.path, '/api/auth/sign-up/email');
+    final body = jsonDecode(client.lastBody!) as Map<String, dynamic>;
+    expect(body['name'], 'New User');
+    expect(body['email'], 'newuser@example.com');
+    expect(body['password'], 'strong-password-123');
+    expect(body['otp'], '482910');
+  });
 }

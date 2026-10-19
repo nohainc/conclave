@@ -14,6 +14,11 @@ export const emailPreviewFixtures: Readonly<{
     verificationUrl: `${EMAIL_PREVIEW_ORIGIN}/verify?token=preview-verification-token`,
     expiresInMinutes: 60,
   },
+  "auth.verify-email-code.v1": {
+    recipientName: "Ada Lovelace",
+    verificationCode: "482910",
+    expiresInMinutes: 10,
+  },
   "auth.reset-password.v1": {
     recipientName: "Ada Lovelace",
     resetUrl: `${EMAIL_PREVIEW_ORIGIN}/reset?token=preview-reset-token`,

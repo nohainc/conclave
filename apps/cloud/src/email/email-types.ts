@@ -6,6 +6,7 @@
  */
 export type EmailTemplateId =
   | "auth.verify-email.v1"
+  | "auth.verify-email-code.v1"
   | "auth.reset-password.v1"
   | "auth.password-changed.v1"
   | "auth.confirm-email-change.v1"
@@ -60,6 +61,13 @@ export interface VerifyEmailInput {
   readonly recipientName?: string | null;
   readonly verificationUrl: string;
   /** Better Auth's configured verification-token lifetime, in minutes. */
+  readonly expiresInMinutes: number;
+}
+
+export interface VerifyEmailCodeInput {
+  readonly recipientName?: string | null;
+  readonly verificationCode: string;
+  /** Verification code lifetime, in minutes. */
   readonly expiresInMinutes: number;
 }
 
@@ -126,6 +134,7 @@ export interface AccountDeletedInput {
 
 export interface EmailTemplateInputMap {
   readonly "auth.verify-email.v1": VerifyEmailInput;
+  readonly "auth.verify-email-code.v1": VerifyEmailCodeInput;
   readonly "auth.reset-password.v1": ResetPasswordInput;
   readonly "auth.password-changed.v1": PasswordChangedInput;
   readonly "auth.confirm-email-change.v1": ConfirmEmailChangeInput;

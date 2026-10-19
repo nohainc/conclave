@@ -78,33 +78,34 @@ The production Worker also uses Cloudflare Email Service for email verification,
 password reset, and Space invitations. Sender configuration is centralized in
 the Cloud email service and uses these production variables:
 
-- `CONCLAVE_EMAIL_FROM=conclave@nohainc.com`
-- `CONCLAVE_EMAIL_FALLBACK_FROM=vitalii@nohainc.com`
+- `CONCLAVE_EMAIL_FROM=conclave@conclaveax.com`
+- `CONCLAVE_EMAIL_FALLBACK_FROM=vitalii@conclaveax.com`
 - `CONCLAVE_EMAIL_FROM_NAME=Conclave AX`
 
 Both addresses must be independently authorized by the Cloudflare Email
-Sending configuration before deploying this change. The fallback is used only
-when the provider explicitly rejects the primary sender before accepting the
-message. Timeouts, recipient failures, and unknown errors are not retried with
-another sender, which avoids duplicate messages after an uncertain provider
-acceptance. The retired `auth@auth.earthuc.com` address is rejected by the
-configuration validator. Local development logs generated links instead of
-sending mail.
+Sending configuration on the `conclaveax.com` zone before deploying this change.
+The fallback is used only when the provider explicitly rejects the primary
+sender before accepting the message. Timeouts, recipient failures, and unknown
+errors are not retried with another sender, which avoids duplicate messages
+after an uncertain provider acceptance. The retired `auth@auth.earthuc.com`
+address is rejected by the configuration validator. Local development uses
+`remote: true` on the `CONCLAVE_EMAIL` binding so real emails are delivered via
+Cloudflare Email Sending when logged into Wrangler (and falls back to logging
+when the binding is absent).
 
 For local overrides, copy `apps/cloud/.dev.vars.example` to `apps/cloud/.dev.vars` and use
 non-deliverable `*.test` addresses. The development Wrangler configuration keeps
-the email binding for local simulation but does not configure production sender
-identities. The production deployment workflows validate configuration and binding shape;
+the email binding for local simulation/remote sending but does not hardcode production sender
+variables. The production deployment workflows validate configuration and binding shape;
 they do not send a test message or prove Cloudflare sender authorization.
 
 The shared delivery service reports accepted delivery separately from sender
 authorization, recipient rejection, rate limiting, provider availability,
-temporary failure, and configuration errors. Authentication preserves its
-throw-on-failure behavior, with one exception: a failed verification email
-during sign-up is logged (`auth.verification_email.signup_failed`) instead of
-failing the request, because the account already exists at that point and the
-user can request a new link; an explicit resend still reports the failure.
-Invitation creation preserves its boolean delivery result.
+temporary failure, and configuration errors. Account registration uses a 2-step
+pre-signup verification code (`POST /api/auth/sign-up/send-code` followed by
+`POST /api/auth/sign-up/email` with `otp`) so the user's email address is
+verified before the account and session are created. Invitation creation
+preserves its boolean delivery result.
 
 The automated coverage and the controlled production sender smoke test are
 documented in the [email delivery verification runbook](EMAIL_DELIVERY_VERIFICATION.md).

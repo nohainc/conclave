@@ -221,6 +221,36 @@ void main() {
     expect(setup.supervisor.slotSnapshot()['active'], 0);
   });
 
+  test('live capacity changes preserve running work and admit queued work',
+      () async {
+    final setup = await _setup();
+    addTearDown(() => setup.root.delete(recursive: true));
+    final first = _execute(setup, 'first',
+        prompt: 'barrier', maxConcurrentAssignments: 2);
+    final second = _execute(setup, 'second',
+        prompt: 'barrier', maxConcurrentAssignments: 2);
+    await _waitFor(() =>
+        File('${setup.state.path}/started-first').existsSync() &&
+        File('${setup.state.path}/started-second').existsSync());
+    final queued = Completer<void>();
+    final third = _execute(setup, 'third',
+        prompt: 'barrier', maxConcurrentAssignments: 2, onQueued: (_) {
+      if (!queued.isCompleted) queued.complete();
+    });
+    await queued.future;
+    setup.supervisor.setParallelSlots(1);
+    expect(setup.supervisor.slotSnapshot()['active'], 2);
+    expect(setup.supervisor.slotSnapshot()['queued'], 1);
+    expect(File('${setup.state.path}/started-third').existsSync(), isFalse);
+    setup.supervisor.setParallelSlots(3);
+    await _waitFor(File('${setup.state.path}/started-third').existsSync);
+    expect(setup.supervisor.slotSnapshot()['active'], 3);
+    await File('${setup.state.path}/release-barrier').writeAsString('release');
+    expect((await first).output, 'barrier');
+    expect((await second).output, 'barrier');
+    expect((await third).output, 'barrier');
+  });
+
   test('cancels the active Engine process tree as an assignment failure',
       () async {
     final setup = await _setup();

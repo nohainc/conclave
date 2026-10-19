@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/platform_runtime.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
+import 'package:conclave_workspace/worker_check_progress.dart';
 
 import 'support/logical_worker_catalog_fixture.dart';
 
@@ -42,6 +43,60 @@ void main() {
     );
     expect(assessment.state, WorkerReadinessState.setupRequired);
     expect(assessment.issueCode, 'setup_required');
+  });
+
+  test('publishes actual live check stages and retains a failed stage',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('worker-progress-');
+    addTearDown(() => directory.delete(recursive: true));
+    final registry = LocalWorkerRegistry(
+      dataDirectory: directory,
+      workspaceId: 'workspace-progress',
+      platform: _ReadinessPlatform(),
+      idGenerator: () => 'worker-chatgpt',
+    );
+    await registry.create(
+        catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
+        localPermissions: const ['repository:read'],
+        status: LocalWorkerStatus.disabled);
+    final assessment = Completer<WorkerReadinessAssessment>();
+    var fail = false;
+    final monitor = WorkerReadinessMonitor(
+        registry: registry,
+        assessWorker: (_) => fail
+            ? Future.value(const WorkerReadinessAssessment(
+                WorkerReadinessState.testFailed,
+                issueCode: 'provider_authentication_required'))
+            : assessment.future);
+    addTearDown(monitor.dispose);
+    final events = <WorkerCheckProgress>[];
+    final enteredProbe = Completer<void>();
+    monitor.addListener(() {
+      final progress = monitor.checks['chatgpt']!;
+      events.add(progress);
+      if (progress.phase == WorkerCheckPhase.probe &&
+          !enteredProbe.isCompleted) {
+        enteredProbe.complete();
+      }
+    });
+    final check = monitor.checkNow(mode: LocalWorkerProbeMode.live);
+    await enteredProbe.future;
+    expect(events.first.phase, WorkerCheckPhase.profile);
+    expect(events.last.outcome, WorkerCheckOutcome.running);
+    assessment
+        .complete(const WorkerReadinessAssessment(WorkerReadinessState.ready));
+    await check;
+    expect(events.map((event) => event.phase), contains(WorkerCheckPhase.save));
+    expect(events.last.outcome, WorkerCheckOutcome.passed);
+    expect(events.last.completedAt, isNotNull);
+    expect(events.map((event) => event.startedAt).toSet(), hasLength(1));
+    fail = true;
+    await monitor.checkNow(mode: LocalWorkerProbeMode.live);
+    expect(events.last.phase, WorkerCheckPhase.probe);
+    expect(events.last.outcome, WorkerCheckOutcome.failed);
+    expect(events.last.issueCode, 'provider_authentication_required');
+    expect((await registry.list()).single.activationState,
+        LocalWorkerActivationState.disabled);
   });
 
   test('rechecks local Workers and syncs changed readiness state', () async {

@@ -110,6 +110,7 @@ extension _AxAppController on _AxAppStateMixin {
     final email = authEmailController.text.trim();
     final password = authPasswordController.text;
     final confirmPassword = authConfirmPasswordController.text;
+    final verificationCode = authVerificationCodeController.text.trim();
     final resetToken = browserNavigation.current.queryParameters['token'];
     if ((resetToken == null && email.isEmpty) ||
         (password.isEmpty && (!authResetRequest || resetToken != null))) {
@@ -122,6 +123,18 @@ extension _AxAppController on _AxAppStateMixin {
     }
     if ((authSignUp || resetToken != null) && password != confirmPassword) {
       _updateState(() => authError = 'The passwords do not match.');
+      return;
+    }
+    if ((authSignUp || resetToken != null) && password.length < 8) {
+      _updateState(
+          () => authError = 'Use a password with at least 8 characters.');
+      return;
+    }
+    if (authSignUp &&
+        authSignUpAwaitingCode &&
+        !RegExp(r'^\d{6}$').hasMatch(verificationCode)) {
+      _updateState(() => authError =
+          'Enter the 6-digit verification code sent to your email.');
       return;
     }
     _updateState(() {
@@ -158,10 +171,27 @@ extension _AxAppController on _AxAppStateMixin {
         return;
       }
       if (authSignUp) {
+        if (!authSignUpAwaitingCode) {
+          await widget.dataSource.requestSignUpVerificationCode(
+            email: email,
+            name: authNameController.text.trim(),
+          );
+          if (mounted) {
+            _updateState(() {
+              authBusy = false;
+              authSignUpAwaitingCode = true;
+              authVerificationCodeController.clear();
+              authNotice =
+                  'We sent a 6-digit verification code to $email. Enter it below to finish creating your account.';
+            });
+          }
+          return;
+        }
         await widget.dataSource.signUpWithEmail(
           name: authNameController.text.trim(),
           email: email,
           password: password,
+          otp: verificationCode,
         );
       } else {
         await widget.dataSource.signInWithEmail(
@@ -172,10 +202,41 @@ extension _AxAppController on _AxAppStateMixin {
       if (!mounted) return;
       _updateState(() {
         authBusy = false;
+        authSignUpAwaitingCode = false;
+        authVerificationCodeController.clear();
         authRequired = false;
         isLoading = true;
       });
       await _loadSession();
+    } catch (error) {
+      if (!mounted) return;
+      _updateState(() {
+        authBusy = false;
+        authError = error.toString();
+      });
+    }
+  }
+
+  Future<void> _resendSignUpCode() async {
+    final email = authEmailController.text.trim();
+    final name = authNameController.text.trim();
+    if (email.isEmpty || authBusy) return;
+    _updateState(() {
+      authBusy = true;
+      authError = null;
+      authNotice = null;
+    });
+    try {
+      await widget.dataSource.requestSignUpVerificationCode(
+        email: email,
+        name: name,
+      );
+      if (!mounted) return;
+      _updateState(() {
+        authBusy = false;
+        authVerificationCodeController.clear();
+        authNotice = 'A new 6-digit verification code was sent to $email.';
+      });
     } catch (error) {
       if (!mounted) return;
       _updateState(() {

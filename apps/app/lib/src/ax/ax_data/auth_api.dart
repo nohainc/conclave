@@ -194,15 +194,27 @@ mixin _AuthApi on _AxApiClientCore {
       });
 
   @override
+  Future<void> requestSignUpVerificationCode({
+    required String email,
+    String? name,
+  }) =>
+      _postAuth('/auth/sign-up/send-code', {
+        'email': email,
+        if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+      });
+
+  @override
   Future<void> signUpWithEmail({
     required String name,
     required String email,
     required String password,
+    String? otp,
   }) =>
       _postAuth('/auth/sign-up/email', {
         'name': name,
         'email': email,
         'password': password,
+        if (otp != null && otp.trim().isNotEmpty) 'otp': otp.trim(),
         // The verification link lands here; a relative value would resolve
         // against the API origin, which differs from the app in local dev.
         'callbackURL': Uri.base.scheme == 'http' || Uri.base.scheme == 'https'

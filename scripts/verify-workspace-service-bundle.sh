@@ -31,7 +31,12 @@ plutil_lint() {
 HELPER="$APP/Contents/Helpers/conclave-service"
 ENGINE="$APP/Contents/Helpers/assets/engines/conclave_cli_worker_engine"
 APP_EXECUTABLE="$APP/Contents/MacOS/$(plist_buddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
-PLIST="$APP/Contents/Library/LaunchAgents/com.conclaveax.workspace.service.plist"
+BUNDLE_ID="$(plist_buddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")"
+case "$BUNDLE_ID" in
+  com.conclaveax.workspace|com.conclaveax.workspace.local) ;;
+  *) echo "Unexpected bundle identifier: $BUNDLE_ID" >&2; exit 1 ;;
+esac
+PLIST="$APP/Contents/Library/LaunchAgents/$BUNDLE_ID.service.plist"
 for path in "$HELPER" "$ENGINE" "$APP_EXECUTABLE" "$PLIST"; do
   [[ -e "$path" ]] || { echo "Missing service bundle item: $path" >&2; exit 1; }
 done
@@ -44,11 +49,11 @@ done
   exit 1
 }
 plist_buddy -c 'Print :Label' "$PLIST" >/dev/null
-[[ "$(plist_buddy -c 'Print :Label' "$PLIST")" == "com.conclaveax.workspace.service" ]] || {
+[[ "$(plist_buddy -c 'Print :Label' "$PLIST")" == "$BUNDLE_ID.service" ]] || {
   echo "Unexpected LaunchAgent label." >&2
   exit 1
 }
-[[ "$(plist_buddy -c 'Print :AssociatedBundleIdentifiers:0' "$PLIST")" == "com.conclaveax.workspace" ]] || {
+[[ "$(plist_buddy -c 'Print :AssociatedBundleIdentifiers:0' "$PLIST")" == "$BUNDLE_ID" ]] || {
   echo "LaunchAgent is not associated with the Workspace app bundle." >&2
   exit 1
 }

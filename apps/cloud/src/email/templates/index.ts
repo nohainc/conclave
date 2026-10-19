@@ -15,6 +15,7 @@ import type {
   SpaceAccessRevokedInput,
   SpaceInvitationInput,
   SpaceInvitationAcceptedInput,
+  VerifyEmailCodeInput,
   VerifyEmailInput,
   WelcomeInput,
 } from "../email-types.js";
@@ -140,6 +141,41 @@ function renderVerifyEmail(input: VerifyEmailInput): RenderedEmailContent {
       action: { label: "Verify email address", url: verificationUrl },
       securityNotice:
         "If you did not create a Conclave AX account, you can safely ignore this email.",
+    }),
+  };
+}
+
+function renderVerifyEmailCode(
+  input: VerifyEmailCodeInput,
+): RenderedEmailContent {
+  const recipientName = safeName(input.recipientName);
+  const verificationCode = required(
+    input.verificationCode,
+    "verificationCode",
+  );
+  if (!/^\d{6}$/.test(verificationCode)) {
+    throw new Error("verificationCode must be a 6-digit numeric code");
+  }
+  const expiration = validityMinutes(
+    input.expiresInMinutes,
+    "expiresInMinutes",
+  );
+  const codeValidityText = `This code is valid for ${expiration} ${expiration === 1 ? "minute" : "minutes"}.`;
+  const subject = `${verificationCode} is your Conclave AX verification code`;
+  return {
+    templateId: "auth.verify-email-code.v1",
+    subject,
+    ...renderEmailLayout({
+      templateId: "auth.verify-email-code.v1",
+      subject,
+      variant: "action-required",
+      eyebrow: "Account security",
+      title: "Verify your email address",
+      intro: `Welcome to Conclave AX, ${recipientName}. Enter the one-time verification code below to finish creating your account.`,
+      bodyHtml: `<div style="margin:24px 0 8px;padding:18px 24px;background:#f4f1ff;border:1px solid #dcd5ff;border-radius:10px;text-align:center;font-family:Courier,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:#172033;">${escapeHtml(verificationCode)}</div><p style="margin:16px 0 0;color:#435066;font-size:15px;line-height:24px;">${escapeHtml(codeValidityText)}</p>`,
+      bodyText: `Enter the one-time verification code below to finish creating your account:\n\n${verificationCode}\n\n${codeValidityText}`,
+      securityNotice:
+        "If you did not request a Conclave AX verification code, you can safely ignore this email.",
     }),
   };
 }
@@ -395,6 +431,14 @@ export const emailTemplateCatalog = Object.freeze([
     render: renderVerifyEmail,
   },
   {
+    id: "auth.verify-email-code.v1",
+    priority: "essential",
+    category: "essential",
+    availability: "implemented",
+    variant: "action-required",
+    render: renderVerifyEmailCode,
+  },
+  {
     id: "auth.reset-password.v1",
     priority: "essential",
     category: "essential",
@@ -476,6 +520,7 @@ const templateById: {
   ) => RenderedEmailContent;
 } = {
   "auth.verify-email.v1": renderVerifyEmail,
+  "auth.verify-email-code.v1": renderVerifyEmailCode,
   "auth.reset-password.v1": renderResetPassword,
   "auth.password-changed.v1": renderPasswordChanged,
   "auth.confirm-email-change.v1": renderConfirmEmailChange,
@@ -508,6 +553,7 @@ function urlForTemplate<TId extends EmailTemplateId>(
       return (input as AccountDeletedInput).appUrl
         ? [["appUrl", (input as AccountDeletedInput).appUrl as string]]
         : [];
+    case "auth.verify-email-code.v1":
     case "auth.password-changed.v1":
     case "auth.email-changed.v1":
     case "space.invitation-accepted.v1":

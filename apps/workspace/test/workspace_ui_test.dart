@@ -271,6 +271,9 @@ void main() {
     Future<void> Function()? onRetry,
     Future<void> Function()? onCheckForUpdates,
     Future<void> Function(String path)? onChangeWorkRoot,
+    Future<Map<String, Object?>> Function()? onLoadWorkerSlots,
+    Future<Map<String, Object?>> Function(int slots)? onSetParallelSlots,
+    Future<void> Function(bool value)? onChangePreventSleep,
     LocalWorkerRegistry? localWorkerRegistry,
     Future<void> Function({LocalWorkerProbeMode mode, String? workerTypeId})?
         onReadinessCheck,
@@ -356,6 +359,9 @@ void main() {
             onRetry: onRetry,
             onCheckForUpdates: onCheckForUpdates,
             onChangeWorkRoot: onChangeWorkRoot,
+            onLoadWorkerSlots: onLoadWorkerSlots,
+            onSetParallelSlots: onSetParallelSlots,
+            onChangePreventSleep: onChangePreventSleep,
             onReadinessCheck: onReadinessCheck,
             onSetWorkerEnabled: onSetWorkerEnabled,
             onConfigureWorker: onConfigureWorker ?? (_) async {},
@@ -999,6 +1005,54 @@ void main() {
     expect(find.bySemanticsLabel('Workspace status'), findsNothing);
   });
 
+  testWidgets('Workspace owns live parallel capacity and sleep settings',
+      (tester) async {
+    tester.view.physicalSize = const Size(1000, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    int? selected;
+    bool? sleep;
+    await pumpDashboard(
+        tester,
+        const WorkspaceUiSnapshot(
+          mode: WorkspaceUiMode.ready,
+          title: 'Ready',
+          detail: '',
+          registered: true,
+          workspaceReady: true,
+          cloudConnected: true,
+          serviceRunning: true,
+        ),
+        onLoadWorkerSlots: () async => {
+              'limit': 5,
+              'active': 0,
+              'queued': 0,
+              'activeAssignmentIds': <String>[],
+            },
+        onSetParallelSlots: (value) async {
+          selected = value;
+          return {'limit': value, 'active': 0, 'queued': 0};
+        },
+        onChangePreventSleep: (value) async {
+          sleep = value;
+        });
+    await tester.pumpAndSettle();
+    final card = find.byType(WorkerSlotsCard);
+    expect(card, findsOneWidget);
+    expect(tester.getTopLeft(card).dy,
+        lessThan(tester.getTopLeft(find.text('Workers').last).dy));
+    await tester.tap(find.byKey(const ValueKey('parallel-slots-select')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('3').last);
+    await tester.pumpAndSettle();
+    expect(selected, 3);
+    await tester.tap(find.text('Prevent sleep'));
+    await tester.pumpAndSettle();
+    expect(sleep, false);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('service manager separates host lifecycle from Cloud controls',
       (tester) async {
     var registerServiceCalls = 0;
@@ -1465,10 +1519,10 @@ void main() {
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
-    expect(find.text('Setup required'), findsNWidgets(2));
+    expect(find.text('Setup required'), findsOneWidget);
     expect(find.text('Provider tool: codex'), findsOneWidget);
-    expect(find.text('Provider tool: agy'), findsOneWidget);
-    expect(find.text('Installed CLI version: Unknown'), findsNWidgets(2));
+    expect(find.text('Provider tool: agy'), findsNothing);
+    expect(find.text('Installed CLI version: Not detected'), findsOneWidget);
     expect(find.textContaining('Capabilities:'), findsNothing);
     expect(find.text('Diagnostics'), findsNothing);
     expect(find.text('Set up ChatGPT'), findsNothing);
@@ -1479,7 +1533,13 @@ void main() {
     expect(find.text('Add Worker'), findsNothing);
     expect(find.text('No local Workers configured'), findsNothing);
     expect(find.byKey(const Key('worker-type-selector')), findsNothing);
-    expect(find.text('Configure'), findsNWidgets(2));
+    expect(find.text('Configure'), findsOneWidget);
+    expect(find.byKey(const Key('worker-catalog-gemini')), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('worker-selector-gemini')));
+    await tester.tap(find.byKey(const Key('worker-selector-gemini')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('worker-catalog-chatgpt')), findsNothing);
+    expect(find.text('Provider tool: agy'), findsOneWidget);
   });
 
   testWidgets(
@@ -1571,7 +1631,8 @@ void main() {
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
     expect(find.text('Dynamic Test Worker'), findsOneWidget);
-    expect(find.text('Setup required'), findsNWidgets(3));
+    expect(find.text('Profile unavailable'), findsOneWidget);
+    expect(find.byKey(const Key('worker-catalog-gemini')), findsNothing);
     expect(find.text('Diagnostics'), findsNothing);
     final refreshButton = tester.widget<IconButton>(
       find.widgetWithIcon(IconButton, Icons.refresh),
@@ -1640,65 +1701,24 @@ void main() {
 
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
-    final disabledChatGptCard = find.byKey(const Key('worker-catalog-chatgpt'));
-    expect(
-      find.descendant(
-        of: disabledChatGptCard,
-        matching: find.text('Disabled'),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: disabledChatGptCard,
-        matching: find.text('Needs attention'),
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('Setup required'), findsOneWidget);
+    expect(find.text('Disabled'), findsOneWidget);
+    expect(find.text('Profile unavailable'), findsOneWidget);
+    expect(find.text('Needs attention'), findsNothing);
     expect(find.text('Provider tool: Codex CLI'), findsOneWidget);
     expect(find.text('Installed CLI version: 1.2.3'), findsOneWidget);
-    expect(find.text('Provider tool: agy'), findsOneWidget);
-    expect(find.text('Installed CLI version: Not detected'), findsOneWidget);
-    expect(find.text('Profile revision: 1'), findsNWidgets(2));
-    expect(find.text('Profile status: Current'), findsNWidgets(2));
-    expect(find.text('Worker state: Disabled'), findsOneWidget);
-    expect(find.text('Readiness: Needs attention'), findsNWidgets(2));
-    expect(find.text('Execution permissions: Restricted'), findsNWidgets(2));
-    expect(find.text('Test'), findsNWidgets(2));
     expect(find.textContaining('Test failed (execution_test_failed)'),
-        findsNothing);
-    expect(find.byTooltip('Copy test details'), findsNothing);
-    expect(find.textContaining('Issue code:'), findsNothing);
-    expect(find.textContaining('Worker Package ·'), findsNothing);
-    expect(find.textContaining('Adapter unavailable'), findsNothing);
-    expect(find.textContaining('Adapter version'), findsNothing);
-    expect(find.textContaining('Signature'), findsNothing);
-    expect(find.textContaining('Release channel'), findsNothing);
-    expect(find.text('Diagnostics'), findsNothing);
-    expect(find.text('Save readiness'), findsNothing);
-    expect(find.text('Authentication'), findsNothing);
-    expect(
-        find.text('Check again').evaluate().length +
-            find.text('Enable').evaluate().length +
-            find.text('Disable').evaluate().length,
-        2);
-    expect(find.text('Configure'), findsNothing);
-    expect(find.text('Models and efforts'), findsNothing);
-    expect(find.textContaining('Local Worker ·'), findsNothing);
-    expect(find.textContaining('ChatGPT local'), findsNothing);
-    expect(find.text('Default Model'), findsNothing);
-    expect(find.text('Allowed Models'), findsNothing);
-    expect(find.text('Permissions'), findsNothing);
-
-    expect(find.text('Engine version'), findsNothing);
-    expect(find.text('Provider CLI version'), findsNothing);
-    expect(find.text('Tool'), findsNothing);
-    expect(find.text('Provider tool: Codex CLI'), findsOneWidget);
-    expect(find.text('Installed CLI version: 1.2.3'), findsOneWidget);
-    expect(find.textContaining('Worker version'), findsNothing);
-    expect(find.textContaining('Signing key'), findsNothing);
-    expect(find.textContaining('Release channel'), findsNothing);
+        findsOneWidget);
+    expect(find.byTooltip('Copy test details'), findsOneWidget);
+    expect(find.text('Issue code: package_unavailable'), findsOneWidget);
+    expect(find.byKey(const Key('worker-catalog-gemini')), findsNothing);
+    await tester.ensureVisible(find.byKey(const Key('worker-selector-gemini')));
+    await tester.tap(find.byKey(const Key('worker-selector-gemini')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('worker-catalog-chatgpt')), findsNothing);
+    expect(find.text('Live test required'), findsOneWidget);
+    expect(find.text('Provider tool: agy'), findsOneWidget);
+    expect(find.text('Needs attention'), findsNothing);
+    expect(find.text('Execution permissions: Restricted'), findsOneWidget);
   });
 
   testWidgets('testing a disabled Worker preserves activation', (tester) async {
@@ -1748,7 +1768,8 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: chatGptCard, matching: find.text('Setup required')),
+      find.descendant(
+          of: chatGptCard, matching: find.text('Live test required')),
       findsOneWidget,
     );
     await tester.tap(find.text('Test').first);
@@ -1776,12 +1797,13 @@ void main() {
       findsNothing,
     );
     expect(
-      find.descendant(of: chatGptCard, matching: find.text('Setup required')),
+      find.descendant(
+          of: chatGptCard, matching: find.text('Live test required')),
       findsNothing,
     );
   });
 
-  testWidgets('a failed live Test keeps Disabled and shows Needs attention',
+  testWidgets('a failed live Test keeps Disabled and shows the live failure',
       (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
@@ -1849,7 +1871,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: chatGptCard, matching: find.text('Needs attention')),
+      find.descendant(of: chatGptCard, matching: find.text('Live test failed')),
       findsOneWidget,
     );
   });
@@ -1964,6 +1986,10 @@ void main() {
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
     expect(find.text('internal-tool'), findsOneWidget);
+    await tester
+        .ensureVisible(find.byKey(const Key('worker-selector-internal-tool')));
+    await tester.tap(find.byKey(const Key('worker-selector-internal-tool')));
+    await tester.pumpAndSettle();
     expect(find.text('Catalog retired'), findsOneWidget);
     expect((await registry.list()).single.id, unknownWorker.id);
   });

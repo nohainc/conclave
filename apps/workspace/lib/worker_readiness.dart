@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'worker_check_progress.dart';
+import 'workspace_notifier.dart';
+
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
     show ToolProfileCompatibility, ToolProfileResolution;
@@ -43,7 +46,7 @@ class WorkerReadinessAssessment {
   final String? profileDigest;
 }
 
-class WorkerReadinessMonitor {
+class WorkerReadinessMonitor extends WorkspaceNotifier {
   WorkerReadinessMonitor({
     required this.registry,
     this.toolProfileReleaseStore,
@@ -71,6 +74,28 @@ class WorkerReadinessMonitor {
   ({LocalWorkerProbeMode mode, String? type, bool disabled})? _activeScope;
   final Map<String, Future<void>> _queuedChecks = {};
   Future<void>? _activeCheck;
+
+  final Map<String, WorkerCheckProgress> _checks = {};
+  Map<String, WorkerCheckProgress> get checks => Map.unmodifiable(_checks);
+
+  void _progress(String type, LocalWorkerProbeMode mode, WorkerCheckPhase phase,
+      {WorkerCheckOutcome outcome = WorkerCheckOutcome.running,
+      String? issueCode}) {
+    final prior = _checks[type];
+    _checks[type] = WorkerCheckProgress(
+      mode: mode.name,
+      phase: phase,
+      outcome: outcome,
+      startedAt: prior?.outcome == WorkerCheckOutcome.running
+          ? prior!.startedAt
+          : DateTime.now().toUtc().toIso8601String(),
+      completedAt: outcome == WorkerCheckOutcome.running
+          ? null
+          : DateTime.now().toUtc().toIso8601String(),
+      issueCode: issueCode,
+    );
+    notifyListeners();
+  }
 
   Future<void> start() async {
     if (_started) return;
@@ -299,74 +324,67 @@ class WorkerReadinessMonitor {
           !includeDisabled) {
         continue;
       }
-      WorkerReadinessAssessment assessment;
+      _progress(worker.workerTypeId, mode, WorkerCheckPhase.profile);
       try {
-        assessment = assessWorker != null
-            ? await assessWorker!(worker)
-            : await _assess(worker, mode: mode);
+        await _checkWorker(worker, mode);
+        final updated = await registry.find(worker.id);
+        final passed = mode == LocalWorkerProbeMode.live
+            ? updated?.lastLiveTestPassed == true
+            : updated?.readinessState == WorkerReadinessState.ready;
+        _progress(
+            worker.workerTypeId, mode, _checks[worker.workerTypeId]!.phase,
+            outcome:
+                passed ? WorkerCheckOutcome.passed : WorkerCheckOutcome.failed,
+            issueCode: mode == LocalWorkerProbeMode.live
+                ? updated?.lastLiveTestIssueCode
+                : updated?.readinessIssueCode);
       } on Object {
-        assessment = const WorkerReadinessAssessment(
-            WorkerReadinessState.testFailed,
-            issueCode: 'provider_failure');
+        _progress(
+            worker.workerTypeId, mode, _checks[worker.workerTypeId]!.phase,
+            outcome: WorkerCheckOutcome.failed,
+            issueCode: 'verification_save_failed');
+        rethrow;
       }
-      final catalog = _catalogForAssessment(worker, assessment);
-      final checkedAt = DateTime.now().toUtc().toIso8601String();
-      if (mode == LocalWorkerProbeMode.passive) {
-        final effectiveReady = assessment.state == WorkerReadinessState.ready ||
-            (assessment.state == WorkerReadinessState.setupRequired &&
-                worker.lastLiveTestPassed == true);
-        await registry.update(
-          worker.id,
-          (current) => current.copyWith(
-            status:
-                current.activationState == LocalWorkerActivationState.disabled
-                    ? LocalWorkerStatus.disabled
-                    : effectiveReady
-                        ? LocalWorkerStatus.ready
-                        : LocalWorkerStatus.needsAttention,
-            activationState: current.activationState,
-            readinessState: assessment.state,
-            lastPassiveProbeAt: checkedAt,
-            readinessIssueCode: assessment.issueCode,
-            clearReadinessIssueCode: assessment.issueCode == null,
-            modelCatalog: catalog,
-            clearModelCatalog: catalog == null,
-            toolVersion: assessment.toolVersion,
-            clearToolVersion: assessment.replaceToolVersion &&
-                assessment.toolVersion == null &&
-                catalog == null,
-            toolName: assessment.toolName,
-            clearToolName:
-                assessment.replaceToolName && assessment.toolName == null,
-            toolPath: assessment.toolPath,
-            clearToolPath:
-                assessment.replaceToolPath && assessment.toolPath == null,
-          ),
-        );
-        continue;
-      }
+    }
+  }
 
-      final passed = assessment.state == WorkerReadinessState.ready;
-      final details = passed
-          ? null
-          : assessment.diagnosticDetails ?? _safeTestDetails(assessment);
+  Future<void> _checkWorker(
+      LocalWorker worker, LocalWorkerProbeMode mode) async {
+    WorkerReadinessAssessment assessment;
+    try {
+      if (assessWorker != null) {
+        _progress(worker.workerTypeId, mode, WorkerCheckPhase.probe);
+      }
+      assessment = assessWorker != null
+          ? await assessWorker!(worker)
+          : await _assess(worker, mode: mode);
+    } on Object {
+      assessment = const WorkerReadinessAssessment(
+          WorkerReadinessState.testFailed,
+          issueCode: 'provider_failure');
+    }
+    if (assessment.state == WorkerReadinessState.ready) {
+      _progress(worker.workerTypeId, mode, WorkerCheckPhase.save);
+    }
+    final catalog = _catalogForAssessment(worker, assessment);
+    final checkedAt = DateTime.now().toUtc().toIso8601String();
+    if (mode == LocalWorkerProbeMode.passive) {
+      final effectiveReady = assessment.state == WorkerReadinessState.ready ||
+          (assessment.state == WorkerReadinessState.setupRequired &&
+              worker.lastLiveTestPassed == true);
       await registry.update(
         worker.id,
         (current) => current.copyWith(
           status: current.activationState == LocalWorkerActivationState.disabled
               ? LocalWorkerStatus.disabled
-              : passed
+              : effectiveReady
                   ? LocalWorkerStatus.ready
                   : LocalWorkerStatus.needsAttention,
           activationState: current.activationState,
-          lastLiveTestAt: checkedAt,
-          lastLiveTestPassed: passed,
-          lastLiveTestProfileDigest: assessment.profileDigest,
-          lastLiveTestToolVersion: assessment.toolVersion,
-          lastLiveTestIssueCode: assessment.issueCode,
-          clearLastLiveTestIssueCode: assessment.issueCode == null,
-          lastLiveTestDetails: details,
-          clearLastLiveTestDetails: passed,
+          readinessState: assessment.state,
+          lastPassiveProbeAt: checkedAt,
+          readinessIssueCode: assessment.issueCode,
+          clearReadinessIssueCode: assessment.issueCode == null,
           modelCatalog: catalog,
           clearModelCatalog: catalog == null,
           toolVersion: assessment.toolVersion,
@@ -381,7 +399,44 @@ class WorkerReadinessMonitor {
               assessment.replaceToolPath && assessment.toolPath == null,
         ),
       );
+      return;
     }
+
+    final passed = assessment.state == WorkerReadinessState.ready;
+    final details = passed
+        ? null
+        : assessment.diagnosticDetails ?? _safeTestDetails(assessment);
+    await registry.update(
+      worker.id,
+      (current) => current.copyWith(
+        status: current.activationState == LocalWorkerActivationState.disabled
+            ? LocalWorkerStatus.disabled
+            : passed
+                ? LocalWorkerStatus.ready
+                : LocalWorkerStatus.needsAttention,
+        activationState: current.activationState,
+        lastLiveTestAt: checkedAt,
+        lastLiveTestPassed: passed,
+        lastLiveTestProfileDigest: assessment.profileDigest,
+        lastLiveTestToolVersion: assessment.toolVersion,
+        lastLiveTestIssueCode: assessment.issueCode,
+        clearLastLiveTestIssueCode: assessment.issueCode == null,
+        lastLiveTestDetails: details,
+        clearLastLiveTestDetails: passed,
+        modelCatalog: catalog,
+        clearModelCatalog: catalog == null,
+        toolVersion: assessment.toolVersion,
+        clearToolVersion: assessment.replaceToolVersion &&
+            assessment.toolVersion == null &&
+            catalog == null,
+        toolName: assessment.toolName,
+        clearToolName:
+            assessment.replaceToolName && assessment.toolName == null,
+        toolPath: assessment.toolPath,
+        clearToolPath:
+            assessment.replaceToolPath && assessment.toolPath == null,
+      ),
+    );
   }
 
   String _safeTestDetails(WorkerReadinessAssessment assessment) {
@@ -495,6 +550,7 @@ class WorkerReadinessMonitor {
     }
     final candidate = resolution.release;
     if (candidate != null && !candidate.isPublished) {
+      _progress(worker.workerTypeId, mode, WorkerCheckPhase.probe);
       final probe = await engine.probe(
         candidate,
         profileFile: await store.executionProfileFile(candidate),
@@ -538,6 +594,7 @@ class WorkerReadinessMonitor {
       );
     }
     if (candidate is WorkerProfileSnapshotAdmission) {
+      _progress(worker.workerTypeId, mode, WorkerCheckPhase.probe);
       final probe = await engine.probe(
         candidate,
         profileFile: await store.executionProfileFile(candidate),
@@ -689,7 +746,9 @@ class WorkerReadinessMonitor {
     };
   }
 
+  @override
   Future<void> dispose() async {
+    super.dispose();
     _disposed = true;
     _started = false;
     _refreshTimer?.cancel();

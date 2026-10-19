@@ -14,6 +14,7 @@
   "send_email": [
     {
       "name": "CONCLAVE_EMAIL",
+      "remote": true,
     },
   ],
   "vars": {

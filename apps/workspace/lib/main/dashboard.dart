@@ -314,6 +314,9 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                       onChangeWorkRoot: widget.onChangeWorkRoot,
                       preventSleep: widget.preventSleep,
                       onChangePreventSleep: widget.onChangePreventSleep,
+                      onLoadSlots: widget.onLoadWorkerSlots,
+                      onResetSlots: widget.onResetWorkerSlots,
+                      onSetParallelSlots: widget.onSetParallelSlots,
                       onStopService: widget.onStopService,
                       onRelease: widget.onRelease,
                       onReset: widget.onReset,
@@ -353,9 +356,6 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                             snapshot.serviceHealthy || snapshot.serviceRunning,
                         isSelected: true,
                         onReadinessCheck: widget.onReadinessCheck,
-                        onLoadSlots: widget.onLoadWorkerSlots,
-                        onResetSlots: widget.onResetWorkerSlots,
-                        onSetParallelSlots: widget.onSetParallelSlots,
                         onConfigureWorker: widget.onConfigureWorker,
                         onSetWorkerEnabled: widget.onSetWorkerEnabled,
                         onSetFullLocalAccess: widget.onSetFullLocalAccess,
@@ -391,6 +391,9 @@ class _WorkspaceTab extends StatefulWidget {
     this.onChangeWorkRoot,
     this.preventSleep = true,
     this.onChangePreventSleep,
+    this.onLoadSlots,
+    this.onResetSlots,
+    this.onSetParallelSlots,
     this.onStopService,
     this.onRelease,
     this.onReset,
@@ -410,6 +413,9 @@ class _WorkspaceTab extends StatefulWidget {
   final SecureCredentialStore credentialStore;
   final Future<void> Function()? onRetry;
   final Future<void> Function(String path)? onChangeWorkRoot;
+  final Future<Map<String, Object?>> Function()? onLoadSlots;
+  final Future<Map<String, Object?>> Function()? onResetSlots;
+  final Future<Map<String, Object?>> Function(int slots)? onSetParallelSlots;
   final bool preventSleep;
   final Future<void> Function(bool value)? onChangePreventSleep;
   final Future<void> Function()? onStopService;
@@ -611,11 +617,17 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
                   ),
                 ),
               ),
+              if (ipcReady && widget.onLoadSlots != null)
+                WorkerSlotsCard(
+                  load: widget.onLoadSlots!,
+                  reset: widget.onResetSlots,
+                  setSlots: widget.onSetParallelSlots,
+                ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Prevent sleep'),
                 subtitle: const Text(
-                  'Keep this computer awake while the Workspace service is running so it stays available.',
+                  'Prevent automatic sleep while the Workspace service is running. Turning this off may interrupt work if the computer sleeps.',
                 ),
                 value: widget.preventSleep,
                 onChanged: widget.onChangePreventSleep?.call,

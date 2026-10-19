@@ -4,8 +4,11 @@ import ServiceManagement
 import LocalAuthentication
 
 private enum WorkspaceBackgroundService {
-  static let launchAgentPlist = "com.conclaveax.workspace.service.plist"
-  static let launchAgentLabel = "com.conclaveax.workspace.service"
+  // Derived from the bundle identifier so a local build (own bundle ID) gets
+  // its own LaunchAgent and can run beside the production app.
+  static let launchAgentLabel =
+    "\(Bundle.main.bundleIdentifier ?? "com.conclaveax.workspace").service"
+  static let launchAgentPlist = "\(launchAgentLabel).plist"
   static let helperRelativePath = "Contents/Helpers/conclave-service"
   static let engineRelativePath =
     "Contents/Helpers/assets/engines/conclave_cli_worker_engine"
