@@ -398,6 +398,7 @@ class _ThreadPageState extends State<ThreadPage>
   String? _selectedWorkflowWorkspaceId;
   int _choicesGeneration = 0;
   String _workflow = '';
+  String? _workflowBeforeChat;
   List<AxBuiltinWorkflow> _workflowCatalog = const [];
   List<AxBuiltinWorkflow> get _currentWorkflows =>
       _currentWorkflowVersions(_availableWorkflows);
@@ -1715,6 +1716,31 @@ class _ThreadPageState extends State<ThreadPage>
           ],
         );
 
+  void _toggleChat() {
+    final current = _effectiveWorkflow;
+    if (current.split(':').first == 'chat') {
+      final restore = _currentWorkflows
+              .where((item) => item.reference == _workflowBeforeChat)
+              .firstOrNull ??
+          _currentWorkflows.where((item) => item.id != 'chat').firstOrNull;
+      if (restore == null) return;
+      _updateState(() {
+        _workflow = restore.reference;
+        _workExecutionSelection = {};
+      });
+    } else {
+      final chat =
+          _currentWorkflows.where((item) => item.id == 'chat').firstOrNull;
+      if (chat == null) return;
+      _updateState(() {
+        _workflowBeforeChat = current;
+        _workflow = chat.reference;
+        _workExecutionSelection = {};
+      });
+    }
+    _scheduleThreadViewStateSave();
+  }
+
   _WorkComposer _workComposer() => _WorkComposer(
         requestController: _requestController,
         historyController: _workHistoryController,
@@ -1764,6 +1790,8 @@ class _ThreadPageState extends State<ThreadPage>
         historyOpenDirection: _requestHistoryDirection,
         onHistorySelected: _selectHistoryPrompt,
         onHistoryClosed: _closeRequestHistory,
+        workflowBeforeChat: _workflowBeforeChat,
+        onToggleChat: _toggleChat,
         onWorkflowChanged: (value) {
           _updateState(() {
             _workflow = value;

@@ -404,7 +404,7 @@ void main() {
       expect(find.text('· $name'), findsOneWidget);
     }
   });
-  testWidgets('dynamic AI workflow menu includes Chat and Work with Markdown',
+  testWidgets('dynamic AI workflow menu separates Chat from Work with Markdown',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -453,7 +453,6 @@ void main() {
             find.byType(ConclaveMenuEntry<String>))
         .toList();
     expect(options.map((item) => item.value), [
-      'chat:v1',
       'direct:v2',
     ]);
     expect(
@@ -463,13 +462,31 @@ void main() {
             .cast<Text>()
             .map((text) => text.data),
         [
-          'Chat',
           'Work',
         ]);
     expect(find.text('Direct'), findsNothing);
     await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is ConclaveMenuEntry<String> && widget.value == 'chat:v1'));
+        widget is ConclaveMenuEntry<String> && widget.value == 'direct:v2'));
     await tester.pumpAndSettle();
+    final chatToggle = find.byKey(const ValueKey('work-toggle-chat'));
+    expect(find.descendant(of: chatToggle, matching: find.byType(Icon)),
+        findsNothing);
+    final inactiveChatText = tester.widget<Text>(
+        find.descendant(of: chatToggle, matching: find.text('Chat')));
+    final inactiveChatColor = inactiveChatText.style!.color!;
+    expect(inactiveChatColor.a, 0.5);
+    expect(
+        tester
+            .widget<Material>(find.descendant(
+                of: chatToggle, matching: find.byType(Material)))
+            .color,
+        Colors.transparent);
+    await tester.tap(chatToggle);
+    await tester.pumpAndSettle();
+    final activeChatText = tester.widget<Text>(
+        find.descendant(of: chatToggle, matching: find.text('Chat')));
+    expect(activeChatText.style!.color!.a, 1.0);
+
     const source = '## Question\n\n**Explain** this `code`.';
     await tester.enterText(find.byType(TextField).first, source);
     await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));

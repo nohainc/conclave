@@ -171,6 +171,8 @@ class _WorkComposer extends StatelessWidget {
     required this.onRetryStep,
     required this.onCancelRun,
     required this.onWorkflowChanged,
+    required this.onToggleChat,
+    this.workflowBeforeChat,
     required this.onRun,
     this.onHistoryNavigate,
     this.historyPrompts,
@@ -216,6 +218,12 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function(String, AxWorkRequestStep)? onRetryStep;
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
+
+  /// Switches between Chat and the preserved work workflow.
+  final VoidCallback onToggleChat;
+
+  /// Work workflow reference kept while Chat is active.
+  final String? workflowBeforeChat;
   final Future<void> Function() onRun;
   final bool Function(int direction)? onHistoryNavigate;
 
@@ -392,7 +400,17 @@ class _WorkComposer extends StatelessWidget {
       .trim();
 
   Widget _additionalControls(BuildContext context) {
-    final selectedWorkflow = _selectedWorkflow();
+    final chatActive = workflow.split(':').first == 'chat';
+    final hasChat =
+        chatActive || workflowCatalog.any((item) => item.id == 'chat');
+    final selectedWorkflow = chatActive
+        ? (workflowCatalog
+                .where((item) => item.reference == workflowBeforeChat)
+                .firstOrNull ??
+            _currentWorkflowVersions(workflowCatalog)
+                .where((item) => item.id != 'chat')
+                .firstOrNull)
+        : _selectedWorkflow();
     final binding = _stepBinding();
     final policy =
         selectedWorkflow?.executionPolicy ?? const AxWorkflowCapabilities();
@@ -411,6 +429,8 @@ class _WorkComposer extends StatelessWidget {
                 .trim() ??
             '';
     final controlBg = Colors.transparent;
+    final activeWorkflowColor = Theme.of(context).colorScheme.onSurface;
+    final inactiveWorkflowColor = activeWorkflowColor.withValues(alpha: 0.5);
     const controlBorderRadius = BorderRadius.all(Radius.circular(6));
 
     return SingleChildScrollView(
@@ -480,6 +500,37 @@ class _WorkComposer extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
+          if (hasChat) ...[
+            Semantics(
+              key: const ValueKey('work-toggle-chat'),
+              label: 'Chat',
+              toggled: chatActive,
+              child: Tooltip(
+                message: chatActive ? 'Chat is on' : 'Switch to Chat',
+                child: Material(
+                  color: controlBg,
+                  borderRadius: controlBorderRadius,
+                  child: InkWell(
+                    borderRadius: controlBorderRadius,
+                    onTap: canExecute && !submitting ? onToggleChat : null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      child: Text('Chat',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: chatActive
+                                        ? activeWorkflowColor
+                                        : inactiveWorkflowColor,
+                                  )),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
           Builder(
             builder: (workflowBtnContext) => Semantics(
               key: const ValueKey('work-choose-workflow'),
@@ -497,7 +548,8 @@ class _WorkComposer extends StatelessWidget {
                             buttonContext: workflowBtnContext,
                             itemHeight: 36.0,
                             items: [
-                              for (final item in versions)
+                              for (final item
+                                  in versions.where((i) => i.id != 'chat'))
                                 ConclaveMenuEntry<String>(
                                   value: item.reference,
                                   child: Semantics(
@@ -507,7 +559,8 @@ class _WorkComposer extends StatelessWidget {
                                           Theme.of(context).brightness ==
                                               Brightness.dark),
                                       leadingIcon: Icon(
-                                        item.reference == workflow
+                                        !chatActive &&
+                                                item.reference == workflow
                                             ? Icons.check_circle_rounded
                                             : Icons.circle_outlined,
                                         size: 15,
@@ -541,6 +594,9 @@ class _WorkComposer extends StatelessWidget {
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
                                       fontWeight: FontWeight.w600,
+                                      color: chatActive
+                                          ? inactiveWorkflowColor
+                                          : activeWorkflowColor,
                                     ),
                           ),
                         ),
