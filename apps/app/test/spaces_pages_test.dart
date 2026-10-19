@@ -128,11 +128,12 @@ void main() {
                   dataSource: _SimpleConversationDataSource(request),
                   currentUserId: 'user-owner',
                   currentUserName: 'You',
-                  initialTab: workflow.$4,
+                  initialTab: 1,
                   onBackToSpace: _noop,
                   onArchive: _noop))));
       await tester.pumpAndSettle();
-      expect(find.text('Hello from the user'), findsOneWidget);
+      await _openAiHistory(tester);
+      expect(_inAiHistory(find.text('Hello from the user')), findsOneWidget);
       expect(find.text('ChatGPT'), findsWidgets);
       expect(find.byTooltip('Original Model Name · Medium'), findsWidgets);
       expect(
@@ -309,7 +310,8 @@ void main() {
         onArchive: _noop,
       ))));
       await tester.pumpAndSettle();
-      expect(find.text('ChatGPT'), findsNWidgets(3));
+      await _openAiHistory(tester);
+      expect(_inAiHistory(find.text('ChatGPT')), findsNWidgets(3));
       expect(find.textContaining('model-x'), findsNothing);
       expect(find.textContaining('model-y'), findsNothing);
       expect(find.byTooltip('model-x · Medium'), findsOneWidget);
@@ -400,6 +402,7 @@ void main() {
       onArchive: _noop,
     ))));
     await tester.pumpAndSettle();
+    await _openAiHistory(tester);
     for (final name in ['Direct', 'Work', 'Chat']) {
       expect(find.text('· $name'), findsOneWidget);
     }
@@ -446,6 +449,7 @@ void main() {
         .map((body) => body.data)
         .toList();
     expect(markdown, containsAll(['**Chat answer**', '**Work answer**']));
+    await _askAi(tester);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
     final options = tester
@@ -500,6 +504,8 @@ void main() {
   });
   testWidgets('current Work selection preserves historical Direct labels',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final submission = Completer<String>();
     String? sentWorkflow;
     await tester.pumpWidget(MaterialApp(
@@ -530,7 +536,9 @@ void main() {
       },
     ))));
     await tester.pumpAndSettle();
+    await _openAiHistory(tester);
     expect(find.text('· Direct'), findsOneWidget);
+    await _askAi(tester);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
     final options = tester
@@ -559,50 +567,7 @@ void main() {
     await tester.pump();
   });
 
-  for (final brightness in Brightness.values) {
-    testWidgets('Thread tab colors follow text and timestamps in $brightness',
-        (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        theme: ThemeData(brightness: brightness),
-        home: Scaffold(
-            body: ThreadPage(
-          space: const AxSpace(
-              id: 'space-1',
-              name: 'Space',
-              branch: '',
-              lastActivity: '',
-              role: 'owner'),
-          thread: const AxThread(
-              id: 'thread-1',
-              spaceId: 'space-1',
-              name: 'Thread',
-              lead: '',
-              status: 'active',
-              brief: '',
-              primaryWorkspace: '',
-              queueStatus: ''),
-          dataSource: _PinnedHistoryDataSource(),
-          onBackToSpace: _noop,
-          onArchive: _noop,
-        )),
-      ));
-      await tester.pumpAndSettle();
-      final tabs = tester.widget<TabBar>(find.byType(TabBar));
-      final theme = Theme.of(tester.element(find.byType(TabBar)));
-      expect(tabs.labelColor, theme.colorScheme.onSurface);
-      expect(tabs.indicatorColor, theme.colorScheme.onSurface);
-      expect(tabs.unselectedLabelColor,
-          brightness == Brightness.dark ? Colors.white38 : Colors.black45);
-      await tester.tap(find.text('Work').first);
-      await tester.pumpAndSettle();
-      final switched = tester.widget<TabBar>(find.byType(TabBar));
-      expect(switched.controller!.index, 1);
-      expect(switched.labelColor, tabs.labelColor);
-      expect(switched.unselectedLabelColor, tabs.unselectedLabelColor);
-    });
-  }
-
-  testWidgets('Thread uses bounded tabs or two panes at the width breakpoint',
+  testWidgets('Thread is one conversation with an optional AI History panel',
       (tester) async {
     tester.view.physicalSize = const Size(1800, 900);
     tester.view.devicePixelRatio = 1;
@@ -638,94 +603,41 @@ void main() {
       ))));
       await tester.pumpAndSettle();
       final chat = find.byKey(const ValueKey('chat-history-scroll'));
+      final work = find.byKey(const ValueKey('work-history-scroll'));
+      final history = find.byKey(const ValueKey('thread-AI History-pane'));
+      expect(find.byType(TabBar), findsNothing);
       expect(tester.getSize(chat).width, lessThanOrEqualTo(800));
+      expect(
+          tester
+              .widget<Padding>(
+                  find.byKey(const ValueKey('thread-Conversation-padding')))
+              .padding,
+          const EdgeInsets.fromLTRB(20, 0, 20, 20));
+      expect(work, findsNothing);
+      expect(find.byType(MarkdownComposer), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('ai-history-toggle')));
+      await tester.pumpAndSettle();
+      expect(work, findsOneWidget);
+      expect(find.text('Read-only'), findsOneWidget);
+      // AI History never accepts input.
+      expect(find.descendant(of: history, matching: find.byType(TextField)),
+          findsNothing);
       if (width < 1000) {
-        expect(
-            tester
-                .widget<Padding>(
-                    find.byKey(const ValueKey('thread-tab-padding')))
-                .padding,
-            const EdgeInsets.fromLTRB(20, 0, 20, 20));
-        expect(find.byType(TabBar), findsOneWidget);
-        expect(find.byKey(const ValueKey('work-history-scroll')), findsNothing);
+        expect(chat, findsNothing);
         expect(find.byType(VerticalDivider), findsNothing);
       } else {
-        for (final name in ['Discussion', 'Work']) {
-          expect(
-              tester
-                  .widget<Padding>(find.byKey(ValueKey('thread-$name-padding')))
-                  .padding,
-              const EdgeInsets.fromLTRB(20, 0, 20, 20));
-        }
-        final work = find.byKey(const ValueKey('work-history-scroll'));
-        expect(find.byType(TabBar), findsNWidgets(2));
-        expect(find.byType(VerticalDivider), findsOneWidget);
+        expect(chat, findsOneWidget);
         final divider =
             tester.widget<VerticalDivider>(find.byType(VerticalDivider));
         expect(divider.indent, 20);
         expect(divider.endIndent, 20);
-        expect(tester.getSize(work).width, lessThanOrEqualTo(800));
         expect(tester.getRect(chat).right, lessThan(tester.getRect(work).left));
-        final chatSend =
-            find.widgetWithIcon(IconButton, Icons.send_rounded).first;
-        final workSend =
-            find.widgetWithIcon(IconButton, Icons.send_rounded).last;
-        expect(find.byTooltip('Show Markdown controls'), findsNothing);
-        expect(find.byTooltip('Hide Markdown controls'), findsNothing);
-        expect(find.byTooltip('Bold'), findsOneWidget);
-        final chatPane = find.byKey(const ValueKey('thread-Discussion-pane'));
-        final workPane = find.byKey(const ValueKey('thread-Work-pane'));
-        expect(find.descendant(of: workPane, matching: find.byTooltip('Bold')),
-            findsNothing);
-        expect(find.descendant(of: workPane, matching: find.text('Preview')),
-            findsNothing);
-        final preview =
-            find.descendant(of: chatPane, matching: find.text('Preview'));
-        expect(tester.getCenter(chatSend).dy,
-            closeTo(tester.getCenter(preview).dy, 1));
-        expect(tester.getRect(chatSend).right,
-            closeTo(tester.getRect(chatPane).right - 6, 1));
-        expect(tester.getRect(workSend).right,
-            closeTo(tester.getRect(workPane).right, 1));
-        for (final send in [chatSend, workSend]) {
-          final context = tester.element(send);
-          expect(tester.widget<IconButton>(send).color,
-              Theme.of(context).colorScheme.onSurface);
-        }
-        final composers = find.byType(MarkdownComposer);
-        expect(tester.getSize(composers.first).height,
-            closeTo(tester.getSize(composers.last).height, 1));
-        final fields = find.byType(TextField);
-        final chatRect = tester.getRect(fields.first);
-        tester.widget<TextField>(fields.last).controller!.text =
-            'One\nTwo\nThree\nFour';
-        await tester.pumpAndSettle();
-        expect(tester.getRect(fields.first), chatRect);
-        expect(tester.getSize(fields.last).height,
-            greaterThan(tester.getSize(fields.first).height));
-        for (final (pane, history) in [(chatPane, chat), (workPane, work)]) {
-          final controller =
-              tester.widget<CustomScrollView>(history).controller!;
-          controller.jumpTo(controller.position.maxScrollExtent);
-          await tester.pumpAndSettle();
-          await tester.drag(history, const Offset(0, 350));
-          await tester.pumpAndSettle();
-          await tester.drag(history, const Offset(0, -60));
-          await tester.pumpAndSettle();
-          final arrow = find.descendant(
-              of: pane,
-              matching: find.byKey(const ValueKey('scroll-to-latest')));
-          expect(arrow, findsOneWidget);
-          final composer = find.descendant(
-              of: pane, matching: find.byType(MarkdownComposer));
-          expect(tester.getRect(arrow).bottom,
-              lessThan(tester.getRect(composer).top));
-          await tester.tap(arrow);
-          await tester.pumpAndSettle();
-          expect(controller.position.extentAfter, closeTo(0, 1));
-          expect(arrow, findsNothing);
-        }
       }
+      await tester.tap(find.byKey(const ValueKey('ai-history-close')));
+      await tester.pumpAndSettle();
+      expect(work, findsNothing);
+      expect(chat, findsOneWidget);
       expect(tester.takeException(), isNull);
     }
   });
@@ -772,6 +684,8 @@ void main() {
   testWidgets(
       'Work appears before validation and progress becomes result or error',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final reject in [false, true]) {
       final data = _SlowSubmissionDataSource();
       const previous = AxWorkRequest(
@@ -818,6 +732,8 @@ void main() {
         },
       ))));
       await tester.pumpAndSettle();
+      await _openAiHistory(tester);
+      await _askAi(tester);
       final previousBody = find
           .descendant(
             of: find.byKey(const ValueKey('previous-response')),
@@ -847,14 +763,16 @@ void main() {
               .text,
           isEmpty);
       expect(
-          find.byType(ConclaveMarkdownBody).evaluate().where((element) =>
-              (element.widget as ConclaveMarkdownBody).data ==
-              '**Immediate request**'),
+          _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().where(
+              (element) =>
+                  (element.widget as ConclaveMarkdownBody).data ==
+                  '**Immediate request**'),
           hasLength(1));
       expect(
-          find.byType(ConclaveMarkdownBody).evaluate().any((element) =>
-              (element.widget as ConclaveMarkdownBody).data ==
-              'Checking that everything is ready…'),
+          _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().any(
+              (element) =>
+                  (element.widget as ConclaveMarkdownBody).data ==
+                  'Checking that everything is ready…'),
           isTrue);
       expectPreviousUnchanged();
       // A concurrent history insertion moves the completed response while the
@@ -896,16 +814,17 @@ void main() {
       await AxWorkHistoryCache.forSource(data).refresh('thread-1');
       await tester.pumpAndSettle();
       expect(
-          find.byType(ConclaveMarkdownBody).evaluate().where((element) =>
-              (element.widget as ConclaveMarkdownBody).data ==
-              '**Immediate request**'),
+          _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().where(
+              (element) =>
+                  (element.widget as ConclaveMarkdownBody).data ==
+                  '**Immediate request**'),
           hasLength(1));
       data.ready.complete(reject ? ['Space access is required.'] : []);
       await tester.pumpAndSettle();
       if (reject) {
         expect(sends, 0);
-        expect(
-            find.textContaining('Space access is required.'), findsOneWidget);
+        expect(_inAiHistory(find.textContaining('Space access is required.')),
+            findsOneWidget);
         expect(
             tester
                 .widget<TextField>(find.byType(TextField).first)
@@ -919,9 +838,10 @@ void main() {
         await tester.enterText(
             find.byType(TextField).first, 'Draft while sending');
         expect(
-            find.byType(ConclaveMarkdownBody).evaluate().any((element) =>
-                (element.widget as ConclaveMarkdownBody).data ==
-                'Sending your request…'),
+            _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().any(
+                (element) =>
+                    (element.widget as ConclaveMarkdownBody).data ==
+                    'Sending your request…'),
             isTrue);
         data.requests = [
           previous,
@@ -940,7 +860,9 @@ void main() {
         submitted.complete('saved-1');
         await tester.pumpAndSettle();
         expectPreviousUnchanged();
-        expect(find.textContaining('A previous request is still in progress.'),
+        expect(
+            _inAiHistory(find
+                .textContaining('A previous request is still in progress.')),
             findsNothing);
         expect(find.text('Cancel pending request'), findsNothing);
         expect(
@@ -995,14 +917,16 @@ void main() {
                 .onPressed,
             isNotNull);
         expect(
-            find.byType(ConclaveMarkdownBody).evaluate().any((element) =>
-                (element.widget as ConclaveMarkdownBody).data ==
-                'Completed answer'),
+            _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().any(
+                (element) =>
+                    (element.widget as ConclaveMarkdownBody).data ==
+                    'Completed answer'),
             isTrue);
         expect(
-            find.byType(ConclaveMarkdownBody).evaluate().where((element) =>
-                (element.widget as ConclaveMarkdownBody).data ==
-                '**Immediate request**'),
+            _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().where(
+                (element) =>
+                    (element.widget as ConclaveMarkdownBody).data ==
+                    '**Immediate request**'),
             hasLength(1));
       }
       expect(tester.takeException(), isNull);
@@ -1032,13 +956,13 @@ void main() {
             primaryWorkspace: '',
             queueStatus: ''),
         dataSource: data,
-        initialTab: tab,
         onBackToSpace: _noop,
         onArchive: _noop,
       ))));
       await tester.pumpAndSettle();
-      final history = find.byKey(
-          ValueKey(tab == 0 ? 'chat-history-scroll' : 'work-history-scroll'));
+      // Work Requests are part of the one conversation; tab 1 composes them.
+      if (tab == 1) await _askAi(tester);
+      final history = find.byKey(const ValueKey('chat-history-scroll'));
       final field = find.byType(TextField).last;
       final before = tester.getRect(field);
       final scrollable =
@@ -1082,6 +1006,106 @@ void main() {
       }
       expect(tester.takeException(), isNull);
     }
+  });
+  testWidgets('conversation interleaves Work with Chat and Ask AI runs Work',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    String? sent;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      space: const AxSpace(
+          id: 'space-1',
+          name: 'Space',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      thread: const AxThread(
+          id: 'thread-1',
+          spaceId: 'space-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: '',
+          canExecuteWork: true),
+      dataSource: _ConversationMixDataSource(),
+      currentUserId: 'user-owner',
+      onBackToSpace: _noop,
+      onArchive: _noop,
+      onRunWork: (source, _, __, ___) async {
+        sent = source;
+        return 'request-new';
+      },
+    ))));
+    await tester.pumpAndSettle();
+    final history = find.byKey(const ValueKey('chat-history-scroll'));
+    double top(String text) => tester
+        .getTopLeft(find.descendant(of: history, matching: find.text(text)))
+        .dy;
+    // Chat and Work read as one timeline in time order.
+    expect(top('Before AI'), lessThan(top('Research auth')));
+    expect(top('Research auth'), lessThan(top('Use passkeys')));
+    expect(top('Use passkeys'), lessThan(top('After AI')));
+    expect(find.byKey(const ValueKey('work-history-scroll')), findsNothing);
+    // The live request is not a Chat message: no edit or delete.
+    expect(find.byTooltip('Edit message'), findsNWidgets(2));
+    expect(find.byTooltip('Delete message'), findsNWidgets(2));
+
+    await _askAi(tester);
+    await tester.enterText(find.byType(TextField).last, 'Next request');
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
+    await tester.pumpAndSettle();
+    expect(sent, 'Next request');
+  });
+  testWidgets('Chat shows archived AI exchanges as read-only Worker answers',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1300, 1600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SizedBox(
+                height: 600,
+                child: ThreadPage(
+                  space: const AxSpace(
+                      id: 'space-1',
+                      name: 'Space',
+                      branch: '',
+                      lastActivity: '',
+                      role: 'owner'),
+                  thread: const AxThread(
+                      id: 'stream-1',
+                      spaceId: 'space-1',
+                      name: 'Chat',
+                      lead: '',
+                      status: 'active',
+                      brief: '',
+                      primaryWorkspace: '',
+                      queueStatus: ''),
+                  dataSource: _ArchivedAiDiscussionDataSource(),
+                  currentUserId: 'user-owner',
+                  onBackToSpace: _noop,
+                  onArchive: _noop,
+                )))));
+    await tester.pumpAndSettle();
+    expect(find.text('Research auth'), findsOneWidget);
+    expect(find.text('Use passkeys'), findsOneWidget);
+    expect(find.text('ChatGPT'), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey('chat-history-scroll')),
+            matching: find.byIcon(Icons.auto_awesome_rounded)),
+        findsOneWidget);
+    expect(
+        find.byWidgetPredicate((widget) =>
+            widget is Text && widget.data?.startsWith('Asked AI · ') == true),
+        findsOneWidget);
+    // Archived AI entries are history: neither the request nor the answer
+    // may be edited.
+    expect(find.byTooltip('Edit message'), findsNothing);
+    expect(find.byTooltip('Copy Markdown'), findsNWidgets(2));
   });
   testWidgets('Chat create edit and copy preserve raw Markdown',
       (tester) async {
@@ -1218,6 +1242,7 @@ void main() {
       ),
     ))));
     await tester.pumpAndSettle();
+    await _openAiHistory(tester);
     final copies = find.byTooltip('Copy Markdown');
     expect(copies, findsNWidgets(2));
     expect(
@@ -1278,14 +1303,17 @@ void main() {
         onArchive: _noop,
         onRunWork: (_, __, ___, key) async =>
             throw const AxApiException(message),
-        initialTab: 1,
       ),
     ))));
     await tester.pumpAndSettle();
+    await _askAi(tester);
     await tester.enterText(find.byType(TextField).last, 'Implement the change');
     await tester.ensureVisible(
         find.byKey(const ValueKey('composer-send-Send request')));
     await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
+    await tester.pumpAndSettle();
+    // The failure diagnostic lives in AI History.
+    await tester.tap(find.byKey(const ValueKey('ai-history-toggle')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byTooltip('Copy error'));
     await tester.tap(find.byTooltip('Copy error'));
@@ -1438,8 +1466,9 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Discussion'), findsOneWidget);
-    expect(find.text('Work'), findsOneWidget);
+    await _openAiHistory(tester);
+    expect(find.text('AI History'), findsOneWidget);
+    expect(find.text('Read-only'), findsOneWidget);
     expect(find.text('Archive'), findsNothing);
     expect(find.text('What should Conclave do?'), findsNothing);
     expect(
@@ -1450,6 +1479,8 @@ void main() {
     expect(find.textContaining('fencing'), findsNothing);
     expect(find.textContaining('Durable Object'), findsNothing);
     expect(find.textContaining('checkout key'), findsNothing);
+    await _askAi(tester);
+    expect(find.text('Conversation'), findsOneWidget);
     expect(find.text('Viewer access can read the thread but cannot run Work.'),
         findsOneWidget);
     expect(find.byKey(const ValueKey('composer-send-Send request')),
@@ -1489,12 +1520,12 @@ void main() {
               submittedWork = work;
               return 'request-1';
             },
-            initialTab: 1,
           ),
         ),
       ),
     ));
     await tester.pumpAndSettle();
+    await _askAi(tester);
 
     expect(find.text('What should Conclave do?'), findsNothing);
     expect(find.byKey(const ValueKey('work-add-attachments')), findsOneWidget);
@@ -1689,6 +1720,7 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
+    await _openAiHistory(tester);
     expect(find.text('History before reconnect'), findsOneWidget);
     dataSource.requests = [
       const AxWorkRequest(
@@ -2459,13 +2491,14 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    await _openAiHistory(tester);
     // Delivered work shows the selected Worker before provider startup.
-    expect(find.text('ChatGPT'), findsNWidgets(2));
+    expect(_inAiHistory(find.text('ChatGPT')), findsNWidgets(2));
     expect(find.textContaining('Direct Execution · 5s'), findsOneWidget);
     expect(find.byTooltip('gpt-4o'), findsOneWidget);
 
     // Worker identity stays visible; its model is available on demand.
-    expect(find.text('Claude 3.7 Sonnet'), findsOneWidget);
+    expect(_inAiHistory(find.text('Claude 3.7 Sonnet')), findsOneWidget);
     expect(find.textContaining('Direct Execution · 12s'), findsOneWidget);
     expect(find.byTooltip('claude-3-7-sonnet'), findsOneWidget);
     expect(find.textContaining('claude-3-7-sonnet'), findsNothing);
@@ -2532,6 +2565,7 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
+    await _openAiHistory(tester);
     final reportTooltip = find
         .byTooltip('Report issue — sends sanitized technical diagnostics only');
     expect(reportTooltip, findsOneWidget);
@@ -2756,6 +2790,77 @@ class _MarkdownDiscussionDataSource extends AxFixtureDataSource {
         body: text,
         createdAt: '2026-10-06T00:00:00Z');
   }
+}
+
+class _ConversationMixDataSource extends _WorkFormDataSource {
+  @override
+  Future<List<AxDiscussionMessage>> discussionRows({
+    required String threadId,
+  }) async =>
+      [
+        for (final (id, body, at) in [
+          ('m1', 'Before AI', '2026-10-06T10:00:00Z'),
+          ('m2', 'After AI', '2026-10-06T12:00:00Z'),
+        ])
+          AxDiscussionMessage(
+              id: id,
+              threadId: threadId,
+              authorUserId: 'user-owner',
+              body: body,
+              createdAt: at,
+              isMe: true),
+      ];
+
+  @override
+  Future<List<AxWorkRequest>> workRequestRows({
+    required String threadId,
+    bool activeOnly = false,
+  }) async =>
+      const [
+        AxWorkRequest(
+          id: 'R',
+          requestedByName: 'You',
+          requestedByUserId: 'user-owner',
+          prompt: 'Research auth',
+          workflowId: 'direct',
+          workflowVersion: 2,
+          status: 'completed',
+          createdAt: '2026-10-06T11:00:00Z',
+          steps: [],
+          finalText: 'Use passkeys',
+        ),
+      ];
+}
+
+class _ArchivedAiDiscussionDataSource extends AxFixtureDataSource {
+  @override
+  Future<List<AxDiscussionMessage>> discussionRows({
+    required String threadId,
+  }) async =>
+      [
+        AxDiscussionMessage.fromJson({
+          'id': 'discussion-ai-request-R',
+          'threadId': threadId,
+          'authorUserId': 'user-owner',
+          'authorName': 'Vitalii',
+          'body': 'Research auth',
+          'createdAt': '2026-10-06T00:00:00Z',
+          'kind': 'ai_request',
+          'workRequestId': 'R',
+          'workerDisplayName': 'ChatGPT',
+        }, currentUserId: 'user-owner'),
+        AxDiscussionMessage.fromJson({
+          'id': 'discussion-ai-answer-R',
+          'threadId': threadId,
+          'authorUserId': 'user-owner',
+          'authorName': 'Vitalii',
+          'body': 'Use passkeys',
+          'createdAt': '2026-10-06T00:01:00Z',
+          'kind': 'ai_answer',
+          'workRequestId': 'R',
+          'workerDisplayName': 'ChatGPT',
+        }, currentUserId: 'user-owner'),
+      ];
 }
 
 class _WorkFormDataSource extends AxFixtureDataSource {
@@ -3209,3 +3314,25 @@ AxWorkRequest _workRequest(String id, String prompt,
     );
 
 void _noop() {}
+
+/// Restricts [finder] to the read-only AI History panel; the conversation
+/// shows the same Work Requests as compact messages.
+Finder _inAiHistory(Finder finder) => find.descendant(
+    of: find.byKey(const ValueKey('thread-AI History-pane')), matching: finder);
+
+/// Opens the read-only AI History panel.
+Future<void> _openAiHistory(WidgetTester tester) async {
+  await tester.tap(find.byKey(const ValueKey('ai-history-toggle')));
+  await tester.pumpAndSettle();
+}
+
+/// Switches the conversation composer to Ask AI (the Work composer).
+Future<void> _askAi(WidgetTester tester) async {
+  // A narrow Thread shows AI History instead of the conversation.
+  if (find.text('Ask AI').evaluate().isEmpty) {
+    await tester.tap(find.byKey(const ValueKey('ai-history-close')));
+    await tester.pumpAndSettle();
+  }
+  await tester.tap(find.text('Ask AI'));
+  await tester.pumpAndSettle();
+}

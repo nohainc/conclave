@@ -72,10 +72,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Discussion'), findsOneWidget);
-    expect(find.text('Work'), findsOneWidget);
+    expect(find.text('Conversation'), findsOneWidget);
+    expect(find.text('AI History'), findsOneWidget);
     expect(find.text('No chat messages yet'), findsOneWidget);
-    await tester.tap(find.text('Work'));
+    await tester.tap(find.text('AI History'));
     await tester.pumpAndSettle();
     expect(find.text('What should Conclave do?'), findsNothing);
     expect(find.text('lease'), findsNothing);

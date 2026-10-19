@@ -394,8 +394,8 @@ This is standard body paragraph text with **bold** and `inline_code`.
       await tester.pumpAndSettle();
 
       // Thread tabs and panes render
-      expect(find.text('Discussion'), findsAtLeastNWidgets(1));
-      expect(find.text('Work'), findsAtLeastNWidgets(1));
+      expect(find.text('Conversation'), findsAtLeastNWidgets(1));
+      expect(find.text('AI History'), findsAtLeastNWidgets(1));
     });
 
     // 8. Worker Card

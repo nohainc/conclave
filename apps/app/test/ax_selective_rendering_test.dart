@@ -186,6 +186,11 @@ void main() {
           ? '/spaces/${space.id}'
           : '/spaces/${space.id}/threads/${space.threads.first.id}';
       final store = await shell(tester, route);
+      if (!spacePage) {
+        // Composer choices are mounted in Ask AI mode.
+        await tester.tap(find.text('Ask AI'));
+        await tester.pumpAndSettle();
+      }
       observe();
       builds.clear();
       store.syncEngine.update(
@@ -228,6 +233,8 @@ void main() {
     final space = axFixtureSnapshot().spaces.first;
     final id = space.threads.first.id;
     final store = await shell(tester, '/spaces/${space.id}/threads/$id');
+    await tester.tap(find.byKey(const ValueKey('ai-history-toggle')));
+    await tester.pumpAndSettle();
     observe();
     builds.clear();
     store.workHistory.replace(id, [
@@ -246,17 +253,14 @@ void main() {
     expect(
         builds['ValueListenableBuilder<ThreadWorkPresentationSnapshot?>'] ?? 0,
         greaterThan(0));
-    expect(
-        builds['ValueListenableBuilder<ThreadChatPresentationSnapshot?>'] ?? 0,
-        0);
+    // Work Requests are conversation entries, so the timeline follows them.
+    expect(builds['conversation-timeline'] ?? 0, greaterThan(0));
     expect(builds['ThreadPage'] ?? 0, 0);
     expect(builds['ConclaveAppShell'] ?? 0, 0);
     builds.clear();
     await store.discussion.synchronize(id, reconcileNewest: true);
     await tester.pumpAndSettle();
-    expect(
-        builds['ValueListenableBuilder<ThreadChatPresentationSnapshot?>'] ?? 0,
-        greaterThan(0));
+    expect(builds['conversation-timeline'] ?? 0, greaterThan(0));
     expect(
         builds['ValueListenableBuilder<ThreadWorkPresentationSnapshot?>'] ?? 0,
         0);
@@ -306,6 +310,8 @@ void main() {
     final space = axFixtureSnapshot().spaces.first;
     final id = space.threads.first.id;
     final store = await shell(tester, '/spaces/${space.id}/threads/$id');
+    await tester.tap(find.text('Ask AI'));
+    await tester.pumpAndSettle();
     observe();
     builds.clear();
     store.syncEngine.update(
@@ -322,7 +328,7 @@ void main() {
     for (final type in [
       'ConclaveAppShell',
       'AxSidebar',
-      'ValueListenableBuilder<ThreadChatPresentationSnapshot?>',
+      'conversation-timeline',
       'ThreadPage',
       'work-history-scroll'
     ]) {

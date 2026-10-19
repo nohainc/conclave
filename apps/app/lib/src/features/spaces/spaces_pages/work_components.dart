@@ -1151,6 +1151,23 @@ class _MemoizedWorkMarkdownState extends State<_MemoizedWorkMarkdown> {
   Widget build(BuildContext context) => _body;
 }
 
+/// The user-facing failure for [request]; diagnostics stay in Engine logs.
+String? _workFailureText(AxWorkRequest request) {
+  final failedStep =
+      request.steps.where((step) => step.status == 'failed').firstOrNull;
+  final rawError = request.error?.trim().isNotEmpty == true
+      ? request.error!
+      : failedStep?.errorMessage;
+  if (request.status != 'failed' && rawError?.isNotEmpty != true) return null;
+  return _publicFailureMessage(
+    failedStep,
+    _executionFailureMessage(
+      failedStep?.errorCode,
+      validationMessage: failedStep == null ? rawError : null,
+    ),
+  );
+}
+
 String? _workResponseText(AxWorkRequest request) =>
     request.finalText?.trim().isNotEmpty == true
         ? request.finalText!
@@ -1297,18 +1314,7 @@ class _WorkTimelineCard extends StatelessWidget {
     final executionPhase = requestIsTerminal
         ? request.status
         : (phaseStep?.effectivePhase ?? request.executionPhase);
-    final rawError = request.error?.trim().isNotEmpty == true
-        ? request.error!
-        : failedStep?.errorMessage;
-    final error = request.status == 'failed' || rawError?.isNotEmpty == true
-        ? _publicFailureMessage(
-            failedStep,
-            _executionFailureMessage(
-              failedStep?.errorCode,
-              validationMessage: failedStep == null ? rawError : null,
-            ),
-          )
-        : null;
+    final error = _workFailureText(request);
     final isError = error?.isNotEmpty == true;
 
     // Waiting/queued messages belong to Conclave. A running Step is the
@@ -2066,6 +2072,8 @@ class _DiscussionItem {
     this.sentAt,
     this.editedAt,
     this.isMe = true,
+    this.aiKind,
+    this.live = false,
   });
 
   final String id;
@@ -2076,6 +2084,75 @@ class _DiscussionItem {
   final String? sentAt;
   final String? editedAt;
   final bool isMe;
+
+  /// `ai_request` or `ai_answer` for an AI exchange archived from Work history.
+  final String? aiKind;
+  bool get isAiAnswer => aiKind == 'ai_answer';
+
+  /// Projected from a Work Request still in Work history rather than stored
+  /// in Chat; it has no Chat message to edit or delete.
+  final bool live;
+}
+
+/// Conversation entries for Work Requests still in Work history: the request
+/// as its author's message, then the Worker's answer or current status.
+List<_DiscussionItem> _workConversationItems(
+  AxWorkRequest request, {
+  required String? currentUserId,
+  required String Function(DateTime) timestamp,
+}) {
+  final date = DateTime.tryParse(request.createdAt)?.toLocal();
+  final isMe = currentUserId != null &&
+      currentUserId.isNotEmpty &&
+      request.requestedByUserId == currentUserId;
+  // Immutable turn evidence names the Worker that answered.
+  final worker = request.turns
+          .map((turn) => turn.workerDisplayName.trim())
+          .where((name) => name.isNotEmpty)
+          .lastOrNull ??
+      request.steps
+          .map((step) => step.workerDisplayName?.trim())
+          .whereType<String>()
+          .where((name) => name.isNotEmpty)
+          .lastOrNull;
+  final completed = request.turns
+      .map((turn) => DateTime.tryParse(turn.completedAt ?? '')?.toLocal())
+      .whereType<DateTime>()
+      .lastOrNull;
+  final response = _workResponseText(request);
+  final failure = _workFailureText(request);
+  final answer = switch (request.status) {
+    _ when response != null && response.trim().isNotEmpty => response,
+    _ when failure != null && failure.isNotEmpty => failure,
+    'failed' => '_Failed_',
+    'cancelled' => '_Cancelled_',
+    'queued' => '_Queued…_',
+    _ => '_Working…_',
+  };
+  return [
+    _DiscussionItem(
+      id: 'work-${request.id}-request',
+      author: isMe ? 'You' : request.requestedByName,
+      authorId: request.requestedByUserId,
+      date: date,
+      text: request.prompt,
+      sentAt: date == null ? null : timestamp(date),
+      isMe: isMe,
+      aiKind: 'ai_request',
+      live: true,
+    ),
+    _DiscussionItem(
+      id: 'work-${request.id}-answer',
+      author: worker ?? 'AI',
+      authorId: 'ai:${request.id}',
+      date: completed ?? date,
+      text: answer,
+      sentAt: completed == null ? null : timestamp(completed),
+      isMe: false,
+      aiKind: 'ai_answer',
+      live: true,
+    ),
+  ];
 }
 
 class _DiscussionMessageBubble extends StatefulWidget {
@@ -2202,14 +2279,20 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                           radius: 12,
                           backgroundColor:
                               ConclaveColors.primarySoftColor(isDark),
-                          child: Text(
-                            initials,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: ConclaveColors.primaryForeground(isDark),
-                            ),
-                          ),
+                          child: widget.item.isAiAnswer
+                              ? Icon(Icons.auto_awesome_rounded,
+                                  size: 13,
+                                  color:
+                                      ConclaveColors.primaryForeground(isDark))
+                              : Text(
+                                  initials,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: ConclaveColors.primaryForeground(
+                                        isDark),
+                                  ),
+                                ),
                         ),
                         const SizedBox(width: 6),
                         Text(
@@ -2278,7 +2361,9 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                               const SizedBox(width: 8),
                             ] else if (widget.item.sentAt != null) ...[
                               Text(
-                                widget.item.sentAt!,
+                                widget.item.aiKind == 'ai_request'
+                                    ? 'Asked AI · ${widget.item.sentAt!}'
+                                    : widget.item.sentAt!,
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: metaColor,
@@ -2288,6 +2373,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                             ],
                             if (isMe &&
                                 widget.onDelete != null &&
+                                !widget.item.live &&
                                 !widget.item.id.startsWith('temp-')) ...[
                               _AnimatedMessageAction(
                                 tooltip: 'Delete message',
@@ -2297,7 +2383,8 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                               ),
                               const SizedBox(width: 6),
                             ],
-                            if (!widget.item.id.startsWith('temp-')) ...[
+                            if (!widget.item.id.startsWith('temp-') &&
+                                widget.item.aiKind == null) ...[
                               _AnimatedMessageAction(
                                 tooltip: 'Edit message',
                                 icon: Icons.edit_outlined,

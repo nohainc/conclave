@@ -75,6 +75,7 @@ void main() {
               body: ThreadPage(
         key: replacePage ? ValueKey(id) : null,
         initialTab: 1,
+        initialAiHistoryOpen: true,
         space: const AxSpace(
             id: 'space',
             name: 'Space',

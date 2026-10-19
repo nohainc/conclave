@@ -22,10 +22,11 @@ function fixture(count = 7) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(`CREATE TABLE users(id TEXT PRIMARY KEY, display_name TEXT);
     CREATE TABLE discussion_messages(id TEXT PRIMARY KEY, thread_id TEXT,
-    author_user_id TEXT, body TEXT, references_json TEXT, edited_at TEXT, created_at TEXT);
+    author_user_id TEXT, body TEXT, references_json TEXT, edited_at TEXT, created_at TEXT,
+    kind TEXT NOT NULL DEFAULT 'message', work_request_id TEXT, worker_display_name TEXT);
     CREATE INDEX discussion_time ON discussion_messages(thread_id, created_at);`);
   const insert = sqlite.prepare(
-    "INSERT INTO discussion_messages VALUES(?, ?, 'owner', ?, '[]', NULL, ?)",
+    "INSERT INTO discussion_messages(id, thread_id, author_user_id, body, references_json, edited_at, created_at) VALUES(?, ?, 'owner', ?, '[]', NULL, ?)",
   );
   // Identical timestamps exercise the stable ID tie-breaker.
   for (let i = 1; i <= count; i++)

@@ -218,3 +218,95 @@ it("announces a retried work-history clear even when the receipt replays", async
     f.sqlite.close();
   }
 });
+
+it("keeps completed AI exchanges in the conversation when Work history is cleared", async () => {
+  const f = await conversationFixture();
+  try {
+    f.sqlite.exec(
+      readFileSync(
+        new URL(
+          "../migrations-v8/0054_thread_work_session_generation.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    f.assign("A");
+    f.start("A");
+    f.sqlite.exec(`
+      UPDATE worker_assignments SET status='completed', updated_at='2026-10-07T10:02:00Z', output_json='{"output":{"text":"The answer"}}' WHERE id='A';
+      UPDATE work_requests SET status='completed' WHERE id='R';`);
+    const answer = (await f.turns()).at(-1)?.resultText;
+    expect(answer).toBeTruthy();
+
+    await handleClearWorkHistory(
+      new Request("https://test/api/threads/W/work-history/clear", {
+        method: "POST",
+      }),
+      { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+      "W",
+    );
+
+    expect(
+      f.sqlite
+        .prepare(
+          `SELECT kind, author_user_id AS author, body, work_request_id AS workRequestId,
+            worker_display_name AS worker FROM discussion_messages ORDER BY created_at, id`,
+        )
+        .all(),
+    ).toEqual([
+      {
+        kind: "ai_request",
+        author: "U",
+        body: "**Exact user text**",
+        workRequestId: "R",
+        worker: "ChatGPT",
+      },
+      {
+        kind: "ai_answer",
+        author: "U",
+        body: answer,
+        workRequestId: "R",
+        worker: "ChatGPT",
+      },
+    ]);
+    expect(
+      f.sqlite.prepare("SELECT COUNT(*) AS count FROM work_requests").get()!
+        .count,
+    ).toBe(0);
+  } finally {
+    f.sqlite.close();
+  }
+});
+
+it("refuses to edit an archived AI entry", async () => {
+  const f = await conversationFixture();
+  try {
+    f.sqlite.exec(
+      `INSERT INTO discussion_messages(id,thread_id,author_user_id,body,kind,work_request_id,worker_display_name,created_at)
+       VALUES('A1','W','U','answer','ai_answer','R','ChatGPT','now')`,
+    );
+    const { authorizeThreadAccess } = await import(
+      "../src/routes/thread-policy.js"
+    );
+    vi.mocked(authorizeThreadAccess).mockResolvedValueOnce({
+      context: { userId: "U" },
+      spaceId: "P",
+    } as never);
+    const { handleEditDiscussionMessage } = await import(
+      "../src/routes/threads.js"
+    );
+    await expect(
+      handleEditDiscussionMessage(
+        new Request("https://test/api/discussion/A1", {
+          method: "PATCH",
+          body: JSON.stringify({ body: "changed" }),
+        }),
+        { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+        "A1",
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+  } finally {
+    f.sqlite.close();
+  }
+});

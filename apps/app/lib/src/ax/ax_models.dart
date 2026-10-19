@@ -429,6 +429,9 @@ class AxDiscussionMessage {
     this.editedAt,
     required this.createdAt,
     this.isMe = false,
+    this.kind = 'message',
+    this.workRequestId,
+    this.workerDisplayName,
   });
 
   final String id;
@@ -441,6 +444,15 @@ class AxDiscussionMessage {
   final String createdAt;
   final bool isMe;
 
+  /// `message` for people's Chat; `ai_request`/`ai_answer` for AI exchanges
+  /// archived into the conversation when Work history is cleared.
+  final String kind;
+  final String? workRequestId;
+  final String? workerDisplayName;
+
+  bool get isAiAnswer => kind == 'ai_answer';
+  bool get isAiEntry => kind != 'message';
+
   AxDiscussionMessage copyWith({String? id, String? body, String? editedAt}) =>
       AxDiscussionMessage(
           id: id ?? this.id,
@@ -451,7 +463,10 @@ class AxDiscussionMessage {
           references: references,
           editedAt: editedAt ?? this.editedAt,
           createdAt: createdAt,
-          isMe: isMe);
+          isMe: isMe,
+          kind: kind,
+          workRequestId: workRequestId,
+          workerDisplayName: workerDisplayName);
 
   factory AxDiscussionMessage.fromJson(
     Map<String, dynamic> json, {
@@ -504,6 +519,11 @@ class AxDiscussionMessage {
       editedAt: json['editedAt'] as String? ?? json['edited_at'] as String?,
       createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
       isMe: isMe,
+      kind: (json['kind'] as String?)?.trim().isNotEmpty == true
+          ? json['kind'] as String
+          : 'message',
+      workRequestId: json['workRequestId'] as String?,
+      workerDisplayName: json['workerDisplayName'] as String?,
     );
   }
 }

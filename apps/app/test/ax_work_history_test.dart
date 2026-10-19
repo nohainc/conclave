@@ -422,6 +422,7 @@ void main() {
                   workHistoryCache: cache,
                   onRunWork: onRun,
                   initialTab: 1,
+                  initialAiHistoryOpen: onRun == null,
                   onBackToSpace: () {},
                   onArchive: () {})));
   Future<void> size(WidgetTester tester) async {

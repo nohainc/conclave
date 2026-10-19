@@ -648,6 +648,10 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   Future<void> _clearWorkHistoryFromSidebar(AxThread thread) async {
     try {
       await store.workHistory.clearHistory(thread.id);
+      // Completed AI exchanges were archived into the conversation.
+      unawaited(store.discussion
+          .synchronize(thread.id, reconcileNewest: true)
+          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       _discardNotificationsFor(threadId: thread.id);
       if (mounted) _showSnackBar('Work history cleared.');
     } catch (error) {

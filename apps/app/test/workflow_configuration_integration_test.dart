@@ -292,7 +292,7 @@ void main() {
     expect(find.textContaining('removed-model · Unavailable'), findsOneWidget);
     expect(find.textContaining('Removed-effort · Unavailable'), findsOneWidget);
     expect(find.text('remember this work'), findsOneWidget);
-    await tester.tap(find.text('Discussion'));
+    await tester.tap(find.text('Message'));
     await tester.pumpAndSettle();
     expect(find.text('remember this chat'), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, 'updated chat draft');

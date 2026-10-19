@@ -202,6 +202,7 @@ void main() {
           queueStatus: ''),
       discussionCache: chat,
       workHistoryCache: work,
+      initialAiHistoryOpen: true,
       onBackToSpace: () {},
       onArchive: () {},
     ))));
@@ -217,12 +218,15 @@ void main() {
             initialLoaded: true));
     work.replace('thread', [request(response: longWork)]);
     await tester.pumpAndSettle();
+    // The conversation holds both arrivals and reveals the first new entry,
+    // the AI answer, from its opening; AI History reveals the same answer.
     for (final tab in ['chat', 'work']) {
       final history = find.byKey(ValueKey('$tab-history-scroll'));
       final rect = tester.getRect(history);
       final opening = tester.getRect(find
-          .textContaining('${tab == 'chat' ? 'Chat' : 'Work'} opening',
-              findRichText: true)
+          .descendant(
+              of: history,
+              matching: find.textContaining('Work opening', findRichText: true))
           .first);
       expect(opening.top, greaterThanOrEqualTo(rect.top - 1));
       expect(opening.top + 24, lessThan(rect.bottom));

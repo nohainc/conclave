@@ -990,7 +990,19 @@ The action also works for Threads whose history has not been opened locally.
 
 Cloud clears the owning Conversations and their cascading canonical history,
 then the Thread's Work Requests, in one transaction with the provider session
-generation increment. Discussion Chat messages remain separate and untouched.
+generation increment. Existing Discussion Chat messages are untouched. In the
+same transaction, each completed Work Request with a non-empty final Worker
+answer is archived into `discussion_messages` as two entries: `kind = ai_request`
+(the original request) and `kind = ai_answer` (the last completed turn's answer,
+with `worker_display_name`). Both are owned by the requester, keep
+`work_request_id` as a plain reference, and use deterministic IDs
+(`discussion-ai-{request|answer}-<workRequestId>`), so retries cannot duplicate
+them. Failed, cancelled, and answerless requests are not archived. Archived
+entries cannot be edited (409), can be deleted by their owner, and are removed
+by Chat clearing. Clearing still resets Worker session continuity: later Workers
+do not receive archived entries as context. AX re-synchronizes Chat after a
+local or remote Work clear and renders `ai_answer` entries as the Worker
+speaking (migration `0078_discussion_ai_entries.sql`).
 The clear endpoint returns a JSON Response on both receipt and non-receipt paths.
 AX includes Cloud's error detail when deletion is rejected. The existing
 `0054_thread_work_session_generation.sql` baseline must be applied before this

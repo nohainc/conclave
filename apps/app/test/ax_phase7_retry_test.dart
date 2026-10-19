@@ -54,6 +54,7 @@ Widget page(RetrySource source) => MaterialApp(
         home: Scaffold(
             body: ThreadPage(
       initialTab: 1,
+      initialAiHistoryOpen: true,
       space:
           const AxSpace(id: 's', name: 'Space', branch: '', lastActivity: ''),
       thread: const AxThread(

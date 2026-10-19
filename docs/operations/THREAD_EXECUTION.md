@@ -1,7 +1,7 @@
 # Chat and Work execution
 
 Opening a Space shows its description, when available, and an optional Thread
-name field. Chat/Work tabs sit directly above the composers at the bottom;
+name field. The Message | Ask AI switch sits directly above the composer at the bottom;
 the empty history area stays blank. The Space page's Chat composer always shows
 its Markdown toolbar without a Show/Hide toggle, including in the single-tab
 layout. **Create Thread** inside the name field
@@ -9,7 +9,7 @@ creates and opens a Thread without sending a message, and is disabled when the
 trimmed name is empty. Names are limited to 22 characters.
 The first nonempty Chat message or Work request also creates the Thread before
 submitting. It uses the entered name, or the opening words of the request when
-the name is empty; an oversized first word is truncated. The app then opens that Thread on the tab
+the name is empty; an oversized first word is truncated. The app then opens that Thread in the composer mode
 used to send. Creation failures keep the draft. If creation succeeds but sending
 fails, retry uses the same Thread. Existing Threads remain in the sidebar.
 

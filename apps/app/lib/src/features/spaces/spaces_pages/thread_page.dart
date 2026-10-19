@@ -22,6 +22,7 @@ class ThreadPage extends StatefulWidget {
     this.onRunWorkWithSelection,
     this.realtimeEvents,
     this.initialTab = 0,
+    this.initialAiHistoryOpen = false,
     this.isDraft = false,
     this.draftBusy = false,
     this.onSendDraftDiscussion,
@@ -57,6 +58,9 @@ class ThreadPage extends StatefulWidget {
       Map<String, dynamic> executionSelection)? onRunWorkWithSelection;
   final Stream<Map<String, dynamic>>? realtimeEvents;
   final int initialTab;
+
+  /// Opens the read-only AI History panel when the page is created.
+  final bool initialAiHistoryOpen;
 
   /// Draft views load Space configuration but never read or persist Thread data.
   final bool isDraft;
@@ -106,6 +110,26 @@ class _ThreadPageState extends State<ThreadPage>
   bool _workFollowScheduled = false;
   int _interactionGeneration = 0;
   bool _loadingOlderChat = false;
+
+  /// The saved Thread tab now selects the conversation composer target:
+  /// index 0 sends a Chat message, index 1 asks AI (a Work Request).
+  bool get _askAiMode => _tabController.index == 1;
+
+  /// Read-only AI History (the former Work timeline) beside or, on narrow
+  /// layouts, instead of the conversation.
+  late bool _aiHistoryOpen = widget.initialAiHistoryOpen;
+
+  void _setAiHistoryOpen(bool open) {
+    if (open == _aiHistoryOpen) return;
+    setState(() {
+      _aiHistoryOpen = open;
+      if (open) _openWorkPending = true;
+      if (!open) _openChatPending = true;
+    });
+    _scheduleFollowLatest(
+        open ? _workHistoryController : _chatHistoryController);
+  }
+
   void _invalidateInteractionCallbacks() {
     _interactionGeneration++;
     _chatIncomingAnchor.reset(clearKeys: true);
@@ -149,7 +173,7 @@ class _ThreadPageState extends State<ThreadPage>
         next: target, fraction: index / sequence.length, once: false);
   }
 
-  bool _tabActive(bool isWork) => _tabController.index == (isWork ? 1 : 0);
+  bool _tabActive(bool isWork) => isWork ? _aiHistoryOpen : true;
 
   /// Returns true when the opening step ran and a rebuilt frame must reveal it.
   bool _openTab(bool isWork, ScrollController controller) {
@@ -283,7 +307,7 @@ class _ThreadPageState extends State<ThreadPage>
             _jumpToLatest(_chatHistoryController);
           } else if (_followChat) {
             _anchorIncoming(_chatIncomingAnchor, _chatHistoryController,
-                List<Object>.of(ids), id);
+                List<Object>.of(_conversationIds()), id);
           }
           break;
         }
@@ -322,6 +346,9 @@ class _ThreadPageState extends State<ThreadPage>
               _followWork = true;
               _workIncomingAnchor.reset();
               _jumpToLatest(_workHistoryController);
+              _followChat = true;
+              _chatIncomingAnchor.reset();
+              _jumpToLatest(_chatHistoryController);
               continue;
             }
             if (!_followWork) continue;
@@ -344,6 +371,56 @@ class _ThreadPageState extends State<ThreadPage>
     }
     if (state.hasData) _previousWorkReplies = replies;
     _scheduleFollowLatest(_workHistoryController);
+    _followWorkInConversation(state, previous);
+    _scheduleFollowLatest(_chatHistoryController);
+  }
+
+  /// Conversation item IDs in display order; see [_mergeWorkIntoConversation].
+  List<String> _conversationIds() {
+    final groups = <(DateTime?, List<String>)>[
+      for (final message in _chatPresentation.messages)
+        (DateTime.tryParse(message.createdAt)?.toLocal(), [message.id]),
+      for (final request in _workPresentation.requests)
+        (
+          DateTime.tryParse(request.createdAt)?.toLocal(),
+          ['work-${request.id}-request', 'work-${request.id}-answer'],
+        ),
+    ];
+    final indexed = groups.indexed.toList()..sort(_byConversationTime);
+    return [for (final entry in indexed) ...entry.$2.$2];
+  }
+
+  static int _byConversationTime(
+      (int, (DateTime?, Object)) a, (int, (DateTime?, Object)) b) {
+    final left = a.$2.$1, right = b.$2.$1;
+    final byDate = left == null || right == null ? 0 : left.compareTo(right);
+    return byDate != 0 ? byDate : a.$1.compareTo(b.$1);
+  }
+
+  /// Work Requests are conversation entries too. The first Work page keeps a
+  /// following reader at the latest content; later requests and answers are
+  /// revealed from their opening like incoming Chat messages.
+  void _followWorkInConversation(
+      ThreadWorkPresentationSnapshot state, Map<String, Object?>? previous) {
+    if (!state.hasData || !_followChat) return;
+    if (previous == null) {
+      if (!_chatIncomingAnchor.active) _jumpToLatest(_chatHistoryController);
+      return;
+    }
+    for (final request in state.requests) {
+      final reply = _previousWorkReplies?[request.id];
+      final String target;
+      if (!previous.containsKey(request.id)) {
+        target = 'work-${request.id}-request';
+      } else if (reply != null && reply != previous[request.id]) {
+        target = 'work-${request.id}-answer';
+      } else {
+        continue;
+      }
+      _anchorIncoming(_chatIncomingAnchor, _chatHistoryController,
+          List<Object>.of(_conversationIds()), target);
+      return;
+    }
   }
 
   void _onWorkActivityChanged() {
@@ -758,16 +835,6 @@ class _ThreadPageState extends State<ThreadPage>
       mounted: mounted,
       disposed: false,
     );
-    final isWork = _tabController.index == 1;
-    if (!_tabController.indexIsChanging) {
-      if (isWork) {
-        _openWorkPending = true;
-      } else {
-        _openChatPending = true;
-      }
-    }
-    _scheduleFollowLatest(
-        isWork ? _workHistoryController : _chatHistoryController);
     if (!_tabController.indexIsChanging) _scheduleThreadViewStateSave();
   }
 
@@ -1247,6 +1314,10 @@ class _ThreadPageState extends State<ThreadPage>
           _workHistoryCache.resetHistory(widget.thread.id);
           unawaited(_refreshWorkTimeline()
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
+          // Completed AI exchanges were archived into the conversation.
+          unawaited(_discussionCache
+              .synchronize(widget.thread.id, reconcileNewest: true)
+              .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
         }
       }
     });
@@ -1353,53 +1424,73 @@ class _ThreadPageState extends State<ThreadPage>
             });
           });
         }
-        Widget tabHeader(List<String> names, {TabController? controller}) =>
-            DefaultTabController(
-              length: names.length,
-              child: Column(children: [
-                Center(
-                    child: TabBar(
-                  controller: controller,
-                  isScrollable: true,
-                  tabAlignment: TabAlignment.center,
-                  labelColor: Theme.of(context).colorScheme.onSurface,
-                  unselectedLabelColor:
-                      Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white38
-                          : Colors.black45,
-                  indicatorColor: Theme.of(context).colorScheme.onSurface,
-                  dividerHeight: 0,
-                  tabs: names.map((name) => Tab(text: name)).toList(),
-                )),
-                const Divider(height: 1, thickness: 1),
-                const SizedBox(height: 16),
-              ]),
-            );
-        Widget pane(String name, Widget content) => Padding(
-            key: ValueKey('thread-$name-padding'),
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Column(
-              key: ValueKey('thread-$name-pane'),
+        final historyOpen = !widget.isDraft && _aiHistoryOpen;
+        final secondary = Theme.of(context).brightness == Brightness.dark
+            ? Colors.white38
+            : Colors.black45;
+        Widget header(String title, {required bool history}) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                tabHeader([name]),
-                if (widget.isDraft) content else Expanded(child: content),
+                SizedBox(
+                  height: 46,
+                  child: Row(children: [
+                    if (history)
+                      IconButton(
+                        key: const ValueKey('ai-history-close'),
+                        tooltip: 'Close AI History',
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                        onPressed: () => _setAiHistoryOpen(false),
+                      ),
+                    Text(title,
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.onSurface)),
+                    if (history) ...[
+                      const SizedBox(width: 8),
+                      Text('Read-only',
+                          style: TextStyle(fontSize: 12, color: secondary)),
+                    ],
+                    const Spacer(),
+                    if (!history && !widget.isDraft)
+                      TextButton.icon(
+                        key: const ValueKey('ai-history-toggle'),
+                        onPressed: () => _setAiHistoryOpen(!historyOpen),
+                        icon: const Icon(Icons.history_rounded, size: 18),
+                        label: const Text('AI History'),
+                      ),
+                  ]),
+                ),
+                const Divider(height: 1, thickness: 1),
+                const SizedBox(height: 16),
               ],
-            ));
+            );
+        Widget pane(String name, Widget content, {bool history = false}) =>
+            Padding(
+                key: ValueKey('thread-$name-padding'),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: Column(
+                  key: ValueKey('thread-$name-pane'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    header(name, history: history),
+                    if (widget.isDraft) content else Expanded(child: content),
+                  ],
+                ));
+        final conversation = pane('Conversation',
+            _discuss(context, twoPane: constraints.maxWidth >= 1000));
         late final Widget content;
         if (constraints.maxWidth >= 1000) {
           content = Center(
               child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1681),
+            constraints: BoxConstraints(maxWidth: historyOpen ? 1681 : 840),
             child: Row(
                 crossAxisAlignment: widget.isDraft
                     ? CrossAxisAlignment.start
                     : CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                      child:
-                          pane('Discussion', _discuss(context, twoPane: true))),
-                  if (!widget.isDraft)
+                  Expanded(child: conversation),
+                  if (historyOpen) ...[
                     VerticalDivider(
                       width: 1,
                       thickness: 1,
@@ -1407,32 +1498,19 @@ class _ThreadPageState extends State<ThreadPage>
                       endIndent: 20,
                       color: Theme.of(context).dividerColor,
                     ),
-                  Expanded(child: pane('Work', _work(context))),
+                    Expanded(
+                        child:
+                            pane('AI History', _work(context), history: true)),
+                  ],
                 ]),
           ));
         } else {
           content = Center(
               child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 840),
-            child: Padding(
-                key: const ValueKey('thread-tab-padding'),
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    tabHeader(['Discussion', 'Work'],
-                        controller: _tabController),
-                    if (widget.isDraft)
-                      _tabController.index == 0
-                          ? _discuss(context)
-                          : _work(context)
-                    else
-                      Expanded(
-                          child: _tabController.index == 0
-                              ? _discuss(context)
-                              : _work(context)),
-                  ],
-                )),
+            child: historyOpen
+                ? pane('AI History', _work(context), history: true)
+                : conversation,
           ));
         }
         return IgnorePointer(
@@ -1450,11 +1528,12 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   Widget _discuss(BuildContext context, {bool twoPane = false}) =>
-      ValueListenableBuilder<ThreadChatPresentationSnapshot?>(
-        valueListenable: _presentation.chat,
-        builder: (context, snapshot, _) => _discussionBody(
+      ListenableBuilder(
+        key: const ValueKey('conversation-timeline'),
+        listenable: Listenable.merge([_presentation.chat, _presentation.work]),
+        builder: (context, _) => _discussionBody(
           context,
-          snapshot ?? _chatPresentation,
+          _presentation.chat.value ?? _chatPresentation,
           twoPane: twoPane,
         ),
       );
@@ -1475,16 +1554,25 @@ class _ThreadPageState extends State<ThreadPage>
               rawAuthor.startsWith('usr_'))
           ? (isMe ? 'You' : 'Member')
           : rawAuthor;
+      // An archived AI answer is the Worker speaking, not its requester.
+      final worker = message.workerDisplayName?.trim();
+      final answer = message.isAiAnswer;
       return _DiscussionItem(
           id: message.id,
-          author: displayAuthor,
-          authorId: message.authorUserId,
+          author: answer
+              ? (worker == null || worker.isEmpty ? 'AI' : worker)
+              : displayAuthor,
+          authorId: answer
+              ? 'ai:${message.workRequestId ?? message.id}'
+              : message.authorUserId,
           date: date,
           text: message.body,
           sentAt: date == null ? null : _chatTimestamp(date),
           editedAt: edited == null ? null : _chatTimestamp(edited),
-          isMe: isMe);
+          isMe: isMe && !answer,
+          aiKind: message.isAiEntry ? message.kind : null);
     }).toList();
+    if (!widget.isDraft) _mergeWorkIntoConversation(messages);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final showEmpty = messages.isEmpty &&
         state.error == null &&
@@ -1525,7 +1613,7 @@ class _ThreadPageState extends State<ThreadPage>
           )
         : null;
 
-    if (widget.isDraft) return _discussionComposer(twoPane: true);
+    if (widget.isDraft) return _conversationComposer(twoPane: true);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1665,7 +1753,67 @@ class _ThreadPageState extends State<ThreadPage>
                   },
                 ))),
         const SizedBox(height: 16),
-        _discussionComposer(twoPane: twoPane),
+        _conversationComposer(twoPane: twoPane),
+      ],
+    );
+  }
+
+  /// One conversation: Work Requests still in Work history appear between
+  /// Chat messages by request time, each followed by its answer or status.
+  void _mergeWorkIntoConversation(List<_DiscussionItem> messages) {
+    final requests = _workTimeline;
+    if (requests.isEmpty) return;
+    final groups = <(DateTime?, List<_DiscussionItem>)>[
+      for (final message in messages) (message.date, [message]),
+      for (final request in requests)
+        (
+          DateTime.tryParse(request.createdAt)?.toLocal(),
+          _workConversationItems(request,
+              currentUserId: widget.currentUserId, timestamp: _chatTimestamp),
+        ),
+    ];
+    final indexed = groups.indexed.toList()..sort(_byConversationTime);
+    messages
+      ..clear()
+      ..addAll(indexed.expand((entry) => entry.$2.$2));
+  }
+
+  Widget _conversationComposer({bool twoPane = false}) {
+    // Like the former Work tab, Ask AI is always offered; the Work composer
+    // shows its own disabled and viewer states.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: SegmentedButton<bool>(
+            key: const ValueKey('conversation-composer-mode'),
+            showSelectedIcon: false,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            segments: const [
+              ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                  label: Text('Message')),
+              ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.auto_awesome_rounded, size: 16),
+                  label: Text('Ask AI')),
+            ],
+            selected: {_askAiMode},
+            onSelectionChanged: (value) =>
+                _updateState(() => _tabController.index = value.first ? 1 : 0),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (_askAiMode)
+          // The same Work composer and run path as the Work pane.
+          ValueListenableBuilder<ThreadComposerPresentationSnapshot>(
+              valueListenable: _presentation.composer,
+              builder: (context, _, __) => _workComposer().controls(context))
+        else
+          _discussionComposer(twoPane: twoPane),
       ],
     );
   }
@@ -1709,10 +1857,6 @@ class _ThreadPageState extends State<ThreadPage>
                             builder: (context, snapshot, _) {
                               return _workComposer().history(context);
                             })))),
-            const SizedBox(height: 16),
-            ValueListenableBuilder<ThreadComposerPresentationSnapshot>(
-                valueListenable: _presentation.composer,
-                builder: (context, _, __) => _workComposer().controls(context)),
           ],
         );
 

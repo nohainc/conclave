@@ -1322,8 +1322,11 @@ export async function handleClearWorkHistory(
   }
 
   const now = new Date().toISOString();
+  const archive = await archivedExchangeStatements(env.CONCLAVE_DB, threadId);
 
   const statements = [
+    // Answers move into the Thread conversation before execution history goes.
+    ...archive,
     // Delete the owning conversations so canonical history cascades legally.
     env.CONCLAVE_DB.prepare(
       "DELETE FROM conversations WHERE thread_id = ?1",
@@ -1347,6 +1350,102 @@ export async function handleClearWorkHistory(
   await announce();
 
   return reply ?? json({ threadId, cleared: true });
+}
+
+/**
+ * Clearing Work history removes execution diagnostics and resets Worker
+ * session continuity, but the completed exchanges stay readable: each
+ * completed request and its final answer become archived conversation
+ * entries owned by the requester. Requests without an answer are dropped.
+ */
+async function archivedExchangeStatements(
+  db: D1Database,
+  threadId: string,
+): Promise<D1PreparedStatement[]> {
+  const rows = await db
+    .prepare(
+      `SELECT wr.id, wr.requested_by_user_id AS userId, wr.created_at AS createdAt,
+        COALESCE(json_extract(wr.input_json, '$.originalRequest'),
+                 json_extract(wr.input_json, '$.request'), '') AS prompt,
+        a.answer, a.workerDisplayName, a.completedAt
+       FROM work_requests wr
+       JOIN (
+         SELECT ct.work_request_id AS workRequestId,
+           COALESCE(h.text, ct.result_text) AS answer,
+           ct.worker_display_name AS workerDisplayName,
+           ct.completed_at AS completedAt,
+           ROW_NUMBER() OVER (PARTITION BY ct.work_request_id
+             ORDER BY ct.completed_at DESC, ct.rowid DESC) AS position
+         FROM conversation_turns ct
+         LEFT JOIN conversation_history_entries h
+           ON h.turn_id = ct.id AND h.kind = 'worker_response'
+         WHERE ct.status = 'completed'
+           AND TRIM(COALESCE(h.text, ct.result_text, '')) <> ''
+       ) a ON a.workRequestId = wr.id AND a.position = 1
+       WHERE wr.thread_id = ?1 AND wr.status = 'completed'
+       ORDER BY wr.created_at, wr.id`,
+    )
+    .bind(threadId)
+    .all<{
+      id: string;
+      userId: string;
+      createdAt: string;
+      prompt: string;
+      answer: string;
+      workerDisplayName: string;
+      completedAt: string | null;
+    }>();
+  const insert = (
+    id: string,
+    userId: string,
+    body: string,
+    kind: "ai_request" | "ai_answer",
+    workRequestId: string,
+    workerDisplayName: string | null,
+    createdAt: string,
+  ) =>
+    db
+      .prepare(
+        `INSERT INTO discussion_messages
+         (id, thread_id, author_user_id, body, references_json, kind,
+          work_request_id, worker_display_name, created_at)
+         VALUES (?1, ?2, ?3, ?4, '[]', ?5, ?6, ?7, ?8)
+         ON CONFLICT(id) DO NOTHING`,
+      )
+      .bind(
+        id,
+        threadId,
+        userId,
+        body,
+        kind,
+        workRequestId,
+        workerDisplayName,
+        createdAt,
+      );
+  return (rows.results ?? []).flatMap((row) => [
+    ...(row.prompt.trim()
+      ? [
+          insert(
+            `discussion-ai-request-${row.id}`,
+            row.userId,
+            row.prompt,
+            "ai_request",
+            row.id,
+            row.workerDisplayName,
+            row.createdAt,
+          ),
+        ]
+      : []),
+    insert(
+      `discussion-ai-answer-${row.id}`,
+      row.userId,
+      row.answer,
+      "ai_answer",
+      row.id,
+      row.workerDisplayName,
+      row.completedAt ?? row.createdAt,
+    ),
+  ]);
 }
 
 /**

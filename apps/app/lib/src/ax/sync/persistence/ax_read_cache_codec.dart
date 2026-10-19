@@ -101,6 +101,9 @@ class AxReadCacheCodec {
         'references': value.references,
         'editedAt': value.editedAt,
         'createdAt': value.createdAt,
+        'kind': value.kind,
+        'workRequestId': value.workRequestId,
+        'workerDisplayName': value.workerDisplayName,
       };
   Map<String, dynamic> work(AxWorkRequest value) => {
         'conversationId': value.conversationId,

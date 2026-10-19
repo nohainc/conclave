@@ -466,7 +466,8 @@ export async function handleListDiscussionMessages(
   const statement = env.CONCLAVE_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
             COALESCE(u.display_name, 'Member') AS authorName,
-            dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt
+            dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
+            dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
      WHERE dm.thread_id = ?1
@@ -580,6 +581,9 @@ export async function handleCreateDiscussionMessage(
       references,
       editedAt: null,
       createdAt: now,
+      kind: "message",
+      workRequestId: null,
+      workerDisplayName: null,
     },
   };
   const write = (receipts: D1PreparedStatement[]) =>
@@ -602,7 +606,8 @@ export async function handleGetDiscussionMessage(
   const message = await env.CONCLAVE_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
       COALESCE(u.display_name, 'Member') AS authorName,
-      dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt
+      dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
+            dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
      WHERE dm.id = ?1`,
@@ -631,7 +636,8 @@ export async function handleEditDiscussionMessage(
   const message = await env.CONCLAVE_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
             COALESCE(u.display_name, 'Member') AS authorName,
-            dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt
+            dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
+            dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
      WHERE dm.id = ?1`,
@@ -648,6 +654,8 @@ export async function handleEditDiscussionMessage(
   );
   if (String(message.authorUserId) !== context.userId)
     throw new HttpError(403, "Only the message author may edit it");
+  if ((message.kind ?? "message") !== "message")
+    throw new HttpError(409, "Archived AI entries cannot be edited");
   const body = (await request.json()) as Record<string, unknown>;
   const content = requiredString(body.body ?? body.content, "body");
   const references = discussionReferences(
