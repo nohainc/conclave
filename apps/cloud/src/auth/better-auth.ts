@@ -171,6 +171,54 @@ async function sendSignUpVerificationCodeEmail(
   });
 }
 
+async function sendWelcomeEmail(
+  env: BetterAuthRuntimeEnv,
+  recipient: { email: string; name?: string | null },
+): Promise<void> {
+  const rawEmail = recipient.email?.trim();
+  if (!rawEmail) return;
+  if (!env.CONCLAVE_EMAIL) {
+    if (env.CONCLAVE_ENVIRONMENT === "development") {
+      console.info("auth.welcome.development", {
+        email: rawEmail,
+      });
+      return;
+    }
+    return;
+  }
+
+  const appOrigin =
+    configuredAppOrigin(env) ??
+    (env.BETTER_AUTH_URL
+      ? (() => {
+          try {
+            return new URL(env.BETTER_AUTH_URL).origin;
+          } catch {
+            return undefined;
+          }
+        })()
+      : undefined) ??
+    "https://app.conclaveax.com";
+
+  try {
+    await sendTemplateEmail(env, {
+      to: rawEmail,
+      templateId: "auth.welcome.v1",
+      input: {
+        recipientName: recipient.name,
+        appUrl: appOrigin,
+      },
+      renderOptions: { approvedOrigins: [appOrigin] },
+    });
+  } catch (error) {
+    const failure = classifyEmailDeliveryFailure(error);
+    console.error("auth.welcome_email.failed", {
+      status: failure.status,
+      providerCode: failure.providerCode,
+    });
+  }
+}
+
 function generateSixDigitCode(): string {
   const bytes = new Uint32Array(1);
   crypto.getRandomValues(bytes);
@@ -454,6 +502,15 @@ export function buildBetterAuthOptions(
     plugins: [passkey(passkeyOptions)],
     databaseHooks: {
       user: {
+        create: {
+          after: async (user: {
+            id: string;
+            email: string;
+            name?: string | null;
+          }) => {
+            await sendWelcomeEmail(env, user);
+          },
+        },
         update: {
           after: async (user: { id: string }) => {
             await publishPeopleProfileChanged(env, user.id);

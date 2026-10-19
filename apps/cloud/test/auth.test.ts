@@ -284,6 +284,26 @@ describe("IdentityService", () => {
     expect(messages[0]?.text).toContain("This link is valid for 60 minutes.");
     expect(messages[1]?.text).toContain("https://app.conclave.test/reset");
     expect(messages[2]?.text).toContain("https://app.conclave.test/change");
+
+    await options.databaseHooks?.user?.create?.after?.({
+      id: "user-1",
+      email: "person@example.com",
+      name: "Person",
+    });
+    expect(send).toHaveBeenCalledTimes(4);
+    const welcomeMessage = send.mock.calls[3]?.[0] as {
+      to: string;
+      subject: string;
+      text?: string;
+      from: { email: string; name: string };
+    };
+    expect(welcomeMessage).toMatchObject({
+      from: { email: "conclave@conclaveax.com", name: "Conclave AX" },
+      to: "person@example.com",
+      subject: "Welcome to Conclave AX — your account is ready",
+    });
+    expect(welcomeMessage.text).toContain("Congratulations");
+    expect(welcomeMessage.text).toContain("https://app.conclave.test");
   });
 
   describe("verification email failures", () => {

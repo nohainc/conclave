@@ -117,7 +117,10 @@ required.
 
 ### Worker management and verification
 
-Workers uses a catalog-driven selector and one detail panel. Selection is keyed
+The manager has separate Workspace and Workers tabs. Workspace contains machine
+settings and execution capacity. Workers uses a scrollable catalog list on the
+left and an independently scrollable detail/action panel on the right. Switching
+tabs preserves the selected Worker and in-progress verification. Selection is keyed
 by logical Worker type and survives inventory refreshes. Availability evidence,
 activation, permissions, and model discovery remain separate. The detail panel
 shows the actual issue code, safe diagnostic details and a recovery action;

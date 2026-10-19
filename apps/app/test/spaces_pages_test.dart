@@ -310,15 +310,16 @@ void main() {
         onArchive: _noop,
       ))));
       await tester.pumpAndSettle();
-      await _openAiHistory(tester);
-      expect(_inAiHistory(find.text('ChatGPT')), findsNWidgets(3));
+      expect(_inConversation(find.text('ChatGPT')), findsNWidgets(3));
       expect(find.textContaining('model-x'), findsNothing);
       expect(find.textContaining('model-y'), findsNothing);
-      expect(find.byTooltip('model-x · Medium'), findsOneWidget);
-      expect(find.byTooltip('model-y · High'), findsOneWidget);
-      expect(find.byTooltip('Default model · Default effort'), findsOneWidget);
+      expect(
+          _inConversation(find.byTooltip('model-x · Medium')), findsOneWidget);
+      expect(_inConversation(find.byTooltip('model-y · High')), findsOneWidget);
+      expect(_inConversation(find.byTooltip('Default model · Default effort')),
+          findsOneWidget);
       expect(find.text('Default model · Default effort'), findsNothing);
-      await tester.tap(find.byTooltip('model-x · Medium'));
+      await tester.tap(_inConversation(find.byTooltip('model-x · Medium')));
       await tester.pumpAndSettle();
       expect(find.text('model-x · Medium'), findsOneWidget);
       expect(find.textContaining('Model changed'), findsNothing);
@@ -536,7 +537,6 @@ void main() {
       },
     ))));
     await tester.pumpAndSettle();
-    await _openAiHistory(tester);
     expect(find.text('· Direct'), findsOneWidget);
     await _askAi(tester);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
@@ -2491,14 +2491,13 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await _openAiHistory(tester);
     // Delivered work shows the selected Worker before provider startup.
-    expect(_inAiHistory(find.text('ChatGPT')), findsNWidgets(2));
+    expect(_inConversation(find.text('ChatGPT')), findsNWidgets(2));
     expect(find.textContaining('Direct Execution · 5s'), findsOneWidget);
     expect(find.byTooltip('gpt-4o'), findsOneWidget);
 
     // Worker identity stays visible; its model is available on demand.
-    expect(_inAiHistory(find.text('Claude 3.7 Sonnet')), findsOneWidget);
+    expect(_inConversation(find.text('Claude 3.7 Sonnet')), findsOneWidget);
     expect(find.textContaining('Direct Execution · 12s'), findsOneWidget);
     expect(find.byTooltip('claude-3-7-sonnet'), findsOneWidget);
     expect(find.textContaining('claude-3-7-sonnet'), findsNothing);
@@ -2565,7 +2564,6 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    await _openAiHistory(tester);
     final reportTooltip = find
         .byTooltip('Report issue — sends sanitized technical diagnostics only');
     expect(reportTooltip, findsOneWidget);
@@ -3319,6 +3317,10 @@ void _noop() {}
 /// shows the same Work Requests as compact messages.
 Finder _inAiHistory(Finder finder) => find.descendant(
     of: find.byKey(const ValueKey('thread-AI History-pane')), matching: finder);
+
+/// Restricts [finder] to the Conversation timeline.
+Finder _inConversation(Finder finder) => find.descendant(
+    of: find.byKey(const ValueKey('chat-history-scroll')), matching: finder);
 
 /// Opens the read-only AI History panel.
 Future<void> _openAiHistory(WidgetTester tester) async {

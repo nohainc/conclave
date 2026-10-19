@@ -202,6 +202,8 @@ void main() {
   }
 
   Future<void> openWorkers(WidgetTester tester) async {
+    await tester.tap(find.widgetWithText(Tab, 'Workers'));
+    await tester.pump();
     await waitForCatalogRefresh(tester);
   }
 
@@ -539,6 +541,8 @@ void main() {
     await openWorkers(tester);
     expect(find.text('ChatGPT'), findsOneWidget);
     expect(find.text('Gemini'), findsOneWidget);
+    await tester.tap(find.widgetWithText(Tab, 'Workspace'));
+    await tester.pumpAndSettle();
     final workspacePage = find.byType(SingleChildScrollView).first;
     await tester.drag(workspacePage, const Offset(0, -320));
     await tester.pumpAndSettle();
@@ -614,6 +618,9 @@ void main() {
     expect(find.text('Workspace'), findsWidgets);
     expect(find.text('Workers'), findsWidgets);
     await openWorkers(tester);
+    expect(find.text('Start Service'), findsNothing);
+    await tester.tap(find.widgetWithText(Tab, 'Workspace'));
+    await tester.pumpAndSettle();
     expect(find.text('Start Service'), findsOneWidget);
     expect(find.text('Release'), findsOneWidget);
     await tester.ensureVisible(find.text('Release'));
@@ -1040,8 +1047,7 @@ void main() {
     await tester.pumpAndSettle();
     final card = find.byType(WorkerSlotsCard);
     expect(card, findsOneWidget);
-    expect(tester.getTopLeft(card).dy,
-        lessThan(tester.getTopLeft(find.text('Workers').last).dy));
+    expect(find.byKey(const Key('worker-selector-chatgpt')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('parallel-slots-select')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('3').last);

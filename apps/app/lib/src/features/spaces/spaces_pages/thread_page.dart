@@ -1530,7 +1530,8 @@ class _ThreadPageState extends State<ThreadPage>
   Widget _discuss(BuildContext context, {bool twoPane = false}) =>
       ListenableBuilder(
         key: const ValueKey('conversation-timeline'),
-        listenable: Listenable.merge([_presentation.chat, _presentation.work]),
+        listenable: Listenable.merge(
+            [_presentation.chat, _presentation.work, _workRealtime]),
         builder: (context, _) => _discussionBody(
           context,
           _presentation.chat.value ?? _chatPresentation,
@@ -1736,17 +1737,23 @@ class _ThreadPageState extends State<ThreadPage>
                           date: message.date,
                           previousDate:
                               index == 0 ? null : messages[index - 1].date,
-                          child: _DiscussionMessageBubble(
-                            item: message,
-                            grouped: _continuesDiscussionGroup(messages, index),
-                            onCopy: () {
-                              Clipboard.setData(
-                                  ClipboardData(text: message.text));
-                            },
-                            onEdit: (newText) =>
-                                _editDiscussion(message.id, newText),
-                            onDelete: () => _deleteDiscussion(message.id),
-                          ),
+                          child: message.workRequest != null
+                              ? _workComposer().requestCard(
+                                  context, message.workRequest!,
+                                  responseAnchorKey: _chatIncomingAnchor.keyFor(
+                                      'work-${message.workRequest!.id}-answer'))
+                              : _DiscussionMessageBubble(
+                                  item: message,
+                                  grouped: _continuesDiscussionGroup(
+                                      messages, index),
+                                  onCopy: () {
+                                    Clipboard.setData(
+                                        ClipboardData(text: message.text));
+                                  },
+                                  onEdit: (newText) =>
+                                      _editDiscussion(message.id, newText),
+                                  onDelete: () => _deleteDiscussion(message.id),
+                                ),
                         ),
                       ),
                     );
@@ -1768,8 +1775,7 @@ class _ThreadPageState extends State<ThreadPage>
       for (final request in requests)
         (
           DateTime.tryParse(request.createdAt)?.toLocal(),
-          _workConversationItems(request,
-              currentUserId: widget.currentUserId, timestamp: _chatTimestamp),
+          [_workConversationItem(request)],
         ),
     ];
     final indexed = groups.indexed.toList()..sort(_byConversationTime);

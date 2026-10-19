@@ -100,116 +100,94 @@ class _WorkersTabState extends State<_WorkersTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (!widget.serviceAvailable) ...[
-            const Text(
-                'Start the service to configure or test Workers. Last saved Worker details are shown below.'),
-            const SizedBox(height: 16),
-          ],
-          Builder(
-            builder: (context) {
-              final catalog = widget.catalogCoordinator?.snapshot ??
-                  const WorkerCatalogSnapshot();
-              final canConfigure = !catalog.refreshing &&
-                  widget.onConfigureWorker != null &&
-                  catalog.localRegistryLoaded &&
-                  catalog.localRegistryError == null;
-              return Column(
+    final catalog =
+        widget.catalogCoordinator?.snapshot ?? const WorkerCatalogSnapshot();
+    final canConfigure = !catalog.refreshing &&
+        widget.onConfigureWorker != null &&
+        catalog.localRegistryLoaded &&
+        catalog.localRegistryError == null;
+    final selected = catalog.workers
+        .where((worker) =>
+            (worker.descriptor?.workerTypeId ??
+                worker.localWorker!.workerTypeId) ==
+            _selectedType(catalog))
+        .firstOrNull;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 12, 8),
+        child: Row(children: [
+          Expanded(
+              child: Text(
+                  'Select a Worker to view its availability, settings, and tests.',
+                  style: theme.textTheme.bodySmall)),
+          IconButton(
+            tooltip: 'Check for Worker updates',
+            onPressed: widget.serviceAvailable && !catalog.refreshing
+                ? () =>
+                    unawaited(widget.catalogCoordinator?.refresh(force: true))
+                : null,
+            icon: const Icon(Icons.refresh),
+          ),
+        ]),
+      ),
+      if (!widget.serviceAvailable)
+        const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Text(
+                'Start the service to configure or test Workers. Last saved Worker details are shown below.')),
+      if (catalog.refreshing)
+        const LinearProgressIndicator(
+            semanticsLabel: 'Refreshing Worker catalog'),
+      Expanded(child: LayoutBuilder(builder: (context, constraints) {
+        final listWidth = (constraints.maxWidth * .28).clamp(140.0, 240.0);
+        return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          SizedBox(
+              width: listWidth,
+              child: ListView(
+                key: const PageStorageKey('worker-list-scroll'),
+                padding: const EdgeInsets.all(8),
                 children: [
-                  if (catalog.refreshing)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const LinearProgressIndicator(
-                              semanticsLabel: 'Refreshing Worker catalog'),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Refreshing Worker catalog, Profiles, and models…',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  if (catalog.workers.isNotEmpty) ...[
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Wrap(spacing: 8, runSpacing: 8, children: [
-                        for (final worker in catalog.workers)
-                          ChoiceChip(
-                            key: Key(
-                                'worker-selector-${worker.descriptor?.workerTypeId ?? worker.localWorker!.workerTypeId}'),
-                            label: Text(worker.descriptor?.displayName ??
-                                worker.localWorker!.workerTypeId),
-                            selected: _selectedType(catalog) ==
-                                (worker.descriptor?.workerTypeId ??
-                                    worker.localWorker!.workerTypeId),
-                            onSelected: (_) => setState(() =>
-                                _selectedWorkerType =
-                                    worker.descriptor?.workerTypeId ??
-                                        worker.localWorker!.workerTypeId),
-                          ),
-                      ]),
-                    ),
-                    const SizedBox(height: 16),
-                    for (final worker in catalog.workers)
-                      if ((worker.descriptor?.workerTypeId ??
-                              worker.localWorker!.workerTypeId) ==
-                          _selectedType(catalog))
-                        if (worker.descriptor == null)
-                          _buildRetiredWorkerCard(worker, theme)
-                        else
-                          _buildLogicalWorkerCard(worker, canConfigure, theme),
-                  ],
-                  if (catalog.descriptors.isEmpty &&
-                      catalog.localRegistryLoaded)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        'No Workers are available in the Cloud catalog.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  if (catalog.catalogError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: CopyableMessageText(
-                        catalog.catalogError!,
-                        style: TextStyle(color: theme.colorScheme.error),
-                        iconColor: theme.colorScheme.error,
-                      ),
-                    ),
-                  if (catalog.localRegistryError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: CopyableMessageText(
-                        catalog.localRegistryError!,
-                        style: TextStyle(color: theme.colorScheme.error),
-                        iconColor: theme.colorScheme.error,
-                      ),
-                    ),
-                  if (!catalog.localRegistryLoaded &&
-                      catalog.localRegistryError != null)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
-                      child: CopyableMessageText(
-                        'Local Worker setup is unavailable. Restart Workspace and try again.',
-                      ),
+                  for (final worker in catalog.workers)
+                    ListTile(
+                      key: Key(
+                          'worker-selector-${worker.descriptor?.workerTypeId ?? worker.localWorker!.workerTypeId}'),
+                      selected: identical(worker, selected),
+                      selectedTileColor: theme.colorScheme.secondaryContainer,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      title: Text(worker.descriptor?.displayName ??
+                          worker.localWorker!.workerTypeId),
+                      onTap: () => setState(() => _selectedWorkerType =
+                          worker.descriptor?.workerTypeId ??
+                              worker.localWorker!.workerTypeId),
                     ),
                 ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
+              )),
+          const VerticalDivider(width: 1),
+          Expanded(
+              child: SingleChildScrollView(
+            key: PageStorageKey('worker-details-${_selectedType(catalog)}'),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (selected != null)
+                    if (selected.descriptor == null)
+                      _buildRetiredWorkerCard(selected, theme)
+                    else
+                      _buildLogicalWorkerCard(selected, canConfigure, theme)
+                  else
+                    const Text(
+                        'No Workers are available in the Cloud catalog.'),
+                  if (catalog.catalogError case final error?)
+                    CopyableMessageText(error),
+                  if (catalog.localRegistryError case final error?)
+                    CopyableMessageText(error),
+                ]),
+          )),
+        ]);
+      })),
+    ]);
   }
 
   String? _selectedType(WorkerCatalogSnapshot catalog) {

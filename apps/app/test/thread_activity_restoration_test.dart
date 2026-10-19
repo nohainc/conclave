@@ -61,6 +61,49 @@ class ActivitySource extends AxFixtureDataSource {
 }
 
 void main() {
+  testWidgets(
+      'Conversation shows live Worker activity and keeps own requests right',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final data = ActivitySource();
+    data.histories['a']!.add(activity('a', 1));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      space: const AxSpace(
+          id: 'p', name: 'Space', branch: '', lastActivity: '', role: 'owner'),
+      thread: const AxThread(
+          id: 'a',
+          spaceId: 'p',
+          name: 'a',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: data,
+      // List rows identify the requester by name only.
+      currentUserName: 'You',
+      onBackToSpace: () {},
+      onArchive: () {},
+    ))));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    final conversation = find.byKey(const ValueKey('chat-history-scroll'));
+    expect(find.byKey(const ValueKey('work-history-scroll')), findsNothing);
+    // The live Work card, with its activity trail, is in the Conversation.
+    expect(
+        find.descendant(of: conversation, matching: find.text('a operation 1')),
+        findsOneWidget);
+    final prompt = find.descendant(
+        of: conversation,
+        matching: find.textContaining('Work in a', findRichText: true));
+    expect(tester.getRect(prompt.first).right,
+        greaterThan(tester.getRect(conversation).center.dx));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('switching concurrent running threads restores prior operations',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1000));
@@ -101,6 +144,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
     }
 
+    Finder inHistory(Finder finder) => find.descendant(
+        of: find.byKey(const ValueKey('work-history-scroll')),
+        matching: finder);
+
     void completeOperation(String id, int sequence) {
       final row = activity(id, sequence);
       data.histories[id]!.add(row);
@@ -119,20 +166,20 @@ void main() {
     await open('a');
     completeOperation('a', 1);
     await tester.pump();
-    expect(find.text('a operation 1'), findsOneWidget);
+    expect(inHistory(find.text('a operation 1')), findsOneWidget);
     await open('b');
-    expect(find.text('a operation 1'), findsNothing);
+    expect(inHistory(find.text('a operation 1')), findsNothing);
     completeOperation('b', 1);
     completeOperation('a', 2); // Arrives while the other Thread is visible.
     await tester.pump();
-    expect(find.text('b operation 1'), findsOneWidget);
+    expect(inHistory(find.text('b operation 1')), findsOneWidget);
     await open('a');
-    expect(find.text('a operation 1'), findsOneWidget);
-    expect(find.text('a operation 2'), findsOneWidget);
-    expect(find.text('b operation 1'), findsNothing);
+    expect(inHistory(find.text('a operation 1')), findsOneWidget);
+    expect(inHistory(find.text('a operation 2')), findsOneWidget);
+    expect(inHistory(find.text('b operation 1')), findsNothing);
     await open('b', replacePage: true); // Also cover disposed/recreated pages.
-    expect(find.text('b operation 1'), findsOneWidget);
-    expect(find.text('a operation 1'), findsNothing);
+    expect(inHistory(find.text('b operation 1')), findsOneWidget);
+    expect(inHistory(find.text('a operation 1')), findsNothing);
     expect(data.details, containsAll(['a', 'b']));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

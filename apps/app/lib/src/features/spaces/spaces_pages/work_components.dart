@@ -329,10 +329,9 @@ class _WorkComposer extends StatelessWidget {
       },
       itemBuilder: (context, index) {
         final request = workTimeline[index];
-        return ListenableBuilder(
+        return KeyedSubtree(
           key: ValueKey(request.id),
-          listenable: activityStore.listenableForRequest(request),
-          builder: (context, _) => KeyedSubtree(
+          child: KeyedSubtree(
             key: incomingAnchor.keyFor((request.id, 'request')),
             child: MessageDayBoundary(
               date: DateTime.tryParse(request.createdAt)?.toLocal(),
@@ -340,36 +339,43 @@ class _WorkComposer extends StatelessWidget {
                   ? null
                   : DateTime.tryParse(workTimeline[index - 1].createdAt)
                       ?.toLocal(),
-              child: _WorkTimelineCard(
-                responseAnchorKey:
-                    incomingAnchor.keyFor((request.id, 'response')),
-                request: request,
-                activities: activityStore.forRequest(request),
-                clockOffset: activityStore.clockOffsetForRequest(request),
-                realtimeStatus: realtimeStatus,
-                progressText: localWorkProgress[request.id],
-                currentUserId: currentUserId,
-                currentUserName: currentUserName,
-                workflowCatalog: workflowCatalog,
-                onReportIssue: localWorkProgress.containsKey(request.id)
-                    ? null
-                    : onReportIssue,
-                reportedIssue: reportedIssues[request.id],
-                reportingIssue: reportingIssueIds.contains(request.id),
-                issueReportError: issueReportErrors[request.id],
-                onRetryStep: localWorkProgress.containsKey(request.id)
-                    ? null
-                    : onRetryStep,
-                onCancelRun: localWorkProgress.containsKey(request.id)
-                    ? null
-                    : onCancelRun,
-              ),
+              child: requestCard(context, request,
+                  responseAnchorKey:
+                      incomingAnchor.keyFor((request.id, 'response'))),
             ),
           ),
         );
       },
     );
   }
+
+  /// The live Work Request card (prompt, Worker status, activity, answer) used
+  /// by both the Conversation and AI History.
+  Widget requestCard(BuildContext context, AxWorkRequest request,
+          {GlobalKey? responseAnchorKey}) =>
+      ListenableBuilder(
+        listenable: activityStore.listenableForRequest(request),
+        builder: (context, _) => _WorkTimelineCard(
+          responseAnchorKey: responseAnchorKey,
+          request: request,
+          activities: activityStore.forRequest(request),
+          clockOffset: activityStore.clockOffsetForRequest(request),
+          realtimeStatus: realtimeStatus,
+          progressText: localWorkProgress[request.id],
+          currentUserId: currentUserId,
+          currentUserName: currentUserName,
+          workflowCatalog: workflowCatalog,
+          onReportIssue:
+              localWorkProgress.containsKey(request.id) ? null : onReportIssue,
+          reportedIssue: reportedIssues[request.id],
+          reportingIssue: reportingIssueIds.contains(request.id),
+          issueReportError: issueReportErrors[request.id],
+          onRetryStep:
+              localWorkProgress.containsKey(request.id) ? null : onRetryStep,
+          onCancelRun:
+              localWorkProgress.containsKey(request.id) ? null : onCancelRun,
+        ),
+      );
 
   Widget controls(BuildContext context) => _buildComposerInput(
       context,
@@ -2073,7 +2079,7 @@ class _DiscussionItem {
     this.editedAt,
     this.isMe = true,
     this.aiKind,
-    this.live = false,
+    this.workRequest,
   });
 
   final String id;
@@ -2089,71 +2095,22 @@ class _DiscussionItem {
   final String? aiKind;
   bool get isAiAnswer => aiKind == 'ai_answer';
 
-  /// Projected from a Work Request still in Work history rather than stored
-  /// in Chat; it has no Chat message to edit or delete.
-  final bool live;
+  /// Set for a Work Request still in Work history; it renders as the Work
+  /// card and has no Chat message to edit or delete.
+  final AxWorkRequest? workRequest;
 }
 
-/// Conversation entries for Work Requests still in Work history: the request
-/// as its author's message, then the Worker's answer or current status.
-List<_DiscussionItem> _workConversationItems(
-  AxWorkRequest request, {
-  required String? currentUserId,
-  required String Function(DateTime) timestamp,
-}) {
-  final date = DateTime.tryParse(request.createdAt)?.toLocal();
-  final isMe = currentUserId != null &&
-      currentUserId.isNotEmpty &&
-      request.requestedByUserId == currentUserId;
-  // Immutable turn evidence names the Worker that answered.
-  final worker = request.turns
-          .map((turn) => turn.workerDisplayName.trim())
-          .where((name) => name.isNotEmpty)
-          .lastOrNull ??
-      request.steps
-          .map((step) => step.workerDisplayName?.trim())
-          .whereType<String>()
-          .where((name) => name.isNotEmpty)
-          .lastOrNull;
-  final completed = request.turns
-      .map((turn) => DateTime.tryParse(turn.completedAt ?? '')?.toLocal())
-      .whereType<DateTime>()
-      .lastOrNull;
-  final response = _workResponseText(request);
-  final failure = _workFailureText(request);
-  final answer = switch (request.status) {
-    _ when response != null && response.trim().isNotEmpty => response,
-    _ when failure != null && failure.isNotEmpty => failure,
-    'failed' => '_Failed_',
-    'cancelled' => '_Cancelled_',
-    'queued' => '_Queued…_',
-    _ => '_Working…_',
-  };
-  return [
-    _DiscussionItem(
+/// A Work Request still in Work history, shown in the Conversation with its
+/// live Work card rather than as a Chat bubble.
+_DiscussionItem _workConversationItem(AxWorkRequest request) => _DiscussionItem(
       id: 'work-${request.id}-request',
-      author: isMe ? 'You' : request.requestedByName,
-      authorId: request.requestedByUserId,
-      date: date,
+      author: request.requestedByName,
+      authorId: 'work:${request.id}',
+      date: DateTime.tryParse(request.createdAt)?.toLocal(),
       text: request.prompt,
-      sentAt: date == null ? null : timestamp(date),
-      isMe: isMe,
       aiKind: 'ai_request',
-      live: true,
-    ),
-    _DiscussionItem(
-      id: 'work-${request.id}-answer',
-      author: worker ?? 'AI',
-      authorId: 'ai:${request.id}',
-      date: completed ?? date,
-      text: answer,
-      sentAt: completed == null ? null : timestamp(completed),
-      isMe: false,
-      aiKind: 'ai_answer',
-      live: true,
-    ),
-  ];
-}
+      workRequest: request,
+    );
 
 class _DiscussionMessageBubble extends StatefulWidget {
   const _DiscussionMessageBubble({
@@ -2373,7 +2330,6 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                             ],
                             if (isMe &&
                                 widget.onDelete != null &&
-                                !widget.item.live &&
                                 !widget.item.id.startsWith('temp-')) ...[
                               _AnimatedMessageAction(
                                 tooltip: 'Delete message',

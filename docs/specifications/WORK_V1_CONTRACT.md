@@ -60,11 +60,11 @@ Thread. While creation/submission is pending, both send actions are guarded.
 The resulting Thread opens with the submitting composer mode and retains the other text draft.
 
 A Thread is one **Conversation**. Chat messages and the Thread's Work Requests
-share one timeline ordered by request time: each Work Request appears as its
-requester's message followed by the Worker's answer, or its queued, working,
-failed (user-facing failure text only), or cancelled status. These live
-entries are projections of Work history, not Chat messages, so they cannot be
-edited or deleted. Completed exchanges archived by a Work-history clear appear
+share one timeline ordered by request time: each Work Request appears as the
+same live Work card used by AI History, with the requester's prompt (right-
+aligned for the viewer's own requests), Worker status, live activity, and the
+answer or user-facing failure. These entries are projections of Work history,
+not Chat messages, so they cannot be edited or deleted as Chat. Completed exchanges archived by a Work-history clear appear
 as read-only `ai_request`/`ai_answer` Chat entries.
 
 The Conversation composer has a **Message | Ask AI** switch. Message sends a

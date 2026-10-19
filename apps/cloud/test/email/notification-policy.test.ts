@@ -15,6 +15,7 @@ describe("email notification policy", () => {
       category: "essential",
       reason: "essential",
     });
+    expect(shouldSendEmailNotification("auth.welcome.v1")).toBe(true);
     expect(shouldSendEmailNotification("space.invitation.v1")).toBe(true);
   });
 
@@ -34,7 +35,7 @@ describe("email notification policy", () => {
       category: "optional",
       reason: "collaboration-preference",
     });
-    expect(shouldSendEmailNotification("auth.welcome.v1")).toBe(false);
+    expect(shouldSendEmailNotification("space.access-revoked.v1")).toBe(false);
   });
 
   it("uses one preference to enable optional collaboration updates", () => {

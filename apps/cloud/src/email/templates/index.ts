@@ -374,22 +374,24 @@ function renderAccessRevoked(
 function renderWelcome(input: WelcomeInput): RenderedEmailContent {
   const recipientName = safeName(input.recipientName);
   const appUrl = safeUrl(input.appUrl, "appUrl");
-  const subject = "Welcome to Conclave AX";
+  const subject = "Welcome to Conclave AX — your account is ready";
   return {
     templateId: "auth.welcome.v1",
     subject,
     ...renderEmailLayout({
       templateId: "auth.welcome.v1",
       subject,
-      variant: "informational",
-      eyebrow: "Welcome",
-      title: "Welcome to Conclave AX",
-      intro: `Hi ${recipientName}, your account is ready for AI collaboration and execution.`,
+      variant: "confirmation",
+      eyebrow: "Welcome to Conclave AX",
+      title: "Congratulations! Your account is ready",
+      intro: `Congratulations, ${recipientName}! Your Conclave AX account has been created and your email address is verified.`,
       bodyHtml:
-        '<p style="margin:20px 0 0;color:#435066;font-size:15px;line-height:24px;">Create or join a Space, connect a Workspace, and start your first conversation.</p>',
+        '<p style="margin:20px 0 0;color:#435066;font-size:15px;line-height:24px;">Your workspace for AI collaboration and execution is ready. Create or join a Space, connect a Workspace, and start your first conversation.</p>',
       bodyText:
-        "Your account is ready for AI collaboration and execution. Create or join a Space, connect a Workspace, and start your first conversation.",
+        "Congratulations! Your Conclave AX account has been created and your email address is verified.\n\nYour workspace for AI collaboration and execution is ready. Create or join a Space, connect a Workspace, and start your first conversation.",
       action: { label: "Open Conclave AX", url: appUrl },
+      securityNotice:
+        "You are receiving this email because a new Conclave AX account was created with this email address.",
     }),
   };
 }
@@ -496,10 +498,10 @@ export const emailTemplateCatalog = Object.freeze([
   },
   {
     id: "auth.welcome.v1",
-    priority: "informational",
-    category: "optional",
-    availability: "planned",
-    variant: "informational",
+    priority: "essential",
+    category: "essential",
+    availability: "implemented",
+    variant: "confirmation",
     render: renderWelcome,
   },
   {

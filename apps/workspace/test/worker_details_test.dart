@@ -97,7 +97,15 @@ void main() {
       },
     ))));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('worker-catalog-chatgpt')), findsNothing);
+    await tester.tap(find.widgetWithText(Tab, 'Workers'));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('worker-catalog-chatgpt')), findsOneWidget);
+    expect(
+        tester.getTopLeft(find.byKey(const Key('worker-selector-chatgpt'))).dx,
+        lessThan(tester
+            .getTopLeft(find.byKey(const Key('worker-catalog-chatgpt')))
+            .dx));
     expect(find.byKey(const Key('worker-catalog-gemini')), findsNothing);
     await tester.ensureVisible(find.byKey(const Key('worker-selector-gemini')));
     await tester.tap(find.byKey(const Key('worker-selector-gemini')));
@@ -149,6 +157,13 @@ void main() {
     expect(find.text('CLI sign-in required'), findsOneWidget);
     expect(find.text('Needs attention'), findsNothing);
     expect(find.text('The provider CLI requires sign-in.'), findsOneWidget);
+    await tester.tap(find.widgetWithText(Tab, 'Workspace'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('worker-catalog-gemini')), findsNothing);
+    await tester.tap(find.widgetWithText(Tab, 'Workers'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('worker-catalog-gemini')), findsOneWidget);
+
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

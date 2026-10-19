@@ -82,6 +82,7 @@ class WorkspaceDashboard extends StatefulWidget {
 }
 
 class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
+  int _selectedTab = 0;
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -110,265 +111,240 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                 ? 'Service running · Cloud connected${transportLabel == null ? '' : ' · $transportLabel'}'
                 : 'Service running · Cloud disconnected')
             : 'Service ${snapshot.serviceStatusDescription.toLowerCase()}';
-    return Column(
-      children: [
-        // App Header Bar
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            border: Border(
-              bottom: BorderSide(
-                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+    final showWorkers = snapshot.workspaceReady || effectiveSignedIn;
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          // App Header Bar
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              border: Border(
+                bottom: BorderSide(
+                  color:
+                      theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                ),
               ),
             ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    ConclaveBrand.logoMark(size: 26),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Conclave Workspace',
-                      style: ConclaveTypography.wordmark.copyWith(fontSize: 14),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'v${snapshot.appVersion}',
+            child: Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      ConclaveBrand.logoMark(size: 26),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Conclave Workspace',
+                        style:
+                            ConclaveTypography.wordmark.copyWith(fontSize: 14),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'v${snapshot.appVersion}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: serviceHealthy
+                              ? ConclaveBrand.success
+                              : ConclaveBrand.warning,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          connectionLabel,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: isConnected
+                                ? (theme.brightness == Brightness.dark
+                                    ? const Color(0xff86efac)
+                                    : const Color(0xff15803d))
+                                : (theme.brightness == Brightness.dark
+                                    ? const Color(0xfffcd34d)
+                                    : const Color(0xffb45309)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                if (userEmail != null && userEmail.isNotEmpty) ...[
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 240),
+                    child: Text(
+                      userEmail,
+                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: serviceHealthy
-                            ? ConclaveBrand.success
-                            : ConclaveBrand.warning,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        connectionLabel,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: isConnected
-                              ? (theme.brightness == Brightness.dark
-                                  ? const Color(0xff86efac)
-                                  : const Color(0xff15803d))
-                              : (theme.brightness == Brightness.dark
-                                  ? const Color(0xfffcd34d)
-                                  : const Color(0xffb45309)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              if (userEmail != null && userEmail.isNotEmpty) ...[
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 240),
-                  child: Text(
-                    userEmail,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w500,
-                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              PopupMenuButton<_HeaderMenuAction>(
-                icon: const Icon(Icons.menu, size: 20),
-                tooltip: 'Menu',
-                constraints: const BoxConstraints(minWidth: 200),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                onSelected: (action) {
-                  switch (action) {
-                    case _HeaderMenuAction.openConclaveAX:
-                      WorkspaceLifecycleController.openAX();
-                      break;
-                    case _HeaderMenuAction.checkForUpdates:
-                      widget.onCheckForUpdates?.call();
-                      break;
-                    case _HeaderMenuAction.about:
-                      showAboutDialog(
-                        context: context,
-                        applicationName: 'Conclave Workspace',
-                        applicationVersion: 'v${snapshot.appVersion}',
-                        applicationIcon: ConclaveBrand.logoMark(size: 40),
-                        children: const [
-                          Text(
-                            'Conclave Workspace Runtime and Local Worker Manager.',
-                          ),
-                        ],
-                      );
-                      break;
-                    case _HeaderMenuAction.signOut:
-                      widget.onSignOut?.call();
-                      break;
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: _HeaderMenuAction.openConclaveAX,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.open_in_new, size: 16),
-                        SizedBox(width: 10),
-                        Text('Open Conclave AX'),
-                      ],
-                    ),
+                  const SizedBox(width: 8),
+                ],
+                PopupMenuButton<_HeaderMenuAction>(
+                  icon: const Icon(Icons.menu, size: 20),
+                  tooltip: 'Menu',
+                  constraints: const BoxConstraints(minWidth: 200),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  const PopupMenuItem(
-                    value: _HeaderMenuAction.checkForUpdates,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.system_update_alt, size: 16),
-                        SizedBox(width: 10),
-                        Text('Check for Updates'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: _HeaderMenuAction.about,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.info_outline, size: 16),
-                        SizedBox(width: 10),
-                        Text('About'),
-                      ],
-                    ),
-                  ),
-                  if (effectiveSignedIn && widget.onSignOut != null) ...[
-                    const PopupMenuDivider(),
+                  onSelected: (action) {
+                    switch (action) {
+                      case _HeaderMenuAction.openConclaveAX:
+                        WorkspaceLifecycleController.openAX();
+                        break;
+                      case _HeaderMenuAction.checkForUpdates:
+                        widget.onCheckForUpdates?.call();
+                        break;
+                      case _HeaderMenuAction.about:
+                        showAboutDialog(
+                          context: context,
+                          applicationName: 'Conclave Workspace',
+                          applicationVersion: 'v${snapshot.appVersion}',
+                          applicationIcon: ConclaveBrand.logoMark(size: 40),
+                          children: const [
+                            Text(
+                              'Conclave Workspace Runtime and Local Worker Manager.',
+                            ),
+                          ],
+                        );
+                        break;
+                      case _HeaderMenuAction.signOut:
+                        widget.onSignOut?.call();
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => [
                     const PopupMenuItem(
-                      value: _HeaderMenuAction.signOut,
+                      value: _HeaderMenuAction.openConclaveAX,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.logout, size: 16),
+                          Icon(Icons.open_in_new, size: 16),
                           SizedBox(width: 10),
-                          Text('Sign out'),
+                          Text('Open Conclave AX'),
                         ],
                       ),
                     ),
-                  ],
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        // Content Area
-        Expanded(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 820),
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(24, 24, 24, 0),
-                      child: Text(
-                        'Workspace',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    const PopupMenuItem(
+                      value: _HeaderMenuAction.checkForUpdates,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.system_update_alt, size: 16),
+                          SizedBox(width: 10),
+                          Text('Check for Updates'),
+                        ],
                       ),
                     ),
-                    _WorkspaceTab(
-                      snapshot: snapshot,
-                      signedIn: effectiveSignedIn,
-                      credentialStore: widget.credentialStore,
-                      onStartService: widget.onStartService,
-                      onRegisterService: widget.onRegisterService,
-                      onUnregisterService: widget.onUnregisterService,
-                      onRestartService: widget.onRestartService,
-                      onRegister: widget.onRegister,
-                      onRecoverCredential: widget.onRecoverCredential,
-                      onChangeWorkspaceName: widget.onChangeWorkspaceName,
-                      onRetry: widget.onRetry,
-                      onConnectCloud: widget.onConnectCloud,
-                      onDisconnectCloud: widget.onDisconnectCloud,
-                      onChangeWorkRoot: widget.onChangeWorkRoot,
-                      preventSleep: widget.preventSleep,
-                      onChangePreventSleep: widget.onChangePreventSleep,
-                      onLoadSlots: widget.onLoadWorkerSlots,
-                      onResetSlots: widget.onResetWorkerSlots,
-                      onSetParallelSlots: widget.onSetParallelSlots,
-                      onStopService: widget.onStopService,
-                      onRelease: widget.onRelease,
-                      onReset: widget.onReset,
+                    const PopupMenuItem(
+                      value: _HeaderMenuAction.about,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.info_outline, size: 16),
+                          SizedBox(width: 10),
+                          Text('About'),
+                        ],
+                      ),
                     ),
-                    if (snapshot.workspaceReady || effectiveSignedIn) ...[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                    if (effectiveSignedIn && widget.onSignOut != null) ...[
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(
+                        value: _HeaderMenuAction.signOut,
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Expanded(
-                              child: Text(
-                                'Workers',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Check for Worker updates',
-                              onPressed: snapshot.serviceHealthy ||
-                                      snapshot.serviceRunning
-                                  ? () => unawaited(
-                                        widget.workerCatalogCoordinator
-                                            ?.refresh(force: true),
-                                      )
-                                  : null,
-                              icon: const Icon(Icons.refresh),
-                            ),
+                            Icon(Icons.logout, size: 16),
+                            SizedBox(width: 10),
+                            Text('Sign out'),
                           ],
                         ),
-                      ),
-                      _WorkersTab(
-                        key: ValueKey(widget.workerRevision),
-                        catalogCoordinator: widget.workerCatalogCoordinator,
-                        serviceAvailable:
-                            snapshot.serviceHealthy || snapshot.serviceRunning,
-                        isSelected: true,
-                        onReadinessCheck: widget.onReadinessCheck,
-                        onConfigureWorker: widget.onConfigureWorker,
-                        onSetWorkerEnabled: widget.onSetWorkerEnabled,
-                        onSetFullLocalAccess: widget.onSetFullLocalAccess,
-                        requireStepUp: widget.requireStepUp,
                       ),
                     ],
                   ],
                 ),
-              ),
+              ],
             ),
           ),
-        ),
-      ],
+
+          if (showWorkers)
+            TabBar(
+              onTap: (index) => setState(() => _selectedTab = index),
+              tabs: const [Tab(text: 'Workspace'), Tab(text: 'Workers')],
+            ),
+          Expanded(
+            child: IndexedStack(
+              index: showWorkers ? _selectedTab : 0,
+              children: [
+                SingleChildScrollView(
+                  key: const PageStorageKey('workspace-settings-scroll'),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 820),
+                      child: _WorkspaceTab(
+                        snapshot: snapshot,
+                        signedIn: effectiveSignedIn,
+                        credentialStore: widget.credentialStore,
+                        onStartService: widget.onStartService,
+                        onRegisterService: widget.onRegisterService,
+                        onUnregisterService: widget.onUnregisterService,
+                        onRestartService: widget.onRestartService,
+                        onRegister: widget.onRegister,
+                        onRecoverCredential: widget.onRecoverCredential,
+                        onChangeWorkspaceName: widget.onChangeWorkspaceName,
+                        onRetry: widget.onRetry,
+                        onConnectCloud: widget.onConnectCloud,
+                        onDisconnectCloud: widget.onDisconnectCloud,
+                        onChangeWorkRoot: widget.onChangeWorkRoot,
+                        preventSleep: widget.preventSleep,
+                        onChangePreventSleep: widget.onChangePreventSleep,
+                        onLoadSlots: widget.onLoadWorkerSlots,
+                        onResetSlots: widget.onResetWorkerSlots,
+                        onSetParallelSlots: widget.onSetParallelSlots,
+                        onStopService: widget.onStopService,
+                        onRelease: widget.onRelease,
+                        onReset: widget.onReset,
+                      ),
+                    ),
+                  ),
+                ),
+                if (showWorkers)
+                  _WorkersTab(
+                    key: ValueKey(widget.workerRevision),
+                    catalogCoordinator: widget.workerCatalogCoordinator,
+                    serviceAvailable:
+                        snapshot.serviceHealthy || snapshot.serviceRunning,
+                    isSelected: _selectedTab == 1,
+                    onReadinessCheck: widget.onReadinessCheck,
+                    onConfigureWorker: widget.onConfigureWorker,
+                    onSetWorkerEnabled: widget.onSetWorkerEnabled,
+                    onSetFullLocalAccess: widget.onSetFullLocalAccess,
+                    requireStepUp: widget.requireStepUp,
+                  )
+                else
+                  const SizedBox.shrink(),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

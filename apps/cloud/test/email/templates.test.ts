@@ -233,7 +233,7 @@ describe("email template architecture", () => {
     expect(transport.messages).toHaveLength(1);
     expect(transport.messages[0]).toMatchObject({
       to: "ada@example.com",
-      subject: "Welcome to Conclave AX",
+      subject: "Welcome to Conclave AX — your account is ready",
       from: { email: "conclave@conclaveax.com", name: "Conclave AX" },
     });
   });
