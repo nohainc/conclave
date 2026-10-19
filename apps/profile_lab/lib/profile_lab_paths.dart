@@ -33,20 +33,39 @@ class ProfileLabPaths {
       Directory('${applicationSupportDirectory.path}/drafts');
 
   /// Repository that holds the Profile files. Profile Lab is an internal tool
-  /// that runs from a checkout: this is the nearest ancestor containing `.git`
-  /// of the current directory or of the running executable. Tests inject it.
-  late final Directory? repositoryRoot = _repositoryRoot ?? _findRepository();
+  /// that reads Profile files from a checkout. Candidates, in order: the
+  /// `CONCLAVE_REPOSITORY` environment variable, the nearest ancestor of the
+  /// current directory or of the running executable, and the checkout
+  /// remembered from an earlier run (a release app started from Finder or
+  /// `/Applications` has neither). A candidate counts only if it really holds
+  /// `apps/profile_lab/assets/profiles`. Tests inject it.
+  late final Directory? repositoryRoot =
+      _repositoryRoot ?? _findRepository(rememberedRepositoryFile);
+
+  static const _profilesRelativePath = 'apps/profile_lab/assets/profiles';
+
+  /// Checkout path remembered for launches that do not start inside it:
+  /// `~/Library/Application Support/Conclave/Profile Lab/repository_root.txt`
+  File get rememberedRepositoryFile =>
+      File('${applicationSupportDirectory.path}/repository_root.txt');
 
   /// Worker Profile source files, one per Worker:
   /// `<repository>/apps/profile_lab/assets/profiles/<workerTypeId>.json`
   Directory? get profilesDirectory {
     final root = repositoryRoot;
-    return root == null
-        ? null
-        : Directory('${root.path}/apps/profile_lab/assets/profiles');
+    return root == null ? null : Directory('${root.path}/$_profilesRelativePath');
   }
 
-  static Directory? _findRepository() {
+  static bool _holdsProfiles(Directory dir) =>
+      FileSystemEntity.typeSync('${dir.path}/$_profilesRelativePath') ==
+      FileSystemEntityType.directory;
+
+  Directory? _findRepository(File remembered) {
+    final fromEnvironment = Platform.environment['CONCLAVE_REPOSITORY'];
+    if (fromEnvironment != null && fromEnvironment.isNotEmpty) {
+      final dir = Directory(fromEnvironment);
+      if (_holdsProfiles(dir)) return dir;
+    }
     for (final start in [
       Directory.current.absolute.path,
       File(Platform.resolvedExecutable).parent.absolute.path,
@@ -54,13 +73,28 @@ class ProfileLabPaths {
       var dir = Directory(start);
       while (true) {
         if (FileSystemEntity.typeSync('${dir.path}/.git') !=
-            FileSystemEntityType.notFound) {
+                FileSystemEntityType.notFound &&
+            _holdsProfiles(dir)) {
+          try {
+            remembered.parent.createSync(recursive: true);
+            remembered.writeAsStringSync(dir.path);
+          } on Object {
+            // Remembering the checkout is best effort.
+          }
           return dir;
         }
         final parent = dir.parent;
         if (parent.path == dir.path) break;
         dir = parent;
       }
+    }
+    try {
+      if (remembered.existsSync()) {
+        final dir = Directory(remembered.readAsStringSync().trim());
+        if (_holdsProfiles(dir)) return dir;
+      }
+    } on Object {
+      // Fall through: no usable remembered checkout.
     }
     return null;
   }

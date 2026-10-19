@@ -17,8 +17,11 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     profileFileUpdateAvailable = false;
     if (directory == null) {
       profileFilePath = null;
-      profileFileError = 'Profile Lab must run from a repository checkout '
-          '(no .git found above the working directory or the app binary).';
+      profileFileError = 'Profile files not found: no checkout with '
+          'apps/profile_lab/assets/profiles was found above the working '
+          'directory or the app binary, and none is remembered from an '
+          'earlier run. Start Profile Lab once from the checkout (flutter '
+          'run), or set CONCLAVE_REPOSITORY to the checkout path.';
       notifyListeners();
       return;
     }
