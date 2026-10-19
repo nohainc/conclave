@@ -1571,7 +1571,9 @@ class CliWorkerEngine {
               request,
               code: interpreted.issueCode ?? WorkerIssueCode.providerFailure,
               message: interpreted.emptyResponse
-                  ? 'The provider returned an empty answer${emptyRetried ? ' repeatedly' : ''}. Please retry.'
+                  ? (toolSeen
+                        ? 'The provider ran a tool and then stopped without an answer. Please retry.'
+                        : 'The provider returned an empty answer${emptyRetried ? ' repeatedly' : ''}. Please retry.')
                   : 'Provider CLI execution failed',
               stage: 'provider_execution',
               detail: failureDetail.isEmpty ? null : failureDetail,
