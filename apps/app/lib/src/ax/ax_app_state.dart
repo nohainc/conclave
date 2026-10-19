@@ -758,6 +758,20 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
       ),
     );
     if (values == null || values.$1.isEmpty) return;
+    final current = store.spaces.items
+            .where((item) => item.id == space.id)
+            .firstOrNull ??
+        space;
+    if (values.$1 != space.name && current.hasActiveWork) {
+      final proceed = await _confirmSpaceAction(
+        title: 'Rename Space while Work is running?',
+        message: 'A Thread in this Space is running. Its folder is renamed '
+            'on the next request, which can interrupt Work that is using it. '
+            'Rename now, or wait until the Work finishes.',
+        action: 'Rename',
+      );
+      if (!proceed) return;
+    }
     try {
       await store.collaboration.editSpace(
         space,
