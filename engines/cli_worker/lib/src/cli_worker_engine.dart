@@ -2453,6 +2453,15 @@ class CliWorkerEngine {
               finalText == null &&
               !markedSuccess,
           terminalObserved: terminalObserved,
+          reason: [
+            'exit=$exitCode',
+            'matched $kind',
+            if (terminalStatus != null) 'status=$terminalStatus',
+            if (!terminalObserved) 'no terminal event',
+            if (providerError) 'provider error reported',
+            if (skippedLines > 0) 'skipped $skippedLines non-JSON lines',
+            _eventShape(events),
+          ].join(', '),
         );
     }
     return _InterpretedOutput(
