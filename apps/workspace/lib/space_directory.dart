@@ -117,12 +117,6 @@ class SpaceDirectoryResolver {
           adoptingLegacy = true;
         }
       }
-      if (directory != null && !adoptingLegacy && await directory.exists()) {
-        // The Space was renamed in the app: follow it with the folder, but
-        // only a folder that carries this Space's own marker.
-        directory = await _renameToSpaceName(
-            directory, spaceId, spaceName, registry, ownerUserId, state);
-      }
     } else {
       directory = await _findMarkedDirectory(spaceId, state.owners);
       directory ??= await _findLegacySpaceDirectory(spaceId);
@@ -283,65 +277,6 @@ class SpaceDirectoryResolver {
       }
     }
     return null;
-  }
-
-  /// Renames the Space folder to follow the Space's name. Keeps the folder
-  /// when the new name is taken, when the name only differs by the " (2)"
-  /// suffix, or when the rename fails; the registry then keeps the old path.
-  Future<Directory> _renameToSpaceName(
-    Directory directory,
-    String spaceId,
-    String spaceName,
-    Map<String, Map<String, Object?>> registry,
-    String? ownerUserId,
-    _RegistryState state,
-  ) async {
-    if (!await _markerMatches(directory, spaceId)) return directory;
-    final desired = _sanitizeName(spaceName);
-    final current = directory.path.split(Platform.pathSeparator).last;
-    if (current == desired ||
-        RegExp('^${RegExp.escape(desired)} \\(\\d+\\)\$').hasMatch(current)) {
-      return directory;
-    }
-    final target = Directory(_join(directory.parent.path, desired));
-    final sameFolderOtherCase =
-        target.path.toLowerCase() == directory.path.toLowerCase();
-    if (!sameFolderOtherCase &&
-        await FileSystemEntity.type(target.path, followLinks: false) !=
-            FileSystemEntityType.notFound) {
-      return directory;
-    }
-    final targetRelative = _relativeToRoot(target.path);
-    if (registry.entries.any((entry) =>
-        entry.key != spaceId && entry.value['relativePath'] == targetRelative)) {
-      return directory;
-    }
-    try {
-      var renamed = directory;
-      if (sameFolderOtherCase) {
-        final temporary = Directory(
-            '${directory.path}.rename-$pid-${DateTime.now().microsecondsSinceEpoch}');
-        await directory.rename(temporary.path);
-        renamed = await temporary.rename(target.path);
-      } else {
-        renamed = await directory.rename(target.path);
-      }
-      final markerFile = File(_join(renamed.path, _markerFileName));
-      try {
-        final value = jsonDecode(await markerFile.readAsString());
-        if (value is Map) {
-          final updated = Map<String, Object?>.from(value);
-          updated['displayName'] =
-              spaceName.trim().isEmpty ? 'Space' : spaceName.trim();
-          await markerFile.writeAsString(jsonEncode(updated), flush: true);
-        }
-      } on Object {
-        // The marker keeps the old display name; identity (spaceId) is intact.
-      }
-      return renamed;
-    } on FileSystemException {
-      return directory;
-    }
   }
 
   /// The first characters of the user ID. The folder is allocated once and

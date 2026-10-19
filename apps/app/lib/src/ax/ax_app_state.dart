@@ -758,10 +758,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
       ),
     );
     if (values == null || values.$1.isEmpty) return;
-    final current = store.spaces.items
-            .where((item) => item.id == space.id)
-            .firstOrNull ??
-        space;
+    final current =
+        store.spaces.items.where((item) => item.id == space.id).firstOrNull ??
+            space;
     if (values.$1 != space.name && current.hasActiveWork) {
       final proceed = await _confirmSpaceAction(
         title: 'Rename Space while Work is running?',
