@@ -1,3 +1,13 @@
+---
+interface Props {
+  currentPath?: string;
+}
+
+const { currentPath = "/" } = Astro.props;
+const normalize = (path: string) => (path.endsWith("/") ? path : `${path}/`);
+const activePath = normalize(currentPath);
+---
+
 <header class="site-header">
   <a class="brand" href="/" aria-label="Conclave AX home">
     <img class="brand-mark" src="/conclave_mark.svg" alt="" width="32" height="32" aria-hidden="true" style="object-fit:contain;background:transparent;box-shadow:none;border-radius:0" />
@@ -7,13 +17,13 @@
     <span class="menu-toggle__label">Menu</span>
     <span class="menu-toggle__icon" aria-hidden="true"><span></span><span></span><span></span></span>
   </button>
-  <nav class="site-nav" id="site-navigation" aria-label="Primary navigation">
-    <a href="/#product">Product</a>
-    <a href="/how-it-works/" data-site-event="navigation.how_it_works">How it works</a>
-    <a href="/workers/">AI & Workers</a>
-    <a href="/use-cases/">Use cases</a>
-    <a href="/security/">Security</a>
-    <a href="/downloads/">Downloads</a>
+  <nav class="site-nav" id="site-navigation" aria-label="Primary">
+    <a href="/#product" aria-current={activePath === "/" ? "page" : undefined}>Product</a>
+    <a href="/how-it-works/" aria-current={activePath === "/how-it-works/" ? "page" : undefined} data-site-event="navigation.how_it_works">How it works</a>
+    <a href="/workers/" aria-current={activePath === "/workers/" ? "page" : undefined}>AI & Workers</a>
+    <a href="/use-cases/" aria-current={activePath === "/use-cases/" ? "page" : undefined}>Use cases</a>
+    <a href="/security/" aria-current={activePath === "/security/" ? "page" : undefined}>Security</a>
+    <a href="/downloads/" aria-current={activePath === "/downloads/" ? "page" : undefined}>Downloads</a>
     <a class="button button--primary nav-cta" href="https://app.conclaveax.com" data-site-event="cta.open_app">Open Conclave AX <span aria-hidden="true">→</span></a>
   </nav>
 </header>

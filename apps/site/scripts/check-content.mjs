@@ -137,8 +137,10 @@ for (const [route, file] of routes) {
   if (!description?.trim()) errors.push(`${route}: description missing`);
   if (!canonical?.startsWith("https://conclaveax.com/"))
     errors.push(`${route}: canonical URL is malformed`);
-  if (!ogImage?.startsWith("https://conclaveax.com/"))
-    errors.push(`${route}: OpenGraph image URL is malformed`);
+  if (ogImage !== "https://conclaveax.com/social-preview.png")
+    errors.push(
+      `${route}: OpenGraph image URL must use https://conclaveax.com/social-preview.png (found: "${ogImage}")`,
+    );
   if (!heading?.includes(contract.heading))
     errors.push(
       `${route}: critical h1 content changed or missing (found: "${heading}", expected to contain: "${contract.heading}")`,
@@ -147,6 +149,10 @@ for (const [route, file] of routes) {
     if (!visibleText.includes(phrase))
       errors.push(`${route}: required content missing: ${phrase}`);
   }
+  if (/secure vault/i.test(visibleText))
+    errors.push(
+      `${route}: must not claim Conclave stores provider credentials in a central vault`,
+    );
 }
 
 const home = sources.get("/");

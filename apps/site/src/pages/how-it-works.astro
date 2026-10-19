@@ -6,6 +6,7 @@ import SectionHeader from "../components/SectionHeader.astro";
 import SiteLayout from "../layouts/SiteLayout.astro";
 import WorkflowStep from "../components/WorkflowStep.astro";
 import SpaceThreadShowcase from "../components/SpaceThreadShowcase.astro";
+import InteractiveWorkflow from "../components/InteractiveWorkflow.astro";
 ---
 
 <SiteLayout
@@ -22,7 +23,7 @@ import SpaceThreadShowcase from "../components/SpaceThreadShowcase.astro";
       />
 
       <div class="workflow-layout">
-        <ol class="workflow-steps">
+        <ol class="workflow-steps" role="list">
           <WorkflowStep number="01" title="Create a Space">
             <p>Set up a shared space for your family, startup, client engagement, or engineering team with customized member permissions and privacy settings.</p>
           </WorkflowStep>
@@ -32,7 +33,7 @@ import SpaceThreadShowcase from "../components/SpaceThreadShowcase.astro";
           </WorkflowStep>
 
           <WorkflowStep number="03" title="Connect & share AI">
-            <p>Space members can contribute supported AI accounts (such as ChatGPT or Gemini) without ever exposing API keys or credentials.</p>
+            <p>Space members can contribute supported AI Workers (such as ChatGPT or Gemini) without ever exposing API keys or credentials.</p>
           </WorkflowStep>
 
           <WorkflowStep number="04" title="Open a Thread">
@@ -47,6 +48,7 @@ import SpaceThreadShowcase from "../components/SpaceThreadShowcase.astro";
             <p>Turn complex questions into multi-step workflows. Coordinate multiple AI models to research, analyze, draft, test, and verify results.</p>
           </WorkflowStep>
         </ol>
+        <InteractiveWorkflow />
       </div>
 
       <div class="how-it-works-principles">
@@ -56,7 +58,7 @@ import SpaceThreadShowcase from "../components/SpaceThreadShowcase.astro";
         </div>
         <div>
           <strong>Private credentials.</strong>
-          <span>Sharing an AI account authorizes use for the space; credentials remain securely encrypted and private.</span>
+          <span>Sharing an AI Worker authorizes use for the space; credentials remain local to their owner and never reach collaborators.</span>
         </div>
         <div>
           <strong>Multi-model continuity.</strong>
@@ -74,7 +76,7 @@ import SpaceThreadShowcase from "../components/SpaceThreadShowcase.astro";
       </div>
 
       <div class="actions" style="justify-content: center; margin-top: var(--space-16);">
-        <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
+        <Button href="https://app.conclaveax.com" label="Open Conclave AX" event="cta.open_app" />
         <Button href="/use-cases/" label="Explore use cases" variant="secondary" />
       </div>
     </Container>

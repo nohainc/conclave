@@ -38,11 +38,11 @@ import SiteLayout from "../layouts/SiteLayout.astro";
           </FeatureCard>
 
           <FeatureCard title="AI Account Privacy" headingLevel={2}>
-            <p>API keys and credentials remain encrypted in Conclave's secure vault. Sharing an AI account authorizes eligible space members to run queries; it never reveals the underlying secret.</p>
+            <p>Provider credentials remain local to the owner's machine and CLI environment. Granting a Worker to a space authorizes eligible members to run queries; it never reveals the underlying secret.</p>
           </FeatureCard>
 
           <FeatureCard title="Workspace Isolation" headingLevel={2}>
-            <p>For technical teams running code or CLI tools, each thread executes in an isolated, ID-derived directory on the authorized host machine with runtime lease serialization.</p>
+            <p>For technical teams running code or CLI tools, work executes in the Space Work Directory on the authorized host machine with isolated Thread sessions and mutation lease serialization.</p>
           </FeatureCard>
 
           <FeatureCard title="Audit & Attribution" headingLevel={2}>
@@ -53,11 +53,11 @@ import SiteLayout from "../layouts/SiteLayout.astro";
 
       <div class="security-callout" style="margin-top: var(--space-12);">
         <strong>Instant revocation with zero password churn.</strong>
-        <span>Revoking an AI account grant or removing a space collaborator immediately cuts off AI access without requiring you to regenerate API keys or reset passwords.</span>
+        <span>Revoking a Workspace or Worker grant or removing a space collaborator immediately cuts off AI access without requiring you to regenerate API keys or reset passwords.</span>
       </div>
 
       <div class="actions" style="justify-content: center; margin-top: var(--space-12);">
-        <Button href="https://app.conclaveax.com" label="Open Conclave AX" />
+        <Button href="https://app.conclaveax.com" label="Open Conclave AX" event="cta.open_app" />
         <Button href="/privacy/" label="Read privacy policy" variant="secondary" />
       </div>
     </Container>

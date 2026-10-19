@@ -14,10 +14,10 @@ import SiteLayout from "../layouts/SiteLayout.astro";
         <p>Conclave Cloud authenticates people and applies Space membership and role checks to shared collaboration data such as Threads, discussions, Runs, artifacts, and Space settings. Joining a Space does not make another person's execution Workspace or private AI Accounts generally available.</p>
 
         <h2>Workspaces and local execution</h2>
-        <p>A Workspace represents an execution environment controlled by its owner. A Space can use that environment only through an explicit Workspace grant. Work runs in an ID-derived Thread directory, and local repository access and Worker processes remain subject to Workspace runtime controls.</p>
+        <p>A Workspace represents an execution environment controlled by its owner. A Space can use that environment only through an explicit Workspace grant. Work runs in the Space Work Directory under coordinated Thread mutation leases, and local repository access and Worker processes remain subject to Workspace runtime controls.</p>
 
         <h2>AI Accounts</h2>
-        <p>AI Accounts represent external provider identities. They are private by default and are authorized independently from Workspace access. Sharing an Account authorizes eligible use; it does not expose the underlying plaintext credential to Space collaborators.</p>
+        <p>AI Accounts represent external provider identities authenticated locally on the owner's Workspace. They are private by default and never enter Cloud APIs in plaintext. Granting a Worker to a Space authorizes eligible use; it does not expose underlying credentials to Space collaborators.</p>
 
         <h2>Workers and assignment data</h2>
         <p>Workers receive scoped assignment context needed for their task rather than Conclave user sessions or unrestricted machine credentials. Execution history may include task metadata, results, artifacts, findings, usage, and evidence needed to operate and audit the workflow.</p>

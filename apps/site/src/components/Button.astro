@@ -3,9 +3,10 @@ interface Props {
   href: string;
   label: string;
   variant?: "primary" | "secondary";
+  event?: string;
 }
 
-const { href, label, variant = "primary" } = Astro.props;
+const { href, label, variant = "primary", event } = Astro.props;
 ---
 
-<a class:list={["button", `button--${variant}`]} href={href}>{label}</a>
+<a class:list={["button", `button--${variant}`]} href={href} data-site-event={event}>{label}</a>

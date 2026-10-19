@@ -62,6 +62,18 @@ for (const file of files) {
     );
   if (/user-scalable\s*=\s*["']no|maximum-scale\s*=\s*["']1/i.test(source))
     errors.push(`${relative}: viewport prevents zoom`);
+  if (
+    !/<a\b[^>]*class="[^"]*\bskip-link\b[^"]*"[^>]*href="#main-content"/i.test(
+      source,
+    )
+  )
+    errors.push(`${relative}: missing skip-link to #main-content`);
+  if (!/<main\b[^>]*\bid="main-content"/i.test(source))
+    errors.push(`${relative}: main landmark missing id="main-content"`);
+  if (/<(?:div|span)\b(?![^>]*\brole=)[^>]*\baria-label=/i.test(source))
+    errors.push(
+      `${relative}: aria-label used on generic div/span without an explicit ARIA role`,
+    );
 }
 
 if (errors.length)
