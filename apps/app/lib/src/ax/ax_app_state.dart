@@ -692,6 +692,16 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
               });
               return;
             }
+            final taken = store.spaces.items.any((other) =>
+                other.id != space.id &&
+                other.role == 'owner' &&
+                other.name.trim().toLowerCase() == trimmedName.toLowerCase());
+            if (taken) {
+              setDialogState(() {
+                errorText = 'You already have a Space with this name.';
+              });
+              return;
+            }
             Navigator.pop(
               dialogContext,
               (trimmedName, description.trim()),
