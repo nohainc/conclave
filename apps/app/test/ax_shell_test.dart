@@ -260,7 +260,7 @@ void main() {
             widget.image is AssetImage &&
             (widget.image as AssetImage).assetName ==
                 'assets/auth/$provider${linked ? '' : '-link'}.png'));
-        expect(icon.width, 24);
+        expect(icon.width, linked ? 24 : 16);
         if (!linked) {
           final row = find.byKey(const ValueKey('profile-account-links'));
           expect(find.descendant(of: row, matching: find.text('Link $label')),
@@ -269,11 +269,13 @@ void main() {
               find.descendant(of: row, matching: find.text('Delete account')),
               findsOneWidget);
           expect(find.widgetWithText(TextButton, 'Link $label'), findsNothing);
+          expect(tester.widget<Text>(find.text('Link $label')).style?.color,
+              Colors.white);
           expect(find.widgetWithText(OutlinedButton, 'Delete account'),
               findsNothing);
           expect(
               tester.widget<Text>(find.text('Link $label')).style?.decoration,
-              TextDecoration.underline);
+              TextDecoration.none);
         }
       }
       expect(tester.takeException(), isNull);
@@ -321,11 +323,27 @@ void main() {
         expect(text.style?.fontSize, 13);
         expect(text.style?.fontFamily, theme.textTheme.bodySmall?.fontFamily);
         expect(text.style?.fontWeight, FontWeight.w500);
-        expect(text.style?.color, theme.colorScheme.onSurface);
+        expect(text.style?.color, Colors.white);
         expect(tester.getSize(finder).width, greaterThan(60));
         expect(tester.getSize(finder).height, greaterThan(0));
       }
       expect(find.text('Expiry unavailable'), findsNWidgets(2));
+      final deviceIcons = find.byIcon(Icons.devices_outlined);
+      for (var index = 0; index < 2; index++) {
+        final icon = tester.widget<Icon>(deviceIcons.at(index));
+        expect(icon.size, 18);
+        expect(icon.color, Colors.white);
+        final label =
+            find.text(index == 0 ? 'Browser session' : 'Chrome on macOS');
+        final expiry = find.text('Expiry unavailable').at(index);
+        expect(tester.getTopLeft(label).dx, tester.getTopLeft(expiry).dx);
+        expect(
+            (tester.getTopLeft(label).dy -
+                    tester.getTopLeft(deviceIcons.at(index)).dy)
+                .abs(),
+            lessThan(1));
+        expect(tester.widget<Text>(expiry).style?.color, Colors.white);
+      }
       expect(find.text('Linked login methods'), findsNothing);
       expect(find.text('No linked methods loaded.'), findsNothing);
       expect(find.text('Link GitHub'), findsOneWidget);

@@ -22,9 +22,9 @@ missing or invisible user-agent metadata displays “Browser session”.
 
 Name and email edits open from accessible edit icons immediately after each
 value; separate Rename and Update email buttons are omitted. Available provider
-links and Delete account use underlined text links in one horizontally scrollable
+links and Delete account use text links without underlines in one horizontally scrollable
 row, keeping one row even on narrow screens. Connected providers still hide
-their link actions. Link icons use alternative official 24px assets:
+their link actions. Link icons use alternative official 16px marks:
 
 - GitHub: https://github.githubassets.com/favicons/favicon.png
 - Google: https://www.google.com/images/branding/googleg/1x/googleg_standard_color_128dp.png
@@ -33,8 +33,19 @@ Links support keyboard focus and activation and expose link semantics.
 Linked-method marks remain 24px.
 
 Session rows inherit the app's body typography: a 13px medium-weight browser
-label, a 12px secondary expiry line, muted 20px device icons, and matching small
+label, a 12px white expiry line, 18px white device icons, and matching small
 status/action text. Icons, details, and trailing status/actions align at the top
 so wrapped labels do not shift controls vertically. Current is a status label,
 not a disabled button. Expiry timestamps display as “Expires 7 Oct 2026, 10:00
 UTC”; missing or invalid timestamps display “Expiry unavailable”.
+
+Session browser labels and expiry details share the same left edge, with an
+8px gap after the device icon. The icon aligns with the browser label rather
+than the combined two-line block.
+
+The action row follows the profile and any linked methods without section-sized
+spacers. An empty linked-method list takes no layout space.
+
+Provider action labels and all session row icons/text use explicit white per the
+account-page design. All three account action labels have no underline; Delete
+account retains its destructive color.

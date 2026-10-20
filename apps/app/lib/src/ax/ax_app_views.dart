@@ -397,7 +397,7 @@ extension _AxAppViews on _AxAppStateMixin {
         : destructive
             ? ConclaveColors.errorText(
                 Theme.of(context).brightness == Brightness.dark)
-            : Theme.of(context).colorScheme.primary;
+            : Colors.white;
     return Semantics(
       link: true,
       enabled: onTap != null,
@@ -414,8 +414,7 @@ extension _AxAppViews on _AxAppStateMixin {
                 style: TextStyle(
                     color: color,
                     fontSize: 13,
-                    decoration: TextDecoration.underline,
-                    decorationColor: color)),
+                    decoration: TextDecoration.none)),
           ]),
         ),
       ),
@@ -462,7 +461,7 @@ extension _AxAppViews on _AxAppStateMixin {
                   Text('Retry account security: ${store.securityError.value}')),
         const SizedBox(height: 24),
         Padding(
-          padding: const EdgeInsets.only(bottom: 24),
+          padding: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -512,25 +511,23 @@ extension _AxAppViews on _AxAppStateMixin {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: accountSecurityLoading
-              ? const Center(child: CircularProgressIndicator())
-              : Column(
-                  children: [
-                    ...linkedAccounts.map((account) => ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: _accountProviderIcon(account.providerId),
-                          title: Text(_providerLabel(account.providerId)),
-                          trailing: Icon(Icons.verified_outlined,
-                              color: Theme.of(context).colorScheme.primary),
-                        )),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-        ),
-        const SizedBox(height: 16),
+        if (accountSecurityLoading || linkedAccounts.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: accountSecurityLoading
+                ? const Center(child: CircularProgressIndicator())
+                : Column(
+                    children: [
+                      ...linkedAccounts.map((account) => ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: _accountProviderIcon(account.providerId),
+                            title: Text(_providerLabel(account.providerId)),
+                            trailing: Icon(Icons.verified_outlined,
+                                color: Theme.of(context).colorScheme.primary),
+                          )),
+                    ],
+                  ),
+          ),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -541,7 +538,7 @@ extension _AxAppViews on _AxAppStateMixin {
                 _profileActionLink(
                     label: 'Link GitHub',
                     icon: Image.asset('assets/auth/github-link.png',
-                        width: 24, height: 24, excludeFromSemantics: true),
+                        width: 16, height: 16, excludeFromSemantics: true),
                     onTap: () => _linkAccountProvider('github')),
                 const SizedBox(width: 20),
               ],
@@ -550,7 +547,7 @@ extension _AxAppViews on _AxAppStateMixin {
                 _profileActionLink(
                     label: 'Link Google',
                     icon: Image.asset('assets/auth/google-link.png',
-                        width: 24, height: 24, excludeFromSemantics: true),
+                        width: 16, height: 16, excludeFromSemantics: true),
                     onTap: () => _linkAccountProvider('google')),
                 const SizedBox(width: 20),
               ],
@@ -600,41 +597,43 @@ extension _AxAppViews on _AxAppStateMixin {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: Icon(Icons.devices_outlined,
-                                  size: 20,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant),
-                            ),
-                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    accountSessionLabel(session.userAgent),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w500,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurface),
-                                    softWrap: true,
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(Icons.devices_outlined,
+                                          size: 18, color: Colors.white),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                          child: Text(
+                                        accountSessionLabel(session.userAgent),
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.white),
+                                        textAlign: TextAlign.start,
+                                        softWrap: true,
+                                      )),
+                                    ],
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(_formatAccountDate(session.expiresAt),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurfaceVariant)),
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 26),
+                                    child: Text(
+                                        _formatAccountDate(session.expiresAt),
+                                        textAlign: TextAlign.start,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(color: Colors.white)),
+                                  ),
                                 ],
                               ),
                             ),
@@ -651,9 +650,7 @@ extension _AxAppViews on _AxAppStateMixin {
                                                 .textTheme
                                                 .bodySmall
                                                 ?.copyWith(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .primary,
+                                                    color: Colors.white,
                                                     fontWeight:
                                                         FontWeight.w500)),
                                       )
@@ -664,6 +661,7 @@ extension _AxAppViews on _AxAppStateMixin {
                                             : () =>
                                                 _revokeAccountSession(session),
                                         style: TextButton.styleFrom(
+                                          foregroundColor: Colors.white,
                                           padding: EdgeInsets.zero,
                                           minimumSize: Size.zero,
                                           tapTargetSize:
