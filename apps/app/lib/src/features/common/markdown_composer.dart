@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/rendering.dart';
 import 'package:conclave_design/conclave_design.dart';
 
 import 'conclave_markdown_body.dart';
+import 'emoji_picker.dart';
 
 enum MarkdownFormat {
   bold,
@@ -90,6 +92,9 @@ class MarkdownComposer extends StatefulWidget {
       this.onSubmit,
       this.additionalControlsBuilder,
       this.executionControlsBuilder,
+      this.leadingControls,
+      this.inputHeight,
+      this.showControlTooltips = true,
       this.sendEnabled = true,
       this.sendInToolbar = false,
       this.sendInFormattingToolbar = false,
@@ -106,6 +111,8 @@ class MarkdownComposer extends StatefulWidget {
       this.showMarkdownControls = true,
       this.showMarkdownControlsInSuffix = true,
       this.showSendInSuffix = true,
+      this.showEmojiPicker = true,
+      this.twoRowLayout = false,
       this.onHistoryNavigate});
 
   final TextEditingController controller;
@@ -117,6 +124,13 @@ class MarkdownComposer extends StatefulWidget {
   final bool Function(int direction)? onHistoryNavigate;
   final Widget Function(GlobalKey inputKey)? additionalControlsBuilder;
   final Widget Function(GlobalKey inputKey)? executionControlsBuilder;
+
+  /// Controls in the left rail beside the input and its bottom row.
+  final Widget? leadingControls;
+
+  /// Height shared by the Thread's Message and Ask AI inputs.
+  final ComposerInputHeight? inputHeight;
+  final bool showControlTooltips;
   final bool sendEnabled;
   final bool sendInToolbar;
   final bool sendInFormattingToolbar;
@@ -135,6 +149,13 @@ class MarkdownComposer extends StatefulWidget {
   final bool showMarkdownControls;
   final bool showMarkdownControlsInSuffix;
   final bool showSendInSuffix;
+
+  /// Shows the smile button that opens the emoji popup.
+  final bool showEmojiPicker;
+
+  /// Chat input as two rows: the text field, then emoji and Markdown popup
+  /// controls on the left and send on the right.
+  final bool twoRowLayout;
 
   @override
   State<MarkdownComposer> createState() => _MarkdownComposerState();
@@ -194,11 +215,106 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
     _focus.requestFocus();
   }
 
+  void _insertEmoji(String emoji) {
+    if (!widget.enabled) return;
+    insertAtCursor(widget.controller, emoji);
+    _focus.requestFocus();
+  }
+
+  Widget _emojiButton() => EmojiPickerButton(
+        enabled: widget.enabled && !_preview,
+        color: _controlColor,
+        onSelected: _insertEmoji,
+      );
+
   bool get _secondaryToolbarVisible =>
       widget.chatStyle &&
       (_showFormatting || _preview || !widget.showMarkdownControlsInSuffix);
 
   Color get _controlColor => Theme.of(context).colorScheme.onSurface;
+
+  static const _formats = [
+    (MarkdownFormat.bold, 'Bold', Icons.format_bold),
+    (MarkdownFormat.italic, 'Italic', Icons.format_italic),
+    (MarkdownFormat.heading, 'Heading', Icons.title),
+    (MarkdownFormat.inlineCode, 'Inline code', Icons.code),
+    (MarkdownFormat.codeBlock, 'Code block', Icons.data_object),
+    (MarkdownFormat.quote, 'Quote', Icons.format_quote),
+    (MarkdownFormat.link, 'Link', Icons.link),
+    (MarkdownFormat.bulletList, 'Bullet list', Icons.format_list_bulleted),
+    (MarkdownFormat.numberedList, 'Numbered list', Icons.format_list_numbered),
+    (MarkdownFormat.taskList, 'Task list', Icons.checklist),
+  ];
+
+  final _markdownMenu = MenuController();
+
+  /// Two-row layout controls: emoji and Markdown popup left, send right.
+  Widget _twoRowControls() => Padding(
+        padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
+        child: Row(children: [
+          if (widget.executionControlsBuilder != null)
+            Expanded(child: widget.executionControlsBuilder!(_inputKey)),
+          if (widget.showEmojiPicker) _emojiButton(),
+          if (widget.showMarkdownControls)
+            MenuAnchor(
+              controller: _markdownMenu,
+              style: ConclaveMenuStyle.surface(
+                  Theme.of(context).brightness == Brightness.dark,
+                  composer: true),
+              menuChildren: [
+                SizedBox(
+                  key: const ValueKey('markdown-controls-popup'),
+                  width: 220,
+                  child: Wrap(children: [
+                    for (final (format, label, icon) in _formats)
+                      IconButton(
+                        tooltip: label,
+                        iconSize: 18,
+                        color: _controlColor,
+                        onPressed: widget.enabled && !_preview
+                            ? () {
+                                _markdownMenu.close();
+                                _format(format);
+                              }
+                            : null,
+                        icon: Icon(icon, semanticLabel: label),
+                      ),
+                    TextButton(
+                      style:
+                          TextButton.styleFrom(foregroundColor: _controlColor),
+                      onPressed: () {
+                        _markdownMenu.close();
+                        setState(() => _preview = !_preview);
+                      },
+                      child: Text(_preview ? 'Write' : 'Preview'),
+                    ),
+                  ]),
+                ),
+              ],
+              builder: (context, controller, _) => IconButton(
+                tooltip: 'Show Markdown controls',
+                isSelected: _preview,
+                icon: Icon(Icons.text_format,
+                    size: 18,
+                    color: _controlColor,
+                    semanticLabel: 'Show Markdown controls'),
+                onPressed: () =>
+                    controller.isOpen ? controller.close() : controller.open(),
+              ),
+            ),
+          if (widget.executionControlsBuilder == null) const Spacer(),
+          if (widget.onSend != null)
+            IconButton(
+              key: ValueKey('composer-send-${widget.sendTooltip}'),
+              tooltip: widget.showSendTooltip ? widget.sendTooltip : null,
+              onPressed:
+                  widget.enabled && widget.sendEnabled ? widget.onSend : null,
+              color: _controlColor,
+              icon: Icon(Icons.send_rounded,
+                  size: 18, semanticLabel: widget.sendTooltip),
+            ),
+        ]),
+      );
 
   Widget _formattingToolbar() =>
       Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -241,7 +357,8 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                   : const EdgeInsets.all(8),
               onPressed:
                   widget.enabled && !_preview ? () => _format(format) : null,
-              icon: Icon(icon)),
+              icon: Icon(icon, semanticLabel: label)),
+        if (!widget.chatStyle && widget.showEmojiPicker) _emojiButton(),
         if (widget.chatStyle)
           TextButton(
             style: TextButton.styleFrom(
@@ -284,9 +401,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                 widget.enabled && widget.sendEnabled ? widget.onSend : null,
             color: _controlColor,
             icon: Icon(Icons.send_rounded,
-                size: 18,
-                semanticLabel:
-                    widget.showSendTooltip ? null : widget.sendTooltip),
+                size: 18, semanticLabel: widget.sendTooltip),
           ),
       ]);
 
@@ -370,7 +485,9 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                       ? const EdgeInsets.fromLTRB(14, 12, 10, 12)
                       : null,
                   suffixIcon: widget.chatStyle &&
-                          ((widget.showMarkdownControls &&
+                          !widget.twoRowLayout &&
+                          (widget.showEmojiPicker ||
+                              (widget.showMarkdownControls &&
                                   widget.showMarkdownControlsInSuffix) ||
                               (widget.onSend != null &&
                                   !widget.sendInToolbar &&
@@ -378,6 +495,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                       ? Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (widget.showEmojiPicker) _emojiButton(),
                             if (widget.showMarkdownControls &&
                                 widget.showMarkdownControlsInSuffix)
                               IconButton(
@@ -407,9 +525,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                                 color: _controlColor,
                                 icon: Icon(Icons.send_rounded,
                                     size: 18,
-                                    semanticLabel: widget.showSendTooltip
-                                        ? null
-                                        : widget.sendTooltip),
+                                    semanticLabel: widget.sendTooltip),
                               ),
                           ],
                         )
@@ -438,6 +554,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
             ),
           ),
         if (widget.chatStyle &&
+            !widget.twoRowLayout &&
             (_showFormatting ||
                 _preview ||
                 !widget.showMarkdownControlsInSuffix)) ...[
@@ -461,10 +578,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                               : null,
                           color: _controlColor,
                           icon: Icon(Icons.send_rounded,
-                              size: 18,
-                              semanticLabel: widget.showSendTooltip
-                                  ? null
-                                  : widget.sendTooltip),
+                              size: 18, semanticLabel: widget.sendTooltip),
                         ),
                     ],
                   )
@@ -478,108 +592,280 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
       Theme.of(context).brightness == Brightness.dark,
     );
 
-    return IconTheme.merge(
-      data: IconThemeData(color: _controlColor),
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        padding: EdgeInsets.all(widget.chatStyle
-            ? 0
-            : widget.compact
-                ? 6
-                : 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!widget.chatStyle)
-              Row(children: [
-                TextButton(
-                    onPressed: () => setState(() => _preview = false),
-                    child: Text('Write',
-                        style: TextStyle(
-                            fontWeight: !_preview ? FontWeight.bold : null))),
-                TextButton(
-                    onPressed: () => setState(() => _preview = true),
-                    child: Text('Preview',
-                        style: TextStyle(
-                            fontWeight: _preview ? FontWeight.bold : null))),
-                const Spacer(),
-                Tooltip(
-                  message: 'Thread content is GitHub-Flavored Markdown source.',
-                  child: Text('Markdown',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          )),
-                ),
-              ]),
-            if (!widget.chatStyle && !_preview) _formattingToolbar(),
-            inputContent,
-            if (widget.chatStyle &&
-                widget.sendInToolbar &&
-                widget.executionControlsBuilder != null &&
-                widget.additionalControlsBuilder != null)
-              widget.additionalControlsBuilder!(_inputKey),
-            if (widget.chatStyle &&
-                widget.sendInToolbar &&
-                (widget.executionControlsBuilder != null ||
-                    widget.additionalControlsBuilder != null ||
-                    !_secondaryToolbarVisible))
-              Row(children: [
-                if (widget.executionControlsBuilder != null)
-                  Expanded(child: widget.executionControlsBuilder!(_inputKey))
-                else if (widget.additionalControlsBuilder != null)
-                  Expanded(child: widget.additionalControlsBuilder!(_inputKey))
-                else
-                  const Spacer(),
-                if (widget.onSend != null && !widget.sendInFormattingToolbar)
-                  IconButton(
-                    key: ValueKey('composer-send-${widget.sendTooltip}'),
-                    tooltip: widget.showSendTooltip ? widget.sendTooltip : null,
-                    onPressed: widget.enabled && widget.sendEnabled
-                        ? widget.onSend
-                        : null,
-                    color: _controlColor,
-                    icon: Icon(Icons.send_rounded,
-                        size: 18,
-                        semanticLabel:
-                            widget.showSendTooltip ? null : widget.sendTooltip),
+    return TooltipVisibility(
+        visible: widget.showControlTooltips,
+        child: IconTheme.merge(
+          data: IconThemeData(color: _controlColor),
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: EdgeInsets.all(widget.chatStyle
+                ? 0
+                : widget.compact
+                    ? 6
+                    : 10),
+            child: Stack(children: [
+              if (widget.leadingControls != null)
+                // Distinct strip behind the mode rail, full composer height.
+                Positioned(
+                  key: const ValueKey('composer-leading-rail-background'),
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 40,
+                  // A subtle shade darker than the adjacent input surface.
+                  child: ColoredBox(
+                    color: Color.alphaBlend(
+                        Colors.black.withValues(alpha: 0.12), backgroundColor),
                   ),
-              ])
-            else if (widget.additionalControlsBuilder != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-                child: widget.additionalControlsBuilder!(_inputKey),
-              ),
-            if (!widget.chatStyle &&
-                (widget.onSend != null || widget.onSubmit != null))
-              Row(children: [
-                Text(
-                  widget.onSend != null && widget.onSubmit == null
-                      ? 'Enter to send · Shift+Enter for a new line'
-                      : '${Theme.of(context).platform == TargetPlatform.macOS || Theme.of(context).platform == TargetPlatform.iOS ? '⌘' : 'Ctrl+'} Enter to save',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (widget.leadingControls != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: SizedBox(
+                        key: const ValueKey('composer-leading-rail'),
+                        width: 32,
+                        child: Center(
+                            heightFactor: 1, child: widget.leadingControls!),
                       ),
-                ),
-                const Spacer(),
-                if (widget.onSend != null && !widget.sendInFormattingToolbar)
-                  IconButton(
-                    key: ValueKey('composer-send-${widget.sendTooltip}'),
-                    tooltip: widget.showSendTooltip ? widget.sendTooltip : null,
-                    onPressed: widget.onSend,
-                    icon: Icon(Icons.send_rounded,
-                        semanticLabel:
-                            widget.showSendTooltip ? null : widget.sendTooltip),
-                  ),
-              ]),
-          ],
-        ),
-      ),
-    );
+                    ),
+                  Expanded(
+                      child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!widget.chatStyle)
+                        Row(children: [
+                          TextButton(
+                              onPressed: () => setState(() => _preview = false),
+                              child: Text('Write',
+                                  style: TextStyle(
+                                      fontWeight:
+                                          !_preview ? FontWeight.bold : null))),
+                          TextButton(
+                              onPressed: () => setState(() => _preview = true),
+                              child: Text('Preview',
+                                  style: TextStyle(
+                                      fontWeight:
+                                          _preview ? FontWeight.bold : null))),
+                          const Spacer(),
+                          Tooltip(
+                            message:
+                                'Thread content is GitHub-Flavored Markdown source.',
+                            child: Text('Markdown',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    )),
+                          ),
+                        ]),
+                      if (!widget.chatStyle && !_preview) _formattingToolbar(),
+                      if (widget.inputHeight case final height?)
+                        ValueListenableBuilder<double>(
+                          valueListenable: height,
+                          builder: (context, minimum, child) => ConstrainedBox(
+                            constraints: BoxConstraints(minHeight: minimum),
+                            // Loose so the observer measures the natural
+                            // height of this input's own content.
+                            child: Align(
+                              alignment: Alignment.topCenter,
+                              heightFactor: 1,
+                              child: _ComposerHeightObserver(
+                                onHeight: (value) {
+                                  if (mounted && widget.inputHeight == height) {
+                                    height.report(widget.controller, value);
+                                  }
+                                },
+                                child: child!,
+                              ),
+                            ),
+                          ),
+                          child: inputContent,
+                        )
+                      else
+                        inputContent,
+                      if (widget.chatStyle && widget.twoRowLayout)
+                        _twoRowControls(),
+                      if (widget.chatStyle &&
+                          !widget.twoRowLayout &&
+                          widget.sendInToolbar &&
+                          widget.executionControlsBuilder != null &&
+                          widget.additionalControlsBuilder != null)
+                        widget.additionalControlsBuilder!(_inputKey),
+                      if (widget.chatStyle &&
+                          !widget.twoRowLayout &&
+                          widget.sendInToolbar &&
+                          (widget.executionControlsBuilder != null ||
+                              widget.additionalControlsBuilder != null ||
+                              !_secondaryToolbarVisible))
+                        Row(children: [
+                          if (widget.executionControlsBuilder != null)
+                            Expanded(
+                                child:
+                                    widget.executionControlsBuilder!(_inputKey))
+                          else if (widget.additionalControlsBuilder != null)
+                            Expanded(
+                                child: widget
+                                    .additionalControlsBuilder!(_inputKey))
+                          else
+                            const Spacer(),
+                          if (widget.onSend != null &&
+                              !widget.sendInFormattingToolbar)
+                            IconButton(
+                              key: ValueKey(
+                                  'composer-send-${widget.sendTooltip}'),
+                              tooltip: widget.showSendTooltip
+                                  ? widget.sendTooltip
+                                  : null,
+                              onPressed: widget.enabled && widget.sendEnabled
+                                  ? widget.onSend
+                                  : null,
+                              color: _controlColor,
+                              icon: Icon(Icons.send_rounded,
+                                  size: 18, semanticLabel: widget.sendTooltip),
+                            ),
+                        ])
+                      else if (widget.additionalControlsBuilder != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+                          child: widget.additionalControlsBuilder!(_inputKey),
+                        ),
+                      if (!widget.chatStyle &&
+                          (widget.onSend != null || widget.onSubmit != null))
+                        Row(children: [
+                          Text(
+                            widget.onSend != null && widget.onSubmit == null
+                                ? 'Enter to send · Shift+Enter for a new line'
+                                : '${Theme.of(context).platform == TargetPlatform.macOS || Theme.of(context).platform == TargetPlatform.iOS ? '⌘' : 'Ctrl+'} Enter to save',
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                          ),
+                          const Spacer(),
+                          if (widget.onSend != null &&
+                              !widget.sendInFormattingToolbar)
+                            IconButton(
+                              key: ValueKey(
+                                  'composer-send-${widget.sendTooltip}'),
+                              tooltip: widget.showSendTooltip
+                                  ? widget.sendTooltip
+                                  : null,
+                              onPressed: widget.onSend,
+                              icon: Icon(Icons.send_rounded,
+                                  semanticLabel: widget.sendTooltip),
+                            ),
+                        ]),
+                    ],
+                  )),
+                ],
+              ),
+            ]),
+          ),
+        ));
+  }
+}
+
+/// Shared minimum input height: the tallest natural height among the inputs
+/// that report to it. An input whose text is sent or cleared shrinks back,
+/// even while it is hidden behind the other mode.
+class ComposerInputHeight extends ValueNotifier<double> {
+  ComposerInputHeight() : super(0);
+
+  final _heights = <TextEditingController, double>{};
+  final _emptyHeights = <TextEditingController, double>{};
+  final _listeners = <TextEditingController, VoidCallback>{};
+
+  void report(TextEditingController controller, double height) {
+    if (!_listeners.containsKey(controller)) {
+      void listener() {
+        // A hidden input cannot re-measure; fall back to its empty height.
+        if (controller.text.isNotEmpty) return;
+        final empty = _emptyHeights[controller] ??
+            (_emptyHeights.isEmpty
+                ? null
+                : _emptyHeights.values.reduce((a, b) => a < b ? a : b));
+        if (empty == null) {
+          _heights.remove(controller);
+        } else {
+          _heights[controller] = empty;
+        }
+        _recompute();
+      }
+
+      controller.addListener(listener);
+      _listeners[controller] = listener;
+    }
+    if (controller.text.isEmpty) {
+      final empty = _emptyHeights[controller];
+      _emptyHeights[controller] =
+          empty == null || height < empty ? height : empty;
+    }
+    _heights[controller] = height;
+    _recompute();
+  }
+
+  void _recompute() {
+    var tallest = 0.0;
+    for (final height in _heights.values) {
+      if (height > tallest) tallest = height;
+    }
+    value = tallest;
+  }
+
+  /// Forgets all measurements, e.g. when the Thread changes.
+  void reset() {
+    _heights.clear();
+    value = 0;
+  }
+
+  @override
+  void dispose() {
+    for (final MapEntry(:key, value: listener) in _listeners.entries) {
+      key.removeListener(listener);
+    }
+    _listeners.clear();
+    super.dispose();
+  }
+}
+
+class _ComposerHeightObserver extends SingleChildRenderObjectWidget {
+  const _ComposerHeightObserver({required this.onHeight, required super.child});
+  final ValueChanged<double> onHeight;
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _ComposerHeightRender(onHeight);
+  @override
+  void updateRenderObject(
+      BuildContext context, _ComposerHeightRender renderObject) {
+    renderObject.onHeight = onHeight;
+  }
+}
+
+class _ComposerHeightRender extends RenderProxyBox {
+  _ComposerHeightRender(this.onHeight);
+  ValueChanged<double> onHeight;
+  double? _lastHeight;
+  @override
+  void performLayout() {
+    super.performLayout();
+    final height = size.height;
+    if (height == _lastHeight) return;
+    _lastHeight = height;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (attached) onHeight(height);
+    });
   }
 }

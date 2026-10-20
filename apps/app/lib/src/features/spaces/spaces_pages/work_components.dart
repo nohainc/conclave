@@ -185,8 +185,12 @@ class _WorkComposer extends StatelessWidget {
     this.onQueuedRemove,
     this.onQueuedSendNow,
     this.usageController,
+    this.leadingControls,
+    this.inputHeight,
   });
 
+  final Widget? leadingControls;
+  final ComposerInputHeight? inputHeight;
   final TextEditingController requestController;
   final ScrollController historyController;
   final AxTimelineFollowAnchor incomingAnchor;
@@ -772,6 +776,9 @@ class _WorkComposer extends StatelessWidget {
               onSendNow: onQueuedSendNow ?? (_) {},
             ),
           MarkdownComposer(
+            leadingControls: leadingControls,
+            inputHeight: inputHeight,
+            showControlTooltips: false,
             controller: requestController,
             hintText: 'Write a message...',
             chatStyle: true,
@@ -790,9 +797,10 @@ class _WorkComposer extends StatelessWidget {
                 !loadingWorkflows &&
                 workflowCatalogError == null,
             showMarkdownControls: false,
+            showEmojiPicker: false,
             showMarkdownControlsInSuffix: true,
             showSendInSuffix: true,
-            sendInToolbar: true,
+            twoRowLayout: true,
             executionControlsBuilder: (_) => _additionalControls(context),
           ),
           if (attachments.isNotEmpty) ...[

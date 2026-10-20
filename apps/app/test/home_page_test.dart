@@ -16,7 +16,14 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(scaffold(EstablishedUserHome(
         spaces: const [
-          AxSpace(id: 's', name: 'Space', branch: '', lastActivity: '')
+          AxSpace(
+              id: 's',
+              name: 'Space',
+              branch: '',
+              lastActivity: '',
+              settings: {
+                'sharedWorkers': ['chatgpt']
+              })
         ],
         workers: const [],
         workspaces: const [],
@@ -54,6 +61,16 @@ void main() {
           expect(tester.getRect(text).right, tester.getRect(row).right);
           expect(tester.widget<Text>(text).textAlign, TextAlign.right);
         }
+      }
+      for (final title in [
+        defaultProductUpdates.first.title,
+        defaultAiCapabilityUpdates.first.title
+      ]) {
+        final card = tester
+            .widget<Container>(find.byKey(ValueKey('home-update-$title')));
+        final decoration = card.decoration! as BoxDecoration;
+        expect(decoration.borderRadius, BorderRadius.circular(12));
+        expect(decoration.border, isNotNull);
       }
       expect(tester.takeException(), isNull);
     });
@@ -694,7 +711,7 @@ void main() {
   });
 
   testWidgets(
-      'Continue Working displays 3-5 thread cards with space, title, collaborators, snippet and action',
+      'Continue Working displays four ranked Thread cards and opens conversations',
       (tester) async {
     var openedSpace = '';
     var openedThread = '';
@@ -841,11 +858,13 @@ void main() {
     expect(find.text('CLOUD SERVICES'), findsNothing);
     expect(find.text('D1 Migrations'), findsOneWidget);
 
-    // Card 5
+    // Home shows at most four ranked Threads.
+    expect(find.byKey(const ValueKey('continue-work-last-message')),
+        findsNWidgets(4));
     expect(find.text('MOBILE APP'), findsNothing);
-    expect(find.text('iOS Polish'), findsOneWidget);
+    expect(find.text('iOS Polish'), findsNothing);
 
-    // 6th item should be truncated by 5-item limit
+    // Remaining items are omitted by the four-item limit
     expect(find.text('EXTRA SPACE'), findsNothing);
     expect(find.text('Extra Thread'), findsNothing);
 

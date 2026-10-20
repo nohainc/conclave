@@ -682,7 +682,7 @@ void main() {
     await tester.pumpWidget(page('w'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Pending Chat');
-    await tester.tap(find.byTooltip('Send message'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send message')));
     await tester.pump();
     expect(find.text('Pending Chat'), findsOneWidget);
     await tester.pumpWidget(page('other'));
@@ -720,7 +720,7 @@ void main() {
     await tester.pumpWidget(page('w'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, 'Failed Chat');
-    await tester.tap(find.byTooltip('Send message'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send message')));
     await tester.pump();
     source.sends.single.completeError(StateError('denied'));
     await tester.pumpAndSettle();

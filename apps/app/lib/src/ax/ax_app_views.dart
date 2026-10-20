@@ -440,6 +440,18 @@ extension _AxAppViews on _AxAppStateMixin {
   Widget _profileSecurityBody() {
     final viewer = store.auth.viewer;
     final security = accountSecurity;
+    // Session changes and server-state resets can clear the lists while the
+    // page stays open; reload instead of showing an empty session list.
+    if (security == null &&
+        !accountSecurityLoading &&
+        store.securityError.value == null &&
+        store.auth.session?.authenticated == true) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && navigation.kind == AxRouteKind.profileSecurity) {
+          unawaited(_loadAccountSecurity());
+        }
+      });
+    }
     // Better Auth can expose its internal credentials account alongside
     // externally linked providers. Credentials are an implementation detail
     // and are not a user-manageable linked login method.
@@ -623,9 +635,6 @@ extension _AxAppViews on _AxAppStateMixin {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      const Icon(Icons.devices_outlined,
-                                          size: 18, color: Colors.white),
-                                      const SizedBox(width: 8),
                                       Expanded(
                                           child: Text(
                                         accountSessionLabel(session.userAgent),
@@ -643,7 +652,7 @@ extension _AxAppViews on _AxAppStateMixin {
                                   ),
                                   const SizedBox(height: 2),
                                   Padding(
-                                    padding: const EdgeInsets.only(left: 26),
+                                    padding: EdgeInsets.zero,
                                     child: Text(
                                         _formatAccountDate(session.expiresAt),
                                         textAlign: TextAlign.start,

@@ -308,7 +308,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                           },
                           decoration: InputDecoration(
                             labelText: 'Password',
-                            helperText: (authSignUp || resetPassword)
+                            hintText: (authSignUp || resetPassword)
                                 ? 'At least 8 characters'
                                 : null,
                             suffixIcon: IconButton(

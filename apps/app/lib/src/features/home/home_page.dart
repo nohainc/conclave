@@ -769,7 +769,7 @@ class EstablishedUserHome extends StatelessWidget {
                 .where((item) => authorizedSpaceIds.contains(item.spaceId))
                 .toList()
             : _deriveDefaultContinueWorkItems(spaces)),
-        limit: 5,
+        limit: 4,
       );
     } catch (_) {
       effectiveRecentWork = const [];
@@ -922,13 +922,7 @@ class EstablishedUserHome extends StatelessWidget {
                 for (var i = 0; i < productUpdatesToShow.length; i++) ...[
                   _ProductUpdateTile(update: productUpdatesToShow[i]),
                   if (i < productUpdatesToShow.length - 1)
-                    Divider(
-                      height: 1,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .outlineVariant
-                          .withValues(alpha: 0.25),
-                    ),
+                    const SizedBox(height: 10),
                 ],
               ],
             ),
@@ -951,13 +945,7 @@ class EstablishedUserHome extends StatelessWidget {
                 for (var i = 0; i < aiUpdatesToShow.length; i++) ...[
                   _AiUpdateRow(update: aiUpdatesToShow[i]),
                   if (i < aiUpdatesToShow.length - 1)
-                    Divider(
-                      height: 1,
-                      color: Theme.of(context)
-                          .colorScheme
-                          .outlineVariant
-                          .withValues(alpha: 0.25),
-                    ),
+                    const SizedBox(height: 10),
                 ],
               ],
             ),
@@ -1705,36 +1693,52 @@ class _HomeUpdateRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    return Container(
+      key: ValueKey('home-update-$title'),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.outlineVariant.withValues(alpha: 0.5)),
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 1, right: 8),
+              child: Icon(
+                  worker == null
+                      ? Icons.new_releases_outlined
+                      : Icons.auto_awesome_outlined,
+                  size: 18,
+                  color: colors.primary),
+            ),
             Expanded(
+                flex: 3,
                 child: Wrap(
                     spacing: 8,
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                  if (worker != null)
-                    Text(worker!,
-                        style: const TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w700)),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                        color: colors.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(4)),
-                    child: Text(label.toUpperCase(),
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                            color: colors.onSurfaceVariant)),
-                  ),
-                ])),
+                      if (worker != null)
+                        Text(worker!,
+                            style: const TextStyle(
+                                fontSize: 13, fontWeight: FontWeight.w700)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: colors.primaryContainer,
+                            borderRadius: BorderRadius.circular(4)),
+                        child: Text(label.toUpperCase(),
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                                color: colors.onPrimaryContainer)),
+                      ),
+                    ])),
             const SizedBox(width: 12),
             Flexible(
                 fit: FlexFit.tight,
@@ -1746,20 +1750,21 @@ class _HomeUpdateRow extends StatelessWidget {
                         fontWeight: FontWeight.w500))),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 12),
         Text(title,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+            style: const TextStyle(
+                fontSize: 16, fontWeight: FontWeight.w700, height: 1.3)),
         const SizedBox(height: 4),
         Text(summary,
             style: TextStyle(
-                fontSize: 13, color: colors.onSurfaceVariant, height: 1.35)),
+                fontSize: 13, color: colors.onSurfaceVariant, height: 1.5)),
         if (details != null &&
             details!.trim().isNotEmpty &&
             details!.trim() != summary) ...[
           const SizedBox(height: 6),
           Text(details!.trim(),
               style: TextStyle(
-                  fontSize: 13, color: colors.onSurfaceVariant, height: 1.35)),
+                  fontSize: 13, color: colors.onSurfaceVariant, height: 1.5)),
         ],
       ]),
     );

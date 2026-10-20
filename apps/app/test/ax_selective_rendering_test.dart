@@ -188,7 +188,7 @@ void main() {
       final store = await shell(tester, route);
       if (!spacePage) {
         // Composer choices are mounted in Ask AI mode.
-        await tester.tap(find.text('Ask AI'));
+        await tester.tap(find.byKey(const ValueKey('composer-mode-ai')));
         await tester.pumpAndSettle();
       }
       observe();
@@ -311,7 +311,7 @@ void main() {
     final space = axFixtureSnapshot().spaces.first;
     final id = space.threads.first.id;
     final store = await shell(tester, '/spaces/${space.id}/threads/$id');
-    await tester.tap(find.text('Ask AI'));
+    await tester.tap(find.byKey(const ValueKey('composer-mode-ai')));
     await tester.pumpAndSettle();
     observe();
     builds.clear();

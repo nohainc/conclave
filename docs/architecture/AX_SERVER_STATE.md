@@ -1196,3 +1196,41 @@ centers Forgot password below the email sign-in action. Google and GitHub use
 matching outlined buttons with the bundled official provider marks. Contextual
 instructions remain for password recovery, account creation, email verification,
 and desktop sign-in approval.
+
+### Home update cards and password hint
+
+Continue working shows up to four authorized ranked Threads. What's new and AI
+updates use separated surface cards with a category icon and badge, a prominent
+title, readable summaries, and publication dates aligned right. Full update
+content and the existing See all actions remain available.
+
+Account creation and password reset display “At least 8 characters” as the
+password field's placeholder, without a helper line below it. Password
+validation is unchanged.
+
+### Consistent Thread composer layout
+
+Message and Ask AI inputs share the two-row MarkdownComposer layout, including
+text padding, bottom-row insets, send-button placement, and a six-line growth
+limit. Message keeps emoji and Markdown actions on the left; Ask AI keeps its
+workflow and execution controls there and hides emoji. Emoji and Markdown
+popups use the shared Conclave composer menu surface, border, radius, and shadow.
+
+The Message / Ask AI mode selector uses two icon buttons inside the
+32-pixel-wide left rail beside the input and bottom row, with Message above Ask AI.
+The icons stay vertically centered as multiline input increases composer height. Selected styling identifies the current
+mode; tooltips and accessible labels identify both actions. Switching mode keeps
+the existing separate message and request drafts and submission paths.
+
+Thread composer controls suppress hover hints while retaining accessible action
+labels. Message and Ask AI share the largest input height reached during the
+current Thread view, including multiline drafts, so switching mode does not
+collapse the composer. The height resets when the view moves to another Thread;
+it is transient UI state and is not stored in Cloud or restored across visits.
+
+The full-height mode strip uses the adjacent composer background darkened with a
+12% black overlay in both themes. Mode icons and selection highlights follow the
+current theme to maintain contrast.
+
+The selected Message / Ask AI icon has a rounded background darkened by 24%
+relative to the input surface; the surrounding mode strip remains 12% darker.

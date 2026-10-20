@@ -1098,13 +1098,23 @@ extension _AxAppController on _AxAppStateMixin {
     final sessionId = store.auth.session?.sessionId;
     try {
       final loaded = await widget.dataSource.loadAccountSecurity();
-      if (!mounted || store.auth.session?.sessionId != sessionId) return;
+      if (!mounted) return;
+      if (store.auth.session?.sessionId != sessionId) {
+        // The session changed mid-flight; drop the stale result and let the
+        // profile page request a fresh load instead of spinning forever.
+        _updateSecurity(() => accountSecurityLoading = false);
+        return;
+      }
       _updateSecurity(() {
         accountSecurity = loaded;
         accountSecurityLoading = false;
       });
     } catch (error) {
-      if (!mounted || store.auth.session?.sessionId != sessionId) return;
+      if (!mounted) return;
+      if (store.auth.session?.sessionId != sessionId) {
+        _updateSecurity(() => accountSecurityLoading = false);
+        return;
+      }
       _updateSecurity(() {
         accountSecurityLoading = false;
         store.securityError.value = error.toString();

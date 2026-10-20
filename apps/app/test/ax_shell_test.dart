@@ -419,20 +419,12 @@ void main() {
         expect(tester.getSize(finder).height, greaterThan(0));
       }
       expect(find.text('Expiry unavailable'), findsNWidgets(2));
-      final deviceIcons = find.byIcon(Icons.devices_outlined);
+      expect(find.byIcon(Icons.devices_outlined), findsNothing);
       for (var index = 0; index < 2; index++) {
-        final icon = tester.widget<Icon>(deviceIcons.at(index));
-        expect(icon.size, 18);
-        expect(icon.color, Colors.white);
         final label =
             find.text(index == 0 ? 'Browser session' : 'Chrome on macOS');
         final expiry = find.text('Expiry unavailable').at(index);
         expect(tester.getTopLeft(label).dx, tester.getTopLeft(expiry).dx);
-        expect(
-            (tester.getTopLeft(label).dy -
-                    tester.getTopLeft(deviceIcons.at(index)).dy)
-                .abs(),
-            lessThan(1));
         expect(tester.widget<Text>(expiry).style?.color, Colors.white);
       }
       expect(find.text('Linked login methods'), findsNothing);
@@ -2909,6 +2901,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Create your account'), findsOneWidget);
+    final password =
+        tester.widget<TextField>(find.widgetWithText(TextField, 'Password'));
+    expect(password.decoration!.hintText, 'At least 8 characters');
+    expect(password.decoration!.helperText, isNull);
+
     expect(find.text('Already have an account? Sign in'), findsNothing);
     await tester.enterText(
       find.widgetWithText(TextField, 'Name'),

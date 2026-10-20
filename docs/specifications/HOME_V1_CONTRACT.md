@@ -52,7 +52,7 @@ HOME
 
 ### 2. Continue Working (Phase 8 & Phase 9: Recent-Work Ranking)
 - **Purpose:** Fast resumption of ongoing collaborative work in context. Spaces are broad; the true return destination is the active Thread/conversation.
-- **Capacity:** Shows 3–5 recent Threads.
+- **Capacity:** Shows up to four ranked recent Threads (two columns on wide screens).
 - **Card Structure:**
   1. **Space Name:** Uppercase tracked label (e.g., `CONCLAVE DEVELOPMENT`, `WEBSITE`).
   2. **Thread Title:** Prominent bold title (e.g., `Worker Sessions`, `Landing Page`).

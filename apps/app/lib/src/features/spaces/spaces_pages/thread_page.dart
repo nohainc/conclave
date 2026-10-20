@@ -526,6 +526,7 @@ class _ThreadPageState extends State<ThreadPage>
     }
   }
 
+  final _composerInputHeight = ComposerInputHeight();
   final _discussionController = TextEditingController();
   late AxSessionCatalogs _catalogs;
   void Function()? _cancelWorkflowWorkspace;
@@ -1257,6 +1258,7 @@ class _ThreadPageState extends State<ThreadPage>
       _threadViewRevealScheduled = false;
       _pendingThreadViewState = null;
       _lastRemoteViewState = null;
+      _composerInputHeight.reset();
       _discussionController.clear();
       _requestController.clear();
       _workExecutionSelection = {};
@@ -1420,6 +1422,7 @@ class _ThreadPageState extends State<ThreadPage>
     _requestController.dispose();
     _workHistoryController.dispose();
     _chatHistoryController.dispose();
+    _composerInputHeight.dispose();
     _discussionController.dispose();
     _presentation.dispose();
     super.dispose();
@@ -1838,47 +1841,64 @@ class _ThreadPageState extends State<ThreadPage>
       ..addAll(indexed.expand((entry) => entry.$2.$2));
   }
 
-  Widget _conversationComposer({bool twoPane = false}) {
-    // Like the former Work tab, Ask AI is always offered; the Work composer
-    // shows its own disabled and viewer states.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: SegmentedButton<bool>(
-            key: const ValueKey('conversation-composer-mode'),
-            showSelectedIcon: false,
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
-            segments: const [
-              ButtonSegment(
-                  value: false,
-                  icon: Icon(Icons.chat_bubble_outline_rounded, size: 16),
-                  label: Text('Message')),
-              ButtonSegment(
-                  value: true,
-                  icon: Icon(Icons.auto_awesome_rounded, size: 16),
-                  label: Text('Ask AI')),
-            ],
-            selected: {_askAiMode},
-            onSelectionChanged: (value) =>
-                _updateState(() => _tabController.index = value.first ? 1 : 0),
-          ),
+  /// Message / Ask AI switch stacked in the composer's 32px left rail.
+  Widget _composerModeControls() {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final selectedBackground = Color.alphaBlend(
+      Colors.black.withValues(alpha: 0.24),
+      ConclaveColors.composerBackground(dark),
+    );
+    Widget toggle(bool askAi, String tooltip, IconData icon) {
+      final selected = _askAiMode == askAi;
+      return IconButton(
+        key: ValueKey('composer-mode-${askAi ? 'ai' : 'message'}'),
+        tooltip: tooltip,
+        isSelected: selected,
+        onPressed: selected
+            ? null
+            : () => _updateState(() => _tabController.index = askAi ? 1 : 0),
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+        style: IconButton.styleFrom(
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          backgroundColor: selected ? selectedBackground : null,
+          disabledBackgroundColor: selected ? selectedBackground : null,
         ),
-        const SizedBox(height: 8),
-        if (_askAiMode)
-          // The same Work composer and run path as the Work pane.
-          ValueListenableBuilder<ThreadComposerPresentationSnapshot>(
-              valueListenable: _presentation.composer,
-              builder: (context, _, __) => _workComposer().controls(context))
-        else
-          _discussionComposer(twoPane: twoPane),
-      ],
+        icon: Icon(icon,
+            semanticLabel: tooltip,
+            size: 16,
+            color: selected
+                ? ConclaveColors.primaryForeground(dark)
+                : Theme.of(context).colorScheme.onSurfaceVariant),
+      );
+    }
+
+    return Semantics(
+      key: const ValueKey('conversation-composer-mode'),
+      container: true,
+      label: _askAiMode ? 'Ask AI mode' : 'Message mode',
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          toggle(false, 'Message', Icons.chat_bubble_outline_rounded),
+          const SizedBox(height: 4),
+          toggle(true, 'Ask AI', Icons.auto_awesome_rounded),
+        ],
+      ),
     );
   }
 
+  Widget _conversationComposer({bool twoPane = false}) => _askAiMode
+      ? ValueListenableBuilder<ThreadComposerPresentationSnapshot>(
+          valueListenable: _presentation.composer,
+          builder: (context, _, __) => _workComposer().controls(context))
+      : _discussionComposer(twoPane: twoPane);
+
   Widget _discussionComposer({bool twoPane = false}) => MarkdownComposer(
+        leadingControls: _composerModeControls(),
+        inputHeight: _composerInputHeight,
+        showControlTooltips: false,
         controller: _discussionController,
         hintText: 'Write a message...',
         chatStyle: true,
@@ -1888,10 +1908,8 @@ class _ThreadPageState extends State<ThreadPage>
                 widget.space.effectivePermissions.manageOwnThreads),
         onSend: _sendDiscussion,
         sendEnabled: !_draftSubmitting && !widget.draftBusy,
-        showMarkdownControls: !twoPane,
-        showMarkdownControlsInSuffix: !twoPane,
-        showSendInSuffix: !twoPane,
-        sendInFormattingToolbar: twoPane,
+        twoRowLayout: true,
+        maxLines: 6,
       );
 
   Widget _work(BuildContext context) => widget.isDraft
@@ -1946,6 +1964,8 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   _WorkComposer _workComposer() => _WorkComposer(
+        leadingControls: _composerModeControls(),
+        inputHeight: _composerInputHeight,
         requestController: _requestController,
         historyController: _workHistoryController,
         incomingAnchor: _workIncomingAnchor,

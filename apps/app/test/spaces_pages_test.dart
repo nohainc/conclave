@@ -599,6 +599,32 @@ void main() {
           const EdgeInsets.fromLTRB(20, 0, 20, 20));
       expect(work, findsNothing);
       expect(find.byType(MarkdownComposer), findsOneWidget);
+      final mode = find.byKey(const ValueKey('conversation-composer-mode'));
+      expect(find.descendant(of: find.byType(MarkdownComposer), matching: mode),
+          findsOneWidget);
+      expect(tester.getRect(mode).right,
+          lessThanOrEqualTo(tester.getRect(find.byType(TextField)).left));
+      final messageSwitch =
+          tester.getRect(find.byKey(const ValueKey('composer-mode-message')));
+      final aiSwitch =
+          tester.getRect(find.byKey(const ValueKey('composer-mode-ai')));
+      expect(messageSwitch.center.dx, aiSwitch.center.dx);
+      expect(messageSwitch.bottom, lessThanOrEqualTo(aiSwitch.top));
+      bool selected(String mode) => tester
+          .widget<IconButton>(find.byKey(ValueKey('composer-mode-$mode')))
+          .isSelected!;
+      expect(selected('message'), isTrue);
+      expect(selected('ai'), isFalse);
+      expect(messageSwitch.width, 28);
+      await tester.tap(find.byKey(const ValueKey('composer-mode-ai')));
+      await tester.pumpAndSettle();
+      expect(selected('ai'), isTrue);
+      expect(find.descendant(of: find.byType(MarkdownComposer), matching: mode),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('emoji-picker-button')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('composer-mode-message')));
+      await tester.pumpAndSettle();
+      expect(selected('message'), isTrue);
 
       final conversationTab = find.byKey(const ValueKey('conversation-tab'));
       final historyTab = find.byKey(const ValueKey('ai-history-toggle'));
@@ -1387,7 +1413,7 @@ void main() {
     await tester.pumpAndSettle();
     const source = '  **raw**\n\n```dart\nfinal x = 1;\n```\n';
     await tester.enterText(find.byType(TextField).first, source);
-    await tester.tap(find.byTooltip('Send message'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send message')));
     await tester.pumpAndSettle();
     expect(ds.createdSource, source);
     final timestamp = find.byWidgetPredicate((widget) =>
@@ -2022,9 +2048,10 @@ void main() {
 
     await tester.enterText(find.byType(TextField).last,
         'The login failure reproduces on a fresh checkout.');
-    await tester.scrollUntilVisible(find.byTooltip('Send message'), 500,
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('composer-send-Send message')), 500,
         scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.byTooltip('Send message'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send message')));
     await tester.pumpAndSettle();
     expect(find.text('The login failure reproduces on a fresh checkout.'),
         findsOneWidget);
@@ -2084,7 +2111,7 @@ void main() {
     // Multiline Markdown source is submitted through the Send action.
     await tester.enterText(
         find.byType(TextField).last, 'Line 1\nLine 2 details');
-    await tester.tap(find.byTooltip('Send message'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send message')));
     await tester.pumpAndSettle();
     expect(find.text('Line 1\nLine 2 details'), findsOneWidget);
 
@@ -2213,7 +2240,7 @@ void main() {
 
     // Send a message on ws1
     await tester.enterText(find.byType(TextField).last, 'Message for Alpha');
-    await tester.tap(find.byTooltip('Send message'));
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send message')));
     await tester.pumpAndSettle();
     expect(find.text('Message for Alpha'), findsOneWidget);
 
@@ -3548,10 +3575,10 @@ Future<void> _openAiHistory(WidgetTester tester) async {
 /// Switches the conversation composer to Ask AI (the Work composer).
 Future<void> _askAi(WidgetTester tester) async {
   // A narrow Thread shows AI History instead of the conversation.
-  if (find.text('Ask AI').evaluate().isEmpty) {
+  if (find.byKey(const ValueKey('composer-mode-ai')).evaluate().isEmpty) {
     await tester.tap(find.byKey(const ValueKey('ai-history-conversation')));
     await tester.pumpAndSettle();
   }
-  await tester.tap(find.text('Ask AI'));
+  await tester.tap(find.byKey(const ValueKey('composer-mode-ai')));
   await tester.pumpAndSettle();
 }
