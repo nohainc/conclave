@@ -297,7 +297,9 @@ describe("IdentityService", () => {
   });
 
   it("sends the account-deleted template to the removed account's email", async () => {
-    const send = vi.fn(async (_message: unknown) => ({ messageId: "deleted-1" }));
+    const send = vi.fn(async (_message: unknown) => ({
+      messageId: "deleted-1",
+    }));
     const options = buildBetterAuthOptions({
       CONCLAVE_DB: {} as D1Database,
       CONCLAVE_ENVIRONMENT: "production",
@@ -332,16 +334,22 @@ describe("IdentityService", () => {
           }),
         },
       });
-      await expect(options.user.deleteUser.afterDelete({
-        email: "removed@example.com",
-        name: "Ada",
-      })).resolves.toBeUndefined();
+      await expect(
+        options.user.deleteUser.afterDelete({
+          email: "removed@example.com",
+          name: "Ada",
+        }),
+      ).resolves.toBeUndefined();
       expect(log).toHaveBeenCalledWith(
         "auth.account_deleted_email.failed",
         expect.objectContaining({ status: expect.any(String) }),
       );
-      expect(JSON.stringify(log.mock.calls)).not.toContain("removed@example.com");
-      expect(JSON.stringify(log.mock.calls)).not.toContain("private provider response");
+      expect(JSON.stringify(log.mock.calls)).not.toContain(
+        "removed@example.com",
+      );
+      expect(JSON.stringify(log.mock.calls)).not.toContain(
+        "private provider response",
+      );
     } finally {
       log.mockRestore();
     }
@@ -679,9 +687,15 @@ describe("IdentityService", () => {
               return null;
             },
             async run() {
-              if (query.includes("DELETE FROM auth_verifications WHERE identifier")) {
+              if (
+                query.includes(
+                  "DELETE FROM auth_verifications WHERE identifier",
+                )
+              ) {
                 verifications.delete(String(bound[0] ?? ""));
-              } else if (query.includes("DELETE FROM auth_verifications WHERE id")) {
+              } else if (
+                query.includes("DELETE FROM auth_verifications WHERE id")
+              ) {
                 const id = String(bound[0] ?? "");
                 for (const [key, row] of verifications.entries()) {
                   if (row.id === id) verifications.delete(key);
@@ -832,9 +846,9 @@ describe("IdentityService", () => {
       await expect(response.json()).resolves.toMatchObject({
         code: "INVALID_OTP",
       });
-      expect(
-        verifications.get("signup-otp:newuser@example.com")?.value,
-      ).toBe("123456:1");
+      expect(verifications.get("signup-otp:newuser@example.com")?.value).toBe(
+        "123456:1",
+      );
     });
   });
 });

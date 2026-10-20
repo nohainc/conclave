@@ -149,10 +149,7 @@ function renderVerifyEmailCode(
   input: VerifyEmailCodeInput,
 ): RenderedEmailContent {
   const recipientName = safeName(input.recipientName);
-  const verificationCode = required(
-    input.verificationCode,
-    "verificationCode",
-  );
+  const verificationCode = required(input.verificationCode, "verificationCode");
   if (!/^\d{6}$/.test(verificationCode)) {
     throw new Error("verificationCode must be a 6-digit numeric code");
   }

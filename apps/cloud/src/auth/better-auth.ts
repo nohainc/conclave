@@ -807,11 +807,7 @@ async function handleSignUpSendCode(
     !SIGNUP_EMAIL_PATTERN.test(normalizedEmail) ||
     /[<>"'\r\n]/.test(normalizedEmail)
   ) {
-    return jsonAuthError(
-      400,
-      "invalid_email",
-      "Enter a valid email address.",
-    );
+    return jsonAuthError(400, "invalid_email", "Enter a valid email address.");
   }
   const recipientName =
     typeof body.name === "string" && body.name.trim().length > 0
@@ -908,7 +904,11 @@ async function verifySignUpOtpIfProvided(
     return null;
   }
 
-  if (!("otp" in payload) || payload.otp === undefined || payload.otp === null) {
+  if (
+    !("otp" in payload) ||
+    payload.otp === undefined ||
+    payload.otp === null
+  ) {
     return null;
   }
 
@@ -916,11 +916,7 @@ async function verifySignUpOtpIfProvided(
     typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
   const rawOtp = typeof payload.otp === "string" ? payload.otp.trim() : "";
   if (!rawEmail) {
-    return jsonAuthError(
-      400,
-      "invalid_email",
-      "Enter a valid email address.",
-    );
+    return jsonAuthError(400, "invalid_email", "Enter a valid email address.");
   }
   if (!/^\d{6}$/.test(rawOtp)) {
     return jsonAuthError(
@@ -996,7 +992,11 @@ async function verifySignUpOtpIfProvided(
           SET value = ?1, updated_at = ?2
         WHERE id = ?3`,
     )
-      .bind(`${parsed.code}:${nextAttempts}`, new Date().toISOString(), record.id)
+      .bind(
+        `${parsed.code}:${nextAttempts}`,
+        new Date().toISOString(),
+        record.id,
+      )
       .run();
     return jsonAuthError(
       400,
@@ -1021,7 +1021,11 @@ async function verifySignUpOtpIfProvided(
   return { email: rawEmail, request: forwardedRequest };
 }
 
-export type AuthenticatedUser = { id: string; email: string; name?: string | null };
+export type AuthenticatedUser = {
+  id: string;
+  email: string;
+  name?: string | null;
+};
 
 async function authenticatedUser(
   request: Request,
@@ -1203,7 +1207,9 @@ export async function handleEmailChangeSendCode(
 ): Promise<Response> {
   const body = await readJsonBody(request);
   const newEmail =
-    typeof body?.newEmail === "string" ? body.newEmail.trim().toLowerCase() : "";
+    typeof body?.newEmail === "string"
+      ? body.newEmail.trim().toLowerCase()
+      : "";
   if (
     !newEmail ||
     !SIGNUP_EMAIL_PATTERN.test(newEmail) ||
@@ -1383,10 +1389,10 @@ export async function handleEmailChangeConfirm(
   } catch {
     // Profile fan-out is best effort; the email change has committed.
   }
-  return new Response(
-    JSON.stringify({ status: true, email: state.newEmail }),
-    { status: 200, headers: { "content-type": "application/json" } },
-  );
+  return new Response(JSON.stringify({ status: true, email: state.newEmail }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 /** Preserve Better Auth's OAuth state/CSRF cookies across the redirect shim. */

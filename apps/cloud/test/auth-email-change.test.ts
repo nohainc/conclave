@@ -6,7 +6,12 @@ import {
   handleEmailChangeVerifyNew,
 } from "../src/auth/better-auth.js";
 
-type Row = { id: string; identifier: string; value: string; expires_at: string };
+type Row = {
+  id: string;
+  identifier: string;
+  value: string;
+  expires_at: string;
+};
 
 function createMemoryDb(users: Record<string, string>) {
   const verifications = new Map<string, Row>();
@@ -48,7 +53,8 @@ function createMemoryDb(users: Record<string, string>) {
         } else if (query.includes("UPDATE auth_verifications")) {
           const [value, , id] = bound as string[];
           for (const [key, row] of verifications) {
-            if (row.id === id) verifications.set(key, { ...row, value: value! });
+            if (row.id === id)
+              verifications.set(key, { ...row, value: value! });
           }
         } else if (query.includes("UPDATE users SET email")) {
           const [email, , id] = bound as string[];

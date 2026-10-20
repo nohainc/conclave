@@ -286,16 +286,14 @@ it("refuses to edit an archived AI entry", async () => {
       `INSERT INTO discussion_messages(id,thread_id,author_user_id,body,kind,work_request_id,worker_display_name,created_at)
        VALUES('A1','W','U','answer','ai_answer','R','ChatGPT','now')`,
     );
-    const { authorizeThreadAccess } = await import(
-      "../src/routes/thread-policy.js"
-    );
+    const { authorizeThreadAccess } =
+      await import("../src/routes/thread-policy.js");
     vi.mocked(authorizeThreadAccess).mockResolvedValueOnce({
       context: { userId: "U" },
       spaceId: "P",
     } as never);
-    const { handleEditDiscussionMessage } = await import(
-      "../src/routes/threads.js"
-    );
+    const { handleEditDiscussionMessage } =
+      await import("../src/routes/threads.js");
     await expect(
       handleEditDiscussionMessage(
         new Request("https://test/api/discussion/A1", {

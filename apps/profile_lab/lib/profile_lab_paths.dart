@@ -53,7 +53,9 @@ class ProfileLabPaths {
   /// `<repository>/apps/profile_lab/assets/profiles/<workerTypeId>.json`
   Directory? get profilesDirectory {
     final root = repositoryRoot;
-    return root == null ? null : Directory('${root.path}/$_profilesRelativePath');
+    return root == null
+        ? null
+        : Directory('${root.path}/$_profilesRelativePath');
   }
 
   static bool _holdsProfiles(Directory dir) =>
