@@ -18,8 +18,6 @@ class AxSidebar extends AppSidebar {
     super.onDeleteSpace,
     super.onRenameThread,
     super.onSetThreadArchived,
-    super.onClearChatHistory,
-    super.onClearWorkHistory,
     super.onDeleteThread,
     super.onReorderThreads,
     super.onSetSpacePinned,

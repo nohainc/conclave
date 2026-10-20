@@ -616,10 +616,41 @@ void main() {
       expect(work, findsNothing);
       expect(find.byType(MarkdownComposer), findsOneWidget);
 
+      final conversationTab = find.byKey(const ValueKey('conversation-tab'));
+      final historyTab = find.byKey(const ValueKey('ai-history-toggle'));
+      Color? tabColor(Finder tab) =>
+          tester.widget<TextButton>(tab).style!.foregroundColor!.resolve({});
+      expect(tabColor(conversationTab), Colors.white);
+      expect(tabColor(historyTab), Colors.grey);
+      expect(
+          find.descendant(
+              of: conversationTab,
+              matching: find.byIcon(Icons.chat_bubble_outline_rounded)),
+          findsOneWidget);
+      expect(tester.getRect(conversationTab).right,
+          lessThanOrEqualTo(tester.getRect(historyTab).left));
+
       await tester.tap(find.byKey(const ValueKey('ai-history-toggle')));
+      await tester.pump();
+      final visibility = find.byKey(const ValueKey('thread-view-visibility'));
+      expect(tester.widget<Opacity>(visibility).opacity, 0);
       await tester.pumpAndSettle();
+      expect(tester.widget<Opacity>(visibility).opacity, 1);
+      final workPosition = tester
+          .state<ScrollableState>(find
+              .descendant(of: work, matching: find.byType(Scrollable))
+              .first)
+          .position;
+      final settledOffset = workPosition.pixels;
+      await tester.pump();
+      expect(workPosition.pixels, settledOffset);
       expect(work, findsOneWidget);
-      expect(find.text('Read-only'), findsOneWidget);
+      expect(
+          tabColor(find.byKey(const ValueKey('ai-history-tab'))), Colors.white);
+      expect(tabColor(find.byKey(const ValueKey('ai-history-conversation'))),
+          Colors.grey);
+      expect(find.text('Read-only'), findsNothing);
+      expect(find.byTooltip('Close AI History'), findsNothing);
       // AI History never accepts input.
       expect(find.descendant(of: history, matching: find.byType(TextField)),
           findsNothing);
@@ -634,8 +665,11 @@ void main() {
         expect(divider.endIndent, 20);
         expect(tester.getRect(chat).right, lessThan(tester.getRect(work).left));
       }
-      await tester.tap(find.byKey(const ValueKey('ai-history-close')));
+      await tester.tap(find.byKey(const ValueKey('ai-history-conversation')));
+      await tester.pump();
+      expect(tester.widget<Opacity>(visibility).opacity, 0);
       await tester.pumpAndSettle();
+      expect(tester.widget<Opacity>(visibility).opacity, 1);
       expect(work, findsNothing);
       expect(chat, findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -1060,6 +1094,60 @@ void main() {
     await tester.pumpAndSettle();
     expect(sent, 'Next request');
   });
+  testWidgets('Thread header clears the active Conversation or AI History',
+      (tester) async {
+    final cleared = <String>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      space: const AxSpace(
+          id: 'space-1',
+          name: 'Space',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      thread: const AxThread(
+          id: 'thread-1',
+          spaceId: 'space-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: const AxFixtureDataSource(),
+      onBackToSpace: _noop,
+      onArchive: _noop,
+      onClearConversation: () async => cleared.add('conversation'),
+      onClearAiHistory: () async => cleared.add('ai'),
+    ))));
+    await tester.pumpAndSettle();
+    final conversation =
+        find.byKey(const ValueKey('clear-conversation-history'));
+    final ai = find.byKey(const ValueKey('clear-ai-history'));
+    expect(conversation, findsOneWidget);
+    expect(ai, findsNothing);
+    // Cancelling the confirmation clears nothing.
+    await tester.tap(conversation);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(cleared, isEmpty);
+    await tester.tap(conversation);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
+    await tester.pumpAndSettle();
+    expect(cleared, ['conversation']);
+
+    await _openAiHistory(tester);
+    await tester.tap(ai);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Completed AI answers stay'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
+    await tester.pumpAndSettle();
+    expect(cleared, ['conversation', 'ai']);
+  });
+
   testWidgets('Chat shows archived AI exchanges as read-only Worker answers',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1300, 1600));
@@ -1468,7 +1556,7 @@ void main() {
     await tester.pumpAndSettle();
     await _openAiHistory(tester);
     expect(find.text('AI History'), findsOneWidget);
-    expect(find.text('Read-only'), findsOneWidget);
+    expect(find.text('Read-only'), findsNothing);
     expect(find.text('Archive'), findsNothing);
     expect(find.text('What should Conclave do?'), findsNothing);
     expect(
@@ -3332,7 +3420,7 @@ Future<void> _openAiHistory(WidgetTester tester) async {
 Future<void> _askAi(WidgetTester tester) async {
   // A narrow Thread shows AI History instead of the conversation.
   if (find.text('Ask AI').evaluate().isEmpty) {
-    await tester.tap(find.byKey(const ValueKey('ai-history-close')));
+    await tester.tap(find.byKey(const ValueKey('ai-history-conversation')));
     await tester.pumpAndSettle();
   }
   await tester.tap(find.text('Ask AI'));

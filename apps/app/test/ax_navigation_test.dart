@@ -81,4 +81,30 @@ void main() {
     final restored = AxNavigation.fromUri(Uri.parse(login.toUri().toString()));
     expect(AxNavigation.fromUri(Uri.parse(restored.loginReturnTo!)), approval);
   });
+
+  test('preserves login reset token and OAuth error parameters without loops',
+      () {
+    final resetRoute = AxNavigation.fromUri(
+      Uri.parse('/login?token=reset-tok-99&returnTo=%2Fspaces%2Fs1'),
+    );
+    expect(resetRoute.kind, AxRouteKind.login);
+    expect(resetRoute.loginToken, 'reset-tok-99');
+    expect(resetRoute.loginReturnTo, '/spaces/s1');
+    expect(
+      AxNavigation.fromUri(resetRoute.toUri()),
+      resetRoute,
+    );
+
+    final errorRoute = AxNavigation.fromUri(
+      Uri.parse('/login?error=account_not_linked&returnTo=%2Flogin'),
+    );
+    expect(errorRoute.kind, AxRouteKind.login);
+    expect(errorRoute.loginError, 'account_not_linked');
+    // Self-referential /login returnTo is normalized away.
+    expect(errorRoute.loginReturnTo, isNull);
+    expect(
+      errorRoute.toUri().toString(),
+      '/login?error=account_not_linked',
+    );
+  });
 }

@@ -73,6 +73,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   bool authSignUpAwaitingCode = false;
   bool authResetRequest = false;
   bool authBusy = false;
+  bool authPasswordVisible = false;
+  bool authConfirmPasswordVisible = false;
   bool desktopAuthBusy = false;
   bool desktopAuthApproved = false;
   bool desktopAuthCancelled = false;
@@ -83,6 +85,21 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   String? desktopAuthError;
   String? authNotice;
   String? authError;
+
+  void _resetSensitiveAuthInputs() {
+    authPasswordController.clear();
+    authConfirmPasswordController.clear();
+    authVerificationCodeController.clear();
+    authPasswordVisible = false;
+    authConfirmPasswordVisible = false;
+    authSignUpAwaitingCode = false;
+  }
+
+  void _dismissOpenModalRoutes() {
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
+    nav.popUntil((route) => route.isFirst);
+  }
 
   Future<void>? _accountSecurityLoadFlight;
   final promptResponseController = TextEditingController();
@@ -633,22 +650,22 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     }
   }
 
-  Future<void> _clearChatHistoryFromSidebar(AxThread thread) async {
+  Future<void> _clearChatHistory(AxThread thread) async {
     try {
       await store.discussion.clearHistory(thread.id);
       _discardNotificationsFor(threadId: thread.id);
-      if (mounted) _showSnackBar('Chat history cleared.');
+      if (mounted) _showSnackBar('Conversation history cleared.');
     } catch (error) {
       if (mounted) {
         _showSnackBar(
-          'Failed to clear chat history: $error',
+          'Failed to clear Conversation history: $error',
           type: ToastType.error,
         );
       }
     }
   }
 
-  Future<void> _clearWorkHistoryFromSidebar(AxThread thread) async {
+  Future<void> _clearWorkHistory(AxThread thread) async {
     try {
       await store.workHistory.clearHistory(thread.id);
       // Completed AI exchanges were archived into the conversation.
@@ -656,11 +673,11 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
           .synchronize(thread.id, reconcileNewest: true)
           .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       _discardNotificationsFor(threadId: thread.id);
-      if (mounted) _showSnackBar('Work history cleared.');
+      if (mounted) _showSnackBar('AI History cleared.');
     } catch (error) {
       if (mounted) {
         _showSnackBar(
-          'Failed to clear work history: $error',
+          'Failed to clear AI History: $error',
           type: ToastType.error,
         );
       }

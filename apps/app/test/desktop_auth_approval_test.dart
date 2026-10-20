@@ -124,4 +124,30 @@ void main() {
         find.text('You can close this page, window, or tab.'), findsOneWidget);
     expect(find.text('Close tab'), findsNothing);
   });
+
+  testWidgets(
+      'desktop approval view allows switching accounts and preserves approval return target',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: const _SignedInDesktopAuthFixture(),
+        initialUri: Uri(
+          path: '/desktop-auth/approve',
+          queryParameters: {'intentId': 'intent-switch'},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Switch account'), findsOneWidget);
+    await tester.tap(find.text('Switch account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(
+      find.text('Sign in to continue approving Conclave Workspace.'),
+      findsOneWidget,
+    );
+  });
 }

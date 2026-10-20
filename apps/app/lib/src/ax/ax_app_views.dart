@@ -239,6 +239,8 @@ extension _AxAppViews on _AxAppStateMixin {
           currentUserName: store.auth.viewer?.displayName,
           viewerEmail: store.auth.viewer?.email,
           onBackToSpace: () => _navigateTo(AxNavigation.space(space.id)),
+          onClearConversation: () => _clearChatHistory(thread),
+          onClearAiHistory: () => _clearWorkHistory(thread),
           onViewStateChanged: (viewState) async {
             await store.collaboration.editThread(thread, viewState: viewState);
           },
@@ -370,6 +372,69 @@ extension _AxAppViews on _AxAppStateMixin {
                             : null,
                   ))));
 
+  Widget _accountProviderIcon(String providerId, {double size = 24}) {
+    final provider = providerId.toLowerCase();
+    if (provider != 'github' && provider != 'google') {
+      return Icon(Icons.account_circle_outlined, size: size);
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: ColoredBox(
+        color: Colors.white,
+        child: Image.asset('assets/auth/$provider.png',
+            width: size, height: size, excludeFromSemantics: true),
+      ),
+    );
+  }
+
+  Widget _profileActionLink(
+      {required String label,
+      required Widget icon,
+      required VoidCallback? onTap,
+      bool destructive = false}) {
+    final color = onTap == null
+        ? Theme.of(context).disabledColor
+        : destructive
+            ? ConclaveColors.errorText(
+                Theme.of(context).brightness == Brightness.dark)
+            : Theme.of(context).colorScheme.primary;
+    return Semantics(
+      link: true,
+      enabled: onTap != null,
+      child: InkWell(
+        onTap: onTap,
+        mouseCursor:
+            onTap == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            icon,
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    decoration: TextDecoration.underline,
+                    decorationColor: color)),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _profileEditableValue(String value,
+          {required String tooltip, required VoidCallback onEdit}) =>
+      Row(
+        children: [
+          Flexible(child: Text(value, overflow: TextOverflow.ellipsis)),
+          IconButton(
+            tooltip: tooltip,
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_outlined, size: 17),
+          ),
+        ],
+      );
+
   Widget _profileSecurityView() => ListenableBuilder(
       listenable: store.profileSecurityChanges,
       builder: (context, _) => _profileSecurityBody());
@@ -384,6 +449,9 @@ extension _AxAppViews on _AxAppStateMixin {
       final providerId = account.providerId.toLowerCase();
       return providerId != 'credential' && providerId != 'credentials';
     }).toList(growable: false);
+    final linkedProviders = linkedAccounts
+        .map((account) => account.providerId.toLowerCase())
+        .toSet();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -400,91 +468,104 @@ extension _AxAppViews on _AxAppStateMixin {
             children: [
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(
-                  backgroundColor: ConclaveColors.primarySoftColor(
-                      Theme.of(context).brightness == Brightness.dark),
-                  backgroundImage: _shellContext.viewerAvatarImage,
-                  child: _shellContext.viewerAvatarImage == null
-                      ? Text(
-                          _shellContext.viewerInitials,
-                          style: TextStyle(
-                            color: ConclaveColors.primaryForeground(
+                leading: Tooltip(
+                  message: avatarUploadBusy ? 'Uploading…' : 'Change avatar',
+                  child: IconButton(
+                    key: const ValueKey('profile-avatar-upload'),
+                    onPressed: avatarUploadBusy ? null : _uploadAvatar,
+                    padding: EdgeInsets.zero,
+                    icon: avatarUploadBusy
+                        ? const SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : CircleAvatar(
+                            backgroundColor: ConclaveColors.primarySoftColor(
                                 Theme.of(context).brightness ==
                                     Brightness.dark),
-                            fontWeight: FontWeight.w700,
+                            backgroundImage: _shellContext.viewerAvatarImage,
+                            child: _shellContext.viewerAvatarImage == null
+                                ? Text(
+                                    _shellContext.viewerInitials,
+                                    style: TextStyle(
+                                      color: ConclaveColors.primaryForeground(
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark),
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  )
+                                : null,
                           ),
-                        )
-                      : null,
+                  ),
                 ),
-                title: Text(viewer?.displayName ?? 'Conclave user'),
-                subtitle: Text(viewer?.email ?? 'Email unavailable'),
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _editDisplayName,
-                    icon: const Icon(Icons.edit_outlined, size: 17),
-                    label: const Text('Rename'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _editEmail,
-                    icon: const Icon(Icons.alternate_email, size: 17),
-                    label: const Text('Update email'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: avatarUploadBusy ? null : _uploadAvatar,
-                    icon: const Icon(Icons.photo_camera_outlined, size: 17),
-                    label:
-                        Text(avatarUploadBusy ? 'Uploading…' : 'Change avatar'),
-                  ),
-                ],
+                title: _profileEditableValue(
+                  viewer?.displayName ?? 'Conclave user',
+                  tooltip: 'Edit name',
+                  onEdit: _editDisplayName,
+                ),
+                subtitle: _profileEditableValue(
+                  viewer?.email ?? 'Email unavailable',
+                  tooltip: 'Edit email',
+                  onEdit: _editEmail,
+                ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 16),
-        _profileSection(
-          title: 'Linked login methods',
+        Padding(
+          padding: const EdgeInsets.only(bottom: 24),
           child: accountSecurityLoading
               ? const Center(child: CircularProgressIndicator())
               : Column(
                   children: [
-                    if (linkedAccounts.isEmpty)
-                      const Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text('No linked methods loaded.')),
                     ...linkedAccounts.map((account) => ListTile(
                           contentPadding: EdgeInsets.zero,
-                          leading: Icon(account.providerId == 'github'
-                              ? Icons.code
-                              : Icons.account_circle_outlined),
+                          leading: _accountProviderIcon(account.providerId),
                           title: Text(_providerLabel(account.providerId)),
                           trailing: Icon(Icons.verified_outlined,
                               color: Theme.of(context).colorScheme.primary),
                         )),
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () => _linkAccountProvider('github'),
-                          icon: const Icon(Icons.code, size: 17),
-                          label: const Text('Link GitHub'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () => _linkAccountProvider('google'),
-                          icon: const Icon(Icons.account_circle_outlined,
-                              size: 17),
-                          label: const Text('Link Google'),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
         ),
         const SizedBox(height: 16),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            key: const ValueKey('profile-account-links'),
+            children: [
+              if (!accountSecurityLoading &&
+                  !linkedProviders.contains('github')) ...[
+                _profileActionLink(
+                    label: 'Link GitHub',
+                    icon: Image.asset('assets/auth/github-link.png',
+                        width: 24, height: 24, excludeFromSemantics: true),
+                    onTap: () => _linkAccountProvider('github')),
+                const SizedBox(width: 20),
+              ],
+              if (!accountSecurityLoading &&
+                  !linkedProviders.contains('google')) ...[
+                _profileActionLink(
+                    label: 'Link Google',
+                    icon: Image.asset('assets/auth/google-link.png',
+                        width: 24, height: 24, excludeFromSemantics: true),
+                    onTap: () => _linkAccountProvider('google')),
+                const SizedBox(width: 20),
+              ],
+              _profileActionLink(
+                  label: deletingAccount ? 'Deleting…' : 'Delete account',
+                  icon: Icon(Icons.delete_forever_outlined,
+                      size: 18,
+                      color: ConclaveColors.errorText(
+                          Theme.of(context).brightness == Brightness.dark)),
+                  destructive: true,
+                  onTap: deletingAccount ? null : _deleteAccount),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
         _profileSection(
           title: 'Active sessions',
           trailing: Builder(builder: (context) {
@@ -514,73 +595,98 @@ extension _AxAppViews on _AxAppStateMixin {
                       final isRevoking =
                           revokingAccountSessionTokens.contains(session.token);
                       final isCurrent = _isCurrentAccountSession(session);
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.devices_outlined),
-                        title: Text(session.userAgent ?? 'Browser session'),
-                        subtitle: Text(
-                            'Expires ${_formatAccountDate(session.expiresAt)}'),
-                        trailing: SizedBox(
-                          width: 96,
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: isCurrent
-                                ? TextButton(
-                                    onPressed: null,
-                                    style: TextButton.styleFrom(
-                                      padding: EdgeInsets.zero,
-                                      minimumSize: Size.zero,
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                      alignment: Alignment.centerRight,
-                                      disabledForegroundColor:
-                                          Theme.of(context).colorScheme.primary,
-                                    ),
-                                    child: const Text('Current',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w700)),
-                                  )
-                                : TextButton(
-                                    onPressed: isRevoking ||
-                                            revokingAllAccountSessions
-                                        ? null
-                                        : () => _revokeAccountSession(session),
-                                    style: TextButton.styleFrom(
-                                      padding: EdgeInsets.zero,
-                                      minimumSize: Size.zero,
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                      alignment: Alignment.centerRight,
-                                    ),
-                                    child: Text(
-                                        isRevoking ? 'Revoking…' : 'Revoke'),
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Icon(Icons.devices_outlined,
+                                  size: 20,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    accountSessionLabel(session.userAgent),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface),
+                                    softWrap: true,
                                   ),
-                          ),
+                                  const SizedBox(height: 2),
+                                  Text(_formatAccountDate(session.expiresAt),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 96,
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: isCurrent
+                                    ? Padding(
+                                        padding: const EdgeInsets.only(top: 2),
+                                        child: Text('Current',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .primary,
+                                                    fontWeight:
+                                                        FontWeight.w500)),
+                                      )
+                                    : TextButton(
+                                        onPressed: isRevoking ||
+                                                revokingAllAccountSessions
+                                            ? null
+                                            : () =>
+                                                _revokeAccountSession(session),
+                                        style: TextButton.styleFrom(
+                                          padding: EdgeInsets.zero,
+                                          minimumSize: Size.zero,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                          alignment: Alignment.centerRight,
+                                          textStyle: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                  fontWeight: FontWeight.w500),
+                                        ),
+                                        child: Text(isRevoking
+                                            ? 'Revoking…'
+                                            : 'Revoke'),
+                                      ),
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     }),
                   ],
                 ),
-        ),
-        _profileSection(
-          title: 'Account',
-          child: OutlinedButton.icon(
-            onPressed: deletingAccount ? null : _deleteAccount,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: ConclaveColors.errorText(
-                  Theme.of(context).brightness == Brightness.dark),
-              side: BorderSide(
-                  color: ConclaveColors.error.withValues(alpha: .45)),
-            ),
-            icon: deletingAccount
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.delete_forever_outlined, size: 17),
-            label: Text(deletingAccount ? 'Deleting…' : 'Delete account'),
-          ),
         ),
       ],
     );
@@ -620,8 +726,25 @@ extension _AxAppViews on _AxAppStateMixin {
       };
 
   String _formatAccountDate(String value) {
-    if (value.isEmpty || value == '—') return 'unknown';
-    return value.replaceFirst('T', ' ').replaceFirst('Z', ' UTC');
+    final date = DateTime.tryParse(value)?.toUtc();
+    if (date == null) return 'Expiry unavailable';
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return 'Expires ${date.day} ${months[date.month - 1]} ${date.year}, $hour:$minute UTC';
   }
 
   String _formatNotificationTime(DateTime dt) {

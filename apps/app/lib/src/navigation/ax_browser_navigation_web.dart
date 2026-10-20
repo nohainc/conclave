@@ -48,9 +48,16 @@ final class _WebAxBrowserNavigation
 
   @override
   void replaceWithLogin(Uri returnTo) {
+    if (returnTo.path == '/login') {
+      replace(returnTo);
+      return;
+    }
+    final returnToString = returnTo.toString();
     final uri = Uri(
       path: '/login',
-      queryParameters: {'returnTo': returnTo.toString()},
+      queryParameters: (returnToString.isEmpty || returnToString == '/')
+          ? null
+          : {'returnTo': returnToString},
     );
     replace(uri);
   }

@@ -182,7 +182,10 @@ void main() {
     await tester.tap(find.byTooltip('Thread menu'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(MenuItemButton), findsNWidgets(5));
+    // Rename, Archive, Delete; clearing history lives in the Thread header.
+    expect(find.byType(MenuItemButton), findsNWidgets(3));
+    expect(find.text('Clear Chat History'), findsNothing);
+    expect(find.text('Clear Work History'), findsNothing);
     expect(find.text('Rename Thread'), findsOneWidget);
     expect(find.text('Delete Thread'), findsOneWidget);
 

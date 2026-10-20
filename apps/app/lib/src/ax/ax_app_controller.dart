@@ -35,24 +35,42 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
+  void _enterUnauthenticatedState() {
+    _dismissOpenModalRoutes();
+    final targetUri = navigation.toUri();
+    final nextLogin = navigation.kind == AxRouteKind.login
+        ? navigation
+        : AxNavigation.login(
+            returnTo: targetUri.path == '/' && !targetUri.hasQuery
+                ? null
+                : targetUri.toString(),
+          );
+    _updateState(() {
+      _resetSensitiveAuthInputs();
+      authError = null;
+      authNotice = null;
+      authRequired = true;
+      isLoading = false;
+      navigation = nextLogin;
+    });
+    browserNavigation.replaceWithLogin(targetUri);
+  }
+
   Future<void> _loadSession() async {
     try {
       final session = await store.auth.load();
       unawaited(_loadViewerAvatar(session.viewer?.avatarUrl));
       if (!session.authenticated) {
         if (!mounted) return;
-        _updateState(() {
-          authRequired = true;
-          isLoading = false;
-        });
-        browserNavigation.replaceWithLogin(navigation.toUri());
+        _enterUnauthenticatedState();
         return;
       }
-      if (navigation.kind == AxRouteKind.login &&
-          navigation.loginReturnTo != null) {
-        final target = AxNavigation.fromUri(
-          Uri.parse(navigation.loginReturnTo!),
-        );
+      if (navigation.kind == AxRouteKind.login) {
+        final target = navigation.loginReturnTo == null
+            ? const AxNavigation.home()
+            : AxNavigation.fromUri(
+                Uri.parse(navigation.loginReturnTo!),
+              );
         if (mounted) _updateState(() => navigation = target);
         browserNavigation.replace(target.toUri());
       }
@@ -96,11 +114,8 @@ extension _AxAppController on _AxAppStateMixin {
       expandedSpaceIds.clear();
       _sidebarRestoredSpaceIds.clear();
       if (!mounted) return;
-      _updateState(() {
-        selectedSpaceId = null;
-        authRequired = true;
-      });
-      browserNavigation.replaceWithLogin(navigation.toUri());
+      selectedSpaceId = null;
+      _enterUnauthenticatedState();
     } catch (error) {
       if (mounted) _updateState(() => loadError = error.toString());
     }
@@ -111,9 +126,19 @@ extension _AxAppController on _AxAppStateMixin {
     final password = authPasswordController.text;
     final confirmPassword = authConfirmPasswordController.text;
     final verificationCode = authVerificationCodeController.text.trim();
-    final resetToken = browserNavigation.current.queryParameters['token'];
-    if ((resetToken == null && email.isEmpty) ||
-        (password.isEmpty && (!authResetRequest || resetToken != null))) {
+    final resetToken = navigation.loginToken ??
+        browserNavigation.current.queryParameters['token'];
+    if (resetToken != null) {
+      if (password.isEmpty) {
+        _updateState(() => authError = 'Enter a new password.');
+        return;
+      }
+    } else if (authResetRequest) {
+      if (email.isEmpty) {
+        _updateState(() => authError = 'Enter your email address.');
+        return;
+      }
+    } else if (email.isEmpty || password.isEmpty) {
       _updateState(() => authError = 'Enter your email and password.');
       return;
     }
@@ -148,13 +173,15 @@ extension _AxAppController on _AxAppStateMixin {
           token: resetToken,
           password: password,
         );
-        browserNavigation.replace(Uri(path: '/login'));
+        final nextLogin =
+            AxNavigation.login(returnTo: navigation.loginReturnTo);
+        browserNavigation.replace(nextLogin.toUri());
         if (mounted) {
           _updateState(() {
+            navigation = nextLogin;
             authBusy = false;
             authNotice = 'Password changed. You can sign in now.';
-            authPasswordController.clear();
-            authConfirmPasswordController.clear();
+            _resetSensitiveAuthInputs();
           });
         }
         return;
@@ -200,10 +227,10 @@ extension _AxAppController on _AxAppStateMixin {
         );
       }
       if (!mounted) return;
+      TextInput.finishAutofillContext();
       _updateState(() {
         authBusy = false;
-        authSignUpAwaitingCode = false;
-        authVerificationCodeController.clear();
+        _resetSensitiveAuthInputs();
         authRequired = false;
         isLoading = true;
       });
@@ -1148,12 +1175,9 @@ extension _AxAppController on _AxAppStateMixin {
       await widget.dataSource.deleteAccount();
       await store.markAccountDeleted();
       if (!mounted) return;
-      _updateState(() {
-        deletingAccount = false;
-        selectedSpaceId = null;
-        authRequired = true;
-      });
-      browserNavigation.replaceWithLogin(navigation.toUri());
+      deletingAccount = false;
+      selectedSpaceId = null;
+      _enterUnauthenticatedState();
     } catch (error) {
       if (!mounted) return;
       _updateState(() => deletingAccount = false);
@@ -1209,18 +1233,18 @@ extension _AxAppController on _AxAppStateMixin {
   }
 
   Future<void> _editDisplayName() async {
-    final controller =
-        TextEditingController(text: store.auth.viewer?.displayName);
+    var draft = store.auth.viewer?.displayName ?? '';
     final value = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Rename profile'),
-        content: TextField(
-          controller: controller,
+        content: TextFormField(
+          initialValue: draft,
+          onChanged: (value) => draft = value,
           autofocus: true,
           textInputAction: TextInputAction.done,
           decoration: const InputDecoration(labelText: 'Name'),
-          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+          onFieldSubmitted: (value) => Navigator.of(dialogContext).pop(value),
         ),
         actions: [
           TextButton(
@@ -1228,13 +1252,12 @@ extension _AxAppController on _AxAppStateMixin {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            onPressed: () => Navigator.of(dialogContext).pop(draft),
             child: const Text('Save'),
           ),
         ],
       ),
     );
-    controller.dispose();
     final name = value?.trim() ?? '';
     if (name.isEmpty || !mounted) return;
     try {
@@ -1250,18 +1273,19 @@ extension _AxAppController on _AxAppStateMixin {
   }
 
   Future<void> _editEmail() async {
-    final controller = TextEditingController(text: store.auth.viewer?.email);
+    var draft = store.auth.viewer?.email ?? '';
     final value = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Update email'),
-        content: TextField(
-          controller: controller,
+        content: TextFormField(
+          initialValue: draft,
+          onChanged: (value) => draft = value,
           autofocus: true,
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.done,
           decoration: const InputDecoration(labelText: 'Email address'),
-          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+          onFieldSubmitted: (value) => Navigator.of(dialogContext).pop(value),
         ),
         actions: [
           TextButton(
@@ -1269,13 +1293,12 @@ extension _AxAppController on _AxAppStateMixin {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            onPressed: () => Navigator.of(dialogContext).pop(draft),
             child: const Text('Continue'),
           ),
         ],
       ),
     );
-    controller.dispose();
     final email = value?.trim() ?? '';
     if (email.isEmpty || !mounted) return;
     try {
@@ -1343,8 +1366,7 @@ extension _AxAppController on _AxAppStateMixin {
     } catch (error) {
       if (!mounted) return;
       if (error is AxApiException && error.statusCode == 401) {
-        _updateState(() => authRequired = true);
-        browserNavigation.replaceWithLogin(navigation.toUri());
+        _enterUnauthenticatedState();
         return;
       }
       if (!showSpinner) {
@@ -1375,8 +1397,7 @@ extension _AxAppController on _AxAppStateMixin {
         store.clearServerState();
         expandedSpaceIds.clear();
         _sidebarRestoredSpaceIds.clear();
-        _updateState(() => authRequired = true);
-        browserNavigation.replaceWithLogin(navigation.toUri());
+        _enterUnauthenticatedState();
         return;
       }
       if (session.authenticated && authRequired) {
@@ -1497,6 +1518,14 @@ extension _AxAppController on _AxAppStateMixin {
   }
 
   void _handleContextualCreate() {
+    if (isLoading ||
+        authRequired ||
+        loadError != null ||
+        desktopAuthApproved ||
+        desktopAuthCancelled ||
+        navigation.kind == AxRouteKind.desktopAuthApproval) {
+      return;
+    }
     final space = selectedSpace;
     if (space != null) {
       _createThread(space);

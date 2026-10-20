@@ -44,11 +44,8 @@ void main() {
     final name = find.byKey(const ValueKey('new-thread-name'));
     expect(tester.getRect(selector).width, tester.getRect(name).width);
     expect(tester.getRect(selector).bottom, lessThan(tester.getRect(name).top));
-    expect(
-        tester.getRect(selector).bottom,
-        lessThan(tester
-            .getRect(find.text('Choose what each member can do in this Space.'))
-            .top));
+    expect(tester.getRect(selector).bottom,
+        lessThan(tester.getRect(find.text('Members')).top));
 
     expect(find.textContaining('Following the default Workspace: First'),
         findsOneWidget);

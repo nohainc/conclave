@@ -74,12 +74,24 @@ Work Request path, so session continuity and cross-Worker context behave as
 before. The persisted Thread tab state selects this switch: `chat` restores
 Message, `work` restores Ask AI.
 
+The Thread header places icon-labelled **Conversation** and **AI History** actions
+next to each other. Each pane highlights its active label in white and the other
+in grey; selecting Conversation closes AI History. Switching panes positions the
+destination timeline before revealing it, so intermediate scroll offsets are
+not painted.
+
 **AI History** (header action) opens the former Work timeline read-only: full
 execution status, activity, Worker identity, model details, retry, cancel,
 and issue reporting, with no composer. At available widths of 1000 pixels or
 more it appears beside the Conversation with a vertical divider inset
-20 pixels; narrower windows show it instead of the Conversation with a close
-action. Thread content is capped at 800 logical pixels per pane, each pane has
+20 pixels; narrower windows show it instead of the Conversation. Select the
+Conversation header action to return; there is no separate close icon or
+read-only label. Clearing history is a confirmed header action of the pane it affects:
+**Clear Conversation History** (Chat messages, including archived AI answers)
+in the Conversation header and **Clear AI History** (Work history and Worker
+session context; completed answers are archived first) in the AI History
+header. The sidebar Thread menu no longer offers either action.
+Thread content is capped at 800 logical pixels per pane, each pane has
 20 pixels of side and bottom padding, and composers stay fixed. At the wide
 breakpoint the Chat composer shows Markdown formatting controls without a
 visibility toggle and places Send at the right of that toolbar.

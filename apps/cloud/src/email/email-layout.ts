@@ -7,7 +7,7 @@ import { escapeHtml } from "./email-escaping.js";
 const PRODUCT_NAME = "Conclave AX";
 const PRODUCT_TAGLINE = "AI collaboration and execution";
 export const EMAIL_LOGO_URL =
-  "https://app.conclaveax.com/assets/branding/conclave_email_logo.png";
+  "https://app.conclaveax.com/assets/assets/branding/conclave_email_logo.png";
 
 export interface EmailLayoutInput {
   readonly templateId: RenderedEmailContent["templateId"];

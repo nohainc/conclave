@@ -89,7 +89,9 @@ describe("email template architecture", () => {
       expect(rendered.subject.length).toBeGreaterThan(10);
       expect(rendered.html).toContain("<!doctype html>");
       expect(rendered.html).toContain("Conclave AX");
-      expect(rendered.html).toContain("conclave_email_logo.png");
+      expect(rendered.html).toContain(
+        "https://app.conclaveax.com/assets/assets/branding/conclave_email_logo.png",
+      );
       expect(rendered.html).toContain(
         "@media only screen and (max-width:620px)",
       );

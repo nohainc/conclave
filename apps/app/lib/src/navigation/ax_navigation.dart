@@ -22,6 +22,8 @@ class AxNavigation {
     this.runId,
     this.workspaceId,
     this.loginReturnTo,
+    this.loginToken,
+    this.loginError,
     this.searchQuery,
     this.desktopAuthIntentId,
   });
@@ -58,8 +60,16 @@ class AxNavigation {
   const AxNavigation.workspace(String workspaceId)
       : this._(kind: AxRouteKind.workspaces, workspaceId: workspaceId);
 
-  const AxNavigation.login({String? returnTo})
-      : this._(kind: AxRouteKind.login, loginReturnTo: returnTo);
+  const AxNavigation.login({
+    String? returnTo,
+    String? token,
+    String? error,
+  }) : this._(
+          kind: AxRouteKind.login,
+          loginReturnTo: returnTo,
+          loginToken: token,
+          loginError: error,
+        );
 
   const AxNavigation.profileSecurity()
       : this._(kind: AxRouteKind.profileSecurity);
@@ -78,6 +88,8 @@ class AxNavigation {
   final String? runId;
   final String? workspaceId;
   final String? loginReturnTo;
+  final String? loginToken;
+  final String? loginError;
   final String? searchQuery;
   final String? desktopAuthIntentId;
 
@@ -85,7 +97,19 @@ class AxNavigation {
     final segments = uri.pathSegments.where((segment) => segment.isNotEmpty);
     final parts = segments.toList(growable: false);
     if (parts case ['login']) {
-      return AxNavigation.login(returnTo: uri.queryParameters['returnTo']);
+      final rawReturnTo = uri.queryParameters['returnTo'];
+      final normalizedReturnTo = (rawReturnTo != null &&
+              rawReturnTo.isNotEmpty &&
+              !rawReturnTo.startsWith('/login'))
+          ? rawReturnTo
+          : null;
+      final rawToken = uri.queryParameters['token'];
+      final rawError = uri.queryParameters['error'];
+      return AxNavigation.login(
+        returnTo: normalizedReturnTo,
+        token: (rawToken != null && rawToken.isNotEmpty) ? rawToken : null,
+        error: (rawError != null && rawError.isNotEmpty) ? rawError : null,
+      );
     }
     if (parts case ['desktop-auth', 'approve']) {
       final intentId = uri.queryParameters['intentId'];
@@ -159,8 +183,24 @@ class AxNavigation {
           : Uri(path: '/workspaces'),
       AxRouteKind.login => Uri(
           path: '/login',
-          queryParameters:
-              loginReturnTo == null ? null : {'returnTo': loginReturnTo}),
+          queryParameters: {
+            if (loginReturnTo != null && loginReturnTo!.isNotEmpty)
+              'returnTo': loginReturnTo!,
+            if (loginToken != null && loginToken!.isNotEmpty)
+              'token': loginToken!,
+            if (loginError != null && loginError!.isNotEmpty)
+              'error': loginError!,
+          }.isEmpty
+              ? null
+              : {
+                  if (loginReturnTo != null && loginReturnTo!.isNotEmpty)
+                    'returnTo': loginReturnTo!,
+                  if (loginToken != null && loginToken!.isNotEmpty)
+                    'token': loginToken!,
+                  if (loginError != null && loginError!.isNotEmpty)
+                    'error': loginError!,
+                },
+        ),
       AxRouteKind.profileSecurity => Uri(path: '/settings/profile'),
       AxRouteKind.search => Uri(
           path: '/search',
@@ -186,10 +226,12 @@ class AxNavigation {
       other.runId == runId &&
       other.workspaceId == workspaceId &&
       other.loginReturnTo == loginReturnTo &&
+      other.loginToken == loginToken &&
+      other.loginError == loginError &&
       other.searchQuery == searchQuery &&
       other.desktopAuthIntentId == desktopAuthIntentId;
 
   @override
   int get hashCode => Object.hash(kind, spaceId, threadId, runId, workspaceId,
-      loginReturnTo, searchQuery, desktopAuthIntentId);
+      loginReturnTo, loginToken, loginError, searchQuery, desktopAuthIntentId);
 }

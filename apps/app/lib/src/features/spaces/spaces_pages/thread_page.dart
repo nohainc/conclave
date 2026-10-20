@@ -23,6 +23,8 @@ class ThreadPage extends StatefulWidget {
     this.realtimeEvents,
     this.initialTab = 0,
     this.initialAiHistoryOpen = false,
+    this.onClearConversation,
+    this.onClearAiHistory,
     this.isDraft = false,
     this.draftBusy = false,
     this.onSendDraftDiscussion,
@@ -62,6 +64,13 @@ class ThreadPage extends StatefulWidget {
   /// Opens the read-only AI History panel when the page is created.
   final bool initialAiHistoryOpen;
 
+  /// Deletes the Thread's Chat messages, including archived AI answers.
+  final Future<void> Function()? onClearConversation;
+
+  /// Deletes AI History and resets Worker session context; completed answers
+  /// are archived into the Conversation.
+  final Future<void> Function()? onClearAiHistory;
+
   /// Draft views load Space configuration but never read or persist Thread data.
   final bool isDraft;
   final bool draftBusy;
@@ -83,6 +92,7 @@ class _ThreadPageState extends State<ThreadPage>
   bool _threadViewStateRestored = false;
   bool _threadViewReady = false;
   bool _threadViewRevealScheduled = false;
+  bool? _paneAwaitingReveal;
   AxThreadViewState? _pendingThreadViewState;
   Map<String, dynamic>? _lastRemoteViewState;
   final _requestController = TextEditingController();
@@ -119,10 +129,44 @@ class _ThreadPageState extends State<ThreadPage>
   /// layouts, instead of the conversation.
   late bool _aiHistoryOpen = widget.initialAiHistoryOpen;
 
+  Future<void> _confirmClear({required bool history}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title:
+            Text(history ? 'Clear AI History' : 'Clear Conversation History'),
+        content: Text(history
+            ? 'Delete all AI requests, activity and diagnostics, and reset the '
+                'Workers\' session context? Completed AI answers stay in the '
+                'Conversation. This action cannot be undone.'
+            : 'Delete all Conversation messages, including saved AI answers? '
+                'Requests still in AI History remain until you clear it. This '
+                'action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await (history ? widget.onClearAiHistory : widget.onClearConversation)
+        ?.call();
+  }
+
   void _setAiHistoryOpen(bool open) {
     if (open == _aiHistoryOpen) return;
     setState(() {
       _aiHistoryOpen = open;
+      // Lay out and position the destination without painting intermediate
+      // scroll offsets. The follow callback reveals it after its final pass.
+      _paneAwaitingReveal = open;
+      _threadViewReady = false;
       if (open) _openWorkPending = true;
       if (!open) _openChatPending = true;
     });
@@ -132,6 +176,7 @@ class _ThreadPageState extends State<ThreadPage>
 
   void _invalidateInteractionCallbacks() {
     _interactionGeneration++;
+    _paneAwaitingReveal = null;
     _chatIncomingAnchor.reset(clearKeys: true);
     _workIncomingAnchor.reset(clearKeys: true);
     _previousChatIds = null;
@@ -284,6 +329,12 @@ class _ThreadPageState extends State<ThreadPage>
         }
       }
       _markSeen(isWork, controller);
+      if (_paneAwaitingReveal == isWork) {
+        setState(() {
+          _paneAwaitingReveal = null;
+          _threadViewReady = true;
+        });
+      }
     });
   }
 
@@ -1410,6 +1461,7 @@ class _ThreadPageState extends State<ThreadPage>
       animation: _tabController,
       builder: (context, _) => LayoutBuilder(builder: (context, constraints) {
         if (_threadViewStateRestored &&
+            _paneAwaitingReveal == null &&
             !_threadViewReady &&
             !_threadViewRevealScheduled) {
           _threadViewRevealScheduled = true;
@@ -1425,39 +1477,59 @@ class _ThreadPageState extends State<ThreadPage>
           });
         }
         final historyOpen = !widget.isDraft && _aiHistoryOpen;
-        final secondary = Theme.of(context).brightness == Brightness.dark
-            ? Colors.white38
-            : Colors.black45;
         Widget header(String title, {required bool history}) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(
                   height: 46,
                   child: Row(children: [
-                    if (history)
-                      IconButton(
-                        key: const ValueKey('ai-history-close'),
-                        tooltip: 'Close AI History',
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                        onPressed: () => _setAiHistoryOpen(false),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(children: [
+                          TextButton.icon(
+                            key: ValueKey(history
+                                ? 'ai-history-conversation'
+                                : 'conversation-tab'),
+                            onPressed: () => _setAiHistoryOpen(false),
+                            style: TextButton.styleFrom(
+                              foregroundColor:
+                                  history ? Colors.grey : Colors.white,
+                            ),
+                            icon: const Icon(Icons.chat_bubble_outline_rounded,
+                                size: 18),
+                            label: const Text('Conversation'),
+                          ),
+                          if (!widget.isDraft)
+                            TextButton.icon(
+                              key: ValueKey(history
+                                  ? 'ai-history-tab'
+                                  : 'ai-history-toggle'),
+                              onPressed: () => _setAiHistoryOpen(true),
+                              style: TextButton.styleFrom(
+                                foregroundColor:
+                                    history ? Colors.white : Colors.grey,
+                              ),
+                              icon: const Icon(Icons.history_rounded, size: 18),
+                              label: const Text('AI History'),
+                            ),
+                        ]),
                       ),
-                    Text(title,
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.onSurface)),
-                    if (history) ...[
-                      const SizedBox(width: 8),
-                      Text('Read-only',
-                          style: TextStyle(fontSize: 12, color: secondary)),
-                    ],
-                    const Spacer(),
-                    if (!history && !widget.isDraft)
-                      TextButton.icon(
-                        key: const ValueKey('ai-history-toggle'),
-                        onPressed: () => _setAiHistoryOpen(!historyOpen),
-                        icon: const Icon(Icons.history_rounded, size: 18),
-                        label: const Text('AI History'),
+                    ),
+                    if (!widget.isDraft &&
+                        (history
+                                ? widget.onClearAiHistory
+                                : widget.onClearConversation) !=
+                            null)
+                      IconButton(
+                        key: ValueKey(history
+                            ? 'clear-ai-history'
+                            : 'clear-conversation-history'),
+                        tooltip: history
+                            ? 'Clear AI History'
+                            : 'Clear Conversation History',
+                        icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                        onPressed: () => _confirmClear(history: history),
                       ),
                   ]),
                 ),
@@ -1518,6 +1590,7 @@ class _ThreadPageState extends State<ThreadPage>
           child: ExcludeSemantics(
             excluding: !_threadViewReady,
             child: Opacity(
+              key: const ValueKey('thread-view-visibility'),
               opacity: _threadViewReady ? 1 : 0,
               child: content,
             ),

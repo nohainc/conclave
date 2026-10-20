@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/brand.dart';
 import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
@@ -175,13 +176,32 @@ void main() {
     expect(find.text('Linked account gh-1'), findsNothing);
     expect(find.text('Revoke all'), findsOneWidget);
     expect(find.text('Current'), findsOneWidget);
-    final currentButton = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'Current'),
-    );
-    expect(currentButton.onPressed, isNull);
-    expect(find.text('Change avatar'), findsOneWidget);
-    expect(find.text('Rename'), findsOneWidget);
-    expect(find.text('Update email'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Current'), findsNothing);
+    expect(find.text('Expires 7 Oct 2026, 10:00 UTC'), findsOneWidget);
+    expect(find.text('Change avatar'), findsNothing);
+    final avatar = find.byKey(const ValueKey('profile-avatar-upload'));
+    expect(tester.widget<IconButton>(avatar).onPressed, isNotNull);
+    await tester.tap(avatar);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Account'), findsNothing);
+    expect(find.text('Linked login methods'), findsNothing);
+    expect(find.text('No linked methods loaded.'), findsNothing);
+    expect(find.text('Delete account'), findsOneWidget);
+    expect(find.text('Rename'), findsNothing);
+    expect(find.text('Update email'), findsNothing);
+    for (final entry in [
+      ('Edit name', 'Rename profile'),
+      ('Edit email', 'Update email')
+    ]) {
+      final edit = find.byTooltip(entry.$1);
+      expect(edit, findsOneWidget);
+      await tester.tap(edit);
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AlertDialog, entry.$2), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    }
     expect(
       find.descendant(
         of: find.widgetWithText(ListTile, 'Fixture browser'),
@@ -201,6 +221,117 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Fixture browser'), findsOneWidget);
     expect(find.text('Other browser'), findsNothing);
+  });
+
+  testWidgets('linked providers hide link buttons and share provider icons',
+      (tester) async {
+    for (final providers in [
+      <String>[],
+      ['GitHub'],
+      ['google'],
+      ['github', 'google']
+    ]) {
+      await tester.pumpWidget(MaterialApp(
+        key: UniqueKey(),
+        theme: ConclaveBrand.lightTheme(),
+        home: ConclaveAppShell(
+          services: const DefaultPlatformServices(),
+          dataSource: _LinkedProvidersFixture(providers),
+          initialUri: Uri.parse('/settings/profile'),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      for (final provider in ['github', 'google']) {
+        final linked =
+            providers.any((value) => value.toLowerCase() == provider);
+        final label = provider == 'github' ? 'GitHub' : 'Google';
+        expect(
+            find.text('Link $label'), linked ? findsNothing : findsOneWidget);
+        expect(find.text(label), linked ? findsOneWidget : findsNothing);
+        expect(
+            find.byWidgetPredicate((widget) =>
+                widget is Image &&
+                widget.image is AssetImage &&
+                (widget.image as AssetImage).assetName ==
+                    'assets/auth/$provider${linked ? '' : '-link'}.png'),
+            findsOneWidget);
+        final icon = tester.widget<Image>(find.byWidgetPredicate((widget) =>
+            widget is Image &&
+            widget.image is AssetImage &&
+            (widget.image as AssetImage).assetName ==
+                'assets/auth/$provider${linked ? '' : '-link'}.png'));
+        expect(icon.width, 24);
+        if (!linked) {
+          final row = find.byKey(const ValueKey('profile-account-links'));
+          expect(find.descendant(of: row, matching: find.text('Link $label')),
+              findsOneWidget);
+          expect(
+              find.descendant(of: row, matching: find.text('Delete account')),
+              findsOneWidget);
+          expect(find.widgetWithText(TextButton, 'Link $label'), findsNothing);
+          expect(find.widgetWithText(OutlinedButton, 'Delete account'),
+              findsNothing);
+          expect(
+              tester.widget<Text>(find.text('Link $label')).style?.decoration,
+              TextDecoration.underline);
+        }
+      }
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('profile sessions have visible small labels for missing metadata',
+      (tester) async {
+    tester.view.physicalSize = const Size(480, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    for (final theme in [
+      ConclaveBrand.lightTheme(),
+      ConclaveBrand.darkTheme()
+    ]) {
+      await tester.pumpWidget(MaterialApp(
+        key: UniqueKey(),
+        theme: theme,
+        home: ConclaveAppShell(
+          services: const DefaultPlatformServices(),
+          dataSource: _LinkedProvidersFixture([], sessions: const [
+            AxAuthSession(
+                token: 'blank',
+                id: 'blank',
+                createdAt: '',
+                expiresAt: '',
+                userAgent: '\u200B'),
+            AxAuthSession(
+                token: 'chrome',
+                id: 'chrome',
+                createdAt: '',
+                expiresAt: '',
+                userAgent: 'Mozilla/5.0 (Macintosh) Chrome/140 Safari/537'),
+          ]),
+          initialUri: Uri.parse('/settings/profile'),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      for (final label in ['Browser session', 'Chrome on macOS']) {
+        final finder = find.text(label);
+        expect(finder, findsOneWidget);
+        await tester.ensureVisible(finder);
+        final text = tester.widget<Text>(finder);
+        expect(text.style?.fontSize, 13);
+        expect(text.style?.fontFamily, theme.textTheme.bodySmall?.fontFamily);
+        expect(text.style?.fontWeight, FontWeight.w500);
+        expect(text.style?.color, theme.colorScheme.onSurface);
+        expect(tester.getSize(finder).width, greaterThan(60));
+        expect(tester.getSize(finder).height, greaterThan(0));
+      }
+      expect(find.text('Expiry unavailable'), findsNWidgets(2));
+      expect(find.text('Linked login methods'), findsNothing);
+      expect(find.text('No linked methods loaded.'), findsNothing);
+      expect(find.text('Link GitHub'), findsOneWidget);
+      expect(find.text('Link Google'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('profile revoke all keeps the current session', (tester) async {
@@ -2624,12 +2755,128 @@ void main() {
     expect(data.signedUpOtp, '482910');
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+      'preserves password reset token across unauthenticated session check and resets password',
+      (tester) async {
+    tester.view.physicalSize = const Size(1800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final data = _PasswordResetFixture();
+    await tester.pumpWidget(MaterialApp(
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: data,
+        initialUri: Uri.parse('/login?token=reset-token-abc'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose a new password'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Password'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Confirm password'), findsOneWidget);
+    expect(find.text('Continue with GitHub'), findsNothing);
+
+    // Password visibility toggle works
+    expect(find.byTooltip('Show password'), findsNWidgets(2));
+    await tester.tap(find.byTooltip('Show password').first);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Hide password'), findsOneWidget);
+
+    // Empty submission shows specific validation message
+    await tester.tap(find.widgetWithText(FilledButton, 'Save new password'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a new password.'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      'updated-secret-999',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Confirm password'),
+      'updated-secret-999',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Save new password'));
+    await tester.pumpAndSettle();
+
+    expect(data.resetTokenUsed, 'reset-token-abc');
+    expect(data.resetNewPasswordUsed, 'updated-secret-999');
+    expect(
+      find.text('Password changed. You can sign in now.'),
+      findsOneWidget,
+    );
+    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+      'preserves OAuth error banner on /login and blocks contextual create shortcut while unauthenticated',
+      (tester) async {
+    tester.view.physicalSize = const Size(1800, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const data = AxFixtureDataSource(authenticated: false);
+    await tester.pumpWidget(MaterialApp(
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: data,
+        initialUri: Uri.parse('/login?error=account_not_linked'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'An account with this email already exists. Sign in with your email and password, then link Google or GitHub in your profile security settings.',
+      ),
+      findsOneWidget,
+    );
+
+    // Pressing Meta+N or Control+N while unauthenticated must not open Create Space dialog
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create Space'), findsNothing);
+
+    // Sign-up mode shows social buttons and does not show duplicate Back to sign in button
+    await tester.tap(find.text('New here? Create an account'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Already have an account? Sign in'), findsOneWidget);
+    expect(find.text('Back to sign in'), findsNothing);
+    expect(find.text('Continue with GitHub'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }
 
 void _dummyNav(AxNavigation _) {}
 void _dummyToggle(String _) {}
 void _dummyAction() {}
 void _dummyExternal(Uri _) {}
+
+class _PasswordResetFixture extends AxFixtureDataSource {
+  _PasswordResetFixture() : super(authenticated: false);
+
+  String? resetTokenUsed;
+  String? resetNewPasswordUsed;
+
+  @override
+  Future<void> resetPassword({
+    required String token,
+    required String password,
+  }) async {
+    resetTokenUsed = token;
+    resetNewPasswordUsed = password;
+  }
+}
 
 class _SignUpOtpFixture extends AxFixtureDataSource {
   _SignUpOtpFixture() : super(authenticated: false);
@@ -2815,4 +3062,19 @@ class _InvitationTestFixture extends AxFixtureDataSource {
     pendingInvitations =
         pendingInvitations.where((i) => i.id != invitationId).toList();
   }
+}
+
+class _LinkedProvidersFixture extends AxFixtureDataSource {
+  _LinkedProvidersFixture(this.providers, {this.sessions = const []});
+  final List<AxAuthSession> sessions;
+  final List<String> providers;
+
+  @override
+  Future<AxAccountSecurity> loadAccountSecurity() async => AxAccountSecurity(
+        accounts: providers
+            .map((provider) => AxAuthAccount(
+                id: provider, providerId: provider, accountId: provider))
+            .toList(),
+        sessions: sessions,
+      );
 }

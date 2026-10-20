@@ -28,8 +28,6 @@ class SpaceTree extends StatelessWidget {
     this.onDeleteSpace,
     this.onRenameThread,
     this.onSetThreadArchived,
-    this.onClearChatHistory,
-    this.onClearWorkHistory,
     this.onDeleteThread,
     this.onReorderThreads,
     this.onSetSpacePinned,
@@ -51,8 +49,6 @@ class SpaceTree extends StatelessWidget {
   final Future<void> Function(AxThread thread, String name)? onRenameThread;
   final Future<void> Function(AxThread thread, bool archived)?
       onSetThreadArchived;
-  final Future<void> Function(AxThread thread)? onClearChatHistory;
-  final Future<void> Function(AxThread thread)? onClearWorkHistory;
   final Future<void> Function(AxThread thread)? onDeleteThread;
 
   /// Persists a Space's Thread order (visible Thread ids, top to bottom).
@@ -649,27 +645,6 @@ class SpaceTree extends StatelessWidget {
           ),
           divider(),
           MenuItemButton(
-            style: itemStyle(),
-            leadingIcon:
-                Icon(Icons.delete_outline, size: 16, color: menuIconColor),
-            onPressed: () => select('clearChat'),
-            child: const Text(
-              'Clear Chat History',
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
-            ),
-          ),
-          MenuItemButton(
-            style: itemStyle(),
-            leadingIcon:
-                Icon(Icons.delete_outline, size: 16, color: menuIconColor),
-            onPressed: () => select('clearWork'),
-            child: const Text(
-              'Clear Work History',
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
-            ),
-          ),
-          divider(),
-          MenuItemButton(
             style: itemStyle(isDestructive: true),
             leadingIcon: Icon(
               Icons.delete_rounded,
@@ -882,12 +857,6 @@ class SpaceTree extends StatelessWidget {
       case 'unarchive':
         unawaited(_showArchiveDialog(context, thread, action == 'archive'));
         break;
-      case 'clearChat':
-        unawaited(_showClearChatDialog(context, thread));
-        break;
-      case 'clearWork':
-        unawaited(_showClearWorkDialog(context, thread));
-        break;
       case 'delete':
         unawaited(_showDeleteThreadDialog(context, thread));
         break;
@@ -945,68 +914,6 @@ class SpaceTree extends StatelessWidget {
         }
       }
     });
-  }
-
-  Future<void> _showClearChatDialog(
-      BuildContext context, AxThread thread) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Clear Chat History'),
-        content: const Text(
-          'Delete all chat messages? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Clear Chat'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await onClearChatHistory?.call(thread);
-    } catch (error) {
-      if (context.mounted) {
-        _showThreadActionError(context, 'clear chat history', error);
-      }
-    }
-  }
-
-  Future<void> _showClearWorkDialog(
-      BuildContext context, AxThread thread) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Clear Work History'),
-        content: const Text(
-          'Delete all work requests and reset Work context? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Clear Work'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    try {
-      await onClearWorkHistory?.call(thread);
-    } catch (error) {
-      if (context.mounted) {
-        _showThreadActionError(context, 'clear work history', error);
-      }
-    }
   }
 
   Future<void> _showDeleteThreadDialog(
