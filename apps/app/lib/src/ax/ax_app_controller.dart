@@ -208,8 +208,7 @@ extension _AxAppController on _AxAppStateMixin {
               authBusy = false;
               authSignUpAwaitingCode = true;
               authVerificationCodeController.clear();
-              authNotice =
-                  'We sent a 6-digit verification code to $email. Enter it below to finish creating your account.';
+              authNotice = null;
             });
           }
           return;

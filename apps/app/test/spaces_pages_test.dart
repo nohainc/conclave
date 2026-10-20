@@ -408,7 +408,7 @@ void main() {
       expect(find.text('· $name'), findsOneWidget);
     }
   });
-  testWidgets('dynamic AI workflow menu separates Chat from Work with Markdown',
+  testWidgets('single Work workflow switches directly from Chat with Markdown',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -453,27 +453,19 @@ void main() {
     await _askAi(tester);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
-    final options = tester
-        .widgetList<ConclaveMenuEntry<String>>(
-            find.byType(ConclaveMenuEntry<String>))
-        .toList();
-    expect(options.map((item) => item.value), [
-      'direct:v2',
-    ]);
-    expect(
-        options
-            .map((item) =>
-                ((item.child as Semantics).child as MenuItemButton).child)
-            .cast<Text>()
-            .map((text) => text.data),
-        [
-          'Work',
-        ]);
+    expect(find.byType(ConclaveMenuEntry<String>), findsNothing);
     expect(find.text('Direct'), findsNothing);
-    await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is ConclaveMenuEntry<String> && widget.value == 'direct:v2'));
-    await tester.pumpAndSettle();
     final chatToggle = find.byKey(const ValueKey('work-toggle-chat'));
+    final workButton = find.byKey(const ValueKey('work-choose-workflow'));
+    final attachments = find.byKey(const ValueKey('work-add-attachments'));
+    expect(tester.getTopRight(attachments).dx,
+        closeTo(tester.getTopLeft(chatToggle).dx, 0.1));
+    expect(tester.getTopRight(chatToggle).dx,
+        closeTo(tester.getTopLeft(workButton).dx, 0.1));
+    expect(
+        find.descendant(
+            of: workButton, matching: find.byIcon(Icons.keyboard_arrow_down)),
+        findsNothing);
     expect(find.descendant(of: chatToggle, matching: find.byType(Icon)),
         findsNothing);
     final inactiveChatText = tester.widget<Text>(
@@ -541,20 +533,12 @@ void main() {
     await _askAi(tester);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
-    final options = tester
-        .widgetList<ConclaveMenuEntry<String>>(
-            find.byType(ConclaveMenuEntry<String>))
-        .toList();
-    expect(options, hasLength(1));
-    expect(options.single.value, 'direct:v2');
+    expect(find.byType(ConclaveMenuEntry<String>), findsNothing);
     expect(
-        (((options.single.child as Semantics).child as MenuItemButton)
-                .leadingIcon as Icon)
-            .icon,
-        Icons.check_circle_rounded);
-    await tester.ensureVisible(find.byType(ConclaveMenuEntry<String>));
-    await tester.tap(find.byType(ConclaveMenuEntry<String>));
-    await tester.pumpAndSettle();
+        find.descendant(
+            of: find.byKey(const ValueKey('work-choose-workflow')),
+            matching: find.byIcon(Icons.keyboard_arrow_down)),
+        findsNothing);
     expect(find.byTooltip('Work settings'), findsNothing);
     await tester.enterText(find.byType(TextField).first, 'New work');
     await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
@@ -654,17 +638,9 @@ void main() {
       // AI History never accepts input.
       expect(find.descendant(of: history, matching: find.byType(TextField)),
           findsNothing);
-      if (width < 1000) {
-        expect(chat, findsNothing);
-        expect(find.byType(VerticalDivider), findsNothing);
-      } else {
-        expect(chat, findsOneWidget);
-        final divider =
-            tester.widget<VerticalDivider>(find.byType(VerticalDivider));
-        expect(divider.indent, 20);
-        expect(divider.endIndent, 20);
-        expect(tester.getRect(chat).right, lessThan(tester.getRect(work).left));
-      }
+      // Only one pane is shown at any width.
+      expect(chat, findsNothing);
+      expect(find.byType(VerticalDivider), findsNothing);
       await tester.tap(find.byKey(const ValueKey('ai-history-conversation')));
       await tester.pump();
       expect(tester.widget<Opacity>(visibility).opacity, 0);
@@ -766,14 +742,10 @@ void main() {
         },
       ))));
       await tester.pumpAndSettle();
-      await _openAiHistory(tester);
       await _askAi(tester);
-      final previousBody = find
-          .descendant(
-            of: find.byKey(const ValueKey('previous-response')),
-            matching: find.byType(ConclaveMarkdownBody),
-          )
-          .last;
+      final previousBody = find.byWidgetPredicate((widget) =>
+          widget is ConclaveMarkdownBody &&
+          widget.data == 'Earlier completed response');
       final previousElement = tester.element(previousBody);
       void expectPreviousUnchanged() {
         expect(tester.element(previousBody), same(previousElement));
@@ -797,13 +769,13 @@ void main() {
               .text,
           isEmpty);
       expect(
-          _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().where(
+          _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().where(
               (element) =>
                   (element.widget as ConclaveMarkdownBody).data ==
                   '**Immediate request**'),
           hasLength(1));
       expect(
-          _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().any(
+          _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().any(
               (element) =>
                   (element.widget as ConclaveMarkdownBody).data ==
                   'Checking that everything is ready…'),
@@ -848,7 +820,7 @@ void main() {
       await AxWorkHistoryCache.forSource(data).refresh('thread-1');
       await tester.pumpAndSettle();
       expect(
-          _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().where(
+          _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().where(
               (element) =>
                   (element.widget as ConclaveMarkdownBody).data ==
                   '**Immediate request**'),
@@ -857,7 +829,8 @@ void main() {
       await tester.pumpAndSettle();
       if (reject) {
         expect(sends, 0);
-        expect(_inAiHistory(find.textContaining('Space access is required.')),
+        expect(
+            _inConversation(find.textContaining('Space access is required.')),
             findsOneWidget);
         expect(
             tester
@@ -872,7 +845,7 @@ void main() {
         await tester.enterText(
             find.byType(TextField).first, 'Draft while sending');
         expect(
-            _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().any(
+            _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().any(
                 (element) =>
                     (element.widget as ConclaveMarkdownBody).data ==
                     'Sending your request…'),
@@ -895,7 +868,7 @@ void main() {
         await tester.pumpAndSettle();
         expectPreviousUnchanged();
         expect(
-            _inAiHistory(find
+            _inConversation(find
                 .textContaining('A previous request is still in progress.')),
             findsNothing);
         expect(find.text('Cancel pending request'), findsNothing);
@@ -920,6 +893,12 @@ void main() {
             isNotNull);
         await tester
             .tap(find.byKey(const ValueKey('composer-send-Send request')));
+        await tester.pumpAndSettle();
+        // Sending while a request processes queues the message.
+        expect(sends, 1);
+        expect(find.byKey(const ValueKey('work-queue-panel')), findsOneWidget);
+        expect(find.text('Next request'), findsOneWidget);
+        await tester.tap(find.byTooltip('Send now'));
         await tester.pumpAndSettle();
         expect(find.text('Cancel previous request?'), findsOneWidget);
         expect(find.text('Cancel and send'), findsOneWidget);
@@ -951,13 +930,13 @@ void main() {
                 .onPressed,
             isNotNull);
         expect(
-            _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().any(
+            _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().any(
                 (element) =>
                     (element.widget as ConclaveMarkdownBody).data ==
                     'Completed answer'),
             isTrue);
         expect(
-            _inAiHistory(find.byType(ConclaveMarkdownBody)).evaluate().where(
+            _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().where(
                 (element) =>
                     (element.widget as ConclaveMarkdownBody).data ==
                     '**Immediate request**'),
@@ -965,6 +944,88 @@ void main() {
       }
       expect(tester.takeException(), isNull);
     }
+  });
+  testWidgets('messages sent while a request runs are queued and sent next',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final data = _SlowSubmissionDataSource()..ready.complete([]);
+    AxWorkRequest running(String status) => AxWorkRequest(
+          id: 'running-1',
+          requestedByName: 'You',
+          requestedByUserId: 'user-owner',
+          prompt: 'First request',
+          workflowId: 'direct',
+          workflowVersion: 1,
+          status: status,
+          createdAt: '2026-10-06T10:00:00Z',
+          steps: const [],
+          finalText: status == 'completed' ? 'First answer' : null,
+        );
+    data.requests = [running('running')];
+    final prompts = <String>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      initialTab: 1,
+      space: const AxSpace(
+          id: 'space-1',
+          name: 'Space',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      thread: const AxThread(
+          id: 'thread-1',
+          spaceId: 'space-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: data,
+      currentUserId: 'user-owner',
+      onBackToSpace: _noop,
+      onArchive: _noop,
+      onRunWork: (prompt, __, ___, key) async {
+        prompts.add(prompt);
+        return 'saved-${prompts.length}';
+      },
+    ))));
+    await tester.pumpAndSettle();
+    await _askAi(tester);
+    final send = find.byKey(const ValueKey('composer-send-Send request'));
+    for (final text in ['Second', 'Third', 'Dropped']) {
+      await tester.enterText(find.byType(TextField).first, text);
+      await tester.tap(send);
+      await tester.pumpAndSettle();
+    }
+    expect(prompts, isEmpty);
+    expect(find.text('Cancel previous request?'), findsNothing);
+    expect(find.byKey(const ValueKey('work-queue-panel')), findsOneWidget);
+    expect(find.textContaining('Queued · 3'), findsOneWidget);
+
+    // Remove one; edit another back into the composer and queue it again.
+    await tester.tap(find.byTooltip('Remove from queue').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Dropped'), findsNothing);
+    await tester.tap(find.byTooltip('Edit').last);
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'Third');
+    await tester.enterText(find.byType(TextField).first, 'Third edited');
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Queued · 2'), findsOneWidget);
+
+    data.requests = [running('completed')];
+    await AxWorkHistoryCache.forSource(data).refresh('thread-1');
+    await tester.pumpAndSettle();
+    // Only the head of the queue is sent; the next waits for it to finish.
+    expect(prompts, ['Second']);
+    expect(find.textContaining('Queued · 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
   testWidgets('Chat and Work controls stay fixed while history scrolls',
       (tester) async {
@@ -1663,32 +1724,12 @@ void main() {
     expect(find.byKey(const ValueKey('work-choose-workflow')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
-    final workflowSurface = find.byWidgetPredicate(
-        (widget) => widget is Material && widget.elevation == 12);
+    expect(find.byType(ConclaveMenuEntry<String>), findsNothing);
     expect(
-        tester.widget<Material>(workflowSurface).color,
-        ConclaveColors.composerBackground(
-            Theme.of(tester.element(workflowSurface)).brightness ==
-                Brightness.dark));
-    expect(
-        tester.getBottomLeft(workflowSurface).dy,
-        closeTo(
-            tester
-                    .getTopLeft(
-                        find.byKey(const ValueKey('work-choose-workflow')))
-                    .dy -
-                8,
-            1));
-    final workOption = find.descendant(
-        of: find.byType(ConclaveMenuEntry<String>),
-        matching: find.text('Work'));
-    expect(find.ancestor(of: workOption, matching: find.byType(InkWell)),
+        find.descendant(
+            of: find.byKey(const ValueKey('work-choose-workflow')),
+            matching: find.text('Work')),
         findsOneWidget);
-    await tester.ensureVisible(workOption);
-    await tester.pumpAndSettle();
-    await tester.tap(find.ancestor(
-        of: workOption, matching: find.byType(ConclaveMenuEntry<String>)));
-    await tester.pumpAndSettle();
     const markdownPrompt =
         '  ## Implementation\n\n- **Add tests**\n\n```dart\nfinal ready = true;\n```\n';
     expect(find.byTooltip('Show Markdown controls'), findsNothing);

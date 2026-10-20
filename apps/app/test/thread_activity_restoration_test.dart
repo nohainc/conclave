@@ -117,8 +117,6 @@ void main() {
           home: Scaffold(
               body: ThreadPage(
         key: replacePage ? ValueKey(id) : null,
-        initialTab: 1,
-        initialAiHistoryOpen: true,
         space: const AxSpace(
             id: 'space',
             name: 'Space',
@@ -144,8 +142,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
     }
 
-    Finder inHistory(Finder finder) => find.descendant(
-        of: find.byKey(const ValueKey('work-history-scroll')),
+    Finder inConversation(Finder finder) => find.descendant(
+        of: find.byKey(const ValueKey('chat-history-scroll')),
         matching: finder);
 
     void completeOperation(String id, int sequence) {
@@ -166,20 +164,20 @@ void main() {
     await open('a');
     completeOperation('a', 1);
     await tester.pump();
-    expect(inHistory(find.text('a operation 1')), findsOneWidget);
+    expect(inConversation(find.text('a operation 1')), findsOneWidget);
     await open('b');
-    expect(inHistory(find.text('a operation 1')), findsNothing);
+    expect(inConversation(find.text('a operation 1')), findsNothing);
     completeOperation('b', 1);
     completeOperation('a', 2); // Arrives while the other Thread is visible.
     await tester.pump();
-    expect(inHistory(find.text('b operation 1')), findsOneWidget);
+    expect(inConversation(find.text('b operation 1')), findsOneWidget);
     await open('a');
-    expect(inHistory(find.text('a operation 1')), findsOneWidget);
-    expect(inHistory(find.text('a operation 2')), findsOneWidget);
-    expect(inHistory(find.text('b operation 1')), findsNothing);
+    expect(inConversation(find.text('a operation 1')), findsOneWidget);
+    expect(inConversation(find.text('a operation 2')), findsOneWidget);
+    expect(inConversation(find.text('b operation 1')), findsNothing);
     await open('b', replacePage: true); // Also cover disposed/recreated pages.
-    expect(inHistory(find.text('b operation 1')), findsOneWidget);
-    expect(inHistory(find.text('a operation 1')), findsNothing);
+    expect(inConversation(find.text('b operation 1')), findsOneWidget);
+    expect(inConversation(find.text('a operation 1')), findsNothing);
     expect(data.details, containsAll(['a', 'b']));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

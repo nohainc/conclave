@@ -20,6 +20,13 @@
   "vars": {
     "CONCLAVE_PROFILE_LAB_OWNER_EMAIL": "vitalii@nohainc.com",
     "CONCLAVE_ENVIRONMENT": "development",
+    // Optional social sign-in; empty disables a provider. Declared here so
+    // wrangler loads overrides from .dev.vars (with `secrets` configured it
+    // only loads .dev.vars keys that are declared vars or required secrets).
+    "CONCLAVE_AUTH_GITHUB_CLIENT_ID": "",
+    "CONCLAVE_AUTH_GITHUB_CLIENT_SECRET": "",
+    "CONCLAVE_AUTH_GOOGLE_CLIENT_ID": "",
+    "CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET": "",
   },
   "secrets": {
     "required": [

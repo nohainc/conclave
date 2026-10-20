@@ -68,6 +68,27 @@ export async function handleListSpaceThreads(
                 ORDER BY h.occurred_at DESC LIMIT 1),
               ''
             ) AS brief,
+            CASE WHEN EXISTS (SELECT 1 FROM discussion_messages m
+                                WHERE m.thread_id = threads.id)
+              THEN (SELECT CASE WHEN m.kind = 'ai_answer'
+                                THEN COALESCE(m.worker_display_name, 'AI')
+                                ELSE COALESCE(u.display_name, 'Member') END
+                      FROM discussion_messages m
+                      LEFT JOIN users u ON u.id = m.author_user_id
+                     WHERE m.thread_id = threads.id
+                     ORDER BY m.created_at DESC LIMIT 1)
+              ELSE (SELECT CASE WHEN h.actor_type = 'worker'
+                                THEN COALESCE(json_extract(h.metadata_json, '$.workerDisplayName'), 'AI')
+                                ELSE COALESCE(u.display_name, 'Member') END
+                      FROM conversation_history_entries h
+                      JOIN conversations conversation
+                        ON conversation.id = h.conversation_id
+                      LEFT JOIN users u
+                        ON h.actor_type = 'user' AND u.id = h.actor_id
+                     WHERE conversation.thread_id = threads.id
+                       AND h.text IS NOT NULL
+                     ORDER BY h.occurred_at DESC LIMIT 1)
+            END AS briefAuthorName,
             ${activeWorkSql("threads")} AS hasActiveWork,
             ${unreadSql("threads", "?2", "COALESCE(read_state.read_at, member.created_at)")} AS hasUnread,
             (SELECT up.pinned_at FROM user_pins up

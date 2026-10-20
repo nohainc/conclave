@@ -255,6 +255,14 @@ for focused development; `scripts/run-workspace-service.sh` launches that
 compiled executable by default and reserves `--source` for Dart debugging;
 `scripts/check-workspace-service.sh` and
 `scripts/verify-workspace-service-bundle.sh` validate the service package.
+`scripts/package-workspace-macos.sh` (`pnpm workspace:package:macos`) wraps the
+built app into a drag-to-Applications `.dmg` and an `/Applications` `.pkg`.
+The app is the single install unit: it already embeds the service, the Engine,
+and the LaunchAgent manifest. The installer has no scripts and does not
+register or start the service; Workspace.app registers it through SMAppService,
+so upgrades keep existing Application Support state. Set
+`CONCLAVE_MACOS_INSTALLER_SIGN_IDENTITY` (Developer ID Installer) and
+`CONCLAVE_MACOS_NOTARY_PROFILE` for distributable artifacts.
 Signing and launchd checks are release/device evidence and cannot be replaced
 by a successful Dart compile.
 

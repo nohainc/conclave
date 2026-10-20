@@ -253,10 +253,11 @@ void main() {
     expect(
         builds['ValueListenableBuilder<ThreadWorkPresentationSnapshot?>'] ?? 0,
         greaterThan(0));
-    // Work Requests are conversation entries, so the timeline follows them.
-    expect(builds['conversation-timeline'] ?? 0, greaterThan(0));
     expect(builds['ThreadPage'] ?? 0, 0);
     expect(builds['ConclaveAppShell'] ?? 0, 0);
+    // The Thread shows one pane at a time; return to the Conversation.
+    await tester.tap(find.byKey(const ValueKey('ai-history-conversation')));
+    await tester.pumpAndSettle();
     builds.clear();
     await store.discussion.synchronize(id, reconcileNewest: true);
     await tester.pumpAndSettle();

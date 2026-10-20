@@ -306,6 +306,57 @@ describe("IdentityService", () => {
     expect(welcomeMessage.text).toContain("https://app.conclave.test");
   });
 
+  it("sends the account-deleted template to the removed account's email", async () => {
+    const send = vi.fn(async (_message: unknown) => ({ messageId: "deleted-1" }));
+    const options = buildBetterAuthOptions({
+      CONCLAVE_DB: {} as D1Database,
+      CONCLAVE_ENVIRONMENT: "production",
+      BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
+      CONCLAVE_EMAIL: { send },
+    });
+    expect(options.user.deleteUser.afterDelete).toEqual(expect.any(Function));
+    await options.user.deleteUser.afterDelete({
+      email: "removed@example.com",
+      name: "Ada",
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]?.[0]).toMatchObject({
+      to: "removed@example.com",
+      subject: "Your Conclave AX account was deleted",
+      from: { email: "conclave@conclaveax.com", name: "Conclave AX" },
+      text: expect.stringContaining("Hi Ada"),
+      html: expect.stringContaining("Account deleted"),
+    });
+  });
+
+  it("does not fail completed account deletion when notification delivery fails", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const options = buildBetterAuthOptions({
+        CONCLAVE_DB: {} as D1Database,
+        CONCLAVE_ENVIRONMENT: "production",
+        BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
+        CONCLAVE_EMAIL: {
+          send: vi.fn(async () => {
+            throw new Error("private provider response");
+          }),
+        },
+      });
+      await expect(options.user.deleteUser.afterDelete({
+        email: "removed@example.com",
+        name: "Ada",
+      })).resolves.toBeUndefined();
+      expect(log).toHaveBeenCalledWith(
+        "auth.account_deleted_email.failed",
+        expect.objectContaining({ status: expect.any(String) }),
+      );
+      expect(JSON.stringify(log.mock.calls)).not.toContain("removed@example.com");
+      expect(JSON.stringify(log.mock.calls)).not.toContain("private provider response");
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   describe("verification email failures", () => {
     const failingEnv = () =>
       buildBetterAuthOptions({

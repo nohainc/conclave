@@ -394,6 +394,26 @@ export function buildBetterAuthOptions(
       },
       deleteUser: {
         enabled: true,
+        afterDelete: async (user: { email: string; name?: string | null }) => {
+          try {
+            await sendTemplateEmail(env, {
+              to: user.email,
+              templateId: "auth.account-deleted.v1",
+              input: {
+                recipientName: user.name,
+                deletedAt: new Date().toISOString(),
+              },
+            });
+          } catch (error) {
+            // Deletion has already committed; delivery failure must not make
+            // the client believe its account still exists.
+            const failure = classifyEmailDeliveryFailure(error);
+            console.error("auth.account_deleted_email.failed", {
+              status: failure.status,
+              providerCode: failure.providerCode,
+            });
+          }
+        },
       },
     },
     account: {

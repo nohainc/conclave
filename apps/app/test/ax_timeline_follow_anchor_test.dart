@@ -202,7 +202,6 @@ void main() {
           queueStatus: ''),
       discussionCache: chat,
       workHistoryCache: work,
-      initialAiHistoryOpen: true,
       onBackToSpace: () {},
       onArchive: () {},
     ))));
@@ -219,9 +218,9 @@ void main() {
     work.replace('thread', [request(response: longWork)]);
     await tester.pumpAndSettle();
     // The conversation holds both arrivals and reveals the first new entry,
-    // the AI answer, from its opening; AI History reveals the same answer.
-    for (final tab in ['chat', 'work']) {
-      final history = find.byKey(ValueKey('$tab-history-scroll'));
+    // the AI answer, from its opening.
+    {
+      final history = find.byKey(const ValueKey('chat-history-scroll'));
       final rect = tester.getRect(history);
       final opening = tester.getRect(find
           .descendant(

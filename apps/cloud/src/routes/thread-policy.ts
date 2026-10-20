@@ -166,6 +166,7 @@ export function threadMetadata(
     leadDisplayName:
       row.leadDisplayName ?? row.lead_display_name ?? row.leadName ?? null,
     brief: row.brief ?? row.lastMessageSnippet ?? "",
+    briefAuthorName: row.briefAuthorName ?? null,
     accessPolicy,
     workConfig: parseJson(row.workConfigJson ?? row.configJson, {
       defaultWorkflowId: "full_cycle",

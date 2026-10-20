@@ -16,12 +16,12 @@ it("reads threads and configuration with distinct update timestamps", async () =
       CREATE TABLE threads (id TEXT, space_id TEXT, name TEXT, status TEXT,
         access_policy_json TEXT, metadata_json TEXT NOT NULL DEFAULT '{}', lead_user_id TEXT, created_at TEXT, updated_at TEXT);
       CREATE TABLE thread_work_configs (thread_id TEXT, config_json TEXT, updated_at TEXT);
-      CREATE TABLE discussion_messages (thread_id TEXT, author_user_id TEXT, body TEXT, created_at TEXT);
+      CREATE TABLE discussion_messages (thread_id TEXT, author_user_id TEXT, body TEXT, created_at TEXT, kind TEXT NOT NULL DEFAULT 'message', worker_display_name TEXT);
       CREATE TABLE work_requests (thread_id TEXT, status TEXT, updated_at TEXT);
       CREATE TABLE thread_read_states (thread_id TEXT, user_id TEXT, read_at TEXT);
       CREATE TABLE user_pins (user_id TEXT, kind TEXT, target_id TEXT, pinned_at TEXT, position INTEGER);
       CREATE TABLE conversations (id TEXT, thread_id TEXT);
-      CREATE TABLE conversation_history_entries (conversation_id TEXT, text TEXT, occurred_at TEXT);
+      CREATE TABLE conversation_history_entries (conversation_id TEXT, text TEXT, occurred_at TEXT, actor_type TEXT, actor_id TEXT, metadata_json TEXT NOT NULL DEFAULT '{}');
       CREATE TABLE space_memberships (id TEXT, space_id TEXT, user_id TEXT, role TEXT, created_at TEXT, updated_at TEXT);
       INSERT INTO spaces VALUES ('space-test', 'user-owner', '{}');
       INSERT INTO users VALUES ('user-owner', 'owner@conclave.test', 'Owner');
@@ -64,7 +64,35 @@ it("reads threads and configuration with distinct update timestamps", async () =
       lead: "user-owner",
       leadDisplayName: "Owner",
       brief: "",
+      briefAuthorName: null,
       updatedAt: "stream-updated",
+    });
+
+    // The latest message names its sender: a member, then a Worker answer.
+    sqlite.exec(
+      `INSERT INTO discussion_messages VALUES ('stream-test', 'user-owner', 'Hello team', 'm1', 'message', NULL)`,
+    );
+    const read = async () => {
+      const result = await handleListSpaceThreads(
+        new Request("https://conclave.test/api/spaces/space-test/threads"),
+        { CONCLAVE_DB: db } as unknown as Parameters<
+          typeof handleListSpaceThreads
+        >[1],
+        "space-test",
+      );
+      return ((await result.json()) as { threads: Record<string, unknown>[] })
+        .threads[0];
+    };
+    expect(await read()).toMatchObject({
+      brief: "Hello team",
+      briefAuthorName: "Owner",
+    });
+    sqlite.exec(
+      `INSERT INTO discussion_messages VALUES ('stream-test', NULL, 'Done', 'm2', 'ai_answer', 'Claude')`,
+    );
+    expect(await read()).toMatchObject({
+      brief: "Done",
+      briefAuthorName: "Claude",
     });
   } finally {
     sqlite.close();

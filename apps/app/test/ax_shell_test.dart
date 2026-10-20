@@ -2729,7 +2729,8 @@ void main() {
     await tester.tap(find.text('New here? Create an account'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Create your Conclave AX account'), findsOneWidget);
+    expect(find.text('Create your account'), findsOneWidget);
+    expect(find.text('Already have an account? Sign in'), findsNothing);
     await tester.enterText(
       find.widgetWithText(TextField, 'Name'),
       'Ada Lovelace',
@@ -2757,6 +2758,19 @@ void main() {
     expect(data.signedUpOtp, isNull);
     expect(find.text('Verify your email address'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Verification code'), findsOneWidget);
+    expect(find.text('Edit details'), findsNothing);
+    expect(find.text('Already have an account? Sign in'), findsNothing);
+    expect(find.textContaining('Enter it below'), findsNothing);
+    expect(
+        find.text(
+            'Enter the 6-digit verification code we sent to ada@example.com.'),
+        findsOneWidget);
+    await tester.tap(find.text('Resend code'));
+    await tester.pumpAndSettle();
+    expect(
+        find.text(
+            'A new 6-digit verification code was sent to ada@example.com.'),
+        findsOneWidget);
 
     await tester.enterText(
       find.widgetWithText(TextField, 'Verification code'),
@@ -2866,7 +2880,7 @@ void main() {
     await tester.tap(find.text('New here? Create an account'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Already have an account? Sign in'), findsOneWidget);
+    expect(find.text('Already have an account? Sign in'), findsNothing);
     expect(find.text('Back to sign in'), findsNothing);
     expect(find.text('Continue with GitHub'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);

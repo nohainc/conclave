@@ -508,7 +508,7 @@ export const emailTemplateCatalog = Object.freeze([
     id: "auth.account-deleted.v1",
     priority: "informational",
     category: "security",
-    availability: "planned",
+    availability: "implemented",
     variant: "security-notice",
     render: renderAccountDeleted,
   },

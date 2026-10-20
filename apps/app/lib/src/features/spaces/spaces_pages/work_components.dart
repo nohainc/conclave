@@ -179,6 +179,11 @@ class _WorkComposer extends StatelessWidget {
     this.historyOpenDirection = 1,
     this.onHistorySelected,
     this.onHistoryClosed,
+    this.queuedMessages = const [],
+    this.queuePaused = false,
+    this.onQueuedEdit,
+    this.onQueuedRemove,
+    this.onQueuedSendNow,
     this.usageController,
   });
 
@@ -235,6 +240,15 @@ class _WorkComposer extends StatelessWidget {
   final int historyOpenDirection;
   final ValueChanged<String>? onHistorySelected;
   final VoidCallback? onHistoryClosed;
+
+  /// Messages waiting for the processing request to finish, oldest first.
+  final List<_QueuedWorkMessage> queuedMessages;
+
+  /// True after a queued message failed to send; the queue waits for the user.
+  final bool queuePaused;
+  final ValueChanged<_QueuedWorkMessage>? onQueuedEdit;
+  final ValueChanged<_QueuedWorkMessage>? onQueuedRemove;
+  final ValueChanged<_QueuedWorkMessage>? onQueuedSendNow;
 
   /// Local view state for the Worker usage card; null when the data source
   /// cannot read usage.
@@ -406,6 +420,10 @@ class _WorkComposer extends StatelessWidget {
       .trim();
 
   Widget _additionalControls(BuildContext context) {
+    final workWorkflows = _currentWorkflowVersions(workflowCatalog)
+        .where((item) => item.id != 'chat')
+        .toList();
+    final singleWorkWorkflow = workWorkflows.length == 1;
     final chatActive = workflow.split(':').first == 'chat';
     final hasChat =
         chatActive || workflowCatalog.any((item) => item.id == 'chat');
@@ -505,7 +523,6 @@ class _WorkComposer extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 6),
           if (hasChat) ...[
             Semantics(
               key: const ValueKey('work-toggle-chat'),
@@ -535,27 +552,30 @@ class _WorkComposer extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 6),
           ],
           Builder(
             builder: (workflowBtnContext) => Semantics(
               key: const ValueKey('work-choose-workflow'),
-              label: 'Choose workflow',
+              label: singleWorkWorkflow
+                  ? workWorkflows.single.name
+                  : 'Choose workflow',
+              toggled: !chatActive,
               child: Material(
                 color: controlBg,
                 borderRadius: controlBorderRadius,
                 child: InkWell(
                   borderRadius: controlBorderRadius,
-                  onTap: canExecute && !submitting && workflowCatalog.isNotEmpty
+                  onTap: canExecute && !submitting && workWorkflows.isNotEmpty
                       ? () async {
-                          final versions =
-                              _currentWorkflowVersions(workflowCatalog);
+                          if (singleWorkWorkflow) {
+                            onWorkflowChanged(workWorkflows.single.reference);
+                            return;
+                          }
                           final value = await _showAnchoredMenu<String>(
                             buttonContext: workflowBtnContext,
                             itemHeight: 36.0,
                             items: [
-                              for (final item
-                                  in versions.where((i) => i.id != 'chat'))
+                              for (final item in workWorkflows)
                                 ConclaveMenuEntry<String>(
                                   value: item.reference,
                                   child: Semantics(
@@ -595,7 +615,9 @@ class _WorkComposer extends StatelessWidget {
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 130),
                           child: Text(
-                            selectedWorkflow?.name ?? 'Choose workflow',
+                            singleWorkWorkflow
+                                ? workWorkflows.single.name
+                                : selectedWorkflow?.name ?? 'Choose workflow',
                             overflow: TextOverflow.ellipsis,
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -606,8 +628,10 @@ class _WorkComposer extends StatelessWidget {
                                     ),
                           ),
                         ),
-                        const SizedBox(width: 2),
-                        const Icon(Icons.keyboard_arrow_down, size: 14),
+                        if (!singleWorkWorkflow) ...[
+                          const SizedBox(width: 2),
+                          const Icon(Icons.keyboard_arrow_down, size: 14),
+                        ],
                       ],
                     ),
                   ),
@@ -615,7 +639,6 @@ class _WorkComposer extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 6),
           ModelEffortSelector(
             scope: 'work-composer',
             immediatePopup: true,
@@ -739,6 +762,14 @@ class _WorkComposer extends StatelessWidget {
               openDirection: historyOpenDirection,
               onSelected: onHistorySelected ?? (_) {},
               onClosed: onHistoryClosed ?? () {},
+            ),
+          if (queuedMessages.isNotEmpty)
+            _QueuedMessagesPanel(
+              messages: queuedMessages,
+              paused: queuePaused,
+              onEdit: onQueuedEdit ?? (_) {},
+              onRemove: onQueuedRemove ?? (_) {},
+              onSendNow: onQueuedSendNow ?? (_) {},
             ),
           MarkdownComposer(
             controller: requestController,
@@ -2583,6 +2614,127 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
                     ),
                   ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A Work message waiting to be sent after the processing request finishes.
+class _QueuedWorkMessage {
+  const _QueuedWorkMessage({
+    required this.text,
+    required this.attachments,
+    required this.executionSelection,
+    required this.workflow,
+  });
+
+  final String text;
+  final List<Map<String, dynamic>> attachments;
+  final Map<String, dynamic> executionSelection;
+  final String workflow;
+}
+
+/// Queued messages above the composer, styled like the request history panel.
+class _QueuedMessagesPanel extends StatelessWidget {
+  const _QueuedMessagesPanel({
+    required this.messages,
+    required this.paused,
+    required this.onEdit,
+    required this.onRemove,
+    required this.onSendNow,
+  });
+
+  final List<_QueuedWorkMessage> messages;
+  final bool paused;
+  final ValueChanged<_QueuedWorkMessage> onEdit;
+  final ValueChanged<_QueuedWorkMessage> onRemove;
+  final ValueChanged<_QueuedWorkMessage> onSendNow;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    const iconConstraints = BoxConstraints.tightFor(width: 28, height: 28);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        key: const ValueKey('work-queue-panel'),
+        constraints: const BoxConstraints(maxHeight: 192),
+        decoration: BoxDecoration(
+          border: Border.all(color: colors.outlineVariant),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+              child: Text(
+                paused
+                    ? 'Queued · ${messages.length} — sending paused after an error'
+                    : 'Queued · ${messages.length} — sent when the current request finishes',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: paused ? colors.error : colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemExtent: 48,
+                itemCount: messages.length,
+                itemBuilder: (context, index) {
+                  final message = messages[index];
+                  final text = message.text.trim().isEmpty
+                      ? '${message.attachments.length} attachment(s)'
+                      : message.text.trim();
+                  return InkWell(
+                    key: ValueKey('work-queue-item-$index'),
+                    onTap: () => onEdit(message),
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12, right: 4),
+                      child: Row(children: [
+                        Expanded(
+                          child: Text(
+                            text,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Edit',
+                          iconSize: 16,
+                          constraints: iconConstraints,
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.edit_outlined),
+                          onPressed: () => onEdit(message),
+                        ),
+                        IconButton(
+                          tooltip: 'Send now',
+                          iconSize: 16,
+                          constraints: iconConstraints,
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.arrow_upward_rounded),
+                          onPressed: () => onSendNow(message),
+                        ),
+                        IconButton(
+                          tooltip: 'Remove from queue',
+                          iconSize: 16,
+                          constraints: iconConstraints,
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => onRemove(message),
+                        ),
+                      ]),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

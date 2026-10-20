@@ -30,19 +30,76 @@ extension _ThreadActions on _ThreadPageState {
       }
       return;
     }
-    final activeRequests = _workTimeline
-        .where((request) =>
-            !request.id.startsWith('local-') &&
-            const {'queued', 'running', 'waiting'}.contains(request.status))
-        .toList(growable: false);
-    if (activeRequests.isNotEmpty) {
+    final message = _QueuedWorkMessage(
+      text: text,
+      attachments: List<Map<String, dynamic>>.from(_workAttachments),
+      executionSelection: Map<String, dynamic>.from(_workExecutionSelection),
+      workflow: _effectiveWorkflow,
+    );
+    _updateState(() {
+      _workSubmitError = null;
+      _workAttachments = [];
+    });
+    _requestController.clear();
+    // While a request is processing, or earlier messages are still waiting,
+    // the message waits its turn; [_dispatchQueuedWork] sends it later.
+    if (_activeWorkRequests.isNotEmpty || _workQueue.isNotEmpty) {
+      _updateState(() {
+        _workQueue.add(message);
+        _workQueuePaused = false;
+      });
+      _dispatchQueuedWork();
+      return;
+    }
+    await _submitWorkMessage(message);
+  }
+
+  /// Saved requests of this Thread that are still processing.
+  List<AxWorkRequest> get _activeWorkRequests => _workTimeline
+      .where((request) =>
+          !request.id.startsWith('local-') &&
+          const {'queued', 'running', 'waiting'}.contains(request.status))
+      .toList(growable: false);
+
+  /// Messages waiting for this Thread's active request to finish.
+  List<_QueuedWorkMessage> get _workQueue =>
+      _queuedWorkByThread.putIfAbsent(widget.thread.id, () => []);
+
+  /// Sends the next queued message once nothing is processing. A failed send
+  /// pauses the queue until the user sends or edits a message.
+  void _dispatchQueuedWork() {
+    if (widget.isDraft ||
+        _dispatchingQueuedWork ||
+        _workQueuePaused ||
+        _submittingWork ||
+        _workQueue.isEmpty ||
+        _activeWorkRequests.isNotEmpty) {
+      return;
+    }
+    final threadId = widget.thread.id;
+    final message = _workQueue.first;
+    _dispatchingQueuedWork = true;
+    _updateState(() => _workQueue.removeAt(0));
+    unawaited(_submitWorkMessage(message, fromQueue: true).whenComplete(() {
+      _dispatchingQueuedWork = false;
+      if (mounted && widget.thread.id == threadId) {
+        WidgetsBinding.instance.addPostFrameCallback(
+            (_) => mounted ? _dispatchQueuedWork() : null);
+      }
+    }));
+  }
+
+  /// Cancels the processing request(s) and sends the queued message now.
+  Future<void> _sendQueuedWorkNow(_QueuedWorkMessage message) async {
+    final active = _activeWorkRequests;
+    if (active.isNotEmpty) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Cancel previous request?'),
-          content: Text(activeRequests.length == 1
+          content: Text(active.length == 1
               ? 'A request is still processing. Cancel it and send this request instead?'
-              : '${activeRequests.length} requests are still processing. Cancel them and send this request instead?'),
+              : '${active.length} requests are still processing. Cancel them and send this request instead?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -56,23 +113,71 @@ extension _ThreadActions on _ThreadPageState {
         ),
       );
       if (confirmed != true || !mounted) return;
-      for (final request in activeRequests) {
+    }
+    if (!_workQueue.contains(message)) return;
+    _dispatchingQueuedWork = true;
+    try {
+      for (final request in active) {
         final cancelled = await _cancelWorkRequest(
           request.id,
           showFeedback: false,
         );
         if (!cancelled || !mounted) return;
       }
+      _updateState(() {
+        _workQueue.remove(message);
+        _workQueuePaused = false;
+      });
+      await _submitWorkMessage(message, fromQueue: true);
+    } finally {
+      _dispatchingQueuedWork = false;
+      if (mounted) _dispatchQueuedWork();
     }
+  }
+
+  void _removeQueuedWork(_QueuedWorkMessage message) =>
+      _updateState(() => _workQueue.remove(message));
+
+  /// Moves a queued message into the composer for editing. A draft already in
+  /// the composer takes its place in the queue, so nothing is lost.
+  void _editQueuedWork(_QueuedWorkMessage message) {
+    final index = _workQueue.indexOf(message);
+    if (index < 0) return;
+    final draft = _requestController.text;
+    final draftAttachments = _workAttachments;
+    _updateState(() {
+      if (draft.trim().isNotEmpty || draftAttachments.isNotEmpty) {
+        _workQueue[index] = _QueuedWorkMessage(
+          text: draft,
+          attachments: draftAttachments,
+          executionSelection:
+              Map<String, dynamic>.from(_workExecutionSelection),
+          workflow: _effectiveWorkflow,
+        );
+      } else {
+        _workQueue.removeAt(index);
+      }
+      _workAttachments = List.of(message.attachments);
+      _workQueuePaused = false;
+    });
+    _requestController.value = TextEditingValue(
+      text: message.text,
+      selection: TextSelection.collapsed(offset: message.text.length),
+    );
+  }
+
+  Future<void> _submitWorkMessage(_QueuedWorkMessage message,
+      {bool fromQueue = false}) async {
+    final submit = widget.onRunWork;
+    final text = message.text;
     final requestText = text.trim().isEmpty
         ? 'Please use the attached inputs to complete the request.'
         : text;
-    final attachments = List<Map<String, dynamic>>.from(_workAttachments);
-    final executionSelection =
-        Map<String, dynamic>.from(_workExecutionSelection);
-    final workflowId = _effectiveWorkflow.split(':').first;
+    final attachments = message.attachments;
+    final executionSelection = message.executionSelection;
+    final workflowId = message.workflow.split(':').first;
     final workflowVersion =
-        int.tryParse(_effectiveWorkflow.split(':v').last) ?? 1;
+        int.tryParse(message.workflow.split(':v').last) ?? 1;
     final threadId = widget.thread.id;
     final workCache = _workHistoryCache;
     final workflowName = _currentWorkflows
@@ -80,11 +185,6 @@ extension _ThreadActions on _ThreadPageState {
             .map((w) => w.name)
             .firstOrNull ??
         workflowId;
-    _updateState(() {
-      _workSubmitError = null;
-      _workAttachments = [];
-    });
-    _requestController.clear();
     try {
       await workCache.createRequest(threadId,
           prompt: requestText,
@@ -109,6 +209,12 @@ extension _ThreadActions on _ThreadPageState {
         return;
       }
       _updateState(() {
+        if (fromQueue) {
+          // Keep the message first in line and wait for the user.
+          _workQueue.insert(0, message);
+          _workQueuePaused = true;
+          return;
+        }
         // Authored form data stays in this form; mutation/history state is shared.
         if (_requestController.text.isEmpty) _requestController.text = text;
         if (_workAttachments.isEmpty) _workAttachments = attachments;

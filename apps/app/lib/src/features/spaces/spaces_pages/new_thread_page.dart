@@ -100,7 +100,7 @@ class _NewThreadPageState extends State<NewThreadPage> {
         children: [
           Center(
               child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1681),
+            constraints: const BoxConstraints(maxWidth: 840),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
               child: Column(
@@ -139,7 +139,7 @@ class _NewThreadPageState extends State<NewThreadPage> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Center(
                 child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1681),
+              constraints: const BoxConstraints(maxWidth: 840),
               child: SpacePage(
                 embedded: true,
                 workflowConfigurations: widget.workflowConfigurations,

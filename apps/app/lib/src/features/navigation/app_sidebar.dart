@@ -136,7 +136,7 @@ class AppSidebar extends StatelessWidget {
                                         overflow: TextOverflow.ellipsis,
                                         style: ConclaveTypography.wordmark
                                             .copyWith(
-                                          color: Colors.white,
+                                          color: Colors.white70,
                                         ),
                                       ),
                                     ),

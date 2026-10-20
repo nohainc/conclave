@@ -46,6 +46,11 @@ latest activity within their ownership group. Accepted requests, new discussion
 messages, and request lifecycle updates advance both the Thread and its Space,
 including while the Thread is open. Sidebar refreshes coalesce activity bursts.
 
+When only one non-Chat workflow is available, Ask AI shows it as a direct
+button; clicking it selects that workflow without opening a menu. Multiple
+workflows retain the chooser. The attachment, Chat, workflow, and model controls
+sit together without inter-button gaps.
+
 1. Open the Space Workflows surface and configure a Ready Worker/model for
    **Chat** and **Work**. These bindings are independent and may use different
    registered Workers.

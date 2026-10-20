@@ -43,6 +43,7 @@ class AxReadCacheCodec {
         'lead': value.lead,
         'status': value.status,
         'brief': value.brief,
+        'briefAuthorName': value.briefAuthorName,
         'primaryWorkspace': value.primaryWorkspace,
         'queueStatus': value.queueStatus,
         'canConfigureWork': value.canConfigureWork,

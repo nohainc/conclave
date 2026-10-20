@@ -254,9 +254,12 @@ void main() {
     expect(find.text('Continue working'), findsOneWidget);
     expect(find.text('WEBSITE REDESIGN'), findsOneWidget);
     expect(find.text('Landing page'), findsOneWidget);
-    expect(find.text('You and ChatGPT · 18 min ago'), findsOneWidget);
-    expect(find.text('"Let\'s simplify the hero section..."'), findsOneWidget);
-    expect(find.text('Continue →'), findsOneWidget);
+    expect(find.text('18 min ago'), findsOneWidget);
+    expect(
+        find.textContaining("Let's simplify the hero section...",
+            findRichText: true),
+        findsOneWidget);
+    expect(find.text('Continue →'), findsNothing);
 
     // 3. WHAT'S NEW
     expect(find.text("What's new"), findsOneWidget);
@@ -278,8 +281,10 @@ void main() {
     expect(find.text('Archived Spaces'), findsNothing);
     expect(find.text('Your execution capacity at a glance.'), findsNothing);
 
-    await tester.ensureVisible(find.text('Continue →'));
-    await tester.tap(find.text('Continue →'));
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('continue-work-last-message')).first);
+    await tester
+        .tap(find.byKey(const ValueKey('continue-work-last-message')).first);
     expect(openedSpace, 'space-1');
     expect(openedThread, 'ws-landing');
 
@@ -618,7 +623,8 @@ void main() {
         threadId: 'ws-sessions',
         threadTitle: 'Worker Sessions',
         collaboratorsDisplay: 'ChatGPT',
-        lastMessageSnippet: 'We should persist the session context.',
+        lastMessageSnippet: 'We should persist\n\nthe session context.',
+        lastMessageAuthor: 'Alex',
         lastActivityDisplay: '23 min ago',
       ),
       const AxContinueWorkItem(
@@ -728,16 +734,21 @@ void main() {
     // Card 1
     expect(find.text('CONCLAVE DEVELOPMENT'), findsOneWidget);
     expect(find.text('Worker Sessions'), findsOneWidget);
-    expect(find.text('ChatGPT · 23 min ago'), findsOneWidget);
+    expect(find.text('23 min ago'), findsOneWidget);
+    // The last message is a one-line preview prefixed with its sender.
     expect(
-        find.text('"We should persist the session context."'), findsOneWidget);
+        find.text('Alex: We should persist the session context.',
+            findRichText: true),
+        findsOneWidget);
 
     // Card 2
     expect(find.text('WEBSITE'), findsOneWidget);
     expect(find.text('Landing Page'), findsOneWidget);
-    expect(find.text('You + Gemini · Yesterday'), findsOneWidget);
+    expect(find.text('Yesterday'), findsOneWidget);
     expect(
-        find.text('"The hero should bring people together."'), findsOneWidget);
+        find.textContaining('The hero should bring people together.',
+            findRichText: true),
+        findsOneWidget);
 
     // Card 3
     expect(find.text('DOCUMENTATION'), findsOneWidget);
@@ -756,8 +767,10 @@ void main() {
     expect(find.text('Extra Thread'), findsNothing);
 
     // Test clicking Continue → on first card
-    await tester.ensureVisible(find.text('Continue →').first);
-    await tester.tap(find.text('Continue →').first);
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('continue-work-last-message')).first);
+    await tester
+        .tap(find.byKey(const ValueKey('continue-work-last-message')).first);
     expect(openedSpace, 'proj-conclave');
     expect(openedThread, 'ws-sessions');
   });
@@ -1044,9 +1057,9 @@ void main() {
       ),
     );
 
-    // Verify What's new header with unread count badge (2 unread)
+    // The What's new header shows no unread count badge.
     expect(find.text("What's new"), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
+    expect(find.text('2'), findsNothing);
     expect(find.text('See all'), findsOneWidget);
 
     // Verify tiles rendered with category pill and CTA
@@ -1054,17 +1067,15 @@ void main() {
     expect(find.text('WORKFLOW'), findsOneWidget);
     expect(find.text('Space Invitations'), findsOneWidget);
     expect(find.text('Conversation Continuity'), findsOneWidget);
-    expect(find.text('Learn more →'), findsNWidgets(2));
+    expect(find.text('Learn more →'), findsNothing);
 
     // Tap See all
     await tester.tap(find.text('See all'));
     await tester.pumpAndSettle();
     expect(seeAllOpened, isTrue);
 
-    // Tap Learn more on first tile
-    await tester.tap(find.text('Learn more →').first);
-    await tester.pumpAndSettle();
-    expect(selectedDetailUpdate?.id, 'up-1');
+    // Update rows are informational and do not open details.
+    expect(selectedDetailUpdate, isNull);
   });
 
   testWidgets('AxWhatsNewDialog displays grouped changelog and details',
@@ -1994,7 +2005,7 @@ void main() {
 
     // Verify What's New tile is present as a row
     expect(find.text('Real-time Collaboration'), findsOneWidget);
-    expect(find.text('Learn more →'), findsOneWidget);
+    expect(find.text('Learn more →'), findsNothing);
 
     // Verify AI Update row is present
     expect(find.text('OpenAI o3-mini'), findsOneWidget);
@@ -2230,20 +2241,18 @@ void main() {
     // 3. Continue Working -> exact Thread deep-link
     openedSpace = null;
     openedThread = null;
-    await tester.ensureVisible(find.text('Continue →'));
-    await tester.tap(find.text('Continue →'));
+    await tester.ensureVisible(
+        find.byKey(const ValueKey('continue-work-last-message')).first);
+    await tester
+        .tap(find.byKey(const ValueKey('continue-work-last-message')).first);
     expect(openedSpace, 'space-1');
     expect(openedThread, 'ws-landing');
 
-    // 4. What's New -> update detail deep-link
-    await tester.ensureVisible(find.text('Learn more →'));
-    await tester.tap(find.text('Learn more →'));
-    expect(openedUpdate?.id, 'up-1');
-
-    // 5. AI Update -> Worker / Model config deep-link
-    await tester.ensureVisible(find.text('Configure →'));
-    await tester.tap(find.text('Configure →'));
-    expect(openedAiUpdate?.id, 'ai-1');
+    // 4. What's New and AI Update rows are informational, not links.
+    expect(find.text('Learn more →'), findsNothing);
+    expect(find.text('Configure →'), findsNothing);
+    expect(openedUpdate, isNull);
+    expect(openedAiUpdate, isNull);
   });
 
   testWidgets(
@@ -2330,7 +2339,8 @@ void main() {
     expect(find.text('AI updates'), findsNothing);
 
     // Verify interaction on continue item works
-    await tester.tap(find.text('Continue →'));
+    await tester
+        .tap(find.byKey(const ValueKey('continue-work-last-message')).first);
     expect(continueOpened, isTrue);
   });
 
@@ -2396,15 +2406,15 @@ void main() {
     // 3. Cached Continue Working is present and interactive
     expect(find.text('Continue working'), findsOneWidget);
     expect(find.text('Offline Mode Testing'), findsOneWidget);
-    await tester.tap(find.text('Continue →'));
+    await tester
+        .tap(find.byKey(const ValueKey('continue-work-last-message')).first);
     expect(openedThread, 'ws-offline');
 
     // 4. Cached What's New is present and readable
     expect(find.text("What's new"), findsOneWidget);
     expect(find.text('Cached Release Note'), findsOneWidget);
-    await tester.ensureVisible(find.text('Learn more →'));
-    await tester.tap(find.text('Learn more →'));
-    expect(openedUpdate?.id, 'up-cached');
+    expect(find.text('Learn more →'), findsNothing);
+    expect(openedUpdate, isNull);
   });
 
   testWidgets(
@@ -2557,7 +2567,10 @@ void main() {
     // 1. Authorized resources MUST render
     expect(find.text('AUTHORIZED SPACE'), findsOneWidget);
     expect(find.text('Active Authorized Thread'), findsOneWidget);
-    expect(find.text('"Authorized discussion snippet."'), findsOneWidget);
+    expect(
+        find.textContaining('Authorized discussion snippet.',
+            findRichText: true),
+        findsOneWidget);
     expect(find.text('Review Authorized Spec'), findsOneWidget);
     expect(find.text('ChatGPT 4.5 Turbo Enabled'), findsOneWidget);
 
@@ -2865,7 +2878,7 @@ void main() {
 
       // Unread count badge should reflect 1 unread update
       expect(find.text("What's new"), findsOneWidget);
-      expect(find.text('1'), findsOneWidget);
+      expect(find.text('1'), findsNothing);
     });
   });
 
@@ -3172,10 +3185,10 @@ void main() {
       expect(find.text('Continue working'), findsOneWidget);
       expect(find.text('MOBILE CLIENT'), findsOneWidget);
       expect(find.text('Authentication Flow'), findsOneWidget);
-      expect(find.textContaining('Vitalii + ChatGPT'), findsOneWidget);
       expect(
           find.textContaining(
-              'Refactoring auth token storage and biometric login.'),
+              'Refactoring auth token storage and biometric login.',
+              findRichText: true),
           findsOneWidget);
     });
 
@@ -3263,7 +3276,7 @@ void main() {
 
       expect(find.text("What's new"), findsOneWidget);
       expect(find.text('Smart Branch Merging'), findsOneWidget);
-      expect(find.text('1'), findsOneWidget); // unread badge count
+      expect(find.text('1'), findsNothing); // no unread badge count
     });
 
     // 12. Scenario: Old/read update -> Expected: Not treated as new
@@ -3691,7 +3704,8 @@ void main() {
         onOpenThread: (pId, wsId) => openedThread = '$pId/$wsId',
       )));
 
-      await tester.tap(find.text('Continue →'));
+      await tester
+          .tap(find.byKey(const ValueKey('continue-work-last-message')).first);
       expect(openedThread, 'p-analytics/ws-analytics');
 
       expect(events, hasLength(1));
@@ -3876,19 +3890,14 @@ void main() {
         onOpenAiUpdate: (up) => openedAiUpdate = up,
       )));
 
-      await tester.ensureVisible(find.text('Configure →'));
-      await tester.tap(find.text('Configure →'));
-      expect(openedAiUpdate?.id, 'ai-gpt-telemetry');
-
+      // AI update rows are informational: tapping one opens nothing.
+      expect(find.text('Configure →'), findsNothing);
+      await tester
+          .ensureVisible(find.text('GPT-4o Mini and o1 Reasoning Added'));
+      await tester.tap(find.text('GPT-4o Mini and o1 Reasoning Added'));
+      expect(openedAiUpdate, isNull);
       expect(events.any((e) => e.action == AxHomeAnalyticsAction.openAiUpdate),
-          isTrue);
-      final event = events
-          .firstWhere((e) => e.action == AxHomeAnalyticsAction.openAiUpdate);
-      expect(event.eventName, 'home.open_ai_update');
-      expect(event.properties['updateId'], 'ai-gpt-telemetry');
-      expect(event.properties['workerProfileId'], 'chatgpt');
-      expect(event.properties['provider'], 'openai');
-      expect(event.properties['type'], 'modelAdded');
+          isFalse);
     });
 
     testWidgets('Measure Home → create Space', (tester) async {

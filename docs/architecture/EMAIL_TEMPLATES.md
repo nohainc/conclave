@@ -18,11 +18,13 @@ use the existing callbacks and delivery service until a later migration phase.
 | Password changed | No current application event hook | `auth.password-changed.v1` | Account email after a successful password change | Informational | Planned; renderer available |
 | Email address changed | No current application event hook | `auth.email-changed.v1` | Previous/account security recipient after a successful change | Informational | Planned; renderer available |
 | Welcome / account activation | No current application event hook | `auth.welcome.v1` | Account email after an explicitly defined activation event | Informational | Planned; renderer available |
-| Account deleted | No current application event hook | `auth.account-deleted.v1` | Account email after a confirmed deletion | Informational | Planned; renderer available |
+| Account deleted | Better Auth `user.deleteUser.afterDelete` | `auth.account-deleted.v1` | Deleted account email after confirmed deletion | Security | Connected to the centralized sender |
 
-The first four rows are the only supported outgoing events in the current
-application. The planned rows are contracts only; creating a renderer does not
-create an automatic notification trigger.
+Account deletion sends the existing security template after Better Auth has
+removed the account and sessions. Delivery is awaited; normalized failures are
+logged without failing the already-completed deletion. There is no persisted
+retry queue for this notification. Planned rows do not acquire a notification
+trigger merely by having a renderer.
 
 ## Notification policy
 
@@ -164,3 +166,10 @@ invitation callbacks now call the shared renderer before the existing sender
 service. Their subjects, trusted links, token lifetimes, fallback behavior and
 caller-specific delivery semantics remain unchanged. Planned notification
 templates have no automatic event hooks yet.
+
+## Signup page presentation
+
+Signup uses the title **Create your account** without a sign-in switch button.
+The verification page shows one instruction above the code field, followed by
+verification and resend actions. It has no Edit details or sign-in switch
+button; resend confirmation and validation errors remain visible.

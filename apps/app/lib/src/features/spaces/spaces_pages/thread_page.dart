@@ -98,6 +98,12 @@ class _ThreadPageState extends State<ThreadPage>
   final _requestController = TextEditingController();
   bool _requestHistoryOpen = false;
   int _requestHistoryDirection = 1;
+
+  /// Work messages sent while a request was processing, per Thread, oldest
+  /// first. Local to this view; see `_dispatchQueuedWork`.
+  final _queuedWorkByThread = <String, List<_QueuedWorkMessage>>{};
+  bool _dispatchingQueuedWork = false;
+  bool _workQueuePaused = false;
   final _workHistoryController = ScrollController();
   late final AxWorkerUsageController _workerUsage = AxWorkerUsageController(
       widget.dataSource is AxWorkerUsageDataSource
@@ -139,9 +145,9 @@ class _ThreadPageState extends State<ThreadPage>
             ? 'Delete all AI requests, activity and diagnostics, and reset the '
                 'Workers\' session context? Completed AI answers stay in the '
                 'Conversation. This action cannot be undone.'
-            : 'Delete all Conversation messages, including saved AI answers? '
-                'Requests still in AI History remain until you clear it. This '
-                'action cannot be undone.'),
+            : 'Delete all Conversation messages and AI History, including '
+                'saved AI answers, activity and diagnostics, and reset the '
+                'Workers\' session context? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -424,6 +430,8 @@ class _ThreadPageState extends State<ThreadPage>
     _scheduleFollowLatest(_workHistoryController);
     _followWorkInConversation(state, previous);
     _scheduleFollowLatest(_chatHistoryController);
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => mounted ? _dispatchQueuedWork() : null);
   }
 
   /// Conversation item IDs in display order; see [_mergeWorkIntoConversation].
@@ -1551,40 +1559,13 @@ class _ThreadPageState extends State<ThreadPage>
                 ));
         final conversation = pane('Conversation',
             _discuss(context, twoPane: constraints.maxWidth >= 1000));
-        late final Widget content;
-        if (constraints.maxWidth >= 1000) {
-          content = Center(
-              child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: historyOpen ? 1681 : 840),
-            child: Row(
-                crossAxisAlignment: widget.isDraft
-                    ? CrossAxisAlignment.start
-                    : CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: conversation),
-                  if (historyOpen) ...[
-                    VerticalDivider(
-                      width: 1,
-                      thickness: 1,
-                      indent: 20,
-                      endIndent: 20,
-                      color: Theme.of(context).dividerColor,
-                    ),
-                    Expanded(
-                        child:
-                            pane('AI History', _work(context), history: true)),
-                  ],
-                ]),
-          ));
-        } else {
-          content = Center(
-              child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 840),
-            child: historyOpen
-                ? pane('AI History', _work(context), history: true)
-                : conversation,
-          ));
-        }
+        final Widget content = Center(
+            child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 840),
+          child: historyOpen
+              ? pane('AI History', _work(context), history: true)
+              : conversation,
+        ));
         return IgnorePointer(
           ignoring: !_threadViewReady,
           child: ExcludeSemantics(
@@ -2011,6 +1992,11 @@ class _ThreadPageState extends State<ThreadPage>
         onHistoryNavigate: _openRequestHistory,
         historyPrompts: _requestHistoryOpen ? _requestHistoryPrompts : null,
         historyOpenDirection: _requestHistoryDirection,
+        queuedMessages: widget.isDraft ? const [] : List.of(_workQueue),
+        queuePaused: _workQueuePaused,
+        onQueuedEdit: _editQueuedWork,
+        onQueuedRemove: _removeQueuedWork,
+        onQueuedSendNow: (message) => unawaited(_sendQueuedWorkNow(message)),
         onHistorySelected: _selectHistoryPrompt,
         onHistoryClosed: _closeRequestHistory,
         workflowBeforeChat: _workflowBeforeChat,

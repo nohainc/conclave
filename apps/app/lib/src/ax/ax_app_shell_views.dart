@@ -217,7 +217,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
             : awaitingSignUpCode
                 ? 'Verify your email address'
                 : authSignUp
-                    ? 'Create your Conclave AX account'
+                    ? 'Create your account'
                     : 'Welcome to Conclave AX';
     return Scaffold(
       body: Center(
@@ -419,26 +419,9 @@ extension _AxAppShellViews on _AxAppStateMixin {
                         ),
                       ),
                       if (awaitingSignUpCode)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            TextButton(
-                              onPressed: authBusy ? null : _resendSignUpCode,
-                              child: const Text('Resend code'),
-                            ),
-                            const SizedBox(width: 8),
-                            TextButton(
-                              onPressed: authBusy
-                                  ? null
-                                  : () => _updateState(() {
-                                        authSignUpAwaitingCode = false;
-                                        authVerificationCodeController.clear();
-                                        authError = null;
-                                        authNotice = null;
-                                      }),
-                              child: const Text('Edit details'),
-                            ),
-                          ],
+                        TextButton(
+                          onPressed: authBusy ? null : _resendSignUpCode,
+                          child: const Text('Resend code'),
                         ),
                       if (!resetPassword && !authSignUp && !authResetRequest)
                         Align(
@@ -454,9 +437,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                             child: const Text('Forgot password?'),
                           ),
                         ),
-                      if (!resetPassword &&
-                          !authResetRequest &&
-                          !awaitingSignUpCode)
+                      if (!resetPassword && !authResetRequest && !authSignUp)
                         TextButton(
                           onPressed: authBusy
                               ? null
@@ -466,9 +447,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                     authError = null;
                                     authNotice = null;
                                   }),
-                          child: Text(authSignUp
-                              ? 'Already have an account? Sign in'
-                              : 'New here? Create an account'),
+                          child: const Text('New here? Create an account'),
                         ),
                       if (resetPassword || authResetRequest)
                         TextButton(
@@ -746,6 +725,14 @@ extension _AxAppShellViews on _AxAppStateMixin {
     );
   }
 
+  Widget _contentWidth(Widget child) => Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 840),
+          child: child,
+        ),
+      );
+
   Widget _content({required bool compact, required bool showTopHud}) {
     return _spaceContextBuilder(() => Stack(
           children: [
@@ -783,8 +770,8 @@ extension _AxAppShellViews on _AxAppStateMixin {
                             ? SingleChildScrollView(
                                 padding: EdgeInsets.fromLTRB(compact ? 18 : 34,
                                     26, compact ? 18 : 34, 40),
-                                child: _spaceResourceView(
-                                    SpacePageSection.members),
+                                child: _contentWidth(_spaceResourceView(
+                                    SpacePageSection.members)),
                               )
                             : SingleChildScrollView(
                                 padding: EdgeInsets.fromLTRB(
@@ -795,9 +782,9 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                   compact ? 18 : 34,
                                   40,
                                 ),
-                                child: showRunDetails
+                                child: _contentWidth(showRunDetails
                                     ? _runDetailsView(compact)
-                                    : _homeView(),
+                                    : _homeView()),
                               ),
               ),
             ]),

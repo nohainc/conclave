@@ -56,9 +56,9 @@ HOME
 - **Card Structure:**
   1. **Space Name:** Uppercase tracked label (e.g., `CONCLAVE DEVELOPMENT`, `WEBSITE`).
   2. **Thread Title:** Prominent bold title (e.g., `Worker Sessions`, `Landing Page`).
-  3. **Collaborators + Relative Time:** Context badge indicating who is working together and when (e.g., `ChatGPT · 23 min ago`, `You + Gemini · Yesterday`).
-  4. **Last Message / Work Quote:** Italicized discussion snippet or decision quote (e.g., `"We should persist the..."`, `"The hero should..."`).
-  5. **Direct CTA:** `Continue →` button navigating straight into the Thread conversation (`AxNavigation.thread(spaceId, threadId)`).
+  3. **Relative Time:** When the Thread last had activity (e.g., `23 min ago`, `Yesterday`).
+  4. **Last Message:** A short preview (whitespace collapsed, at most two lines) prefixed with its sender, e.g. `Alex: We should persist the...`. The sender comes from the thread list `briefAuthorName` (member display name, or the Worker display name for AI answers).
+  5. **Navigation:** The whole card is clickable and opens the Thread conversation (`AxNavigation.thread(spaceId, threadId)`); there is no separate button.
 - **Recent-Work Ranking Engine (`AxRecentWorkRanker`):**
   - **Does NOT use naive `updatedAt DESC`:** Background synchronization, metadata polls, or entity updates do not push irrelevant threads to the top.
   - **Ranking Factors:**
@@ -79,7 +79,7 @@ HOME
 - **Characteristics:**
   - Benefit-first descriptions (not git commits)
   - Human-readable release date
-  - Direct deep-links to try new features (`Learn more →`)
+  - Full text shown inline on Home; the full changelog is available from `See all`
   - Targetable audience / per-user read state tracking
 
 ### 4. AI Updates
@@ -161,7 +161,7 @@ HomePage (Dispatcher)
 - **Experience:**
   - **For You**: Prioritizes attention items, thread input requests, and pending invitations.
   - **Running Now**: Conditionally visible when active runs exist.
-  - **Continue Working**: Contextual threads with collaborators, snippet, and `Continue →` button.
+  - **Continue Working**: Clickable Thread cards with the last message and its sender.
   - **What's New in Conclave**: Official product updates.
   - **AI Updates**: Scoped AI capability news for available worker types.
   - Strictly omits onboarding cards and getting-started tutorials.
@@ -246,15 +246,15 @@ AxUserProductUpdateState
 └── dismissedAt?: DateTime (user explicitly hid / dismissed update)
 ```
 - **Unread Badge Calculation:** `AxProductUpdateService.computeUnreadCount(...)` counts published, version-compatible updates where `seenAt == null` and `dismissedAt == null`.
-- **Badge Display:** Displays `What's new • 2` (or counter badge) next to the section title when unread updates exist.
+- **Badge Display:** The Home section title shows no unread count; the count is used only for analytics.
 
 ### 4. Home Presentation for What's New (Phase 14)
 - **Capacity:** Shows the top 2–3 newest published, non-dismissed updates (`AxProductUpdateService.getHomeUpdates(..., limit: 3)`).
 - **Tile Elements:**
   1. Category badge pill (`[COLLABORATION]`, `[WORKFLOW]`, `[SECURITY]`, `[WORKSPACE]`, `[WORKER]`, `[FEATURE]`, `[IMPROVEMENT]`).
   2. Date format: e.g. `Oct 7`.
-  3. Bold title and multi-line summary.
-  4. `Learn more →` CTA button triggering the detail view or full changelog.
+  3. Bold title, full summary, and full details text.
+  4. Rows are informational and not clickable; `See all` opens the full changelog.
 - **Empty-State Omission:** If no updates exist or all are dismissed, the section collapses completely (`const SizedBox.shrink()`) with **zero** filler text (never displays `"Nothing new."`).
 
 ### 5. Full What's New Surface (`AxWhatsNewDialog`, Phase 15)
@@ -293,7 +293,7 @@ AxAiCapabilityUpdate
 
 ### 2. Presentation & Filtering on Home
 - **Scoped by Active Workers:** When workers are configured in the user's workspace, Home filters AI capability updates to highlight relevant provider/worker capabilities.
-- **Card Presentation (`_AiUpdateCard`):** Displays worker identity dot, worker name, category pill badge (e.g. `[MODEL ADDED]`, `[CAPABILITY ADDED]`), publication date (`Oct 7`), bold title, and concise summary.
+- **Card Presentation (`_AiUpdateCard`):** Displays worker identity dot, worker name, category pill badge (e.g. `[MODEL ADDED]`, `[CAPABILITY ADDED]`), publication date (`Oct 7`), bold title, and the full update text. Rows are informational: not clickable and without a `Configure →` action; `See all` opens the AI updates dialog.
 
 ---
 

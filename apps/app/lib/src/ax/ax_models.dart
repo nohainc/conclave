@@ -282,6 +282,7 @@ class AxThread {
     required this.brief,
     required this.primaryWorkspace,
     required this.queueStatus,
+    this.briefAuthorName = '',
     this.leadDisplayName = '',
     this.workConfig = const {},
     this.metadata = const {},
@@ -305,6 +306,9 @@ class AxThread {
   final String leadDisplayName;
   final String status;
   final String brief;
+
+  /// Who sent [brief], the latest Thread message; empty when unknown.
+  final String briefAuthorName;
   final String primaryWorkspace;
   final String queueStatus;
   final Map<String, dynamic> workConfig;
@@ -354,6 +358,7 @@ class AxThread {
           leadDisplayName: leadDisplayName,
           status: status ?? this.status,
           brief: brief,
+          briefAuthorName: briefAuthorName,
           primaryWorkspace: primaryWorkspace,
           queueStatus: queueStatus,
           workConfig: workConfig ?? this.workConfig,
@@ -384,6 +389,7 @@ class AxThread {
         leadDisplayName: _string(json, 'leadDisplayName'),
         status: _string(json, 'status', 'active'),
         brief: _string(json, 'brief', ''),
+        briefAuthorName: _string(json, 'briefAuthorName'),
         primaryWorkspace: _string(json, 'primaryWorkspace', 'Not selected'),
         queueStatus: _string(json, 'queueStatus', 'Idle'),
         workConfig: json['workConfig'] is Map
@@ -1749,6 +1755,7 @@ class AxContinueWorkItem {
     String? threadTitle,
     required this.collaboratorsDisplay,
     required this.lastMessageSnippet,
+    this.lastMessageAuthor = '',
     required this.lastActivityDisplay,
     this.lastMeaningfulActivityAt,
     this.hasUserParticipation = false,
@@ -1767,6 +1774,9 @@ class AxContinueWorkItem {
   final String threadTitle;
   final String collaboratorsDisplay;
   final String lastMessageSnippet;
+
+  /// Who sent [lastMessageSnippet]; empty when unknown.
+  final String lastMessageAuthor;
   final String lastActivityDisplay;
   final DateTime? lastMeaningfulActivityAt;
   final bool hasUserParticipation;
@@ -1783,6 +1793,7 @@ class AxContinueWorkItem {
         threadTitle: _string(json, 'threadTitle'),
         collaboratorsDisplay: _string(json, 'collaboratorsDisplay'),
         lastMessageSnippet: _string(json, 'lastMessageSnippet'),
+        lastMessageAuthor: _string(json, 'lastMessageAuthor'),
         lastActivityDisplay: _string(json, 'lastActivityDisplay'),
         lastMeaningfulActivityAt: json['lastMeaningfulActivityAt'] != null
             ? DateTime.tryParse(json['lastMeaningfulActivityAt'].toString())
@@ -1803,6 +1814,8 @@ class AxContinueWorkItem {
         'threadTitle': threadTitle,
         'collaboratorsDisplay': collaboratorsDisplay,
         'lastMessageSnippet': lastMessageSnippet,
+        if (lastMessageAuthor.isNotEmpty)
+          'lastMessageAuthor': lastMessageAuthor,
         'lastActivityDisplay': lastActivityDisplay,
         if (lastMeaningfulActivityAt != null)
           'lastMeaningfulActivityAt':
@@ -1821,6 +1834,7 @@ class AxContinueWorkItem {
     String? threadTitle,
     String? collaboratorsDisplay,
     String? lastMessageSnippet,
+    String? lastMessageAuthor,
     String? lastActivityDisplay,
     DateTime? lastMeaningfulActivityAt,
     bool? hasUserParticipation,
@@ -1836,6 +1850,7 @@ class AxContinueWorkItem {
         threadTitle: threadTitle ?? this.threadTitle,
         collaboratorsDisplay: collaboratorsDisplay ?? this.collaboratorsDisplay,
         lastMessageSnippet: lastMessageSnippet ?? this.lastMessageSnippet,
+        lastMessageAuthor: lastMessageAuthor ?? this.lastMessageAuthor,
         lastActivityDisplay: lastActivityDisplay ?? this.lastActivityDisplay,
         lastMeaningfulActivityAt:
             lastMeaningfulActivityAt ?? this.lastMeaningfulActivityAt,

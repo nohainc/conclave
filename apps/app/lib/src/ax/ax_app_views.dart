@@ -853,6 +853,8 @@ class _HomeThreadCollectionState extends State<_HomeThreadCollection> {
           lastMessageSnippet: thread.brief.isNotEmpty
               ? thread.brief
               : 'Continue conversation and work in context',
+          lastMessageAuthor:
+              thread.brief.isNotEmpty ? thread.briefAuthorName : '',
           lastActivityDisplay: activityAt == null
               ? (space.lastActivity.isNotEmpty
                   ? space.lastActivity

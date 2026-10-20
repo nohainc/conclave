@@ -652,9 +652,12 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
 
   Future<void> _clearChatHistory(AxThread thread) async {
     try {
+      // AI requests render in the Conversation and archive completed answers
+      // into it, so clear AI History first, then the messages.
+      await store.workHistory.clearHistory(thread.id);
       await store.discussion.clearHistory(thread.id);
       _discardNotificationsFor(threadId: thread.id);
-      if (mounted) _showSnackBar('Conversation history cleared.');
+      if (mounted) _showSnackBar('Conversation and AI History cleared.');
     } catch (error) {
       if (mounted) {
         _showSnackBar(
