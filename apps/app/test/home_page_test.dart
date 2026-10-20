@@ -9,6 +9,56 @@ void main() {
         home: Scaffold(body: SingleChildScrollView(child: child)),
       );
 
+  for (final width in [390.0, 1200.0]) {
+    testWidgets('Home times and update dates align right at width $width',
+        (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 1800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(scaffold(EstablishedUserHome(
+        spaces: const [
+          AxSpace(id: 's', name: 'Space', branch: '', lastActivity: '')
+        ],
+        workers: const [],
+        workspaces: const [],
+        run: null,
+        openFindingCount: 0,
+        onOpenWorkspaces: () {},
+        onOpenRun: (_, __) {},
+        onOpenSpace: (_) {},
+        continueWorkItems: const [
+          AxContinueWorkItem(
+            spaceId: 's',
+            spaceName: 'Space',
+            threadId: 't',
+            threadTitle: 'A long Thread title for responsive timestamp layout',
+            collaboratorsDisplay: '',
+            lastMessageSnippet: 'Message',
+            lastActivityDisplay: '18 min ago',
+          )
+        ],
+        productUpdates: [defaultProductUpdates.first],
+        aiUpdates: [defaultAiCapabilityUpdates.first],
+      )));
+      await tester.pumpAndSettle();
+      final labels = {
+        '18 min ago',
+        defaultProductUpdates.first.dateDisplay,
+        defaultAiCapabilityUpdates.first.dateDisplay
+      };
+      for (final label in labels) {
+        final matches = find.text(label);
+        expect(matches, findsWidgets);
+        for (var index = 0; index < matches.evaluate().length; index++) {
+          final text = matches.at(index);
+          final row = find.ancestor(of: text, matching: find.byType(Row)).first;
+          expect(tester.getRect(text).right, tester.getRect(row).right);
+          expect(tester.widget<Text>(text).textAlign, TextAlign.right);
+        }
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('Continue working bounds the message preview to 200 characters',
       (tester) async {
     await tester.pumpWidget(scaffold(EstablishedUserHome(

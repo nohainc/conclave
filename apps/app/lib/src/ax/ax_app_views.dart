@@ -511,6 +511,12 @@ extension _AxAppViews on _AxAppStateMixin {
             ],
           ),
         ),
+        if (accountUnlinkError != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(accountUnlinkError!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
         if (accountSecurityLoading || linkedAccounts.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 4),
@@ -522,8 +528,20 @@ extension _AxAppViews on _AxAppStateMixin {
                             contentPadding: EdgeInsets.zero,
                             leading: _accountProviderIcon(account.providerId),
                             title: Text(_providerLabel(account.providerId)),
-                            trailing: Icon(Icons.verified_outlined,
-                                color: Theme.of(context).colorScheme.primary),
+                            trailing: ['google', 'github']
+                                    .contains(account.providerId.toLowerCase())
+                                ? TextButton(
+                                    onPressed: unlinkingAccountIds.isNotEmpty
+                                        ? null
+                                        : () => _unlinkAccountProvider(account),
+                                    child: Text(unlinkingAccountIds
+                                            .contains(account.id)
+                                        ? 'Unlinking…'
+                                        : 'Unlink ${_providerLabel(account.providerId)}'),
+                                  )
+                                : Icon(Icons.verified_outlined,
+                                    color:
+                                        Theme.of(context).colorScheme.primary),
                           )),
                     ],
                   ),

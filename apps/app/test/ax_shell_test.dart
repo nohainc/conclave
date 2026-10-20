@@ -17,6 +17,53 @@ import 'ax_fixture_data.dart';
 import 'ax_fixture_realtime.dart';
 
 void main() {
+  for (final theme in [ConclaveBrand.lightTheme(), ConclaveBrand.darkTheme()]) {
+    testWidgets(
+        'login presentation uses matching branded buttons in ${theme.brightness}',
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+        theme: theme,
+        home: const ConclaveAppShell(
+          services: DefaultPlatformServices(),
+          dataSource: AxFixtureDataSource(authenticated: false),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Sign in securely'), findsNothing);
+      final forgot = find.text('Forgot password?');
+      final email = find.widgetWithText(TextField, 'Email');
+      expect(tester.getCenter(forgot).dx, tester.getCenter(email).dx);
+      for (final provider in ['github', 'google']) {
+        final label = provider == 'github' ? 'GitHub' : 'Google';
+        final button =
+            find.widgetWithText(OutlinedButton, 'Continue with $label');
+        expect(button, findsOneWidget);
+        expect(
+            find.descendant(
+                of: button,
+                matching: find.byWidgetPredicate((widget) =>
+                    widget is Image &&
+                    widget.image is AssetImage &&
+                    (widget.image as AssetImage).assetName ==
+                        'assets/auth/$provider.png')),
+            findsOneWidget);
+      }
+      expect(
+          tester.getSize(
+              find.widgetWithText(OutlinedButton, 'Continue with GitHub')),
+          tester.getSize(
+              find.widgetWithText(OutlinedButton, 'Continue with Google')));
+      await tester.tap(forgot);
+      await tester.pumpAndSettle();
+      expect(find.text('Restore your password'), findsOneWidget);
+      expect(
+          find.textContaining('Enter your email and we will send a reset link'),
+          findsOneWidget);
+      expect(find.text('Continue with Google'), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   for (final collapsed in [false, true]) {
     testWidgets('sidebar suppresses hover hints collapsed=$collapsed',
         (tester) async {
@@ -222,6 +269,49 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Fixture browser'), findsOneWidget);
     expect(find.text('Other browser'), findsNothing);
+  });
+
+  testWidgets(
+      'linked Google and GitHub can be unlinked and failures preserve links',
+      (tester) async {
+    final source = _LinkedProvidersFixture(['google', 'github']);
+    await tester.pumpWidget(MaterialApp(
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: source,
+        initialUri: Uri.parse('/settings/profile'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    source.failUnlink = true;
+    await tester.tap(find.text('Unlink Google'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unlink Google'), findsOneWidget);
+    expect(find.text('Link Google'), findsNothing);
+    expect(find.textContaining('Keep another sign-in method'), findsOneWidget);
+    source.failUnlink = false;
+    for (final label in ['Google', 'GitHub']) {
+      final pending = Completer<void>();
+      source.unlinkGate = pending.future;
+      await tester.tap(find.text('Unlink $label'));
+      await tester.pump();
+      expect(find.text('Unlinking…'), findsOneWidget);
+      if (label == 'Google') {
+        expect(
+            tester
+                .widget<TextButton>(
+                    find.widgetWithText(TextButton, 'Unlink GitHub'))
+                .onPressed,
+            isNull);
+      }
+      pending.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Unlink $label'), findsNothing);
+      expect(find.text('Link $label'), findsOneWidget);
+    }
+    expect(source.unlinkedIds, ['google', 'google', 'github']);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('linked providers hide link buttons and share provider icons',
@@ -2684,6 +2774,17 @@ void main() {
       // Assert modal dialog contents
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(find.text('Version 0.1.0'), findsOneWidget);
+      expect(
+          find.textContaining(
+              'people and AI Workers together in Spaces and Threads'),
+          findsOneWidget);
+      expect(
+          find.textContaining('Team conversations, AI requests, and results'),
+          findsOneWidget);
+      expect(find.textContaining('Conclave Workspace and the provider CLIs'),
+          findsOneWidget);
+      expect(find.textContaining('coordinates AI Workers across models'),
+          findsNothing);
       expect(find.textContaining('Provider-Independent'), findsNothing);
       expect(find.text('Docs'), findsNothing);
       expect(find.text('GitHub'), findsNothing);
@@ -2954,12 +3055,19 @@ void main() {
 
     expect(find.text('Create Space'), findsNothing);
 
-    // Sign-up mode shows social buttons and does not show duplicate Back to sign in button
+    // Account creation offers email registration and a return to sign in.
     await tester.tap(find.text('New here? Create an account'));
     await tester.pumpAndSettle();
 
     expect(find.text('Already have an account? Sign in'), findsNothing);
-    expect(find.text('Back to sign in'), findsNothing);
+    expect(find.text('Back to sign in'), findsOneWidget);
+    expect(find.text('Continue with GitHub'), findsNothing);
+    expect(find.text('Continue with Google'), findsNothing);
+
+    await tester.tap(find.text('Back to sign in'));
+    await tester.pumpAndSettle();
+    expect(find.text('Create your account'), findsNothing);
+    expect(find.text('Sign in with email'), findsOneWidget);
     expect(find.text('Continue with GitHub'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
 
@@ -3207,6 +3315,17 @@ class _LinkedProvidersFixture extends AxFixtureDataSource {
   _LinkedProvidersFixture(this.providers, {this.sessions = const []});
   final List<AxAuthSession> sessions;
   final List<String> providers;
+  bool failUnlink = false;
+  Future<void>? unlinkGate;
+  final unlinkedIds = <String>[];
+
+  @override
+  Future<void> unlinkAccount({required String accountId}) async {
+    unlinkedIds.add(accountId);
+    if (failUnlink) throw Exception('Keep another sign-in method');
+    if (unlinkGate != null) await unlinkGate;
+    providers.remove(accountId);
+  }
 
   @override
   Future<AxAccountSecurity> loadAccountSecurity() async => AxAccountSecurity(

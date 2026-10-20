@@ -1610,29 +1610,35 @@ class _ContinueWorkCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 2. THREAD TITLE
-                  Text(
-                    item.threadTitle,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                          child: Text(
+                        item.threadTitle,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 15),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )),
+                      if (item.lastActivityDisplay.isNotEmpty) ...[
+                        const SizedBox(width: 12),
+                        Flexible(
+                            fit: FlexFit.tight,
+                            child: Text(
+                              item.lastActivityDisplay,
+                              textAlign: TextAlign.right,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                      ConclaveColors.primaryForeground(isDark)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            )),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  // 3. Last activity time
-                  if (item.lastActivityDisplay.isNotEmpty)
-                    Text(
-                      item.lastActivityDisplay,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: ConclaveColors.primaryForeground(isDark),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
                   if (snippetText.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     // 4. Last message, prefixed with who sent it
@@ -1702,33 +1708,44 @@ class _HomeUpdateRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              if (worker != null)
-                Text(worker!,
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w700)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                    color: colors.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(4)),
-                child: Text(label.toUpperCase(),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+                child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                  if (worker != null)
+                    Text(worker!,
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w700)),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                        color: colors.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(4)),
+                    child: Text(label.toUpperCase(),
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                            color: colors.onSurfaceVariant)),
+                  ),
+                ])),
+            const SizedBox(width: 12),
+            Flexible(
+                fit: FlexFit.tight,
+                child: Text(date,
+                    textAlign: TextAlign.right,
                     style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                        color: colors.onSurfaceVariant)),
-              ),
-              Text(date,
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: colors.onSurfaceVariant,
-                      fontWeight: FontWeight.w500)),
-            ]),
+                        fontSize: 12,
+                        color: colors.onSurfaceVariant,
+                        fontWeight: FontWeight.w500))),
+          ],
+        ),
         const SizedBox(height: 6),
         Text(title,
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),

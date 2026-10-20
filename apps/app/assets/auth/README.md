@@ -5,7 +5,8 @@ Official provider assets, downloaded from:
 - GitHub: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
 - Google: https://developers.google.com/identity/images/g-logo.png
 
-The account page uses these marks for both link actions and linked methods.
+The login page uses the official GitHub and Google marks at 20px in matching
+outlined provider buttons. Account settings also use these marks for linked methods.
 A provider's link action is hidden once that provider appears in the loaded
 account security data (case-insensitive). Credential accounts remain hidden.
 Session rows show a compact best-effort browser/device label in small text,

@@ -358,6 +358,27 @@ mixin _AuthApi on _AxApiClientCore {
   }
 
   @override
+  Future<void> unlinkAccount({required String accountId}) async {
+    final response = await client.post(
+      Uri.parse('$baseUrl/auth/unlink-account'),
+      headers: _headers(contentType: 'application/json'),
+      body: jsonEncode({'accountId': accountId}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var message = 'Could not unlink account. Try signing in again.';
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map && body['message'] is String) {
+          message = body['message'] as String;
+        }
+      } on FormatException {
+        // Keep the fallback for non-JSON errors.
+      }
+      throw AxApiException(message, statusCode: response.statusCode);
+    }
+  }
+
+  @override
   Future<Uri> beginAccountLink(String provider, Uri returnTo) async {
     // Return to this app even when the API runs on another origin (local dev).
     final callbackURL = Uri.base.scheme == 'http' || Uri.base.scheme == 'https'

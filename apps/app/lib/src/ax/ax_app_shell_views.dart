@@ -237,20 +237,24 @@ extension _AxAppShellViews on _AxAppStateMixin {
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                               fontSize: 24, fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 8),
-                      Text(
-                          resetPassword
-                              ? 'Choose a strong password for your account.'
-                              : authResetRequest
-                                  ? 'Enter your email and we will send a reset link if an account exists.'
-                                  : awaitingSignUpCode
-                                      ? 'Enter the 6-digit verification code we sent to ${authEmailController.text.trim()}.'
-                                      : authSignUp
-                                          ? 'Create an account to start using Conclave AX. We will send a one-time code to verify your email.'
-                                          : pendingDesktopAppName != null
-                                              ? 'Sign in to continue approving $pendingDesktopAppName.'
-                                              : 'Sign in securely to access your Spaces, Workspaces, and Workers.',
-                          textAlign: TextAlign.center),
+                      if (resetPassword ||
+                          authResetRequest ||
+                          authSignUp ||
+                          awaitingSignUpCode ||
+                          pendingDesktopAppName != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                            resetPassword
+                                ? 'Choose a strong password for your account.'
+                                : authResetRequest
+                                    ? 'Enter your email and we will send a reset link if an account exists.'
+                                    : awaitingSignUpCode
+                                        ? 'Enter the 6-digit verification code we sent to ${authEmailController.text.trim()}.'
+                                        : authSignUp
+                                            ? 'Create an account to start using Conclave AX. We will send a one-time code to verify your email.'
+                                            : 'Sign in to continue approving $pendingDesktopAppName.',
+                            textAlign: TextAlign.center),
+                      ],
                       const SizedBox(height: 20),
                       if (!resetPassword &&
                           authSignUp &&
@@ -425,7 +429,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                         ),
                       if (!resetPassword && !authSignUp && !authResetRequest)
                         Align(
-                          alignment: Alignment.centerRight,
+                          alignment: Alignment.center,
                           child: TextButton(
                             onPressed: authBusy
                                 ? null
@@ -449,7 +453,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                   }),
                           child: const Text('New here? Create an account'),
                         ),
-                      if (resetPassword || authResetRequest)
+                      if (resetPassword || authResetRequest || authSignUp)
                         TextButton(
                           onPressed: authBusy
                               ? null
@@ -481,16 +485,16 @@ extension _AxAppShellViews on _AxAppStateMixin {
                         ),
                       if (!resetPassword &&
                           !authResetRequest &&
-                          !awaitingSignUpCode) ...[
+                          !authSignUp) ...[
                         const Divider(height: 28),
                         SizedBox(
                           width: double.infinity,
-                          child: FilledButton.icon(
+                          child: OutlinedButton.icon(
                             onPressed: authBusy
                                 ? null
                                 : () => browserNavigation.startSocialLogin(
                                     'github', returnTo),
-                            icon: const Icon(Icons.code),
+                            icon: _accountProviderIcon('github', size: 20),
                             label: const Text('Continue with GitHub'),
                           ),
                         ),
@@ -502,7 +506,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                 ? null
                                 : () => browserNavigation.startSocialLogin(
                                     'google', returnTo),
-                            icon: const Icon(Icons.account_circle_outlined),
+                            icon: _accountProviderIcon('google', size: 20),
                             label: const Text('Continue with Google'),
                           ),
                         ),

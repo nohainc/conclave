@@ -47,6 +47,7 @@ class _NewThreadPageState extends State<NewThreadPage> {
                   spaceId: widget.space.id)
               : null);
   bool _busy = false;
+  bool _membersExpanded = false;
   String? _creationError;
 
   @override
@@ -148,8 +149,23 @@ class _NewThreadPageState extends State<NewThreadPage> {
                 childrenPadding: EdgeInsets.zero,
                 shape: const Border(),
                 collapsedShape: const Border(),
-                title: Text('Members',
-                    style: Theme.of(context).textTheme.titleMedium),
+                showTrailingIcon: false,
+                onExpansionChanged: (expanded) =>
+                    setState(() => _membersExpanded = expanded),
+                title: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Members',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(width: 4),
+                    AnimatedRotation(
+                      turns: _membersExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: const Icon(Icons.expand_more,
+                          key: ValueKey('space-members-arrow'), size: 20),
+                    ),
+                  ],
+                ),
                 children: [
                   SpacePage(
                     embedded: true,

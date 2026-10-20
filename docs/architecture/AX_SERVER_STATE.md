@@ -1146,7 +1146,8 @@ and Cloud remains authoritative for concurrent conflicts. Errors display below
 the field. The Space page has no message composers or Discussion/Work tabs.
 Workspace selection retains owner editing and read-only display for other members.
 The landing content shares the Members title’s left edge at all viewport widths.
-The Members section follows, collapsed by default and expandable from its title;
+The Members section follows, collapsed by default and expandable from its title,
+with a rotating arrow immediately beside the Members label;
 Share Space is in the member grid’s name/email
 column header. Member permissions and invitations observe existing Space queries.
 Old Members routes render the Space landing page. Existing Thread pages retain
@@ -1159,3 +1160,39 @@ pixels, centered within their responsive page padding. People and Archived
 Spaces use the same width and left edge as Home even when their lists are empty
 or loading; text length must not determine the page width. Space and Thread
 pages retain their dedicated layout owners.
+
+### Account creation navigation
+
+The Create your account form offers email registration without Google or GitHub
+buttons. A Back to sign in link returns to email sign-in, clears sensitive form
+inputs and authentication notices, and restores the social sign-in buttons.
+The same return link remains available during email-code verification.
+
+### Home timestamps and linked sign-in methods
+
+Continue working cards place the last-activity time at the right of the Thread
+heading. What's new and AI updates place publication dates at the right of each
+item's metadata row, including on narrow screens.
+
+Account settings offer Unlink Google and Unlink GitHub for linked accounts.
+The client posts the local Better Auth account record ID to the existing
+`/api/auth/unlink-account` endpoint and reloads account security after success.
+Failed unlink attempts keep the provider visible and display the server error.
+Better Auth retains ownership of fresh-session checks and last-account protection;
+this change does not enable unlinking the last sign-in method.
+
+### About description
+
+The About dialog describes Conclave AX as collaboration between people and AI
+Workers in Spaces and Threads, with team conversations, AI requests, and results
+kept together. It introduces Workflows and local execution through Conclave
+Workspace and provider CLIs without presenting AI orchestration as the sole
+product purpose.
+
+### Login presentation
+
+The standard sign-in form omits the generic “Sign in securely” subtitle and
+centers Forgot password below the email sign-in action. Google and GitHub use
+matching outlined buttons with the bundled official provider marks. Contextual
+instructions remain for password recovery, account creation, email verification,
+and desktop sign-in approval.

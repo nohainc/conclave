@@ -139,6 +139,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
 
   bool revokingAllAccountSessions = false;
   bool deletingAccount = false;
+  final unlinkingAccountIds = <String>{};
+  String? accountUnlinkError;
   ThemeMode _themeMode = ThemeMode.system;
   bool _desktopSidebarCollapsed = false;
   double _desktopSidebarWidth = ResizableSidebar.minWidth;

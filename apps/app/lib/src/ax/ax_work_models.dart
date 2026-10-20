@@ -868,6 +868,8 @@ abstract interface class AxDataSource {
   Future<void> revokeAccountSession(String token);
   Future<void> deleteAccount({required String confirmEmail}) async =>
       throw UnimplementedError('Account deletion is not available');
+  Future<void> unlinkAccount({required String accountId}) async =>
+      throw UnimplementedError('Account unlinking is not available');
   Future<Uri> beginAccountLink(String provider, Uri returnTo);
   Future<void> approveDesktopAuthIntent({
     required String intentId,

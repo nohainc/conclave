@@ -302,12 +302,12 @@ extension _AxAppController on _AxAppStateMixin {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Conclave AX coordinates AI Workers across models and machines to research, implement, review, test, and verify complex work.',
+                'Conclave AX brings people and AI Workers together in Spaces and Threads to discuss ideas, share context, and get work done.',
                 style: TextStyle(fontSize: 13.5, height: 1.45),
               ),
               const SizedBox(height: 8),
               const Text(
-                'Workers run on your own Workspaces through the provider CLIs you already use; Conclave keeps Spaces, Threads, and workflow state in sync.',
+                'Team conversations, AI requests, and results stay together in one place. Choose how Workers handle tasks through Workflows, and run AI work on your own machines with Conclave Workspace and the provider CLIs you already use.',
                 style: TextStyle(fontSize: 12.5, height: 1.45),
               ),
               const SizedBox(height: 16),
@@ -1312,6 +1312,35 @@ extension _AxAppController on _AxAppStateMixin {
     }
     _updateState(() {});
     _showSnackBar('Email updated.');
+  }
+
+  Future<void> _unlinkAccountProvider(AxAuthAccount account) async {
+    if (unlinkingAccountIds.isNotEmpty) return;
+    unlinkingAccountIds.add(account.id);
+    _updateState(() => accountUnlinkError = null);
+    final sessionId = store.auth.session?.sessionId;
+    try {
+      await widget.dataSource.unlinkAccount(accountId: account.id);
+      if (!mounted || store.auth.session?.sessionId != sessionId) return;
+      final current = accountSecurity;
+      if (current != null) {
+        accountSecurity = current.copyWith(
+            accounts: current.accounts
+                .where((item) => item.id != account.id)
+                .toList());
+      }
+      await _loadAccountSecurity();
+      if (mounted && store.auth.session?.sessionId == sessionId) {
+        _showSnackBar('${_providerLabel(account.providerId)} unlinked.');
+      }
+    } catch (error) {
+      if (mounted && store.auth.session?.sessionId == sessionId) {
+        _updateState(() => accountUnlinkError = error.toString());
+      }
+    } finally {
+      unlinkingAccountIds.remove(account.id);
+      if (mounted) _updateState(() {});
+    }
   }
 
   Future<void> _linkAccountProvider(String provider) async {

@@ -381,6 +381,9 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
   Future<void> revokeAccountSession(String token) async {}
 
   @override
+  Future<void> unlinkAccount({required String accountId}) async {}
+
+  @override
   Future<void> deleteAccount({required String confirmEmail}) async {}
 
   @override

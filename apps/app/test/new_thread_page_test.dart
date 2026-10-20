@@ -70,6 +70,13 @@ void main() {
       expect(tester.getRect(field).bottom,
           lessThan(tester.getRect(find.text('Members')).top));
       final membersTitle = find.text('Members');
+      final arrow = find.byKey(const ValueKey('space-members-arrow'));
+      expect(
+          tester.getRect(arrow).left - tester.getRect(membersTitle).right, 4);
+      final rotation =
+          find.ancestor(of: arrow, matching: find.byType(AnimatedRotation));
+      expect(tester.widget<AnimatedRotation>(rotation).turns, 0);
+
       for (final content in [
         find.byKey(const ValueKey('space-landing-name')),
         find.text('Description'),
@@ -83,10 +90,12 @@ void main() {
       await tester.tap(membersTitle);
       await tester.pumpAndSettle();
       expect(memberDescription, findsOneWidget);
+      expect(tester.widget<AnimatedRotation>(rotation).turns, 0.5);
       expect(find.byType(DataTable), findsOneWidget);
       await tester.tap(membersTitle);
       await tester.pumpAndSettle();
       expect(memberDescription, findsNothing);
+      expect(tester.widget<AnimatedRotation>(rotation).turns, 0);
       await tester.enterText(field, '  New name  ');
       await tester.pump();
       await tester.tap(find.widgetWithText(TextButton, 'Create Thread'));
