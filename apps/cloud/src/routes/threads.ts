@@ -57,38 +57,40 @@ export async function handleListSpaceThreads(
             creator.email AS creatorEmail,
             CASE WHEN threads.lead_user_id = space.owner_user_id THEN 1 ELSE 0 END AS creatorIsOwner,
             threads.created_at AS createdAt, ${lastThreadActivitySql("threads")} AS updatedAt,
-            COALESCE(
-              (SELECT m.body FROM discussion_messages m
-                 WHERE m.thread_id = threads.id
-                 ORDER BY m.created_at DESC LIMIT 1),
-              (SELECT h.text FROM conversation_history_entries h
-                 JOIN conversations conversation
-                   ON conversation.id = h.conversation_id
-                WHERE conversation.thread_id = threads.id
-                ORDER BY h.occurred_at DESC LIMIT 1),
-              ''
-            ) AS brief,
-            CASE WHEN EXISTS (SELECT 1 FROM discussion_messages m
-                                WHERE m.thread_id = threads.id)
-              THEN (SELECT CASE WHEN m.kind = 'ai_answer'
-                                THEN COALESCE(m.worker_display_name, 'AI')
-                                ELSE COALESCE(u.display_name, 'Member') END
-                      FROM discussion_messages m
-                      LEFT JOIN users u ON u.id = m.author_user_id
-                     WHERE m.thread_id = threads.id
-                     ORDER BY m.created_at DESC LIMIT 1)
-              ELSE (SELECT CASE WHEN h.actor_type = 'worker'
-                                THEN COALESCE(json_extract(h.metadata_json, '$.workerDisplayName'), 'AI')
-                                ELSE COALESCE(u.display_name, 'Member') END
-                      FROM conversation_history_entries h
-                      JOIN conversations conversation
-                        ON conversation.id = h.conversation_id
-                      LEFT JOIN users u
-                        ON h.actor_type = 'user' AND u.id = h.actor_id
-                     WHERE conversation.thread_id = threads.id
-                       AND h.text IS NOT NULL
-                     ORDER BY h.occurred_at DESC LIMIT 1)
-            END AS briefAuthorName,
+            COALESCE((SELECT text FROM (SELECT m.body AS text,
+                       CASE WHEN m.kind = 'ai_answer' THEN COALESCE(m.worker_display_name, 'AI')
+                            ELSE COALESCE(u.display_name, 'Member') END AS author,
+                       m.created_at AS sentAt, 0 AS source
+                  FROM discussion_messages m LEFT JOIN users u ON u.id = m.author_user_id
+                 WHERE m.thread_id = threads.id AND m.body IS NOT NULL
+                UNION ALL
+                SELECT h.text,
+                       CASE WHEN h.actor_type = 'worker'
+                            THEN COALESCE(json_extract(h.metadata_json, '$.workerDisplayName'), 'AI')
+                            ELSE COALESCE(u.display_name, 'Member') END,
+                       h.occurred_at, 1
+                  FROM conversation_history_entries h
+                  JOIN conversations c ON c.id = h.conversation_id
+                  LEFT JOIN users u ON h.actor_type = 'user' AND u.id = h.actor_id
+                 WHERE c.thread_id = threads.id AND h.text IS NOT NULL
+                   AND h.kind IN ('user_message', 'worker_response')) ORDER BY sentAt DESC, source DESC, text DESC, author DESC LIMIT 1), '') AS brief,
+            (SELECT author FROM (SELECT m.body AS text,
+                       CASE WHEN m.kind = 'ai_answer' THEN COALESCE(m.worker_display_name, 'AI')
+                            ELSE COALESCE(u.display_name, 'Member') END AS author,
+                       m.created_at AS sentAt, 0 AS source
+                  FROM discussion_messages m LEFT JOIN users u ON u.id = m.author_user_id
+                 WHERE m.thread_id = threads.id AND m.body IS NOT NULL
+                UNION ALL
+                SELECT h.text,
+                       CASE WHEN h.actor_type = 'worker'
+                            THEN COALESCE(json_extract(h.metadata_json, '$.workerDisplayName'), 'AI')
+                            ELSE COALESCE(u.display_name, 'Member') END,
+                       h.occurred_at, 1
+                  FROM conversation_history_entries h
+                  JOIN conversations c ON c.id = h.conversation_id
+                  LEFT JOIN users u ON h.actor_type = 'user' AND u.id = h.actor_id
+                 WHERE c.thread_id = threads.id AND h.text IS NOT NULL
+                   AND h.kind IN ('user_message', 'worker_response')) ORDER BY sentAt DESC, source DESC, text DESC, author DESC LIMIT 1) AS briefAuthorName,
             ${activeWorkSql("threads")} AS hasActiveWork,
             ${unreadSql("threads", "?2", "COALESCE(read_state.read_at, member.created_at)")} AS hasUnread,
             (SELECT up.pinned_at FROM user_pins up

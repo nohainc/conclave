@@ -102,6 +102,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   }
 
   Future<void>? _accountSecurityLoadFlight;
+  Future<void>? _disconnectSessionCheck;
   final promptResponseController = TextEditingController();
   final TextEditingController _searchQueryController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();

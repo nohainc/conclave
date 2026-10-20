@@ -27,6 +27,7 @@ const SIGNUP_OTP_EXPIRATION_SECONDS = 10 * 60;
 const SIGNUP_OTP_EXPIRATION_MINUTES = SIGNUP_OTP_EXPIRATION_SECONDS / 60;
 const SIGNUP_OTP_MAX_ATTEMPTS = 5;
 const SIGNUP_OTP_PREFIX = "signup-otp:";
+const EMAIL_CHANGE_OTP_PREFIX = "email-change-otp:";
 
 export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> &
   EmailSenderEnvironment & {
@@ -145,12 +146,14 @@ async function sendSignUpVerificationCodeEmail(
   env: BetterAuthRuntimeEnv,
   recipient: { email: string; name?: string | null },
   verificationCode: string,
+  purpose: "sign-up" | "email-change" = "sign-up",
 ): Promise<void> {
   if (!env.CONCLAVE_EMAIL) {
     if (env.CONCLAVE_ENVIRONMENT === "development") {
       console.info("auth.signup_otp.development", {
         email: recipient.email,
         verificationCode,
+        purpose,
       });
       return;
     }
@@ -167,6 +170,7 @@ async function sendSignUpVerificationCodeEmail(
       recipientName: recipient.name,
       verificationCode,
       expiresInMinutes: SIGNUP_OTP_EXPIRATION_MINUTES,
+      purpose,
     },
   });
 }
@@ -367,31 +371,9 @@ export function buildBetterAuthOptions(
         createdAt: "created_at",
         updatedAt: "updated_at",
       },
-      changeEmail: {
-        enabled: true,
-        sendChangeEmailConfirmation: async ({
-          user,
-          newEmail,
-          url,
-        }: {
-          user: { email: string; name?: string | null };
-          newEmail: string;
-          url: string;
-        }) =>
-          sendAuthEmail(
-            env,
-            user,
-            "auth.confirm-email-change.v1",
-            {
-              recipientName: user.name,
-              newEmail,
-              confirmationUrl: url,
-              expiresInMinutes: AUTH_EMAIL_LINK_EXPIRATION_MINUTES,
-            },
-            `Confirm changing your email to ${newEmail}`,
-            url,
-          ),
-      },
+      // Email changes use the Conclave two-step one-time-code flow
+      // (`/api/auth/change-email/*`); Better Auth's link flow stays disabled.
+      changeEmail: { enabled: false },
       deleteUser: {
         enabled: true,
         afterDelete: async (user: { email: string; name?: string | null }) => {
@@ -587,6 +569,9 @@ export function buildBetterAuthOptions(
         enabled: false,
       },
       expiresIn: 60 * 60 * 24 * 14,
+      // Account management (session list, deletion) must work for any valid
+      // session; deletion is guarded by typed email confirmation instead.
+      freshAge: 0,
       updateAge: 60 * 60 * 24,
       disableSessionRefresh: false,
     },
@@ -630,6 +615,32 @@ export async function handleBetterAuthRequest(
     url.pathname.endsWith("/api/auth/sign-up/send-code")
   ) {
     return handleSignUpSendCode(request, env);
+  }
+  if (request.method === "POST") {
+    const emailChangeStep = url.pathname.match(
+      /\/api\/auth\/change-email\/(send-code|verify-new|confirm)$/,
+    )?.[1];
+    if (emailChangeStep) {
+      const user = await authenticatedUser(request, env);
+      if (!user) return jsonAuthError(401, "UNAUTHORIZED", "Sign in again.");
+      if (emailChangeStep === "send-code") {
+        return handleEmailChangeSendCode(request, env, user);
+      }
+      return emailChangeStep === "verify-new"
+        ? handleEmailChangeVerifyNew(request, env, user)
+        : handleEmailChangeConfirm(request, env, user);
+    }
+    if (url.pathname.endsWith("/api/auth/change-email")) {
+      return jsonAuthError(
+        410,
+        "EMAIL_CHANGE_FLOW_REPLACED",
+        "Email changes require one-time codes from the new and current addresses.",
+      );
+    }
+    if (url.pathname.endsWith("/api/auth/delete-user")) {
+      const rejected = await requireDeletionEmailConfirmation(request, env);
+      if (rejected) return rejected;
+    }
   }
 
   let verifiedSignUpEmail: string | undefined;
@@ -1008,6 +1019,374 @@ async function verifySignUpOtpIfProvided(
     body: JSON.stringify(forwardedPayload),
   });
   return { email: rawEmail, request: forwardedRequest };
+}
+
+export type AuthenticatedUser = { id: string; email: string; name?: string | null };
+
+async function authenticatedUser(
+  request: Request,
+  env: BetterAuthRuntimeEnv,
+): Promise<AuthenticatedUser | undefined> {
+  try {
+    const session = await createBetterAuth(env).api.getSession({
+      headers: request.headers,
+    });
+    if (!session?.user?.id || !session.user.email) return undefined;
+    return {
+      id: session.user.id,
+      email: session.user.email,
+      name: session.user.name,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function readJsonBody(
+  request: Request,
+): Promise<Record<string, unknown> | undefined> {
+  try {
+    const body = (await request.clone().json()) as unknown;
+    return body && typeof body === "object"
+      ? (body as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Account deletion requires the signed-in user to retype their email. */
+async function requireDeletionEmailConfirmation(
+  request: Request,
+  env: BetterAuthRuntimeEnv,
+): Promise<Response | undefined> {
+  const user = await authenticatedUser(request, env);
+  if (!user) return jsonAuthError(401, "UNAUTHORIZED", "Sign in again.");
+  const body = await readJsonBody(request);
+  const confirmation =
+    typeof body?.confirmEmail === "string"
+      ? body.confirmEmail.trim().toLowerCase()
+      : "";
+  if (confirmation !== user.email.trim().toLowerCase()) {
+    return jsonAuthError(
+      400,
+      "EMAIL_CONFIRMATION_MISMATCH",
+      "Enter your account email address to confirm deletion.",
+    );
+  }
+  return undefined;
+}
+
+type EmailChangeState = {
+  stage: "new" | "current";
+  newEmail: string;
+  code: string;
+  attempts: number;
+};
+
+function emailChangeIdentifier(userId: string): string {
+  return `${EMAIL_CHANGE_OTP_PREFIX}${userId}`;
+}
+
+function parseEmailChangeState(raw: string): EmailChangeState | null {
+  try {
+    const value = JSON.parse(raw) as Partial<EmailChangeState>;
+    if (
+      (value.stage !== "new" && value.stage !== "current") ||
+      typeof value.newEmail !== "string" ||
+      typeof value.code !== "string" ||
+      !/^\d{6}$/.test(value.code)
+    ) {
+      return null;
+    }
+    const attempts = Number(value.attempts ?? 0);
+    return {
+      stage: value.stage,
+      newEmail: value.newEmail,
+      code: value.code,
+      attempts: Number.isFinite(attempts) && attempts >= 0 ? attempts : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function storeEmailChangeState(
+  env: BetterAuthRuntimeEnv,
+  userId: string,
+  state: EmailChangeState,
+): Promise<string> {
+  const identifier = emailChangeIdentifier(userId);
+  const now = new Date();
+  const expiresAt = new Date(
+    now.getTime() + SIGNUP_OTP_EXPIRATION_SECONDS * 1000,
+  );
+  const id = `ver-${crypto.randomUUID()}`;
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      "DELETE FROM auth_verifications WHERE identifier = ?1",
+    ).bind(identifier),
+    env.CONCLAVE_DB.prepare(
+      `INSERT INTO auth_verifications
+         (id, identifier, value, expires_at, created_at, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+    ).bind(
+      id,
+      identifier,
+      JSON.stringify(state),
+      expiresAt.toISOString(),
+      now.toISOString(),
+      now.toISOString(),
+    ),
+  ]);
+  return id;
+}
+
+async function deliverEmailChangeCode(
+  env: BetterAuthRuntimeEnv,
+  verificationId: string,
+  recipient: { email: string; name?: string | null },
+  code: string,
+): Promise<Response | undefined> {
+  try {
+    await sendSignUpVerificationCodeEmail(env, recipient, code, "email-change");
+    return undefined;
+  } catch (error) {
+    await env.CONCLAVE_DB.prepare(
+      "DELETE FROM auth_verifications WHERE id = ?1",
+    )
+      .bind(verificationId)
+      .run();
+    const failure = classifyEmailDeliveryFailure(error);
+    console.error("auth.email_change_otp.delivery_failed", {
+      status: failure.status,
+      providerCode: failure.providerCode,
+    });
+    return jsonAuthError(
+      failure.status === "rate_limited" ? 429 : 503,
+      `email_${failure.status}`,
+      "We could not send a verification code to that email address right now. Please try again.",
+    );
+  }
+}
+
+async function emailInUse(
+  env: BetterAuthRuntimeEnv,
+  email: string,
+  userId: string,
+): Promise<boolean> {
+  const existing = await env.CONCLAVE_DB.prepare(
+    "SELECT id FROM users WHERE lower(email) = ?1 AND id != ?2 LIMIT 1",
+  )
+    .bind(email, userId)
+    .first<{ id: string }>();
+  return Boolean(existing);
+}
+
+function emailChangeSent(email: string, stage: "new" | "current"): Response {
+  return new Response(
+    JSON.stringify({
+      sent: true,
+      stage,
+      email,
+      expiresInSeconds: SIGNUP_OTP_EXPIRATION_SECONDS,
+    }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
+
+/** Step 1: send a one-time code to the requested new address. */
+export async function handleEmailChangeSendCode(
+  request: Request,
+  env: BetterAuthRuntimeEnv,
+  user: AuthenticatedUser,
+): Promise<Response> {
+  const body = await readJsonBody(request);
+  const newEmail =
+    typeof body?.newEmail === "string" ? body.newEmail.trim().toLowerCase() : "";
+  if (
+    !newEmail ||
+    !SIGNUP_EMAIL_PATTERN.test(newEmail) ||
+    /[<>"'\r\n]/.test(newEmail)
+  ) {
+    return jsonAuthError(400, "invalid_email", "Enter a valid email address.");
+  }
+  if (newEmail === user.email.trim().toLowerCase()) {
+    return jsonAuthError(
+      400,
+      "EMAIL_UNCHANGED",
+      "Enter an email address different from your current one.",
+    );
+  }
+  if (await emailInUse(env, newEmail, user.id)) {
+    return jsonAuthError(
+      409,
+      "USER_ALREADY_EXISTS",
+      "Another account already uses this email address.",
+    );
+  }
+  const code = generateSixDigitCode();
+  const verificationId = await storeEmailChangeState(env, user.id, {
+    stage: "new",
+    newEmail,
+    code,
+    attempts: 0,
+  });
+  const failed = await deliverEmailChangeCode(
+    env,
+    verificationId,
+    { email: newEmail, name: user.name },
+    code,
+  );
+  return failed ?? emailChangeSent(newEmail, "new");
+}
+
+/** Validates the submitted code against the user's pending email change. */
+async function consumeEmailChangeCode(
+  request: Request,
+  env: BetterAuthRuntimeEnv,
+  user: AuthenticatedUser,
+  expectedStage: "new" | "current",
+): Promise<{ state: EmailChangeState } | Response> {
+  const body = await readJsonBody(request);
+  const code = typeof body?.code === "string" ? body.code.trim() : "";
+  if (!/^\d{6}$/.test(code)) {
+    return jsonAuthError(
+      400,
+      "INVALID_OTP",
+      "Enter the 6-digit verification code.",
+    );
+  }
+  const record = await env.CONCLAVE_DB.prepare(
+    `SELECT id, value, expires_at FROM auth_verifications
+      WHERE identifier = ?1 ORDER BY created_at DESC LIMIT 1`,
+  )
+    .bind(emailChangeIdentifier(user.id))
+    .first<{ id: string; value: string; expires_at: string }>();
+  const state = record ? parseEmailChangeState(record.value) : null;
+  const expiresAtMs = record ? Date.parse(record.expires_at) : Number.NaN;
+  if (
+    !record ||
+    !state ||
+    state.stage !== expectedStage ||
+    Number.isNaN(expiresAtMs) ||
+    expiresAtMs < Date.now()
+  ) {
+    if (record) {
+      await env.CONCLAVE_DB.prepare(
+        "DELETE FROM auth_verifications WHERE id = ?1",
+      )
+        .bind(record.id)
+        .run();
+    }
+    return jsonAuthError(
+      400,
+      "OTP_EXPIRED",
+      "That verification code has expired. Start the email change again.",
+    );
+  }
+  if (state.code !== code) {
+    const attempts = state.attempts + 1;
+    if (attempts >= SIGNUP_OTP_MAX_ATTEMPTS) {
+      await env.CONCLAVE_DB.prepare(
+        "DELETE FROM auth_verifications WHERE id = ?1",
+      )
+        .bind(record.id)
+        .run();
+      return jsonAuthError(
+        400,
+        "TOO_MANY_ATTEMPTS",
+        "Too many invalid attempts. Start the email change again.",
+      );
+    }
+    await env.CONCLAVE_DB.prepare(
+      "UPDATE auth_verifications SET value = ?1, updated_at = ?2 WHERE id = ?3",
+    )
+      .bind(
+        JSON.stringify({ ...state, attempts }),
+        new Date().toISOString(),
+        record.id,
+      )
+      .run();
+    return jsonAuthError(
+      400,
+      "INVALID_OTP",
+      "That verification code is not valid. Check the 6-digit code and try again.",
+    );
+  }
+  return { state };
+}
+
+/** Step 2: the new address is proven; send a code to the current address. */
+export async function handleEmailChangeVerifyNew(
+  request: Request,
+  env: BetterAuthRuntimeEnv,
+  user: AuthenticatedUser,
+): Promise<Response> {
+  const result = await consumeEmailChangeCode(request, env, user, "new");
+  if (result instanceof Response) return result;
+  const { state } = result;
+  const code = generateSixDigitCode();
+  const verificationId = await storeEmailChangeState(env, user.id, {
+    stage: "current",
+    newEmail: state.newEmail,
+    code,
+    attempts: 0,
+  });
+  const failed = await deliverEmailChangeCode(
+    env,
+    verificationId,
+    { email: user.email, name: user.name },
+    code,
+  );
+  return failed ?? emailChangeSent(user.email, "current");
+}
+
+/** Step 3: the current address is proven; apply the new email. */
+export async function handleEmailChangeConfirm(
+  request: Request,
+  env: BetterAuthRuntimeEnv,
+  user: AuthenticatedUser,
+): Promise<Response> {
+  const result = await consumeEmailChangeCode(request, env, user, "current");
+  if (result instanceof Response) return result;
+  const { state } = result;
+  const identifier = emailChangeIdentifier(user.id);
+  if (await emailInUse(env, state.newEmail, user.id)) {
+    await env.CONCLAVE_DB.prepare(
+      "DELETE FROM auth_verifications WHERE identifier = ?1",
+    )
+      .bind(identifier)
+      .run();
+    return jsonAuthError(
+      409,
+      "USER_ALREADY_EXISTS",
+      "Another account already uses this email address.",
+    );
+  }
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      `UPDATE users SET email = ?1, email_verified = 1, updated_at = ?2
+        WHERE id = ?3`,
+    ).bind(state.newEmail, new Date().toISOString(), user.id),
+    env.CONCLAVE_DB.prepare(
+      "DELETE FROM auth_verifications WHERE identifier = ?1",
+    ).bind(identifier),
+  ]);
+  await safeRecord(env, {
+    action: "auth.email.changed",
+    outcome: "success",
+    userId: user.id,
+  });
+  try {
+    await publishPeopleProfileChanged(env, user.id);
+  } catch {
+    // Profile fan-out is best effort; the email change has committed.
+  }
+  return new Response(
+    JSON.stringify({ status: true, email: state.newEmail }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
 }
 
 /** Preserve Better Auth's OAuth state/CSRF cookies across the redirect shim. */

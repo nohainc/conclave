@@ -183,8 +183,10 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Members', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
+          if (!widget.embedded) ...[
+            Text('Members', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+          ],
           Text(
             'Choose what each member can do in this Space.',
             style: TextStyle(

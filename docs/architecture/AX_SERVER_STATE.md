@@ -1145,7 +1145,17 @@ including archived Threads); cached Thread queries provide inline validation,
 and Cloud remains authoritative for concurrent conflicts. Errors display below
 the field. The Space page has no message composers or Discussion/Work tabs.
 Workspace selection retains owner editing and read-only display for other members.
-The Members section follows; Share Space is in the member grid’s name/email
+The landing content shares the Members title’s left edge at all viewport widths.
+The Members section follows, collapsed by default and expandable from its title;
+Share Space is in the member grid’s name/email
 column header. Member permissions and invitations observe existing Space queries.
 Old Members routes render the Space landing page. Existing Thread pages retain
 their history and composer layout.
+
+### Shared page content width
+
+The shell's scrollable pages fill the available content width up to 840 logical
+pixels, centered within their responsive page padding. People and Archived
+Spaces use the same width and left edge as Home even when their lists are empty
+or loading; text length must not determine the page width. Space and Thread
+pages retain their dedicated layout owners.

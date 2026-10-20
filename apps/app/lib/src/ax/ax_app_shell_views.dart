@@ -729,7 +729,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 840),
-          child: child,
+          child: SizedBox(width: double.infinity, child: child),
         ),
       );
 

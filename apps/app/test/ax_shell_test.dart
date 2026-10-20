@@ -14,6 +14,7 @@ import 'package:conclave_app/src/app_shell.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 
 import 'ax_fixture_data.dart';
+import 'ax_fixture_realtime.dart';
 
 void main() {
   for (final collapsed in [false, true]) {
@@ -371,7 +372,7 @@ void main() {
     expect(find.text('Other browser'), findsNothing);
   });
 
-  testWidgets('profile can delete the account after confirmation',
+  testWidgets('profile deletes the account only after the email is retyped',
       (tester) async {
     final data = _DeleteAccountFixture();
     await tester.pumpWidget(MaterialApp(
@@ -393,10 +394,87 @@ void main() {
             'This permanently deletes your Conclave account and signs you out on every device. This action cannot be undone.'),
         findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Delete account'));
+    final confirmButton = find.widgetWithText(FilledButton, 'Delete account');
+    expect(tester.widget<FilledButton>(confirmButton).onPressed, isNull);
+    await tester.enterText(
+        find.byKey(const ValueKey('delete-account-confirm-email')),
+        'wrong@example.test');
+    await tester.pump();
+    expect(tester.widget<FilledButton>(confirmButton).onPressed, isNull);
+    await tester.enterText(
+        find.byKey(const ValueKey('delete-account-confirm-email')),
+        data.viewerEmail);
+    await tester.pump();
+    await tester.tap(confirmButton);
     await tester.pumpAndSettle();
     expect(data.deleted, isTrue);
+    expect(data.confirmEmail, data.viewerEmail);
     expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+  });
+
+  testWidgets('removed account is signed out when realtime disconnects',
+      (tester) async {
+    final data = _RemovableAccountFixture();
+    final realtime = TestRealtime();
+    await tester.pumpWidget(MaterialApp(
+      theme: ConclaveBrand.lightTheme(),
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: data,
+        realtimeClient: realtime,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Welcome to Conclave AX'), findsNothing);
+
+    // The account is deleted elsewhere; Cloud closes the realtime socket.
+    data.removed = true;
+    realtime.emit({'type': 'realtime.connection', 'status': 'reconnecting'});
+    await tester.pumpAndSettle();
+    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+  });
+
+  testWidgets('profile email change needs codes from new then current email',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: ConclaveBrand.lightTheme(),
+      home: ConclaveAppShell(
+        services: const DefaultPlatformServices(),
+        dataSource: _EmailChangeFixture(),
+        initialUri: Uri.parse('/settings/profile'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Edit email'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('email-change-new-email')),
+        'next@example.test');
+    await tester.tap(find.widgetWithText(FilledButton, 'Send code'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter the 6-digit code sent to next@example.test.'),
+        findsOneWidget);
+
+    await tester.enterText(
+        find.byKey(const ValueKey('email-change-code-newCode')), '000000');
+    await tester.tap(find.widgetWithText(FilledButton, 'Verify'));
+    await tester.pumpAndSettle();
+    expect(find.text('Invalid code'), findsOneWidget);
+
+    await tester.enterText(
+        find.byKey(const ValueKey('email-change-code-newCode')), '111111');
+    await tester.tap(find.widgetWithText(FilledButton, 'Verify'));
+    await tester.pumpAndSettle();
+    expect(
+        find.textContaining('sent to your current address, old@example.test.'),
+        findsOneWidget);
+
+    await tester.enterText(
+        find.byKey(const ValueKey('email-change-code-currentCode')), '222222');
+    await tester.tap(find.widgetWithText(FilledButton, 'Update email'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('changed@example.test'), findsOneWidget);
   });
 
   testWidgets('profile security remains loading until both lists arrive',
@@ -2605,8 +2683,8 @@ void main() {
 
       // Assert modal dialog contents
       expect(find.byType(AlertDialog), findsOneWidget);
-      expect(find.text('Conclave AX v0.4.0 • Provider-Independent Core'),
-          findsOneWidget);
+      expect(find.text('Version 0.1.0'), findsOneWidget);
+      expect(find.textContaining('Provider-Independent'), findsNothing);
       expect(find.text('Docs'), findsNothing);
       expect(find.text('GitHub'), findsNothing);
       expect(find.text('Website'), findsNothing);
@@ -3040,12 +3118,41 @@ class _DelayedAccountSecurityDataSource extends AxFixtureDataSource {
   }
 }
 
-class _DeleteAccountFixture extends AxFixtureDataSource {
-  var deleted = false;
+class _RemovableAccountFixture extends AxFixtureDataSource {
+  var removed = false;
 
   @override
-  Future<void> deleteAccount() async {
+  Future<AxSession> loadSession() async =>
+      removed ? const AxSession(authenticated: false) : super.loadSession();
+}
+
+class _EmailChangeFixture extends AxFixtureDataSource {
+  @override
+  Future<AxSession> loadSession() async => const AxSession(
+        authenticated: true,
+        sessionId: 'fixture-session',
+        viewer: AxViewer(
+            id: 'user-1', displayName: 'Person', email: 'old@example.test'),
+      );
+}
+
+class _DeleteAccountFixture extends AxFixtureDataSource {
+  var deleted = false;
+  String? confirmEmail;
+  final viewerEmail = 'person@example.test';
+
+  @override
+  Future<AxSession> loadSession() async => AxSession(
+        authenticated: true,
+        sessionId: 'fixture-session',
+        viewer:
+            AxViewer(id: 'user-1', displayName: 'Person', email: viewerEmail),
+      );
+
+  @override
+  Future<void> deleteAccount({required String confirmEmail}) async {
     deleted = true;
+    this.confirmEmail = confirmEmail;
   }
 }
 

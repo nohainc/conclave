@@ -69,6 +69,24 @@ void main() {
           lessThan(tester.getRect(field).top));
       expect(tester.getRect(field).bottom,
           lessThan(tester.getRect(find.text('Members')).top));
+      final membersTitle = find.text('Members');
+      for (final content in [
+        find.byKey(const ValueKey('space-landing-name')),
+        find.text('Description'),
+        field,
+      ]) {
+        expect(tester.getRect(content).left, tester.getRect(membersTitle).left);
+      }
+      final memberDescription =
+          find.text('Choose what each member can do in this Space.');
+      expect(memberDescription, findsNothing);
+      await tester.tap(membersTitle);
+      await tester.pumpAndSettle();
+      expect(memberDescription, findsOneWidget);
+      expect(find.byType(DataTable), findsOneWidget);
+      await tester.tap(membersTitle);
+      await tester.pumpAndSettle();
+      expect(memberDescription, findsNothing);
       await tester.enterText(field, '  New name  ');
       await tester.pump();
       await tester.tap(find.widgetWithText(TextButton, 'Create Thread'));

@@ -134,9 +134,21 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
   Future<List<int>?> loadAvatar({required String url}) async => null;
 
   @override
-  Future<AxEmailChangeResult> requestEmailChange(
-          {required String email}) async =>
-      const AxEmailChangeResult(message: 'Email updated');
+  Future<AxEmailChangeStep> requestEmailChangeCode(
+          {required String newEmail}) async =>
+      AxEmailChangeStep(email: newEmail, stage: 'new');
+
+  @override
+  Future<AxEmailChangeStep> verifyNewEmailCode({required String code}) async {
+    if (code != '111111') throw const AxApiException('Invalid code');
+    return const AxEmailChangeStep(email: 'current', stage: 'current');
+  }
+
+  @override
+  Future<String> confirmEmailChange({required String code}) async {
+    if (code != '222222') throw const AxApiException('Invalid code');
+    return 'changed@example.test';
+  }
 
   @override
   Future<String> uploadAvatar({
@@ -369,7 +381,7 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
   Future<void> revokeAccountSession(String token) async {}
 
   @override
-  Future<void> deleteAccount() async {}
+  Future<void> deleteAccount({required String confirmEmail}) async {}
 
   @override
   Future<Uri> beginAccountLink(String provider, Uri returnTo) async =>

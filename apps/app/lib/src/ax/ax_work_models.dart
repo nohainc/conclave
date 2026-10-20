@@ -762,8 +762,19 @@ abstract interface class AxDataSource {
   Future<List<int>?> loadAvatar({required String url}) async => null;
   Future<void> updateDisplayName({required String displayName}) async =>
       throw UnimplementedError('Profile updates are not available');
-  Future<AxEmailChangeResult> requestEmailChange(
-          {required String email}) async =>
+
+  /// Sends a one-time code to [newEmail] to start an email change.
+  Future<AxEmailChangeStep> requestEmailChangeCode(
+          {required String newEmail}) async =>
+      throw UnimplementedError('Email changes are not available');
+
+  /// Verifies the new-address code; Cloud then sends a code to the current
+  /// address.
+  Future<AxEmailChangeStep> verifyNewEmailCode({required String code}) async =>
+      throw UnimplementedError('Email changes are not available');
+
+  /// Verifies the current-address code and returns the applied email.
+  Future<String> confirmEmailChange({required String code}) async =>
       throw UnimplementedError('Email changes are not available');
   Future<String> uploadAvatar({
     required List<int> bytes,
@@ -855,7 +866,7 @@ abstract interface class AxDataSource {
       throw UnimplementedError('Space collaboration is not available');
   Future<AxAccountSecurity> loadAccountSecurity();
   Future<void> revokeAccountSession(String token);
-  Future<void> deleteAccount() async =>
+  Future<void> deleteAccount({required String confirmEmail}) async =>
       throw UnimplementedError('Account deletion is not available');
   Future<Uri> beginAccountLink(String provider, Uri returnTo);
   Future<void> approveDesktopAuthIntent({

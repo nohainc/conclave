@@ -272,6 +272,12 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
+  /// Release builds pass `--dart-define=CONCLAVE_APP_VERSION=<version>`.
+  static const conclaveAppVersion = String.fromEnvironment(
+    'CONCLAVE_APP_VERSION',
+    defaultValue: '0.1.0',
+  );
+
   Future<void> _showAboutConclave() {
     final dialogContext = navigatorKey.currentState?.context ?? context;
     return showDialog<void>(
@@ -299,35 +305,46 @@ extension _AxAppController on _AxAppStateMixin {
                 'Conclave AX coordinates AI Workers across models and machines to research, implement, review, test, and verify complex work.',
                 style: TextStyle(fontSize: 13.5, height: 1.45),
               ),
+              const SizedBox(height: 8),
+              const Text(
+                'Workers run on your own Workspaces through the provider CLIs you already use; Conclave keeps Spaces, Threads, and workflow state in sync.',
+                style: TextStyle(fontSize: 12.5, height: 1.45),
+              ),
               const SizedBox(height: 16),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: ConclaveColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.verified_outlined,
-                      size: 14,
-                      color: ConclaveColors.primaryForegroundDark,
-                    ),
-                    SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        'Conclave AX v0.4.0 • Provider-Independent Core',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: ConclaveColors.primaryForegroundDark,
+              Builder(builder: (context) {
+                final dark = Theme.of(context).brightness == Brightness.dark;
+                final foreground = ConclaveColors.primaryForeground(dark);
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: ConclaveColors.primarySoftColor(dark),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.verified_outlined,
+                          size: 14, color: foreground),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'Version $conclaveAppVersion',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: foreground,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                );
+              }),
+              const SizedBox(height: 12),
+              Text(
+                '© ${DateTime.now().year} Conclave AX',
+                style: Theme.of(dialogContext).textTheme.bodySmall,
               ),
             ],
           ),
@@ -398,6 +415,12 @@ extension _AxAppController on _AxAppStateMixin {
             ? 'Live updates paused. Conclave AX is reconnecting.'
             : 'Live updates connected.';
       });
+      // Cloud closes the socket when the account or session is removed, and
+      // the reconnect handshake then fails. Re-check the session so a removed
+      // user is signed out instead of retrying forever.
+      if (realtimeStale && store.auth.session?.authenticated == true) {
+        unawaited(_verifySessionAfterDisconnect());
+      }
       return;
     }
     if (type == 'realtime.ready') {
@@ -1161,17 +1184,15 @@ extension _AxAppController on _AxAppStateMixin {
 
   Future<void> _deleteAccount() async {
     if (deletingAccount) return;
-    final confirmed = await _confirmSpaceAction(
-      title: 'Delete account?',
-      message:
-          'This permanently deletes your Conclave account and signs you out on every device. This action cannot be undone.',
-      action: 'Delete account',
-      destructive: true,
+    final confirmEmail = await showDialog<String>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (_) =>
+          DeleteAccountDialog(email: store.auth.viewer?.email ?? ''),
     );
-    if (!confirmed || !mounted) return;
+    if (confirmEmail == null || !mounted) return;
     _updateState(() => deletingAccount = true);
     try {
-      await widget.dataSource.deleteAccount();
+      await widget.dataSource.deleteAccount(confirmEmail: confirmEmail);
       await store.markAccountDeleted();
       if (!mounted) return;
       deletingAccount = false;
@@ -1272,50 +1293,25 @@ extension _AxAppController on _AxAppStateMixin {
   }
 
   Future<void> _editEmail() async {
-    var draft = store.auth.viewer?.email ?? '';
-    final value = await showDialog<String>(
+    final source = widget.dataSource;
+    final email = await showDialog<String>(
       context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Update email'),
-        content: TextFormField(
-          initialValue: draft,
-          onChanged: (value) => draft = value,
-          autofocus: true,
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(labelText: 'Email address'),
-          onFieldSubmitted: (value) => Navigator.of(dialogContext).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(draft),
-            child: const Text('Continue'),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (_) => EmailChangeDialog(
+        currentEmail: store.auth.viewer?.email ?? 'your current address',
+        requestCode: (newEmail) =>
+            source.requestEmailChangeCode(newEmail: newEmail),
+        verifyNewEmail: (code) => source.verifyNewEmailCode(code: code),
+        confirm: (code) => source.confirmEmailChange(code: code),
       ),
     );
-    final email = value?.trim() ?? '';
-    if (email.isEmpty || !mounted) return;
-    try {
-      final result = await widget.dataSource.requestEmailChange(email: email);
-      if (!mounted) return;
-      if (result.verificationRequired) {
-        _showSnackBar('Check your email to confirm the new address.');
-      } else {
-        final viewer = store.auth.viewer;
-        if (viewer != null) {
-          store.auth.viewer = viewer.copyWith(email: email);
-          _updateState(() {});
-        }
-        _showSnackBar('Email updated.');
-      }
-    } catch (error) {
-      if (mounted) _showSnackBar(error.toString());
+    if (email == null || !mounted) return;
+    final viewer = store.auth.viewer;
+    if (viewer != null) {
+      store.auth.viewer = viewer.copyWith(email: email);
     }
+    _updateState(() {});
+    _showSnackBar('Email updated.');
   }
 
   Future<void> _linkAccountProvider(String provider) async {
@@ -1378,6 +1374,11 @@ extension _AxAppController on _AxAppStateMixin {
         loadError = error.toString();
       });
     }
+  }
+
+  Future<void> _verifySessionAfterDisconnect() {
+    return _disconnectSessionCheck ??=
+        _syncSession().whenComplete(() => _disconnectSessionCheck = null);
   }
 
   Future<void> _syncSession() async {

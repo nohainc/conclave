@@ -47,44 +47,51 @@ mixin _AuthApi on _AxApiClientCore {
       _postAuth('/auth/update-user', {'name': displayName});
 
   @override
-  Future<AxEmailChangeResult> requestEmailChange(
-      {required String email}) async {
-    final callbackURL = Uri.base.scheme == 'http' || Uri.base.scheme == 'https'
-        ? '${Uri.base.origin}/settings/profile'
-        : '/settings/profile';
+  Future<AxEmailChangeStep> requestEmailChangeCode(
+          {required String newEmail}) async =>
+      AxEmailChangeStep.fromJson(await _postAuthJson(
+          '/auth/change-email/send-code', {'newEmail': newEmail}));
+
+  @override
+  Future<AxEmailChangeStep> verifyNewEmailCode({required String code}) async =>
+      AxEmailChangeStep.fromJson(
+          await _postAuthJson('/auth/change-email/verify-new', {'code': code}));
+
+  @override
+  Future<String> confirmEmailChange({required String code}) async {
+    final body =
+        await _postAuthJson('/auth/change-email/confirm', {'code': code});
+    final email = body['email'];
+    if (email is! String || email.isEmpty) {
+      throw const AxApiException('Email change response is malformed');
+    }
+    return email;
+  }
+
+  Future<Map<String, dynamic>> _postAuthJson(
+      String path, Map<String, dynamic> body) async {
     final response = await client.post(
-      Uri.parse('$baseUrl/auth/change-email'),
+      Uri.parse('$baseUrl$path'),
       headers: _headers(contentType: 'application/json'),
-      body: jsonEncode({
-        'newEmail': email,
-        'callbackURL': callbackURL,
-      }),
+      body: jsonEncode(body),
     );
+    Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on Object {
+      // Non-JSON responses fall back to the status-based message.
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      var message = 'Email update failed (${response.statusCode})';
-      try {
-        final decoded = jsonDecode(response.body);
-        if (decoded is Map && decoded['message'] is String) {
-          message = decoded['message'] as String;
-        } else if (decoded is Map && decoded['error'] is String) {
-          message = decoded['error'] as String;
-        }
-      } on Object {
-        // Keep the status-based message for non-JSON responses.
-      }
+      final message = decoded is Map && decoded['message'] is String
+          ? decoded['message'] as String
+          : decoded is Map && decoded['error'] is String
+              ? decoded['error'] as String
+              : 'Request failed (${response.statusCode})';
       throw AxApiException(message, statusCode: response.statusCode);
     }
-    final decoded = jsonDecode(response.body);
-    final message = decoded is Map && decoded['message'] is String
-        ? decoded['message'] as String
-        : null;
-    return AxEmailChangeResult(
-      message: message,
-      // Better Auth only changes the address immediately for unverified
-      // accounts; every other success is a pending confirmation flow and
-      // may omit `message` entirely (`{status: true}`).
-      verificationRequired: message != 'Email updated',
-    );
+    return decoded is Map
+        ? Map<String, dynamic>.from(decoded)
+        : const <String, dynamic>{};
   }
 
   @override
@@ -102,7 +109,11 @@ mixin _AuthApi on _AxApiClientCore {
   }
 
   @override
-  Future<void> deleteAccount() => _postAuth('/auth/delete-user', {});
+  Future<void> deleteAccount({required String confirmEmail}) async {
+    await _postAuth('/auth/delete-user', {'confirmEmail': confirmEmail});
+    clearConditionalReads();
+    sessionToken = null;
+  }
 
   @override
   Future<String> uploadAvatar({

@@ -11,7 +11,8 @@ export type AuthAuditAction =
   | "auth.passkey.removed"
   | "auth.step_up.completed"
   | "auth.authorization.denied"
-  | "auth.invitation.accepted";
+  | "auth.invitation.accepted"
+  | "auth.email.changed";
 
 const PROVIDERS = new Set(["github", "google", "passkey", "totp"]);
 const REASONS = new Set([

@@ -69,6 +69,8 @@ export interface VerifyEmailCodeInput {
   readonly verificationCode: string;
   /** Verification code lifetime, in minutes. */
   readonly expiresInMinutes: number;
+  /** Flow the code confirms; defaults to sign-up. */
+  readonly purpose?: "sign-up" | "email-change";
 }
 
 export interface ResetPasswordInput {

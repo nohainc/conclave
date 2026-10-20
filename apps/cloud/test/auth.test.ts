@@ -162,14 +162,11 @@ describe("IdentityService", () => {
       image: "avatar_url",
     });
     expect(options.user?.changeEmail).toMatchObject({
-      enabled: true,
+      enabled: false,
     });
     expect(options.user?.deleteUser).toMatchObject({
       enabled: true,
     });
-    expect(options.user?.changeEmail?.sendChangeEmailConfirmation).toEqual(
-      expect.any(Function),
-    );
     expect(options.account?.modelName).toBe("auth_accounts");
     expect(options.account?.encryptOAuthTokens).toBe(true);
     expect(options.account?.accountLinking).toMatchObject({
@@ -199,6 +196,7 @@ describe("IdentityService", () => {
       expiresIn: 60 * 60 * 24 * 14,
       updateAge: 60 * 60 * 24,
       disableSessionRefresh: false,
+      freshAge: 0,
       cookieCache: { enabled: false },
     });
     expect(options.trustedOrigins).toContain("https://app.conclaveax.com");
@@ -231,7 +229,7 @@ describe("IdentityService", () => {
     ]);
   });
 
-  it("uses the centralized sender for verification, reset, and email change messages", async () => {
+  it("uses the centralized sender for verification and reset messages", async () => {
     const send = vi.fn(async (_message: unknown) => ({
       messageId: "message-1",
     }));
@@ -252,13 +250,7 @@ describe("IdentityService", () => {
       user,
       url: "https://app.conclave.test/reset",
     });
-    await options.user?.changeEmail?.sendChangeEmailConfirmation?.({
-      user,
-      newEmail: "new@example.com",
-      url: "https://app.conclave.test/change",
-    });
-
-    expect(send).toHaveBeenCalledTimes(3);
+    expect(send).toHaveBeenCalledTimes(2);
     const messages = send.mock.calls.map(
       ([message]) =>
         message as {
@@ -278,20 +270,18 @@ describe("IdentityService", () => {
     expect(messages.map((message) => message.subject)).toEqual([
       "Verify your Conclave AX email address",
       "Reset your Conclave AX password",
-      "Confirm your Conclave AX email change",
     ]);
     expect(messages[0]?.text).toContain("https://app.conclave.test/verify");
     expect(messages[0]?.text).toContain("This link is valid for 60 minutes.");
     expect(messages[1]?.text).toContain("https://app.conclave.test/reset");
-    expect(messages[2]?.text).toContain("https://app.conclave.test/change");
 
     await options.databaseHooks?.user?.create?.after?.({
       id: "user-1",
       email: "person@example.com",
       name: "Person",
     });
-    expect(send).toHaveBeenCalledTimes(4);
-    const welcomeMessage = send.mock.calls[3]?.[0] as {
+    expect(send).toHaveBeenCalledTimes(3);
+    const welcomeMessage = send.mock.calls[2]?.[0] as {
       to: string;
       subject: string;
       text?: string;

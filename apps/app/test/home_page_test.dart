@@ -9,6 +9,39 @@ void main() {
         home: Scaffold(body: SingleChildScrollView(child: child)),
       );
 
+  testWidgets('Continue working bounds the message preview to 200 characters',
+      (tester) async {
+    await tester.pumpWidget(scaffold(EstablishedUserHome(
+      spaces: const [
+        AxSpace(id: 's', name: 'Conclave', branch: 'main', lastActivity: 'Now')
+      ],
+      workers: const [],
+      workspaces: const [],
+      run: null,
+      openFindingCount: 0,
+      onOpenWorkspaces: () {},
+      onOpenRun: (_, __) {},
+      continueWorkItems: [
+        AxContinueWorkItem(
+          spaceId: 's',
+          spaceName: 'Conclave',
+          threadId: 't',
+          threadTitle: 'Thread',
+          collaboratorsDisplay: '',
+          lastMessageSnippet: List.filled(250, 'a').join(),
+          lastMessageAuthor: 'Alex',
+          lastActivityDisplay: 'Now',
+        )
+      ],
+      onOpenSpace: (_) {},
+    )));
+    final text = tester
+        .widget<Text>(find.byKey(const ValueKey('continue-work-last-message')));
+    expect(
+        text.textSpan!.toPlainText(), 'Alex: ${List.filled(199, 'a').join()}…');
+    expect(find.text('CONCLAVE'), findsNothing);
+  });
+
   const space = AxSpace(
     id: 'space-1',
     name: 'Space One',
@@ -252,7 +285,7 @@ void main() {
 
     // 2. CONTINUE WORKING
     expect(find.text('Continue working'), findsOneWidget);
-    expect(find.text('WEBSITE REDESIGN'), findsOneWidget);
+    expect(find.text('WEBSITE REDESIGN'), findsNothing);
     expect(find.text('Landing page'), findsOneWidget);
     expect(find.text('18 min ago'), findsOneWidget);
     expect(
@@ -732,7 +765,7 @@ void main() {
     expect(find.text('Continue working'), findsOneWidget);
 
     // Card 1
-    expect(find.text('CONCLAVE DEVELOPMENT'), findsOneWidget);
+    expect(find.text('CONCLAVE DEVELOPMENT'), findsNothing);
     expect(find.text('Worker Sessions'), findsOneWidget);
     expect(find.text('23 min ago'), findsOneWidget);
     // The last message is a one-line preview prefixed with its sender.
@@ -742,7 +775,7 @@ void main() {
         findsOneWidget);
 
     // Card 2
-    expect(find.text('WEBSITE'), findsOneWidget);
+    expect(find.text('WEBSITE'), findsNothing);
     expect(find.text('Landing Page'), findsOneWidget);
     expect(find.text('Yesterday'), findsOneWidget);
     expect(
@@ -751,15 +784,15 @@ void main() {
         findsOneWidget);
 
     // Card 3
-    expect(find.text('DOCUMENTATION'), findsOneWidget);
+    expect(find.text('DOCUMENTATION'), findsNothing);
     expect(find.text('Architecture v8'), findsOneWidget);
 
     // Card 4
-    expect(find.text('CLOUD SERVICES'), findsOneWidget);
+    expect(find.text('CLOUD SERVICES'), findsNothing);
     expect(find.text('D1 Migrations'), findsOneWidget);
 
     // Card 5
-    expect(find.text('MOBILE APP'), findsOneWidget);
+    expect(find.text('MOBILE APP'), findsNothing);
     expect(find.text('iOS Polish'), findsOneWidget);
 
     // 6th item should be truncated by 5-item limit
@@ -1330,7 +1363,11 @@ void main() {
     expect(find.text('GPT-5 is available'), findsNWidgets(2));
     expect(find.text('Use the newest reasoning model for demanding tasks.'),
         findsNWidgets(2));
-    expect(find.text('Model: GPT-5'), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byType(AxAiUpdatesDialog),
+            matching: find.text('Model: GPT-5')),
+        findsOneWidget);
   });
 
   test(
@@ -2565,7 +2602,7 @@ void main() {
     );
 
     // 1. Authorized resources MUST render
-    expect(find.text('AUTHORIZED SPACE'), findsOneWidget);
+    expect(find.text('AUTHORIZED SPACE'), findsNothing);
     expect(find.text('Active Authorized Thread'), findsOneWidget);
     expect(
         find.textContaining('Authorized discussion snippet.',
@@ -2575,7 +2612,7 @@ void main() {
     expect(find.text('ChatGPT 4.5 Turbo Enabled'), findsOneWidget);
 
     // 2. Revoked space resources MUST NEVER appear on Home
-    expect(find.text('AUTHORIZED SPACE'), findsOneWidget);
+    expect(find.text('AUTHORIZED SPACE'), findsNothing);
     expect(find.text('REVOKED SECRET SPACE'), findsNothing);
     expect(find.text('Revoked Secret Space'), findsNothing);
     expect(find.text('Revoked Confidential Thread'), findsNothing);
@@ -3033,7 +3070,7 @@ void main() {
       )));
 
       expect(find.text('Julia invited you to Family Travel'), findsNothing);
-      expect(find.text('FAMILY TRAVEL'), findsOneWidget);
+      expect(find.text('FAMILY TRAVEL'), findsNothing);
     });
 
     // 6. Scenario: Thread needs input -> Expected: For You
@@ -3183,7 +3220,7 @@ void main() {
       )));
 
       expect(find.text('Continue working'), findsOneWidget);
-      expect(find.text('MOBILE CLIENT'), findsOneWidget);
+      expect(find.text('MOBILE CLIENT'), findsNothing);
       expect(find.text('Authentication Flow'), findsOneWidget);
       expect(
           find.textContaining(
@@ -3518,7 +3555,7 @@ void main() {
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('Offline · Cached data'), findsOneWidget);
       expect(find.text('Continue working'), findsOneWidget);
-      expect(find.text('SPACE ONE'), findsOneWidget);
+      expect(find.text('SPACE ONE'), findsNothing);
     });
 
     // 18. Scenario: Space permission revoked -> Expected: Data disappears
@@ -3567,7 +3604,7 @@ void main() {
         onCreateSpace: () {},
       )));
 
-      expect(find.text('ALLOWED SPACE'), findsOneWidget);
+      expect(find.text('ALLOWED SPACE'), findsNothing);
       expect(find.text('Allowed Thread'), findsOneWidget);
       expect(find.text('REVOKED CONFIDENTIAL SPACE'), findsNothing);
       expect(find.text('Secret Thread'), findsNothing);

@@ -98,58 +98,71 @@ class _NewThreadPageState extends State<NewThreadPage> {
           child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-              child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 840),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (widget.space.name.trim().isNotEmpty) ...[
-                      Text(widget.space.name.trim(),
-                          key: const ValueKey('space-landing-name'),
-                          style: Theme.of(context).textTheme.headlineSmall),
-                      const SizedBox(height: 12),
-                    ],
-                    if (widget.space.description.trim().isNotEmpty) ...[
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 140),
-                        child: SingleChildScrollView(
-                            child: Text(widget.space.description)),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    if (_workflows != null)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _SpaceWorkspaceSelector(
-                            configurations: _workflows!,
-                            isOwner: widget.space.role == 'owner'),
-                      ),
-                    const SizedBox(height: 20),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: SizedBox(width: 360, child: _threadNameField()),
-                    ),
-                  ]),
-            ),
-          )),
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Center(
+                  child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 840),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 20, 0, 12),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (widget.space.name.trim().isNotEmpty) ...[
+                          Text(widget.space.name.trim(),
+                              key: const ValueKey('space-landing-name'),
+                              style: Theme.of(context).textTheme.headlineSmall),
+                          const SizedBox(height: 12),
+                        ],
+                        if (widget.space.description.trim().isNotEmpty) ...[
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 140),
+                            child: SingleChildScrollView(
+                                child: Text(widget.space.description)),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        if (_workflows != null)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: _SpaceWorkspaceSelector(
+                                configurations: _workflows!,
+                                isOwner: widget.space.role == 'owner'),
+                          ),
+                        const SizedBox(height: 20),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child:
+                              SizedBox(width: 360, child: _threadNameField()),
+                        ),
+                      ]),
+                ),
+              ))),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Center(
                 child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 840),
-              child: SpacePage(
-                embedded: true,
-                workflowConfigurations: widget.workflowConfigurations,
-                section: SpacePageSection.members,
-                space: widget.space,
-                dataSource: widget.dataSource,
-                viewerEmail: widget.viewerEmail,
-                onOpenThread: (_) {},
-                onArchive: () {},
-                onDelete: () {},
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                shape: const Border(),
+                collapsedShape: const Border(),
+                title: Text('Members',
+                    style: Theme.of(context).textTheme.titleMedium),
+                children: [
+                  SpacePage(
+                    embedded: true,
+                    workflowConfigurations: widget.workflowConfigurations,
+                    section: SpacePageSection.members,
+                    space: widget.space,
+                    dataSource: widget.dataSource,
+                    viewerEmail: widget.viewerEmail,
+                    onOpenThread: (_) {},
+                    onArchive: () {},
+                    onDelete: () {},
+                  )
+                ],
               ),
             )),
           ),

@@ -1099,11 +1099,21 @@ class AxViewer {
       );
 }
 
-class AxEmailChangeResult {
-  const AxEmailChangeResult({this.message, this.verificationRequired = false});
+/// Pending email change step: a one-time code was sent to [email].
+class AxEmailChangeStep {
+  const AxEmailChangeStep({required this.email, required this.stage});
 
-  final String? message;
-  final bool verificationRequired;
+  /// Address that received the code.
+  final String email;
+
+  /// `new` while proving the new address, `current` for the existing one.
+  final String stage;
+
+  factory AxEmailChangeStep.fromJson(Map<String, dynamic> json) =>
+      AxEmailChangeStep(
+        email: _string(json, 'email'),
+        stage: _string(json, 'stage'),
+      );
 }
 
 class AxSession {

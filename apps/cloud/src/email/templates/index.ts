@@ -160,6 +160,7 @@ function renderVerifyEmailCode(
     input.expiresInMinutes,
     "expiresInMinutes",
   );
+  const emailChange = input.purpose === "email-change";
   const codeValidityText = `This code is valid for ${expiration} ${expiration === 1 ? "minute" : "minutes"}.`;
   const subject = `${verificationCode} is your Conclave AX verification code`;
   return {
@@ -170,10 +171,14 @@ function renderVerifyEmailCode(
       subject,
       variant: "action-required",
       eyebrow: "Account security",
-      title: "Verify your email address",
-      intro: `Welcome to Conclave AX, ${recipientName}. Enter the one-time verification code below to finish creating your account.`,
+      title: emailChange
+        ? "Confirm your email change"
+        : "Verify your email address",
+      intro: emailChange
+        ? `Hi ${recipientName}. Enter the one-time verification code below to confirm changing the email address on your Conclave AX account.`
+        : `Welcome to Conclave AX, ${recipientName}. Enter the one-time verification code below to finish creating your account.`,
       bodyHtml: `<div style="margin:24px 0 8px;padding:18px 24px;background:#f4f1ff;border:1px solid #dcd5ff;border-radius:10px;text-align:center;font-family:Courier,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:#172033;">${escapeHtml(verificationCode)}</div><p style="margin:16px 0 0;color:#435066;font-size:15px;line-height:24px;">${escapeHtml(codeValidityText)}</p>`,
-      bodyText: `Enter the one-time verification code below to finish creating your account:\n\n${verificationCode}\n\n${codeValidityText}`,
+      bodyText: `Enter the one-time verification code below to ${emailChange ? "confirm your email change" : "finish creating your account"}:\n\n${verificationCode}\n\n${codeValidityText}`,
       securityNotice:
         "If you did not request a Conclave AX verification code, you can safely ignore this email.",
     }),

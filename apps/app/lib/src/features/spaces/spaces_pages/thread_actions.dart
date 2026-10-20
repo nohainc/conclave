@@ -80,7 +80,9 @@ extension _ThreadActions on _ThreadPageState {
     final message = _workQueue.first;
     _dispatchingQueuedWork = true;
     _updateState(() => _workQueue.removeAt(0));
+    _followLatestWork();
     unawaited(_submitWorkMessage(message, fromQueue: true).whenComplete(() {
+      if (mounted && widget.thread.id == threadId) _followLatestWork();
       _dispatchingQueuedWork = false;
       if (mounted && widget.thread.id == threadId) {
         WidgetsBinding.instance.addPostFrameCallback(
@@ -128,11 +130,24 @@ extension _ThreadActions on _ThreadPageState {
         _workQueue.remove(message);
         _workQueuePaused = false;
       });
+      _followLatestWork();
       await _submitWorkMessage(message, fromQueue: true);
+      if (mounted) _followLatestWork();
     } finally {
       _dispatchingQueuedWork = false;
       if (mounted) _dispatchQueuedWork();
     }
+  }
+
+  /// A request sent from the queue scrolls the conversation to its newest
+  /// content, even when the reader had scrolled up.
+  void _followLatestWork() {
+    _followWork = true;
+    _workIncomingAnchor.reset();
+    _jumpToLatest(_workHistoryController);
+    _followChat = true;
+    _chatIncomingAnchor.reset();
+    _jumpToLatest(_chatHistoryController);
   }
 
   void _removeQueuedWork(_QueuedWorkMessage message) =>

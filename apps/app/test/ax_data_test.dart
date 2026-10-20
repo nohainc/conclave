@@ -112,40 +112,57 @@ void main() {
     expect(jsonDecode(nameClient.lastBody!), {'name': 'New Name'});
 
     final emailClient = _JsonClient(const <String, dynamic>{
-      'status': true,
-      'message': 'Verification email sent'
+      'sent': true,
+      'stage': 'new',
+      'email': 'new@example.test',
     }, statusCode: 200);
     final emailApi = AxApiClient(
       baseUrl: 'https://cloud.test/api',
       client: emailClient,
     );
-    final result = await emailApi.requestEmailChange(email: 'new@example.test');
-    expect(emailClient.lastRequest?.url.path, '/api/auth/change-email');
-    expect(result.verificationRequired, isTrue);
-    expect((jsonDecode(emailClient.lastBody!) as Map)['newEmail'],
+    final step =
+        await emailApi.requestEmailChangeCode(newEmail: 'new@example.test');
+    expect(
+        emailClient.lastRequest?.url.path, '/api/auth/change-email/send-code');
+    expect(step.stage, 'new');
+    expect(step.email, 'new@example.test');
+    expect(jsonDecode(emailClient.lastBody!), {'newEmail': 'new@example.test'});
+
+    await emailApi.verifyNewEmailCode(code: '123456');
+    expect(
+        emailClient.lastRequest?.url.path, '/api/auth/change-email/verify-new');
+    expect(jsonDecode(emailClient.lastBody!), {'code': '123456'});
+
+    final confirmClient = _JsonClient(
+        const <String, dynamic>{'status': true, 'email': 'new@example.test'},
+        statusCode: 200);
+    final confirmApi = AxApiClient(
+      baseUrl: 'https://cloud.test/api',
+      client: confirmClient,
+    );
+    expect(await confirmApi.confirmEmailChange(code: '654321'),
         'new@example.test');
-
-    // Better Auth 1.7 answers a pending change with a bare `{status: true}`.
-    final bareApi = AxApiClient(
-      baseUrl: 'https://cloud.test/api',
-      client:
-          _JsonClient(const <String, dynamic>{'status': true}, statusCode: 200),
-    );
     expect(
-        (await bareApi.requestEmailChange(email: 'new@example.test'))
-            .verificationRequired,
-        isTrue);
+        confirmClient.lastRequest?.url.path, '/api/auth/change-email/confirm');
 
-    final immediateApi = AxApiClient(
+    final rejectApi = AxApiClient(
       baseUrl: 'https://cloud.test/api',
-      client: _JsonClient(
-          const <String, dynamic>{'status': true, 'message': 'Email updated'},
-          statusCode: 200),
+      client: _JsonClient(const <String, dynamic>{
+        'message': 'That verification code is not valid.'
+      }, statusCode: 400),
     );
-    expect(
-        (await immediateApi.requestEmailChange(email: 'new@example.test'))
-            .verificationRequired,
-        isFalse);
+    await expectLater(
+        rejectApi.verifyNewEmailCode(code: '000000'),
+        throwsA(isA<AxApiException>().having((error) => error.message,
+            'message', 'That verification code is not valid.')));
+
+    final deleteClient =
+        _JsonClient(const <String, dynamic>{'success': true}, statusCode: 200);
+    await AxApiClient(baseUrl: 'https://cloud.test/api', client: deleteClient)
+        .deleteAccount(confirmEmail: 'me@example.test');
+    expect(deleteClient.lastRequest?.url.path, '/api/auth/delete-user');
+    expect(jsonDecode(deleteClient.lastBody!),
+        {'confirmEmail': 'me@example.test'});
   });
 
   test('Space and Thread API paths consume only current product envelopes',

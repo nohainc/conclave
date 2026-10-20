@@ -53,8 +53,17 @@ the existing `CONCLAVE_ARTIFACTS` R2 bucket and keeps only an `r2://` reference
 in `users.avatar_url`. Avatar reads are authenticated and limited to the owner
 and established People relationships, so the R2 object is never exposed as a
 public bucket URL. Profile names use the authenticated Better Auth
-`/update-user` endpoint. Email changes use `/change-email` and follow the
-configured verification flow before the address is changed.
+`/update-user` endpoint. Email changes are a two-step one-time-code flow owned
+by Cloud: `POST /api/auth/change-email/send-code` mails a 6-digit code to the
+new address, `/change-email/verify-new` accepts it and mails a code to the
+current address, and `/change-email/confirm` accepts that code and applies the
+change (marking the new address verified). Pending state lives in
+`auth_verifications` per user, expires after 10 minutes, and is cleared after 5
+wrong attempts. Better Auth's link-based `/change-email` is disabled and
+answers 410. Account deletion (`/delete-user`) requires `confirmEmail` to match
+the signed-in account email. Better Auth session freshness is disabled
+(`freshAge: 0`) so the active-session list and deletion work for any valid
+session; typed email confirmation guards deletion instead.
 
 Workspace-owned Worker inventory remains visible in AX as operational
 readiness. Workspace registration and recovery, local Worker lifecycle,

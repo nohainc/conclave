@@ -21,7 +21,7 @@ it("reads threads and configuration with distinct update timestamps", async () =
       CREATE TABLE thread_read_states (thread_id TEXT, user_id TEXT, read_at TEXT);
       CREATE TABLE user_pins (user_id TEXT, kind TEXT, target_id TEXT, pinned_at TEXT, position INTEGER);
       CREATE TABLE conversations (id TEXT, thread_id TEXT);
-      CREATE TABLE conversation_history_entries (conversation_id TEXT, text TEXT, occurred_at TEXT, actor_type TEXT, actor_id TEXT, metadata_json TEXT NOT NULL DEFAULT '{}');
+      CREATE TABLE conversation_history_entries (conversation_id TEXT, text TEXT, occurred_at TEXT, actor_type TEXT, actor_id TEXT, kind TEXT, metadata_json TEXT NOT NULL DEFAULT '{}');
       CREATE TABLE space_memberships (id TEXT, space_id TEXT, user_id TEXT, role TEXT, created_at TEXT, updated_at TEXT);
       INSERT INTO spaces VALUES ('space-test', 'user-owner', '{}');
       INSERT INTO users VALUES ('user-owner', 'owner@conclave.test', 'Owner');
@@ -93,6 +93,22 @@ it("reads threads and configuration with distinct update timestamps", async () =
     expect(await read()).toMatchObject({
       brief: "Done",
       briefAuthorName: "Claude",
+    });
+    sqlite.exec(`
+      INSERT INTO conversations VALUES ('conversation', 'stream-test');
+      INSERT INTO conversation_history_entries VALUES ('conversation', 'Latest Work reply', 'm3', 'worker', 'worker', 'worker_response', '{"workerDisplayName":"Gemini"}');
+      INSERT INTO conversation_history_entries VALUES ('conversation', 'Internal context', 'm4', 'system', NULL, 'context_updated', '{}');
+    `);
+    expect(await read()).toMatchObject({
+      brief: "Latest Work reply",
+      briefAuthorName: "Gemini",
+    });
+    sqlite.exec(
+      `INSERT INTO discussion_messages VALUES ('stream-test', 'user-owner', 'Newest discussion', 'm5', 'message', NULL)`,
+    );
+    expect(await read()).toMatchObject({
+      brief: "Newest discussion",
+      briefAuthorName: "Owner",
     });
   } finally {
     sqlite.close();

@@ -1027,6 +1027,94 @@ void main() {
     expect(find.textContaining('Queued · 1'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('sending a queued message scrolls to the latest content',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final data = _SlowSubmissionDataSource()..ready.complete([]);
+    final longAnswer = List.generate(80, (i) => 'Answer line $i').join('\n\n');
+    AxWorkRequest running(String status) => AxWorkRequest(
+          id: 'running-1',
+          requestedByName: 'You',
+          requestedByUserId: 'user-owner',
+          prompt: 'First request',
+          workflowId: 'direct',
+          workflowVersion: 1,
+          status: status,
+          createdAt: '2026-10-06T10:00:00Z',
+          steps: const [],
+          finalText: status == 'completed' ? 'Done' : null,
+        );
+    final earlier = AxWorkRequest(
+      id: 'earlier-1',
+      requestedByName: 'You',
+      requestedByUserId: 'user-owner',
+      prompt: 'Earlier request',
+      workflowId: 'direct',
+      workflowVersion: 1,
+      status: 'completed',
+      createdAt: '2026-10-06T09:00:00Z',
+      steps: const [],
+      finalText: longAnswer,
+    );
+    data.requests = [earlier, running('running')];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      initialTab: 1,
+      space: const AxSpace(
+          id: 'space-1',
+          name: 'Space',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      thread: const AxThread(
+          id: 'thread-1',
+          spaceId: 'space-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: data,
+      currentUserId: 'user-owner',
+      onBackToSpace: _noop,
+      onArchive: _noop,
+      onRunWork: (prompt, __, ___, key) async {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+        return 'saved-1';
+      },
+    ))));
+    await tester.pumpAndSettle();
+    await _askAi(tester);
+    await tester.enterText(find.byType(TextField).first, 'Queued follow-up');
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
+    await tester.pumpAndSettle();
+
+    ScrollPosition history() => tester
+        .stateList<ScrollableState>(find.byType(Scrollable))
+        .map((state) => state.position)
+        .where((position) => position.maxScrollExtent > 0)
+        .reduce((a, b) => a.maxScrollExtent >= b.maxScrollExtent ? a : b);
+    // The reader scrolls up while the first request is still running.
+    history().jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(history().pixels, 0);
+
+    // It finishes; the queued message is sent and the view follows it.
+    data.requests = [earlier, running('completed')];
+    await AxWorkHistoryCache.forSource(data).refresh('thread-1');
+    await tester.pump();
+    // The reader is still scrolled up while the queued send is in flight.
+    history().jumpTo(0);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('work-queue-panel')), findsNothing);
+    final position = history();
+    expect(position.pixels, closeTo(position.maxScrollExtent, 1));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('Chat and Work controls stay fixed while history scrolls',
       (tester) async {
     for (final tab in [0, 1]) {

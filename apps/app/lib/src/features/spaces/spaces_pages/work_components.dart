@@ -2673,7 +2673,7 @@ class _QueuedMessagesPanel extends StatelessWidget {
               child: Text(
                 paused
                     ? 'Queued · ${messages.length} — sending paused after an error'
-                    : 'Queued · ${messages.length} — sent when the current request finishes',
+                    : 'Queued · ${messages.length}',
                 style: TextStyle(
                   fontSize: 11,
                   color: paused ? colors.error : colors.onSurfaceVariant,

@@ -26,6 +26,7 @@ import '../features/spaces/archived_spaces_page.dart';
 import '../features/search/search_page.dart';
 import '../features/workspace/workspaces_page.dart';
 import 'ax_models.dart';
+import 'account_dialogs.dart';
 import 'account_session_label.dart';
 import 'ax_data.dart';
 import 'ax_render_diagnostics.dart';

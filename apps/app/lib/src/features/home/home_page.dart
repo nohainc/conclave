@@ -1582,8 +1582,11 @@ class _ContinueWorkCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
 
     // Collapse the latest message to a single short preview line.
-    final snippetText =
+    final normalized =
         item.lastMessageSnippet.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final snippetText = normalized.characters.length > 200
+        ? '${normalized.characters.take(199)}…'
+        : normalized;
     final author = item.lastMessageAuthor.trim();
 
     return Card(
@@ -1607,19 +1610,6 @@ class _ContinueWorkCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 1. SPACE NAME (uppercase, tracked label)
-                  Text(
-                    item.spaceName.toUpperCase(),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 11,
-                      letterSpacing: 0.5,
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
                   // 2. THREAD TITLE
                   Text(
                     item.threadTitle,
@@ -1685,84 +1675,76 @@ class _ProductUpdateTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    return _HomeUpdateRow(
+      label: update.category.label,
+      date: update.dateDisplay,
+      title: update.title,
+      summary: update.summary,
+      details: update.details,
+    );
+  }
+}
 
-    final details = update.details?.trim() ?? '';
+class _HomeUpdateRow extends StatelessWidget {
+  const _HomeUpdateRow(
+      {required this.label,
+      required this.date,
+      required this.title,
+      required this.summary,
+      this.details,
+      this.worker});
+  final String label, date, title, summary;
+  final String? details, worker;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        update.category.label.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      update.dateDisplay,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  update.title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  update.summary,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: colorScheme.onSurfaceVariant,
-                    height: 1.35,
-                  ),
-                ),
-                if (details.isNotEmpty && details != update.summary) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    details,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (worker != null)
+                Text(worker!,
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w700)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                    color: colors.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(4)),
+                child: Text(label.toUpperCase(),
                     style: TextStyle(
-                      fontSize: 13,
-                      color: colorScheme.onSurfaceVariant,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: colors.onSurfaceVariant)),
+              ),
+              Text(date,
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: colors.onSurfaceVariant,
+                      fontWeight: FontWeight.w500)),
+            ]),
+        const SizedBox(height: 6),
+        Text(title,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(summary,
+            style: TextStyle(
+                fontSize: 13, color: colors.onSurfaceVariant, height: 1.35)),
+        if (details != null &&
+            details!.trim().isNotEmpty &&
+            details!.trim() != summary) ...[
+          const SizedBox(height: 6),
+          Text(details!.trim(),
+              style: TextStyle(
+                  fontSize: 13, color: colors.onSurfaceVariant, height: 1.35)),
         ],
-      ),
+      ]),
     );
   }
 }
@@ -1887,113 +1869,20 @@ class AxWhatsNewDialog extends StatelessWidget {
                                 for (final update in items) ...[
                                   Card(
                                     margin: const EdgeInsets.only(bottom: 12),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Container(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                        horizontal: 6,
-                                                        vertical: 2),
-                                                    decoration: BoxDecoration(
-                                                      color: colorScheme
-                                                          .surfaceContainerHighest,
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              4),
-                                                    ),
-                                                    child: Text(
-                                                      update.category.label
-                                                          .toUpperCase(),
-                                                      style: TextStyle(
-                                                        fontSize: 10,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                        letterSpacing: 0.5,
-                                                        color: colorScheme
-                                                            .onSurfaceVariant,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Text(
-                                                    update.dateDisplay,
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: colorScheme
-                                                          .onSurfaceVariant,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              if (onDismissUpdate != null)
-                                                IconButton(
-                                                  icon: const Icon(
-                                                    Icons
-                                                        .visibility_off_outlined,
-                                                    size: 18,
-                                                  ),
-                                                  tooltip: 'Hide update',
-                                                  visualDensity:
-                                                      VisualDensity.compact,
-                                                  onPressed: () =>
-                                                      onDismissUpdate!(update),
-                                                ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            update.title,
-                                            style: const TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            update.summary,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
-                                              height: 1.4,
-                                            ),
-                                          ),
-                                          if (update.details != null &&
-                                              update.details!.isNotEmpty) ...[
-                                            const SizedBox(height: 10),
-                                            Container(
-                                              padding: const EdgeInsets.all(10),
-                                              decoration: BoxDecoration(
-                                                color: colorScheme
-                                                    .surfaceContainerLow,
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                              ),
-                                              child: Text(
-                                                update.details!,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: colorScheme.onSurface,
-                                                  height: 1.35,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
+                                    child: Column(children: [
+                                      _ProductUpdateTile(update: update),
+                                      if (onDismissUpdate != null)
+                                        Align(
+                                            alignment: Alignment.centerRight,
+                                            child: IconButton(
+                                              tooltip: 'Hide update',
+                                              icon: const Icon(
+                                                  Icons.visibility_off_outlined,
+                                                  size: 18),
+                                              onPressed: () =>
+                                                  onDismissUpdate!(update),
+                                            )),
+                                    ]),
                                   ),
                                 ],
                               ],
@@ -2165,74 +2054,7 @@ class AxAiUpdatesDialog extends StatelessWidget {
                                       onOpenUpdate!(update);
                                       Navigator.of(context).pop();
                                     },
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Wrap(
-                                      crossAxisAlignment:
-                                          WrapCrossAlignment.center,
-                                      spacing: 8,
-                                      runSpacing: 4,
-                                      children: [
-                                        _buildAiUpdateDot(
-                                            update.workerProfileId),
-                                        Text(update.workerDisplayName,
-                                            style: const TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                                fontSize: 13)),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: colorScheme
-                                                .surfaceContainerHighest,
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                          ),
-                                          child: Text(
-                                            update.type.label.toUpperCase(),
-                                            style: TextStyle(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w700,
-                                                letterSpacing: 0.5,
-                                                color: colorScheme
-                                                    .onSurfaceVariant),
-                                          ),
-                                        ),
-                                        Text(update.dateDisplay,
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: colorScheme
-                                                    .onSurfaceVariant)),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Text(update.title,
-                                        style: const TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w700)),
-                                    const SizedBox(height: 6),
-                                    Text(update.summary,
-                                        style: TextStyle(
-                                            fontSize: 13,
-                                            color: colorScheme.onSurfaceVariant,
-                                            height: 1.4)),
-                                    if (update.modelDisplayName != null &&
-                                        update
-                                            .modelDisplayName!.isNotEmpty) ...[
-                                      const SizedBox(height: 8),
-                                      Text('Model: ${update.modelDisplayName}',
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
-                                              fontWeight: FontWeight.w600)),
-                                    ],
-                                  ],
-                                ),
-                              ),
+                              child: _AiUpdateRow(update: update),
                             ),
                           );
                         },
@@ -2253,101 +2075,18 @@ class _AiUpdateRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: _buildAiUpdateDot(update.workerProfileId),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    Text(
-                      update.workerDisplayName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        update.type.label.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.4,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      update.dateDisplay,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  update.title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  update.summary,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.onSurfaceVariant,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return _HomeUpdateRow(
+      label: update.type.label,
+      worker: update.workerDisplayName,
+      date: update.dateDisplay,
+      title: update.title,
+      summary: update.summary,
+      details:
+          update.modelDisplayName == null || update.modelDisplayName!.isEmpty
+              ? null
+              : 'Model: ${update.modelDisplayName}',
     );
   }
-}
-
-Widget _buildAiUpdateDot(String typeId) {
-  final color = switch (typeId.toLowerCase()) {
-    'chatgpt' => const Color(0xFF10A37F),
-    'gemini' => const Color(0xFF3B82F6),
-    'claude' => const Color(0xFFD97706),
-    'ollama' => const Color(0xFF6366F1),
-    _ => Colors.purpleAccent,
-  };
-  return Container(
-    width: 8,
-    height: 8,
-    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-  );
 }
 
 class _InvitationItem extends StatelessWidget {
