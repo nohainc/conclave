@@ -279,10 +279,10 @@ class _WorkComposer extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
+                const Icon(
                   Icons.chat_bubble_outline_rounded,
                   size: 42,
-                  color: isDark ? Colors.white24 : Colors.black26,
+                  color: ConclaveColors.neutral,
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -290,16 +290,16 @@ class _WorkComposer extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.white60 : Colors.black54,
+                    color: ConclaveColors.textSecondary(isDark),
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                const Text(
                   'Ask AI to do something for the team. Nothing runs until you send the request.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDark ? Colors.white38 : Colors.black38,
+                    color: ConclaveColors.neutral,
                   ),
                 ),
               ],
@@ -338,6 +338,7 @@ class _WorkComposer extends StatelessWidget {
           ),
       ],
       itemCount: workTimeline.length,
+      itemId: (index) => workTimeline[index].id,
       empty: empty,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       findChildIndexCallback: (key) {
@@ -1119,7 +1120,7 @@ class _UsageTable extends StatelessWidget {
             child: LinearProgressIndicator(
                 value: (window.usedPercent / 100).clamp(0.0, 1.0),
                 color: ConclaveColors.primaryForeground(dark),
-                backgroundColor: dark ? const Color(0xFF252525) : Colors.white,
+                backgroundColor: ConclaveColors.surfaceHover(dark),
                 stopIndicatorColor: Colors.transparent,
                 minHeight: 6,
                 semanticsLabel: '${window.group ?? ''} ${window.label} usage',
@@ -1295,10 +1296,11 @@ class _WorkTimelineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = Theme.of(context).colorScheme;
-    final metaColor = isDark ? Colors.white38 : Colors.black45;
+    final metaColor = ConclaveColors.textSecondary(isDark);
 
     final timestamp = DateTime.tryParse(request.createdAt)?.toLocal();
-    final timeLabel = timestamp == null ? '' : _chatTimestamp(timestamp);
+    final timeLabel =
+        timestamp == null ? '' : _relativeChatTimestamp(timestamp);
     final rawRequesterName = request.requestedByName.trim();
     final effectiveRequesterName = (rawRequesterName.isEmpty ||
             rawRequesterName == request.requestedByUserId ||
@@ -1457,6 +1459,27 @@ class _WorkTimelineCard extends StatelessWidget {
       return segments.isEmpty ? '' : '· ${segments.join(' · ')}';
     }
 
+    final requestMeta = <Widget>[
+      if (timeLabel.isNotEmpty) ...[
+        Tooltip(
+          message: _chatTimestamp(timestamp!),
+          child: Text(
+            timeLabel,
+            style: TextStyle(fontSize: 11, color: metaColor),
+          ),
+        ),
+        const SizedBox(width: 8),
+      ],
+      _AnimatedMessageAction(
+        tooltip: 'Copy',
+        icon: Icons.copy_rounded,
+        color: metaColor,
+        onTap: () {
+          Clipboard.setData(ClipboardData(text: request.prompt));
+        },
+      ),
+    ].orderedForMessage(isOwnRequest);
+
     final hasMetadata = _workflowName.isNotEmpty ||
         progress.showsLiveElapsed ||
         _totalElapsedMs != 0;
@@ -1497,350 +1520,354 @@ class _WorkTimelineCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // User prompt bubble
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final maxBubbleWidth = math.min(640.0, constraints.maxWidth * 0.9);
-            return Align(
-              alignment:
-                  isOwnRequest ? Alignment.centerRight : Alignment.centerLeft,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isOwnRequest
-                        ? ConclaveColors.ownMessageBackground(isDark)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding:
-                      EdgeInsets.fromLTRB(isOwnRequest ? 14 : 0, 10, 14, 10),
-                  child: Column(
-                    crossAxisAlignment: isOwnRequest
-                        ? CrossAxisAlignment.end
-                        : CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (showRequesterIdentity) ...[
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircleAvatar(
-                              radius: 12,
-                              backgroundColor:
-                                  ConclaveColors.primarySoftColor(isDark),
-                              child: Text(
-                                requesterInitials,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color:
-                                      ConclaveColors.primaryForeground(isDark),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              effectiveRequesterName,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? Colors.white : Colors.black87,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                      ],
-                      CollapsibleOwnMessage(
-                        key: ValueKey(request.id),
-                        data: request.prompt,
-                        enabled: isOwnRequest,
-                        toggleColor: metaColor,
+        _MessageHover(
+          builder: (context, showMeta) => LayoutBuilder(
+            builder: (context, constraints) {
+              final maxBubbleWidth =
+                  math.min(640.0, constraints.maxWidth * 0.9);
+              return Align(
+                alignment:
+                    isOwnRequest ? Alignment.centerRight : Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                  child: _withMessageMeta(
+                    own: isOwnRequest,
+                    visible: showMeta,
+                    meta: requestMeta,
+                    bubble: Container(
+                      decoration: BoxDecoration(
+                        color: isOwnRequest
+                            ? ConclaveColors.ownMessageBackground(isDark)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: EdgeInsets.fromLTRB(
+                          isOwnRequest ? 14 : 0, 10, 14, 10),
+                      child: Column(
                         crossAxisAlignment: isOwnRequest
                             ? CrossAxisAlignment.end
                             : CrossAxisAlignment.start,
-                        child: _MemoizedWorkMarkdown(
-                          data: request.prompt,
-                          fitContent: true,
-                        ),
-                        footerBuilder: (context, toggle) => _messageFooter(
-                            toggle,
-                            [
-                              if (timeLabel.isNotEmpty) ...[
-                                Text(
-                                  timeLabel,
-                                  style:
-                                      TextStyle(fontSize: 11, color: metaColor),
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              _AnimatedMessageAction(
-                                tooltip: 'Copy Markdown',
-                                icon: Icons.copy_rounded,
-                                color: metaColor,
-                                onTap: () {
-                                  Clipboard.setData(
-                                      ClipboardData(text: request.prompt));
-                                },
-                              ),
-                            ].orderedForMessage(isOwnRequest)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        // AI Execution & response bubble
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final maxBubbleWidth = math.min(680.0, constraints.maxWidth * 0.9);
-            return Align(
-              alignment: Alignment.centerLeft,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(0, 14, 14, 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          senderAvatar,
-                          const SizedBox(width: 6),
-                          Text(
-                            senderName,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: metaColor,
-                            ),
-                          ),
-                          if (isWorkerResponse &&
-                              formattedModelInfo != null) ...[
-                            const SizedBox(width: 6),
-                            Tooltip(
-                              message: formattedModelInfo,
-                              triggerMode: TooltipTriggerMode.tap,
-                              child: Padding(
-                                padding: const EdgeInsets.all(4),
-                                child: Icon(Icons.info_outline_rounded,
-                                    size: 14, color: metaColor),
-                              ),
-                            ),
-                          ],
-                          if (hasMetadata) ...[
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: AxLiveTicker(
-                                active: progress.isTicking &&
-                                    realtimeStatus !=
-                                        AxWorkRealtimeStatus.checking,
-                                builder: (context, now) => Text(
-                                  metadataAt(now),
-                                  overflow: TextOverflow.ellipsis,
-                                  style:
-                                      TextStyle(fontSize: 12, color: metaColor),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      // The trail is the only place that shows live progress;
-                      // it goes away once the request has finished.
-                      // A streamed answer or error also retires it, so the
-                      // text never lands inside the trail before it hides.
-                      if (!progress.isTerminal &&
-                          response?.isNotEmpty != true &&
-                          error?.isNotEmpty != true &&
-                          (activities.isNotEmpty ||
-                              progress.currentAction != null)) ...[
-                        const SizedBox(height: 8),
-                        _WorkActivityTrail(
-                          activities: activities,
-                          fallbackAction: progress.currentAction,
-                          color: metaColor,
-                          accentColor: colors.primary,
-                        ),
-                      ],
-                      const SizedBox(height: 10),
-                      Builder(builder: (context) {
-                        // The body shows the Worker's live status while the
-                        // request is unfinished and the real outcome at the end.
-                        final String? message = error?.isNotEmpty == true
-                            ? error
-                            : response?.isNotEmpty == true
-                                ? response
-                                : request.status == 'cancelled'
-                                    ? 'Request cancelled.'
-                                    : (progress.isExecuting
-                                            ? null
-                                            : progressText) ??
-                                        switch (request.status) {
-                                          'completed' => 'Request completed.',
-                                          'failed' =>
-                                            'Your request could not be completed.',
-                                          'timed_out' =>
-                                            'The worker took too long to respond. Please retry your request.',
-                                          'lost' =>
-                                            'The connection to the worker was lost. Please retry your request.',
-                                          _ => null,
-                                        };
-                        final isError = error?.isNotEmpty == true;
-                        Widget compactAction({
-                          required String tooltip,
-                          required IconData icon,
-                          required VoidCallback? onPressed,
-                        }) =>
-                            Tooltip(
-                              message: tooltip,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(4),
-                                onTap: onPressed,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(3),
-                                  child: Icon(
-                                    icon,
-                                    size: 15,
-                                    color: metaColor,
-                                  ),
-                                ),
-                              ),
-                            );
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (message != null) ...[
-                              KeyedSubtree(
-                                key: responseAnchorKey,
-                                child: isError
-                                    ? SelectableText(
-                                        message,
-                                        style:
-                                            ConclaveMessageTypography.fromTheme(
-                                                    Theme.of(context))
-                                                .copyWith(color: colors.error),
-                                      )
-                                    : _MemoizedWorkMarkdown(
-                                        key: ValueKey((request.id, message)),
-                                        data: message,
-                                      ),
-                              ),
-                              const SizedBox(height: 8),
-                            ],
+                          if (showRequesterIdentity) ...[
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (response?.isNotEmpty == true ||
-                                    error?.isNotEmpty == true)
-                                  compactAction(
-                                    tooltip: isError
-                                        ? 'Copy error'
-                                        : 'Copy Markdown',
-                                    icon: Icons.copy_outlined,
-                                    onPressed: () {
-                                      Clipboard.setData(ClipboardData(
-                                        text: isError ? error! : response!,
-                                      ));
-                                    },
-                                  ),
-                                if ((request.status == 'queued' ||
-                                        request.status == 'running') &&
-                                    onCancelRun != null)
-                                  compactAction(
-                                    tooltip: 'Cancel request',
-                                    icon: Icons.cancel_outlined,
-                                    onPressed: () => onCancelRun!(request.id),
-                                  ),
-                                if (request.status == 'failed' &&
-                                    failedStep != null &&
-                                    failedStep.retryAllowed &&
-                                    onRetryStep != null)
-                                  compactAction(
-                                    tooltip: failedStep.errorCode ==
-                                            'space_folder_exists'
-                                        ? 'Use the existing folder and retry'
-                                        : failedStep.retryRequiresConfirmation
-                                            ? 'Retry anyway — the previous execution may already have made changes'
-                                            : 'Retry',
-                                    icon: Icons.refresh_rounded,
-                                    onPressed: () =>
-                                        onRetryStep!(request.id, failedStep),
-                                  ),
-                                if (request.status == 'failed' &&
-                                    onReportIssue != null)
-                                  if (reportedIssue != null)
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.check_circle_outline,
-                                            size: 15, color: colors.primary),
-                                        const SizedBox(width: 3),
-                                        Text('Reported',
-                                            style: TextStyle(
-                                                fontSize: 11,
-                                                color: colors.primary)),
-                                      ],
-                                    )
-                                  else
-                                    compactAction(
-                                      tooltip: reportingIssue
-                                          ? 'Sending issue report'
-                                          : 'Report issue — sends sanitized technical diagnostics only',
-                                      icon: reportingIssue
-                                          ? Icons.hourglass_top_rounded
-                                          : Icons.flag_outlined,
-                                      onPressed: reportingIssue
-                                          ? null
-                                          : () => onReportIssue!(request.id),
-                                    ),
-                                const SizedBox(width: 8),
-                                if (timeLabel.isNotEmpty)
-                                  Text(
-                                    timeLabel,
+                                CircleAvatar(
+                                  radius: 12,
+                                  backgroundColor:
+                                      ConclaveColors.primarySoftColor(isDark),
+                                  child: Text(
+                                    requesterInitials,
                                     style: TextStyle(
-                                      fontSize: 11,
-                                      color: metaColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: ConclaveColors.primaryForeground(
+                                          isDark),
                                     ),
                                   ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  effectiveRequesterName,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: ConclaveColors.textSecondary(isDark),
+                                  ),
+                                ),
                               ],
                             ),
-                            if (reportedIssue != null) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                'Thanks — sanitized technical diagnostics were sent.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: metaColor,
+                            const SizedBox(height: 6),
+                          ],
+                          CollapsibleOwnMessage(
+                            key: ValueKey(request.id),
+                            data: request.prompt,
+                            enabled: isOwnRequest,
+                            toggleColor: metaColor,
+                            crossAxisAlignment: isOwnRequest
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
+                            child: _MemoizedWorkMarkdown(
+                              data: request.prompt,
+                              fitContent: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        // AI Execution & response bubble
+        _MessageHover(
+          builder: (context, showMeta) => LayoutBuilder(
+            builder: (context, constraints) {
+              final maxBubbleWidth =
+                  math.min(680.0, constraints.maxWidth * 0.9);
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(0, 14, 14, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            senderAvatar,
+                            const SizedBox(width: 6),
+                            Text(
+                              senderName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: metaColor,
+                              ),
+                            ),
+                            if (isWorkerResponse &&
+                                formattedModelInfo != null) ...[
+                              const SizedBox(width: 6),
+                              Tooltip(
+                                message: formattedModelInfo,
+                                triggerMode: TooltipTriggerMode.tap,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(Icons.info_outline_rounded,
+                                      size: 14, color: metaColor),
                                 ),
                               ),
                             ],
-                            if (issueReportError != null) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                "Couldn't send the report. Try again.",
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: colors.error,
+                            if (hasMetadata) ...[
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: AxLiveTicker(
+                                  active: progress.isTicking &&
+                                      realtimeStatus !=
+                                          AxWorkRealtimeStatus.checking,
+                                  builder: (context, now) => Text(
+                                    metadataAt(now),
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12, color: metaColor),
+                                  ),
                                 ),
                               ),
                             ],
                           ],
-                        );
-                      }),
-                    ],
+                        ),
+                        // The trail is the only place that shows live progress;
+                        // it goes away once the request has finished.
+                        // A streamed answer or error also retires it, so the
+                        // text never lands inside the trail before it hides.
+                        if (!progress.isTerminal &&
+                            response?.isNotEmpty != true &&
+                            error?.isNotEmpty != true &&
+                            (activities.isNotEmpty ||
+                                progress.currentAction != null)) ...[
+                          const SizedBox(height: 8),
+                          _WorkActivityTrail(
+                            activities: activities,
+                            fallbackAction: progress.currentAction,
+                            color: metaColor,
+                            accentColor: colors.primary,
+                          ),
+                        ],
+                        const SizedBox(height: 10),
+                        Builder(builder: (context) {
+                          // The body shows the Worker's live status while the
+                          // request is unfinished and the real outcome at the end.
+                          final String? message = error?.isNotEmpty == true
+                              ? error
+                              : response?.isNotEmpty == true
+                                  ? response
+                                  : request.status == 'cancelled'
+                                      ? 'Request cancelled.'
+                                      : (progress.isExecuting
+                                              ? null
+                                              : progressText) ??
+                                          switch (request.status) {
+                                            'completed' => 'Request completed.',
+                                            'failed' =>
+                                              'Your request could not be completed.',
+                                            'timed_out' =>
+                                              'The worker took too long to respond. Please retry your request.',
+                                            'lost' =>
+                                              'The connection to the worker was lost. Please retry your request.',
+                                            _ => null,
+                                          };
+                          final isError = error?.isNotEmpty == true;
+                          Widget compactAction({
+                            required String tooltip,
+                            required IconData icon,
+                            required VoidCallback? onPressed,
+                          }) =>
+                              Tooltip(
+                                message: tooltip,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(4),
+                                  onTap: onPressed,
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(2),
+                                    child: Icon(
+                                      icon,
+                                      size: 15,
+                                      color: metaColor,
+                                    ),
+                                  ),
+                                ),
+                              );
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (message != null) ...[
+                                KeyedSubtree(
+                                  key: responseAnchorKey,
+                                  child: isError
+                                      ? SelectableText(
+                                          message,
+                                          style: ConclaveMessageTypography
+                                                  .fromTheme(Theme.of(context))
+                                              .copyWith(color: colors.error),
+                                        )
+                                      : _MemoizedWorkMarkdown(
+                                          key: ValueKey((request.id, message)),
+                                          data: message,
+                                        ),
+                                ),
+                                const SizedBox(height: 10),
+                              ],
+                              AnimatedOpacity(
+                                  // Copy is revealed on hover; cancel, retry and
+                                  // report stay visible while they are needed.
+                                  opacity: showMeta ||
+                                          !const {'completed', 'cancelled'}
+                                              .contains(request.status)
+                                      ? 1
+                                      : 0,
+                                  duration: const Duration(milliseconds: 120),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (response?.isNotEmpty == true ||
+                                          error?.isNotEmpty == true)
+                                        compactAction(
+                                          tooltip: 'Copy',
+                                          icon: Icons.copy_outlined,
+                                          onPressed: () {
+                                            Clipboard.setData(ClipboardData(
+                                              text:
+                                                  isError ? error! : response!,
+                                            ));
+                                          },
+                                        ),
+                                      if ((request.status == 'queued' ||
+                                              request.status == 'running') &&
+                                          onCancelRun != null)
+                                        compactAction(
+                                          tooltip: 'Cancel request',
+                                          icon: Icons.cancel_outlined,
+                                          onPressed: () =>
+                                              onCancelRun!(request.id),
+                                        ),
+                                      if (request.status == 'failed' &&
+                                          failedStep != null &&
+                                          failedStep.retryAllowed &&
+                                          onRetryStep != null)
+                                        compactAction(
+                                          tooltip: failedStep.errorCode ==
+                                                  'space_folder_exists'
+                                              ? 'Use the existing folder and retry'
+                                              : failedStep
+                                                      .retryRequiresConfirmation
+                                                  ? 'Retry anyway — the previous execution may already have made changes'
+                                                  : 'Retry',
+                                          icon: Icons.refresh_rounded,
+                                          onPressed: () => onRetryStep!(
+                                              request.id, failedStep),
+                                        ),
+                                      if (request.status == 'failed' &&
+                                          onReportIssue != null)
+                                        if (reportedIssue != null)
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.check_circle_outline,
+                                                  size: 15,
+                                                  color: colors.primary),
+                                              const SizedBox(width: 3),
+                                              Text('Reported',
+                                                  style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: colors.primary)),
+                                            ],
+                                          )
+                                        else
+                                          compactAction(
+                                            tooltip: reportingIssue
+                                                ? 'Sending issue report'
+                                                : 'Report issue — sends sanitized technical diagnostics only',
+                                            icon: reportingIssue
+                                                ? Icons.hourglass_top_rounded
+                                                : Icons.flag_outlined,
+                                            onPressed: reportingIssue
+                                                ? null
+                                                : () =>
+                                                    onReportIssue!(request.id),
+                                          ),
+                                      const SizedBox(width: 8),
+                                      if (timeLabel.isNotEmpty)
+                                        Tooltip(
+                                          message: _chatTimestamp(timestamp!),
+                                          child: Text(
+                                            timeLabel,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: metaColor,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  )),
+                              if (reportedIssue != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Thanks — sanitized technical diagnostics were sent.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: metaColor,
+                                  ),
+                                ),
+                              ],
+                              if (issueReportError != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  "Couldn't send the report. Try again.",
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: colors.error,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          );
+                        }),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ],
     );
@@ -2116,6 +2143,7 @@ class _DiscussionItem {
     this.date,
     this.sentAt,
     this.editedAt,
+    this.editedDate,
     this.isMe = true,
     this.aiKind,
     this.workRequest,
@@ -2128,6 +2156,7 @@ class _DiscussionItem {
   final String text;
   final String? sentAt;
   final String? editedAt;
+  final DateTime? editedDate;
   final bool isMe;
 
   /// `ai_request` or `ai_answer` for an AI exchange archived from Work history.
@@ -2207,6 +2236,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
+        constraints: ConclaveDialogStyle.small,
         title: const Text('Delete message?'),
         content: const Text(
             'Are you sure you want to delete this message? This action cannot be undone.'),
@@ -2216,9 +2246,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
+            style: ConclaveDialogStyle.destructiveButton(),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),
@@ -2246,168 +2274,227 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
             .toUpperCase()
         : 'U';
 
-    final metaColor = isDark ? Colors.white38 : Colors.black45;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxBubbleWidth = math.min(640.0, constraints.maxWidth * 0.9);
-        return Align(
-          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-            child: Container(
-              decoration: BoxDecoration(
-                color: isMe
-                    ? ConclaveColors.ownMessageBackground(isDark)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              padding: EdgeInsets.fromLTRB(isMe ? 14 : 0, 10, 14, 10),
-              child: Column(
-                crossAxisAlignment:
-                    isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (!isMe && !widget.grouped) ...[
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(
-                          radius: 12,
-                          backgroundColor:
-                              ConclaveColors.primarySoftColor(isDark),
-                          child: widget.item.isAiAnswer
-                              ? Icon(Icons.auto_awesome_rounded,
-                                  size: 13,
-                                  color:
-                                      ConclaveColors.primaryForeground(isDark))
-                              : Text(
-                                  initials,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: ConclaveColors.primaryForeground(
-                                        isDark),
-                                  ),
-                                ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          widget.item.author,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white : Colors.black87,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                  ],
-                  if (_isEditing) ...[
-                    MarkdownComposer(
-                      controller: _editController,
-                      compact: true,
-                      maxLines: 6,
-                      autofocus: true,
-                      chatStyle: true,
-                      onSubmit: _saveEdit,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextButton(
-                          onPressed: () => setState(() {
-                            _editController.text = widget.item.text;
-                            _isEditing = false;
-                          }),
-                          child: const Text('Cancel'),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: _saveEdit,
-                          child: const Text('Save'),
-                        ),
-                      ],
-                    ),
-                  ] else ...[
-                    CollapsibleOwnMessage(
-                      data: widget.item.text,
-                      enabled: isMe,
-                      toggleColor: metaColor,
-                      footerGap: 8,
-                      crossAxisAlignment: isMe
-                          ? CrossAxisAlignment.end
-                          : CrossAxisAlignment.start,
-                      child: ConclaveMarkdownBody(
-                        data: widget.item.text,
-                        fitContent: true,
-                      ),
-                      footerBuilder: (context, toggle) => _messageFooter(
-                          toggle,
-                          [
-                            if (widget.item.editedAt != null) ...[
-                              Text(
-                                'Edited ${widget.item.editedAt}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: metaColor,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ] else if (widget.item.sentAt != null) ...[
-                              Text(
-                                widget.item.aiKind == 'ai_request'
-                                    ? 'Asked AI · ${widget.item.sentAt!}'
-                                    : widget.item.sentAt!,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: metaColor,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            if (isMe &&
-                                widget.onDelete != null &&
-                                !widget.item.id.startsWith('temp-')) ...[
-                              _AnimatedMessageAction(
-                                tooltip: 'Delete message',
-                                icon: Icons.delete_outline_rounded,
-                                color: metaColor,
-                                onTap: () => _confirmDelete(context),
-                              ),
-                              const SizedBox(width: 6),
-                            ],
-                            if (!widget.item.id.startsWith('temp-') &&
-                                widget.item.aiKind == null) ...[
-                              _AnimatedMessageAction(
-                                tooltip: 'Edit message',
-                                icon: Icons.edit_outlined,
-                                color: metaColor,
-                                onTap: () => setState(() {
-                                  _editController.text = widget.item.text;
-                                  _isEditing = true;
-                                }),
-                              ),
-                              const SizedBox(width: 6),
-                            ],
-                            _AnimatedMessageAction(
-                              tooltip: 'Copy Markdown',
-                              icon: Icons.copy_rounded,
-                              color: metaColor,
-                              onTap: widget.onCopy,
-                            ),
-                          ].orderedForMessage(isMe)),
-                    ),
-                  ],
-                ],
-              ),
+    final metaColor = ConclaveColors.textSecondary(isDark);
+    final sent = widget.item.date;
+    final sentLabel =
+        sent == null ? widget.item.sentAt : _relativeChatTimestamp(sent);
+    final edited = widget.item.editedDate;
+    final editedLabel =
+        edited == null ? widget.item.editedAt : _relativeChatTimestamp(edited);
+    final meta = <Widget>[
+      if (editedLabel != null) ...[
+        Tooltip(
+          message: widget.item.editedAt ?? editedLabel,
+          child: Text(
+            'Edited $editedLabel',
+            style: TextStyle(
+              fontSize: 12,
+              color: metaColor,
             ),
           ),
-        );
-      },
+        ),
+        const SizedBox(width: 8),
+      ] else if (sentLabel != null) ...[
+        Tooltip(
+          message: widget.item.sentAt ?? sentLabel,
+          child: Text(
+            widget.item.aiKind == 'ai_request'
+                ? 'Asked AI · $sentLabel'
+                : sentLabel,
+            style: TextStyle(
+              fontSize: 12,
+              color: metaColor,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+      ],
+      if (isMe &&
+          widget.onDelete != null &&
+          !widget.item.id.startsWith('temp-')) ...[
+        _AnimatedMessageAction(
+          tooltip: 'Delete',
+          icon: Icons.delete_outline_rounded,
+          color: metaColor,
+          onTap: () => _confirmDelete(context),
+        ),
+        const SizedBox(width: 6),
+      ],
+      if (!widget.item.id.startsWith('temp-') &&
+          widget.item.aiKind == null) ...[
+        _AnimatedMessageAction(
+          tooltip: 'Edit',
+          icon: Icons.edit_outlined,
+          color: metaColor,
+          onTap: () => setState(() {
+            _editController.text = widget.item.text;
+            _isEditing = true;
+          }),
+        ),
+        const SizedBox(width: 6),
+      ],
+      _AnimatedMessageAction(
+        tooltip: 'Copy',
+        icon: Icons.copy_rounded,
+        color: metaColor,
+        onTap: widget.onCopy,
+      ),
+    ].orderedForMessage(isMe);
+    return _MessageHover(
+        builder: (context, showMeta) => LayoutBuilder(
+              builder: (context, constraints) {
+                final maxBubbleWidth =
+                    math.min(640.0, constraints.maxWidth * 0.9);
+                return Align(
+                  alignment:
+                      isMe ? Alignment.centerRight : Alignment.centerLeft,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                    child: _withMessageMeta(
+                      own: isMe,
+                      visible: showMeta && !_isEditing,
+                      meta: meta,
+                      bubble: Container(
+                        decoration: BoxDecoration(
+                          color: isMe
+                              ? ConclaveColors.ownMessageBackground(isDark)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: EdgeInsets.fromLTRB(isMe ? 14 : 0, 10, 14, 10),
+                        child: Column(
+                          crossAxisAlignment: isMe
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (!isMe && !widget.grouped) ...[
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 12,
+                                    backgroundColor:
+                                        ConclaveColors.primarySoftColor(isDark),
+                                    child: widget.item.isAiAnswer
+                                        ? Icon(Icons.auto_awesome_rounded,
+                                            size: 13,
+                                            color: ConclaveColors
+                                                .primaryForeground(isDark))
+                                        : Text(
+                                            initials,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: ConclaveColors
+                                                  .primaryForeground(isDark),
+                                            ),
+                                          ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    widget.item.author,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color:
+                                          ConclaveColors.textSecondary(isDark),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                            ],
+                            if (_isEditing) ...[
+                              MarkdownComposer(
+                                controller: _editController,
+                                compact: true,
+                                maxLines: 6,
+                                autofocus: true,
+                                chatStyle: true,
+                                onSubmit: _saveEdit,
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TextButton(
+                                    onPressed: () => setState(() {
+                                      _editController.text = widget.item.text;
+                                      _isEditing = false;
+                                    }),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  FilledButton(
+                                    onPressed: _saveEdit,
+                                    child: const Text('Save'),
+                                  ),
+                                ],
+                              ),
+                            ] else ...[
+                              CollapsibleOwnMessage(
+                                data: widget.item.text,
+                                enabled: isMe,
+                                toggleColor: metaColor,
+                                crossAxisAlignment: isMe
+                                    ? CrossAxisAlignment.end
+                                    : CrossAxisAlignment.start,
+                                child: _MemoizedWorkMarkdown(
+                                  data: widget.item.text,
+                                  fitContent: true,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ));
+  }
+}
+
+/// Reveals a message's date/time and actions while the pointer is over it.
+/// Touch platforms have no hover, so their meta line stays visible.
+class _MessageHover extends StatefulWidget {
+  const _MessageHover({required this.builder});
+
+  final Widget Function(BuildContext context, bool showMeta) builder;
+
+  @override
+  State<_MessageHover> createState() => _MessageHoverState();
+}
+
+class _MessageHoverState extends State<_MessageHover> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final platform = Theme.of(context).platform;
+    final touch =
+        platform == TargetPlatform.iOS || platform == TargetPlatform.android;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: widget.builder(context, _hovered || touch),
     );
   }
+}
+
+/// Recent messages read as "5m ago"; anything older than a week shows the
+/// full date and time.
+String _relativeChatTimestamp(DateTime value) {
+  final age = DateTime.now().difference(value);
+  if (age.isNegative || age.inMinutes < 1) return 'just now';
+  if (age.inHours < 1) return '${age.inMinutes}m ago';
+  if (age.inDays < 1) return '${age.inHours}h ago';
+  if (age.inDays < 7) {
+    return age.inDays == 1 ? 'yesterday' : '${age.inDays}d ago';
+  }
+  return _chatTimestamp(value);
 }
 
 class _AnimatedMessageAction extends StatefulWidget {
@@ -2460,7 +2547,7 @@ class _AnimatedMessageActionState extends State<_AnimatedMessageAction> {
                 scale: _pressed ? 0.78 : 1,
                 duration: const Duration(milliseconds: 120),
                 curve: Curves.easeOutBack,
-                child: Icon(widget.icon, size: 14, color: widget.color),
+                child: Icon(widget.icon, size: 15, color: widget.color),
               ),
             ),
           ),
@@ -2473,21 +2560,34 @@ extension _MessageFooterOrder on List<Widget> {
   List<Widget> orderedForMessage(bool own) => own ? this : reversed.toList();
 }
 
-/// Meta line under a message. With a Show more / Hide more [toggle] it spans the
-/// bubble: toggle at the left edge, date/time and actions at the right edge.
-Widget _messageFooter(Widget? toggle, List<Widget> meta) {
-  final items = Wrap(
-    alignment: toggle != null ? WrapAlignment.end : WrapAlignment.start,
-    crossAxisAlignment: WrapCrossAlignment.center,
-    children: meta,
-  );
-  if (toggle == null) return items;
-  return Row(children: [
-    toggle,
-    const SizedBox(width: 8),
-    Expanded(child: items),
-  ]);
-}
+/// A message bubble with its date/time and actions below, outside the
+/// bubble so its background fits the message. The meta line fades in on hover;
+/// its space stays reserved so the timeline does not shift under the pointer.
+Widget _withMessageMeta({
+  required Widget bubble,
+  required bool own,
+  required bool visible,
+  required List<Widget> meta,
+}) =>
+    Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment:
+          own ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        bubble,
+        Padding(
+          padding: EdgeInsets.only(top: own ? 4 : 0, right: own ? 14 : 0),
+          child: AnimatedOpacity(
+            opacity: visible ? 1 : 0,
+            duration: const Duration(milliseconds: 120),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: meta,
+            ),
+          ),
+        ),
+      ],
+    );
 
 /// Keyboard-driven list of earlier requests, opened with Arrow Up/Down in an
 /// empty composer. Enter copies the highlighted prompt into the composer.

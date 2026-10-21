@@ -220,8 +220,7 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
+            style: ConclaveDialogStyle.destructiveButton(),
             onPressed: _matches
                 ? () => Navigator.of(context).pop(_controller.text.trim())
                 : null,

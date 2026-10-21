@@ -32,6 +32,9 @@ abstract final class ConclaveMenuStyle {
 
   static ButtonStyle item(bool isDark, {bool isDestructive = false}) =>
       ButtonStyle(
+        foregroundColor:
+            WidgetStatePropertyAll(ConclaveColors.textPrimary(isDark)),
+        iconColor: WidgetStatePropertyAll(ConclaveColors.textSecondary(isDark)),
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         ),
@@ -50,6 +53,10 @@ abstract final class ConclaveMenuStyle {
           return null;
         }),
       );
+
+  /// Text style for [PopupMenuItem] rows so popup-button menus match.
+  static TextStyle popupTextStyle(bool isDark) =>
+      textStyle.copyWith(color: ConclaveColors.textPrimary(isDark));
 }
 
 /// A popup route entry whose child owns focus, hover, and activation.

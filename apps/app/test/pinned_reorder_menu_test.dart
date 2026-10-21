@@ -64,7 +64,7 @@ Future<void> _open(WidgetTester tester, String tooltip) async {
   await tester.pumpAndSettle();
   for (final anchor in tester.widgetList<MenuAnchor>(find.byType(MenuAnchor))) {
     expect(anchor.style?.backgroundColor?.resolve({}),
-        ConclaveColors.navigationBackgroundDark);
+        ConclaveColors.navigationBackgroundLight);
   }
 }
 

@@ -575,39 +575,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   Future<void> _createThread([AxSpace? targetSpace]) async {
     final space = targetSpace ?? selectedSpace;
     if (space == null) return;
-    var name = '';
-    final created = await showDialog<String>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Create Thread'),
-        content: TextField(
-          autofocus: true,
-          onChanged: (value) => name = value,
-          onSubmitted: (_) {
-            if (name.trim().isNotEmpty) {
-              Navigator.pop(dialogContext, name.trim());
-            }
-          },
-          decoration: const InputDecoration(
-            labelText: 'Thread name',
-            hintText: 'e.g. Authentication redesign',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (name.trim().isNotEmpty) {
-                Navigator.pop(dialogContext, name.trim());
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
+    final created = await showCreateThreadDialog(
+      navigatorKey.currentContext ?? context,
     );
     if (created == null || created.isEmpty) return;
     try {
@@ -706,92 +675,27 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     }
   }
 
-  Future<void> _editSpace(AxSpace space) async {
-    var name = space.name;
-    var description = space.description;
-    String? errorText;
-    final values = await showDialog<(String, String)?>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          void submit() {
-            final trimmedName = name.trim();
-            if (trimmedName.isEmpty) {
-              setDialogState(() {
-                errorText = 'Space name cannot be empty.';
-              });
-              return;
-            }
-            final taken = store.spaces.items.any((other) =>
-                other.id != space.id &&
-                other.role == 'owner' &&
-                other.name.trim().toLowerCase() == trimmedName.toLowerCase());
-            if (taken) {
-              setDialogState(() {
-                errorText = 'You already have a Space with this name.';
-              });
-              return;
-            }
-            Navigator.pop(
-              dialogContext,
-              (trimmedName, description.trim()),
-            );
-          }
+  /// Space whose page should open with the inline edit form showing.
+  String? _pendingSpaceEditId;
 
-          return AlertDialog(
-            title: const Text('Edit Space'),
-            content: SizedBox(
-              width: 440,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextFormField(
-                      initialValue: space.name,
-                      autofocus: true,
-                      onChanged: (value) {
-                        name = value;
-                        if (errorText != null) {
-                          setDialogState(() => errorText = null);
-                        }
-                      },
-                      onFieldSubmitted: (_) => submit(),
-                      decoration: InputDecoration(
-                        labelText: 'Space Name',
-                        errorText: errorText,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      initialValue: space.description,
-                      onChanged: (value) => description = value,
-                      decoration:
-                          const InputDecoration(labelText: 'Description'),
-                      maxLines: 2,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: submit,
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-    if (values == null || values.$1.isEmpty) return;
+  /// Sidebar "Edit Space": open the Space page in edit mode.
+  Future<void> _editSpace(AxSpace space) async {
+    setState(() => _pendingSpaceEditId = space.id);
+    _navigateTo(AxNavigation.space(space.id));
+  }
+
+  /// Saves an inline Space edit; returns an error for the form or null.
+  Future<String?> _saveSpaceEdits(
+      AxSpace space, String name, String description) async {
+    final taken = store.spaces.items.any((other) =>
+        other.id != space.id &&
+        other.role == 'owner' &&
+        other.name.trim().toLowerCase() == name.toLowerCase());
+    if (taken) return 'You already have a Space with this name.';
     final current =
         store.spaces.items.where((item) => item.id == space.id).firstOrNull ??
             space;
-    if (values.$1 != space.name && current.hasActiveWork) {
+    if (name != space.name && current.hasActiveWork) {
       final proceed = await _confirmSpaceAction(
         title: 'Rename Space while Work is running?',
         message: 'A Thread in this Space is running. Its folder is renamed '
@@ -799,21 +703,21 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
             'Rename now, or wait until the Work finishes.',
         action: 'Rename',
       );
-      if (!proceed) return;
+      if (!proceed) return 'Rename cancelled.';
     }
     try {
       await store.collaboration.editSpace(
         space,
-        name: values.$1,
-        description: values.$2,
+        name: name,
+        description: description,
         // Instructions are no longer part of the Space UI; preserve any
         // legacy value until a dedicated data migration removes it.
         instructions: space.instructions,
       );
-      if (!mounted) return;
-      _showSnackBar('Space updated.');
+      if (mounted) _showSnackBar('Space updated.');
+      return null;
     } catch (error) {
-      if (mounted) _showSnackBar(error.toString(), type: ToastType.error);
+      return error.toString();
     }
   }
 
@@ -880,6 +784,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     final result = await showDialog<bool>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
+        constraints: ConclaveDialogStyle.small,
         title: Text(title),
         content: Text(message),
         actions: [
@@ -888,9 +793,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: destructive
-                ? FilledButton.styleFrom(backgroundColor: ConclaveColors.error)
-                : null,
+            style: destructive ? ConclaveDialogStyle.destructiveButton() : null,
             onPressed: () => Navigator.pop(dialogContext, true),
             child: Text(action),
           ),

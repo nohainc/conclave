@@ -154,7 +154,7 @@ void main() {
     });
   }
   testWidgets(
-      'ThreadPage reveals incoming Chat and Work openings and respects manual scrolling',
+      'ThreadPage follows incoming Chat and Work to the end and respects manual scrolling',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1300, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -217,20 +217,17 @@ void main() {
             initialLoaded: true));
     work.replace('thread', [request(response: longWork)]);
     await tester.pumpAndSettle();
-    // The conversation holds both arrivals and reveals the first new entry,
-    // the AI answer, from its opening.
+    // A reader at the latest content follows both arrivals to the end.
     {
       final history = find.byKey(const ValueKey('chat-history-scroll'));
-      final rect = tester.getRect(history);
-      final opening = tester.getRect(find
-          .descendant(
-              of: history,
-              matching: find.textContaining('Work opening', findRichText: true))
-          .first);
-      expect(opening.top, greaterThanOrEqualTo(rect.top - 1));
-      expect(opening.top + 24, lessThan(rect.bottom));
       final controller = tester.widget<CustomScrollView>(history).controller!;
-      expect(controller.position.extentAfter, greaterThan(500));
+      expect(controller.position.extentAfter, lessThan(1));
+      expect(
+          find.descendant(
+              of: history,
+              matching: find.textContaining('Chat body paragraph.',
+                  findRichText: true)),
+          findsWidgets);
     }
     final history = find.byKey(const ValueKey('chat-history-scroll'));
     await tester.drag(history, const Offset(0, 150));

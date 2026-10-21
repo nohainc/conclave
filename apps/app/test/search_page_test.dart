@@ -88,7 +88,10 @@ void main() {
         ),
       );
 
-      // Initially empty -> no clear button
+      // Search starts as an icon and opens a focused field.
+      expect(find.byType(TextField), findsNothing);
+      await tester.tap(find.byTooltip('Search...'));
+      await tester.pumpAndSettle();
       expect(find.byType(TextField), findsOneWidget);
       expect(find.byIcon(Icons.close_rounded), findsNothing);
 
@@ -106,7 +109,9 @@ void main() {
       expect(controller.text, isEmpty);
       expect(find.byIcon(Icons.close_rounded), findsNothing);
 
-      // Enter text and press Escape
+      // Reopen after clearing, then enter text and press Escape.
+      await tester.tap(find.byTooltip('Search...'));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'testing escape');
       await tester.pumpAndSettle();
       expect(controller.text, 'testing escape');

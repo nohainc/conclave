@@ -25,8 +25,6 @@ class ExecutionStatusPopover extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final borderColor =
         isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
-    final surfaceColor =
-        isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface;
     final cardBg = isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper;
     final inkColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
     final mutedInk =
@@ -38,20 +36,23 @@ class ExecutionStatusPopover extends StatelessWidget {
 
     return Dialog(
       backgroundColor: Colors.transparent,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       alignment: Alignment.topRight,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
           width: 380,
           margin: const EdgeInsets.only(top: 52, right: 12),
           decoration: BoxDecoration(
-            color: surfaceColor,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: borderColor),
+            color: ConclaveMenuStyle.background(isDark),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: ConclaveColors.navigationBorder(isDark)),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
+                color: ConclaveMenuStyle.shadow(isDark),
                 blurRadius: 16,
                 offset: const Offset(0, 8),
               ),

@@ -200,13 +200,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     final actions = _buildActions();
 
     return Dialog(
-      backgroundColor:
-          isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-            color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine),
-      ),
+      constraints: ConclaveDialogStyle.large,
       child: Focus(
         autofocus: true,
         onKeyEvent: (node, event) {

@@ -139,12 +139,12 @@ class DiffViewer extends StatelessWidget {
       bgColor = isDark
           ? ConclaveBrand.successWashDark.withValues(alpha: 0.4)
           : ConclaveBrand.successWash;
-      textColor = isDark ? const Color(0xff86efac) : const Color(0xff15803d);
+      textColor = ConclaveColors.successText(isDark);
     } else if (line.startsWith('-')) {
       bgColor = isDark
           ? ConclaveBrand.errorWashDark.withValues(alpha: 0.4)
           : ConclaveBrand.errorWash;
-      textColor = isDark ? const Color(0xfffca5a5) : const Color(0xffb91c1c);
+      textColor = ConclaveColors.errorText(isDark);
     } else if (line.startsWith('@@')) {
       bgColor = isDark
           ? ConclaveBrand.accentWashDark.withValues(alpha: 0.4)

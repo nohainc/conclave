@@ -1019,10 +1019,11 @@ class _OfflineConnectivityIndicator extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: const Color(0xfff59e0b).withValues(alpha: 0.12),
+        color: ConclaveColors.warningSoft(
+            Theme.of(context).brightness == Brightness.dark),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: const Color(0xfff59e0b).withValues(alpha: 0.35),
+          color: ConclaveColors.warning.withValues(alpha: 0.35),
           width: 1,
         ),
       ),
@@ -1033,17 +1034,18 @@ class _OfflineConnectivityIndicator extends StatelessWidget {
             width: 7,
             height: 7,
             decoration: const BoxDecoration(
-              color: Color(0xfff59e0b),
+              color: ConclaveColors.warning,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 6),
-          const Text(
+          Text(
             'Offline · Cached data',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Color(0xfff59e0b),
+              color: ConclaveColors.warningText(
+                  Theme.of(context).brightness == Brightness.dark),
               letterSpacing: 0.2,
             ),
           ),
@@ -1795,8 +1797,7 @@ class AxWhatsNewDialog extends StatelessWidget {
     ValueChanged<AxProductUpdate>? onOpenUpdateDetail,
     ValueChanged<AxProductUpdate>? onDismissUpdate,
   }) {
-    return showDialog<void>(
-      context: context,
+    return Navigator.of(context).push<void>(MaterialPageRoute(
       builder: (context) => AxWhatsNewDialog(
         updates: updates,
         readStates: readStates,
@@ -1804,7 +1805,7 @@ class AxWhatsNewDialog extends StatelessWidget {
         onOpenUpdateDetail: onOpenUpdateDetail,
         onDismissUpdate: onDismissUpdate,
       ),
-    );
+    ));
   }
 
   @override
@@ -1813,11 +1814,9 @@ class AxWhatsNewDialog extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final grouped = AxProductUpdateService.groupUpdatesByMonthYear(updates);
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+    return _UpdatesPageFrame(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 720),
+        constraints: const BoxConstraints(maxWidth: 720),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -1994,14 +1993,13 @@ class AxAiUpdatesDialog extends StatelessWidget {
     String? initialUpdateId,
     ValueChanged<AxAiCapabilityUpdate>? onOpenUpdate,
   }) =>
-      showDialog<void>(
-        context: context,
+      Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (context) => AxAiUpdatesDialog(
           updates: updates,
           initialUpdateId: initialUpdateId,
           onOpenUpdate: onOpenUpdate,
         ),
-      );
+      ));
 
   @override
   Widget build(BuildContext context) {
@@ -2015,11 +2013,9 @@ class AxAiUpdatesDialog extends StatelessWidget {
       ordered.insert(0, selected);
     }
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+    return _UpdatesPageFrame(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 640, maxHeight: 720),
+        constraints: const BoxConstraints(maxWidth: 720),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
@@ -2396,3 +2392,18 @@ const defaultAiCapabilityUpdates = [
     dateDisplay: 'Oct 2',
   ),
 ];
+
+/// What's new and AI updates are long reading content, so they open as a
+/// full page rather than a dialog. The content keeps its own header and
+/// close button, which pops the page.
+class _UpdatesPageFrame extends StatelessWidget {
+  const _UpdatesPageFrame({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: SafeArea(
+          child: Align(alignment: Alignment.topCenter, child: child),
+        ),
+      );
+}

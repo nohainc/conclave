@@ -9,6 +9,10 @@ import '../../ax/sync/ax_session_catalogs.dart';
 import '../../ax/sync/ax_workflow_configurations.dart';
 
 /// Fixed, Conclave-owned steps. Only execution preferences are editable here.
+///
+/// Shown as a full page (see [WorkflowEditor.open]) rather than a dialog:
+/// step editing is too large for a pop-up and must not be lost by an
+/// accidental click outside.
 class WorkflowEditor extends StatefulWidget {
   const WorkflowEditor(
       {super.key,
@@ -24,6 +28,12 @@ class WorkflowEditor extends StatefulWidget {
   final AxUserWorkflowConfiguration configuration;
   final AxSessionCatalogs catalogs;
   final AxWorkflowConfigurations cache;
+
+  /// Pushes the editor as a page and completes when it is closed.
+  static Future<void> open(BuildContext context, WorkflowEditor editor) =>
+      Navigator.of(context).push<void>(MaterialPageRoute(
+          builder: (_) => editor,
+          settings: const RouteSettings(name: 'workflow-editor')));
   @override
   State<WorkflowEditor> createState() => _WorkflowEditorState();
 }
@@ -118,96 +128,123 @@ class _WorkflowEditorState extends State<WorkflowEditor> {
             final visibleIssues = issues.entries
                 .where((entry) => !_hideValidationMessage(entry.value))
                 .toList();
-            return AlertDialog(
-              title: Text(widget.definition.name),
-              content: SizedBox(
-                  width: 480,
-                  child: SingleChildScrollView(
+            return Scaffold(
+              appBar: AppBar(
+                title: Text(widget.definition.name),
+                leading: IconButton(
+                    tooltip: 'Back',
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: busy ? null : () => Navigator.pop(context)),
+              ),
+              body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 720),
                       child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (!widget.stepsOnly) ...[
-                        SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Enabled'),
-                            value: enabled,
-                            subtitle: widget.definition.id == 'chat'
-                                ? const Text('Chat is always available.')
-                                : null,
-                            onChanged: busy || widget.definition.id == 'chat'
-                                ? null
-                                : (value) => setState(() => enabled = value)),
-                        Text('Default execution',
-                            style: Theme.of(context).textTheme.titleSmall),
-                        const SizedBox(height: 12),
-                        _selection(
-                            'defaults',
-                            defaults,
-                            const AxWorkflowSelection(),
-                            options,
-                            (value) => defaults = value),
-                        if (issues['defaults'] != null &&
-                            !_hideValidationMessage(issues['defaults']))
-                          _notice(issues['defaults']!, error: true),
-                        const SizedBox(height: 8),
-                      ],
-                      if (widget.stepsOnly) ...[
-                        Text('Workflow steps',
-                            style: Theme.of(context).textTheme.titleSmall),
-                        const SizedBox(height: 8),
-                        for (var index = 0; index < steps.length; index++)
-                          _step(index, steps[index], options,
-                              issues[steps[index].kind]),
-                      ] else
-                        ExpansionTile(
-                          key: const ValueKey('workflow-advanced'),
-                          tilePadding: EdgeInsets.zero,
-                          title: const Text('Advanced'),
-                          children: [
-                            const Divider(),
-                            const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text('Workflow steps',
-                                    style: TextStyle(
-                                        fontWeight: FontWeight.w600))),
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (!widget.stepsOnly) ...[
+                            SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: const Text('Enabled'),
+                                value: enabled,
+                                subtitle: widget.definition.id == 'chat'
+                                    ? const Text('Chat is always available.')
+                                    : null,
+                                onChanged:
+                                    busy || widget.definition.id == 'chat'
+                                        ? null
+                                        : (value) =>
+                                            setState(() => enabled = value)),
+                            Text('Default execution',
+                                style: Theme.of(context).textTheme.titleSmall),
+                            const SizedBox(height: 12),
+                            _selection(
+                                'defaults',
+                                defaults,
+                                const AxWorkflowSelection(),
+                                options,
+                                (value) => defaults = value),
+                            if (issues['defaults'] != null &&
+                                !_hideValidationMessage(issues['defaults']))
+                              _notice(issues['defaults']!, error: true),
+                            const SizedBox(height: 8),
+                          ],
+                          if (widget.stepsOnly) ...[
+                            Text('Workflow steps',
+                                style: Theme.of(context).textTheme.titleSmall),
                             const SizedBox(height: 8),
                             for (var index = 0; index < steps.length; index++)
                               _step(index, steps[index], options,
                                   issues[steps[index].kind]),
-                          ],
-                        ),
-                      if (visibleIssues.isNotEmpty)
-                        _notice(
-                            'Resolve incompatible choices before saving.\n${visibleIssues.where((entry) => entry.key != 'defaults').map((entry) => '${_title(entry.key)}: ${entry.value}').join('\n')}',
-                            error: true),
-                      if (state.error != null)
-                        _notice(
-                            'Worker details could not be refreshed. Saved selections are retained.'),
-                      if (error != null) _notice(error!, error: true),
-                    ],
-                  ))),
-              actions: [
-                if (!widget.stepsOnly)
-                  TextButton(
-                      key: const ValueKey('reset-workflow'),
-                      onPressed: busy ? null : () => _save(reset: true),
-                      child: Text(widget.cache.spaceId == null ||
-                              widget.cache.engine
-                                      .peek(widget.cache.workspaceQuery)
-                                      .data
-                                      ?.inherited ==
-                                  false
-                          ? 'Reset'
-                          : 'Use global defaults')),
-                TextButton(
-                    onPressed: busy ? null : () => Navigator.pop(context),
-                    child: const Text('Cancel')),
-                FilledButton(
-                    key: const ValueKey('save-workflow'),
-                    onPressed: busy || issues.isNotEmpty ? null : _save,
-                    child: Text(busy ? 'Saving…' : 'Save')),
-              ],
+                          ] else
+                            ExpansionTile(
+                              key: const ValueKey('workflow-advanced'),
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text('Advanced'),
+                              children: [
+                                const Divider(),
+                                const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text('Workflow steps',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w600))),
+                                const SizedBox(height: 8),
+                                for (var index = 0;
+                                    index < steps.length;
+                                    index++)
+                                  _step(index, steps[index], options,
+                                      issues[steps[index].kind]),
+                              ],
+                            ),
+                          if (visibleIssues.isNotEmpty)
+                            _notice(
+                                'Resolve incompatible choices before saving.\n${visibleIssues.where((entry) => entry.key != 'defaults').map((entry) => '${_title(entry.key)}: ${entry.value}').join('\n')}',
+                                error: true),
+                          if (state.error != null)
+                            _notice(
+                                'Worker details could not be refreshed. Saved selections are retained.'),
+                          if (error != null) _notice(error!, error: true),
+                          const SizedBox(height: 8),
+                          Wrap(
+                              alignment: WrapAlignment.end,
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                if (!widget.stepsOnly)
+                                  TextButton(
+                                      key: const ValueKey('reset-workflow'),
+                                      onPressed: busy
+                                          ? null
+                                          : () => _save(reset: true),
+                                      child: Text(
+                                          widget.cache.spaceId == null ||
+                                                  widget.cache.engine
+                                                          .peek(widget.cache
+                                                              .workspaceQuery)
+                                                          .data
+                                                          ?.inherited ==
+                                                      false
+                                              ? 'Reset'
+                                              : 'Use global defaults')),
+                                TextButton(
+                                    onPressed: busy
+                                        ? null
+                                        : () => Navigator.pop(context),
+                                    child: const Text('Cancel')),
+                                FilledButton(
+                                    key: const ValueKey('save-workflow'),
+                                    onPressed: busy || issues.isNotEmpty
+                                        ? null
+                                        : _save,
+                                    child: Text(busy ? 'Saving…' : 'Save')),
+                              ]),
+                        ],
+                      ),
+                    ),
+                  )),
             );
           },
         ),

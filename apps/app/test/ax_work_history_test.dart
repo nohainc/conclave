@@ -483,7 +483,7 @@ void main() {
         requests: List.generate(
             50, (i) => request('a${i.toString().padLeft(3, '0')}'))));
     await tester.pumpAndSettle();
-    expect(controller.offset, greaterThan(0));
+    expect(controller.position.extentBefore, greaterThan(0));
     expect(cache.peek('w').requests.length, 100);
     await tester.drag(history, const Offset(0, 18000));
     await tester.pumpAndSettle();

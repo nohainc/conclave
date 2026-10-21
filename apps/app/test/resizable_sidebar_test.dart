@@ -15,13 +15,13 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: ResizableSidebar(
-          width: 200,
+          width: 180,
           onWidthChanged: (_) {},
           child: const ColoredBox(color: Colors.black),
         ),
       ),
     ));
-    expect(tester.getSize(find.byType(ResizableSidebar)).width, 220);
+    expect(tester.getSize(find.byType(ResizableSidebar)).width, 200);
     final handle = find.byKey(const ValueKey('sidebar-resize-handle'));
     final line = find.byKey(const ValueKey('sidebar-resize-line'));
     Color? lineColor() => tester.widget<Container>(line).color;
@@ -63,11 +63,11 @@ void main() {
     await tester.pumpAndSettle();
     final sidebar = find.byType(ResizableSidebar);
     final handle = find.byKey(const ValueKey('sidebar-resize-handle'));
-    expect(tester.getSize(sidebar).width, 220);
+    expect(tester.getSize(sidebar).width, 200);
 
     await tester.drag(handle, const Offset(-300, 0));
     await tester.pumpAndSettle();
-    expect(tester.getSize(sidebar).width, 220);
+    expect(tester.getSize(sidebar).width, 200);
     expect(tester.takeException(), isNull);
     expect(find.byTooltip('New Space'), findsOneWidget);
     expect(find.byTooltip('Notifications'), findsOneWidget);
@@ -76,30 +76,30 @@ void main() {
     await tester.tap(handle);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
-    expect(tester.getSize(sidebar).width, 230);
+    expect(tester.getSize(sidebar).width, 210);
     await tester.sendKeyEvent(LogicalKeyboardKey.end);
     await tester.pumpAndSettle();
     expect(tester.getSize(sidebar).width, 300);
     await tester.sendKeyEvent(LogicalKeyboardKey.home);
     await tester.pumpAndSettle();
-    expect(tester.getSize(sidebar).width, 220);
+    expect(tester.getSize(sidebar).width, 200);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
-    expect(tester.getSize(sidebar).width, 220);
+    expect(tester.getSize(sidebar).width, 200);
 
     await tester.drag(handle, const Offset(30, 0));
     await tester.pumpAndSettle();
-    expect(tester.getSize(sidebar).width, 250);
+    expect(tester.getSize(sidebar).width, 230);
     await tester.tap(find.byTooltip('Hide sidebar'));
     await tester.pumpAndSettle();
     expect(sidebar, findsNothing);
     await tester.tap(find.byTooltip('Expand sidebar'));
     await tester.pumpAndSettle();
-    expect(tester.getSize(sidebar).width, 250);
+    expect(tester.getSize(sidebar).width, 230);
 
     await tester.tap(find.byTooltip('Profile & Settings'));
     await tester.pumpAndSettle();
-    expect(tester.getSize(sidebar).width, 250);
+    expect(tester.getSize(sidebar).width, 230);
     await tester.drag(handle, const Offset(300, 0));
     await tester.pumpAndSettle();
     expect(tester.getSize(sidebar).width, 300);

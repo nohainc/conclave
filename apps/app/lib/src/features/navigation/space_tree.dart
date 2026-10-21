@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../common/quiet_notices.dart';
+import '../common/thread_dialogs.dart';
 
 import 'package:flutter/material.dart';
 
@@ -138,10 +139,11 @@ class SpaceTree extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const Icon(
+                  Icon(
                     Icons.chevron_right_rounded,
                     size: 14,
-                    color: Colors.white54,
+                    color: ConclaveColors.navigationTextMuted(
+                        Theme.of(context).brightness == Brightness.dark),
                   ),
                 ],
               ),
@@ -149,37 +151,39 @@ class SpaceTree extends StatelessWidget {
           ),
         ],
         if (shellContext.spaces.isEmpty && invitations.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Text(
               'No spaces yet',
               style: TextStyle(
                 fontSize: 11.5,
-                color: Colors.white38,
+                color: ConclaveColors.navigationTextMuted(
+                    Theme.of(context).brightness == Brightness.dark),
               ),
             ),
           ),
         // Pinned Spaces lead the list, without a group of their own.
         ...pinnedSpaces.map((space) => _buildSpaceItem(context, space)),
         if (ownedSpaces.isNotEmpty) ...[
-          if (sharedSpaces.isNotEmpty) _groupLabel('YOUR SPACES'),
+          if (sharedSpaces.isNotEmpty) _groupLabel(context, 'YOUR SPACES'),
           ...ownedSpaces.map((space) => _buildSpaceItem(context, space)),
         ],
         if (sharedSpaces.isNotEmpty) ...[
-          _groupLabel('SHARED WITH YOU'),
+          _groupLabel(context, 'SHARED WITH YOU'),
           ...sharedSpaces.map((space) => _buildSpaceItem(context, space)),
         ],
       ],
     );
   }
 
-  Widget _groupLabel(String label) => Padding(
+  Widget _groupLabel(BuildContext context, String label) => Padding(
       padding: const EdgeInsets.fromLTRB(10, 12, 8, 6),
       child: Text(label,
-          style: const TextStyle(
+          style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
-              color: Colors.white54)));
+              color: ConclaveColors.navigationTextMuted(
+                  Theme.of(context).brightness == Brightness.dark))));
 
   Widget _buildSpaceItem(BuildContext context, AxSpace space) {
     final cache = shellContext.spaceThreads;
@@ -222,7 +226,8 @@ class SpaceTree extends StatelessWidget {
           height: _sidebarRowHeight,
           decoration: BoxDecoration(
             color: isSpaceFocused
-                ? ConclaveColors.navigationSelected
+                ? ConclaveColors.navigationSelectedColor(
+                    Theme.of(context).brightness == Brightness.dark)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
@@ -260,7 +265,9 @@ class SpaceTree extends StatelessWidget {
                           ConclaveFolderIcon(
                             isExpanded: isExpanded,
                             size: 16,
-                            color: Colors.white70,
+                            color: ConclaveColors.navigationTextMuted(
+                                Theme.of(context).brightness ==
+                                    Brightness.dark),
                           ),
                           if (!isExpanded)
                             Positioned(
@@ -282,18 +289,21 @@ class SpaceTree extends StatelessWidget {
                       space.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: ConclaveColors.navigationTextMuted(
+                            Theme.of(context).brightness == Brightness.dark),
                         fontSize: 12.5,
                         fontWeight: FontWeight.w400,
                       ),
                     ),
                   ),
                   if (space.isPinned && isSpaceFocused)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
                       child: Icon(Icons.push_pin_outlined,
-                          size: 12, color: Colors.white38),
+                          size: 12,
+                          color: ConclaveColors.navigationTextMuted(
+                              Theme.of(context).brightness == Brightness.dark)),
                     ),
                   isSpaceFocused
                       ? _spaceMenu(context, space)
@@ -304,10 +314,13 @@ class SpaceTree extends StatelessWidget {
           ),
         ),
         if (isExpanded && loading)
-          const Padding(
-              padding: EdgeInsets.fromLTRB(34, 6, 10, 6),
+          Padding(
+              padding: const EdgeInsets.fromLTRB(34, 6, 10, 6),
               child: Text('Loading Threads…',
-                  style: TextStyle(color: Colors.white60, fontSize: 11.5))),
+                  style: TextStyle(
+                      color: ConclaveColors.navigationTextMuted(
+                          Theme.of(context).brightness == Brightness.dark),
+                      fontSize: 11.5))),
         if (isExpanded && error != null)
           TextButton(
               onPressed: () => shellContext.spaceThreads
@@ -337,7 +350,8 @@ class SpaceTree extends StatelessWidget {
                   padding: const EdgeInsets.only(left: 8, right: 2),
                   decoration: BoxDecoration(
                     color: isThreadSelected
-                        ? ConclaveColors.navigationSelected
+                        ? ConclaveColors.navigationSelectedColor(
+                            Theme.of(context).brightness == Brightness.dark)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -358,8 +372,10 @@ class SpaceTree extends StatelessWidget {
                           thread.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white60,
+                          style: TextStyle(
+                            color: ConclaveColors.navigationTextMuted(
+                                Theme.of(context).brightness ==
+                                    Brightness.dark),
                             fontSize: 11.5,
                             fontWeight: FontWeight.w400,
                           ),
@@ -372,10 +388,13 @@ class SpaceTree extends StatelessWidget {
                       // Like the menu, only on the active row; same spot as
                       // the Space pin, just left of the menu slot.
                       if (thread.isPinned && isThreadSelected)
-                        const Padding(
-                          padding: EdgeInsets.only(right: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
                           child: Icon(Icons.push_pin_outlined,
-                              size: 12, color: Colors.white38),
+                              size: 12,
+                              color: ConclaveColors.navigationTextMuted(
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark)),
                         ),
                       isThreadSelected
                           ? _threadMenu(
@@ -399,15 +418,18 @@ class SpaceTree extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(34, 8, 10, 4),
             child: Row(
               children: [
-                const Icon(Icons.archive_outlined,
-                    size: 12, color: Colors.white38),
+                Icon(Icons.archive_outlined,
+                    size: 12,
+                    color: ConclaveColors.navigationTextMuted(
+                        Theme.of(context).brightness == Brightness.dark)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'Archived (${archivedThreads.length})',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10.5,
-                      color: Colors.white38,
+                      color: ConclaveColors.navigationTextMuted(
+                          Theme.of(context).brightness == Brightness.dark),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -436,7 +458,8 @@ class SpaceTree extends StatelessWidget {
                   padding: EdgeInsets.only(left: narrow ? 16 : 48, right: 2),
                   decoration: BoxDecoration(
                     color: isThreadSelected
-                        ? ConclaveColors.navigationSelected
+                        ? ConclaveColors.navigationSelectedColor(
+                            Theme.of(context).brightness == Brightness.dark)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(6),
                   ),
@@ -457,8 +480,10 @@ class SpaceTree extends StatelessWidget {
                           thread.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white38,
+                          style: TextStyle(
+                            color: ConclaveColors.navigationTextMuted(
+                                Theme.of(context).brightness ==
+                                    Brightness.dark),
                             fontSize: 11,
                             fontWeight: FontWeight.w400,
                           ),
@@ -485,57 +510,12 @@ class SpaceTree extends StatelessWidget {
     final group = isPinnedHere ? pinnedOrder : const <String>[];
     final canReorder = isPinnedHere && onReorderPinnedThreads != null;
     final position = group.indexOf(thread.id);
-    final isDark = ThemeData.estimateBrightnessForColor(
-            ConclaveColors.navigationBackgroundDark) ==
-        Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isArchived =
         thread.archived || thread.status.toLowerCase() == 'archived';
-    final menuStyle = MenuStyle(
-      backgroundColor: WidgetStatePropertyAll(
-        ConclaveColors.navigationBackground(isDark),
-      ),
-      surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-      elevation: const WidgetStatePropertyAll(12),
-      shadowColor: WidgetStatePropertyAll(
-        Colors.black.withValues(alpha: isDark ? 0.7 : 0.18),
-      ),
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-            color: ConclaveColors.navigationBorder(isDark),
-            width: 1,
-          ),
-        ),
-      ),
-      padding: const WidgetStatePropertyAll(
-        EdgeInsets.symmetric(vertical: 6, horizontal: 6),
-      ),
-    );
-
-    ButtonStyle itemStyle({bool isDestructive = false}) {
-      return ButtonStyle(
-        foregroundColor:
-            WidgetStatePropertyAll(ConclaveColors.navigationText(isDark)),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        ),
-        minimumSize: const WidgetStatePropertyAll(Size(196, 36)),
-        shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        overlayColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.hovered) ||
-              states.contains(WidgetState.focused)) {
-            if (isDestructive) {
-              return ConclaveColors.error.withValues(alpha: 0.12);
-            }
-            return ConclaveColors.navigationHover(isDark);
-          }
-          return null;
-        }),
-      );
-    }
+    final menuStyle = ConclaveMenuStyle.surface(isDark);
+    ButtonStyle itemStyle({bool isDestructive = false}) =>
+        ConclaveMenuStyle.item(isDark, isDestructive: isDestructive);
 
     Widget divider() => Padding(
           padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
@@ -546,7 +526,7 @@ class SpaceTree extends StatelessWidget {
           ),
         );
 
-    final menuIconColor = isDark ? Colors.white70 : Colors.black87;
+    final menuIconColor = ConclaveColors.textPrimary(isDark);
 
     void select(String action) =>
         _handleThreadMenuItem(context, space, thread, action);
@@ -563,9 +543,10 @@ class SpaceTree extends StatelessWidget {
                   message: 'Thread menu',
                   excludeFromSemantics: true,
                   child: IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.more_vert,
-                      color: Colors.white60,
+                      color: ConclaveColors.navigationTextMuted(
+                          Theme.of(context).brightness == Brightness.dark),
                       size: 18,
                     ),
                     splashRadius: 14,
@@ -667,9 +648,7 @@ class SpaceTree extends StatelessWidget {
   }
 
   Widget _spaceMenu(BuildContext context, AxSpace space) {
-    final isDark = ThemeData.estimateBrightnessForColor(
-            ConclaveColors.navigationBackgroundDark) ==
-        Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final pinnedOrder = ([
       for (final item in shellContext.spaces)
         if (item.isPinned) item
@@ -678,49 +657,9 @@ class SpaceTree extends StatelessWidget {
         .toList();
     final pinnedPosition = pinnedOrder.indexOf(space.id);
     final canReorderPins = space.isPinned && onReorderPinnedSpaces != null;
-    final menuStyle = MenuStyle(
-      backgroundColor: WidgetStatePropertyAll(
-        ConclaveColors.navigationBackground(isDark),
-      ),
-      surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-      elevation: const WidgetStatePropertyAll(12),
-      shadowColor: WidgetStatePropertyAll(
-        Colors.black.withValues(alpha: isDark ? 0.7 : 0.18),
-      ),
-      shape: WidgetStatePropertyAll(
-        RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-            color: ConclaveColors.navigationBorder(isDark),
-            width: 1,
-          ),
-        ),
-      ),
-      padding: const WidgetStatePropertyAll(
-        EdgeInsets.symmetric(vertical: 6, horizontal: 6),
-      ),
-    );
-
-    ButtonStyle itemStyle({bool isDestructive = false}) => ButtonStyle(
-          foregroundColor:
-              WidgetStatePropertyAll(ConclaveColors.navigationText(isDark)),
-          padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          ),
-          minimumSize: const WidgetStatePropertyAll(Size(196, 36)),
-          shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          overlayColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.hovered) ||
-                states.contains(WidgetState.focused)) {
-              return isDestructive
-                  ? ConclaveColors.error.withValues(alpha: 0.12)
-                  : ConclaveColors.navigationHover(isDark);
-            }
-            return null;
-          }),
-        );
+    final menuStyle = ConclaveMenuStyle.surface(isDark);
+    ButtonStyle itemStyle({bool isDestructive = false}) =>
+        ConclaveMenuStyle.item(isDark, isDestructive: isDestructive);
 
     Widget divider() => Padding(
           padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
@@ -730,7 +669,7 @@ class SpaceTree extends StatelessWidget {
           ),
         );
 
-    final iconColor = isDark ? Colors.white70 : Colors.black87;
+    final iconColor = ConclaveColors.textPrimary(isDark);
     void select(String action) {
       switch (action) {
         case 'pin':
@@ -760,8 +699,10 @@ class SpaceTree extends StatelessWidget {
                 message: 'Space menu',
                 excludeFromSemantics: true,
                 child: IconButton(
-                  icon: const Icon(Icons.more_vert,
-                      color: Colors.white60, size: 18),
+                  icon: Icon(Icons.more_vert,
+                      color: ConclaveColors.navigationTextMuted(
+                          Theme.of(context).brightness == Brightness.dark),
+                      size: 18),
                   splashRadius: 14,
                   padding: EdgeInsets.zero,
                   constraints:
@@ -864,15 +805,13 @@ class SpaceTree extends StatelessWidget {
   }
 
   Future<void> _showRenameDialog(BuildContext context, AxThread thread) async {
-    final name = await showDialog<String>(
-      context: context,
-      builder: (_) => _RenameThreadDialog(initialTitle: thread.title),
+    final name = await showRenameThreadDialog(
+      context,
+      currentName: thread.title,
     );
-    if (name == null || name.trim().isEmpty || name.trim() == thread.title) {
-      return;
-    }
+    if (name == null) return;
     try {
-      await onRenameThread?.call(thread, name.trim());
+      await onRenameThread?.call(thread, name);
     } catch (error) {
       if (context.mounted) {
         _showThreadActionError(context, 'rename', error);
@@ -890,6 +829,7 @@ class SpaceTree extends StatelessWidget {
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        constraints: ConclaveDialogStyle.small,
         title: Text(title),
         content: Text(content),
         actions: [
@@ -918,29 +858,7 @@ class SpaceTree extends StatelessWidget {
 
   Future<void> _showDeleteThreadDialog(
       BuildContext context, AxThread thread) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Thread'),
-        content: const Text(
-          'Permanently delete this Thread and all its history? This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: ConclaveColors.error,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
+    if (!await confirmDeleteThread(context)) return;
     try {
       await onDeleteThread?.call(thread);
     } catch (error) {
@@ -1001,69 +919,6 @@ class SpaceTree extends StatelessWidget {
   }
 }
 
-class _RenameThreadDialog extends StatefulWidget {
-  const _RenameThreadDialog({required this.initialTitle});
-
-  final String initialTitle;
-
-  @override
-  State<_RenameThreadDialog> createState() => _RenameThreadDialogState();
-}
-
-class _RenameThreadDialogState extends State<_RenameThreadDialog> {
-  late final TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialTitle);
-    _controller.addListener(_onTextChanged);
-  }
-
-  @override
-  void dispose() {
-    _controller
-      ..removeListener(_onTextChanged)
-      ..dispose();
-    super.dispose();
-  }
-
-  void _onTextChanged() => setState(() {});
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Rename Thread'),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        maxLines: 1,
-        textInputAction: TextInputAction.done,
-        onSubmitted: (value) {
-          if (value.trim().isNotEmpty) {
-            Navigator.pop(context, value);
-          }
-        },
-        decoration: const InputDecoration(
-          labelText: 'Thread name',
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _controller.text.trim().isEmpty
-              ? null
-              : () => Navigator.pop(context, _controller.text),
-          child: const Text('Rename'),
-        ),
-      ],
-    );
-  }
-}
-
 /// Vector folder icon rendering clean line-art closed/open folder states.
 class ConclaveFolderIcon extends StatelessWidget {
   const ConclaveFolderIcon({
@@ -1079,7 +934,10 @@ class ConclaveFolderIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = color ?? IconTheme.of(context).color ?? Colors.white70;
+    final iconColor = color ??
+        IconTheme.of(context).color ??
+        ConclaveColors.navigationTextMuted(
+            Theme.of(context).brightness == Brightness.dark);
     return CustomPaint(
       size: Size(size, size),
       painter: _FolderPainter(

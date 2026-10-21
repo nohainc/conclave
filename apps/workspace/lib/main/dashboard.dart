@@ -169,12 +169,10 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                             color: isConnected
-                                ? (theme.brightness == Brightness.dark
-                                    ? const Color(0xff86efac)
-                                    : const Color(0xff15803d))
-                                : (theme.brightness == Brightness.dark
-                                    ? const Color(0xfffcd34d)
-                                    : const Color(0xffb45309)),
+                                ? ConclaveColors.successText(
+                                    theme.brightness == Brightness.dark)
+                                : ConclaveColors.warningText(
+                                    theme.brightness == Brightness.dark),
                           ),
                         ),
                       ),

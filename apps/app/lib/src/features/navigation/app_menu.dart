@@ -34,10 +34,7 @@ class GlobalAppMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activeThemeMode = shellContext.themeMode;
-    // The sidebar uses its dark navigation surface in both app themes.
-    final isDark = ThemeData.estimateBrightnessForColor(
-            ConclaveColors.navigationBackgroundDark) ==
-        Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final menuStyle = ConclaveMenuStyle.surface(isDark);
     ButtonStyle itemStyle({bool isDestructive = false}) =>
@@ -55,7 +52,7 @@ class GlobalAppMenu extends StatelessWidget {
           ),
         );
 
-    final menuIconColor = isDark ? Colors.white70 : Colors.black87;
+    final menuIconColor = ConclaveColors.textPrimary(isDark);
 
     return MenuAnchor(
       style: menuStyle,
@@ -66,9 +63,10 @@ class GlobalAppMenu extends StatelessWidget {
                 message: 'Application menu',
                 excludeFromSemantics: true,
                 child: IconButton(
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.menu_rounded,
-                    color: Colors.white60,
+                    color: ConclaveColors.navigationTextMuted(
+                        Theme.of(context).brightness == Brightness.dark),
                     size: 18,
                   ),
                   splashRadius: 14,
@@ -148,8 +146,8 @@ class GlobalAppMenu extends StatelessWidget {
                     : Icons.circle_outlined,
                 size: 15,
                 color: activeThemeMode == ThemeMode.system
-                    ? (isDark ? Colors.white : Colors.black87)
-                    : (isDark ? Colors.white38 : Colors.black38),
+                    ? (ConclaveColors.textPrimary(isDark))
+                    : (ConclaveColors.neutral),
               ),
               onPressed: () {
                 if (onSetThemeMode != null) {
@@ -171,8 +169,8 @@ class GlobalAppMenu extends StatelessWidget {
                     : Icons.circle_outlined,
                 size: 15,
                 color: activeThemeMode == ThemeMode.light
-                    ? (isDark ? Colors.white : Colors.black87)
-                    : (isDark ? Colors.white38 : Colors.black38),
+                    ? (ConclaveColors.textPrimary(isDark))
+                    : (ConclaveColors.neutral),
               ),
               onPressed: () {
                 if (onSetThemeMode != null) {
@@ -194,8 +192,8 @@ class GlobalAppMenu extends StatelessWidget {
                     : Icons.circle_outlined,
                 size: 15,
                 color: activeThemeMode == ThemeMode.dark
-                    ? (isDark ? Colors.white : Colors.black87)
-                    : (isDark ? Colors.white38 : Colors.black38),
+                    ? (ConclaveColors.textPrimary(isDark))
+                    : (ConclaveColors.neutral),
               ),
               onPressed: () {
                 if (onSetThemeMode != null) {

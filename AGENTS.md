@@ -75,8 +75,10 @@ Every implementation task must report:
 - Keep service registration behind `WorkspaceServiceManager`. Put launchd,
   Service Control Manager/systemd, native IPC, and platform secret-store details
   in platform adapters; the shared Dart runtime must not import Apple
-  frameworks. Windows/Linux service adapters are not in scope until separately
-  requested, with Windows user-session and CLI-credential ownership decided.
+  frameworks. Linux/Windows adapters follow
+  `docs/decisions/ADR-021-workspace-service-linux-windows.md` (systemd user
+  unit/foreground mode; Windows per-user logon task, not SCM; CLIs run as the
+  user who owns their logins).
 - For Workspace Service changes, run focused service/runtime tests and
   `scripts/check-workspace-service.sh`; run the Workspace and direct Worker
   Engine component validations when the environment permits. macOS launchd,

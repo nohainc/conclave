@@ -1,3 +1,4 @@
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
@@ -130,8 +131,10 @@ class WorkspacesOverview extends StatelessWidget {
                                   Icons.circle,
                                   size: 7,
                                   color: online
-                                      ? const Color(0xff3ca879)
-                                      : Colors.grey,
+                                      ? ConclaveColors.successText(
+                                          Theme.of(context).brightness ==
+                                              Brightness.dark)
+                                      : ConclaveColors.neutral,
                                 ),
                                 const SizedBox(width: 5),
                                 Flexible(
@@ -142,7 +145,9 @@ class WorkspacesOverview extends StatelessWidget {
                                       fontSize: 12,
                                       fontWeight: FontWeight.w500,
                                       color: online
-                                          ? const Color(0xff3ca879)
+                                          ? ConclaveColors.successText(
+                                              Theme.of(context).brightness ==
+                                                  Brightness.dark)
                                           : theme.colorScheme.onSurfaceVariant,
                                     ),
                                   ),

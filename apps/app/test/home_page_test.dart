@@ -1426,12 +1426,14 @@ void main() {
     await tester.ensureVisible(find.text('See all').last);
     await tester.tap(find.text('See all').last);
     await tester.pumpAndSettle();
-    expect(find.text('AI updates'), findsNWidgets(2));
+    // AI updates open as a full page; Home is no longer visible behind it.
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('AI updates'), findsOneWidget);
     expect(find.text('New Worker execution options and model updates'),
         findsOneWidget);
-    expect(find.text('GPT-5 is available'), findsNWidgets(2));
+    expect(find.text('GPT-5 is available'), findsWidgets);
     expect(find.text('Use the newest reasoning model for demanding tasks.'),
-        findsNWidgets(2));
+        findsWidgets);
     expect(
         find.descendant(
             of: find.byType(AxAiUpdatesDialog),

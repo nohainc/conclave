@@ -1,3 +1,4 @@
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'controllers/profile_lab_controller.dart';
@@ -411,7 +412,7 @@ class _LocalBuildBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: const Color(0xFFB45309),
+        color: ConclaveColors.warningTextLight,
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),

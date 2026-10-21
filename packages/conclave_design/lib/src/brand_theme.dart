@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'colors.dart';
+import 'dialog_style.dart';
 import 'radius.dart';
 import 'typography.dart';
 import 'brand_assets.dart';
@@ -90,6 +91,7 @@ abstract final class ConclaveBrand {
       onPrimary: Colors.white,
       onPrimaryContainer: ConclaveColors.primaryPressed,
       onSurface: ConclaveColors.textPrimaryLight,
+      onSurfaceVariant: ConclaveColors.textSecondaryLight,
       onError: Colors.white,
       outline: ConclaveColors.borderLight,
       outlineVariant: ConclaveColors.borderLight,
@@ -131,8 +133,17 @@ abstract final class ConclaveBrand {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(ConclaveRadius.md),
           borderSide:
-              const BorderSide(color: ConclaveColors.primary, width: 1.5),
+              BorderSide(color: ConclaveColors.focusBorder(false), width: 1.5),
         ),
+        labelStyle: TextStyle(color: ConclaveColors.textSecondary(false)),
+        hintStyle: TextStyle(color: ConclaveColors.textSecondary(false)),
+        floatingLabelStyle:
+            WidgetStateTextStyle.resolveWith((states) => TextStyle(
+                color: states.contains(WidgetState.error)
+                    ? ConclaveColors.errorText(false)
+                    : states.contains(WidgetState.focused)
+                        ? ConclaveColors.focusLabel(false)
+                        : ConclaveColors.textSecondary(false))),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
@@ -141,6 +152,7 @@ abstract final class ConclaveBrand {
       outlinedButtonTheme: _outlinedButtonTheme(
           ConclaveColors.borderLight, ConclaveColors.primaryForegroundLight),
       textButtonTheme: _textButtonTheme(ConclaveColors.primaryForegroundLight),
+      dialogTheme: ConclaveDialogStyle.theme(false),
       chipTheme: _chipTheme(
           ConclaveColors.surfaceHoverLight, ConclaveColors.textPrimaryLight),
       snackBarTheme: SnackBarThemeData(
@@ -175,6 +187,7 @@ abstract final class ConclaveBrand {
       onPrimary: Colors.white,
       onPrimaryContainer: Colors.white,
       onSurface: ConclaveColors.textPrimaryDark,
+      onSurfaceVariant: ConclaveColors.textSecondaryDark,
       onError: Colors.white,
       outline: ConclaveColors.borderDark,
       outlineVariant: ConclaveColors.borderDark,
@@ -216,8 +229,17 @@ abstract final class ConclaveBrand {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(ConclaveRadius.md),
           borderSide:
-              const BorderSide(color: ConclaveColors.primary, width: 1.5),
+              BorderSide(color: ConclaveColors.focusBorder(true), width: 1.5),
         ),
+        labelStyle: TextStyle(color: ConclaveColors.textSecondary(true)),
+        hintStyle: TextStyle(color: ConclaveColors.textSecondary(true)),
+        floatingLabelStyle:
+            WidgetStateTextStyle.resolveWith((states) => TextStyle(
+                color: states.contains(WidgetState.error)
+                    ? ConclaveColors.errorText(true)
+                    : states.contains(WidgetState.focused)
+                        ? ConclaveColors.focusLabel(true)
+                        : ConclaveColors.textSecondary(true))),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
@@ -226,6 +248,7 @@ abstract final class ConclaveBrand {
       outlinedButtonTheme: _outlinedButtonTheme(
           ConclaveColors.borderDark, ConclaveColors.primaryForegroundDark),
       textButtonTheme: _textButtonTheme(ConclaveColors.primaryForegroundDark),
+      dialogTheme: ConclaveDialogStyle.theme(true),
       chipTheme: _chipTheme(
           ConclaveColors.surfaceHoverDark, ConclaveColors.textPrimaryDark),
       snackBarTheme: SnackBarThemeData(

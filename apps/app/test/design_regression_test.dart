@@ -94,8 +94,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Home brand logo/link is present
-      expect(find.text('Conclave AX'), findsOneWidget);
+      // The app mark remains the Home link without a wordmark.
+      expect(find.byTooltip('Conclave AX — Home'), findsOneWidget);
+      expect(find.text('Conclave AX'), findsNothing);
 
       // Profile item at bottom
       expect(find.text('Vitalii Noha'), findsOneWidget);
@@ -163,7 +164,7 @@ void main() {
 
       final profileText = tester.widget<Text>(find.text('Vitalii Noha'));
       expect(profileText.style?.fontWeight, FontWeight.w600);
-      expect(profileText.style?.color, Colors.white);
+      expect(profileText.style?.color, ConclaveColors.navigationTextDark);
     });
 
     // 3. Status Badges & Semantic Tokens

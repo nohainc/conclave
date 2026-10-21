@@ -638,7 +638,7 @@ void main() {
     await tester.pumpAndSettle();
     final history = find.byKey(const ValueKey('chat-history-scroll'));
     final controller = tester.widget<CustomScrollView>(history).controller!;
-    expect(controller.offset, greaterThan(0));
+    expect(controller.position.extentBefore, greaterThan(0));
     final older = Completer<AxDiscussionPage>();
     source.queuedPages.add(older);
     await tester.drag(history, const Offset(0, 12000));
@@ -649,7 +649,7 @@ void main() {
         messages: List.generate(50,
             (i) => message('a${i.toString().padLeft(3, '0')}', 'Older $i'))));
     await tester.pumpAndSettle();
-    expect(controller.offset, greaterThan(0));
+    expect(controller.position.extentBefore, greaterThan(0));
     await tester.drag(history, const Offset(0, 12000));
     await tester.pumpAndSettle();
     expect(source.pages.length, 2);
@@ -703,7 +703,7 @@ void main() {
     source.server = [message('1', 'Original Chat')];
     await tester.pumpWidget(page('w'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Edit message'));
+    await tester.tap(find.byTooltip('Edit'));
     await tester.pumpAndSettle();
     await tester.enterText(
         find.widgetWithText(TextField, 'Original Chat'), 'Optimistic edit');

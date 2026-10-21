@@ -477,8 +477,7 @@ void main() {
                       const ValueKey('composer-leading-rail-background')),
                   matching: find.byType(ColoredBox)))
               .color,
-          Color.alphaBlend(Colors.black.withValues(alpha: 0.12),
-              ConclaveColors.composerBackgroundLight));
+          ConclaveColors.composerRailLight);
     }
 
     expectCentered();

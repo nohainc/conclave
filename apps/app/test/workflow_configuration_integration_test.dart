@@ -287,6 +287,8 @@ void main() {
                 threadViewStateStore: store,
                 onBackToSpace: () {},
                 onArchive: () {}))));
+    // The saved view is applied synchronously, before the first frame.
+    expect(find.text('remember this work'), findsOneWidget);
     await tester.pumpAndSettle();
     expect(find.textContaining('Second'), findsNothing);
     expect(find.textContaining('removed-model · Unavailable'), findsOneWidget);

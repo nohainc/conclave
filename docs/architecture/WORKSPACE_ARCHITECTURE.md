@@ -289,9 +289,19 @@ tests should be removed only after an equivalent boundary test exists.
 ## Future portability
 
 The shared service and protocol remain platform-independent Dart. macOS host
-registration is behind `WorkspaceServiceManager`; Windows and Linux adapters
-(SCM/systemd, named pipes/Unix sockets, and platform secret stores) are future
-work and are not part of this implementation.
+registration is behind `WorkspaceServiceManager`. Linux and Windows support is
+decided in [ADR-021](../decisions/ADR-021-workspace-service-linux-windows.md)
+and is being implemented in phases; only the macOS adapter exists today.
+
+- Linux: systemd user unit, or a foreground headless mode for containers;
+  Unix-domain socket IPC; Secret Service, `systemd-creds`, or a `0600` file;
+  XDG state directories.
+- Windows: per-user logon task in the interactive session (not a Service
+  Control Manager service); named-pipe IPC restricted to the owning user;
+  DPAPI secret store; `%LOCALAPPDATA%\Conclave\Workspace`.
+- On every platform the Service, Engine, and provider CLIs run as the same
+  user that owns the CLI logins; Conclave never manages provider credentials.
+- Headless hosts are managed through a `conclave-workspace` IPC client.
 
 ### Profile-declared model discovery
 

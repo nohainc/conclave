@@ -116,6 +116,7 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
           (await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
+                          constraints: ConclaveDialogStyle.small,
                           title: const Text('Change Workspace?'),
                           content: Text(inherit
                               ? 'This Space will follow your default Workspace. Its own workflow overrides are reset, and existing runs keep their recorded settings.'

@@ -18,151 +18,112 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
     }
   }
 
-  Future<void> _editSpaceDialog() async {
-    var name = widget.space.name;
-    var description = widget.space.description;
-    String? errorText;
+  void _startEditing() => _updateState(() {
+        _nameController.text = widget.space.name;
+        _descriptionController.text = widget.space.description;
+        _editError = null;
+        _editing = true;
+      });
 
-    final result = await showDialog<(String, String)>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          void submit() {
-            final trimmedName = name.trim();
-            if (trimmedName.isEmpty) {
-              setDialogState(() {
-                errorText = 'Space name cannot be empty.';
-              });
-              return;
-            }
-            Navigator.pop(
-              dialogContext,
-              (trimmedName, description.trim()),
-            );
-          }
+  void _cancelEditing() => _updateState(() {
+        _editing = false;
+        _editError = null;
+      });
 
-          return AlertDialog(
-            title: const Text('Edit Space'),
-            content: SizedBox(
-              width: 440,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextFormField(
-                      initialValue: name,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        labelText: 'Space Name',
-                        errorText: errorText,
-                      ),
-                      onChanged: (value) {
-                        name = value;
-                        if (errorText != null) {
-                          setDialogState(() => errorText = null);
-                        }
-                      },
-                      onFieldSubmitted: (_) => submit(),
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      initialValue: description,
-                      decoration: const InputDecoration(
-                        labelText: 'Description',
-                      ),
-                      maxLines: 2,
-                      onChanged: (value) => description = value,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: submit,
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    if (result == null) return;
-    try {
-      final updated = await _collaboration.editSpace(
-        widget.space,
-        name: result.$1,
-        description: result.$2,
-        instructions: widget.space.instructions,
-        settings: widget.space.settings,
-      );
-      if (!mounted) return;
-      _message('Space updated.');
-      widget.onSpaceUpdated?.call(updated);
-    } catch (error) {
-      if (mounted) {
-        _message(error.toString());
-      }
+  Future<void> _saveEdits() async {
+    final name = _nameController.text.trim();
+    final description = _descriptionController.text.trim();
+    if (name.isEmpty) {
+      _updateState(() => _editError = 'Space name cannot be empty.');
+      return;
     }
+    _updateState(() {
+      _savingEdits = true;
+      _editError = null;
+    });
+    String? error;
+    try {
+      if (widget.onSaveEdits != null) {
+        error = await widget.onSaveEdits!(name, description);
+      } else {
+        final updated = await _collaboration.editSpace(
+          widget.space,
+          name: name,
+          description: description,
+          instructions: widget.space.instructions,
+          settings: widget.space.settings,
+        );
+        widget.onSpaceUpdated?.call(updated);
+      }
+    } catch (failure) {
+      error = failure.toString();
+    }
+    if (!mounted) return;
+    _updateState(() {
+      _savingEdits = false;
+      _editError = error;
+      if (error == null) _editing = false;
+    });
+  }
+
+  /// Inline replacement for the old Edit Space dialog.
+  Widget _spaceEditForm() => Padding(
+        key: const ValueKey('space-edit-form'),
+        padding: const EdgeInsets.only(right: 40),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Edit Space', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _nameController,
+              autofocus: true,
+              enabled: !_savingEdits,
+              decoration: InputDecoration(
+                labelText: 'Space Name',
+                errorText: _editError,
+              ),
+              onChanged: (_) {
+                if (_editError != null) _updateState(() => _editError = null);
+              },
+              onSubmitted: (_) => _saveEdits(),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _descriptionController,
+              enabled: !_savingEdits,
+              decoration: const InputDecoration(labelText: 'Description'),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: _savingEdits ? null : _cancelEditing,
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _savingEdits ? null : _saveEdits,
+                  child: Text(_savingEdits ? 'Saving…' : 'Save'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+  bool _threadNameTaken(String name, {String? exceptId}) {
+    final lower = name.trim().toLowerCase();
+    return threads.any((thread) =>
+        thread.id != exceptId && thread.name.trim().toLowerCase() == lower);
   }
 
   Future<void> _createThread() async {
-    var name = '';
-    String? errorText;
-    final created = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          void submit() {
-            final trimmed = name.trim();
-            if (trimmed.isEmpty) return;
-            final exists = threads.any(
-              (w) => w.name.trim().toLowerCase() == trimmed.toLowerCase(),
-            );
-            if (exists) {
-              setDialogState(() {
-                errorText = 'A thread with this name already exists.';
-              });
-              return;
-            }
-            Navigator.pop(dialogContext, trimmed);
-          }
-
-          return AlertDialog(
-            title: const Text('Create Thread'),
-            content: TextField(
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: 'Thread name',
-                errorText: errorText,
-              ),
-              onChanged: (value) {
-                name = value;
-                if (errorText != null) {
-                  setDialogState(() => errorText = null);
-                }
-              },
-              onSubmitted: (_) => submit(),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: submit,
-                child: const Text('Create Thread'),
-              ),
-            ],
-          );
-        },
-      ),
+    final created = await showCreateThreadDialog(
+      context,
+      isNameTaken: (name) => _threadNameTaken(name),
     );
     if (created == null || created.isEmpty) return;
     try {
@@ -180,65 +141,12 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
   }
 
   Future<void> _editThread(AxThread thread) async {
-    var name = thread.name;
-    String? errorText;
-    final updatedName = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          void submit() {
-            final trimmed = name.trim();
-            if (trimmed.isEmpty) return;
-            final exists = threads.any(
-              (w) =>
-                  w.id != thread.id &&
-                  w.name.trim().toLowerCase() == trimmed.toLowerCase(),
-            );
-            if (exists) {
-              setDialogState(() {
-                errorText = 'A thread with this name already exists.';
-              });
-              return;
-            }
-            Navigator.pop(dialogContext, trimmed);
-          }
-
-          return AlertDialog(
-            title: const Text('Edit Thread'),
-            content: TextFormField(
-              initialValue: thread.name,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: 'Thread name',
-                errorText: errorText,
-              ),
-              onChanged: (value) {
-                name = value;
-                if (errorText != null) {
-                  setDialogState(() => errorText = null);
-                }
-              },
-              onFieldSubmitted: (_) => submit(),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: submit,
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
-      ),
+    final updatedName = await showRenameThreadDialog(
+      context,
+      currentName: thread.name,
+      isNameTaken: (name) => _threadNameTaken(name, exceptId: thread.id),
     );
-    if (updatedName == null ||
-        updatedName.isEmpty ||
-        updatedName == thread.name) {
-      return;
-    }
+    if (updatedName == null) return;
     try {
       await _collaboration.editThread(
         thread,
@@ -246,7 +154,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
       );
       if (!mounted) return;
 
-      _message('Thread updated.');
+      _message('Thread renamed.');
       widget.onSpaceUpdated?.call(widget.space);
     } catch (error) {
       _message(error.toString());
@@ -254,27 +162,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
   }
 
   Future<void> _deleteThread(AxThread thread) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Delete "${thread.name}"?'),
-        content: const Text(
-            'Are you sure you want to delete this Thread? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            style:
-                FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
+    if (!await confirmDeleteThread(context)) return;
     try {
       await _collaboration.deleteThread(thread);
       if (!mounted) return;
@@ -330,7 +218,8 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
           ),
           action: SnackBarAction(
             label: 'Copy',
-            textColor: ConclaveColors.primaryForegroundDark,
+            textColor: ConclaveColors.primaryForeground(
+                Theme.of(context).brightness == Brightness.dark),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: message));
               ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -364,6 +253,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        constraints: ConclaveDialogStyle.small,
         title: Text('Remove "${member.displayName}"?'),
         content: const Text(
             'Are you sure you want to remove this member from the Space?'),
@@ -374,8 +264,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style:
-                FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
+            style: ConclaveDialogStyle.destructiveButton(),
             child: const Text('Remove'),
           ),
         ],
@@ -392,6 +281,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        constraints: ConclaveDialogStyle.small,
         title: const Text('Revoke invitation?'),
         content: Text('Cancel pending invitation for ${invite.email}?'),
         actions: [
@@ -401,8 +291,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style:
-                FilledButton.styleFrom(backgroundColor: ConclaveColors.error),
+            style: ConclaveDialogStyle.destructiveButton(),
             child: const Text('Revoke'),
           ),
         ],

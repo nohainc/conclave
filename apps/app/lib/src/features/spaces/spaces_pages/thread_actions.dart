@@ -63,7 +63,7 @@ extension _ThreadActions on _ThreadPageState {
 
   /// Messages waiting for this Thread's active request to finish.
   List<_QueuedWorkMessage> get _workQueue =>
-      _queuedWorkByThread.putIfAbsent(widget.thread.id, () => []);
+      _ThreadPageState._queuedWorkByThread.putIfAbsent(_workQueueKey, () => []);
 
   /// Sends the next queued message once nothing is processing. A failed send
   /// pauses the queue until the user sends or edits a message.
@@ -72,6 +72,10 @@ extension _ThreadActions on _ThreadPageState {
         _dispatchingQueuedWork ||
         _workQueuePaused ||
         _submittingWork ||
+        // Until this Thread's requests are loaded, a processing request may be
+        // missing from the timeline, and the queue would be sent too early.
+        !_workPresentation.hasData ||
+        _workPresentation.isFetching ||
         _workQueue.isEmpty ||
         _activeWorkRequests.isNotEmpty) {
       return;
@@ -98,6 +102,7 @@ extension _ThreadActions on _ThreadPageState {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
+          constraints: ConclaveDialogStyle.small,
           title: const Text('Cancel previous request?'),
           content: Text(active.length == 1
               ? 'A request is still processing. Cancel it and send this request instead?'
@@ -194,6 +199,7 @@ extension _ThreadActions on _ThreadPageState {
     final workflowVersion =
         int.tryParse(message.workflow.split(':v').last) ?? 1;
     final threadId = widget.thread.id;
+    final queueKey = _workQueueKey;
     final workCache = _workHistoryCache;
     final workflowName = _currentWorkflows
             .where((w) => w.id == workflowId)
@@ -218,6 +224,15 @@ extension _ThreadActions on _ThreadPageState {
                   widget.onRunWorkWithSelection!(
                       prompt, workflow, inputs, key, selection));
     } catch (error) {
+      if (fromQueue &&
+          error is! AxMutationSuperseded &&
+          (!mounted || widget.thread.id != threadId)) {
+        // The page was left mid-send: keep the message queued for the return.
+        (_ThreadPageState._queuedWorkByThread[queueKey] ??= [])
+            .insert(0, message);
+        _ThreadPageState._pausedWorkQueues.add(queueKey);
+        return;
+      }
       if (!mounted ||
           widget.thread.id != threadId ||
           error is AxMutationSuperseded) {
@@ -446,6 +461,7 @@ extension _ThreadActions on _ThreadPageState {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
+          constraints: ConclaveDialogStyle.small,
           title: Text(folderExists ? 'Use existing folder?' : 'Retry anyway?'),
           content: Text(
             folderExists

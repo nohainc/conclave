@@ -1,6 +1,13 @@
 import 'ax_thread_view_state.dart';
 
 abstract interface class AxThreadViewStateStore {
+  /// Synchronous read so a Thread can apply its saved view before its first
+  /// frame. Every store is backed by synchronous storage.
+  AxThreadViewState? loadSync({
+    required String userId,
+    required String threadId,
+  });
+
   Future<AxThreadViewState?> load({
     required String userId,
     required String threadId,
@@ -21,11 +28,18 @@ class MemoryAxThreadViewStateStore implements AxThreadViewStateStore {
   final _values = <String, Map<String, AxThreadViewState>>{};
 
   @override
+  AxThreadViewState? loadSync({
+    required String userId,
+    required String threadId,
+  }) =>
+      _values[userId]?[threadId];
+
+  @override
   Future<AxThreadViewState?> load({
     required String userId,
     required String threadId,
   }) async =>
-      _values[userId]?[threadId];
+      loadSync(userId: userId, threadId: threadId);
 
   @override
   Future<void> save({

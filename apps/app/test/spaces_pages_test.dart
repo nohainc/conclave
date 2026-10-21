@@ -15,6 +15,7 @@ import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 import 'package:conclave_app/src/features/common/markdown_composer.dart';
 
 void main() {
+  tearDown(ThreadPage.resetWorkQueues);
   for (final workflow in [
     ('chat', 1, 'chat', 0),
     ('direct', 2, 'implement', 1)
@@ -630,8 +631,8 @@ void main() {
       final historyTab = find.byKey(const ValueKey('ai-history-toggle'));
       Color? tabColor(Finder tab) =>
           tester.widget<TextButton>(tab).style!.foregroundColor!.resolve({});
-      expect(tabColor(conversationTab), Colors.white);
-      expect(tabColor(historyTab), Colors.grey);
+      expect(tabColor(conversationTab), ConclaveColors.textPrimaryLight);
+      expect(tabColor(historyTab), ConclaveColors.textSecondaryLight);
       expect(
           find.descendant(
               of: conversationTab,
@@ -655,10 +656,10 @@ void main() {
       await tester.pump();
       expect(workPosition.pixels, settledOffset);
       expect(work, findsOneWidget);
-      expect(
-          tabColor(find.byKey(const ValueKey('ai-history-tab'))), Colors.white);
+      expect(tabColor(find.byKey(const ValueKey('ai-history-tab'))),
+          ConclaveColors.textPrimaryLight);
       expect(tabColor(find.byKey(const ValueKey('ai-history-conversation'))),
-          Colors.grey);
+          ConclaveColors.textSecondaryLight);
       expect(find.text('Read-only'), findsNothing);
       expect(find.byTooltip('Close AI History'), findsNothing);
       // AI History never accepts input.
@@ -667,12 +668,20 @@ void main() {
       // Only one pane is shown at any width.
       expect(chat, findsNothing);
       expect(find.byType(VerticalDivider), findsNothing);
+      // Both panes stay mounted once positioned: switching back is instant
+      // and AI History keeps its scroll position.
       await tester.tap(find.byKey(const ValueKey('ai-history-conversation')));
       await tester.pump();
-      expect(tester.widget<Opacity>(visibility).opacity, 0);
-      await tester.pumpAndSettle();
       expect(tester.widget<Opacity>(visibility).opacity, 1);
       expect(work, findsNothing);
+      expect(chat, findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('ai-history-toggle')));
+      await tester.pump();
+      expect(tester.widget<Opacity>(visibility).opacity, 1);
+      expect(work, findsOneWidget);
+      expect(workPosition.pixels, settledOffset);
+      await tester.tap(find.byKey(const ValueKey('ai-history-conversation')));
+      await tester.pumpAndSettle();
       expect(chat, findsOneWidget);
       expect(tester.takeException(), isNull);
     }
@@ -787,6 +796,8 @@ void main() {
           find.byType(TextField).first, '**Immediate request**');
       await tester
           .tap(find.byKey(const ValueKey('composer-send-Send request')));
+      await tester.pump();
+      // The new request is revealed by the follow jump on the next frame.
       await tester.pump();
       expect(
           tester
@@ -1084,56 +1095,69 @@ void main() {
       finalText: longAnswer,
     );
     data.requests = [earlier, running('running')];
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: ThreadPage(
-      initialTab: 1,
-      space: const AxSpace(
-          id: 'space-1',
-          name: 'Space',
-          branch: '',
-          lastActivity: '',
-          role: 'owner'),
-      thread: const AxThread(
-          id: 'thread-1',
-          spaceId: 'space-1',
-          name: 'Stream',
-          lead: '',
-          status: 'active',
-          brief: '',
-          primaryWorkspace: '',
-          queueStatus: ''),
-      dataSource: data,
-      currentUserId: 'user-owner',
-      onBackToSpace: _noop,
-      onArchive: _noop,
-      onRunWork: (prompt, __, ___, key) async {
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-        return 'saved-1';
-      },
-    ))));
+    Widget page() => MaterialApp(
+            home: Scaffold(
+                body: ThreadPage(
+          initialTab: 1,
+          space: const AxSpace(
+              id: 'space-1',
+              name: 'Space',
+              branch: '',
+              lastActivity: '',
+              role: 'owner'),
+          thread: const AxThread(
+              id: 'thread-1',
+              spaceId: 'space-1',
+              name: 'Stream',
+              lead: '',
+              status: 'active',
+              brief: '',
+              primaryWorkspace: '',
+              queueStatus: ''),
+          dataSource: data,
+          currentUserId: 'user-owner',
+          onBackToSpace: _noop,
+          onArchive: _noop,
+          onRunWork: (prompt, __, ___, key) async {
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+            return 'saved-1';
+          },
+        )));
+    await tester.pumpWidget(page());
     await tester.pumpAndSettle();
     await _askAi(tester);
     await tester.enterText(find.byType(TextField).first, 'Queued follow-up');
     await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('work-queue-panel')), findsOneWidget);
+
+    // Leaving the Thread page and returning keeps the queued message.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    await _askAi(tester);
+    expect(find.byKey(const ValueKey('work-queue-panel')), findsOneWidget);
+    expect(find.textContaining('Queued follow-up'), findsWidgets);
 
     ScrollPosition history() => tester
         .stateList<ScrollableState>(find.byType(Scrollable))
         .map((state) => state.position)
-        .where((position) => position.maxScrollExtent > 0)
-        .reduce((a, b) => a.maxScrollExtent >= b.maxScrollExtent ? a : b);
+        .where((position) => position.extentBefore + position.extentAfter > 0)
+        .reduce((a, b) =>
+            a.extentBefore + a.extentAfter >= b.extentBefore + b.extentAfter
+                ? a
+                : b);
     // The reader scrolls up while the first request is still running.
-    history().jumpTo(0);
+    history().jumpTo(history().minScrollExtent);
     await tester.pumpAndSettle();
-    expect(history().pixels, 0);
+    expect(history().extentBefore, 0);
 
     // It finishes; the queued message is sent and the view follows it.
     data.requests = [earlier, running('completed')];
     await AxWorkHistoryCache.forSource(data).refresh('thread-1');
     await tester.pump();
     // The reader is still scrolled up while the queued send is in flight.
-    history().jumpTo(0);
+    history().jumpTo(history().minScrollExtent);
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('work-queue-panel')), findsNothing);
@@ -1177,7 +1201,7 @@ void main() {
       final scrollable =
           find.descendant(of: history, matching: find.byType(Scrollable)).first;
       final position = tester.state<ScrollableState>(scrollable).position;
-      expect(position.maxScrollExtent, greaterThan(0));
+      expect(position.extentBefore, greaterThan(0));
       expect(position.extentAfter, closeTo(0, 1));
       await tester.drag(history, const Offset(0, 250));
       await tester.pumpAndSettle();
@@ -1206,7 +1230,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(position.extentAfter, closeTo(0, 1));
       }
-      expect(position.pixels, greaterThan(0));
+      expect(position.extentBefore, greaterThan(0));
       expect(tester.getRect(field), before);
       expect(find.ancestor(of: field, matching: history), findsNothing);
       if (tab == 1) {
@@ -1260,8 +1284,8 @@ void main() {
     expect(top('Use passkeys'), lessThan(top('After AI')));
     expect(find.byKey(const ValueKey('work-history-scroll')), findsNothing);
     // The live request is not a Chat message: no edit or delete.
-    expect(find.byTooltip('Edit message'), findsNWidgets(2));
-    expect(find.byTooltip('Delete message'), findsNWidgets(2));
+    expect(find.byTooltip('Edit'), findsNWidgets(2));
+    expect(find.byTooltip('Delete'), findsNWidgets(2));
 
     await _askAi(tester);
     await tester.enterText(find.byType(TextField).last, 'Next request');
@@ -1367,8 +1391,8 @@ void main() {
         findsOneWidget);
     // Archived AI entries are history: neither the request nor the answer
     // may be edited.
-    expect(find.byTooltip('Edit message'), findsNothing);
-    expect(find.byTooltip('Copy Markdown'), findsNWidgets(2));
+    expect(find.byTooltip('Edit'), findsNothing);
+    expect(find.byTooltip('Copy'), findsNWidgets(2));
   });
   testWidgets('Chat create edit and copy preserve raw Markdown',
       (tester) async {
@@ -1420,13 +1444,13 @@ void main() {
         widget is Text && widget.data?.startsWith('2026-10-06 ·') == true);
     expect(timestamp, findsOneWidget);
     expect(tester.getTopLeft(timestamp).dx,
-        lessThan(tester.getTopLeft(find.byTooltip('Edit message')).dx));
-    expect(tester.getTopLeft(find.byTooltip('Edit message')).dx,
-        lessThan(tester.getTopLeft(find.byTooltip('Copy Markdown')).dx));
+        lessThan(tester.getTopLeft(find.byTooltip('Edit')).dx));
+    expect(tester.getTopLeft(find.byTooltip('Edit')).dx,
+        lessThan(tester.getTopLeft(find.byTooltip('Copy')).dx));
     for (final tooltip in [
-      'Delete message',
-      'Edit message',
-      'Copy Markdown',
+      'Delete',
+      'Edit',
+      'Copy',
     ]) {
       expect(
           find.descendant(
@@ -1434,7 +1458,7 @@ void main() {
               matching: find.byType(AnimatedScale)),
           findsOneWidget);
     }
-    await tester.tap(find.byTooltip('Edit message'));
+    await tester.tap(find.byTooltip('Edit'));
     await tester.pumpAndSettle();
     expect(
         tester.widget<TextField>(find.byType(TextField).first).controller!.text,
@@ -1444,7 +1468,7 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(ds.editedSource, edited);
-    await tester.tap(find.byTooltip('Copy Markdown'));
+    await tester.tap(find.byTooltip('Copy'));
     await tester.pump();
     expect(copied, edited);
   });
@@ -1506,7 +1530,7 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     await _openAiHistory(tester);
-    final copies = find.byTooltip('Copy Markdown');
+    final copies = find.byTooltip('Copy');
     expect(copies, findsNWidgets(2));
     expect(
         find.descendant(of: copies.first, matching: find.byType(AnimatedScale)),
@@ -1578,8 +1602,8 @@ void main() {
     // The failure diagnostic lives in AI History.
     await tester.tap(find.byKey(const ValueKey('ai-history-toggle')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byTooltip('Copy error'));
-    await tester.tap(find.byTooltip('Copy error'));
+    await tester.ensureVisible(find.byTooltip('Copy').last);
+    await tester.tap(find.byTooltip('Copy').last);
     await tester.pumpAndSettle();
     expect(copied, message);
     final diagnostic = tester.widget<SelectableText>(find.byWidgetPredicate(
@@ -1608,7 +1632,10 @@ void main() {
             ),
             dataSource: const AxFixtureDataSource(),
             onOpenThread: (_) {},
-            onEdit: () => edited = true,
+            onSaveEdits: (name, description) async {
+              edited = true;
+              return null;
+            },
             onArchive: () {},
             onDelete: () {},
           ),
@@ -1633,7 +1660,19 @@ void main() {
 
     await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
+    // Editing happens inline in the page header, not in a dialog.
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.byKey(const ValueKey('space-edit-form')), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'Space One'), '');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Space name cannot be empty.'), findsOneWidget);
+    expect(edited, isFalse);
+    await tester.enterText(find.byType(TextField).first, 'Space Two');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
     expect(edited, isTrue);
+    expect(find.byKey(const ValueKey('space-edit-form')), findsNothing);
 
     expect(find.byType(TabBar), findsNothing);
     expect(find.text('Each Thread is one focused area of team work.'),
@@ -1667,7 +1706,6 @@ void main() {
             space: p1,
             dataSource: const AxFixtureDataSource(),
             onOpenThread: (_) {},
-            onEdit: () {},
             onArchive: () {},
             onDelete: () {},
           ),
@@ -1685,7 +1723,6 @@ void main() {
             space: p2,
             dataSource: const AxFixtureDataSource(),
             onOpenThread: (_) {},
-            onEdit: () {},
             onArchive: () {},
             onDelete: () {},
           ),
@@ -2058,14 +2095,14 @@ void main() {
     expect(find.text('You'), findsNothing);
 
     // Verify copy message button exists and triggers
-    expect(find.byTooltip('Copy Markdown'), findsOneWidget);
-    await tester.tap(find.byTooltip('Copy Markdown'));
+    expect(find.byTooltip('Copy'), findsOneWidget);
+    await tester.tap(find.byTooltip('Copy'));
     await tester.pumpAndSettle();
     expect(find.text('Message copied to clipboard'), findsNothing);
 
     // Verify edit message button allows editing in-place
-    expect(find.byTooltip('Edit message'), findsOneWidget);
-    await tester.tap(find.byTooltip('Edit message'));
+    expect(find.byTooltip('Edit'), findsOneWidget);
+    await tester.tap(find.byTooltip('Edit'));
     await tester.pumpAndSettle();
     expect(find.text('Save'), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);
@@ -2082,8 +2119,8 @@ void main() {
         findsOneWidget);
 
     // Verify delete message button shows confirmation and removes message
-    expect(find.byTooltip('Delete message'), findsOneWidget);
-    await tester.tap(find.byTooltip('Delete message'));
+    expect(find.byTooltip('Delete'), findsOneWidget);
+    await tester.tap(find.byTooltip('Delete'));
     await tester.pumpAndSettle();
     expect(find.text('Delete message?'), findsOneWidget);
     expect(
@@ -2097,7 +2134,7 @@ void main() {
             'The login failure reproduces on a fresh checkout. (Updated)'),
         findsOneWidget);
 
-    await tester.tap(find.byTooltip('Delete message'));
+    await tester.tap(find.byTooltip('Delete'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
@@ -2159,11 +2196,18 @@ void main() {
       );
       final date = find.byWidgetPredicate((widget) =>
           widget is Text && widget.data?.startsWith('2026-10-05 ·') == true);
-      final copyX = tester.getTopLeft(find.byTooltip('Copy Markdown')).dx;
-      final editX = tester.getTopLeft(find.byTooltip('Edit message')).dx;
+      final copyX = tester.getTopLeft(find.byTooltip('Copy')).dx;
+      final editX = tester.getTopLeft(find.byTooltip('Edit')).dx;
       final dateX = tester.getTopLeft(date).dx;
-      final bubble = tester.widget<Container>(
-          find.ancestor(of: date, matching: find.byType(Container)).first);
+      final bubbleFinder = find
+          .ancestor(
+              of: find.byType(ConclaveMarkdownBody).first,
+              matching: find.byType(Container))
+          .first;
+      final bubble = tester.widget<Container>(bubbleFinder);
+      // Date/time and actions sit below the bubble, not inside its background.
+      expect(tester.getTopLeft(date).dy,
+          greaterThanOrEqualTo(tester.getBottomLeft(bubbleFinder).dy));
       final decoration = bubble.decoration as BoxDecoration;
       expect(decoration.border, isNull);
       expect(
@@ -2172,7 +2216,7 @@ void main() {
               ? ConclaveColors.ownMessageBackground(false)
               : Colors.transparent);
       if (own) {
-        final deleteX = tester.getTopLeft(find.byTooltip('Delete message')).dx;
+        final deleteX = tester.getTopLeft(find.byTooltip('Delete')).dx;
         expect(dateX, lessThan(deleteX));
         expect(deleteX, lessThan(editX));
         expect(editX, lessThan(copyX));
@@ -2324,7 +2368,6 @@ void main() {
             space: space,
             dataSource: _SpaceStreamsSource([ws1, ws2, ws3]),
             onOpenThread: (_) {},
-            onEdit: () {},
             onArchive: () {},
             onDelete: () {},
           ),
@@ -2464,7 +2507,6 @@ void main() {
             ),
             dataSource: customDataSource,
             onOpenThread: (_) {},
-            onEdit: () {},
             onArchive: () {},
             onDelete: () {},
           ),
@@ -2481,6 +2523,7 @@ void main() {
 
     // Enter existing name (case-insensitive)
     await tester.enterText(find.byType(TextField).first, 'frontend design');
+    await tester.pump(); // Create enables once a name is entered.
     await tester.tap(find.widgetWithText(FilledButton, 'Create Thread'));
     await tester.pumpAndSettle();
 
@@ -2519,7 +2562,6 @@ void main() {
             ),
             dataSource: customDataSource,
             onOpenThread: (_) {},
-            onEdit: () {},
             onArchive: () {},
             onDelete: () {},
           ),
@@ -2593,7 +2635,6 @@ void main() {
             ),
             dataSource: customDataSource,
             onOpenThread: (_) {},
-            onEdit: () {},
             onArchive: () {},
             onDelete: () {},
           ),

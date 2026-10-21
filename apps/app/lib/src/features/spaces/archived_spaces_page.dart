@@ -1,6 +1,7 @@
 import 'dart:async';
 import '../common/quiet_notices.dart';
 
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
@@ -160,6 +161,7 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        constraints: ConclaveDialogStyle.small,
         title: Text('Delete ${space.name}?'),
         content: const Text(
             'This permanently deletes the Space and its archived record.'),

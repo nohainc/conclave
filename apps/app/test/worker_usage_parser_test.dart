@@ -179,7 +179,7 @@ void main() {
             find.byType(LinearProgressIndicator))
         .first;
     expect(bar.color, ConclaveColors.primaryForeground(false));
-    expect(bar.backgroundColor, Colors.white);
+    expect(bar.backgroundColor, ConclaveColors.surfaceHoverLight);
     expect(find.textContaining('Resets in'), findsWidgets);
     await tester.pumpWidget(MaterialApp(
         theme: ThemeData.dark(),
@@ -191,7 +191,7 @@ void main() {
             find.byType(LinearProgressIndicator))
         .first;
     expect(darkBar.color, ConclaveColors.primaryForeground(true));
-    expect(darkBar.backgroundColor, const Color(0xFF252525));
+    expect(darkBar.backgroundColor, ConclaveColors.surfaceHoverDark);
 
     await tester
         .tap(find.byKey(const ValueKey('worker-usage-toggle-original')));

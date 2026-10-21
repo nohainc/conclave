@@ -251,7 +251,7 @@ class SearchPage extends StatelessWidget {
                         : 'Found ${results.length} ${results.length == 1 ? "result" : "results"} for "${query.trim()}"',
                     style: TextStyle(
                       fontSize: 13,
-                      color: isDark ? Colors.white60 : const Color(0xff64748b),
+                      color: ConclaveColors.textSecondary(isDark),
                     ),
                   ),
                 ],
@@ -279,10 +279,10 @@ class SearchPage extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
+                const Icon(
                   Icons.search_off_rounded,
                   size: 48,
-                  color: isDark ? Colors.white30 : const Color(0xff94a3b8),
+                  color: ConclaveColors.neutral,
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -298,7 +298,7 @@ class SearchPage extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 13,
-                    color: isDark ? Colors.white54 : const Color(0xff64748b),
+                    color: ConclaveColors.textSecondary(isDark),
                   ),
                 ),
                 const SizedBox(height: 20),

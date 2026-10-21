@@ -1018,7 +1018,8 @@ class _FloatingRealtimeStatusBannerState
               child: Material(
                 elevation: 6,
                 borderRadius: BorderRadius.circular(8),
-                color: const Color(0xfffff6df),
+                color: ConclaveColors.surface(
+                    Theme.of(context).brightness == Brightness.dark),
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

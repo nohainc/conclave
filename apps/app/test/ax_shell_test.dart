@@ -17,6 +17,74 @@ import 'ax_fixture_data.dart';
 import 'ax_fixture_realtime.dart';
 
 void main() {
+  for (final width in [140.0, 200.0, 220.0, 320.0]) {
+    testWidgets('sidebar icon header opens search at width $width',
+        (tester) async {
+      final controller = TextEditingController();
+      final focus = FocusNode();
+      var query = '';
+      var created = false;
+      var notified = false;
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+            width: width,
+            child: AxSidebar(
+              shellContext: const AxShellContext(
+                  navigation: AxNavigation.home(), spaces: []),
+              onNavigateTo: (_) {},
+              onCreateSpace: () => created = true,
+              onOpenNotifications: () => notified = true,
+              searchController: controller,
+              searchFocusNode: focus,
+              onSearchChanged: (value) => query = value,
+              onLogout: () {},
+              onOpenAbout: () {},
+              onOpenExternal: (_) {},
+            )),
+      ))));
+      await tester.pumpAndSettle();
+      expect(find.text('Conclave AX'), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+      final home = find.byTooltip('Conclave AX — Home');
+      final search = find.byTooltip('Search...');
+      final add = find.byTooltip('New Space');
+      final alarm = find.byTooltip('Notifications');
+      if (width >= 220) {
+        for (final action in [search, add, alarm]) {
+          expect(tester.getCenter(action).dy, tester.getCenter(home).dy);
+        }
+        expect(tester.getCenter(search).dx,
+            greaterThan(tester.getCenter(home).dx));
+        expect(
+            tester.getCenter(add).dx, greaterThan(tester.getCenter(search).dx));
+        expect(
+            tester.getCenter(alarm).dx, greaterThan(tester.getCenter(add).dx));
+      }
+      await tester.tap(add);
+      await tester.tap(alarm);
+      expect(created, isTrue);
+      expect(notified, isTrue);
+      await tester.tap(search);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
+      expect(focus.hasFocus, isTrue);
+      await tester.enterText(find.byType(TextField), 'design');
+      expect(query, 'design');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(controller.text, isEmpty);
+      expect(query, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
+      focus.dispose();
+    });
+  }
+
   for (final theme in [ConclaveBrand.lightTheme(), ConclaveBrand.darkTheme()]) {
     testWidgets(
         'login presentation uses matching branded buttons in ${theme.brightness}',
@@ -109,7 +177,7 @@ void main() {
   }
 
   for (final dark in [false, true]) {
-    testWidgets('collapsed sidebar menu surfaces match sidebar dark=$dark',
+    testWidgets('collapsed sidebar menu surfaces follow theme dark=$dark',
         (tester) async {
       const testSpace = AxSpace(
           id: 'menu-space',
@@ -150,7 +218,7 @@ void main() {
       expect(anchors.length, greaterThan(1));
       for (final anchor in anchors) {
         expect(anchor.style?.backgroundColor?.resolve({}),
-            ConclaveColors.navigationBackgroundDark);
+            ConclaveColors.navigationBackground(dark));
         expect(anchor.style?.surfaceTintColor?.resolve({}), Colors.transparent);
       }
       await tester.tap(find.byTooltip('YOUR SPACES'));
@@ -160,12 +228,12 @@ void main() {
       final threadColor =
           tester.widget<Text>(find.text('Menu Thread')).style?.color;
       expect(spaceColor, threadColor);
-      expect(spaceColor, dark ? Colors.white70 : Colors.black87);
+      expect(spaceColor, ConclaveColors.navigationTextMuted(dark));
       expect(
           find.byWidgetPredicate((widget) =>
               widget is Material &&
               widget.elevation == 12 &&
-              widget.color == ConclaveColors.navigationBackgroundDark),
+              widget.color == ConclaveColors.navigationBackground(dark)),
           findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -238,10 +306,16 @@ void main() {
     expect(find.text('Delete account'), findsOneWidget);
     expect(find.text('Rename'), findsNothing);
     expect(find.text('Update email'), findsNothing);
-    for (final entry in [
-      ('Edit name', 'Rename profile'),
-      ('Edit email', 'Update email')
-    ]) {
+    // The name is edited inline on the page, not in a dialog.
+    await tester.tap(find.byTooltip('Edit name'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(
+        find.byKey(const ValueKey('inline-text-edit-field')), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('inline-text-edit-field')), findsNothing);
+    for (final entry in [('Edit email', 'Update email')]) {
       final edit = find.byTooltip(entry.$1);
       expect(edit, findsOneWidget);
       await tester.tap(edit);
@@ -836,13 +910,13 @@ void main() {
       await tester.pumpAndSettle();
 
       // Check Header & Main Sections
-      expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand & Space
+      expect(find.text('Conclave AX'), findsOneWidget); // Space only
       expect(find.text('Home'), findsNothing);
       expect(find.text('Spaces'), findsNothing);
       expect(find.text('SPACES'), findsNothing);
 
       // Tapping Conclave AX brand navigates to Home
-      await tester.tap(find.text('Conclave AX').first);
+      await tester.tap(find.byTooltip('Conclave AX — Home'));
       expect(navigatedTo?.kind, AxRouteKind.home);
       navigatedTo = null;
 
@@ -1975,7 +2049,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Ensure sidebar renders without error
-        expect(find.text('Conclave AX'), findsOneWidget);
+        expect(find.byTooltip('Conclave AX — Home'), findsOneWidget);
       }
     });
 
@@ -2474,7 +2548,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Space rows display the space name without legacy Goal counts.
-      expect(find.text('Conclave AX'), findsNWidgets(2)); // Brand and Space
+      expect(find.text('Conclave AX'), findsOneWidget); // Space only
       expect(find.text('5'), findsNothing);
 
       // Thread rows are rendered
@@ -2703,8 +2777,8 @@ void main() {
       expect(find.byType(AxTopBar), findsNothing); // Top HUD hidden on desktop
       expect(
           find.text('Authentication redesign'), findsOneWidget); // sidebar item
-      expect(find.byTooltip('Search or jump to...'),
-          findsOneWidget); // Search on sidebar
+      expect(find.byTooltip('Search...'),
+          findsOneWidget); // Search icon on sidebar
       expect(
           find.byTooltip('Notifications'), findsOneWidget); // Alarm on sidebar
       expect(

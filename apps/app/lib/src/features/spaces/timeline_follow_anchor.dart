@@ -86,7 +86,9 @@ class AxTimelineFollowAnchor {
     final render = context is Element ? context.renderObject : null;
     if (render == null || !render.attached) {
       final estimate = _fallbackFraction != null
-          ? _fallbackFraction! * position.maxScrollExtent
+          ? position.minScrollExtent +
+              _fallbackFraction! *
+                  (position.maxScrollExtent - position.minScrollExtent)
           : _fallbackOffset ?? position.maxScrollExtent;
       controller.jumpTo(
           estimate.clamp(position.minScrollExtent, position.maxScrollExtent));

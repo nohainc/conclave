@@ -190,7 +190,10 @@ extension _AxAppViews on _AxAppStateMixin {
       dataSource: widget.dataSource,
       viewerEmail: store.auth.viewer?.email,
       onOpenThread: (threadId) => _openThread(space.id, threadId),
-      onEdit: () => _editSpace(space),
+      onSaveEdits: (name, description) =>
+          _saveSpaceEdits(space, name, description),
+      startEditing: _pendingSpaceEditId == space.id,
+      onEditingStarted: () => _pendingSpaceEditId = null,
       onArchive: () => _archiveSpace(space),
       onDelete: () => _deleteSpace(space.id),
     );
@@ -509,10 +512,11 @@ extension _AxAppViews on _AxAppStateMixin {
                           ),
                   ),
                 ),
-                title: _profileEditableValue(
-                  viewer?.displayName ?? 'Conclave user',
+                title: InlineTextEdit(
+                  value: viewer?.displayName ?? 'Conclave user',
                   tooltip: 'Edit name',
-                  onEdit: _editDisplayName,
+                  label: 'Name',
+                  onSave: _saveDisplayName,
                 ),
                 subtitle: _profileEditableValue(
                   viewer?.email ?? 'Email unavailable',

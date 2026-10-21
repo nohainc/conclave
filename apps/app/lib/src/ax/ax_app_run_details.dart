@@ -427,8 +427,11 @@ extension _AxAppRunDetails on _AxAppStateMixin {
                                 fontWeight: FontWeight.w700, fontSize: 12)),
                         const SizedBox(height: 4),
                         Text(output.summary,
-                            style: const TextStyle(
-                                color: Color(0xff777683), fontSize: 11)),
+                            style: TextStyle(
+                                color: ConclaveColors.textSecondary(
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark),
+                                fontSize: 11)),
                       ],
                     ),
                   ),

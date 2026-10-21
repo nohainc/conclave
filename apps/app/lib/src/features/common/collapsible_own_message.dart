@@ -65,7 +65,7 @@ class _CollapsibleOwnMessageState extends State<CollapsibleOwnMessage> {
           behavior: HitTestBehavior.opaque,
           onTap: () => setState(() => _expanded = !_expanded),
           child: Text(_expanded ? 'Hide more' : 'Show more',
-              style: TextStyle(fontSize: 11, color: color)),
+              style: TextStyle(fontSize: 12, color: color)),
         ),
       );
       return _withFooter(

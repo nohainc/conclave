@@ -75,6 +75,7 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
 
   Widget _threadListTile(AxThread thread) {
     final archived = thread.status == 'archived';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final pending = thread.id.startsWith('local-thread-');
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -95,8 +96,12 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
               mainAxisSize: MainAxisSize.min,
               children: [
                 PopupMenuButton<String>(
-                  color: ConclaveColors.navigationBackgroundDark,
+                  color: ConclaveMenuStyle.background(isDark),
                   surfaceTintColor: Colors.transparent,
+                  elevation: 12,
+                  shadowColor: ConclaveMenuStyle.shadow(isDark),
+                  shape: ConclaveMenuStyle.shape(isDark),
+                  menuPadding: ConclaveMenuStyle.padding,
                   tooltip: 'Thread actions',
                   onSelected: (action) {
                     if (action == 'edit') {
@@ -111,23 +116,23 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                   },
                   itemBuilder: (context) => [
                     if (!archived)
-                      const PopupMenuItem(
-                        textStyle:
-                            TextStyle(color: ConclaveColors.navigationTextDark),
+                      PopupMenuItem(
+                        height: 36,
+                        textStyle: ConclaveMenuStyle.popupTextStyle(isDark),
                         value: 'edit',
-                        child: Text('Rename'),
+                        child: const Text('Rename'),
                       ),
                     PopupMenuItem(
-                      textStyle: const TextStyle(
-                          color: ConclaveColors.navigationTextDark),
+                      height: 36,
+                      textStyle: ConclaveMenuStyle.popupTextStyle(isDark),
                       value: archived ? 'restore' : 'archive',
                       child: Text(archived ? 'Restore' : 'Archive'),
                     ),
-                    const PopupMenuItem(
-                      textStyle:
-                          TextStyle(color: ConclaveColors.navigationTextDark),
+                    PopupMenuItem(
+                      height: 36,
+                      textStyle: ConclaveMenuStyle.popupTextStyle(isDark),
                       value: 'delete',
-                      child: Text('Delete'),
+                      child: const Text('Delete'),
                     ),
                   ],
                 ),

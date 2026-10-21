@@ -474,10 +474,8 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                   labelText: widget.labelText,
                   hintText: widget.hintText,
                   // Same muted color as the message date/time.
-                  hintStyle: TextStyle(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? Colors.white38
-                        : Colors.black45,
+                  hintStyle: const TextStyle(
+                    color: ConclaveColors.neutral,
                   ),
                   isDense: widget.chatStyle,
                   hoverColor: Colors.transparent,
@@ -616,10 +614,10 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                   top: 0,
                   bottom: 0,
                   width: 40,
-                  // A subtle shade darker than the adjacent input surface.
+                  // Distinct rail shade: OKLCH L 93% light / 24% dark.
                   child: ColoredBox(
-                    color: Color.alphaBlend(
-                        Colors.black.withValues(alpha: 0.12), backgroundColor),
+                    color: ConclaveColors.composerRail(
+                        Theme.of(context).brightness == Brightness.dark),
                   ),
                 ),
               Row(

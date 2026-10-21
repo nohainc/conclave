@@ -1,6 +1,13 @@
 part of '../spaces_pages.dart';
 
 class ThreadPage extends StatefulWidget {
+  /// Clears the session-wide Work queues so tests start independent.
+  @visibleForTesting
+  static void resetWorkQueues() {
+    _ThreadPageState._queuedWorkByThread.clear();
+    _ThreadPageState._pausedWorkQueues.clear();
+  }
+
   const ThreadPage({
     super.key,
     required this.space,
@@ -99,11 +106,18 @@ class _ThreadPageState extends State<ThreadPage>
   bool _requestHistoryOpen = false;
   int _requestHistoryDirection = 1;
 
-  /// Work messages sent while a request was processing, per Thread, oldest
-  /// first. Local to this view; see `_dispatchQueuedWork`.
-  final _queuedWorkByThread = <String, List<_QueuedWorkMessage>>{};
+  /// Work messages sent while a request was processing, per user and Thread,
+  /// oldest first. Kept for the app session so leaving the Thread page and
+  /// returning keeps the queue; see `_dispatchQueuedWork`.
+  static final _queuedWorkByThread = <String, List<_QueuedWorkMessage>>{};
+  static final _pausedWorkQueues = <String>{};
   bool _dispatchingQueuedWork = false;
-  bool _workQueuePaused = false;
+  String get _workQueueKey =>
+      '${widget.currentUserId ?? ''}|${widget.thread.id}';
+  bool get _workQueuePaused => _pausedWorkQueues.contains(_workQueueKey);
+  set _workQueuePaused(bool paused) => paused
+      ? _pausedWorkQueues.add(_workQueueKey)
+      : _pausedWorkQueues.remove(_workQueueKey);
   final _workHistoryController = ScrollController();
   late final AxWorkerUsageController _workerUsage = AxWorkerUsageController(
       widget.dataSource is AxWorkerUsageDataSource
@@ -134,11 +148,17 @@ class _ThreadPageState extends State<ThreadPage>
   /// Read-only AI History (the former Work timeline) beside or, on narrow
   /// layouts, instead of the conversation.
   late bool _aiHistoryOpen = widget.initialAiHistoryOpen;
+  // AI History stays mounted once opened so switching keeps both lists and
+  // their scroll positions; a positioned pane is revealed without hiding.
+  late bool _aiHistoryMounted = _aiHistoryOpen;
+  bool _chatPositioned = false;
+  bool _workPositioned = false;
 
   Future<void> _confirmClear({required bool history}) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        constraints: ConclaveDialogStyle.small,
         title:
             Text(history ? 'Clear AI History' : 'Clear Conversation History'),
         content: Text(history
@@ -167,7 +187,14 @@ class _ThreadPageState extends State<ThreadPage>
 
   void _setAiHistoryOpen(bool open) {
     if (open == _aiHistoryOpen) return;
+    if (open ? _workPositioned : _chatPositioned) {
+      setState(() => _aiHistoryOpen = open);
+      final controller = open ? _workHistoryController : _chatHistoryController;
+      if (open ? _followWork : _followChat) _scheduleFollowLatest(controller);
+      return;
+    }
     setState(() {
+      _aiHistoryMounted |= open;
       _aiHistoryOpen = open;
       // Lay out and position the destination without painting intermediate
       // scroll offsets. The follow callback reveals it after its final pass.
@@ -190,6 +217,8 @@ class _ThreadPageState extends State<ThreadPage>
     _chatFollowScheduled = false;
     _workFollowScheduled = false;
     _openChatPending = _openWorkPending = true;
+    _chatPositioned = _workPositioned = false;
+    _lastMaxExtent.clear();
   }
 
   List<(String, Object)> _chatSequence() => [
@@ -210,18 +239,41 @@ class _ThreadPageState extends State<ThreadPage>
     return items;
   }
 
-  /// A new item scrolls to the message before it so the reader sees where the
-  /// new content starts; the first item has no predecessor and anchors itself.
+  /// A reader at the latest content keeps following it: a new item scrolls
+  /// the timeline to its end. Callers only invoke this while following.
   void _anchorIncoming(AxTimelineFollowAnchor anchor,
       ScrollController controller, List<Object> sequence, Object target) {
-    if (anchor.active) return;
-    final index = sequence.indexOf(target);
-    if (index <= 0) {
-      anchor.observe(target, controller);
-      return;
+    anchor.reset();
+    _jumpToLatest(controller);
+  }
+
+  final _lastMaxExtent = <bool, double>{};
+
+  /// Keeps a following timeline pinned to its end while content grows in
+  /// place, such as a Worker's in-progress output or a row settling height.
+  /// Only growth follows, so programmatic jumps elsewhere are left alone.
+  bool _onTimelineMetricsChanged(ScrollMetricsNotification notification) {
+    for (final (isWork, controller) in [
+      (false, _chatHistoryController),
+      (true, _workHistoryController),
+    ]) {
+      if (!(isWork ? _followWork : _followChat) ||
+          (isWork ? _openWorkPending : _openChatPending) ||
+          (isWork ? _workIncomingAnchor : _chatIncomingAnchor).active ||
+          !controller.hasClients ||
+          !controller.position.hasContentDimensions) {
+        continue;
+      }
+      final position = controller.position;
+      final previous = _lastMaxExtent[isWork];
+      _lastMaxExtent[isWork] = position.maxScrollExtent;
+      if (previous != null &&
+          position.maxScrollExtent > previous + 0.5 &&
+          previous - position.pixels <= 24) {
+        _jumpToLatest(controller);
+      }
     }
-    anchor.anchorAt(sequence[index - 1],
-        next: target, fraction: index / sequence.length, once: false);
+    return false;
   }
 
   bool _tabActive(bool isWork) => isWork ? _aiHistoryOpen : true;
@@ -335,6 +387,13 @@ class _ThreadPageState extends State<ThreadPage>
         }
       }
       _markSeen(isWork, controller);
+      if (_tabActive(isWork) && _threadViewStateRestored) {
+        if (isWork) {
+          _workPositioned = true;
+        } else {
+          _chatPositioned = true;
+        }
+      }
       if (_paneAwaitingReveal == isWork) {
         setState(() {
           _paneAwaitingReveal = null;
@@ -484,6 +543,8 @@ class _ThreadPageState extends State<ThreadPage>
 
   void _onWorkActivityChanged() {
     _scheduleFollowLatest(_workHistoryController);
+    if (_followChat && !_openChatPending) _jumpToLatest(_chatHistoryController);
+    if (_followWork && !_openWorkPending) _jumpToLatest(_workHistoryController);
   }
 
   void _onWorkHistoryScroll() {
@@ -829,7 +890,9 @@ class _ThreadPageState extends State<ThreadPage>
     _updateComposerState(() {});
   }
 
-  Future<void> _restoreThreadViewState() async {
+  /// Both stores read synchronously, so the saved view is applied before the
+  /// Thread's first frame instead of after an extra async round trip.
+  void _restoreThreadViewState() {
     final userId = widget.currentUserId;
     final threadId = widget.thread.id;
     final generation = ++_threadViewStateGeneration;
@@ -842,7 +905,7 @@ class _ThreadPageState extends State<ThreadPage>
       _threadViewReady = true;
       return;
     }
-    final saved = _withRemoteViewState(await _threadViewStateStore.load(
+    final saved = _withRemoteViewState(_threadViewStateStore.loadSync(
       userId: userId,
       threadId: threadId,
     ));
@@ -857,9 +920,8 @@ class _ThreadPageState extends State<ThreadPage>
       _lastRemoteViewState = _remoteViewStatePayload(saved);
     }
     if (saved != null) {
-      // A draft typed while the asynchronous restore was in flight belongs
-      // to the current user, not to the persistence result. Never overwrite
-      // non-empty input or an active edit session.
+      // Never overwrite non-empty input or an active edit session with the
+      // persisted draft.
       if (_discussionController.text.isEmpty && saved.chatDraft.isNotEmpty) {
         _discussionController.value = TextEditingValue(
           text: saved.chatDraft,
@@ -881,7 +943,7 @@ class _ThreadPageState extends State<ThreadPage>
       }
       _reconcilePendingThreadViewState();
     }
-    if (mounted) setState(() {});
+    // Callers run in initState/didUpdateWidget, which always rebuild next.
     _scheduleThreadViewStateSave();
     _scheduleFollowLatest(_chatHistoryController);
     _scheduleFollowLatest(_workHistoryController);
@@ -1007,7 +1069,7 @@ class _ThreadPageState extends State<ThreadPage>
     _subscribeWorkflowWorkspace();
     _loadWorkChoices();
     _loadWorkflowCatalog();
-    unawaited(_restoreThreadViewState());
+    _restoreThreadViewState();
   }
 
   void _applyWorkers(List<AxWorker> workers) {
@@ -1266,12 +1328,14 @@ class _ThreadPageState extends State<ThreadPage>
       _followWork = _followChat = true;
       _chatSeenId = _workSeenId = null;
       _openChatPending = _openWorkPending = true;
+      _chatPositioned = _workPositioned = false;
+      _aiHistoryMounted = _aiHistoryOpen;
       // Activity is keyed by assignment, so it is kept: returning to a Thread
       // shows its earlier operations immediately while details reload.
       _cancelTerminalActivityChecks();
-      unawaited(_restoreThreadViewState());
+      _restoreThreadViewState();
     } else if (oldWidget.currentUserId != widget.currentUserId) {
-      unawaited(_restoreThreadViewState());
+      _restoreThreadViewState();
     }
     if (oldWidget.initialTab != widget.initialTab) {
       final targetIndex =
@@ -1488,6 +1552,7 @@ class _ThreadPageState extends State<ThreadPage>
           });
         }
         final historyOpen = !widget.isDraft && _aiHistoryOpen;
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         Widget header(String title, {required bool history}) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1504,8 +1569,9 @@ class _ThreadPageState extends State<ThreadPage>
                                 : 'conversation-tab'),
                             onPressed: () => _setAiHistoryOpen(false),
                             style: TextButton.styleFrom(
-                              foregroundColor:
-                                  history ? Colors.grey : Colors.white,
+                              foregroundColor: history
+                                  ? ConclaveColors.textSecondary(isDark)
+                                  : ConclaveColors.textPrimary(isDark),
                             ),
                             icon: const Icon(Icons.chat_bubble_outline_rounded,
                                 size: 18),
@@ -1518,8 +1584,9 @@ class _ThreadPageState extends State<ThreadPage>
                                   : 'ai-history-toggle'),
                               onPressed: () => _setAiHistoryOpen(true),
                               style: TextButton.styleFrom(
-                                foregroundColor:
-                                    history ? Colors.white : Colors.grey,
+                                foregroundColor: history
+                                    ? ConclaveColors.textPrimary(isDark)
+                                    : ConclaveColors.textSecondary(isDark),
                               ),
                               icon: const Icon(Icons.history_rounded, size: 18),
                               label: const Text('AI History'),
@@ -1565,9 +1632,20 @@ class _ThreadPageState extends State<ThreadPage>
         final Widget content = Center(
             child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 840),
-          child: historyOpen
-              ? pane('AI History', _work(context), history: true)
-              : conversation,
+          child: widget.isDraft
+              ? conversation
+              : IndexedStack(
+                  key: const ValueKey('thread-panes'),
+                  index: historyOpen ? 1 : 0,
+                  sizing: StackFit.expand,
+                  children: [
+                    conversation,
+                    if (_aiHistoryMounted || historyOpen)
+                      pane('AI History', _work(context), history: true)
+                    else
+                      const SizedBox.shrink(),
+                  ],
+                ),
         ));
         return IgnorePointer(
           ignoring: !_threadViewReady,
@@ -1576,7 +1654,10 @@ class _ThreadPageState extends State<ThreadPage>
             child: Opacity(
               key: const ValueKey('thread-view-visibility'),
               opacity: _threadViewReady ? 1 : 0,
-              child: content,
+              child: NotificationListener<ScrollMetricsNotification>(
+                onNotification: _onTimelineMetricsChanged,
+                child: content,
+              ),
             ),
           ),
         );
@@ -1596,10 +1677,22 @@ class _ThreadPageState extends State<ThreadPage>
         ),
       );
 
-  Widget _discussionBody(
-      BuildContext context, ThreadChatPresentationSnapshot state,
-      {bool twoPane = false}) {
-    final messages = state.messages.map((message) {
+  // Rebuilt only when messages, Work requests or the viewer change, not on
+  // every realtime activity tick or follow/reveal pass.
+  (Object, Object, String?, bool, List<_DiscussionItem>)? _conversationCache;
+
+  List<_DiscussionItem> _conversationItems(
+      ThreadChatPresentationSnapshot state) {
+    final cached = _conversationCache;
+    final requests = _workTimeline;
+    if (cached != null &&
+        identical(cached.$1, state) &&
+        identical(cached.$2, requests) &&
+        cached.$3 == widget.currentUserId &&
+        cached.$4 == widget.isDraft) {
+      return cached.$5;
+    }
+    final items = state.messages.map((message) {
       final isMe =
           widget.currentUserId != null && widget.currentUserId!.isNotEmpty
               ? message.authorUserId == widget.currentUserId
@@ -1627,10 +1720,20 @@ class _ThreadPageState extends State<ThreadPage>
           text: message.body,
           sentAt: date == null ? null : _chatTimestamp(date),
           editedAt: edited == null ? null : _chatTimestamp(edited),
+          editedDate: edited,
           isMe: isMe && !answer,
           aiKind: message.isAiEntry ? message.kind : null);
     }).toList();
-    if (!widget.isDraft) _mergeWorkIntoConversation(messages);
+    if (!widget.isDraft) _mergeWorkIntoConversation(items);
+    _conversationCache =
+        (state, requests, widget.currentUserId, widget.isDraft, items);
+    return items;
+  }
+
+  Widget _discussionBody(
+      BuildContext context, ThreadChatPresentationSnapshot state,
+      {bool twoPane = false}) {
+    final messages = _conversationItems(state);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final showEmpty = messages.isEmpty &&
         state.error == null &&
@@ -1643,10 +1746,10 @@ class _ThreadPageState extends State<ThreadPage>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
+                const Icon(
                   Icons.chat_bubble_outline_rounded,
                   size: 42,
-                  color: isDark ? Colors.white24 : Colors.black26,
+                  color: ConclaveColors.neutral,
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -1654,16 +1757,16 @@ class _ThreadPageState extends State<ThreadPage>
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.white60 : Colors.black54,
+                    color: ConclaveColors.textSecondary(isDark),
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
+                const Text(
                   'Share context, decisions, or questions with your team below.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDark ? Colors.white38 : Colors.black38,
+                    color: ConclaveColors.neutral,
                   ),
                 ),
               ],
@@ -1773,6 +1876,7 @@ class _ThreadPageState extends State<ThreadPage>
                       ),
                   ],
                   itemCount: messages.length,
+                  itemId: (index) => messages[index].id,
                   empty: empty,
                   separatorBuilder: (_, index) => SizedBox(
                     height:
@@ -1844,10 +1948,12 @@ class _ThreadPageState extends State<ThreadPage>
   /// Message / Ask AI switch stacked in the composer's 32px left rail.
   Widget _composerModeControls() {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final selectedBackground = Color.alphaBlend(
-      Colors.black.withValues(alpha: 0.24),
-      ConclaveColors.composerBackground(dark),
-    );
+    final selectedBackground = dark
+        ? Color.alphaBlend(
+            Colors.black.withValues(alpha: 0.24),
+            ConclaveColors.composerBackgroundDark,
+          )
+        : ConclaveColors.primarySoft;
     Widget toggle(bool askAi, String tooltip, IconData icon) {
       final selected = _askAiMode == askAi;
       return IconButton(

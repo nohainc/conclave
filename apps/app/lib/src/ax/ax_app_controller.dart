@@ -704,15 +704,21 @@ extension _AxAppController on _AxAppStateMixin {
       });
     final selected = await showDialog<AxNotification>(
       context: dialogContext,
+      barrierColor: Colors.transparent,
       builder: (context) => ListenableBuilder(
         listenable: store.invitations,
         builder: (context, _) {
           final pendingInvitations = store.invitations.items;
           final isEmpty = pendingInvitations.isEmpty && notifications.isEmpty;
+          // A side panel anchored under the top-right bell, not a centred
+          // window: the inbox is browsed, not a decision.
           return AlertDialog(
+            alignment: Alignment.topRight,
+            insetPadding: const EdgeInsets.fromLTRB(24, 56, 16, 16),
+            constraints: const BoxConstraints(maxWidth: 400),
             title: const Text('Inbox'),
             content: SizedBox(
-              width: 440,
+              width: 400,
               child: isEmpty
                   ? const Padding(
                       padding: EdgeInsets.symmetric(vertical: 16),
@@ -1262,34 +1268,8 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
-  Future<void> _editDisplayName() async {
-    var draft = store.auth.viewer?.displayName ?? '';
-    final value = await showDialog<String>(
-      context: navigatorKey.currentContext ?? context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Rename profile'),
-        content: TextFormField(
-          initialValue: draft,
-          onChanged: (value) => draft = value,
-          autofocus: true,
-          textInputAction: TextInputAction.done,
-          decoration: const InputDecoration(labelText: 'Name'),
-          onFieldSubmitted: (value) => Navigator.of(dialogContext).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(draft),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    final name = value?.trim() ?? '';
-    if (name.isEmpty || !mounted) return;
+  /// Saves the profile name edited inline on Profile & Security.
+  Future<String?> _saveDisplayName(String name) async {
     try {
       await widget.dataSource.updateDisplayName(displayName: name);
       final viewer = store.auth.viewer;
@@ -1297,8 +1277,9 @@ extension _AxAppController on _AxAppStateMixin {
         store.auth.viewer = viewer.copyWith(displayName: name);
       }
       if (mounted) _updateState(() {});
+      return null;
     } catch (error) {
-      if (mounted) _showSnackBar(error.toString());
+      return error.toString();
     }
   }
 

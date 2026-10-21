@@ -1,5 +1,7 @@
 import '../features/people/people_page.dart';
 import '../features/common/quiet_notices.dart';
+import '../features/common/thread_dialogs.dart';
+import '../features/common/inline_text_edit.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';

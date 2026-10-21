@@ -899,7 +899,7 @@ class _LocalBuildBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: const Color(0xFFB45309),
+        color: ConclaveColors.warningTextLight,
         child: SafeArea(
           bottom: false,
           child: Container(

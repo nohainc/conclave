@@ -1,3 +1,4 @@
+import 'package:conclave_design/conclave_design.dart';
 import '../../ax/ax_people.dart';
 import '../../ax/ax_data.dart'
     show AxWorkflowWorkspaceDataSource, AxWorkflowWorkspaceSettings;
@@ -122,6 +123,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final tabs = _tabs;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -140,11 +142,9 @@ class _WorkspacesPageState extends State<WorkspacesPage>
               controller: tabs,
               isScrollable: true,
               tabAlignment: TabAlignment.center,
-              labelColor: theme.colorScheme.onSurface,
-              unselectedLabelColor: theme.brightness == Brightness.dark
-                  ? Colors.white38
-                  : Colors.black45,
-              indicatorColor: theme.colorScheme.onSurface,
+              labelColor: ConclaveColors.primaryForeground(isDark),
+              unselectedLabelColor: ConclaveColors.textSecondary(isDark),
+              indicatorColor: ConclaveColors.primaryForeground(isDark),
               dividerHeight: 0,
               tabs: [
                 for (final workspace in widget.workspaces)
@@ -401,9 +401,7 @@ class _WorkerCard extends StatelessWidget {
                             Icon(
                               Icons.check_circle_outline,
                               size: 16,
-                              color: isDark
-                                  ? const Color(0xff3ca879)
-                                  : const Color(0xff2d7a56),
+                              color: ConclaveColors.successText(isDark),
                             ),
                         ],
                       ),
@@ -442,7 +440,11 @@ class _StatusPill extends StatelessWidget {
     return Chip(
       visualDensity: VisualDensity.compact,
       avatar: Icon(Icons.circle,
-          size: 9, color: online ? const Color(0xff3ca879) : Colors.grey),
+          size: 9,
+          color: online
+              ? ConclaveColors.successText(
+                  Theme.of(context).brightness == Brightness.dark)
+              : ConclaveColors.neutral),
       label: Text(_display(status)),
     );
   }
@@ -512,6 +514,7 @@ class _DefaultWorkspaceControlState extends State<_DefaultWorkspaceControl> {
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
+              constraints: ConclaveDialogStyle.small,
               title: const Text('Change default Workspace?'),
               content: Text(
                   'Spaces using the default Workspace, including new Spaces, will use ${widget.workspace.name}. Workflow overrides in inheriting Spaces are reset. Saved per-Workspace workflows and existing runs keep their settings.'),

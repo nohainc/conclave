@@ -33,7 +33,6 @@ void main() {
             space: space,
             dataSource: const AxFixtureDataSource(),
             onOpenThread: (_) {},
-            onEdit: () {},
             onArchive: () {},
             onDelete: () {},
           ),

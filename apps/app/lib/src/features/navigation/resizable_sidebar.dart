@@ -12,7 +12,7 @@ class ResizableSidebar extends StatefulWidget {
     required this.child,
   });
 
-  static const minWidth = 220.0;
+  static const minWidth = 200.0;
   static const maxWidth = 300.0;
   final double width;
   final ValueChanged<double> onWidthChanged;

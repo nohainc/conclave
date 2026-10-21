@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
@@ -161,29 +162,20 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
         .createWorkspaceInvitation(widget.workspaceId, person.email));
   }
 
+  /// Person whose access editor is open inline; at most one at a time.
+  String? _editingUserId;
+
   Future<void> _editAccess(AxPersonWithAccess person) async {
-    await showDialog<void>(
-        context: context,
-        builder: (context) => Dialog(
-            child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
-                child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: WorkspaceMemberAccessSection(
-                        key: ValueKey('person-access-${person.userId}'),
-                        workspaceId: widget.workspaceId,
-                        workers: widget.workers,
-                        source: widget.memberAccessSource!,
-                        personSource: widget.personAccessSource,
-                        userId: person.userId,
-                        personName: person.displayName)))));
-    if (mounted) await _load();
+    final closing = _editingUserId == person.userId;
+    setState(() => _editingUserId = closing ? null : person.userId);
+    if (closing) await _load();
   }
 
   Future<void> _revokePerson(AxPersonWithAccess person) async {
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
+              constraints: ConclaveDialogStyle.small,
               title: Text('Revoke access for ${person.displayName}?'),
               content: const Text(
                   'They stop being able to run on this Workspace. Work already running finishes.'),
@@ -290,7 +282,26 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
                 child: TextButton(
                     key: ValueKey('sharing-edit-${person.userId}'),
                     onPressed: _busy ? null : () => _editAccess(person),
-                    child: const Text('Edit access'))),
+                    child: Text(_editingUserId == person.userId
+                        ? 'Done'
+                        : 'Edit access'))),
+          if (person.active &&
+              _editingUserId == person.userId &&
+              widget.memberAccessSource != null)
+            Container(
+                margin: const EdgeInsets.only(top: 4, bottom: 8),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                    borderRadius: BorderRadius.circular(14)),
+                child: WorkspaceMemberAccessSection(
+                    key: ValueKey('person-access-${person.userId}'),
+                    workspaceId: widget.workspaceId,
+                    workers: widget.workers,
+                    source: widget.memberAccessSource!,
+                    personSource: widget.personAccessSource,
+                    userId: person.userId,
+                    personName: person.displayName)),
           if (person.active)
             Row(children: [
               Text('At once:', style: muted),

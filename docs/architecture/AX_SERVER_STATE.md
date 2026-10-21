@@ -864,8 +864,8 @@ Space list and detail responses include the authenticated viewer's membership
 `role`. Sidebar grouping must use that server attribution, including after a
 Space detail refresh, rather than inferring ownership from a missing field.
 
-The expanded desktop sidebar defaults to 220 logical pixels. Its right-edge
-resize grip supports dragging between 220 and 300 pixels. The resize line is visible only while the pointer
+The expanded desktop sidebar defaults to 200 logical pixels. Its right-edge
+resize grip supports dragging between 200 and 300 pixels. The resize line is visible only while the pointer
 is over the grip, uses the same neutral color in all interaction states, and
 has no tooltip. When focused, Left
 and Right adjust by 10 pixels; Home and End select the limits. Width is local
@@ -1234,3 +1234,12 @@ current theme to maintain contrast.
 
 The selected Message / Ask AI icon has a rounded background darkened by 24%
 relative to the input surface; the surrounding mode strip remains 12% darker.
+
+### Sidebar header actions
+
+The expanded sidebar header shows the app mark without a visible app name.
+Search, New Space, and Notifications follow the mark, with the sidebar toggle
+at the end. The compact action group wraps at narrow sidebar widths.
+Search starts as an icon and opens the same focused search popup used by the
+collapsed rail. Typing updates search, Enter opens results, and Escape clears
+and closes the popup. Notification unread badges and action callbacks are retained.

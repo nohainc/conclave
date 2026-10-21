@@ -8,7 +8,9 @@ class SpacePage extends StatelessWidget {
     required this.space,
     required this.dataSource,
     required this.onOpenThread,
-    this.onEdit,
+    this.onSaveEdits,
+    this.startEditing = false,
+    this.onEditingStarted,
     required this.onArchive,
     required this.onDelete,
     this.onSpaceUpdated,
@@ -27,7 +29,14 @@ class SpacePage extends StatelessWidget {
   final AxSpace space;
   final AxDataSource dataSource;
   final ValueChanged<String> onOpenThread;
-  final VoidCallback? onEdit;
+
+  /// Saves an inline edit of name and description. Returns an error to show
+  /// under the form, or null on success. Without it the page saves directly.
+  final Future<String?> Function(String name, String description)? onSaveEdits;
+
+  /// Opens the inline edit form once, e.g. from the sidebar's Edit Space.
+  final bool startEditing;
+  final VoidCallback? onEditingStarted;
   final VoidCallback onArchive;
   final VoidCallback onDelete;
   final ValueChanged<AxSpace>? onSpaceUpdated;
@@ -44,7 +53,9 @@ class SpacePage extends StatelessWidget {
         space: space,
         dataSource: dataSource,
         onOpenThread: onOpenThread,
-        onEdit: onEdit,
+        onSaveEdits: onSaveEdits,
+        startEditing: startEditing,
+        onEditingStarted: onEditingStarted,
         onArchive: onArchive,
         onDelete: onDelete,
         onSpaceUpdated: onSpaceUpdated,
@@ -64,7 +75,9 @@ class _SpaceWorkspace extends StatefulWidget {
     required this.space,
     required this.dataSource,
     required this.onOpenThread,
-    this.onEdit,
+    this.onSaveEdits,
+    this.startEditing = false,
+    this.onEditingStarted,
     required this.onArchive,
     required this.onDelete,
     this.onSpaceUpdated,
@@ -81,7 +94,14 @@ class _SpaceWorkspace extends StatefulWidget {
   final AxSpace space;
   final AxDataSource dataSource;
   final ValueChanged<String> onOpenThread;
-  final VoidCallback? onEdit;
+
+  /// Saves an inline edit of name and description. Returns an error to show
+  /// under the form, or null on success. Without it the page saves directly.
+  final Future<String?> Function(String name, String description)? onSaveEdits;
+
+  /// Opens the inline edit form once, e.g. from the sidebar's Edit Space.
+  final bool startEditing;
+  final VoidCallback? onEditingStarted;
   final VoidCallback onArchive;
   final VoidCallback onDelete;
   final ValueChanged<AxSpace>? onSpaceUpdated;
@@ -113,6 +133,11 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
   bool get canManage => widget.space.effectivePermissions.manageOwnThreads;
   bool get canInvite => widget.space.role == 'owner';
   final _savingMembers = <String>{};
+  final _nameController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  bool _editing = false;
+  bool _savingEdits = false;
+  String? _editError;
   bool get isOwner => widget.space.role == 'owner';
 
   @override
@@ -120,6 +145,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
     super.initState();
     _configureQueries();
     _bindActiveSection();
+    _consumeStartEditing();
   }
 
   void _configureQueries() {
@@ -198,6 +224,10 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
   @override
   void didUpdateWidget(_SpaceWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.space.id != widget.space.id) _editing = false;
+    if (widget.startEditing && !oldWidget.startEditing) {
+      _consumeStartEditing();
+    }
     if (oldWidget.space.id != widget.space.id ||
         oldWidget.dataSource != widget.dataSource ||
         oldWidget.spaceThreads != widget.spaceThreads ||
@@ -213,16 +243,29 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
   @override
   void dispose() {
     _cancelTab();
+    _nameController.dispose();
+    _descriptionController.dispose();
     super.dispose();
   }
 
   void _updateState(VoidCallback callback) => setState(callback);
+
+  void _consumeStartEditing() {
+    if (!widget.startEditing) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!_editing) _startEditing();
+      widget.onEditingStarted?.call();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     if (widget.embedded) return _membersTab();
     return _page();
   }
+
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
 
   Widget _page() => LayoutBuilder(
         builder: (context, constraints) => Center(
@@ -241,105 +284,112 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                         Stack(
                           alignment: Alignment.topCenter,
                           children: [
-                            Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    widget.space.name.isNotEmpty
-                                        ? widget.space.name
-                                        : 'Untitled Space',
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: -0.3,
-                                    ),
-                                  ),
-                                  if (widget.space.description
-                                      .trim()
-                                      .isNotEmpty) ...[
-                                    const SizedBox(height: 12),
+                            if (_editing)
+                              _spaceEditForm()
+                            else
+                              Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
                                     Text(
-                                      widget.space.description.trim(),
+                                      widget.space.name.isNotEmpty
+                                          ? widget.space.name
+                                          : 'Untitled Space',
                                       textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
+                                      style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: -0.3,
                                       ),
                                     ),
+                                    if (widget.space.description
+                                        .trim()
+                                        .isNotEmpty) ...[
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        widget.space.description.trim(),
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                    if (_workflows != null)
+                                      _SpaceWorkspaceSelector(
+                                          configurations: _workflows!,
+                                          isOwner: isOwner),
                                   ],
-                                  if (_workflows != null)
-                                    _SpaceWorkspaceSelector(
-                                        configurations: _workflows!,
-                                        isOwner: isOwner),
-                                ],
+                                ),
                               ),
-                            ),
                             Align(
                               alignment: Alignment.topRight,
-                              child: isOwner
+                              child: isOwner && !_editing
                                   ? PopupMenuButton<String>(
-                                      color: ConclaveColors
-                                          .navigationBackgroundDark,
+                                      color:
+                                          ConclaveMenuStyle.background(_isDark),
                                       surfaceTintColor: Colors.transparent,
+                                      elevation: 12,
+                                      shadowColor:
+                                          ConclaveMenuStyle.shadow(_isDark),
+                                      shape: ConclaveMenuStyle.shape(_isDark),
+                                      menuPadding: ConclaveMenuStyle.padding,
                                       icon: const Icon(Icons.more_vert),
                                       tooltip: 'Space actions',
                                       splashRadius: 18,
                                       onSelected: (action) {
                                         if (action == 'edit') {
-                                          if (widget.onEdit != null) {
-                                            widget.onEdit!();
-                                          } else {
-                                            _editSpaceDialog();
-                                          }
+                                          _startEditing();
                                         } else if (action == 'archive') {
                                           widget.onArchive();
                                         } else if (action == 'delete') {
                                           widget.onDelete();
                                         }
                                       },
-                                      itemBuilder: (context) => const [
+                                      itemBuilder: (context) => [
                                         PopupMenuItem(
-                                          textStyle: TextStyle(
-                                              color: ConclaveColors
-                                                  .navigationTextDark),
+                                          height: 36,
+                                          textStyle:
+                                              ConclaveMenuStyle.popupTextStyle(
+                                                  _isDark),
                                           value: 'edit',
                                           child: Row(
                                             children: [
                                               Icon(Icons.edit_outlined,
                                                   color: ConclaveColors
-                                                      .navigationTextDark,
+                                                      .textSecondary(_isDark),
                                                   size: 18),
-                                              SizedBox(width: 8),
-                                              Text('Edit'),
+                                              const SizedBox(width: 8),
+                                              const Text('Edit'),
                                             ],
                                           ),
                                         ),
                                         PopupMenuItem(
-                                          textStyle: TextStyle(
-                                              color: ConclaveColors
-                                                  .navigationTextDark),
+                                          height: 36,
+                                          textStyle:
+                                              ConclaveMenuStyle.popupTextStyle(
+                                                  _isDark),
                                           value: 'archive',
                                           child: Row(
                                             children: [
                                               Icon(Icons.archive_outlined,
                                                   color: ConclaveColors
-                                                      .navigationTextDark,
+                                                      .textSecondary(_isDark),
                                                   size: 18),
-                                              SizedBox(width: 8),
-                                              Text('Archive'),
+                                              const SizedBox(width: 8),
+                                              const Text('Archive'),
                                             ],
                                           ),
                                         ),
                                         PopupMenuItem(
-                                          textStyle: TextStyle(
-                                              color: ConclaveColors
-                                                  .navigationTextDark),
+                                          height: 36,
+                                          textStyle:
+                                              ConclaveMenuStyle.popupTextStyle(
+                                                  _isDark),
                                           value: 'delete',
-                                          child: Row(
+                                          child: const Row(
                                             children: [
                                               Icon(Icons.delete_outline,
                                                   size: 18,

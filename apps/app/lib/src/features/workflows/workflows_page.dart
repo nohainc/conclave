@@ -874,6 +874,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
       final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
+                  constraints: ConclaveDialogStyle.small,
                   title: const Text('Use this Workspace?'),
                   content: const Text(
                       'New Work will run on this Workspace using its own workflow settings. Workflow settings of other Workspaces are kept. Workflow overrides of Spaces using the global Workspace are reset, and existing runs keep their recorded settings.'),
@@ -899,16 +900,16 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
 
   Future<void> _edit(AxBuiltinWorkflow definition,
       AxUserWorkflowConfiguration configuration) async {
-    await showDialog<void>(
-        context: context,
-        builder: (context) => WorkflowEditor(
-              stepsOnly: true,
-              definition: definition,
-              configuration: configuration,
-              catalogs: widget.catalogs,
-              workspaceId: widget.workspaceId,
-              cache: widget.configurations,
-            ));
+    await WorkflowEditor.open(
+        context,
+        WorkflowEditor(
+          stepsOnly: true,
+          definition: definition,
+          configuration: configuration,
+          catalogs: widget.catalogs,
+          workspaceId: widget.workspaceId,
+          cache: widget.configurations,
+        ));
   }
 }
 

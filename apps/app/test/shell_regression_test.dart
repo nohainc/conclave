@@ -127,7 +127,7 @@ void main() {
 
       // Allowed permanent items:
       expect(find.text('Conclave AX'),
-          findsNWidgets(2)); // Brand Header & Space in tree
+          findsOneWidget); // Space in tree; header has only the app mark
       expect(find.byTooltip('New Space'),
           findsOneWidget); // New Space button before alarm
       expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm button
@@ -530,8 +530,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AppSidebar), findsOneWidget);
       expect(find.byType(AppTopHud), findsNothing); // Top HUD hidden on desktop
-      expect(find.byTooltip('Search or jump to...'),
-          findsOneWidget); // Search on sidebar
+      expect(find.byTooltip('Search...'), findsOneWidget); // Search on sidebar
       expect(
           find.byTooltip('Notifications'), findsOneWidget); // Alarm on sidebar
       expect(find.byTooltip('Open menu'), findsNothing);

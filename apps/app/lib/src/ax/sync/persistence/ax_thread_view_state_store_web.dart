@@ -17,7 +17,14 @@ class LocalStorageAxThreadViewStateStore implements AxThreadViewStateStore {
   Future<AxThreadViewState?> load({
     required String userId,
     required String threadId,
-  }) async {
+  }) async =>
+      loadSync(userId: userId, threadId: threadId);
+
+  @override
+  AxThreadViewState? loadSync({
+    required String userId,
+    required String threadId,
+  }) {
     try {
       final raw = web.window.localStorage.getItem(_key(userId, threadId));
       return raw == null ? null : AxThreadViewState.decode(raw);

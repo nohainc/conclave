@@ -105,15 +105,15 @@ Future<WorkflowSource> mount(
       home: Builder(
           builder: (context) => Scaffold(
               body: TextButton(
-                  onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (context) => WorkflowEditor(
-                            definition: workflow('full_cycle', 'Full Cycle',
-                                steps: ['plan', 'implement', 'verify']),
-                            configuration: saved,
-                            catalogs: catalogs,
-                            cache: cache,
-                          )),
+                  onPressed: () => WorkflowEditor.open(
+                      context,
+                      WorkflowEditor(
+                        definition: workflow('full_cycle', 'Full Cycle',
+                            steps: ['plan', 'implement', 'verify']),
+                        configuration: saved,
+                        catalogs: catalogs,
+                        cache: cache,
+                      )),
                   child: const Text('Open'))))));
   await tester.tap(find.text('Open'));
   await tester.pumpAndSettle();

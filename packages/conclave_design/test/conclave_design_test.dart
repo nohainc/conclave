@@ -17,19 +17,19 @@ double _contrastRatio(Color foreground, Color background) {
 void main() {
   group('Surface Hierarchy & Theme Tokens', () {
     test('Light mode surface hierarchy is defined deterministically', () {
-      expect(ConclaveColors.canvasLight, const Color(0xfff8f7f3));
-      expect(ConclaveColors.surfaceLight, const Color(0xffffffff));
-      expect(ConclaveColors.surfaceHoverLight, const Color(0xfff1efe8));
-      expect(ConclaveColors.borderLight, const Color(0xffd2d1ca));
-      expect(ConclaveColors.codeBackgroundLight, const Color(0xfff0eee8));
+      expect(ConclaveColors.canvasLight, const Color(0xffeff0ff));
+      expect(ConclaveColors.surfaceLight, const Color(0xfffbfbff));
+      expect(ConclaveColors.surfaceHoverLight, const Color(0xffe6e7f5));
+      expect(ConclaveColors.borderLight, const Color(0xffd2d3e1));
+      expect(ConclaveColors.codeBackgroundLight, const Color(0xffe6e7f5));
     });
 
     test('Dark mode surface hierarchy is defined deterministically', () {
-      expect(ConclaveColors.canvasDark, const Color(0xff1b1a24));
-      expect(ConclaveColors.surfaceDark, const Color(0xff24222e));
-      expect(ConclaveColors.surfaceHoverDark, const Color(0xff343142));
-      expect(ConclaveColors.borderDark, const Color(0xff403d50));
-      expect(ConclaveColors.codeBackgroundDark, const Color(0xff15151d));
+      expect(ConclaveColors.canvasDark, const Color(0xff171721));
+      expect(ConclaveColors.surfaceDark, const Color(0xff1f1e29));
+      expect(ConclaveColors.surfaceHoverDark, const Color(0xff242530));
+      expect(ConclaveColors.borderDark, const Color(0xff2d2d38));
+      expect(ConclaveColors.codeBackgroundDark, const Color(0xff10101a));
     });
 
     test('Material 3 ColorScheme maps surface containers properly', () {
