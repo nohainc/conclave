@@ -342,7 +342,7 @@ for (const [workflowName, workflowContent, command] of [
   [
     "nightly",
     nightlyWorkflow,
-    "bash scripts/build-workspace-macos.sh --prepared",
+    "bash scripts/build-workspace-macos.sh --debug --prepared",
   ],
   [
     "nightly",
