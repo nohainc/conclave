@@ -203,13 +203,15 @@ void main() {
         ),
       ))));
       await tester.pump();
-      for (final label in ['Space A', 'Active Thread', 'Archived Thread']) {
+      for (final label in ['Space A', 'Active Thread']) {
         final row = find
             .ancestor(of: find.text(label), matching: find.byType(InkWell))
             .first;
         expect(tester.getSize(row).height, 30, reason: '$label at $navigation');
       }
-      if (navigation.kind == AxRouteKind.space || navigation.threadId != null) {
+      expect(find.text('Archived Thread'), findsNothing);
+      if (navigation.kind == AxRouteKind.space ||
+          navigation.threadId == 'active') {
         final menu = find.byTooltip(
             navigation.threadId == null ? 'Space menu' : 'Thread menu');
         expect(menu, findsOneWidget);

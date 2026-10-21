@@ -1235,7 +1235,7 @@ void main() {
       expect(logoutTriggered, isTrue);
     });
 
-    testWidgets('groups archived threads beneath active sidebar threads',
+    testWidgets('omits archived threads and archive groups from the sidebar',
         (tester) async {
       const spaceWithArchived = AxSpace(
         id: 'space-2',
@@ -1292,8 +1292,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Active Thread'), findsOneWidget);
-      expect(find.text('Old Archived Thread'), findsOneWidget);
-      expect(find.text('Archived (1)'), findsOneWidget);
+      expect(find.text('Old Archived Thread'), findsNothing);
+      expect(find.text('Archived (1)'), findsNothing);
     });
   });
 

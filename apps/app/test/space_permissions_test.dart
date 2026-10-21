@@ -183,10 +183,10 @@ void main() {
       onArchive: () {},
     ))));
     await tester.pumpAndSettle();
-    final chatToggle = find.byKey(const ValueKey('work-choose-workflow'));
+    final chatToggle = find.byKey(const ValueKey('work-toggle-chat'));
     expect(chatToggle, findsOneWidget);
     final activeChatText = tester.widget<Text>(
-        find.descendant(of: chatToggle, matching: find.text('Chat workflow')));
+        find.descendant(of: chatToggle, matching: find.text('Chat')));
     expect(activeChatText.style!.color!.a, 1.0);
     expect(find.text('Work workflow'), findsNothing);
     expect(tester.takeException(), isNull);

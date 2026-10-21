@@ -26,17 +26,49 @@ const _thread = AxThread(
 );
 
 void main() {
+  testWidgets('archived Threads are absent from the expanded sidebar',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SpaceTree(
+      shellContext: const AxShellContext(
+        navigation: AxNavigation.home(),
+        spaces: [_space],
+        expandedSpaceIds: {'space-a'},
+        threadsBySpace: {
+          'space-a': [
+            _thread,
+            AxThread(
+                id: 'archived',
+                spaceId: 'space-a',
+                name: 'Archived Thread',
+                lead: '',
+                status: 'archived',
+                brief: '',
+                primaryWorkspace: '',
+                queueStatus: ''),
+          ]
+        },
+      ),
+      onNavigateTo: (_) {},
+      onToggleSpaceExpanded: (_) {},
+    ))));
+    expect(find.text('Thread A'), findsOneWidget);
+    expect(find.text('Archived Thread'), findsNothing);
+    expect(find.textContaining('Archived ('), findsNothing);
+  });
+
   testWidgets('hovered Space and Thread rows show their menus', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: SizedBox(
           width: 260,
           child: SpaceTree(
-            shellContext: AxShellContext(
-              navigation: const AxNavigation.home(),
-              spaces: const [_space],
-              expandedSpaceIds: const {'space-a'},
-              threadsBySpace: const {
+            shellContext: const AxShellContext(
+              navigation: AxNavigation.home(),
+              spaces: [_space],
+              expandedSpaceIds: {'space-a'},
+              threadsBySpace: {
                 'space-a': [_thread]
               },
             ),

@@ -46,10 +46,14 @@ latest activity within their ownership group. Accepted requests, new discussion
 messages, and request lifecycle updates advance both the Thread and its Space,
 including while the Thread is open. Sidebar refreshes coalesce activity bursts.
 
-When only one non-Chat workflow is available, Ask AI shows it as a direct
-button; clicking it selects that workflow without opening a menu. Multiple
-workflows retain the chooser. The attachment, Chat, workflow, and model controls
-sit together without inter-button gaps.
+Ask AI keeps **Chat | Work | More ▾** visible. Chat and Work select their current
+catalog versions directly. More lists other available workflows by name in a
+fixed catalog order. Selecting one replaces More with its name; click that name to choose
+another, or Chat/Work to return immediately. Only the selected control is
+highlighted, by text color as in the Message / Ask AI rail. Missing primary workflows and an empty More menu remain disabled.
+Workflow selection stays with the Thread and applies to the next request;
+switching does not alter or cancel a running request. History preserves the
+workflow used for each request.
 
 1. Open the Space Workflows surface and configure a Ready Worker/model for
    **Chat** and **Work**. These bindings are independent and may use different

@@ -24,7 +24,7 @@ void main() {
     queueStatus: 'Idle',
   );
 
-  testWidgets('Space explains team collaboration and Threads', (tester) async {
+  testWidgets('Space exposes Threads and archive filtering', (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -42,8 +42,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Authentication'), findsOneWidget);
-    expect(find.text('Each Thread is one focused area of team work.'),
-        findsOneWidget);
+    expect(find.text('Threads'), findsOneWidget);
     expect(find.text('Workspaces'), findsNothing);
     expect(find.text('Workflows'), findsNothing);
     expect(find.text('Members'), findsNothing);

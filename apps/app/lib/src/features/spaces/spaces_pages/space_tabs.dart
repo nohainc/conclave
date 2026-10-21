@@ -6,27 +6,57 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Each Thread is one focused area of team work.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+            if (!widget.embedded) ...[
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: 8,
+                children: [
+                  Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Text('Threads',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 12),
+                    DropdownButtonHideUnderline(
+                      child: DropdownButton<bool>(
+                        key: const ValueKey('space-thread-filter'),
+                        value: _showArchivedThreads,
+                        isDense: true,
+                        borderRadius: BorderRadius.circular(8),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: false, child: Text('Active')),
+                          DropdownMenuItem(
+                              value: true, child: Text('Archived')),
+                        ],
+                        onChanged: (value) => _updateState(
+                            () => _showArchivedThreads = value ?? false),
+                      ),
                     ),
-                  ),
-                ),
-                if (canManage)
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    tooltip: 'Create Thread',
-                    splashRadius: 20,
-                    onPressed: _createThread,
-                  ),
-              ],
-            ),
+                  ]),
+                  if (canManage)
+                    Tooltip(
+                      message: 'Create Thread',
+                      child: FilledButton.icon(
+                        key: const ValueKey('space-new-thread'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF5E20F8),
+                          foregroundColor: Colors.white,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('New Thread'),
+                        onPressed: _createThread,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+            ],
             const SizedBox(height: 8),
             if (threadsError != null)
               TextButton(
@@ -38,43 +68,29 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                   child: const Text('Retry Threads')),
             if (threadsLoading)
               const LinearProgressIndicator()
-            else if (threads.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('No threads yet.'),
+            else if (_filteredThreads.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(
+                    _archivedOnly ? 'No archived threads.' : 'No threads yet.'),
               )
             else
-              Column(
-                children: [
-                  ...sortAxThreadsByLastUpdate(threads)
-                      .where((thread) => thread.status != 'archived')
-                      .map((thread) => _threadListTile(thread)),
-                  if (threads.any((item) => item.status == 'archived')) ...[
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Archived Threads',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    ...sortAxThreadsByLastUpdate(threads)
-                        .where((item) => item.status == 'archived')
-                        .map((thread) => _threadListTile(thread)),
-                  ],
-                ],
-              ),
+              ..._filteredThreads.map(_threadListTile),
           ],
         ),
       );
 
+  Iterable<AxThread> get _filteredThreads =>
+      sortAxThreadsByLastUpdate(threads).where((thread) =>
+          (thread.archived || thread.status.toLowerCase() == 'archived') ==
+          _archivedOnly);
+
+  // Embedded on the Space landing, active Threads live in the sidebar.
+  bool get _archivedOnly => widget.embedded || _showArchivedThreads;
+
   Widget _threadListTile(AxThread thread) {
-    final archived = thread.status == 'archived';
+    final archived =
+        thread.archived || thread.status.toLowerCase() == 'archived';
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final pending = thread.id.startsWith('local-thread-');
     return ListTile(

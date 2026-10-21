@@ -43,6 +43,23 @@ Future<void> pump(WidgetTester tester,
 }
 
 void main() {
+  testWidgets('Space landing shows only archived Threads in a collapsed area',
+      (tester) async {
+    await pump(tester, create: (_) async => thread, open: (_) {});
+    final title = find.text('Archived Threads');
+    expect(tester.getRect(title).bottom,
+        lessThan(tester.getRect(find.text('Members')).top));
+    expect(find.byKey(const ValueKey('space-thread-filter')), findsNothing);
+    expect(find.text('Existing'), findsNothing);
+    await tester.tap(title);
+    await tester.pumpAndSettle();
+    expect(find.text('Existing'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Restore'), findsNothing);
+    await tester.tap(find.byIcon(Icons.more_vert).last);
+    await tester.pumpAndSettle();
+    expect(find.text('Restore'), findsOneWidget);
+  });
+
   for (final width in [600.0, 1200.0]) {
     testWidgets('Space has only named creation and members at width $width',
         (tester) async {

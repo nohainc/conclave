@@ -74,9 +74,18 @@ Work Request path, so session continuity and cross-Worker context behave as
 before. The persisted Thread tab state selects this switch: `chat` restores
 Message, `work` restores Ask AI.
 
-The input area's Workflow selector lists Chat and Work together, alongside other
-available Workflows. It shows the selected Workflow's name and marks the selected
-entry in the menu. There is no separate Chat toggle.
+The input area keeps fixed Chat and Work buttons followed by More ▾, grouped
+in one outlined track; Chat and Work explain themselves in tooltips. Selecting
+another available Workflow from More replaces that label with its name and
+marks the third control as active; its menu shows names and a selection mark. Chat or Work switches back in one click and restores the More
+label. Only the active control is highlighted. Unavailable primary workflows
+remain visible but disabled; More is disabled when no other workflows are available.
+More always lists workflows in catalog order; selecting one never moves it.
+The active control is shown by text color only, matching the composer's
+Message / Ask AI rail, with no background fill. The existing
+saved Thread selection remains in effect until changed. Selection affects the
+next request, never an accepted or running request; history retains each request's
+accepted workflow. Controls are guarded during request submission.
 
 The Thread header places icon-labelled **Conversation** and **AI History** actions
 next to each other. Each pane highlights its active label in white and the other

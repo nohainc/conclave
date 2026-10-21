@@ -32,6 +32,9 @@ Future<void> pumpSpace(
     onOpenThread: (_) {},
   ))));
   await tester.pumpAndSettle();
+  // Workspace lives in the collapsed Settings area.
+  await tester.tap(find.text('Settings'));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -41,11 +44,10 @@ void main() {
     await pumpSpace(tester, source, ownerSpace);
     expect(find.byKey(const ValueKey('space-workspace')), findsOneWidget);
     final selector = find.byKey(const ValueKey('space-workspace'));
-    final name = find.byKey(const ValueKey('new-thread-name'));
-    expect(tester.getRect(selector).width, tester.getRect(name).width);
-    expect(tester.getRect(selector).bottom, lessThan(tester.getRect(name).top));
-    expect(tester.getRect(selector).bottom,
-        lessThan(tester.getRect(find.text('Members')).top));
+    expect(tester.getRect(selector).top,
+        greaterThan(tester.getRect(find.text('Settings')).bottom));
+    expect(tester.getRect(selector).top,
+        greaterThan(tester.getRect(find.text('Members')).bottom));
 
     expect(find.textContaining('Following the default Workspace: First'),
         findsOneWidget);
@@ -83,15 +85,13 @@ void main() {
     expect(source.workspaceWrites, 2);
   });
 
-  testWidgets('narrow Space keeps Workspace above Thread name', (tester) async {
+  testWidgets('narrow Space shows Workspace under Settings', (tester) async {
     final source = WorkflowSource();
     await pumpSpace(tester, source, ownerSpace);
     await tester.binding.setSurfaceSize(const Size(600, 1000));
     await tester.pumpAndSettle();
-    expect(
-        tester.getRect(find.byKey(const ValueKey('space-workspace'))).bottom,
-        lessThan(
-            tester.getRect(find.byKey(const ValueKey('new-thread-name'))).top));
+    expect(tester.getRect(find.byKey(const ValueKey('space-workspace'))).top,
+        greaterThan(tester.getRect(find.text('Settings')).bottom));
     expect(tester.takeException(), isNull);
   });
 

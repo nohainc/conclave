@@ -161,6 +161,10 @@ extension _AxAppViews on _AxAppStateMixin {
       createThread: (name) =>
           store.collaboration.createThread(spaceId: space.id, name: name),
       onOpenThread: (thread) => _openThread(space.id, thread.id),
+      onOpenThreadId: (threadId) => _openThread(space.id, threadId),
+      spaceThreads: store.spaceThreads,
+      tabQueries: store.spaceTabs,
+      mutations: store.collaboration,
     );
   }
 

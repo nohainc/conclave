@@ -20,6 +20,62 @@ void main() {
     ('chat', 1, 'chat', 0),
     ('direct', 2, 'implement', 1)
   ]) {
+    testWidgets('Space filters active and archived Threads at narrow widths',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(360, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      const active = AxThread(
+          id: 'active',
+          spaceId: 'p-1',
+          name: 'Active Thread',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: '');
+      final archived = const AxThread(
+          id: 'archived',
+          spaceId: 'p-1',
+          name: 'Archived Thread',
+          lead: '',
+          status: 'archived',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: '');
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: SingleChildScrollView(
+                  child: SpacePage(
+        space: const AxSpace(
+            id: 'p-1',
+            name: 'A very long Space name that must wrap beside its actions',
+            branch: '',
+            lastActivity: ''),
+        dataSource: _SpaceStreamsSource([active, archived]),
+        onOpenThread: (_) {},
+        onArchive: () {},
+        onDelete: () {},
+      )))));
+      await tester.pumpAndSettle();
+      expect(find.text('Active Thread'), findsOneWidget);
+      expect(find.text('Archived Thread'), findsNothing);
+      expect(find.text('Restore'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('space-thread-filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Archived').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Active Thread'), findsNothing);
+      expect(find.text('Archived Thread'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Restore'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const ValueKey('space-thread-filter')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Active').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Active Thread'), findsOneWidget);
+      expect(find.text('Archived Thread'), findsNothing);
+    });
+
     testWidgets('${workflow.$1} keeps run and step metadata internal',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 1400));
@@ -163,6 +219,58 @@ void main() {
       expect(find.byTooltip('Report issue'), findsNothing);
     });
   }
+
+  testWidgets('a user-cancelled request is shown as cancelled, not failed',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    // Send now from the queue cancels the running request; its stopped Step
+    // still carries an error code.
+    const step = AxWorkRequestStep(
+        kind: 'implement',
+        status: 'failed',
+        workerId: 'worker-a',
+        workerDisplayName: 'ChatGPT',
+        errorCode: 'execution_failed',
+        errorMessage: 'process terminated');
+    const request = AxWorkRequest(
+        id: 'cancelled-request',
+        requestedByName: 'User',
+        prompt: 'Continue',
+        workflowId: 'direct',
+        workflowVersion: 2,
+        status: 'cancelled',
+        createdAt: '2026-10-07T10:00:00Z',
+        error:
+            'A Step could not be completed. Open Run details for the safe error code.',
+        steps: [step]);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      initialTab: 1,
+      space: const AxSpace(
+          id: 'space-1',
+          name: 'Space',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      thread: const AxThread(
+          id: 'stream-1',
+          spaceId: 'space-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: _ContinuityFailureDataSource(request, step),
+      onBackToSpace: _noop,
+      onArchive: _noop,
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.text('Request cancelled.'), findsOneWidget);
+    expect(find.textContaining('could not be completed'), findsNothing);
+  });
 
   for (final workflow in ['chat', 'direct']) {
     for (final code in [
@@ -454,7 +562,57 @@ void main() {
     expect(find.descendant(of: history, matching: find.text('After clear')),
         findsOneWidget);
   });
-  testWidgets('single Work workflow switches directly from Chat with Markdown',
+  testWidgets('narrow composer lists every workflow in one selector',
+      (tester) async {
+    tester.view
+      ..physicalSize = const Size(420, 1000)
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      initialTab: 1,
+      space: const AxSpace(
+          id: 'space-1',
+          name: 'Space',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      thread: const AxThread(
+          id: 'stream-1',
+          spaceId: 'space-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: _CurrentWorkflowUiDataSource(),
+      onBackToSpace: _noop,
+      onArchive: _noop,
+      onRunWork: (_, __, ___, ____) => Completer<String>().future,
+    ))));
+    await tester.pumpAndSettle();
+    await _askAi(tester);
+    expect(find.byKey(const ValueKey('work-toggle-chat')), findsNothing);
+    expect(find.byKey(const ValueKey('work-toggle-direct')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
+    await tester.pumpAndSettle();
+    final menu = find.byType(ConclaveMenuEntry<String>);
+    final chat = find.descendant(of: menu, matching: find.text('Chat'));
+    expect(chat, findsOneWidget);
+    expect(
+        find.descendant(of: menu, matching: find.text('Work')), findsOneWidget);
+    final colors = tester
+        .widgetList<Text>(
+            find.descendant(of: menu, matching: find.byType(Text)))
+        .map((text) => text.style?.color)
+        .toSet();
+    // All workflow items share the normal text color.
+    expect(colors, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('Chat Work and More switch workflows and submit Markdown',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -466,6 +624,7 @@ void main() {
         home: Scaffold(
             body: ThreadPage(
       initialTab: 1,
+      viewerEmail: 'vitalii@nohainc.com',
       space: const AxSpace(
           id: 'space-1',
           name: 'Space',
@@ -497,21 +656,60 @@ void main() {
         .toList();
     expect(markdown, containsAll(['**Chat answer**', '**Work answer**']));
     await _askAi(tester);
+    expect(find.byKey(const ValueKey('work-toggle-chat')), findsOneWidget);
+    expect(find.byKey(const ValueKey('work-toggle-direct')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('work-toggle-chat')), findsNothing);
     final menu = find.byType(ConclaveMenuEntry<String>);
     expect(
-        find.descendant(of: menu, matching: find.text('Chat')), findsOneWidget);
+        find.descendant(of: menu, matching: find.text('Chat')), findsNothing);
     expect(
-        find.descendant(of: menu, matching: find.text('Work')), findsOneWidget);
-    await tester.tap(find.descendant(of: menu, matching: find.text('Chat')));
+        find.descendant(of: menu, matching: find.text('Work')), findsNothing);
+    expect(
+        find.descendant(of: menu, matching: find.text('Direct')), findsNothing);
+    final menuOrder = tester
+        .widgetList<Text>(
+            find.descendant(of: menu, matching: find.byType(Text)))
+        .map((text) => text.data)
+        .toList();
+    await tester.tap(
+        find.descendant(of: menu, matching: find.text('Plan & Implement')));
     await tester.pumpAndSettle();
     expect(
         find.descendant(
             of: find.byKey(const ValueKey('work-choose-workflow')),
-            matching: find.text('Chat')),
+            matching: find.text('Plan & Implement')),
         findsOneWidget);
+    expect(
+        tester
+            .widget<Semantics>(
+                find.byKey(const ValueKey('work-choose-workflow')))
+            .properties
+            .selected,
+        isTrue);
+    await tester.tap(find.byKey(const ValueKey('work-toggle-direct')));
+    await tester.pumpAndSettle();
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey('work-choose-workflow')),
+            matching: find.text('More')),
+        findsOneWidget);
+    // More keeps catalog order regardless of the selection; names only.
+    await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
+    await tester.pumpAndSettle();
+    expect(find.byType(PopupMenuDivider), findsNothing);
+    expect(
+        tester
+            .widgetList<Text>(find.descendant(
+                of: find.byType(ConclaveMenuEntry<String>),
+                matching: find.byType(Text)))
+            .map((text) => text.data)
+            .toList(),
+        menuOrder);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('work-toggle-chat')));
+    await tester.pumpAndSettle();
 
     const source = '## Question\n\n**Explain** this `code`.';
     await tester.enterText(find.byType(TextField).first, source);
@@ -560,11 +758,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('· Direct'), findsOneWidget);
     await _askAi(tester);
-    await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.descendant(
-        of: find.byType(ConclaveMenuEntry<String>),
-        matching: find.text('Work')));
+    expect(
+        tester
+            .widget<Semantics>(
+                find.byKey(const ValueKey('work-choose-workflow')))
+            .properties
+            .enabled,
+        isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('work-toggle-direct')));
     await tester.pumpAndSettle();
     expect(
         find.descendant(
@@ -1723,8 +1925,7 @@ void main() {
     expect(find.byKey(const ValueKey('space-edit-form')), findsNothing);
 
     expect(find.byType(TabBar), findsNothing);
-    expect(find.text('Each Thread is one focused area of team work.'),
-        findsOneWidget);
+    expect(find.text('Threads'), findsOneWidget);
     expect(find.byTooltip('Create Thread'), findsOneWidget);
 
     await tester.binding.setSurfaceSize(null);
@@ -1921,16 +2122,12 @@ void main() {
     await tester.tapAt(Offset.zero);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('work-choose-workflow')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.descendant(
-        of: find.byType(ConclaveMenuEntry<String>),
-        matching: find.text('Work')));
+    await tester.tap(find.byKey(const ValueKey('work-toggle-direct')));
     await tester.pumpAndSettle();
     expect(
         find.descendant(
             of: find.byKey(const ValueKey('work-choose-workflow')),
-            matching: find.text('Work')),
+            matching: find.text('More')),
         findsOneWidget);
     const markdownPrompt =
         '  ## Implementation\n\n- **Add tests**\n\n```dart\nfinal ready = true;\n```\n';

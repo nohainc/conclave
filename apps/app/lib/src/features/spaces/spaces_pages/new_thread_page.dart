@@ -16,6 +16,10 @@ class NewThreadPage extends StatefulWidget {
     this.currentUserId,
     this.currentUserName,
     this.viewerEmail,
+    this.onOpenThreadId,
+    this.spaceThreads,
+    this.tabQueries,
+    this.mutations,
   });
 
   final AxSpace space;
@@ -30,6 +34,12 @@ class NewThreadPage extends StatefulWidget {
   final String? currentUserId;
   final String? currentUserName;
   final String? viewerEmail;
+
+  /// Opens an existing Thread from the Space's Thread list.
+  final ValueChanged<String>? onOpenThreadId;
+  final AxSpaceThreads? spaceThreads;
+  final AxSpaceTabQueries? tabQueries;
+  final AxCollaborationMutations? mutations;
 
   @override
   State<NewThreadPage> createState() => _NewThreadPageState();
@@ -47,7 +57,6 @@ class _NewThreadPageState extends State<NewThreadPage> {
                   spaceId: widget.space.id)
               : null);
   bool _busy = false;
-  bool _membersExpanded = false;
   String? _creationError;
 
   @override
@@ -123,14 +132,6 @@ class _NewThreadPageState extends State<NewThreadPage> {
                           ),
                           const SizedBox(height: 16),
                         ],
-                        if (_workflows != null)
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: _SpaceWorkspaceSelector(
-                                configurations: _workflows!,
-                                isOwner: widget.space.role == 'owner'),
-                          ),
-                        const SizedBox(height: 20),
                         Align(
                           alignment: Alignment.centerLeft,
                           child:
@@ -144,40 +145,56 @@ class _NewThreadPageState extends State<NewThreadPage> {
             child: Center(
                 child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 840),
-              child: ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: EdgeInsets.zero,
-                shape: const Border(),
-                collapsedShape: const Border(),
-                showTrailingIcon: false,
-                onExpansionChanged: (expanded) =>
-                    setState(() => _membersExpanded = expanded),
-                title: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('Members',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(width: 4),
-                    AnimatedRotation(
-                      turns: _membersExpanded ? 0.5 : 0,
-                      duration: const Duration(milliseconds: 200),
-                      child: const Icon(Icons.expand_more,
-                          key: ValueKey('space-members-arrow'), size: 20),
-                    ),
-                  ],
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SpacePage(
-                    embedded: true,
-                    workflowConfigurations: widget.workflowConfigurations,
-                    section: SpacePageSection.members,
-                    space: widget.space,
-                    dataSource: widget.dataSource,
-                    viewerEmail: widget.viewerEmail,
-                    onOpenThread: (_) {},
-                    onArchive: () {},
-                    onDelete: () {},
-                  )
+                  _SpaceLandingSection(
+                    title: 'Archived Threads',
+                    arrowKey: const ValueKey('space-archived-arrow'),
+                    child: SpacePage(
+                      key: const ValueKey('space-landing-threads'),
+                      embedded: true,
+                      section: SpacePageSection.threads,
+                      space: widget.space,
+                      dataSource: widget.dataSource,
+                      spaceThreads: widget.spaceThreads,
+                      tabQueries: widget.tabQueries,
+                      mutations: widget.mutations,
+                      viewerEmail: widget.viewerEmail,
+                      onOpenThread: (id) => widget.onOpenThreadId?.call(id),
+                      onArchive: () {},
+                      onDelete: () {},
+                    ),
+                  ),
+                  _SpaceLandingSection(
+                    title: 'Members',
+                    arrowKey: const ValueKey('space-members-arrow'),
+                    child: SpacePage(
+                      embedded: true,
+                      workflowConfigurations: widget.workflowConfigurations,
+                      section: SpacePageSection.members,
+                      space: widget.space,
+                      dataSource: widget.dataSource,
+                      viewerEmail: widget.viewerEmail,
+                      onOpenThread: (_) {},
+                      onArchive: () {},
+                      onDelete: () {},
+                    ),
+                  ),
+                  if (_workflows != null)
+                    _SpaceLandingSection(
+                      title: 'Settings',
+                      arrowKey: const ValueKey('space-settings-arrow'),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _SpaceWorkspaceSelector(
+                              configurations: _workflows!,
+                              isOwner: widget.space.role == 'owner'),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             )),
@@ -219,5 +236,45 @@ class _NewThreadPageState extends State<NewThreadPage> {
             onSubmitted: (_) => _createNamedThread(),
           );
         },
+      );
+}
+
+/// Collapsed-by-default area on the Space landing: a title with a rotating
+/// arrow that reveals its content.
+class _SpaceLandingSection extends StatefulWidget {
+  const _SpaceLandingSection(
+      {required this.title, required this.arrowKey, required this.child});
+  final String title;
+  final Key arrowKey;
+  final Widget child;
+
+  @override
+  State<_SpaceLandingSection> createState() => _SpaceLandingSectionState();
+}
+
+class _SpaceLandingSectionState extends State<_SpaceLandingSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) => ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        shape: const Border(),
+        collapsedShape: const Border(),
+        showTrailingIcon: false,
+        onExpansionChanged: (expanded) => setState(() => _expanded = expanded),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(widget.title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(width: 4),
+            AnimatedRotation(
+              turns: _expanded ? 0.5 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: Icon(Icons.expand_more, key: widget.arrowKey, size: 20),
+            ),
+          ],
+        ),
+        children: [widget.child],
       );
 }

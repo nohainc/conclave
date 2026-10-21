@@ -213,10 +213,7 @@ class SpaceTree extends StatelessWidget {
     final isExpanded = shellContext.isSpaceExpanded(space.id);
     final sortedThreads = applyAxThreadPins(sortAxThreadsByLastUpdate(threads));
     final visibleThreads = sortedThreads
-        .where((t) => t.status.toLowerCase() != 'archived')
-        .toList();
-    final archivedThreads = sortedThreads
-        .where((t) => t.status.toLowerCase() == 'archived')
+        .where((t) => !t.archived && t.status.toLowerCase() != 'archived')
         .toList();
 
     return Column(
@@ -424,103 +421,6 @@ class SpaceTree extends StatelessWidget {
                                       .where((t) => t.isPinned)
                                       .map((t) => t.id)
                                       .toList())
-                              : const SizedBox(width: _menuSlotWidth),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        if (isExpanded && archivedThreads.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(34, 8, 10, 4),
-            child: Row(
-              children: [
-                Icon(Icons.archive_outlined,
-                    size: 12,
-                    color: ConclaveColors.navigationTextMuted(
-                        Theme.of(context).brightness == Brightness.dark)),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Archived (${archivedThreads.length})',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: ConclaveColors.navigationTextMuted(
-                          Theme.of(context).brightness == Brightness.dark),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (isExpanded)
-          ...archivedThreads.map(
-            (thread) {
-              final isThreadSelected =
-                  shellContext.navigation.threadId == thread.id ||
-                      shellContext.selectedThread?.id == thread.id;
-
-              return _SidebarHoverRow(
-                key: ValueKey('sidebar-thread-row-${thread.id}'),
-                builder: (context, hovered, menuOpenChanged) {
-                  final isThreadActive = isThreadSelected || hovered;
-                  return InkWell(
-                    hoverColor: Colors.transparent,
-                    onTap: thread.id.startsWith('local-thread-') ||
-                            thread.id.startsWith('local-thread-')
-                        ? null
-                        : () {
-                            onNavigateTo(
-                                AxNavigation.thread(space.id, thread.id));
-                            if (compact) {
-                              Scaffold.maybeOf(context)?.closeDrawer();
-                            }
-                          },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      height: _sidebarRowHeight,
-                      padding:
-                          EdgeInsets.only(left: narrow ? 16 : 48, right: 2),
-                      decoration: BoxDecoration(
-                        color: isThreadActive
-                            ? ConclaveColors.navigationSelectedColor(
-                                Theme.of(context).brightness == Brightness.dark)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          // Leading slot sits under the Space folder icon, so the
-                          // title stays put and the right edge stays clear.
-                          SizedBox(
-                            width: narrow ? 10 : 26,
-                            child: SidebarActivityIndicators(
-                              running: thread.hasActiveWork,
-                              unread: thread.hasUnread && !isThreadSelected,
-                              gap: narrow ? 0 : 4,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              thread.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: ConclaveColors.navigationTextMuted(
-                                    Theme.of(context).brightness ==
-                                        Brightness.dark),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ),
-                          isThreadActive
-                              ? _threadMenu(
-                                  context, space, thread, menuOpenChanged)
                               : const SizedBox(width: _menuSlotWidth),
                         ],
                       ),

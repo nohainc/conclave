@@ -17,7 +17,6 @@ class _SpaceWorkspaceSelector extends StatefulWidget {
 class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
   static const _followDefault = '';
   bool _busy = false;
-  int _revision = 0;
 
   @override
   void initState() {
@@ -49,51 +48,84 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
               ?.name;
           final theme = Theme.of(context);
           if (!widget.isOwner) {
-            return Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text('Workspace: ${name ?? 'None selected'}',
-                    key: const ValueKey('space-workspace-readonly'),
-                    style:
-                        TextStyle(color: theme.colorScheme.onSurfaceVariant)));
+            return Text('Workspace: ${name ?? 'None selected'}',
+                key: const ValueKey('space-workspace-readonly'),
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant));
           }
           final known = settings.workspaces
               .any((workspace) => workspace.id == settings.workspaceId);
           final current = settings.inherited
               ? _followDefault
               : (settings.workspaceId ?? _followDefault);
-          return Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 360),
-                  child: KeyedSubtree(
-                      key: ValueKey(_revision),
-                      child: DropdownButtonFormField<String>(
-                          key: const ValueKey('space-workspace'),
-                          initialValue: current,
-                          decoration: InputDecoration(
-                              labelText: 'Workspace',
-                              helperText: settings.inherited
-                                  ? 'Following the default Workspace${name == null ? '' : ': $name'}'
-                                  : null),
-                          items: [
-                            const DropdownMenuItem(
-                                value: _followDefault,
-                                child: Text('Default Workspace')),
-                            for (final workspace in settings.workspaces)
-                              DropdownMenuItem(
-                                  value: workspace.id,
-                                  child: Text(workspace.name)),
-                            if (!settings.inherited &&
-                                settings.workspaceId != null &&
-                                !known)
-                              DropdownMenuItem(
-                                  value: settings.workspaceId,
-                                  child: const Text('Unavailable Workspace')),
-                          ],
-                          onChanged: _busy
-                              ? null
-                              : (id) => _select(
-                                  id ?? _followDefault, current, settings)))));
+          final choices = <String, String>{
+            _followDefault: 'Default Workspace',
+            for (final workspace in settings.workspaces)
+              workspace.id: workspace.name,
+            if (!settings.inherited && settings.workspaceId != null && !known)
+              settings.workspaceId!: 'Unavailable Workspace',
+          };
+          final isDark = theme.brightness == Brightness.dark;
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text('Workspace',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant)),
+                  const SizedBox(width: 8),
+                  // Same compact list selector as the Work composer and
+                  // workflow model pickers.
+                  PopupMenuButton<String>(
+                    key: const ValueKey('space-workspace'),
+                    enabled: !_busy,
+                    tooltip: 'Choose Workspace',
+                    color: ConclaveColors.composerBackground(isDark),
+                    surfaceTintColor: Colors.transparent,
+                    elevation: 12,
+                    shadowColor: ConclaveMenuStyle.shadow(isDark),
+                    shape: ConclaveMenuStyle.shape(isDark),
+                    menuPadding: ConclaveMenuStyle.padding,
+                    itemBuilder: (menuContext) => [
+                      for (final choice in choices.entries)
+                        ConclaveMenuEntry<String>(
+                          value: choice.key,
+                          child: MenuItemButton(
+                            style: ConclaveMenuStyle.item(isDark),
+                            leadingIcon: Icon(
+                              choice.key == current
+                                  ? Icons.check_circle_rounded
+                                  : Icons.circle_outlined,
+                              size: 15,
+                            ),
+                            onPressed: () =>
+                                Navigator.pop(menuContext, choice.key),
+                            child: Text(choice.value,
+                                style: ConclaveMenuStyle.textStyle),
+                          ),
+                        ),
+                    ],
+                    onSelected: (id) => _select(id, current, settings),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 5),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text(choices[current] ?? 'Default Workspace',
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 2),
+                        const Icon(Icons.keyboard_arrow_down, size: 14),
+                      ]),
+                    ),
+                  ),
+                ]),
+                if (settings.inherited)
+                  Text(
+                      'Following the default Workspace${name == null ? '' : ': $name'}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant)),
+              ]);
         },
       );
 
@@ -141,10 +173,7 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _busy = false;
-          _revision++;
-        });
+        setState(() => _busy = false);
       }
     }
   }

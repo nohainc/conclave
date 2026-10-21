@@ -26,6 +26,7 @@ class ModelEffortSelector extends StatefulWidget {
       this.scope = 'execution',
       this.validationMessage,
       this.helperMessage,
+      this.onShowUsage,
       this.showCatalog = true,
       this.allowWorkerChange = true,
       this.allowModelChange = true,
@@ -60,6 +61,10 @@ class ModelEffortSelector extends StatefulWidget {
   final bool showWorkerInCompactSummary;
   final String scope;
   final String? validationMessage, helperMessage;
+
+  /// Opens the selected Worker's usage report; shown before Restore in the
+  /// immediate popup when non-null.
+  final VoidCallback? onShowUsage;
   @override
   State<ModelEffortSelector> createState() => _ModelEffortSelectorState();
 }
@@ -562,6 +567,21 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                                     })
                                 ])
                               : const SizedBox.shrink()),
+                      if (widget.onShowUsage != null)
+                        Semantics(
+                          label: 'Worker usage',
+                          button: true,
+                          child: IconButton(
+                            key: ValueKey('${widget.scope}-usage'),
+                            icon: const Icon(Icons.speed),
+                            onPressed: effective.worker == null
+                                ? null
+                                : () {
+                                    Navigator.of(context).pop();
+                                    widget.onShowUsage!();
+                                  },
+                          ),
+                        ),
                       Semantics(
                         label: 'Restore opening selection',
                         child: IconButton(

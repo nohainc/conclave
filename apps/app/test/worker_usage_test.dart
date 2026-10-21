@@ -140,6 +140,6 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('work-add-attachments')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('work-menu-usage')), findsOneWidget);
+    expect(find.byKey(const ValueKey('work-menu-usage')), findsNothing);
   });
 }

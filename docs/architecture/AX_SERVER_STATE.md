@@ -1265,3 +1265,17 @@ reset or choose another Worker and retry, instead of a generic failure or a
 misleading provider-start headline. This is separate from conversation context
 limits and unavailable native sessions. Raw CLI text, reset strings, and
 provider diagnostics remain outside conversation messages.
+
+## Space Thread archive navigation
+
+The sidebar lists active Threads only. The Space landing page does not repeat
+active Threads; below the Thread name field it shows three collapsed areas:
+**Archived Threads**, **Members**, and **Settings**. Archived Threads come from
+the same Space-scoped query cache as the sidebar. Authorized managers restore an
+archived Thread from its row's actions menu; the collaboration mutation updates
+the shared cache so the Thread returns to the sidebar. Archiving does not delete
+Threads or change their permissions.
+
+Settings holds the Space's Workspace choice. Owners change it through the same
+compact list selector used by the Work composer and workflow model pickers;
+other members see the current Workspace read-only.

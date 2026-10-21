@@ -421,23 +421,6 @@ class _WorkerCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (usageSource != null)
-                            IconButton(
-                              key: ValueKey(
-                                  'workspace-worker-usage-${worker.id}'),
-                              tooltip: 'Worker usage',
-                              icon: const Icon(Icons.data_usage_rounded,
-                                  size: 18),
-                              visualDensity: VisualDensity.compact,
-                              onPressed: online && worker.isReady
-                                  ? () => showDialog<void>(
-                                        context: context,
-                                        builder: (_) => WorkerUsageDialog(
-                                            source: usageSource!,
-                                            worker: worker),
-                                      )
-                                  : null,
-                            ),
                           const SizedBox(width: 6),
                           if (!worker.isReady)
                             const Icon(
@@ -454,12 +437,41 @@ class _WorkerCard extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        toolInfo,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              toolInfo,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (usageSource != null) ...[
+                            const SizedBox(width: 4),
+                            IconButton(
+                              key: ValueKey(
+                                  'workspace-worker-usage-${worker.id}'),
+                              icon: const Icon(Icons.speed, size: 16),
+                              iconSize: 16,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints.tightFor(
+                                  width: 20, height: 20),
+                              style: const ButtonStyle(
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              onPressed: online && worker.isReady
+                                  ? () => showDialog<void>(
+                                        context: context,
+                                        builder: (_) => WorkerUsageDialog(
+                                            source: usageSource!,
+                                            worker: worker),
+                                      )
+                                  : null,
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),

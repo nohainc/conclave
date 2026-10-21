@@ -140,11 +140,7 @@ void main() {
                 onArchive: () {}))));
     await tester.pump(const Duration(milliseconds: 50));
     // Workers are still loading, so the saved selection is pending.
-    await tester.tap(find.descendant(
-        of: find.byKey(const ValueKey('work-choose-workflow')),
-        matching: find.byType(InkWell)));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Chat').last);
+    await tester.tap(find.byKey(const ValueKey('work-toggle-chat')));
     await tester.pumpAndSettle();
     source.workersReady.complete();
     await tester.pumpAndSettle();

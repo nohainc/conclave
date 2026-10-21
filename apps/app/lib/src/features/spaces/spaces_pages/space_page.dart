@@ -136,6 +136,7 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   bool _editing = false;
+  bool _showArchivedThreads = false;
   bool _savingEdits = false;
   String? _editError;
   bool get isOwner => widget.space.role == 'owner';
@@ -261,7 +262,11 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.embedded) return _membersTab();
+    if (widget.embedded) {
+      return widget.section == SpacePageSection.members
+          ? _membersTab()
+          : _threadsTab();
+    }
     return _page();
   }
 
@@ -281,34 +286,35 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Stack(
-                          alignment: Alignment.topCenter,
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (_editing)
-                              _spaceEditForm()
+                              Expanded(child: _spaceEditForm())
                             else
-                              Center(
+                              Expanded(
                                 child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
                                       widget.space.name.isNotEmpty
                                           ? widget.space.name
                                           : 'Untitled Space',
-                                      textAlign: TextAlign.center,
+                                      textAlign: TextAlign.start,
                                       style: const TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.w700,
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w600,
                                         letterSpacing: -0.3,
                                       ),
                                     ),
                                     if (widget.space.description
                                         .trim()
                                         .isNotEmpty) ...[
-                                      const SizedBox(height: 12),
+                                      const SizedBox(height: 6),
                                       Text(
                                         widget.space.description.trim(),
-                                        textAlign: TextAlign.center,
+                                        textAlign: TextAlign.start,
                                         style: TextStyle(
                                           fontSize: 14,
                                           color: Theme.of(context)
@@ -317,15 +323,11 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                                         ),
                                       ),
                                     ],
-                                    if (_workflows != null)
-                                      _SpaceWorkspaceSelector(
-                                          configurations: _workflows!,
-                                          isOwner: isOwner),
                                   ],
                                 ),
                               ),
-                            Align(
-                              alignment: Alignment.topRight,
+                            SizedBox(
+                              key: const ValueKey('space-header-actions'),
                               child: isOwner && !_editing
                                   ? PopupMenuButton<String>(
                                       color:
@@ -408,6 +410,12 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                             ),
                           ],
                         ),
+                        if (_workflows != null && !_editing)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: _SpaceWorkspaceSelector(
+                                configurations: _workflows!, isOwner: isOwner),
+                          ),
                       ],
                     ),
                   ),

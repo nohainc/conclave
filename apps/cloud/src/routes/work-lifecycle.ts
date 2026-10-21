@@ -1184,7 +1184,9 @@ export async function handleListWorkRequests(
       ...requestExecutionFields(String(row.status), steps),
       steps: steps.map(({ finalText: _text, error: _error, ...step }) => step),
       ...(finalText ? { finalText } : {}),
-      ...(errorCode
+      // A user-cancelled request is not a failure; its stopped Step may still
+      // carry an error code, which stays available in Run details.
+      ...(errorCode && row.status !== "cancelled"
         ? {
             errorCode,
             error:

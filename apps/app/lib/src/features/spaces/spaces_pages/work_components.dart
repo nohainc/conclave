@@ -422,7 +422,15 @@ class _WorkComposer extends StatelessWidget {
       ?.toString()
       .trim();
 
-  Widget _additionalControls(BuildContext context) {
+  // Below this input width the Chat / Work / More rail plus the Worker
+  // selector no longer fit on one line, so the rail becomes one list.
+  static const _singleWorkflowListWidth = 560.0;
+
+  Widget _additionalControls(BuildContext context) => LayoutBuilder(
+      builder: (context, constraints) => _workflowControls(
+          context, constraints.maxWidth < _singleWorkflowListWidth));
+
+  Widget _workflowControls(BuildContext context, bool singleList) {
     final workflows = _currentWorkflowVersions(workflowCatalog);
     final selectedWorkflow = _selectedWorkflow();
     final binding = _stepBinding();
@@ -443,8 +451,86 @@ class _WorkComposer extends StatelessWidget {
                 .trim() ??
             '';
     final controlBg = Colors.transparent;
-    final activeWorkflowColor = Theme.of(context).colorScheme.onSurface;
+    final colors = Theme.of(context).colorScheme;
+    final otherWorkflows = workflows
+        .where((item) => !_primaryWorkflowIds.contains(item.id))
+        .toList();
+    final otherSelected = selectedWorkflow != null &&
+        !_primaryWorkflowIds.contains(selectedWorkflow.id);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // All workflow items use normal text; the active item is marked by the
+    // sidebar's selected-item background.
+    final selectedForeground = colors.onSurface;
+    final inactiveForeground = colors.onSurface;
+    final activeBackground = ConclaveColors.navigationSelectedColor(isDark);
+    final canSelect = canExecute && !submitting;
+    final menuWorkflows = singleList ? workflows : otherWorkflows;
+    final menuSelected =
+        selectedWorkflow != null && (singleList || otherSelected);
+
     const controlBorderRadius = BorderRadius.all(Radius.circular(6));
+
+    Widget primaryWorkflow(String id, String label, String tooltip) {
+      final item = workflows.where((item) => item.id == id).firstOrNull;
+      final selected = selectedWorkflow?.id == id;
+      return Tooltip(
+        message: tooltip,
+        waitDuration: const Duration(milliseconds: 500),
+        child: Semantics(
+          key: ValueKey('work-toggle-$id'),
+          label: '$label workflow',
+          selected: selected,
+          button: true,
+          enabled: canSelect && item != null,
+          child: Material(
+            color: selected ? activeBackground : controlBg,
+            borderRadius: controlBorderRadius,
+            child: InkWell(
+              borderRadius: controlBorderRadius,
+              onTap: canSelect && item != null
+                  ? () => onWorkflowChanged(item.reference)
+                  : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                child: Text(label,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: item == null
+                            ? colors.onSurface.withValues(alpha: 0.38)
+                            : selected
+                                ? selectedForeground
+                                : inactiveForeground)),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    PopupMenuEntry<String> workflowEntry(
+            AxBuiltinWorkflow item, BuildContext menuContext) =>
+        ConclaveMenuEntry<String>(
+          value: item.reference,
+          child: MenuItemButton(
+            style: ConclaveMenuStyle.item(
+                Theme.of(context).brightness == Brightness.dark),
+            leadingIcon: Icon(
+              item.reference == selectedWorkflow?.reference
+                  ? Icons.check_circle_rounded
+                  : Icons.circle_outlined,
+              size: 15,
+              color: item.reference == selectedWorkflow?.reference
+                  ? selectedForeground
+                  : inactiveForeground,
+            ),
+            onPressed: () => Navigator.pop(menuContext, item.reference),
+            child: Text(item.name,
+                style: ConclaveMenuStyle.textStyle.copyWith(
+                    color: item.reference == selectedWorkflow?.reference
+                        ? selectedForeground
+                        : inactiveForeground)),
+          ),
+        );
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -480,29 +566,10 @@ class _WorkComposer extends StatelessWidget {
                                 style: ConclaveMenuStyle.textStyle),
                           ),
                         ),
-                        if (usageController?.supported ?? false)
-                          ConclaveMenuEntry<String>(
-                            value: 'usage',
-                            child: MenuItemButton(
-                              key: const ValueKey('work-menu-usage'),
-                              style: ConclaveMenuStyle.item(
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark),
-                              leadingIcon: const Icon(Icons.speed, size: 16),
-                              onPressed: () =>
-                                  Navigator.pop(buttonContext, 'usage'),
-                              child: const Text('Usage',
-                                  style: ConclaveMenuStyle.textStyle),
-                            ),
-                          ),
                       ],
                     );
                     if (!buttonContext.mounted || value == null) return;
-                    if (value == 'files') {
-                      onAddFiles();
-                    } else if (value == 'usage') {
-                      _runComposerCommand(_usageCommand);
-                    }
+                    if (value == 'files') onAddFiles();
                   },
                   child: const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -512,79 +579,87 @@ class _WorkComposer extends StatelessWidget {
               ),
             ),
           ),
-          Builder(
-            builder: (workflowBtnContext) => Semantics(
-              key: const ValueKey('work-choose-workflow'),
-              label: 'Choose workflow',
-              child: Material(
-                color: controlBg,
-                borderRadius: controlBorderRadius,
-                child: InkWell(
-                  borderRadius: controlBorderRadius,
-                  onTap: canExecute && !submitting && workflows.isNotEmpty
-                      ? () async {
-                          final value = await _showAnchoredMenu<String>(
-                            buttonContext: workflowBtnContext,
-                            itemHeight: 36.0,
-                            items: [
-                              for (final item in workflows)
-                                ConclaveMenuEntry<String>(
-                                  value: item.reference,
-                                  child: Semantics(
-                                    label: item.description,
-                                    child: MenuItemButton(
-                                      style: ConclaveMenuStyle.item(
-                                          Theme.of(context).brightness ==
-                                              Brightness.dark),
-                                      leadingIcon: Icon(
-                                        item.reference ==
-                                                selectedWorkflow?.reference
-                                            ? Icons.check_circle_rounded
-                                            : Icons.circle_outlined,
-                                        size: 15,
+          DecoratedBox(
+            key: const ValueKey('work-workflow-track'),
+            decoration: BoxDecoration(
+              border: Border.all(color: colors.outlineVariant),
+              borderRadius: const BorderRadius.all(Radius.circular(8)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(1),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (!singleList) ...[
+                  primaryWorkflow(
+                      'chat', 'Chat', 'Chat — talk with the Worker'),
+                  primaryWorkflow(
+                      'direct', 'Work', 'Work — run a tracked Work Request'),
+                ],
+                Builder(
+                  builder: (workflowBtnContext) => Semantics(
+                    key: const ValueKey('work-choose-workflow'),
+                    label: menuSelected
+                        ? 'Choose workflow, ${selectedWorkflow.name} selected'
+                        : 'More workflows',
+                    selected: menuSelected,
+                    button: true,
+                    enabled: canSelect && menuWorkflows.isNotEmpty,
+                    child: Material(
+                      color: menuSelected ? activeBackground : controlBg,
+                      borderRadius: controlBorderRadius,
+                      child: InkWell(
+                        borderRadius: controlBorderRadius,
+                        onTap: canSelect && menuWorkflows.isNotEmpty
+                            ? () async {
+                                final value = await _showAnchoredMenu<String>(
+                                  buttonContext: workflowBtnContext,
+                                  itemHeight: 36.0,
+                                  items: [
+                                    for (final item in menuWorkflows)
+                                      workflowEntry(item, workflowBtnContext),
+                                  ],
+                                );
+                                if (!workflowBtnContext.mounted ||
+                                    value == null) {
+                                  return;
+                                }
+                                onWorkflowChanged(value);
+                              }
+                            : null,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 5),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 130),
+                                child: Text(
+                                  menuSelected
+                                      ? selectedWorkflow.name
+                                      : (singleList ? 'Workflow' : 'More'),
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        color: menuSelected
+                                            ? selectedForeground
+                                            : inactiveForeground,
                                       ),
-                                      onPressed: () => Navigator.pop(
-                                          workflowBtnContext, item.reference),
-                                      child: Text(item.name,
-                                          style: ConclaveMenuStyle.textStyle),
-                                    ),
-                                  ),
                                 ),
+                              ),
+                              const SizedBox(width: 2),
+                              const Icon(Icons.keyboard_arrow_down, size: 14),
                             ],
-                          );
-                          if (!workflowBtnContext.mounted || value == null) {
-                            return;
-                          }
-                          onWorkflowChanged(value);
-                        }
-                      : null,
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 130),
-                          child: Text(
-                            selectedWorkflow?.name ?? 'Choose workflow',
-                            overflow: TextOverflow.ellipsis,
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: activeWorkflowColor,
-                                    ),
                           ),
                         ),
-                        if (workflows.isNotEmpty) ...[
-                          const SizedBox(width: 2),
-                          const Icon(Icons.keyboard_arrow_down, size: 14),
-                        ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ]),
             ),
           ),
           ModelEffortSelector(
@@ -608,6 +683,9 @@ class _WorkComposer extends StatelessWidget {
                         ?.modelSwitchSupported ==
                     false
                 ? 'Changing the model starts a new session with the conversation context. Effort changes that select another model follow the same rule.'
+                : null,
+            onShowUsage: usageController?.supported ?? false
+                ? () => _runComposerCommand(_usageCommand)
                 : null,
             compact: true,
             showWorkerInCompactSummary: false,
@@ -834,6 +912,9 @@ class _ComposerCommand {
   final String description;
   final IconData icon;
 }
+
+/// Workflows with fixed Chat and Work buttons; others live under More.
+const _primaryWorkflowIds = {'chat', 'direct'};
 
 const _usageCommand = _ComposerCommand(
   id: 'usage',
@@ -1142,6 +1223,9 @@ class _MemoizedWorkMarkdownState extends State<_MemoizedWorkMarkdown> {
 
 /// The user-facing failure for [request]; diagnostics stay in Engine logs.
 String? _workFailureText(AxWorkRequest request) {
+  // A user cancellation (including Send now from the queue) is not a failure,
+  // even when the stopped Worker step recorded an error code.
+  if (request.status == 'cancelled') return null;
   final failedStep =
       request.steps.where((step) => step.status == 'failed').firstOrNull;
   final rawError = request.error?.trim().isNotEmpty == true
