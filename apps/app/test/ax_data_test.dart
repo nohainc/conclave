@@ -60,6 +60,29 @@ void main() {
     expect(jsonDecode(client.lastBody!),
         {'stepKind': 'verify', 'confirmSideEffects': true});
   });
+  test('context recovery sends explicit reset approval and fresh session',
+      () async {
+    final client = _JsonClient({});
+    final api = AxApiClient(baseUrl: 'https://cloud.test/api', client: client);
+    await api.retryWorkRequestStep(
+        workRequestId: 'r',
+        stepKind: 'implement',
+        sessionStrategy: 'fresh',
+        clearAiHistory: true);
+    expect(jsonDecode(client.lastBody!), {
+      'stepKind': 'implement',
+      'sessionStrategy': 'fresh',
+      'clearAiHistory': true
+    });
+  });
+  test('clear history uses the exact server cutoff', () async {
+    const cutoff = '2026-10-21T10:00:00.000Z';
+    final api = AxApiClient(
+        baseUrl: 'https://cloud.test/api',
+        client: _JsonClient({'aiHistoryClearedAt': cutoff}));
+    expect(await api.clearThreadWorkHistory(threadId: 'thread-1'), cutoff);
+  });
+
   test('clear history preserves the server error detail', () async {
     final client = _JsonClient({'error': 'Cancel active Work Requests first'},
         statusCode: 409);

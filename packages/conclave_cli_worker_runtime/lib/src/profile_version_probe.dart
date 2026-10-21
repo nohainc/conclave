@@ -9,11 +9,16 @@ final class ProfileVersionProbeResult {
     required this.exitCode,
     required this.version,
     required this.supported,
+    this.output = '',
   });
 
   final int exitCode;
   final String? version;
   final bool supported;
+
+  /// The probe's configured output stream, trimmed and capped at 200
+  /// characters. Profile Lab only checks that the CLI answered.
+  final String output;
 }
 
 /// Executes and interprets a provider version probe using its Tool Profile.
@@ -85,6 +90,10 @@ abstract final class ProfileVersionProbe {
       supported:
           version != null &&
           ToolProfileCompatibility.isProviderCompatible(profile, version),
+      output: () {
+        final trimmed = source.trim();
+        return trimmed.length > 200 ? trimmed.substring(0, 200) : trimmed;
+      }(),
     );
   }
 

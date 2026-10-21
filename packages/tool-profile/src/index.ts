@@ -555,6 +555,9 @@ const profileSchema = z
               .max(TOOL_PROFILE_LIMITS.configChecks),
           })
           .strict(),
+        // Deprecated: the live check now runs the Profile's `usage` command
+        // and never calls a model. Kept only so already-published releases
+        // still parse; new Profiles omit it.
         live: z
           .object({
             timeoutMs: z.number().int().min(100).max(60_000),
@@ -734,6 +737,8 @@ const profileSchema = z
       .strict(),
     progress: z.array(progressRule).max(TOOL_PROFILE_LIMITS.progressRules),
     activity: activity.optional(),
+    // Required for publication (Cloud rejects a candidate without it); still
+    // optional here so already-published releases keep parsing.
     usage: usageCommand.optional(),
     errors: z
       .object({

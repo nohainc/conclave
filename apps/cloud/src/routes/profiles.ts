@@ -58,8 +58,8 @@ export async function handleListWorkspaceWorkerInventory(
   const owned = (rows.results ?? []).map((row) =>
     projectInventoryRow(row, null),
   );
-  // Space members also see what the Workspace owner shares with them: the
-  // Workers of the Workspace their Spaces run on, limited by the owner's
+  // Space members and people a Workspace is lent to also see what the owner
+  // shares with them: the Workers of those Workspaces, limited by the owner's
   // member-access policy. Only clients that ask for it receive them.
   const shared: unknown[] = [];
   if (params.get("includeShared") === "true") {
@@ -68,13 +68,20 @@ export async function handleListWorkspaceWorkerInventory(
         WHERE ew.status != 'revoked'
           AND i.owner_user_id <> ?1
           AND (?2 IS NULL OR i.workspace_id = ?2)
-          AND i.workspace_id IN (
-            SELECT CASE WHEN sws.space_id IS NOT NULL THEN sws.workspace_id ELSE uws.workspace_id END
+          AND (EXISTS (
+            SELECT 1
               FROM space_memberships m
               JOIN spaces s ON s.id = m.space_id
               LEFT JOIN space_workflow_settings sws ON sws.space_id = s.id
               LEFT JOIN user_workflow_settings uws ON uws.user_id = s.owner_user_id
-             WHERE m.user_id = ?1 AND s.owner_user_id <> ?1)
+             WHERE m.user_id = ?1 AND s.owner_user_id <> ?1
+               -- A Workspace lent to the Space owner is not passed on to
+               -- their Space members (ADR-020: grants are non-transferable).
+               AND s.owner_user_id = i.owner_user_id
+               AND i.workspace_id = CASE WHEN sws.space_id IS NOT NULL THEN sws.workspace_id ELSE uws.workspace_id END)
+            OR i.workspace_id IN (
+            SELECT g.workspace_id FROM workspace_person_grants g
+             WHERE g.user_id = ?1 AND g.status = 'active'))
         ORDER BY i.workspace_id, i.worker_type_id, i.worker_id`,
     )
       .bind(context.userId, workspaceId)

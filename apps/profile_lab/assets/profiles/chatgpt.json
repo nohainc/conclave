@@ -312,7 +312,9 @@
   "usage": {
     "arguments": ["app-server", "--listen", "stdio://"],
     "timeoutMs": 20000,
-    "jsonRpc": { "method": "account/rateLimits/read" }
+    "jsonRpc": {
+      "method": "account/rateLimits/read"
+    }
   },
   "compatibilityOverrides": [
     {
@@ -396,6 +398,13 @@
           "patternId": "provider_authentication_required"
         },
         "issueCode": "provider_authentication_required"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "quota_exhausted"
+        },
+        "issueCode": "quota_exhausted"
       },
       {
         "evidence": {
@@ -560,13 +569,6 @@
     "unknownModelPolicy": "pass_through"
   },
   "probe": {
-    "live": {
-      "expectedFinalText": {
-        "kind": "exact",
-        "value": "OK"
-      },
-      "timeoutMs": 30000
-    },
     "passive": {
       "checks": [
         {

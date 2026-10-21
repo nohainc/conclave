@@ -488,7 +488,29 @@ extension _ThreadActions on _ThreadPageState {
     }
     if (!mounted) return;
     String? sessionStrategy;
-    if (step.kind == 'implement') {
+    final clearAiHistory = step.errorCode == 'context_limit_exceeded';
+    if (clearAiHistory) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Clear AI History and retry?'),
+          content: const Text(
+            'Start a fresh AI session with the latest AI answer and this request. '
+            'Earlier AI context will be cleared. Your Conversation stays available.',
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Clear and retry')),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      sessionStrategy = 'fresh';
+    } else if (step.kind == 'implement') {
       final resumeRecommended = const {
         'provider_unavailable',
         'authentication_required',
@@ -536,8 +558,10 @@ extension _ThreadActions on _ThreadPageState {
         stepKind: step.kind,
         sessionStrategy: sessionStrategy,
         confirmSideEffects: confirmSideEffects,
+        clearAiHistory: clearAiHistory,
       );
       if (!mounted) return;
+      if (clearAiHistory) unawaited(_refreshWorkTimeline());
       unawaited(_workHistoryCache
           .refreshRequest(widget.thread.id, workRequestId, supersede: true)
           .catchError((Object _) {}));

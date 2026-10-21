@@ -103,6 +103,7 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
     required String workRequestId,
     required String stepKind,
     String? sessionStrategy,
+    bool clearAiHistory = false,
     bool confirmSideEffects = false,
   }) async {}
 
@@ -486,7 +487,8 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
   Future<void> deleteThread({required String threadId}) async {}
 
   @override
-  Future<void> clearThreadWorkHistory({required String threadId}) async {}
+  Future<String?> clearThreadWorkHistory({required String threadId}) async =>
+      DateTime.now().toUtc().toIso8601String();
 
   @override
   Future<void> clearThreadChatHistory({required String threadId}) async {}

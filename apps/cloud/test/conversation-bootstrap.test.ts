@@ -319,3 +319,62 @@ it("parallel worker steps preserve one base and never acquire a sibling's respon
     f.sqlite.close();
   }
 });
+
+it("leaves exchanges before an AI History clear out of later context", async () => {
+  const f = await conversationFixture();
+  try {
+    f.assign("A");
+    f.start("A");
+    await recordAssignmentResult(f.db as unknown as D1Database, "A", {
+      assignmentId: "A",
+      status: "completed",
+      output: { text: "Previous answer" },
+      artifactIds: [],
+      completedAt: "2026-10-07T10:02:00Z",
+    });
+    // Clearing AI History moves the context floor past everything so far.
+    f.sqlite.exec(`UPDATE conversations SET context_floor_sequence =
+      (SELECT MAX(sequence) FROM conversation_history_entries)`);
+    f.sqlite
+      .exec(`INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,input_json,created_at,updated_at)
+      VALUES('R2','W','U','stateless','chat',1,'{}','running','{"originalRequest":"Current request"}','now','now')`);
+    await f.db.batch(
+      conversationSubmissionStatements(
+        f.db as unknown as D1Database,
+        "W",
+        CONVERSATION_WORKFLOWS.chat!,
+        "R2",
+        "now",
+      ),
+    );
+    const conversation = f.sqlite
+      .prepare("SELECT id FROM conversations")
+      .get() as { id: string };
+    const bootstrap = await loadConversationBootstrap(
+      f.db as unknown as D1Database,
+      conversation.id,
+      "R2",
+      1,
+    );
+    expect(bootstrap.text).not.toContain("Exact user text");
+    expect(bootstrap.text).not.toContain("Previous answer");
+    // Context-limit recovery retains the latest answer as the only prior text.
+    f.sqlite.exec(`UPDATE conversations SET context_floor_sequence =
+      (SELECT MAX(sequence) - 1 FROM conversation_history_entries WHERE kind='worker_response')`);
+    const recovered = await loadConversationBootstrap(
+      f.db as unknown as D1Database,
+      conversation.id,
+      "R2",
+      1,
+    );
+    const document = JSON.parse(recovered.text);
+    expect(
+      document.history
+        .filter((entry: { text: string | null }) => entry.text)
+        .map((entry: { text: string }) => entry.text),
+    ).toEqual(["Previous answer"]);
+    expect(recovered.text).not.toContain("Exact user text");
+  } finally {
+    f.sqlite.close();
+  }
+});

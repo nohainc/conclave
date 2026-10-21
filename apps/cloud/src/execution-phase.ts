@@ -57,7 +57,7 @@ export const FAILURE_CATEGORY_MESSAGES: Readonly<
   startup_timeout: "Worker startup timed out",
   execution_failed: "Worker execution failed",
   context_limit_exceeded:
-    "This conversation exceeds the supported context limit. Start a new Thread with the relevant context.",
+    "This conversation exceeds the supported context limit. Clear AI History and retry; the latest answer is kept as context.",
   state_uncertain: "Checking whether execution is still active",
 };
 
@@ -292,8 +292,10 @@ export function deriveRetryAdvice(
     return { allowed: false, requiresConfirmation: false };
   }
   if (phase !== "failed") return null;
+  // The retry must clear AI History first (the
+  // retry route enforces it), so the same oversized snapshot is never resent.
   if (evidence.errorCode === "context_limit_exceeded") {
-    return { allowed: false, requiresConfirmation: false };
+    return { allowed: true, requiresConfirmation: false };
   }
   const { revocationObservedStatus } = parseError(evidence.errorJson);
   // The Service stopped before any provider work; the only thing the user

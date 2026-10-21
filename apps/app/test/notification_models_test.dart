@@ -173,7 +173,8 @@ void main() {
       'timestamp': '2026-01-01T00:00:00Z',
     })!;
     final placed = n.withPlace('Docs › Fix login');
-    expect(placed.message, startsWith('Docs › Fix login · '));
+    expect(n.message, isEmpty);
+    expect(placed.message, 'Docs › Fix login');
     expect(placed.withPlace('Docs › Fix login').message, placed.message);
     expect(n.withPlace(null).message, n.message);
   });

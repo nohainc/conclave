@@ -45,15 +45,24 @@ export async function loadConversationBootstrap(
     .bind(conversationId)
     .first<{ sequence: number }>();
   const throughSequence = highWater?.sequence ?? 0;
+  // A cleared AI History leaves its exchanges readable but out of context.
+  const floor = await db
+    .prepare(
+      "SELECT context_floor_sequence AS floor FROM conversations WHERE id = ?1",
+    )
+    .bind(conversationId)
+    .first<{ floor: number }>();
+  const floorSequence = floor?.floor ?? 0;
   const bounds = await db
     .prepare(
       `SELECT COUNT(*) AS count,
     COALESCE(SUM(length(CAST(COALESCE(text,'') AS BLOB)) + length(CAST(metadata_json AS BLOB))),0) AS bytes
     FROM conversation_history_entries h WHERE conversation_id = ?1 AND sequence <= ?2
+      AND sequence > ?4
       AND (h.work_request_id IS NULL OR EXISTS (SELECT 1 FROM conversation_work_requests cr
         WHERE cr.conversation_id = h.conversation_id AND cr.work_request_id = h.work_request_id AND cr.conversation_revision <= ?3))`,
     )
-    .bind(conversationId, throughSequence, contextRevision)
+    .bind(conversationId, throughSequence, contextRevision, floorSequence)
     .first<{ count: number; bytes: number }>();
   if (!bounds || bounds.count > 1000 || bounds.bytes > 256 * 1024) {
     throw new ContextLimitError(
@@ -66,11 +75,11 @@ export async function loadConversationBootstrap(
     actor_id AS actorId, text, source_id AS sourceId, artifact_id AS artifactId, metadata_json AS metadataJson,
     COALESCE((SELECT cr.conversation_revision FROM conversation_work_requests cr WHERE cr.work_request_id = h.work_request_id AND cr.conversation_id = h.conversation_id),0) AS contextRevision
     FROM conversation_history_entries h
-    WHERE conversation_id = ?1 AND sequence <= ?2 AND (h.work_request_id IS NULL OR EXISTS
+    WHERE conversation_id = ?1 AND sequence <= ?2 AND sequence > ?4 AND (h.work_request_id IS NULL OR EXISTS
       (SELECT 1 FROM conversation_work_requests cr WHERE cr.conversation_id = h.conversation_id AND cr.work_request_id = h.work_request_id AND cr.conversation_revision <= ?3))
     ORDER BY sequence LIMIT 1001`,
     )
-    .bind(conversationId, throughSequence, contextRevision)
+    .bind(conversationId, throughSequence, contextRevision, floorSequence)
     .all<{
       sequence: number;
       contextRevision: number;

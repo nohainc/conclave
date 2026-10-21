@@ -13,7 +13,7 @@ String _modelDisplayName(String? modelId, {AxWorker? worker}) {
 String _executionFailureMessage(String? code, {String? validationMessage}) =>
     switch (code) {
       'context_limit_exceeded' =>
-        'This conversation exceeds the supported context limit. Start a new Thread with the relevant context.',
+        'This conversation exceeds the supported context limit. Clear AI History and retry; the latest answer is kept as context.',
       'session_resume_failed' =>
         'The worker could not continue the previous conversation. Please retry your request.',
       'worker_not_ready' =>
@@ -32,7 +32,8 @@ String _executionFailureMessage(String? code, {String? validationMessage}) =>
         'The selected model is not available for this worker. Choose another model and retry.',
       'permission_denied' =>
         'The worker does not have the access needed to complete your request.',
-      'quota_exhausted' => 'The worker’s usage limit has been reached.',
+      'quota_exhausted' =>
+        'The provider’s usage limit has been reached. Wait for the limit to reset or choose another worker, then retry.',
       'provider_unavailable' =>
         'The worker is temporarily unavailable. Please try again later.',
       'timeout' ||
@@ -47,6 +48,10 @@ String _executionFailureMessage(String? code, {String? validationMessage}) =>
 /// Cloud's fixed public failure category, with the code-specific guidance
 /// appended only when the code says more than the category already does.
 String _publicFailureMessage(AxWorkRequestStep? step, String guidance) {
+  if (step?.errorCode == 'context_limit_exceeded' ||
+      step?.errorCode == 'quota_exhausted') {
+    return guidance;
+  }
   final headline = step?.failureCategoryMessage?.trim();
   if (headline == null || headline.isEmpty) return guidance;
   final code = step?.errorCode;
@@ -171,8 +176,6 @@ class _WorkComposer extends StatelessWidget {
     required this.onRetryStep,
     required this.onCancelRun,
     required this.onWorkflowChanged,
-    required this.onToggleChat,
-    this.workflowBeforeChat,
     required this.onRun,
     this.onHistoryNavigate,
     this.historyPrompts,
@@ -228,11 +231,6 @@ class _WorkComposer extends StatelessWidget {
   final Future<void> Function(String)? onCancelRun;
   final ValueChanged<String> onWorkflowChanged;
 
-  /// Switches between Chat and the preserved work workflow.
-  final VoidCallback onToggleChat;
-
-  /// Work workflow reference kept while Chat is active.
-  final String? workflowBeforeChat;
   final Future<void> Function() onRun;
   final bool Function(int direction)? onHistoryNavigate;
 
@@ -425,21 +423,8 @@ class _WorkComposer extends StatelessWidget {
       .trim();
 
   Widget _additionalControls(BuildContext context) {
-    final workWorkflows = _currentWorkflowVersions(workflowCatalog)
-        .where((item) => item.id != 'chat')
-        .toList();
-    final singleWorkWorkflow = workWorkflows.length == 1;
-    final chatActive = workflow.split(':').first == 'chat';
-    final hasChat =
-        chatActive || workflowCatalog.any((item) => item.id == 'chat');
-    final selectedWorkflow = chatActive
-        ? (workflowCatalog
-                .where((item) => item.reference == workflowBeforeChat)
-                .firstOrNull ??
-            _currentWorkflowVersions(workflowCatalog)
-                .where((item) => item.id != 'chat')
-                .firstOrNull)
-        : _selectedWorkflow();
+    final workflows = _currentWorkflowVersions(workflowCatalog);
+    final selectedWorkflow = _selectedWorkflow();
     final binding = _stepBinding();
     final policy =
         selectedWorkflow?.executionPolicy ?? const AxWorkflowCapabilities();
@@ -459,7 +444,6 @@ class _WorkComposer extends StatelessWidget {
             '';
     final controlBg = Colors.transparent;
     final activeWorkflowColor = Theme.of(context).colorScheme.onSurface;
-    final inactiveWorkflowColor = activeWorkflowColor.withValues(alpha: 0.5);
     const controlBorderRadius = BorderRadius.all(Radius.circular(6));
 
     return SingleChildScrollView(
@@ -528,59 +512,22 @@ class _WorkComposer extends StatelessWidget {
               ),
             ),
           ),
-          if (hasChat) ...[
-            Semantics(
-              key: const ValueKey('work-toggle-chat'),
-              label: 'Chat',
-              toggled: chatActive,
-              child: Tooltip(
-                message: chatActive ? 'Chat is on' : 'Switch to Chat',
-                child: Material(
-                  color: controlBg,
-                  borderRadius: controlBorderRadius,
-                  child: InkWell(
-                    borderRadius: controlBorderRadius,
-                    onTap: canExecute && !submitting ? onToggleChat : null,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 5),
-                      child: Text('Chat',
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: chatActive
-                                        ? activeWorkflowColor
-                                        : inactiveWorkflowColor,
-                                  )),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
           Builder(
             builder: (workflowBtnContext) => Semantics(
               key: const ValueKey('work-choose-workflow'),
-              label: singleWorkWorkflow
-                  ? workWorkflows.single.name
-                  : 'Choose workflow',
-              toggled: !chatActive,
+              label: 'Choose workflow',
               child: Material(
                 color: controlBg,
                 borderRadius: controlBorderRadius,
                 child: InkWell(
                   borderRadius: controlBorderRadius,
-                  onTap: canExecute && !submitting && workWorkflows.isNotEmpty
+                  onTap: canExecute && !submitting && workflows.isNotEmpty
                       ? () async {
-                          if (singleWorkWorkflow) {
-                            onWorkflowChanged(workWorkflows.single.reference);
-                            return;
-                          }
                           final value = await _showAnchoredMenu<String>(
                             buttonContext: workflowBtnContext,
                             itemHeight: 36.0,
                             items: [
-                              for (final item in workWorkflows)
+                              for (final item in workflows)
                                 ConclaveMenuEntry<String>(
                                   value: item.reference,
                                   child: Semantics(
@@ -590,8 +537,8 @@ class _WorkComposer extends StatelessWidget {
                                           Theme.of(context).brightness ==
                                               Brightness.dark),
                                       leadingIcon: Icon(
-                                        !chatActive &&
-                                                item.reference == workflow
+                                        item.reference ==
+                                                selectedWorkflow?.reference
                                             ? Icons.check_circle_rounded
                                             : Icons.circle_outlined,
                                         size: 15,
@@ -620,20 +567,16 @@ class _WorkComposer extends StatelessWidget {
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 130),
                           child: Text(
-                            singleWorkWorkflow
-                                ? workWorkflows.single.name
-                                : selectedWorkflow?.name ?? 'Choose workflow',
+                            selectedWorkflow?.name ?? 'Choose workflow',
                             overflow: TextOverflow.ellipsis,
                             style:
                                 Theme.of(context).textTheme.bodySmall?.copyWith(
                                       fontWeight: FontWeight.w600,
-                                      color: chatActive
-                                          ? inactiveWorkflowColor
-                                          : activeWorkflowColor,
+                                      color: activeWorkflowColor,
                                     ),
                           ),
                         ),
-                        if (!singleWorkWorkflow) ...[
+                        if (workflows.isNotEmpty) ...[
                           const SizedBox(width: 2),
                           const Icon(Icons.keyboard_arrow_down, size: 14),
                         ],

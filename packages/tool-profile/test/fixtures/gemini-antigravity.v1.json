@@ -334,6 +334,13 @@
       {
         "evidence": {
           "kind": "stderr_pattern",
+          "patternId": "quota_exhausted"
+        },
+        "issueCode": "quota_exhausted"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
           "patternId": "session_unavailable"
         },
         "issueCode": "session_resume_failed"

@@ -89,6 +89,12 @@ Acceptance creates the Person Grant and nothing else.
 - The lender sees borrowers in a separate "People with access" list: display
   name, email, effective policy and usage. The borrower sees the Workspace name,
   its owner and what the grant allows.
+- `GET /api/workspaces` lists a lent Workspace to the borrower with
+  `role: "member"` and `shared: true`. The borrower's Workspaces page shows its
+  info, the Workers the grant allows and workflow configuration, but not the
+  Member access or sharing sections. The borrower may make it their default
+  Workspace; each inheriting Space then gets a lender-made grant capped by the
+  borrower's mode, exactly as when a single Space selects it.
 - Invitations expire, can be revoked before acceptance, and are single-use.
   The invitee must sign in with the invited email to accept. Accepting twice,
   or after revocation or expiry, fails.

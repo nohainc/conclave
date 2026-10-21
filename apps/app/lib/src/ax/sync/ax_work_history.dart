@@ -197,6 +197,10 @@ class AxWorkHistoryCache {
     final revisions = Map.of(context.revisions);
     final first = await source!
         .loadThreadWorkRequestPage(threadId: id, activeOnly: activeOnly);
+    // An invalidated read must not overwrite a newer clear's cutoff.
+    if (identical(_contexts[id], context)) {
+      _aiHistoryClearedAt[id] = first.aiHistoryClearedAt;
+    }
     final records = [...first.requests];
     // Active-only pages contain live/recently changed requests, not old history.
     var cursor = activeOnly ? first.nextCursor : null;
@@ -835,14 +839,29 @@ class AxWorkHistoryCache {
     }
   }
 
+  /// Requests created at or before this instant are hidden from AI History;
+  /// the Conversation still shows them unchanged.
+  String? aiHistoryClearedAt(String threadId) => _aiHistoryClearedAt[threadId];
+  final _aiHistoryClearedAt = <String, String?>{};
+
+  /// Clearing AI History records a cutoff instead of deleting Work, so the
+  /// retained requests stay; the refresh brings Cloud's exact cutoff.
   Future<void> clearHistory(String threadId) async {
     // Remote success is the boundary: failures must preserve visible history.
-    await source?.clearThreadWorkHistory(threadId: threadId);
-    resetHistory(threadId);
+    final cutoff = await source?.clearThreadWorkHistory(threadId: threadId);
+    // Fence pre-clear reads while keeping the original Conversation records.
+    final retained = peek(threadId);
+    invalidate(threadId);
+    engine.update(query(threadId), (_) => retained);
+    _aiHistoryClearedAt[threadId] = cutoff;
+    final context = _contexts[threadId];
+    if (context != null) _emit(context);
+    unawaited(refresh(threadId).then<void>((_) {}, onError: (Object _) {}));
   }
 
   /// Apply a confirmed remote clear and fence all pre-clear reads.
   void resetHistory(String threadId) {
+    _aiHistoryClearedAt.remove(threadId);
     invalidate(threadId);
     engine.update(
       query(threadId),
@@ -852,6 +871,7 @@ class AxWorkHistoryCache {
 
   void clear() {
     _attempts.clear();
+    _aiHistoryClearedAt.clear();
     for (final entry in _contexts.entries) {
       entry.value.cancel?.call();
       for (final key in entry.value.pageKeys) {

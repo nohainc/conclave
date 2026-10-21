@@ -730,9 +730,14 @@ artifact-body resolution, and provider token budgets remain future work.
 Context size limits include the complete serialized document, including repeated
 recent-turn evidence and structured facts, rather than raw history text alone.
 Cloud treats history/serialized-byte overflow as an assignment admission failure
-before creating an assignment or consuming Worker capacity. The failure asks the
-user to start a new Thread with the relevant context; retrying the same oversized
-snapshot cannot reduce its size. Canonical history remains intact.
+before creating an assignment or consuming Worker capacity. The failure offers a retry icon and asks the user to confirm clearing AI History.
+The confirmed retry starts a fresh session in the same Thread, retaining the latest
+preceding AI answer and the failed request. Canonical history remains intact;
+the context floor excludes older exchanges. The retry API requires `clearAiHistory: true`
+for `context_limit_exceeded`. Migration `0079_ai_history_cutoff.sql` adds the
+Thread history cutoff and Conversation context floor. Chat and Work session keys
+include the Thread session generation, so subsequent requests continue the fresh
+session after a reset. Earlier exchanges remain readable in Conversation.
 Cloud reports the stable `context_limit_exceeded` error code and fixed public
 guidance in Thread history, including for previously stored fixed context-limit
 errors. Retry advice disallows replaying the same oversized snapshot. This is an
@@ -1255,3 +1260,21 @@ public protocol migration. Clients or hand-authored configuration that supplied
 only the retired snake-case binding aliases must use the canonical camel-case
 fields; no unreleased-architecture compatibility adapter is retained. No remote
 rollout or live-provider validation is performed by this cleanup.
+
+### AI History clearing and Conversation retention
+
+Clearing AI History records the Cloud timestamp on the Thread and advances each
+Conversation's canonical context floor. It preserves the original Work Requests,
+turns, answers, Worker identity, model and timing evidence without copying them
+into discussion messages. AX filters AI History by request creation time while
+Conversation continues rendering those same original records. AX uses the exact
+Cloud cutoff, fences earlier reads, and reconciles other clients through the
+existing clear event.
+
+Both Chat and Work use the next Thread session generation after a clear. This
+resets session continuity; native provider session files remain owned locally by
+Workspace/Engine and are not physically erased by the Cloud action. Clearing the
+Conversation deletes discussion messages and Work with their canonical history;
+Thread removal retains its existing cascading deletion behavior. Active Work
+must be cancelled before either clear action. Records already deleted by the
+former archive-and-delete implementation cannot recover missing metadata.

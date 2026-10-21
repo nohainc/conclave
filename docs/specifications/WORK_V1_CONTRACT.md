@@ -69,10 +69,14 @@ as read-only `ai_request`/`ai_answer` Chat entries.
 
 The Conversation composer has a **Message | Ask AI** switch. Message sends a
 Chat message. Ask AI shows the existing Work composer (Workflow, Worker,
-model, effort, attachments, Chat toggle) and submits through the unchanged
+model, effort, attachments) and submits through the unchanged
 Work Request path, so session continuity and cross-Worker context behave as
 before. The persisted Thread tab state selects this switch: `chat` restores
 Message, `work` restores Ask AI.
+
+The input area's Workflow selector lists Chat and Work together, alongside other
+available Workflows. It shows the selected Workflow's name and marks the selected
+entry in the menu. There is no separate Chat toggle.
 
 The Thread header places icon-labelled **Conversation** and **AI History** actions
 next to each other. Each pane highlights its active label in white and the other

@@ -65,6 +65,7 @@ it("stores Thread view state in metadata without touching updatedAt", async () =
           workflowReference: "direct:2",
           model: "sonnet",
           reasoningEffort: "medium",
+          selectionUpdatedAt: "2026-10-21T20:00:00.000Z",
         },
       },
     }),
@@ -86,6 +87,7 @@ it("stores Thread view state in metadata without touching updatedAt", async () =
       tabIndex: 0,
       workflowReference: "direct:2",
       reasoningEffort: "medium",
+      selectionUpdatedAt: "2026-10-21T20:00:00.000Z",
     },
   });
   const listed = (await (

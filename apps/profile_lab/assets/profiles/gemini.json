@@ -207,6 +207,13 @@
       {
         "evidence": {
           "kind": "stderr_pattern",
+          "patternId": "quota_exhausted"
+        },
+        "issueCode": "quota_exhausted"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
           "patternId": "permission_denied"
         },
         "issueCode": "permission_denied"
@@ -386,14 +393,6 @@
     "unknownModelPolicy": "pass_through"
   },
   "probe": {
-    "live": {
-      "expectedFinalText": {
-        "kind": "exact",
-        "value": "OK"
-      },
-      "requiredForReadiness": true,
-      "timeoutMs": 30000
-    },
     "passive": {
       "checks": [],
       "configChecks": []

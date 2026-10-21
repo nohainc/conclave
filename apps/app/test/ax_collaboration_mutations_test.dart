@@ -80,7 +80,8 @@ class CollaborationSource extends AxFixtureDataSource {
   }
 
   @override
-  Future<void> clearThreadWorkHistory({required String threadId}) async {}
+  Future<String?> clearThreadWorkHistory({required String threadId}) async =>
+      DateTime.now().toUtc().toIso8601String();
 }
 
 void main() {

@@ -14,13 +14,13 @@ describe("canonical execution error taxonomy", () => {
     "Conversation bootstrap exceeds the history or byte limit",
     "Conversation bootstrap exceeds the history limit",
     "Conversation bootstrap exceeds the byte limit",
-    "Conversation context exceeds the supported history or 256 KiB serialized byte limit. Start a new Thread with the relevant context before retrying.",
+    "This conversation exceeds the supported context limit. Clear AI History and retry; the latest answer is kept as context.",
   ])(
     "preserves actionable context overflow for stored task error %s",
     (error) => {
       const code = canonicalExecutionErrorCode(error);
       expect(code).toBe("context_limit_exceeded");
-      expect(executionErrorMessage(code)).toContain("Start a new Thread");
+      expect(executionErrorMessage(code)).toContain("Clear AI History");
     },
   );
 

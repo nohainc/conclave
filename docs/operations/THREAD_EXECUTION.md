@@ -91,3 +91,12 @@ Workspace, and the Engine ignore that metadata. AGY Chat uses the signed
 Profile's `--mode plan` mapping and Work uses its restricted `accept-edits`
 mapping. Release qualification and live provider acceptance remain required;
 see [regression coverage](../acceptance/CHAT_WORKFLOW.md).
+
+### Worker usage from Workspaces
+
+Open **Workspaces** and select a Workspace. Click the **Worker usage** icon on a
+Worker card to run its Profile-defined usage command. The action is enabled for
+ready, enabled Workers on online Workspaces you own; shared Workspace usage
+remains owner-only. The report opens in a local dialog with refresh,
+original-output, and close controls. It does not create a Thread message or Work
+Request. Workers without a usage command show an unavailable report.

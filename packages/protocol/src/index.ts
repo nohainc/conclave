@@ -41,7 +41,7 @@ export function canonicalExecutionErrorCode(
       "Conversation bootstrap exceeds the history or byte limit",
       "Conversation bootstrap exceeds the history limit",
       "Conversation bootstrap exceeds the byte limit",
-      "Conversation context exceeds the supported history or 256 KiB serialized byte limit. Start a new Thread with the relevant context before retrying.",
+      "This conversation exceeds the supported context limit. Clear AI History and retry; the latest answer is kept as context.",
     ].includes(value)
   )
     return "context_limit_exceeded";

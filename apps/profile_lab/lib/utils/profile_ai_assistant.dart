@@ -142,12 +142,6 @@ class ProfileAiHeuristicRepairService {
             base.putIfAbsent('logicalWorkerTypeId',
                 () => context.workerMetadata['workerTypeId'] ?? 'ai-worker');
             break;
-          case 'engine_compatibility':
-            base['engineCompatibility'] = {
-              'min': '1.0.0',
-              'maxExclusive': '2.0.0'
-            };
-            break;
           case 'executable_discovery':
             final tool =
                 Map<String, dynamic>.from(base['providerTool'] as Map? ?? {});
@@ -189,13 +183,6 @@ class ProfileAiHeuristicRepairService {
               'configChecks': []
             };
             base['probe'] = probe;
-            break;
-          case 'live_probe':
-          case 'representative_thread_write':
-            final exec =
-                Map<String, dynamic>.from(base['execution'] as Map? ?? {});
-            exec['arguments'] = ['run', '{{prompt}}'];
-            base['execution'] = exec;
             break;
           // Session identifiers and resume arguments are provider Profile
           // data. A failed session scenario is diagnostic input, not evidence

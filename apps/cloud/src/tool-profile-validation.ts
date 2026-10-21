@@ -49,91 +49,25 @@ export interface WorkerProfilePublicationEvidence {
 const acceptanceScenarios = [
   "activity_mapping",
   "passive_probe",
-  "live_probe",
-  "model_selection",
-  "representative_thread_write",
-  "durable_session_start",
-  "durable_session_resume",
-  "cancellation",
-  "timeout",
+  "usage_check",
 ] as const;
 
-function compareReleaseSemver(left: string, right: string): number {
-  const parse = (value: string) => {
-    const match =
-      /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
-        value,
-      );
-    if (!match) return null;
-    return {
-      core: match.slice(1, 4).map(Number),
-      prerelease: match[4]?.split(".") ?? null,
-    };
-  };
-  const a = parse(left);
-  const b = parse(right);
-  if (!a || !b) return Number.NaN;
-  for (let index = 0; index < 3; index++)
-    if (a.core[index] !== b.core[index])
-      return a.core[index]! < b.core[index]! ? -1 : 1;
-  if (a.prerelease === null || b.prerelease === null)
-    return a.prerelease === b.prerelease ? 0 : a.prerelease === null ? 1 : -1;
-  const length = Math.max(a.prerelease.length, b.prerelease.length);
-  for (let index = 0; index < length; index++) {
-    const leftPart = a.prerelease[index];
-    const rightPart = b.prerelease[index];
-    if (leftPart === undefined || rightPart === undefined)
-      return leftPart === rightPart ? 0 : leftPart === undefined ? -1 : 1;
-    if (leftPart === rightPart) continue;
-    const leftNumeric = /^(0|[1-9]\d*)$/.test(leftPart);
-    const rightNumeric = /^(0|[1-9]\d*)$/.test(rightPart);
-    if (leftNumeric && rightNumeric)
-      return Number(leftPart) < Number(rightPart) ? -1 : 1;
-    if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
-    return leftPart < rightPart ? -1 : 1;
-  }
-  return 0;
-}
-
-function profileRangeIncludes(
-  version: string,
-  ranges: readonly { min: string; maxExclusive: string }[],
-): boolean {
-  return ranges.some((range) => {
-    const lower = compareReleaseSemver(version, range.min);
-    const upper = compareReleaseSemver(version, range.maxExclusive);
-    return (
-      Number.isFinite(lower) &&
-      Number.isFinite(upper) &&
-      lower >= 0 &&
-      upper < 0
-    );
-  });
-}
-
+/**
+ * Scenarios Profile Lab must report for a publishable candidate. Every
+ * published Profile must declare a usage command, so the usage check always
+ * applies; no scenario calls a model. Engine and CLI version ranges are not
+ * part of the evidence: Workspace enforces them on the user's machine.
+ */
 export function toolProfileAcceptanceScenarioStatuses(
   profile: ToolProfileV1,
 ): Readonly<Record<string, "passed" | "not_applicable">> {
-  const durable = profile.session.supported;
   const activityMappingApplicable =
     profile.execution.output.mode === "jsonl" &&
     (profile.activity?.mappings.length ?? 0) > 0;
   return {
     activity_mapping: activityMappingApplicable ? "passed" : "not_applicable",
     passive_probe: "passed",
-    live_probe: "passed",
-    model_selection:
-      profile.model.supported && (profile.model.allowlist?.length ?? 0) > 0
-        ? "passed"
-        : "not_applicable",
-    representative_thread_write:
-      profile.sandbox.mappings.restricted.length > 0
-        ? "passed"
-        : "not_applicable",
-    durable_session_start: durable ? "passed" : "not_applicable",
-    durable_session_resume: durable ? "passed" : "not_applicable",
-    cancellation: "passed",
-    timeout: "passed",
+    usage_check: "passed",
   };
 }
 
@@ -151,6 +85,11 @@ export function validateWorkerProfilePublicationEvidence(
       "Publication requires complete, recent evidence for this exact Profile candidate",
     );
   };
+  if (!expected.profile.usage)
+    throw new ToolProfileRegistryError(
+      409,
+      "Publication requires the Profile to declare a usage command",
+    );
   if (!input || typeof input !== "object" || Array.isArray(input))
     return fail();
   const evidence = input as Record<string, unknown>;
@@ -191,15 +130,10 @@ export function validateWorkerProfilePublicationEvidence(
     evidence.workerTypeId !== expected.workerTypeId ||
     evidence.candidateDigest !== expected.candidateDigest ||
     typeof evidence.engineVersion !== "string" ||
-    !profileRangeIncludes(evidence.engineVersion, [
-      expected.profile.engineCompatibility,
-    ]) ||
+    evidence.engineVersion.length === 0 ||
     evidence.providerToolName !== expected.profile.providerTool.name ||
     typeof evidence.providerToolVersion !== "string" ||
-    !profileRangeIncludes(
-      evidence.providerToolVersion,
-      expected.profile.providerTool.supportedVersions,
-    ) ||
+    evidence.providerToolVersion.length === 0 ||
     !Number.isFinite(testedAt) ||
     testedAt > Date.now() + 5 * 60 * 1000 ||
     Date.now() - testedAt > 90 * 24 * 60 * 60 * 1000 ||

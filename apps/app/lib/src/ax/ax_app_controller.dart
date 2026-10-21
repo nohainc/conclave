@@ -113,6 +113,7 @@ extension _AxAppController on _AxAppStateMixin {
       await store.logout();
       expandedSpaceIds.clear();
       _sidebarRestoredSpaceIds.clear();
+      _readHomeAttentionIds.clear();
       if (!mounted) return;
       selectedSpaceId = null;
       _enterUnauthenticatedState();
@@ -696,160 +697,122 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
+  void _readHomeAttentionItem(String id) {
+    _updateState(() => _readHomeAttentionIds.add(id));
+    final invitation = store.invitations.items
+        .where((invite) => 'invite-${invite.id}' == id)
+        .firstOrNull;
+    final ids = notifications
+        .where((item) =>
+            item.id == id ||
+            (invitation != null &&
+                item.spaceId == invitation.spaceId &&
+                (item.kind == AxNotificationKind.spaceInvitationReceived ||
+                    item.kind == AxNotificationKind.invitationReceived)))
+        .map((item) => item.id)
+        .toList();
+    if (ids.isEmpty) return;
+    _persistNotificationsRead(ids: ids);
+    _updateNotifications(() {
+      for (var index = 0; index < notifications.length; index++) {
+        if (ids.contains(notifications[index].id)) {
+          notifications[index] = notifications[index].markRead();
+        }
+      }
+    });
+  }
+
   Future<void> _showNotifications() async {
     final dialogContext = navigatorKey.currentState?.context ?? context;
     final orderedNotifications = [...notifications]..sort((a, b) {
         final priority = b.priority.index.compareTo(a.priority.index);
         return priority != 0 ? priority : b.createdAt.compareTo(a.createdAt);
       });
-    final selected = await showDialog<AxNotification>(
-      context: dialogContext,
-      barrierColor: Colors.transparent,
-      builder: (context) => ListenableBuilder(
-        listenable: store.invitations,
-        builder: (context, _) {
-          final pendingInvitations = store.invitations.items;
-          final isEmpty = pendingInvitations.isEmpty && notifications.isEmpty;
-          // A side panel anchored under the top-right bell, not a centred
-          // window: the inbox is browsed, not a decision.
-          return AlertDialog(
-            alignment: Alignment.topRight,
-            insetPadding: const EdgeInsets.fromLTRB(24, 56, 16, 16),
-            constraints: const BoxConstraints(maxWidth: 400),
-            title: const Text('Inbox'),
-            content: SizedBox(
-              width: 400,
-              child: isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Text('You are all caught up.'),
-                    )
-                  : SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (pendingInvitations.isNotEmpty) ...[
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Text(
-                                'Pending invitations',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                            for (final invite in pendingInvitations)
-                              Card(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.mail_outline,
-                                              size: 18),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              invite.spaceName.isNotEmpty
-                                                  ? invite.spaceName
-                                                  : 'Space Invitation',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w700,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                          ),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .primary
-                                                  .withValues(alpha: 0.1),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              invite.role.toUpperCase(),
-                                              style: TextStyle(
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w600,
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .primary,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        'Invited by ${invite.invitedByDisplay}',
-                                        style: TextStyle(
-                                          fontSize: 12.5,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          OutlinedButton(
-                                            onPressed: () => unawaited(
-                                                _declineInvitation(invite)),
-                                            style: OutlinedButton.styleFrom(
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 12),
-                                            ),
-                                            child: const Text('Decline'),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          FilledButton(
-                                            onPressed: () {
-                                              Navigator.of(context).pop();
-                                              unawaited(
-                                                  _acceptInvitation(invite));
-                                            },
-                                            style: FilledButton.styleFrom(
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 12),
-                                            ),
-                                            child: const Text('Accept'),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            if (notifications.isNotEmpty)
-                              const Divider(height: 24),
-                          ],
-                          if (notifications.isNotEmpty) ...[
-                            if (pendingInvitations.isNotEmpty)
+    final width = navigatorKey.currentState?.overlay?.context.size?.width ??
+        MediaQuery.sizeOf(dialogContext).width;
+    final isDesktop = ConclaveBrand.isDesktop(width);
+    final sidebarWidth = _desktopSidebarCollapsed ? 50.0 : _desktopSidebarWidth;
+    Widget buildInbox(BuildContext context) => ListenableBuilder(
+          listenable: store.invitations,
+          builder: (context, _) {
+            final pendingInvitations = store.invitations.items;
+            final isEmpty = pendingInvitations.isEmpty && notifications.isEmpty;
+            // Keep desktop notifications beside their sidebar entry point.
+            return AlertDialog(
+              alignment: isDesktop ? Alignment.topLeft : Alignment.bottomCenter,
+              insetPadding: isDesktop
+                  ? EdgeInsets.fromLTRB(sidebarWidth + 8, 16, 16, 16)
+                  : EdgeInsets.zero,
+              constraints: isDesktop
+                  ? const BoxConstraints(maxWidth: 400)
+                  : BoxConstraints(minWidth: width, maxWidth: width),
+              title: Row(
+                children: [
+                  const Expanded(child: Text('Inbox')),
+                  if (notifications.isNotEmpty)
+                    IconButton(
+                      onPressed: () {
+                        _persistNotificationsRead();
+                        _updateNotifications(() {
+                          for (var index = 0;
+                              index < notifications.length;
+                              index++) {
+                            notifications[index] =
+                                notifications[index].markRead();
+                          }
+                        });
+                        Navigator.of(context).pop();
+                      },
+                      tooltip: 'Mark all as read',
+                      icon: const Icon(Icons.done_all_rounded),
+                    ),
+                  if (browserAlerts.supported)
+                    IconButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        if (browserAlerts.enabled) {
+                          browserAlerts.disable();
+                          _showSnackBar('Desktop alerts turned off.');
+                        } else {
+                          unawaited(browserAlerts.enable().then((on) {
+                            if (!mounted) return;
+                            _showSnackBar(on
+                                ? 'Desktop alerts turned on for background tabs.'
+                                : 'Desktop alerts need browser permission.');
+                          }));
+                        }
+                      },
+                      tooltip: browserAlerts.enabled
+                          ? 'Turn off desktop alerts'
+                          : 'Turn on desktop alerts',
+                      icon: Icon(browserAlerts.enabled
+                          ? Icons.notifications_active_outlined
+                          : Icons.notifications_off_outlined),
+                    ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    tooltip: 'Close',
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 400,
+                child: isEmpty
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                        child: Text('You are all caught up.'),
+                      )
+                    : SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (pendingInvitations.isNotEmpty) ...[
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
                                 child: Text(
-                                  'Activity',
+                                  'Pending invitations',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
@@ -859,118 +822,209 @@ extension _AxAppController on _AxAppStateMixin {
                                   ),
                                 ),
                               ),
-                            ListView.separated(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: orderedNotifications.length,
-                              separatorBuilder: (_, __) =>
-                                  const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final notification =
-                                    orderedNotifications[index];
-                                return ListTile(
-                                  leading: Icon(
-                                    switch (notification.kind) {
-                                      AxNotificationKind.threadNeedsInput ||
-                                      AxNotificationKind
-                                          .workflowRunNeedsApproval ||
-                                      AxNotificationKind.approvalRequired =>
-                                        Icons.help_outline,
-                                      AxNotificationKind.threadFailed ||
-                                      AxNotificationKind.workflowRunFailed ||
-                                      AxNotificationKind.failed =>
-                                        Icons.error_outline,
-                                      AxNotificationKind.threadCompleted ||
-                                      AxNotificationKind.workflowRunCompleted ||
-                                      AxNotificationKind.completed =>
-                                        Icons.check_circle_outline,
-                                      AxNotificationKind.workspaceOffline =>
-                                        Icons.cloud_off_outlined,
-                                      AxNotificationKind
-                                            .workerCredentialProblem =>
-                                        Icons.key_off_outlined,
-                                      AxNotificationKind.workerInstallFailed =>
-                                        Icons.download_for_offline_outlined,
-                                      AxNotificationKind.spaceInvitationReceived ||
-                                      AxNotificationKind
-                                          .spaceInvitationReceived ||
-                                      AxNotificationKind.invitationReceived =>
-                                        Icons.mail_outline,
-                                    },
-                                    color: notification.read
-                                        ? Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant
-                                        : notification.priority ==
-                                                AxNotificationPriority.high
-                                            ? Theme.of(context)
+                              for (final invite in pendingInvitations)
+                                Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.mail_outline,
+                                                size: 18),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                invite.spaceName.isNotEmpty
+                                                    ? invite.spaceName
+                                                    : 'Space Invitation',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary
+                                                    .withValues(alpha: 0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                invite.role.toUpperCase(),
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'Invited by ${invite.invitedByDisplay}',
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            color: Theme.of(context)
                                                 .colorScheme
-                                                .error
-                                            : Theme.of(context)
-                                                .colorScheme
-                                                .primary,
+                                                .onSurfaceVariant,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
+                                          children: [
+                                            OutlinedButton(
+                                              onPressed: () => unawaited(
+                                                  _declineInvitation(invite)),
+                                              style: OutlinedButton.styleFrom(
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 12),
+                                              ),
+                                              child: const Text('Decline'),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            FilledButton(
+                                              onPressed: () {
+                                                Navigator.of(context).pop();
+                                                unawaited(
+                                                    _acceptInvitation(invite));
+                                              },
+                                              style: FilledButton.styleFrom(
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 12),
+                                              ),
+                                              child: const Text('Accept'),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                  title: Text(notification.title),
-                                  subtitle: Text(
-                                      '${notification.message} · ${notification.priority.name} priority'),
-                                  trailing: notification.read
-                                      ? null
-                                      : const Icon(Icons.circle, size: 9),
-                                  onTap: () =>
-                                      Navigator.of(context).pop(notification),
-                                );
-                              },
-                            ),
+                                ),
+                              if (notifications.isNotEmpty)
+                                const Divider(height: 24),
+                            ],
+                            if (notifications.isNotEmpty) ...[
+                              if (pendingInvitations.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Text(
+                                    'Activity',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: orderedNotifications.length,
+                                separatorBuilder: (_, __) =>
+                                    const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final notification =
+                                      orderedNotifications[index];
+                                  return ListTile(
+                                    leading: Icon(
+                                      switch (notification.kind) {
+                                        AxNotificationKind.threadNeedsInput ||
+                                        AxNotificationKind
+                                            .workflowRunNeedsApproval ||
+                                        AxNotificationKind.approvalRequired =>
+                                          Icons.help_outline,
+                                        AxNotificationKind.threadFailed ||
+                                        AxNotificationKind.workflowRunFailed ||
+                                        AxNotificationKind.failed =>
+                                          Icons.error_outline,
+                                        AxNotificationKind.threadCompleted ||
+                                        AxNotificationKind
+                                            .workflowRunCompleted ||
+                                        AxNotificationKind.completed =>
+                                          Icons.check_circle_outline,
+                                        AxNotificationKind.workspaceOffline =>
+                                          Icons.cloud_off_outlined,
+                                        AxNotificationKind
+                                              .workerCredentialProblem =>
+                                          Icons.key_off_outlined,
+                                        AxNotificationKind
+                                              .workerInstallFailed =>
+                                          Icons.download_for_offline_outlined,
+                                        AxNotificationKind.spaceInvitationReceived ||
+                                        AxNotificationKind
+                                            .spaceInvitationReceived ||
+                                        AxNotificationKind.invitationReceived =>
+                                          Icons.mail_outline,
+                                      },
+                                      semanticLabel:
+                                          '${notification.priority.name} priority, ${notification.read ? 'Read' : 'Unread'}',
+                                      color: notification.read
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant
+                                          : notification.priority ==
+                                                  AxNotificationPriority.high
+                                              ? Theme.of(context)
+                                                  .colorScheme
+                                                  .error
+                                              : Theme.of(context)
+                                                  .colorScheme
+                                                  .primary,
+                                    ),
+                                    title: Text(notification.title),
+                                    subtitle: notification.message.isEmpty
+                                        ? null
+                                        : Text(notification.message),
+                                    onTap: () =>
+                                        Navigator.of(context).pop(notification),
+                                  );
+                                },
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-            ),
-            actions: [
-              if (notifications.isNotEmpty)
-                TextButton(
-                  onPressed: () {
-                    _persistNotificationsRead();
-                    _updateNotifications(() {
-                      for (var index = 0;
-                          index < notifications.length;
-                          index++) {
-                        notifications[index] = notifications[index].markRead();
-                      }
-                    });
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text('Mark all as read'),
-                ),
-              if (browserAlerts.supported)
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    if (browserAlerts.enabled) {
-                      browserAlerts.disable();
-                      _showSnackBar('Desktop alerts turned off.');
-                    } else {
-                      unawaited(browserAlerts.enable().then((on) {
-                        if (!mounted) return;
-                        _showSnackBar(on
-                            ? 'Desktop alerts turned on for background tabs.'
-                            : 'Desktop alerts need browser permission.');
-                      }));
-                    }
-                  },
-                  child: Text(browserAlerts.enabled
-                      ? 'Turn off desktop alerts'
-                      : 'Turn on desktop alerts'),
-                ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
               ),
-            ],
+            );
+          },
+        );
+    final selected = isDesktop
+        ? await showDialog<AxNotification>(
+            context: dialogContext,
+            barrierColor: Colors.transparent,
+            builder: buildInbox,
+          )
+        : await showModalBottomSheet<AxNotification>(
+            context: dialogContext,
+            isScrollControlled: true,
+            useSafeArea: true,
+            constraints: BoxConstraints(minWidth: width, maxWidth: width),
+            builder: buildInbox,
           );
-        },
-      ),
-    );
     if (!mounted || selected == null) return;
     _persistNotificationsRead(ids: [selected.id]);
     _updateNotifications(() {

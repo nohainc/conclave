@@ -48,7 +48,11 @@ it("routes through production handler registration and clears remote history", a
       },
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ threadId: "W", cleared: true });
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ threadId: "W", cleared: true });
+    expect(typeof body.aiHistoryClearedAt).toBe("string");
+    // AI History is cut off, not deleted: the Conversation keeps every
+    // request, answer and diagnostic unchanged.
     for (const table of [
       "work_requests",
       "conversations",
@@ -56,8 +60,24 @@ it("routes through production handler registration and clears remote history", a
     ]) {
       expect(
         f.sqlite.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()!.count,
-      ).toBe(0);
+      ).toBeGreaterThan(0);
     }
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT ai_history_cleared_at AS clearedAt FROM threads WHERE id='W'",
+        )
+        .get()!.clearedAt,
+    ).toBe(body.aiHistoryClearedAt);
+    // Later Worker context starts after everything that existed at the clear.
+    const floors = f.sqlite
+      .prepare(
+        `SELECT c.context_floor_sequence AS floor,
+           (SELECT MAX(sequence) FROM conversation_history_entries) AS latest
+         FROM conversations c`,
+      )
+      .get()!;
+    expect(floors.floor).toBe(floors.latest);
     expect(
       f.sqlite
         .prepare(
@@ -148,12 +168,22 @@ it("emits a clear event that the protocol's realtime envelope accepts", async ()
   }
 });
 
-it("clears Discussion Chat remotely, announces it, and leaves Work history alone", async () => {
+it("clears the whole Conversation remotely, including Work history", async () => {
   const f = await conversationFixture();
   try {
     f.sqlite.exec(
       `INSERT INTO discussion_messages(id,thread_id,author_user_id,body,created_at) VALUES('M1','W','U','hi','now'),('M2','W','U','there','now')`,
     );
+    f.sqlite.exec(
+      readFileSync(
+        new URL(
+          "../migrations-v8/0054_thread_work_session_generation.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    f.sqlite.exec("UPDATE work_requests SET status='completed' WHERE id='R'");
     vi.mocked(publishCollaborationEvent).mockClear();
     const response = await handleClearChatHistory(
       new Request("https://test/api/threads/W/chat/clear", { method: "POST" }),
@@ -174,10 +204,32 @@ it("clears Discussion Chat remotely, announces it, and leaves Work history alone
         .prepare("SELECT COUNT(*) AS count FROM discussion_messages")
         .get()!.count,
     ).toBe(0);
-    expect(
-      f.sqlite.prepare("SELECT COUNT(*) AS count FROM work_requests").get()!
-        .count,
-    ).toBe(1);
+    for (const table of [
+      "work_requests",
+      "conversations",
+      "conversation_history_entries",
+    ]) {
+      expect(
+        f.sqlite.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()!.count,
+      ).toBe(0);
+    }
+  } finally {
+    f.sqlite.close();
+  }
+});
+
+it("refuses to clear the Conversation while Work is active", async () => {
+  const f = await conversationFixture();
+  try {
+    await expect(
+      handleClearChatHistory(
+        new Request("https://test/api/threads/W/chat/clear", {
+          method: "POST",
+        }),
+        { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+        "W",
+      ),
+    ).rejects.toMatchObject({ status: 409 });
   } finally {
     f.sqlite.close();
   }
@@ -219,7 +271,7 @@ it("announces a retried work-history clear even when the receipt replays", async
   }
 });
 
-it("keeps completed AI exchanges in the conversation when Work history is cleared", async () => {
+it("keeps cleared AI exchanges readable but out of later Worker context", async () => {
   const f = await conversationFixture();
   try {
     f.sqlite.exec(
@@ -236,8 +288,8 @@ it("keeps completed AI exchanges in the conversation when Work history is cleare
     f.sqlite.exec(`
       UPDATE worker_assignments SET status='completed', updated_at='2026-10-07T10:02:00Z', output_json='{"output":{"text":"The answer"}}' WHERE id='A';
       UPDATE work_requests SET status='completed' WHERE id='R';`);
-    const answer = (await f.turns()).at(-1)?.resultText;
-    expect(answer).toBeTruthy();
+    const before = await f.turns();
+    expect(before.at(-1)?.resultText).toBeTruthy();
 
     await handleClearWorkHistory(
       new Request("https://test/api/threads/W/work-history/clear", {
@@ -247,33 +299,13 @@ it("keeps completed AI exchanges in the conversation when Work history is cleare
       "W",
     );
 
+    // Nothing is copied into Chat and the original exchange is untouched.
     expect(
       f.sqlite
-        .prepare(
-          `SELECT kind, author_user_id AS author, body, work_request_id AS workRequestId,
-            worker_display_name AS worker FROM discussion_messages ORDER BY created_at, id`,
-        )
-        .all(),
-    ).toEqual([
-      {
-        kind: "ai_request",
-        author: "U",
-        body: "**Exact user text**",
-        workRequestId: "R",
-        worker: "ChatGPT",
-      },
-      {
-        kind: "ai_answer",
-        author: "U",
-        body: answer,
-        workRequestId: "R",
-        worker: "ChatGPT",
-      },
-    ]);
-    expect(
-      f.sqlite.prepare("SELECT COUNT(*) AS count FROM work_requests").get()!
-        .count,
+        .prepare("SELECT COUNT(*) AS count FROM discussion_messages")
+        .get()!.count,
     ).toBe(0);
+    expect(await f.turns()).toEqual(before);
   } finally {
     f.sqlite.close();
   }

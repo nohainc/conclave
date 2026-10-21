@@ -105,14 +105,17 @@ class AxNotification {
   /// Prefixes the message with where this happened (e.g. "Space › Thread"), so
   /// a generic "failed" says which Space and Thread it concerns.
   AxNotification withPlace(String? place) {
-    if (place == null || place.isEmpty || message.startsWith('$place · ')) {
+    if (place == null ||
+        place.isEmpty ||
+        message == place ||
+        message.startsWith('$place · ')) {
       return this;
     }
     return AxNotification(
       id: id,
       kind: kind,
       title: title,
-      message: '$place · $message',
+      message: message.isEmpty ? place : '$place · $message',
       createdAt: createdAt,
       priority: priority,
       spaceId: spaceId,
@@ -225,31 +228,7 @@ AxNotification? notificationFromRealtimeEvent(
   final message = _optionalString(payloadMap['prompt']) ??
       _optionalString(payloadMap['summary']) ??
       _optionalString(payloadMap['error']) ??
-      switch (kind) {
-        AxNotificationKind.threadNeedsInput =>
-          'Your input or decision is needed in the Thread.',
-        AxNotificationKind.threadCompleted => 'Thread activity has completed.',
-        AxNotificationKind.threadFailed =>
-          'Thread activity failed and needs attention.',
-        AxNotificationKind.workflowRunCompleted ||
-        AxNotificationKind.completed =>
-          'The Workflow Run is ready to review.',
-        AxNotificationKind.workflowRunFailed ||
-        AxNotificationKind.failed =>
-          'The Workflow Run needs attention.',
-        AxNotificationKind.workflowRunNeedsApproval ||
-        AxNotificationKind.approvalRequired =>
-          'Approval is required before the Workflow Run can continue.',
-        AxNotificationKind.workspaceOffline =>
-          'A Workspace is offline and may need to reconnect.',
-        AxNotificationKind.workerCredentialProblem =>
-          'A Worker connection needs to be re-authenticated.',
-        AxNotificationKind.workerInstallFailed =>
-          'A Worker could not connect to a Workspace.',
-        AxNotificationKind.spaceInvitationReceived ||
-        AxNotificationKind.invitationReceived =>
-          'You received a Space invitation.',
-      };
+      '';
   final timestamp =
       DateTime.tryParse(_optionalString(event['timestamp']) ?? '')?.toLocal() ??
           DateTime.now();

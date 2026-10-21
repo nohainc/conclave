@@ -1,6 +1,8 @@
 import 'package:conclave_app/src/ax/ax_people.dart';
 import 'package:conclave_app/src/ax/ax_workspace_member_access.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/features/workspace/workspace_sharing_section.dart';
+import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
 import 'package:flutter/material.dart';
 import 'workflow_editor_test.dart' show worker;
 import 'package:flutter_test/flutter_test.dart';
@@ -128,6 +130,36 @@ void main() {
     expect(person.usage.requests, 4);
     expect(person.usage.workerIds, ['w']);
     expect(person.active, isTrue);
+  });
+
+  testWidgets('a lent Workspace hides member access and sharing',
+      (tester) async {
+    Future<void> show(Map<String, dynamic> json) =>
+        tester.pumpWidget(MaterialApp(
+            home: Scaffold(
+                body: SingleChildScrollView(
+                    child: WorkspacesPage(
+          key: UniqueKey(),
+          workspaces: [AxWorkspace.fromJson(json)],
+          sharingSource: SharingSource(),
+          memberAccessSource: AccessOnlySource(),
+        )))));
+    await show({'id': 'own', 'name': 'Mine', 'role': 'owner'});
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('workspace-sharing-own')), findsOneWidget);
+    expect(find.byKey(const ValueKey('workspace-member-access-own')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('workspace-shared-badge')), findsNothing);
+
+    await show(
+        {'id': 'lent', 'name': 'Lender Mac', 'role': 'member', 'shared': true});
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('workspace-detail-lent')), findsOneWidget);
+    expect(find.byKey(const ValueKey('workspace-sharing-lent')), findsNothing);
+    expect(find.byKey(const ValueKey('workspace-member-access-lent')),
+        findsNothing);
+    expect(
+        find.byKey(const ValueKey('workspace-shared-badge')), findsOneWidget);
   });
 
   testWidgets('owner invites, cancels, sets the quota and revokes',

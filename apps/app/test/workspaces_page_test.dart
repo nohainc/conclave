@@ -607,7 +607,7 @@ void main() {
       );
     });
 
-    testWidgets('Workspace inventory does not expose usage controls',
+    testWidgets('Workspace inventory does not expose scheduling controls',
         (tester) async {
       await tester.pumpWidget(buildTestScaffold(WorkspacesPage(
         workspaces: const [

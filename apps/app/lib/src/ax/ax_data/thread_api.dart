@@ -191,7 +191,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
   }
 
   @override
-  Future<void> clearThreadWorkHistory({required String threadId}) async {
+  Future<String?> clearThreadWorkHistory({required String threadId}) async {
     final response = await client.post(
       Uri.parse('$baseUrl/threads/$threadId/work-history/clear'),
       headers: _headers(),
@@ -211,6 +211,12 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
         statusCode: response.statusCode,
       );
     }
+    final body = jsonDecode(response.body);
+    final cutoff = body is Map ? body['aiHistoryClearedAt'] : null;
+    if (cutoff is! String || DateTime.tryParse(cutoff) == null) {
+      throw const AxApiException('Malformed AI History cutoff');
+    }
+    return cutoff;
   }
 
   /// Uploads picked file bytes to Cloud storage and returns file references.
@@ -590,6 +596,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
     required String workRequestId,
     required String stepKind,
     String? sessionStrategy,
+    bool clearAiHistory = false,
     bool confirmSideEffects = false,
   }) async {
     final response = await client.post(
@@ -599,6 +606,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
         'stepKind': stepKind,
         if (sessionStrategy != null) 'sessionStrategy': sessionStrategy,
         if (confirmSideEffects) 'confirmSideEffects': true,
+        if (clearAiHistory) 'clearAiHistory': true,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -702,7 +710,9 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
     if (records.any((v) => v.id.isEmpty || v.createdAt.isEmpty)) {
       throw const AxApiException('Malformed Work Request');
     }
+    final clearedAt = body['aiHistoryClearedAt'];
     return AxWorkRequestPage(
+        aiHistoryClearedAt: clearedAt is String ? clearedAt : null,
         requests: records.reversed,
         nextCursor: cursor == null
             ? null

@@ -101,6 +101,7 @@ class _ThreadPageState extends State<ThreadPage>
   bool _threadViewRevealScheduled = false;
   bool? _paneAwaitingReveal;
   AxThreadViewState? _pendingThreadViewState;
+  String? _selectionUpdatedAt;
   Map<String, dynamic>? _lastRemoteViewState;
   final _requestController = TextEditingController();
   bool _requestHistoryOpen = false;
@@ -230,7 +231,7 @@ class _ThreadPageState extends State<ThreadPage>
   /// already-seen request counts as new.
   List<(String, Object)> _workSequence() {
     final items = <(String, Object)>[];
-    for (final request in _workPresentation.requests) {
+    for (final request in _afterAiHistoryClear(_workPresentation.requests)) {
       items.add(('${request.id}|request', (request.id, 'request')));
       if (_workResponseText(request) != null || request.status == 'failed') {
         items.add(('${request.id}|response', (request.id, 'response')));
@@ -596,7 +597,6 @@ class _ThreadPageState extends State<ThreadPage>
   String? _selectedWorkflowWorkspaceId;
   int _choicesGeneration = 0;
   String _workflow = '';
-  String? _workflowBeforeChat;
   List<AxBuiltinWorkflow> _workflowCatalog = const [];
   List<AxBuiltinWorkflow> get _currentWorkflows =>
       _currentWorkflowVersions(_availableWorkflows);
@@ -630,6 +630,22 @@ class _ThreadPageState extends State<ThreadPage>
   bool _loadingOlderWork = false;
   List<AxWorkRequest> get _workTimeline =>
       _presentation.work.value?.requests ?? const [];
+
+  /// AI History starts after its last clear; the Conversation keeps every
+  /// request through [_workTimeline].
+  List<AxWorkRequest> get _aiHistoryTimeline =>
+      _afterAiHistoryClear(_workTimeline);
+
+  List<AxWorkRequest> _afterAiHistoryClear(List<AxWorkRequest> requests) {
+    final clearedAt = DateTime.tryParse(
+        _workHistoryCache.aiHistoryClearedAt(widget.thread.id) ?? '');
+    if (clearedAt == null) return requests;
+    return requests
+        .where((request) =>
+            DateTime.tryParse(request.createdAt)?.isAfter(clearedAt) ?? true)
+        .toList();
+  }
+
   void _subscribeWorkHistory() {
     if (widget.isDraft) return;
     _presentation.attach(
@@ -752,6 +768,8 @@ class _ThreadPageState extends State<ThreadPage>
       catalogRevision: pending != null
           ? pending.catalogRevision
           : _selectionValue('catalogRevision'),
+      selectionUpdatedAt:
+          pending != null ? pending.selectionUpdatedAt : _selectionUpdatedAt,
       chatDraft: _discussionController.text,
       workDraft: _requestController.text,
       chatSeenId: _chatSeenId,
@@ -767,34 +785,11 @@ class _ThreadPageState extends State<ThreadPage>
         'model': state.model,
         'reasoningEffort': state.reasoningEffort,
         'catalogRevision': state.catalogRevision,
+        'selectionUpdatedAt': state.selectionUpdatedAt,
       };
 
-  /// Thread metadata wins over the browser-local copy for the selection; the
-  /// drafts stay local because they are never shared through Cloud.
-  AxThreadViewState? _withRemoteViewState(AxThreadViewState? local) {
-    final remote = widget.thread.viewState;
-    if (remote.isEmpty) return local;
-    String? string(String key) {
-      final value = remote[key];
-      return value is String && value.isNotEmpty ? value : null;
-    }
-
-    final tab = remote['tabIndex'];
-    return AxThreadViewState(
-      tabIndex: tab is int ? tab.clamp(0, 1) : local?.tabIndex ?? 0,
-      workflowReference: string('workflowReference'),
-      workerId: string('workerId'),
-      workerTypeId: string('workerTypeId') ??
-          (local?.workerId == string('workerId') ? local?.workerTypeId : null),
-      model: string('model'),
-      reasoningEffort: string('reasoningEffort'),
-      catalogRevision: string('catalogRevision'),
-      chatDraft: local?.chatDraft ?? '',
-      workDraft: local?.workDraft ?? '',
-      chatSeenId: local?.chatSeenId,
-      workSeenId: local?.workSeenId,
-    );
-  }
+  AxThreadViewState? _withRemoteViewState(AxThreadViewState? local) =>
+      AxThreadViewState.withRemote(local, widget.thread.viewState);
 
   Future<void> _saveThreadViewState() async {
     if (widget.isDraft) return;
@@ -829,6 +824,22 @@ class _ThreadPageState extends State<ThreadPage>
         _lastRemoteViewState = previous;
       }
     });
+  }
+
+  /// An explicit choice supersedes a saved selection still waiting for the
+  /// catalogs; otherwise saves keep the old values and the late restore
+  /// overwrites the user's choice.
+  void _markSelectionChangedByUser() {
+    final pending = _pendingThreadViewState;
+    if (pending != null) {
+      if (pending.workflowReference != null &&
+          _availableWorkflows
+              .any((item) => item.reference == pending.workflowReference)) {
+        _workflow = pending.workflowReference!;
+      }
+      _pendingThreadViewState = null;
+    }
+    _selectionUpdatedAt = DateTime.now().toUtc().toIso8601String();
   }
 
   void _reconcilePendingThreadViewState() {
@@ -936,6 +947,7 @@ class _ThreadPageState extends State<ThreadPage>
       }
       _chatSeenId = saved.chatSeenId;
       _workSeenId = saved.workSeenId;
+      _selectionUpdatedAt = saved.selectionUpdatedAt;
       _pendingThreadViewState = saved;
       final targetIndex = saved.tabIndex.clamp(0, _tabController.length - 1);
       if (_tabController.index != targetIndex) {
@@ -1324,6 +1336,7 @@ class _ThreadPageState extends State<ThreadPage>
       _discussionController.clear();
       _requestController.clear();
       _workExecutionSelection = {};
+      _selectionUpdatedAt = null;
       _workflow = '';
       _followWork = _followChat = true;
       _chatSeenId = _workSeenId = null;
@@ -1428,20 +1441,19 @@ class _ThreadPageState extends State<ThreadPage>
           // Thread was archived by another user or session
           _handleThreadArchived(Map<String, dynamic>.from(payload));
         } else if (type == 'thread.chat_cleared') {
-          // Chat was cleared by another session; drop retained messages, then
-          // reconcile with the server.
+          // The Conversation was cleared by another session: Chat and all
+          // Work are gone. Drop retained data, then reconcile.
           _discussionCache.resetHistory(widget.thread.id);
+          _workHistoryCache.resetHistory(widget.thread.id);
           unawaited(_discussionCache
               .synchronize(widget.thread.id, reconcileNewest: true)
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-        } else if (type == 'thread.work_cleared') {
-          // Discard retained pages before reconciling the remote clear.
-          _workHistoryCache.resetHistory(widget.thread.id);
           unawaited(_refreshWorkTimeline()
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-          // Completed AI exchanges were archived into the conversation.
-          unawaited(_discussionCache
-              .synchronize(widget.thread.id, reconcileNewest: true)
+        } else if (type == 'thread.work_cleared') {
+          // AI History moved its cutoff; Work itself is kept, so refreshing
+          // brings the new cutoff without discarding the Conversation.
+          unawaited(_refreshWorkTimeline()
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
         }
       }
@@ -1948,12 +1960,10 @@ class _ThreadPageState extends State<ThreadPage>
   /// Message / Ask AI switch stacked in the composer's 32px left rail.
   Widget _composerModeControls() {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final selectedBackground = dark
-        ? Color.alphaBlend(
-            Colors.black.withValues(alpha: 0.24),
-            ConclaveColors.composerBackgroundDark,
-          )
-        : ConclaveColors.primarySoft;
+    // Indicate the active mode with icon color only in both themes.
+    final selectedForeground = dark
+        ? ConclaveColors.focusBorderDark
+        : ConclaveColors.primaryForegroundLight;
     Widget toggle(bool askAi, String tooltip, IconData icon) {
       final selected = _askAiMode == askAi;
       return IconButton(
@@ -1968,14 +1978,14 @@ class _ThreadPageState extends State<ThreadPage>
         style: IconButton.styleFrom(
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-          backgroundColor: selected ? selectedBackground : null,
-          disabledBackgroundColor: selected ? selectedBackground : null,
+          backgroundColor: Colors.transparent,
+          disabledBackgroundColor: Colors.transparent,
         ),
         icon: Icon(icon,
             semanticLabel: tooltip,
             size: 16,
             color: selected
-                ? ConclaveColors.primaryForeground(dark)
+                ? selectedForeground
                 : Theme.of(context).colorScheme.onSurfaceVariant),
       );
     }
@@ -2044,31 +2054,6 @@ class _ThreadPageState extends State<ThreadPage>
           ],
         );
 
-  void _toggleChat() {
-    final current = _effectiveWorkflow;
-    if (current.split(':').first == 'chat') {
-      final restore = _currentWorkflows
-              .where((item) => item.reference == _workflowBeforeChat)
-              .firstOrNull ??
-          _currentWorkflows.where((item) => item.id != 'chat').firstOrNull;
-      if (restore == null) return;
-      _updateState(() {
-        _workflow = restore.reference;
-        _workExecutionSelection = {};
-      });
-    } else {
-      final chat =
-          _currentWorkflows.where((item) => item.id == 'chat').firstOrNull;
-      if (chat == null) return;
-      _updateState(() {
-        _workflowBeforeChat = current;
-        _workflow = chat.reference;
-        _workExecutionSelection = {};
-      });
-    }
-    _scheduleThreadViewStateSave();
-  }
-
   _WorkComposer _workComposer() => _WorkComposer(
         leadingControls: _composerModeControls(),
         inputHeight: _composerInputHeight,
@@ -2085,7 +2070,7 @@ class _ThreadPageState extends State<ThreadPage>
         loadingWorkflows: _loadingWorkflows,
         workflowCatalogError: _workflowCatalogError,
         canExecute: _canExecute,
-        workTimeline: _workTimeline,
+        workTimeline: _aiHistoryTimeline,
         activityStore: _workActivityStore,
         realtimeStatus: _workRealtime.displayStatus,
         localWorkProgress: _localWorkProgress,
@@ -2097,10 +2082,13 @@ class _ThreadPageState extends State<ThreadPage>
         onAddFiles: _addWorkFiles,
         executionSelection: _workExecutionSelection,
         onExecutionSelectionChanged: (selection) {
-          _updateState(() => _workExecutionSelection = {
-                ..._workExecutionSelection,
-                ...selection
-              });
+          _updateState(() {
+            _markSelectionChangedByUser();
+            _workExecutionSelection = {
+              ..._workExecutionSelection,
+              ...selection
+            };
+          });
           _scheduleThreadViewStateSave();
         },
         onRemoveAttachment: (index) => _updateState(() {
@@ -2125,10 +2113,9 @@ class _ThreadPageState extends State<ThreadPage>
         onQueuedSendNow: (message) => unawaited(_sendQueuedWorkNow(message)),
         onHistorySelected: _selectHistoryPrompt,
         onHistoryClosed: _closeRequestHistory,
-        workflowBeforeChat: _workflowBeforeChat,
-        onToggleChat: _toggleChat,
         onWorkflowChanged: (value) {
           _updateState(() {
+            _markSelectionChangedByUser();
             _workflow = value;
             _workExecutionSelection = {};
           });

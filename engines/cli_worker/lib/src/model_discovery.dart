@@ -300,6 +300,21 @@ class ModelDiscoveryCache {
     }
   }
 
+  /// The cached catalog for this Profile regardless of the CLI version it was
+  /// discovered with. Used by execution, which does not run the CLI just to
+  /// re-check its version: Workspace readiness owns that check.
+  Future<DiscoveredModelCatalog?> loadForProfile(String digest) async {
+    try {
+      if (await file.length() > 128 * 1024) return null;
+      final catalog = DiscoveredModelCatalog.fromJson(
+        Map<String, Object?>.from(jsonDecode(await file.readAsString()) as Map),
+      );
+      return catalog.profileDigest == digest ? catalog : null;
+    } on Object {
+      return null;
+    }
+  }
+
   Future<void> save(DiscoveredModelCatalog catalog) async {
     await file.parent.create(recursive: true);
     final temp = File(

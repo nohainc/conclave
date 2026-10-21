@@ -122,3 +122,28 @@ it("uses work session generation to create fresh sessions for direct Work, with 
     `work-session-${createHash("sha256").update("thread:thread-1:direct:work-conversation:gen-2").digest("hex")}`,
   );
 });
+
+it("continues the fresh Chat session after clearing AI History", () => {
+  const params = {
+    workBindingId: "chat" as const,
+    threadId: "T",
+    workRequestId: "R",
+    stepKind: "chat",
+  };
+  const old = workStepSessionKey(params);
+  const fresh = workStepSessionKey({
+    ...params,
+    workSessionGeneration: 1,
+    retryStepKind: "chat",
+    retrySessionStrategy: "fresh",
+    retryNumber: 1,
+  });
+  expect(fresh).not.toBe(old);
+  expect(
+    workStepSessionKey({
+      ...params,
+      workSessionGeneration: 1,
+      workRequestId: "next",
+    }),
+  ).toBe(fresh);
+});

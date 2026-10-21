@@ -20,8 +20,6 @@ import 'engine_session_store.dart';
 import 'conversation_execution_router.dart';
 import 'provider_activity_adapter.dart';
 
-const _liveProbePrompt = 'Reply with exactly the word OK. Do not use tools.';
-const _liveProbeExpectedText = 'OK';
 const _compiledEngineVersion = String.fromEnvironment(
   'ENGINE_VERSION',
   defaultValue: 'dev',
@@ -502,73 +500,81 @@ class CliWorkerEngine {
           }
         }
         if (request.mode == WorkerProbeMode.live && issue == null) {
-          final liveConfig = _profile.probe['live'];
-          final profileTimeoutMs = liveConfig is Map
-              ? _int(liveConfig['timeoutMs'])
-              : WorkerProtocolLimits.maxProbeTimeoutMs;
-          final liveTimeout = remaining(profileLimitMs: profileTimeoutMs);
-          final liveContext = _context(
-            ExecuteRequest(
-              requestId: request.requestId,
-              assignmentId: 'live-probe',
-              prompt: _liveProbePrompt,
-              timeoutMs: liveTimeout.inMilliseconds,
-              sessionPolicy: WorkerSessionPolicy.stateless,
-            ),
-            null,
-          );
-          final liveStdout = StringBuffer();
-          final liveArguments = _expandArguments(
-            _list(_profile.execution['arguments']),
-            liveContext,
-          );
-          final liveEnvironment = _environment(liveContext);
-          final liveResult = await _streamingRunner.run(
-            executable,
-            liveArguments,
-            environment: liveEnvironment,
-            workingDirectory: liveContext['workingDirectory']!,
-            stdinText: _expandStdin(
-              _map(_profile.execution['stdin']),
-              liveContext,
-            ),
-            timeout: liveTimeout,
-            onStdoutLine: (line) => liveStdout.writeln(line),
-          );
-          final liveOutput = _interpret(
-            liveStdout.toString(),
-            liveResult.stderr,
-            liveResult.exitCode,
-            _profile.execution,
-          );
-          final livePassed =
-              liveResult.exitCode == 0 &&
-              liveOutput.issueCode == null &&
-              liveOutput.finalText?.trim() == _liveProbeExpectedText;
-          checks.add(
-            ProbeCheck(
-              code: 'provider_live_execution',
-              status: livePassed
-                  ? ProbeCheckStatus.passed
-                  : ProbeCheckStatus.failed,
-              message: livePassed
-                  ? 'Provider completed the live check.'
-                  : 'Provider did not complete the expected live check '
-                        '(exit ${liveResult.exitCode}, '
-                        'issue ${liveOutput.issueCode ?? 'none'}, '
-                        'final text '
-                        '${liveOutput.finalText == null
-                            ? 'missing'
-                            : liveOutput.finalText?.trim() == _liveProbeExpectedText
-                            ? 'matched'
-                            : 'differed'}). '
-                        'Arguments: ${liveArguments.join(' ')}. '
-                        'Environment keys: ${(liveEnvironment.keys.toList()..sort()).join(',')}. '
-                        'Stderr: ${_liveStderrExcerpt(liveResult.stderr)}',
-            ),
-          );
-          if (!livePassed)
-            issue ??= liveOutput.issueCode ?? WorkerIssueCode.providerFailure;
+          final usageSpec = _profile.usage;
+          if (usageSpec != null) {
+            final profileTimeoutMs = _int(usageSpec['timeoutMs']);
+            final liveTimeout = remaining(profileLimitMs: profileTimeoutMs);
+            final workingDirectory = Directory.current.path;
+            final usageContext = ProfileVersionProbe.buildContext(
+              profile: _profile,
+              workingDirectory: workingDirectory,
+              homeDirectory: Platform.environment['HOME'] ?? workingDirectory,
+              workerStateDirectory: options.statePath,
+            );
+            final usageArguments = _stringList(
+              usageSpec['arguments'],
+            ).map((argument) => _template(argument, usageContext)).toList();
+            final rpc = usageSpec['jsonRpc'];
+            final CliCommandResult result;
+            if (rpc is Map) {
+              final rpcResult = await readAppServerResult(
+                executable: executable,
+                arguments: usageArguments,
+                environment: _environment(),
+                workingDirectory: workingDirectory,
+                method: _string(rpc['method']),
+                timeout: liveTimeout,
+              );
+              result = CliCommandResult(
+                exitCode: 0,
+                stdout:
+                    '${const JsonEncoder.withIndent('  ').convert(rpcResult)}\n',
+                stderr: '',
+              );
+            } else {
+              result = await _commandRunner.run(
+                executable,
+                usageArguments,
+                environment: _environment(),
+                workingDirectory: workingDirectory,
+                timeout: liveTimeout,
+              );
+            }
+            // Live mode checks the provider account through the Profile's
+            // usage command instead of calling a model, so a limit on one
+            // model cannot fail the whole Worker. The command must succeed and
+            // print something.
+            final livePassed =
+                result.exitCode == 0 && result.stdout.trim().isNotEmpty;
+            checks.add(
+              ProbeCheck(
+                code: 'provider_live_execution',
+                status: livePassed
+                    ? ProbeCheckStatus.passed
+                    : ProbeCheckStatus.failed,
+                message: livePassed
+                    ? 'Provider answered the usage command.'
+                    : 'Provider usage command '
+                          '${result.exitCode == 0 ? 'returned no output' : 'failed (exit ${result.exitCode})'}. '
+                          'Arguments: ${usageArguments.join(' ')}. '
+                          'Stderr: ${_liveStderrExcerpt(result.stderr)}',
+              ),
+            );
+            if (!livePassed) {
+              issue ??= WorkerIssueCode.providerFailure;
+            }
+          } else {
+            // Live mode is the usage check; it never calls a model. A Profile
+            // without a usage command cannot be live-tested.
+            checks.add(
+              ProbeCheck(
+                code: 'provider_live_execution',
+                status: ProbeCheckStatus.failed,
+                message: 'This Tool Profile declares no usage command.',
+              ),
+            );
+            issue ??= WorkerIssueCode.providerFailure;
+          }
         } else if (request.mode == WorkerProbeMode.live && issue != null) {
           checks.add(
             ProbeCheck(
@@ -824,8 +830,22 @@ class CliWorkerEngine {
     await ModelDiscoveryCache(options.statePath).save(_modelCatalog!);
   }
 
+  /// Loads the model catalog an assignment is validated against. Execution
+  /// sends the prompt straight to the CLI: it reads the catalog saved by
+  /// Workspace readiness (a file read, so a refreshed catalog is picked up)
+  /// and runs the version and discovery commands only when no catalog exists
+  /// for this Profile at all. Keeping the CLI unchanged between readiness
+  /// checks is the user's responsibility.
   Future<void> _ensureModelCatalog() async {
     if (_profile.model['discovery'] is! Map) return;
+    final cached = await ModelDiscoveryCache(
+      options.statePath,
+    ).loadForProfile(_admittedProfile.digest);
+    if (cached != null) {
+      _modelCatalog = cached;
+      _providerVersion ??= cached.providerToolVersion;
+      return;
+    }
     final executable = await _resolveTool();
     final context = ProfileVersionProbe.buildContext(
       profile: _profile,
@@ -2571,7 +2591,7 @@ class CliWorkerEngine {
         caseSensitive: false,
       ),
       'quota_exhausted': RegExp(
-        r'quota.{0,40}(exceeded|exhausted)|rate limit',
+        r"quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota|insufficient[_ -]quota|usage[_ -]limit[_ -](?:reached|exceeded)|(?:usage|session|weekly|daily|monthly|spending|rate) limit.{0,40}(?:reached|exceeded|exhausted)|rate[_ -]limit(?:ed|[_ -]error|[_ -]exceeded)|you(?:['’]ve| have) (?:hit|reached) your (?:(?:session|usage|weekly|daily|monthly|spending) )?limit|credits? balance is too low|resource_exhausted|resource has been exhausted",
         caseSensitive: false,
       ),
       'provider_unavailable': RegExp(

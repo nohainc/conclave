@@ -43,7 +43,7 @@ class ProfileLabLadderStageResult {
       };
 }
 
-/// The complete progressive test ladder result across all 12 ordered stages.
+/// The complete progressive test ladder result across all 6 ordered stages.
 class ProfileLabLadderResult {
   const ProfileLabLadderResult({
     required this.overallResult,
@@ -209,51 +209,23 @@ Future<void> _deleteSandboxTreeWithoutFollowingLinks(
   }
 }
 
-bool _matchesExpectedTextFile(String actual, String expected) =>
-    actual == expected || actual == '$expected\n' || actual == '$expected\r\n';
-
 const cloudAcceptanceScenarioNames = <String>[
   'activity_mapping',
   'passive_probe',
-  'live_probe',
-  'model_selection',
-  'representative_thread_write',
-  'durable_session_start',
-  'durable_session_resume',
-  'cancellation',
-  'timeout',
+  'usage_check',
 ];
 
 /// Derives the Cloud scenario status map from the candidate Tool Profile.
 ///
-/// Worker/Profile capability declarations are intentionally not consulted.
-/// Applicability comes from the executable contract itself: sandbox mappings,
-/// session support, and model configuration.
+/// Every Profile must declare a `usage` command, so the usage check always
+/// applies. No scenario calls a model.
 Map<String, String> cloudAcceptanceScenarioStatuses(
   Map<String, Object?> profile,
 ) {
-  final session = profile['session'] as Map<String, Object?>? ?? const {};
-  final model = profile['model'] as Map<String, Object?>? ?? const {};
-  final sessionSupported = session['supported'] == true;
-  final sandbox = profile['sandbox'] as Map<String, Object?>? ?? const {};
-  final mappings = sandbox['mappings'] as Map<String, Object?>? ?? const {};
-  final restricted = mappings['restricted'];
-
   return {
     'activity_mapping': _activityMappingScenarioStatus(profile),
     'passive_probe': 'passed',
-    'live_probe': 'passed',
-    'model_selection': model['supported'] == true &&
-            ((model['allowlist'] as List?)?.isNotEmpty ?? false)
-        ? 'passed'
-        : 'not_applicable',
-    'representative_thread_write': restricted is List && restricted.isNotEmpty
-        ? 'passed'
-        : 'not_applicable',
-    'durable_session_start': sessionSupported ? 'passed' : 'not_applicable',
-    'durable_session_resume': sessionSupported ? 'passed' : 'not_applicable',
-    'cancellation': 'passed',
-    'timeout': 'passed',
+    'usage_check': 'passed',
   };
 }
 
@@ -416,18 +388,19 @@ class ProfileLabTestSandbox {
   }
 
   /// Executes the progressive local test ladder:
-  /// 1. Schema Validation (Zero Quota)
-  /// 2. Profile Activity Mapping Replay (Zero Quota)
-  /// 3. Engine Compatibility (Zero Quota)
-  /// 4. Executable Discovery (Zero Quota)
-  /// 5. CLI Version Probe (Zero Model Quota)
-  /// 6. Passive Probe (Zero Model Quota)
-  /// 7. Live Probe (Engine-controlled OK probe)
-  /// 8. Representative thread write (real assignment and file verification)
-  /// 9. Session Test (real create/resume assignments if supported)
-  /// 10. Model Selection Test (real model-selected assignment if supported)
-  /// 11. Cancellation Test (real assignment canceled through the Engine)
-  /// 12. Timeout Test (real assignment with a bounded Engine deadline)
+  /// 1. Schema Validation (no quota)
+  /// 2. Event Mapping Replay (no quota)
+  /// 3. Executable Discovery (no quota)
+  /// 4. CLI Version Command: the command runs and prints something; the
+  ///    version is not compared with the Profile's ranges (no quota)
+  /// 5. Passive Probe (no model call)
+  /// 6. Provider Usage Check: the Profile's usage command (no model call)
+  ///
+  /// No stage calls a model.
+  ///
+  /// Engine and CLI version ranges are enforced by Workspace readiness on the
+  /// user's machine, not here. Cancellation and timeout are Engine behavior
+  /// covered by Engine and supervisor tests.
   Future<ProfileLabLadderResult> executeTestLadder({
     required LocalDraftProfileCandidate candidate,
     void Function(String stageId, String status, String diagnostics)?
@@ -551,55 +524,7 @@ class ProfileLabTestSandbox {
       );
     }
 
-    // --- STAGE 3: Engine Compatibility ---
-    if (haltExecution) {
-      // The mapping stage has already stopped its timer.
-      addStage(
-        stageId: 'engine_compatibility',
-        displayName: 'Engine Compatibility',
-        status: 'skipped',
-        durationMs: 0,
-        diagnostics: 'Skipped due to prior schema validation failure.',
-        consumesQuota: false,
-      );
-    } else {
-      final engineCompat =
-          candidate.profile['engineCompatibility'] as Map<String, Object?>? ??
-              {};
-      final minVer = engineCompat['min'] as String? ?? '0.0.0';
-      final maxVer = engineCompat['maxExclusive'] as String? ?? '99.0.0';
-
-      final isCompatible = _isEngineVersionCompatible(
-        cliWorkerEngineVersion,
-        minVer,
-        maxVer,
-      );
-      if (isCompatible) {
-        addStage(
-          stageId: 'engine_compatibility',
-          displayName: 'Engine Compatibility',
-          status: 'passed',
-          durationMs: s2Timer.elapsedMilliseconds,
-          diagnostics:
-              'CLI Worker Engine v$cliWorkerEngineVersion satisfies bounds [$minVer, $maxVer).',
-          consumesQuota: false,
-        );
-      } else {
-        haltExecution = true;
-        addStage(
-          stageId: 'engine_compatibility',
-          displayName: 'Engine Compatibility',
-          status: 'failed',
-          durationMs: s2Timer.elapsedMilliseconds,
-          diagnostics:
-              'CLI Worker Engine v$cliWorkerEngineVersion incompatible with bounds [$minVer, $maxVer).',
-          consumesQuota: false,
-          issueCode: 'engine_incompatible',
-        );
-      }
-    }
-
-    // --- STAGE 4: Executable Discovery ---
+    // --- STAGE 3: Executable Discovery ---
     final s3Timer = Stopwatch()..start();
     String? discoveredExecPath;
     if (haltExecution) {
@@ -609,7 +534,7 @@ class ProfileLabTestSandbox {
         displayName: 'Executable Discovery',
         status: 'skipped',
         durationMs: 0,
-        diagnostics: 'Skipped due to prior compatibility failure.',
+        diagnostics: 'Skipped due to a prior failure.',
         consumesQuota: false,
       );
     } else {
@@ -684,13 +609,17 @@ class ProfileLabTestSandbox {
       }
     }
 
-    // --- STAGE 5: CLI Version ---
+    // --- STAGE 4: CLI Version Command ---
+    // Only checks that the CLI understands its version command and answers
+    // with something. The value is recorded, never compared: the local dev
+    // environment says nothing about users' machines, and Workspace enforces
+    // the Profile's supported range at runtime.
     final s4Timer = Stopwatch()..start();
     if (haltExecution) {
       s4Timer.stop();
       addStage(
         stageId: 'cli_version',
-        displayName: 'CLI Version Probe',
+        displayName: 'CLI Version Command',
         status: 'skipped',
         durationMs: 0,
         diagnostics: 'Skipped because executable discovery failed.',
@@ -720,84 +649,44 @@ class ProfileLabTestSandbox {
           deadline: const Duration(seconds: 30),
         );
         s4Timer.stop();
-        detectedProviderToolVersion = versionResult.version;
-        if (versionResult.exitCode == 0 && versionResult.version != null) {
-          final compatibilityRanges =
-              profile.providerTool['supportedVersions'] as List? ?? const [];
-          final placeholder =
-              ToolProfileCompatibility.hasPlaceholderProviderRange(profile);
-          if (compatibilityRanges.isEmpty || placeholder) {
-            haltExecution = true;
-            final recommendation =
-                ToolProfileCompatibility.recommendedProviderRange(
-              versionResult.version!,
-            );
-            addStage(
-              stageId: 'cli_version',
-              displayName: 'CLI Version Probe',
-              status: 'failed',
-              durationMs: s4Timer.elapsedMilliseconds,
-              diagnostics: recommendation == null
-                  ? 'Provider CLI version $detectedProviderToolVersion was discovered, but a bounded compatibility range must be configured before qualification.'
-                  : 'Provider CLI version $detectedProviderToolVersion was discovered. Configure the suggested narrow range before rerunning qualification.',
-              consumesQuota: false,
-              issueCode: placeholder
-                  ? 'provider_compatibility_placeholder'
-                  : 'provider_compatibility_unconfigured',
-              details: {
-                if (recommendation != null) ...{
-                  'detectedProviderVersion': versionResult.version,
-                  'suggestedMin': recommendation['min'],
-                  'suggestedMaxExclusive': recommendation['maxExclusive'],
-                },
-              },
-            );
-          } else if (versionResult.supported) {
-            addStage(
-              stageId: 'cli_version',
-              displayName: 'CLI Version Probe',
-              status: 'passed',
-              durationMs: s4Timer.elapsedMilliseconds,
-              diagnostics:
-                  'Provider CLI version $detectedProviderToolVersion is within a declared supported range.',
-              consumesQuota: false,
-              details: {'cliVersion': detectedProviderToolVersion},
-            );
-          } else {
-            haltExecution = true;
-            addStage(
-              stageId: 'cli_version',
-              displayName: 'CLI Version Probe',
-              status: 'failed',
-              durationMs: s4Timer.elapsedMilliseconds,
-              diagnostics: detectedProviderToolVersion == null
-                  ? 'Provider CLI version output did not contain a semantic version.'
-                  : 'Provider CLI version $detectedProviderToolVersion is outside declared supported ranges.',
-              consumesQuota: false,
-              issueCode: 'provider_version_unsupported',
-              details: {'cliVersion': detectedProviderToolVersion},
-            );
-          }
-        } else {
+        final answered =
+            versionResult.exitCode == 0 && versionResult.output.isNotEmpty;
+        if (answered) {
+          detectedProviderToolVersion = versionResult.version ??
+              versionResult.output.split(RegExp(r'\r?\n')).first.trim();
           addStage(
             stageId: 'cli_version',
-            displayName: 'CLI Version Probe',
-            status: 'failed',
+            displayName: 'CLI Version Command',
+            status: 'passed',
             durationMs: s4Timer.elapsedMilliseconds,
             diagnostics:
-                'Provider CLI version probe exited with code ${versionResult.exitCode}',
+                'The CLI answered its version command: $detectedProviderToolVersion',
+            consumesQuota: false,
+            details: {'cliVersion': detectedProviderToolVersion},
+          );
+        } else {
+          haltExecution = true;
+          addStage(
+            stageId: 'cli_version',
+            displayName: 'CLI Version Command',
+            status: 'failed',
+            durationMs: s4Timer.elapsedMilliseconds,
+            diagnostics: versionResult.exitCode != 0
+                ? 'The CLI version command failed with exit code ${versionResult.exitCode}.'
+                : 'The CLI version command returned no output.',
             consumesQuota: false,
             issueCode: 'version_probe_failed',
           );
         }
       } catch (e) {
         s4Timer.stop();
+        haltExecution = true;
         addStage(
           stageId: 'cli_version',
-          displayName: 'CLI Version Probe',
+          displayName: 'CLI Version Command',
           status: 'failed',
           durationMs: s4Timer.elapsedMilliseconds,
-          diagnostics: 'Version probe execution error: $e',
+          diagnostics: 'Version command error: $e',
           consumesQuota: false,
           issueCode: 'version_probe_failed',
         );
@@ -831,47 +720,7 @@ class ProfileLabTestSandbox {
       );
       _activeSupervisor = supervisor;
 
-      Future<WorkerResult> executeAssignment({
-        required String label,
-        required String prompt,
-        Duration timeout = const Duration(seconds: 60),
-        WorkerSessionPolicy sessionPolicy = WorkerSessionPolicy.stateless,
-        String? sessionKey,
-        String? model,
-        Duration? engineExecutionTimeout,
-        WorkerExecutionPolicy executionPolicy =
-            WorkerExecutionPolicy.restricted,
-        void Function()? onExecutionStarted,
-      }) {
-        final assignmentId = 'lab-${label.replaceAll('_', '-')}-'
-            '${DateTime.now().microsecondsSinceEpoch}';
-        _activeAssignmentId = assignmentId;
-        return supervisor
-            .execute(
-          candidate,
-          profileFile: profileTempFile,
-          stateDirectory: scratchDir,
-          workingDirectory: scratchDir,
-          workerId: 'profile-lab-${candidate.profileDefinitionId}',
-          maxConcurrentAssignments: 1,
-          assignmentId: assignmentId,
-          prompt: prompt,
-          timeout: timeout,
-          engineExecutionTimeout: engineExecutionTimeout,
-          onExecutionStarted: onExecutionStarted,
-          sessionPolicy: sessionPolicy,
-          sessionKey: sessionKey,
-          model: model,
-          executionPolicy: executionPolicy,
-        )
-            .whenComplete(() {
-          if (_activeAssignmentId == assignmentId) {
-            _activeAssignmentId = null;
-          }
-        });
-      }
-
-      // --- STAGE 6: Passive Probe ---
+      // --- STAGE 5: Passive Probe ---
       final s5Timer = Stopwatch()..start();
       if (haltExecution) {
         s5Timer.stop();
@@ -893,15 +742,21 @@ class ProfileLabTestSandbox {
             timeout: const Duration(seconds: 30),
           );
           s5Timer.stop();
-          if (probeRes.ready) {
+          // The local CLI version is not compared in Profile Lab.
+          final versionOnly = !probeRes.ready &&
+              probeRes.issueCode ==
+                  WorkerIssueCode.unsupportedProviderToolVersion;
+          if (probeRes.ready || versionOnly) {
             observedAcceptanceScenarios['passive_probe'] = 'passed';
             addStage(
               stageId: 'passive_probe',
               displayName: 'Passive Probe',
               status: 'passed',
               durationMs: s5Timer.elapsedMilliseconds,
-              diagnostics:
-                  'Passive probe clean. Non-model contract checks passed.',
+              diagnostics: versionOnly
+                  ? 'Passive probe clean apart from the CLI version range, '
+                      'which Profile Lab does not compare.'
+                  : 'Passive probe clean. Non-model contract checks passed.',
               consumesQuota: false,
             );
           } else {
@@ -934,18 +789,34 @@ class ProfileLabTestSandbox {
         }
       }
 
-      // --- STAGE 7: Live Probe ---
+      // --- STAGE 6: Provider Usage Check ---
+      // Runs the Profile's usage command through the Engine's live probe. No
+      // model is called, so a limit on one model cannot fail the Worker.
       final s6Timer = Stopwatch()..start();
       if (haltExecution) {
         s6Timer.stop();
         addStage(
-          stageId: 'live_probe',
-          displayName: 'Live Probe',
+          stageId: 'usage_check',
+          displayName: 'Provider Usage Check',
           status: 'skipped',
           durationMs: 0,
-          diagnostics:
-              'Skipped due to prior passive probe or discovery failure.',
+          diagnostics: 'Skipped due to a prior failure.',
           consumesQuota: false,
+        );
+      } else if (candidate.profile['usage'] is! Map) {
+        s6Timer.stop();
+        observedAcceptanceScenarios['usage_check'] = 'failed';
+        haltExecution = true;
+        addStage(
+          stageId: 'usage_check',
+          displayName: 'Provider Usage Check',
+          status: 'failed',
+          durationMs: 0,
+          diagnostics:
+              'The Tool Profile must declare a usage command; it replaces the '
+              'live model call when checking the provider.',
+          consumesQuota: false,
+          issueCode: 'usage_command_missing',
         );
       } else {
         try {
@@ -958,469 +829,46 @@ class ProfileLabTestSandbox {
           );
           s6Timer.stop();
           if (probeRes.ready) {
-            observedAcceptanceScenarios['live_probe'] = 'passed';
+            observedAcceptanceScenarios['usage_check'] = 'passed';
             addStage(
-              stageId: 'live_probe',
-              displayName: 'Live Probe',
+              stageId: 'usage_check',
+              displayName: 'Provider Usage Check',
               status: 'passed',
               durationMs: s6Timer.elapsedMilliseconds,
-              diagnostics: 'Live probe Engine-controlled OK test passed.',
-              consumesQuota: true,
+              diagnostics: 'The provider answered the usage command.',
+              consumesQuota: false,
             );
           } else {
-            observedAcceptanceScenarios['live_probe'] = 'failed';
+            observedAcceptanceScenarios['usage_check'] = 'failed';
             haltExecution = true;
             addStage(
-              stageId: 'live_probe',
-              displayName: 'Live Probe',
+              stageId: 'usage_check',
+              displayName: 'Provider Usage Check',
               status: 'failed',
               durationMs: s6Timer.elapsedMilliseconds,
               diagnostics:
-                  'Live probe issue: ${probeRes.issueCode ?? "live_probe_failed"}'
+                  'Usage check issue: ${probeRes.issueCode ?? "usage_check_failed"}'
                   '${probeRes.checks.where((c) => c.status == ProbeCheckStatus.failed).map((c) => '\n${c.code}: ${c.message}').join()}',
-              consumesQuota: true,
-              issueCode: probeRes.issueCode ?? 'live_probe_failed',
+              consumesQuota: false,
+              issueCode: probeRes.issueCode ?? 'usage_check_failed',
             );
           }
         } catch (e) {
-          observedAcceptanceScenarios['live_probe'] = 'failed';
+          observedAcceptanceScenarios['usage_check'] = 'failed';
           s6Timer.stop();
           haltExecution = true;
           addStage(
-            stageId: 'live_probe',
-            displayName: 'Live Probe',
+            stageId: 'usage_check',
+            displayName: 'Provider Usage Check',
             status: 'failed',
             durationMs: s6Timer.elapsedMilliseconds,
-            diagnostics: 'Live probe exception: $e',
-            consumesQuota: true,
-            issueCode: 'live_probe_exception',
+            diagnostics: 'Usage check exception: $e',
+            consumesQuota: false,
+            issueCode: 'usage_check_exception',
           );
         }
       }
 
-      // --- STAGE 8: Representative Thread Write ---
-      final s7Timer = Stopwatch()..start();
-      const writeSentinel = 'conclave-profile-lab-write-verified';
-      final writeTarget = File('${scratchDir.path}/acceptance-write.txt');
-      final threadWriteApplicable =
-          expectedAcceptanceScenarios['representative_thread_write'] ==
-              'passed';
-      if (!threadWriteApplicable) {
-        s7Timer.stop();
-        observedAcceptanceScenarios['representative_thread_write'] =
-            'not_applicable';
-        addStage(
-          stageId: 'representative_thread_write',
-          displayName: 'Representative Thread Write',
-          status: 'skipped',
-          durationMs: 0,
-          diagnostics:
-              'This Tool Profile does not define a restricted execution mapping.',
-          consumesQuota: false,
-          details: {'applicability': 'not_applicable'},
-        );
-      } else if (haltExecution) {
-        s7Timer.stop();
-        addStage(
-          stageId: 'representative_thread_write',
-          displayName: 'Representative Thread Write',
-          status: 'skipped',
-          durationMs: 0,
-          diagnostics: 'Skipped due to prior live probe failure.',
-          consumesQuota: false,
-        );
-      } else {
-        try {
-          await executeAssignment(
-            label: 'representative-thread-write',
-            timeout: const Duration(minutes: 3),
-            prompt: 'Create the file "acceptance-write.txt" in the current '
-                'working directory and write exactly this UTF-8 text into it '
-                '(a single final line ending is acceptable): '
-                '$writeSentinel. Do not just describe the action. Then reply '
-                'that the file was written.',
-          );
-          final wroteExpectedContent = await writeTarget.exists() &&
-              _matchesExpectedTextFile(
-                await writeTarget.readAsString(),
-                writeSentinel,
-              );
-          final sandbox = candidate.profile['sandbox'];
-          final mappings = sandbox is Map ? sandbox['mappings'] : null;
-          final fullAccessMapping =
-              mappings is Map ? mappings['full_access'] : null;
-          var fullAccessStatus = 'not_applicable';
-          var fullAccessPassed = true;
-          if (fullAccessMapping is List && fullAccessMapping.isNotEmpty) {
-            try {
-              if (await writeTarget.exists()) await writeTarget.delete();
-              await executeAssignment(
-                label: 'full-local-access',
-                timeout: const Duration(minutes: 3),
-                prompt: 'Create the file "acceptance-write.txt" in the '
-                    'current working directory and write exactly this UTF-8 '
-                    'text into it: $writeSentinel. Do not just describe the '
-                    'action. After writing the file, reply that the file was '
-                    'written and finish. No additional tasks are required.',
-                executionPolicy: WorkerExecutionPolicy.fullAccess,
-              );
-              fullAccessPassed = await writeTarget.exists() &&
-                  _matchesExpectedTextFile(
-                    await writeTarget.readAsString(),
-                    writeSentinel,
-                  );
-              fullAccessStatus = fullAccessPassed ? 'passed' : 'failed';
-            } on Object catch (error) {
-              fullAccessPassed = false;
-              fullAccessStatus = 'failed: $error';
-            }
-          }
-          s7Timer.stop();
-          observedAcceptanceScenarios['representative_thread_write'] =
-              wroteExpectedContent && fullAccessPassed ? 'passed' : 'failed';
-          if (wroteExpectedContent && fullAccessPassed) {
-            addStage(
-              stageId: 'representative_thread_write',
-              displayName: 'Representative Thread Write',
-              status: 'passed',
-              durationMs: s7Timer.elapsedMilliseconds,
-              diagnostics:
-                  'Engine assignment wrote and verified the expected file in the isolated sandbox; stdin transport and error handling were exercised. Full local access: $fullAccessStatus.',
-              consumesQuota: true,
-              details: {
-                'stdinTransport': 'passed',
-                'errorInterpretation': 'engine_classified',
-                'fullLocalAccess': fullAccessStatus,
-              },
-            );
-          } else {
-            haltExecution = true;
-            addStage(
-              stageId: 'representative_thread_write',
-              displayName: 'Representative Thread Write',
-              status: 'failed',
-              durationMs: s7Timer.elapsedMilliseconds,
-              diagnostics: wroteExpectedContent
-                  ? 'Full local access verification failed: $fullAccessStatus.'
-                  : 'Engine assignment completed without writing the expected file contents.',
-              consumesQuota: true,
-              issueCode: 'thread_write_not_observed',
-              details: {
-                'stdinTransport': wroteExpectedContent ? 'passed' : 'failed',
-                'errorInterpretation': 'engine_classified',
-                'fullLocalAccess': fullAccessStatus,
-              },
-            );
-          }
-        } on Object catch (error) {
-          s7Timer.stop();
-          haltExecution = true;
-          observedAcceptanceScenarios['representative_thread_write'] = 'failed';
-          addStage(
-            stageId: 'representative_thread_write',
-            displayName: 'Representative Thread Write',
-            status: 'failed',
-            durationMs: s7Timer.elapsedMilliseconds,
-            diagnostics: error is CliWorkerEngineProbeException &&
-                    error.localDiagnostics != null
-                ? 'Engine execution failed: $error\n'
-                    'Local diagnostics: ${error.localDiagnostics}'
-                : 'Engine execution failed: $error',
-            consumesQuota: true,
-            issueCode: error is CliWorkerEngineProbeException
-                ? error.issueCode
-                : 'engine_execution_failed',
-          );
-        }
-      }
-
-      // --- STAGE 9: Session Test ---
-      final s8Timer = Stopwatch()..start();
-      final durableSessionApplicable =
-          expectedAcceptanceScenarios['durable_session_start'] == 'passed';
-      if (!durableSessionApplicable) {
-        observedAcceptanceScenarios['durable_session_start'] = 'not_applicable';
-        observedAcceptanceScenarios['durable_session_resume'] =
-            'not_applicable';
-        s8Timer.stop();
-        addStage(
-          stageId: 'session_test',
-          displayName: 'Session Test',
-          status: 'skipped',
-          durationMs: 0,
-          diagnostics:
-              'Session management is not declared by this Tool Profile.',
-          consumesQuota: false,
-          details: {'applicability': 'not_applicable'},
-        );
-      } else if (haltExecution) {
-        s8Timer.stop();
-        addStage(
-          stageId: 'session_test',
-          displayName: 'Session Test',
-          status: 'skipped',
-          durationMs: 0,
-          diagnostics: 'Skipped due to prior execution failure.',
-          consumesQuota: true,
-        );
-      } else {
-        try {
-          final sessionMap =
-              candidate.profile['session'] as Map<String, Object?>? ?? const {};
-          final sessionKey = 'lab-${DateTime.now().microsecondsSinceEpoch}';
-          await executeAssignment(
-            label: 'session-create',
-            prompt: 'Conclave Lab session creation probe. Reply briefly.',
-            sessionPolicy: WorkerSessionPolicy.durableSession,
-            sessionKey: sessionKey,
-          );
-          observedAcceptanceScenarios['durable_session_start'] = 'passed';
-          final resumed = await executeAssignment(
-            label: 'session-resume',
-            prompt: 'Continue the Conclave Lab session probe. Reply briefly.',
-            sessionPolicy: WorkerSessionPolicy.durableSession,
-            sessionKey: sessionKey,
-          );
-          s8Timer.stop();
-          observedAcceptanceScenarios['durable_session_resume'] = 'passed';
-          addStage(
-            stageId: 'session_test',
-            displayName: 'Session Create and Resume',
-            status: 'passed',
-            durationMs: s8Timer.elapsedMilliseconds,
-            diagnostics:
-                'Engine completed durable session create and resume assignments.',
-            consumesQuota: true,
-            details: {
-              'formatId': sessionMap['formatId'],
-              'resumeOutputLength': resumed.output.length,
-            },
-          );
-        } on Object catch (error) {
-          s8Timer.stop();
-          haltExecution = true;
-          observedAcceptanceScenarios.putIfAbsent(
-            'durable_session_start',
-            () => 'failed',
-          );
-          observedAcceptanceScenarios['durable_session_resume'] = 'failed';
-          addStage(
-            stageId: 'session_test',
-            displayName: 'Session Create and Resume',
-            status: 'failed',
-            durationMs: s8Timer.elapsedMilliseconds,
-            diagnostics: 'Engine session execution failed: $error',
-            consumesQuota: true,
-            issueCode: error is CliWorkerEngineProbeException
-                ? error.issueCode
-                : 'session_test_failed',
-          );
-        }
-      }
-
-      // --- STAGE 10: Model Selection Test ---
-      final s9Timer = Stopwatch()..start();
-      final modelMap =
-          candidate.profile['model'] as Map<String, Object?>? ?? {};
-      final modelSelectionApplicable =
-          expectedAcceptanceScenarios['model_selection'] == 'passed';
-      if (!modelSelectionApplicable) {
-        observedAcceptanceScenarios['model_selection'] = 'not_applicable';
-        s9Timer.stop();
-        addStage(
-          stageId: 'model_selection_test',
-          displayName: 'Model Selection Test',
-          status: 'skipped',
-          durationMs: 0,
-          diagnostics:
-              'The Tool Profile does not declare a testable model selection.',
-          consumesQuota: false,
-          details: {'applicability': 'not_applicable'},
-        );
-      } else if (haltExecution) {
-        s9Timer.stop();
-        addStage(
-          stageId: 'model_selection_test',
-          displayName: 'Model Selection Test',
-          status: 'skipped',
-          durationMs: 0,
-          diagnostics: 'Skipped due to prior execution failure.',
-          consumesQuota: true,
-        );
-      } else {
-        final selectedModel =
-            (modelMap['allowlist'] as List).whereType<String>().first;
-        try {
-          await executeAssignment(
-            label: 'model-selection',
-            prompt: 'Conclave Lab model selection probe. Reply briefly.',
-            model: selectedModel,
-          );
-          s9Timer.stop();
-          observedAcceptanceScenarios['model_selection'] = 'passed';
-          addStage(
-            stageId: 'model_selection_test',
-            displayName: 'Model Selection Test',
-            status: 'passed',
-            durationMs: s9Timer.elapsedMilliseconds,
-            diagnostics:
-                'Engine completed an assignment using the declared model.',
-            consumesQuota: true,
-            details: {'model': selectedModel},
-          );
-        } on Object catch (error) {
-          s9Timer.stop();
-          haltExecution = true;
-          observedAcceptanceScenarios['model_selection'] = 'failed';
-          addStage(
-            stageId: 'model_selection_test',
-            displayName: 'Model Selection Test',
-            status: 'failed',
-            durationMs: s9Timer.elapsedMilliseconds,
-            diagnostics: 'Engine model-selected execution failed: $error',
-            consumesQuota: true,
-            issueCode: error is CliWorkerEngineProbeException
-                ? error.issueCode
-                : 'model_selection_test_failed',
-          );
-        }
-      }
-
-      // --- STAGE 11: Cancellation ---
-      final s10Timer = Stopwatch()..start();
-      if (haltExecution) {
-        addStage(
-          stageId: 'cancellation_test',
-          displayName: 'Cancellation',
-          status: 'skipped',
-          durationMs: 0,
-          diagnostics: 'Skipped because a prior Engine execution failed.',
-          consumesQuota: false,
-        );
-      } else {
-        final providerStarted = Completer<void>();
-        final assignment = executeAssignment(
-          label: 'cancellation',
-          prompt:
-              'Conclave Lab cancellation probe. This request will be cancelled.',
-          timeout: const Duration(seconds: 30),
-          onExecutionStarted: () {
-            if (!providerStarted.isCompleted) providerStarted.complete();
-          },
-        );
-        try {
-          await providerStarted.future.timeout(const Duration(seconds: 15));
-          await cancelCurrentTest();
-          await assignment;
-          s10Timer.stop();
-          addStage(
-            stageId: 'cancellation_test',
-            displayName: 'Engine Cancellation',
-            status: 'failed',
-            durationMs: s10Timer.elapsedMilliseconds,
-            diagnostics:
-                'The Engine assignment completed before cancellation was observed.',
-            consumesQuota: true,
-            issueCode: 'cancellation_not_observed',
-          );
-          haltExecution = true;
-        } on WorkerAssignmentCancelledException {
-          s10Timer.stop();
-          observedAcceptanceScenarios['cancellation'] = 'passed';
-          addStage(
-            stageId: 'cancellation_test',
-            displayName: 'Engine Cancellation',
-            status: 'passed',
-            durationMs: s10Timer.elapsedMilliseconds,
-            diagnostics:
-                'The active Engine assignment and provider process tree were cancelled.',
-            consumesQuota: true,
-          );
-        } on Object catch (error) {
-          await cancelCurrentTest();
-          s10Timer.stop();
-          observedAcceptanceScenarios['cancellation'] = 'failed';
-          addStage(
-            stageId: 'cancellation_test',
-            displayName: 'Engine Cancellation',
-            status: 'failed',
-            durationMs: s10Timer.elapsedMilliseconds,
-            diagnostics: 'Cancellation outcome was not confirmed: $error',
-            consumesQuota: true,
-            issueCode: 'cancellation_test_failed',
-          );
-          haltExecution = true;
-        }
-      }
-
-      // --- STAGE 12: Timeout ---
-      final s11Timer = Stopwatch()..start();
-      if (haltExecution) {
-        addStage(
-          stageId: 'timeout_test',
-          displayName: 'Execution Timeout',
-          status: 'skipped',
-          durationMs: 0,
-          diagnostics: 'Skipped because a prior Engine execution failed.',
-          consumesQuota: false,
-        );
-      } else {
-        final providerStarted = Completer<void>();
-        final assignment = executeAssignment(
-          label: 'timeout',
-          prompt: 'Conclave Lab timeout probe. Complete this request.',
-          timeout: const Duration(seconds: 30),
-          engineExecutionTimeout: const Duration(milliseconds: 100),
-          onExecutionStarted: () {
-            if (!providerStarted.isCompleted) providerStarted.complete();
-          },
-        );
-        try {
-          await providerStarted.future.timeout(const Duration(seconds: 15));
-          await assignment;
-          s11Timer.stop();
-          addStage(
-            stageId: 'timeout_test',
-            displayName: 'Execution Timeout',
-            status: 'failed',
-            durationMs: s11Timer.elapsedMilliseconds,
-            diagnostics:
-                'The provider completed before the short post-start Engine deadline; timeout behavior was not observed.',
-            consumesQuota: true,
-            issueCode: 'timeout_not_observed',
-          );
-        } on CliWorkerEngineProbeException catch (error) {
-          s11Timer.stop();
-          final passed = error.issueCode == WorkerIssueCode.deadlineExceeded;
-          observedAcceptanceScenarios['timeout'] = passed ? 'passed' : 'failed';
-          addStage(
-            stageId: 'timeout_test',
-            displayName: 'Execution Timeout',
-            status: passed ? 'passed' : 'failed',
-            durationMs: s11Timer.elapsedMilliseconds,
-            diagnostics: passed
-                ? 'The Engine enforced the assignment deadline and terminated the process tree.'
-                : 'Engine execution ended before timeout: ${error.safeMessage}',
-            consumesQuota: true,
-            issueCode: passed ? null : error.issueCode,
-          );
-          if (!passed) haltExecution = true;
-        } on Object catch (error) {
-          s11Timer.stop();
-          haltExecution = true;
-          observedAcceptanceScenarios['timeout'] = 'failed';
-          addStage(
-            stageId: 'timeout_test',
-            displayName: 'Execution Timeout',
-            status: 'failed',
-            durationMs: s11Timer.elapsedMilliseconds,
-            diagnostics:
-                'Timeout was not confirmed after provider start: $error',
-            consumesQuota: true,
-            issueCode: 'timeout_test_failed',
-          );
-        }
-      }
       _activeSupervisor = null;
     } finally {
       final supervisor = _activeSupervisor;
@@ -1527,49 +975,5 @@ class ProfileLabTestSandbox {
       publicationEvidence: publicationEvidence,
       logs: logs,
     );
-  }
-
-  static bool _isEngineVersionCompatible(
-    String version,
-    String min,
-    String maxExclusive,
-  ) {
-    final lower = _compareReleaseSemver(version, min);
-    final upper = _compareReleaseSemver(version, maxExclusive);
-    return lower != null && upper != null && lower >= 0 && upper < 0;
-  }
-
-  static int? _compareReleaseSemver(String left, String right) {
-    final pattern = RegExp(
-      r'^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$',
-    );
-    final a = pattern.firstMatch(left);
-    final b = pattern.firstMatch(right);
-    if (a == null || b == null) return null;
-    for (var index = 1; index <= 3; index++) {
-      final comparison = int.parse(a[index]!).compareTo(int.parse(b[index]!));
-      if (comparison != 0) return comparison;
-    }
-    final aPre = a[4]?.split('.');
-    final bPre = b[4]?.split('.');
-    if (aPre == null || bPre == null) {
-      if (aPre == bPre) return 0;
-      return aPre == null ? 1 : -1;
-    }
-    for (var index = 0; index < aPre.length || index < bPre.length; index++) {
-      if (index >= aPre.length) return -1;
-      if (index >= bPre.length) return 1;
-      final leftPart = aPre[index];
-      final rightPart = bPre[index];
-      if (leftPart == rightPart) continue;
-      final leftNumeric = RegExp(r'^(0|[1-9][0-9]*)$').hasMatch(leftPart);
-      final rightNumeric = RegExp(r'^(0|[1-9][0-9]*)$').hasMatch(rightPart);
-      if (leftNumeric && rightNumeric) {
-        return int.parse(leftPart).compareTo(int.parse(rightPart));
-      }
-      if (leftNumeric != rightNumeric) return leftNumeric ? -1 : 1;
-      return leftPart.compareTo(rightPart);
-    }
-    return 0;
   }
 }

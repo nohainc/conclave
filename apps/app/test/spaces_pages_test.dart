@@ -167,6 +167,7 @@ void main() {
   for (final workflow in ['chat', 'direct']) {
     for (final code in [
       'session_resume_failed',
+      'quota_exhausted',
       'context_limit_exceeded',
       'execution_failed',
       'unknown_code'
@@ -182,6 +183,9 @@ void main() {
             workerId: 'worker-a',
             workerDisplayName: 'ChatGPT',
             errorCode: code,
+            failureCategoryMessage: code == 'quota_exhausted'
+                ? 'The provider could not start'
+                : null,
             errorMessage: raw,
             assignmentId: 'secret-assignment',
             sessionPolicy: 'durable_session',
@@ -222,9 +226,11 @@ void main() {
         await tester.pumpAndSettle();
         final friendly = code == 'session_resume_failed'
             ? 'The worker could not continue the previous conversation. Please retry your request.'
-            : code == 'context_limit_exceeded'
-                ? 'This conversation exceeds the supported context limit. Start a new Thread with the relevant context.'
-                : 'Your request could not be completed. Please retry.';
+            : code == 'quota_exhausted'
+                ? 'The provider’s usage limit has been reached. Wait for the limit to reset or choose another worker, then retry.'
+                : code == 'context_limit_exceeded'
+                    ? 'This conversation exceeds the supported context limit. Clear AI History and retry; the latest answer is kept as context.'
+                    : 'Your request could not be completed. Please retry.';
         expect(find.text(friendly), findsOneWidget);
         expect(find.textContaining('C123'), findsNothing);
         for (final hidden in [
@@ -409,6 +415,45 @@ void main() {
       expect(find.text('· $name'), findsOneWidget);
     }
   });
+  testWidgets(
+      'AI History starts after its clear while the Conversation keeps all',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(900, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      initialTab: 1,
+      space: const AxSpace(
+          id: 'space-1',
+          name: 'Space',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      thread: const AxThread(
+          id: 'stream-cleared',
+          spaceId: 'space-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: _ClearedHistoryDataSource(),
+      onBackToSpace: _noop,
+      onArchive: _noop,
+    ))));
+    await tester.pumpAndSettle();
+    // The Conversation shows both exchanges with their full Work cards.
+    expect(_inConversation(find.text('Before clear')), findsOneWidget);
+    expect(_inConversation(find.text('After clear')), findsOneWidget);
+    await _openAiHistory(tester);
+    final history = find.byKey(const ValueKey('work-history-scroll'));
+    expect(find.descendant(of: history, matching: find.text('Before clear')),
+        findsNothing);
+    expect(find.descendant(of: history, matching: find.text('After clear')),
+        findsOneWidget);
+  });
   testWidgets('single Work workflow switches directly from Chat with Markdown',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(900, 1400));
@@ -454,36 +499,19 @@ void main() {
     await _askAi(tester);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
-    expect(find.byType(ConclaveMenuEntry<String>), findsNothing);
-    expect(find.text('Direct'), findsNothing);
-    final chatToggle = find.byKey(const ValueKey('work-toggle-chat'));
-    final workButton = find.byKey(const ValueKey('work-choose-workflow'));
-    final attachments = find.byKey(const ValueKey('work-add-attachments'));
-    expect(tester.getTopRight(attachments).dx,
-        closeTo(tester.getTopLeft(chatToggle).dx, 0.1));
-    expect(tester.getTopRight(chatToggle).dx,
-        closeTo(tester.getTopLeft(workButton).dx, 0.1));
+    expect(find.byKey(const ValueKey('work-toggle-chat')), findsNothing);
+    final menu = find.byType(ConclaveMenuEntry<String>);
+    expect(
+        find.descendant(of: menu, matching: find.text('Chat')), findsOneWidget);
+    expect(
+        find.descendant(of: menu, matching: find.text('Work')), findsOneWidget);
+    await tester.tap(find.descendant(of: menu, matching: find.text('Chat')));
+    await tester.pumpAndSettle();
     expect(
         find.descendant(
-            of: workButton, matching: find.byIcon(Icons.keyboard_arrow_down)),
-        findsNothing);
-    expect(find.descendant(of: chatToggle, matching: find.byType(Icon)),
-        findsNothing);
-    final inactiveChatText = tester.widget<Text>(
-        find.descendant(of: chatToggle, matching: find.text('Chat')));
-    final inactiveChatColor = inactiveChatText.style!.color!;
-    expect(inactiveChatColor.a, 0.5);
-    expect(
-        tester
-            .widget<Material>(find.descendant(
-                of: chatToggle, matching: find.byType(Material)))
-            .color,
-        Colors.transparent);
-    await tester.tap(chatToggle);
-    await tester.pumpAndSettle();
-    final activeChatText = tester.widget<Text>(
-        find.descendant(of: chatToggle, matching: find.text('Chat')));
-    expect(activeChatText.style!.color!.a, 1.0);
+            of: find.byKey(const ValueKey('work-choose-workflow')),
+            matching: find.text('Chat')),
+        findsOneWidget);
 
     const source = '## Question\n\n**Explain** this `code`.';
     await tester.enterText(find.byType(TextField).first, source);
@@ -534,12 +562,15 @@ void main() {
     await _askAi(tester);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
-    expect(find.byType(ConclaveMenuEntry<String>), findsNothing);
+    await tester.tap(find.descendant(
+        of: find.byType(ConclaveMenuEntry<String>),
+        matching: find.text('Work')));
+    await tester.pumpAndSettle();
     expect(
         find.descendant(
             of: find.byKey(const ValueKey('work-choose-workflow')),
             matching: find.byIcon(Icons.keyboard_arrow_down)),
-        findsNothing);
+        findsOneWidget);
     expect(find.byTooltip('Work settings'), findsNothing);
     await tester.enterText(find.byType(TextField).first, 'New work');
     await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
@@ -614,12 +645,29 @@ void main() {
       bool selected(String mode) => tester
           .widget<IconButton>(find.byKey(ValueKey('composer-mode-$mode')))
           .isSelected!;
+      void expectIconOnlySelection(String activeMode) {
+        for (final mode in ['message', 'ai']) {
+          final button = tester
+              .widget<IconButton>(find.byKey(ValueKey('composer-mode-$mode')));
+          expect(
+              button.style!.backgroundColor!.resolve({}), Colors.transparent);
+          expect(button.style!.backgroundColor!.resolve({WidgetState.disabled}),
+              Colors.transparent);
+          if (mode == activeMode) {
+            expect((button.icon as Icon).color,
+                ConclaveColors.primaryForegroundLight);
+          }
+        }
+      }
+
       expect(selected('message'), isTrue);
       expect(selected('ai'), isFalse);
+      expectIconOnlySelection('message');
       expect(messageSwitch.width, 28);
       await tester.tap(find.byKey(const ValueKey('composer-mode-ai')));
       await tester.pumpAndSettle();
       expect(selected('ai'), isTrue);
+      expectIconOnlySelection('ai');
       expect(find.descendant(of: find.byType(MarkdownComposer), matching: mode),
           findsOneWidget);
       expect(find.byKey(const ValueKey('emoji-picker-button')), findsNothing);
@@ -1875,7 +1923,10 @@ void main() {
     expect(find.byKey(const ValueKey('work-choose-workflow')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
-    expect(find.byType(ConclaveMenuEntry<String>), findsNothing);
+    await tester.tap(find.descendant(
+        of: find.byType(ConclaveMenuEntry<String>),
+        matching: find.text('Work')));
+    await tester.pumpAndSettle();
     expect(
         find.descendant(
             of: find.byKey(const ValueKey('work-choose-workflow')),
@@ -3393,6 +3444,34 @@ class _SnapshotHistoryDataSource extends AxFixtureDataSource {
             'finalText': 'History answer',
           }),
       ];
+}
+
+class _ClearedHistoryDataSource extends AxFixtureDataSource {
+  @override
+  Future<AxWorkRequestPage> loadThreadWorkRequestPage(
+          {required String threadId,
+          int limit = 50,
+          String? beforeCreatedAt,
+          String? beforeId,
+          bool activeOnly = false}) async =>
+      AxWorkRequestPage(
+        aiHistoryClearedAt: '2026-10-06T12:00:00Z',
+        requests: [
+          for (final (id, at, prompt) in [
+            ('before', '2026-10-06T10:00:00Z', 'Before clear'),
+            ('after', '2026-10-06T14:00:00Z', 'After clear'),
+          ])
+            AxWorkRequest.fromJson({
+              'id': id,
+              'workflowId': 'direct',
+              'workflowVersion': 2,
+              'status': 'completed',
+              'createdAt': at,
+              'prompt': prompt,
+              'finalText': 'Answer',
+            }),
+        ],
+      );
 }
 
 class _SpaceStreamsSource extends AxFixtureDataSource {

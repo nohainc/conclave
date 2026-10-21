@@ -1110,7 +1110,8 @@ through execution paths:
 - **Thread** (`threads.metadata_json`, migration 0066, returned as
   `thread.metadata`): `viewState` holds `tabIndex` (0 Chat, 1 Work),
   `workflowReference`, `workerId`, `workerTypeId`, `model`,
-  `reasoningEffort`, and `catalogRevision`. `PATCH /threads/:id` accepts
+  `reasoningEffort`, `catalogRevision`, and `selectionUpdatedAt` (UTC
+  ISO-8601 time of the user's last selection change). `PATCH /threads/:id` accepts
   `{ "metadata": { "viewState": { ... } } }` as a JSON merge patch (`null`
   clears a key). The route validates keys and bounds values, and a
   metadata-only write does not change `updatedAt`, so it never reorders the
@@ -1130,7 +1131,11 @@ re-registered), the app re-binds by the stable `workerTypeId` and refreshes
 `workflowReference` whose version was superseded resolves to the current version
 of the same workflow id. Leaving a Thread writes its Cloud `viewState` for that
 Thread, and a selection still waiting for the catalogs is saved as-is rather
-than replaced by defaults.
+than replaced by defaults. An explicit Workflow/Worker/model change made while
+that selection is pending supersedes it, so the late restore cannot overwrite
+the user's choice. On reopen the Cloud selection wins over the browser-local
+copy unless the local `selectionUpdatedAt` is newer (the Cloud write failed or
+the Thread list predates it).
 
 The Work tab retains cached history after synchronization failures without an
 inline Retry Work sync button. Existing automatic synchronization and recovery
@@ -1243,3 +1248,20 @@ at the end. The compact action group wraps at narrow sidebar widths.
 Search starts as an icon and opens the same focused search popup used by the
 collapsed rail. Typing updates search, Enter opens results, and Escape clears
 and closes the popup. Notification unread badges and action callbacks are retained.
+
+### Appearance preference
+
+AX saves the latest Light, Dark, or System appearance selection in browser-local
+storage (`conclave-ax-theme-v1`) and restores it synchronously before the first
+render after a refresh. This device-local preference is independent of sign-in
+and is not sent to Cloud. Missing, invalid, or inaccessible storage defaults to
+System; unavailable writes leave the current session's selection working.
+
+### Provider usage-limit failures
+
+Provider quota/session-usage exhaustion uses the existing `quota_exhausted`
+execution code. AX shows a fixed message to wait for the provider's limit to
+reset or choose another Worker and retry, instead of a generic failure or a
+misleading provider-start headline. This is separate from conversation context
+limits and unavailable native sessions. Raw CLI text, reset strings, and
+provider diagnostics remain outside conversation messages.

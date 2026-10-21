@@ -32,7 +32,7 @@ export const EXECUTION_ERROR_MESSAGES = {
   cancelled: "The assignment was cancelled.",
   execution_failed: "The assignment could not be completed.",
   context_limit_exceeded:
-    "This conversation exceeds the supported context limit. Start a new Thread with the relevant context.",
+    "This conversation exceeds the supported context limit. Clear AI History and retry; the latest answer is kept as context.",
 } as const;
 
 export const REALTIME_EVENTS_NAME = "conclave.realtime-events" as const;

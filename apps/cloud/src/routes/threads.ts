@@ -748,20 +748,43 @@ export async function handleClearChatHistory(
     "manage",
     accessContext,
   );
-  const mutation = env.CONCLAVE_DB.prepare(
-    "DELETE FROM discussion_messages WHERE thread_id = ?1",
-  ).bind(threadId);
-  // The mutation and the event are committed together by the publisher, so a
+  const active = await env.CONCLAVE_DB.prepare(
+    "SELECT COUNT(*) AS count FROM work_requests WHERE thread_id = ?1 AND status IN ('queued', 'running', 'waiting')",
+  )
+    .bind(threadId)
+    .first<{ count: number }>();
+  if (active && active.count > 0) {
+    throw new HttpError(
+      409,
+      `Cannot clear the Conversation with ${active.count} active Work Request(s). Cancel first.`,
+    );
+  }
+  const db = env.CONCLAVE_DB;
+  // Clearing the Conversation is the real deletion: Chat messages, every Work
+  // Request with its answers and diagnostics, and Worker session continuity.
+  // Deleting the owning Conversations lets canonical history cascade legally.
+  const mutations = [
+    db
+      .prepare("DELETE FROM discussion_messages WHERE thread_id = ?1")
+      .bind(threadId),
+    db.prepare("DELETE FROM conversations WHERE thread_id = ?1").bind(threadId),
+    db.prepare("DELETE FROM work_requests WHERE thread_id = ?1").bind(threadId),
+    db
+      .prepare(
+        `UPDATE threads SET ai_history_cleared_at = NULL,
+           work_session_generation = work_session_generation + 1, updated_at = ?1
+         WHERE id = ?2`,
+      )
+      .bind(new Date().toISOString(), threadId),
+  ];
+  // The mutations and the event are committed together by the publisher, so a
   // successful clear is always announced to other sessions.
   await publishCollaborationEvent(
     env,
     "thread.chat_cleared",
     spaceId,
     threadId,
-    {
-      threadId,
-      mutations: [mutation],
-    },
+    { threadId, mutations },
   );
   return json({ threadId, cleared: true });
 }

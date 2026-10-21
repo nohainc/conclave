@@ -21,6 +21,7 @@ import 'dart:io';
 import 'dart:convert';
 Future<void> main(List<String> args) async {
   if(args.contains('--version')) { stdout.writeln('1.2.16'); return; }
+  if(args.contains('usage')) { stdout.writeln('fixture usage: ok'); return; }
   if(args.contains('models')) { stdout.write(await File(r'${models.path}').readAsString()); return; }
   final input = jsonDecode(await stdin.transform(utf8.decoder).join()) as Map;
   final prompt = (input['message'] as Map)['content'];
@@ -61,6 +62,10 @@ Future<void> main(List<String> args) async {
         provider.path,
         ...execution['arguments'] as List,
       ];
+      profile['usage'] = {
+        'arguments': ['run', provider.path, 'usage'],
+        'timeoutMs': 60000,
+      };
       final bytes = utf8.encode(jsonEncode(profile));
       final profileFile = File('${root.path}/profile.json');
       await profileFile.writeAsBytes(bytes);

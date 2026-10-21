@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_data.dart';
@@ -76,7 +78,84 @@ class IntegrationSource extends WorkflowSource
       ];
 }
 
+class _SlowWorkersSource extends IntegrationSource {
+  final workersReady = Completer<void>();
+  @override
+  Future<List<AxWorker>> loadWorkspaceWorkerInventory() async {
+    await workersReady.future;
+    return super.loadWorkspaceWorkerInventory();
+  }
+}
+
 void main() {
+  testWidgets(
+      'a choice made before the saved selection resolves is not overwritten',
+      (tester) async {
+    tester.view.physicalSize = const Size(900, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final source = _SlowWorkersSource()
+      ..defaultWorkflow = 'direct'
+      ..workers = [worker('a'), worker('b')];
+    final engine = AxSyncEngine();
+    final store = MemoryAxThreadViewStateStore();
+    await store.save(
+      userId: 'user',
+      threadId: 'thread',
+      state: const AxThreadViewState(
+          tabIndex: 1,
+          workflowReference: 'direct:v2',
+          workerId: 'b',
+          model: 'saved-model'),
+    );
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+                initialTab: 1,
+                space: const AxSpace(
+                    id: 's',
+                    name: 'Space',
+                    branch: '',
+                    lastActivity: '',
+                    role: 'owner'),
+                thread: const AxThread(
+                    id: 'thread',
+                    spaceId: 's',
+                    name: 'Thread',
+                    lead: '',
+                    status: 'active',
+                    brief: '',
+                    primaryWorkspace: '',
+                    queueStatus: '',
+                    canExecuteWork: true),
+                currentUserId: 'user',
+                dataSource: source,
+                catalogs: AxSessionCatalogs(source, engine: engine),
+                workflowConfigurations:
+                    AxWorkflowConfigurations(source, engine: engine),
+                workHistoryCache: AxWorkHistoryCache(source, engine: engine),
+                threadViewStateStore: store,
+                onBackToSpace: () {},
+                onArchive: () {}))));
+    await tester.pump(const Duration(milliseconds: 50));
+    // Workers are still loading, so the saved selection is pending.
+    await tester.tap(find.descendant(
+        of: find.byKey(const ValueKey('work-choose-workflow')),
+        matching: find.byType(InkWell)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Chat').last);
+    await tester.pumpAndSettle();
+    source.workersReady.complete();
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 250));
+    final saved = await store.load(userId: 'user', threadId: 'thread');
+    expect(saved?.workflowReference, startsWith('chat'));
+    expect(saved?.model, isNot('saved-model'));
+    expect(saved?.selectionUpdatedAt, isNotNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
       'global configuration updates and reset reach Thread controls without reloading',
       (tester) async {

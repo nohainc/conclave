@@ -85,6 +85,7 @@ const VIEW_STATE_STRING_KEYS = [
   "model",
   "reasoningEffort",
   "catalogRevision",
+  "selectionUpdatedAt",
 ] as const;
 
 /**

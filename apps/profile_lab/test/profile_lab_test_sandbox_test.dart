@@ -163,41 +163,14 @@ CONCLAVE_MODEL_OUTPUT
           reason: 'The model request sandbox is removed after execution.');
     });
 
-    test('derives optional evidence scenarios from the execution contract', () {
+    test('derives evidence scenarios from the Profile', () {
       final statuses = cloudAcceptanceScenarioStatuses({
         'session': {'supported': false},
-        'sandbox': {
-          'mappings': {'restricted': []}
-        },
       });
-      expect(statuses['representative_thread_write'], 'not_applicable');
-      expect(statuses['durable_session_start'], 'not_applicable');
-      expect(statuses['durable_session_resume'], 'not_applicable');
-      expect(statuses['model_selection'], 'not_applicable');
+      expect(statuses.keys.toSet(), cloudAcceptanceScenarioNames.toSet());
       expect(statuses['passive_probe'], 'passed');
-      expect(statuses['cancellation'], 'passed');
-      final capableStatuses = cloudAcceptanceScenarioStatuses({
-        'session': {'supported': true},
-        'model': {
-          'supported': true,
-          'allowlist': ['fixture-model']
-        },
-        'sandbox': {
-          'mappings': {
-            'restricted': ['--sandbox']
-          }
-        },
-      });
-      expect(capableStatuses['representative_thread_write'], 'passed');
-      expect(capableStatuses['durable_session_start'], 'passed');
-      expect(capableStatuses['durable_session_resume'], 'passed');
-      expect(capableStatuses['model_selection'], 'passed');
-      expect(
-        cloudAcceptanceScenarioStatuses({
-          'session': {'supported': false},
-        }),
-        isNotNull,
-      );
+      // Every Profile must declare a usage command.
+      expect(statuses['usage_check'], 'passed');
     });
 
     test(
@@ -343,16 +316,18 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
             stageUpdates.add('$stageId:$status'),
       );
 
-      expect(ladderResult.stages.length, 12);
+      expect(ladderResult.stages.map((stage) => stage.stageId), [
+        'schema',
+        'activity_mapping',
+        'executable_discovery',
+        'cli_version',
+        'passive_probe',
+        'usage_check',
+      ]);
       expect(streamedStages, orderedEquals(ladderResult.stages));
-      expect(ladderResult.stages[0].stageId, 'schema');
       expect(ladderResult.stages[0].status, 'passed');
       expect(ladderResult.stages[0].consumesQuota, isFalse);
-
-      expect(ladderResult.stages[1].stageId, 'activity_mapping');
       expect(ladderResult.stages[1].status, 'not_applicable');
-      expect(ladderResult.stages[2].stageId, 'engine_compatibility');
-      expect(ladderResult.stages[2].status, 'passed');
       expect(
         ladderResult.overallResult,
         'pass',
@@ -361,28 +336,9 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
                 '${stage.stageId}:${stage.status}:${stage.diagnostics}')
             .join('\n'),
       );
-      for (final stageId in [
-        'representative_thread_write',
-        'session_test',
-        'model_selection_test',
-        'cancellation_test',
-        'timeout_test',
-      ]) {
-        expect(
-          ladderResult.stages
-              .singleWhere((stage) => stage.stageId == stageId)
-              .status,
-          'passed',
-          reason:
-              'The real Engine stage $stageId should complete its scenario.',
-        );
-      }
-
-      expect(ladderResult.stages[8].stageId, 'session_test');
-      expect(ladderResult.stages[8].status, 'passed');
-
-      expect(ladderResult.stages[9].stageId, 'model_selection_test');
-      expect(ladderResult.stages[9].status, 'passed');
+      // The usage command comes from the fixture Profile and is answered by
+      // the fixture provider.
+      expect(ladderResult.stages[5].status, 'passed');
 
       expect(stageUpdates, isNotEmpty);
 

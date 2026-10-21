@@ -48,13 +48,10 @@ void main() {
         result.stages.map((stage) => stage.stageId),
         containsAll(<String>[
           'schema',
-          'engine_compatibility',
           'executable_discovery',
           'cli_version',
           'passive_probe',
-          'representative_thread_write',
-          'cancellation_test',
-          'timeout_test',
+          'usage_check',
         ]),
       );
       expect(result.publicationEvidence, isNotNull);

@@ -18,6 +18,7 @@
     "supportedVersions": [{ "min": "0.3.0", "maxExclusive": "0.4.0" }]
   },
   "environment": { "passthrough": ["PATH", "HOME", "PUB_CACHE"], "set": {} },
+  "usage": { "arguments": ["usage"], "timeoutMs": 5000 },
   "probe": {
     "passive": {
       "checks": [

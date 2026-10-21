@@ -56,3 +56,40 @@ step.
 Protocol 4.1 adds a catalog revision pin to execution requests. Legacy 4.0 frames
 remain readable without that field; native model identifiers remain local to the
 Engine and are never accepted as client-supplied invocation arguments.
+
+### Provider usage-limit classification
+
+Profiles opt into the existing `quota_exhausted` mapping. The shared error-channel
+matcher recognizes quota exhaustion, rate-limit identifiers, and explicit usage
+or session-limit messages, including Claude's “You've hit your session limit”.
+Claude's starter also maps structured assistant `rate_limit`, `rate_limit_error`,
+and `usage_limit_reached` errors through a terminal status, so a terminal result
+with an empty error string does not hide the earlier limit signal. Informational
+rate-limit events and successful answers discussing limits are not failures.
+
+The local Conclave/Engine request `work-request-144a4fdf-f00f-40aa-9a53-57d4c946bdaf`
+failed on 2026-10-21 with a Claude usage-limit error; its stored assignment was
+previously normalized to `execution_failed`. This change does not rewrite past
+requests, retry automatically, clear sessions, or bypass provider limits.
+
+Updated starter JSON is a candidate: existing published/signed Profiles remain
+immutable. Apply the mappings to the Worker's current Profile through Profile
+Lab and publish a new signed revision, then use the updated Engine for expanded
+text classification. No protocol/schema migration is needed.
+
+### Per-prompt execution
+
+An assignment sends the prompt straight to the provider CLI. The Engine runs no
+version, readiness or discovery command per prompt: it reads the model catalog
+that Workspace readiness saved for the Profile and runs version and discovery
+only when no catalog exists at all. Workspace checks the CLI before it is used;
+if the user changes or updates the CLI without restarting Workspace, keeping it
+compatible is the user's responsibility. Retries after an empty answer or an
+unavailable session are the only additional CLI runs.
+
+### Live probe
+
+A live probe runs the Profile's `usage` command and never calls a model, so a
+limit on one model does not mark the whole Worker as failing. It passes when
+the command succeeds and prints something. A Profile without a `usage` command
+fails the live probe; `probe.live` is deprecated and ignored.

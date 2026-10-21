@@ -1228,6 +1228,7 @@ class AxWorkspace {
     this.lastSeen = '—',
     this.workerCount = 0,
     this.activeTaskCount = 0,
+    this.shared = false,
   });
 
   final String id;
@@ -1235,6 +1236,9 @@ class AxWorkspace {
   final String slug;
   final String status;
   final String role;
+
+  /// Lent to the viewer by its owner; the viewer may not manage access.
+  final bool shared;
   final bool hasRuntimeIdentity;
   final String platform;
   final String architecture;
@@ -1271,6 +1275,7 @@ class AxWorkspace {
             json, 'lastSeen', json['factsUpdatedAt']?.toString() ?? '—'),
         workerCount: json['workerCount'] as int? ?? 0,
         activeTaskCount: json['activeTaskCount'] as int? ?? 0,
+        shared: json['shared'] == true || json['shared'] == 1,
       );
 
   AxWorkspace copyWith({
@@ -1297,6 +1302,7 @@ class AxWorkspace {
         lastSeen: lastSeen ?? this.lastSeen,
         workerCount: workerCount ?? this.workerCount,
         activeTaskCount: activeTaskCount ?? this.activeTaskCount,
+        shared: shared,
       );
 }
 

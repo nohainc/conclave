@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
 import '../../brand.dart';
+import '../../ax/worker_presentation.dart';
 import 'home_analytics.dart';
 
 export 'home_analytics.dart';
@@ -31,6 +32,8 @@ class HomePage extends StatelessWidget {
     this.onDeclineInvitation,
     this.onOpenThread,
     this.onOpenNotifications,
+    this.onReadAttentionItem,
+    this.readAttentionItemIds = const {},
     this.onOpenWhatsNew,
     this.onOpenUpdateDetail,
     this.onDismissUpdate,
@@ -64,6 +67,8 @@ class HomePage extends StatelessWidget {
   final ValueChanged<AxSpaceInvitation>? onDeclineInvitation;
   final void Function(String spaceId, String threadId)? onOpenThread;
   final VoidCallback? onOpenNotifications;
+  final ValueChanged<String>? onReadAttentionItem;
+  final Set<String> readAttentionItemIds;
   final VoidCallback? onOpenWhatsNew;
   final ValueChanged<AxProductUpdate>? onOpenUpdateDetail;
   final ValueChanged<AxProductUpdate>? onDismissUpdate;
@@ -104,6 +109,8 @@ class HomePage extends StatelessWidget {
           onOpenRun: onOpenRun,
           onOpenThread: onOpenThread,
           onOpenNotifications: onOpenNotifications,
+          onReadAttentionItem: onReadAttentionItem,
+          readAttentionItemIds: readAttentionItemIds,
           onOpenWhatsNew: onOpenWhatsNew,
           onOpenUpdateDetail: onOpenUpdateDetail,
           onDismissUpdate: onDismissUpdate,
@@ -626,6 +633,8 @@ class EstablishedUserHome extends StatelessWidget {
     required this.onOpenRun,
     this.onOpenThread,
     this.onOpenNotifications,
+    this.onReadAttentionItem,
+    this.readAttentionItemIds = const {},
     this.onOpenWhatsNew,
     this.onOpenUpdateDetail,
     this.onDismissUpdate,
@@ -656,6 +665,8 @@ class EstablishedUserHome extends StatelessWidget {
   final void Function(String spaceId, String runId) onOpenRun;
   final void Function(String spaceId, String threadId)? onOpenThread;
   final VoidCallback? onOpenNotifications;
+  final ValueChanged<String>? onReadAttentionItem;
+  final Set<String> readAttentionItemIds;
   final VoidCallback? onOpenWhatsNew;
   final ValueChanged<AxProductUpdate>? onOpenUpdateDetail;
   final ValueChanged<AxProductUpdate>? onDismissUpdate;
@@ -665,8 +676,7 @@ class EstablishedUserHome extends StatelessWidget {
     try {
       return AxProductUpdateService.getHomeUpdates(
         productUpdates.isNotEmpty ? productUpdates : defaultProductUpdates,
-        readStates: productUpdateReadStates,
-        limit: 3,
+        limit: 4,
       );
     } catch (_) {
       return const [];
@@ -743,6 +753,7 @@ class EstablishedUserHome extends StatelessWidget {
       effectiveAttentionItems = AxHomeAttentionProjector.space(
         invitations: invitations,
         rawAttentionItems: attentionItems,
+        readItemIds: readAttentionItemIds,
         openFindingCount: openFindingCount,
         spaces: spaces,
         onAcceptInvitation: onAcceptInvitation,
@@ -763,21 +774,37 @@ class EstablishedUserHome extends StatelessWidget {
     final isRunningNow = isRunAuthorized && run!.isRunning;
     List<AxContinueWorkItem> effectiveRecentWork;
     try {
-      effectiveRecentWork = AxRecentWorkRanker.rank(
-        (continueWorkItems.isNotEmpty
-            ? continueWorkItems
-                .where((item) => authorizedSpaceIds.contains(item.spaceId))
-                .toList()
-            : _deriveDefaultContinueWorkItems(spaces)),
-        limit: 4,
-      );
+      final candidates = (continueWorkItems.isNotEmpty
+          ? continueWorkItems
+          : _deriveDefaultContinueWorkItems(spaces));
+      final indexed = candidates.indexed
+          .where((entry) =>
+              authorizedSpaceIds.contains(entry.$2.spaceId) &&
+              !entry.$2.archived &&
+              entry.$2.isDirectMember)
+          .toList();
+      indexed.sort((a, b) {
+        final left = a.$2.lastMeaningfulActivityAt;
+        final right = b.$2.lastMeaningfulActivityAt;
+        if (left != null && right != null) {
+          final result = right.compareTo(left);
+          if (result != 0) return result;
+        } else if (left != null) {
+          return -1;
+        } else if (right != null) {
+          return 1;
+        }
+        return a.$1.compareTo(b.$1);
+      });
+      effectiveRecentWork = indexed.take(4).map((entry) => entry.$2).toList();
     } catch (_) {
       effectiveRecentWork = const [];
     }
     final hasContinueWork = effectiveRecentWork.isNotEmpty;
     final productUpdatesToShow = _effectiveProductUpdates;
     final hasProductUpdates = productUpdatesToShow.isNotEmpty;
-    final aiUpdatesToShow = _effectiveAiUpdates;
+    final allAiUpdates = _effectiveAiUpdates;
+    final aiUpdatesToShow = allAiUpdates.take(4).toList();
     final hasAiUpdates = aiUpdatesToShow.isNotEmpty;
 
     final effectiveGreeting = greeting ??
@@ -834,6 +861,8 @@ class EstablishedUserHome extends StatelessWidget {
               onOpenThread: onOpenThread,
               onOpenWorkspaces: onOpenWorkspaces,
               onOpenNotifications: onOpenNotifications,
+              onReadAttentionItem: onReadAttentionItem,
+              readAttentionItemIds: readAttentionItemIds,
             ),
             const SizedBox(height: 28),
           ],
@@ -906,6 +935,7 @@ class EstablishedUserHome extends StatelessWidget {
                 } else {
                   AxWhatsNewDialog.show(
                     context,
+                    contentWidth: context.size?.width,
                     updates: productUpdates.isNotEmpty
                         ? productUpdates
                         : defaultProductUpdates,
@@ -935,7 +965,8 @@ class EstablishedUserHome extends StatelessWidget {
               title: 'AI updates',
               onSeeAll: () => AxAiUpdatesDialog.show(
                 context,
-                updates: aiUpdatesToShow,
+                contentWidth: context.size?.width,
+                updates: allAiUpdates,
                 onOpenUpdate: onOpenAiUpdate,
               ),
             ),
@@ -1061,6 +1092,8 @@ class AxHomeAttentionProjector {
     required List<AxHomeAttentionItem> rawAttentionItems,
     required int openFindingCount,
     List<AxSpace>? spaces,
+    int? limit = 4,
+    Set<String> readItemIds = const {},
     ValueChanged<AxSpaceInvitation>? onAcceptInvitation,
     ValueChanged<AxSpaceInvitation>? onDeclineInvitation,
     ValueChanged<String>? onOpenSpace,
@@ -1072,10 +1105,14 @@ class AxHomeAttentionProjector {
     final effectiveOpenThread = onOpenThread;
     final list = <AxHomeAttentionItem>[];
     final authorizedSpaceIds = effectiveSpaces.map((p) => p.id).toSet();
-    final pendingInvitationSpaceIds = invitations.map((i) => i.spaceId).toSet();
+    final pendingInvitations =
+        invitations.where((invite) => invite.status == 'pending');
+    final pendingInvitationSpaceIds =
+        pendingInvitations.map((i) => i.spaceId).toSet();
 
     // 1. Invitations
-    for (final inv in invitations) {
+    for (final inv in pendingInvitations) {
+      if (readItemIds.contains('invite-${inv.id}')) continue;
       final inviter = inv.invitedByUserName.isNotEmpty
           ? inv.invitedByUserName
           : (inv.invitedByUserEmail.isNotEmpty
@@ -1128,6 +1165,15 @@ class AxHomeAttentionProjector {
 
     // 2. Attention items (derive action closures if not already set)
     for (final raw in rawAttentionItems) {
+      // A completion or informational event is history, even if it has an
+      // Open action. Pending invitations come from the authoritative list,
+      // so accepted/declined invitation notifications cannot reappear here.
+      if (!raw.isUnread ||
+          readItemIds.contains(raw.id) ||
+          raw.effectiveType == AxHomeAttentionType.executionCompleted ||
+          raw.effectiveType == AxHomeAttentionType.spaceInvitation) {
+        continue;
+      }
       if (raw.spaceId != null &&
           !authorizedSpaceIds.contains(raw.spaceId) &&
           !pendingInvitationSpaceIds.contains(raw.spaceId)) {
@@ -1209,6 +1255,7 @@ class AxHomeAttentionProjector {
 
     // 3. Open findings
     if (openFindingCount > 0 &&
+        !readItemIds.contains('findings-open') &&
         !list.any((it) => it.effectiveType == AxHomeAttentionType.needsInput)) {
       final firstSpaceId =
           effectiveSpaces.isNotEmpty ? effectiveSpaces.first.id : null;
@@ -1245,35 +1292,22 @@ class AxHomeAttentionProjector {
       }
     }
 
-    // Sort by: priority -> unread -> actionability -> recency
+    // Latest attention first; retain a deterministic order for undated items.
     uniqueList.sort((a, b) {
-      final pA = a.priorityOrder;
-      final pB = b.priorityOrder;
-      if (pA != pB) return pA.compareTo(pB);
-
-      if (a.isUnread != b.isUnread) {
-        return a.isUnread ? -1 : 1;
-      }
-
-      if (a.isActionable != b.isActionable) {
-        return a.isActionable ? -1 : 1;
-      }
-
-      final timeA = a.createdAt;
-      final timeB = b.createdAt;
-      if (timeA != null && timeB != null) {
-        final recency = timeB.compareTo(timeA);
-        if (recency != 0) return recency;
-      } else if (timeA != null) {
+      final left = a.createdAt ?? a.timestamp;
+      final right = b.createdAt ?? b.timestamp;
+      if (left != null && right != null) {
+        final result = right.compareTo(left);
+        if (result != 0) return result;
+      } else if (left != null) {
         return -1;
-      } else if (timeB != null) {
+      } else if (right != null) {
         return 1;
       }
-
-      return a.id.compareTo(b.id);
+      return list.indexOf(a).compareTo(list.indexOf(b));
     });
 
-    return uniqueList.take(5).toList();
+    return limit == null ? uniqueList : uniqueList.take(limit).toList();
   }
 }
 
@@ -1289,6 +1323,8 @@ class _ForYouSection extends StatelessWidget {
     this.onOpenThread,
     required this.onOpenWorkspaces,
     this.onOpenNotifications,
+    this.onReadAttentionItem,
+    this.readAttentionItemIds = const {},
   })  : spaces = spaces ?? const [],
         onOpenSpace = onOpenSpace ?? _noopString;
 
@@ -1304,14 +1340,16 @@ class _ForYouSection extends StatelessWidget {
   final void Function(String spaceId, String threadId)? onOpenThread;
   final VoidCallback onOpenWorkspaces;
   final VoidCallback? onOpenNotifications;
+  final ValueChanged<String>? onReadAttentionItem;
+  final Set<String> readAttentionItemIds;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final items = AxHomeAttentionProjector.space(
+    final eligibleItems = AxHomeAttentionProjector.space(
+      limit: null,
       invitations: invitations,
       rawAttentionItems: attentionItems,
+      readItemIds: readAttentionItemIds,
       openFindingCount: openFindingCount,
       spaces: spaces,
       onAcceptInvitation: onAcceptInvitation,
@@ -1321,11 +1359,8 @@ class _ForYouSection extends StatelessWidget {
       onOpenWorkspaces: onOpenWorkspaces,
     );
 
+    final items = eligibleItems.take(4).toList();
     if (items.isEmpty) return const SizedBox.shrink();
-
-    final totalCount = invitations.length +
-        attentionItems.length +
-        (openFindingCount > 0 ? 1 : 0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1333,34 +1368,8 @@ class _ForYouSection extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'For you',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-                if (totalCount > 0) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '$totalCount',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+            const Text('For you',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             if (onOpenNotifications != null)
               Flexible(
                 child: TextButton(
@@ -1377,18 +1386,22 @@ class _ForYouSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        Column(
-          children: [
-            for (var i = 0; i < items.length; i++) ...[
-              _ForYouItemTile(item: items[i]),
-              if (i < items.length - 1)
-                Divider(
-                  height: 1,
-                  color: colorScheme.outlineVariant.withValues(alpha: 0.35),
-                ),
-            ],
-          ],
-        ),
+        LayoutBuilder(builder: (context, constraints) {
+          final isWide = constraints.maxWidth > 700;
+          return GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: isWide ? 2 : 1,
+              mainAxisExtent: isWide ? 150 : 160,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            itemCount: items.length,
+            itemBuilder: (_, index) => _ForYouItemTile(
+                item: items[index], onRead: onReadAttentionItem),
+          );
+        }),
         const SizedBox(height: 24),
       ],
     );
@@ -1396,11 +1409,15 @@ class _ForYouSection extends StatelessWidget {
 }
 
 class _ForYouItemTile extends StatelessWidget {
-  const _ForYouItemTile({
-    required this.item,
-  });
+  const _ForYouItemTile({required this.item, this.onRead});
 
   final AxHomeAttentionItem item;
+  final ValueChanged<String>? onRead;
+
+  void _perform(AxHomeAttentionAction? action) {
+    onRead?.call(item.id);
+    action?.onPerform();
+  }
 
   String _deriveCategory() {
     if (item.categoryLabel != null && item.categoryLabel!.isNotEmpty) {
@@ -1440,98 +1457,31 @@ class _ForYouItemTile extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final category = _deriveCategory();
     final categoryColor = _deriveCategoryColor(colorScheme, isDark);
-    final hasActions =
-        item.primaryAction != null || item.secondaryAction != null;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: categoryColor.withValues(alpha: isDark ? 0.2 : 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  category,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: categoryColor,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
-              if (item.timestampDisplay != null &&
-                  item.timestampDisplay!.isNotEmpty)
-                Text(
-                  item.timestampDisplay!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            item.title,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (item.subtitle.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              item.subtitle,
-              style: TextStyle(
-                fontSize: 13,
-                color: colorScheme.onSurfaceVariant,
-                height: 1.3,
-              ),
-            ),
-          ],
-          if (hasActions) ...[
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (item.secondaryAction != null) ...[
-                  OutlinedButton(
-                    onPressed: item.secondaryAction!.onPerform,
-                    style: OutlinedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 6),
-                    ),
-                    child: Text(item.secondaryAction!.label),
-                  ),
-                  if (item.primaryAction != null) const SizedBox(width: 8),
-                ],
-                if (item.primaryAction != null)
-                  FilledButton(
-                    onPressed: item.primaryAction!.onPerform,
-                    style: FilledButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 6),
-                    ),
-                    child: Text(item.primaryAction!.label),
-                  ),
-              ],
-            ),
-          ],
-        ],
+    final invitation =
+        item.effectiveType == AxHomeAttentionType.spaceInvitation;
+    return _ContinueWorkCard(
+      item: AxContinueWorkItem(
+        threadTitle: item.title,
+        collaboratorsDisplay: '',
+        lastMessageSnippet: item.subtitle,
+        lastActivityDisplay: item.timestampDisplay ?? '',
       ),
+      onTap: () => _perform(invitation ? null : item.primaryAction),
+      label: Text(category,
+          style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w600, color: categoryColor)),
+      footer: invitation
+          ? Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              if (item.secondaryAction != null)
+                TextButton(
+                    onPressed: () => _perform(item.secondaryAction),
+                    child: Text(item.secondaryAction!.label)),
+              if (item.primaryAction != null)
+                TextButton(
+                    onPressed: () => _perform(item.primaryAction),
+                    child: Text(item.primaryAction!.label)),
+            ])
+          : null,
     );
   }
 }
@@ -1560,7 +1510,10 @@ String _formatRelativeTime(String? raw) {
 }
 
 class _ContinueWorkCard extends StatelessWidget {
-  const _ContinueWorkCard({required this.item, required this.onTap});
+  const _ContinueWorkCard(
+      {required this.item, required this.onTap, this.label, this.footer});
+
+  final Widget? label, footer;
 
   final AxContinueWorkItem item;
   final VoidCallback onTap;
@@ -1600,6 +1553,7 @@ class _ContinueWorkCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (label != null) ...[label!, const SizedBox(height: 6)],
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1644,7 +1598,9 @@ class _ContinueWorkCard extends StatelessWidget {
                           ),
                         TextSpan(text: snippetText),
                       ]),
-                      key: const ValueKey('continue-work-last-message'),
+                      key: ValueKey(label == null
+                          ? 'continue-work-last-message'
+                          : 'attention-description'),
                       style: TextStyle(
                         fontSize: 12,
                         color: colorScheme.onSurfaceVariant,
@@ -1656,12 +1612,47 @@ class _ContinueWorkCard extends StatelessWidget {
                   ],
                 ],
               ),
+              if (footer != null) footer!,
             ],
           ),
         ),
       ),
     );
   }
+}
+
+String _updateDate(Object publishedAt, String fallback) {
+  final date = publishedAt is DateTime
+      ? publishedAt
+      : DateTime.tryParse(publishedAt.toString());
+  if (date == null) return fallback;
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec'
+  ];
+  return '${months[date.month - 1]} ${date.day}, ${date.year}';
+}
+
+Widget _aiUpdateIcon(AxAiCapabilityUpdate update) {
+  final identity = WorkerPresentation.resolve(
+      update.workerProfileId, update.workerDisplayName);
+  final asset = identity.iconAsset;
+  if (asset == null) return const Icon(Icons.smart_toy_outlined, size: 18);
+  return Image.asset(asset,
+      width: 18,
+      height: 18,
+      fit: BoxFit.contain,
+      semanticLabel: '${identity.name} icon');
 }
 
 class _ProductUpdateTile extends StatelessWidget {
@@ -1673,7 +1664,19 @@ class _ProductUpdateTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return _HomeUpdateRow(
       label: update.category.label,
-      date: update.dateDisplay,
+      leading: Icon(
+          switch (update.category) {
+            AxProductUpdateCategory.feature => Icons.new_releases_outlined,
+            AxProductUpdateCategory.improvement => Icons.trending_up_rounded,
+            AxProductUpdateCategory.security => Icons.shield_outlined,
+            AxProductUpdateCategory.workflow => Icons.account_tree_outlined,
+            AxProductUpdateCategory.collaboration => Icons.groups_outlined,
+            AxProductUpdateCategory.workspace => Icons.computer_outlined,
+            AxProductUpdateCategory.worker => Icons.smart_toy_outlined,
+          },
+          size: 18,
+          color: Theme.of(context).colorScheme.primary),
+      date: _updateDate(update.publishedAt, update.dateDisplay),
       title: update.title,
       summary: update.summary,
       details: update.details,
@@ -1688,7 +1691,9 @@ class _HomeUpdateRow extends StatelessWidget {
       required this.title,
       required this.summary,
       this.details,
-      this.worker});
+      this.worker,
+      required this.leading});
+  final Widget leading;
   final String label, date, title, summary;
   final String? details, worker;
 
@@ -1709,12 +1714,7 @@ class _HomeUpdateRow extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 1, right: 8),
-              child: Icon(
-                  worker == null
-                      ? Icons.new_releases_outlined
-                      : Icons.auto_awesome_outlined,
-                  size: 18,
-                  color: colors.primary),
+              child: leading,
             ),
             Expanded(
                 flex: 3,
@@ -1776,12 +1776,15 @@ class _HomeUpdateRow extends StatelessWidget {
 class AxWhatsNewDialog extends StatelessWidget {
   const AxWhatsNewDialog({
     super.key,
+    this.contentWidth,
     required this.updates,
     this.readStates = const {},
     this.initialUpdateId,
     this.onOpenUpdateDetail,
     this.onDismissUpdate,
   });
+
+  final double? contentWidth;
 
   final List<AxProductUpdate> updates;
   final Map<String, AxUserProductUpdateState> readStates;
@@ -1791,6 +1794,7 @@ class AxWhatsNewDialog extends StatelessWidget {
 
   static Future<void> show(
     BuildContext context, {
+    double? contentWidth,
     required List<AxProductUpdate> updates,
     Map<String, AxUserProductUpdateState> readStates = const {},
     String? initialUpdateId,
@@ -1799,6 +1803,7 @@ class AxWhatsNewDialog extends StatelessWidget {
   }) {
     return Navigator.of(context).push<void>(MaterialPageRoute(
       builder: (context) => AxWhatsNewDialog(
+        contentWidth: contentWidth,
         updates: updates,
         readStates: readStates,
         initialUpdateId: initialUpdateId,
@@ -1816,16 +1821,17 @@ class AxWhatsNewDialog extends StatelessWidget {
 
     return _UpdatesPageFrame(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
+        constraints: BoxConstraints(maxWidth: contentWidth ?? 840),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
+                  Expanded(
+                      child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
@@ -1844,7 +1850,7 @@ class AxWhatsNewDialog extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ),
+                  )),
                   IconButton(
                     icon: const Icon(Icons.close),
                     onPressed: () => Navigator.of(context).pop(),
@@ -1890,20 +1896,7 @@ class AxWhatsNewDialog extends StatelessWidget {
                                 for (final update in items) ...[
                                   Card(
                                     margin: const EdgeInsets.only(bottom: 12),
-                                    child: Column(children: [
-                                      _ProductUpdateTile(update: update),
-                                      if (onDismissUpdate != null)
-                                        Align(
-                                            alignment: Alignment.centerRight,
-                                            child: IconButton(
-                                              tooltip: 'Hide update',
-                                              icon: const Icon(
-                                                  Icons.visibility_off_outlined,
-                                                  size: 18),
-                                              onPressed: () =>
-                                                  onDismissUpdate!(update),
-                                            )),
-                                    ]),
+                                    child: _ProductUpdateTile(update: update),
                                   ),
                                 ],
                               ],
@@ -1978,10 +1971,13 @@ const defaultProductUpdates = [
 class AxAiUpdatesDialog extends StatelessWidget {
   const AxAiUpdatesDialog({
     super.key,
+    this.contentWidth,
     required this.updates,
     this.initialUpdateId,
     this.onOpenUpdate,
   });
+
+  final double? contentWidth;
 
   final List<AxAiCapabilityUpdate> updates;
   final String? initialUpdateId;
@@ -1989,12 +1985,14 @@ class AxAiUpdatesDialog extends StatelessWidget {
 
   static Future<void> show(
     BuildContext context, {
+    double? contentWidth,
     required List<AxAiCapabilityUpdate> updates,
     String? initialUpdateId,
     ValueChanged<AxAiCapabilityUpdate>? onOpenUpdate,
   }) =>
       Navigator.of(context).push<void>(MaterialPageRoute(
         builder: (context) => AxAiUpdatesDialog(
+          contentWidth: contentWidth,
           updates: updates,
           initialUpdateId: initialUpdateId,
           onOpenUpdate: onOpenUpdate,
@@ -2015,9 +2013,9 @@ class AxAiUpdatesDialog extends StatelessWidget {
 
     return _UpdatesPageFrame(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
+        constraints: BoxConstraints(maxWidth: contentWidth ?? 840),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2095,8 +2093,9 @@ class _AiUpdateRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return _HomeUpdateRow(
       label: update.type.label,
+      leading: _aiUpdateIcon(update),
       worker: update.workerDisplayName,
-      date: update.dateDisplay,
+      date: _updateDate(update.publishedAt, update.dateDisplay),
       title: update.title,
       summary: update.summary,
       details:
@@ -2403,7 +2402,19 @@ class _UpdatesPageFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         body: SafeArea(
-          child: Align(alignment: Alignment.topCenter, child: child),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              ConclaveBrand.isDesktop(MediaQuery.sizeOf(context).width)
+                  ? 34
+                  : 18,
+              26,
+              ConclaveBrand.isDesktop(MediaQuery.sizeOf(context).width)
+                  ? 34
+                  : 18,
+              40,
+            ),
+            child: Align(alignment: Alignment.topCenter, child: child),
+          ),
         ),
       );
 }

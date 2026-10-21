@@ -578,7 +578,7 @@ class AppIconRail extends StatelessWidget {
                   hoverColor: ConclaveColors.navigationHover(isDark),
                   child: Padding(
                     padding: const EdgeInsets.all(4),
-                    child: ConclaveBrand.logoMark(size: 32),
+                    child: ConclaveBrand.logoMark(size: 28),
                   ),
                 ),
               )),
@@ -789,7 +789,7 @@ class AppIconRail extends StatelessWidget {
                 'Profile & Security',
             child: InkWell(
               onTap: () => onNavigateTo(const AxNavigation.profileSecurity()),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(13),
               child: Container(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
@@ -801,7 +801,7 @@ class AppIconRail extends StatelessWidget {
                       : null,
                 ),
                 child: CircleAvatar(
-                  radius: 14,
+                  radius: 13,
                   backgroundColor: ConclaveColors.primarySoft,
                   backgroundImage: shellContext.viewerAvatarImage,
                   child: shellContext.viewerAvatarImage == null

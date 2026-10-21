@@ -9,6 +9,150 @@ void main() {
         home: Scaffold(body: SingleChildScrollView(child: child)),
       );
 
+  testWidgets('Home uses brand icons, category icons, and latest four Threads',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(scaffold(EstablishedUserHome(
+      spaces: const [
+        AxSpace(
+            id: 's',
+            name: 'Space',
+            branch: '',
+            lastActivity: '',
+            settings: {
+              'sharedWorkers': ['chatgpt', 'gemini', 'claude']
+            })
+      ],
+      workers: const [],
+      workspaces: const [],
+      run: null,
+      openFindingCount: 0,
+      onOpenWorkspaces: () {},
+      onOpenRun: (_, __) {},
+      onOpenSpace: (_) {},
+      continueWorkItems: List.generate(
+          6,
+          (index) => AxContinueWorkItem(
+                spaceId: 's',
+                threadId: '$index',
+                threadTitle: 'Thread $index',
+                collaboratorsDisplay: '',
+                lastMessageSnippet: 'Message $index',
+                lastActivityDisplay: 'Recently',
+                lastMeaningfulActivityAt: DateTime.utc(2026, 10, index + 1),
+                hasUnresolvedState: index == 0,
+              )),
+      productUpdates: defaultProductUpdates,
+      aiUpdates: defaultAiCapabilityUpdates,
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Thread 0'), findsNothing);
+    expect(find.text('Thread 1'), findsNothing);
+    for (final index in [2, 3, 4, 5]) {
+      expect(find.text('Thread $index'), findsOneWidget);
+    }
+    expect(tester.getTopLeft(find.text('Thread 5')).dy,
+        lessThanOrEqualTo(tester.getTopLeft(find.text('Thread 4')).dy));
+    final assets = tester
+        .widgetList<Image>(find.byType(Image))
+        .map((image) => (image.image as AssetImage).assetName)
+        .toSet();
+    expect(
+        assets,
+        containsAll([
+          'assets/worker_icons/chatgpt.png',
+          'assets/worker_icons/gemini.png',
+          'assets/worker_icons/claude.png'
+        ]));
+    expect(find.byIcon(Icons.groups_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.account_tree_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.shield_outlined), findsOneWidget);
+    expect(find.text('Oct 7, 2026'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final section in ["What's new", 'AI updates']) {
+    for (final contentWidth in [354.0, 532.0, 840.0]) {
+      testWidgets(
+          '$section See all matches Home width $contentWidth and keeps four latest items',
+          (tester) async {
+        await tester.binding.setSurfaceSize(const Size(1200, 2200));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        final products = List.generate(
+            5,
+            (index) => AxProductUpdate(
+                  id: 'product-$index',
+                  slug: 'product-$index',
+                  title: 'Product $index',
+                  summary: 'Product summary',
+                  publishedAt: '2026-10-${10 + index}T00:00:00Z',
+                ));
+        final ai = List.generate(
+            5,
+            (index) => AxAiCapabilityUpdate(
+                  id: 'ai-$index',
+                  workerProfileId: 'chatgpt',
+                  type: AxAiCapabilityUpdateType.modelAdded,
+                  title: 'AI $index',
+                  summary: 'AI summary',
+                  publishedAt: '2026-10-${10 + index}T00:00:00Z',
+                ));
+        await tester.pumpWidget(scaffold(Center(
+            child: SizedBox(
+          width: contentWidth,
+          child: EstablishedUserHome(
+            spaces: const [
+              AxSpace(
+                  id: 's',
+                  name: 'Space',
+                  branch: '',
+                  lastActivity: '',
+                  settings: {
+                    'sharedWorkers': ['chatgpt']
+                  })
+            ],
+            workspaces: const [],
+            workers: const [],
+            run: null,
+            openFindingCount: 0,
+            onOpenWorkspaces: () {},
+            onOpenRun: (_, __) {},
+            onOpenSpace: (_) {},
+            onDismissUpdate: (_) => fail('Dismiss is unavailable'),
+            productUpdates: products,
+            aiUpdates: ai,
+            productUpdateReadStates: {
+              'product-4': AxUserProductUpdateState(
+                  userId: 'u',
+                  updateId: 'product-4',
+                  dismissedAt: DateTime.utc(2026, 10, 15))
+            },
+          ),
+        ))));
+        await tester.pumpAndSettle();
+        for (final prefix in ['Product', 'AI']) {
+          expect(find.text('$prefix 0'), findsNothing);
+          for (var index = 1; index <= 4; index++) {
+            expect(find.text('$prefix $index'), findsOneWidget);
+          }
+        }
+        final title = section == 'AI updates' ? 'AI 4' : 'Product 4';
+        final homeWidth =
+            tester.getSize(find.byKey(ValueKey('home-update-$title'))).width;
+        await tester
+            .tap(find.text('See all').at(section == 'AI updates' ? 1 : 0));
+        await tester.pumpAndSettle();
+        expect(tester.getSize(find.byKey(ValueKey('home-update-$title'))).width,
+            homeWidth);
+        expect(find.text(section == 'AI updates' ? 'AI 0' : 'Product 0'),
+            findsOneWidget);
+        expect(find.byTooltip('Hide update'), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   for (final width in [390.0, 1200.0]) {
     testWidgets('Home times and update dates align right at width $width',
         (tester) async {
@@ -47,11 +191,7 @@ void main() {
         aiUpdates: [defaultAiCapabilityUpdates.first],
       )));
       await tester.pumpAndSettle();
-      final labels = {
-        '18 min ago',
-        defaultProductUpdates.first.dateDisplay,
-        defaultAiCapabilityUpdates.first.dateDisplay
-      };
+      final labels = {'18 min ago', 'Oct 7, 2026'};
       for (final label in labels) {
         final matches = find.text(label);
         expect(matches, findsWidgets);
@@ -141,6 +281,167 @@ void main() {
     invitedByUserName: 'Alex',
     createdAt: '2026-10-07T14:00:00Z',
   );
+
+  test('For you filters read actions before applying the four-item limit', () {
+    final items = AxHomeAttentionProjector.space(
+        invitations: const [],
+        openFindingCount: 0,
+        spaces: const [space],
+        rawAttentionItems: [
+          const AxHomeAttentionItem(
+              id: 'read',
+              type: AxHomeAttentionType.executionFailed,
+              title: 'Already read',
+              description: '',
+              isUnread: false),
+          ...List.generate(
+              5,
+              (index) => AxHomeAttentionItem(
+                  id: '$index',
+                  type: AxHomeAttentionType.executionFailed,
+                  title: 'Unread $index',
+                  description: '',
+                  isUnread: true,
+                  createdAt: DateTime.utc(2026, 10, index + 1))),
+        ],
+        readItemIds: const {'4'});
+    expect(items.map((item) => item.id), ['3', '2', '1', '0']);
+  });
+
+  testWidgets(
+      'Opening a For you card marks it read before navigation and clears Home',
+      (tester) async {
+    final readIds = <String>{};
+    var navigated = false;
+    await tester.pumpWidget(scaffold(StatefulBuilder(
+        builder: (context, setState) => HomePage(
+              spaces: const [space],
+              workspaces: const [],
+              workers: const [],
+              run: null,
+              openFindingCount: 0,
+              onOpenWorkspaces: () {},
+              onOpenRun: (_, __) {},
+              onOpenThread: (_, __) {
+                expect(readIds, contains('unread'));
+                navigated = true;
+              },
+              readAttentionItemIds: readIds,
+              onReadAttentionItem: (id) => setState(() => readIds.add(id)),
+              attentionItems: const [
+                AxHomeAttentionItem(
+                    id: 'unread',
+                    type: AxHomeAttentionType.executionFailed,
+                    title: 'Unread failure',
+                    description: '',
+                    spaceId: 'space-1',
+                    threadId: 'thread'),
+                AxHomeAttentionItem(
+                    id: 'read',
+                    type: AxHomeAttentionType.executionFailed,
+                    title: 'Read failure',
+                    description: '',
+                    isUnread: false),
+              ],
+            ))));
+    expect(find.text('Read failure'), findsNothing);
+    await tester.tap(find.text('Unread failure'));
+    await tester.pumpAndSettle();
+    expect(navigated, isTrue);
+    expect(find.text('Unread failure'), findsNothing);
+    expect(find.text('For you'), findsNothing);
+  });
+
+  test('For you ignores stale invitations and informational Open actions', () {
+    final ordinary = [
+      const AxHomeAttentionItem(
+          id: 'done',
+          type: AxHomeAttentionType.executionCompleted,
+          title: 'Done',
+          description: 'Result ready',
+          isActionable: true,
+          actionLabel: 'Open'),
+      const AxHomeAttentionItem(
+          id: 'old-invite',
+          type: AxHomeAttentionType.spaceInvitation,
+          title: 'Old invitation',
+          description: 'Already accepted',
+          isActionable: true),
+    ];
+    final before = [...ordinary];
+    final projected = AxHomeAttentionProjector.space(
+        invitations: const [],
+        rawAttentionItems: ordinary,
+        openFindingCount: 0,
+        spaces: const [space]);
+    expect(projected, isEmpty);
+    expect(ordinary, before); // Inbox history is untouched.
+    final pending = AxHomeAttentionProjector.space(
+        invitations: const [testInvite1],
+        rawAttentionItems: ordinary,
+        openFindingCount: 0,
+        spaces: const [space]);
+    expect(pending, hasLength(1));
+    expect(pending.single.invitation?.id, testInvite1.id);
+    for (final status in ['accepted', 'declined', 'expired', 'revoked']) {
+      expect(
+          AxHomeAttentionProjector.space(
+              invitations: [
+                AxSpaceInvitation(
+                    id: 'old',
+                    email: 'user@example.com',
+                    role: 'editor',
+                    status: status,
+                    createdAt: '2026-10-01T00:00:00Z')
+              ],
+              rawAttentionItems: ordinary,
+              openFindingCount: 0,
+              spaces: const [space]),
+          isEmpty);
+    }
+  });
+
+  testWidgets('For you shows unread actions without a count badge',
+      (tester) async {
+    await tester.pumpWidget(scaffold(HomePage(
+      spaces: const [space],
+      workspaces: const [],
+      workers: const [],
+      run: null,
+      openFindingCount: 0,
+      onOpenWorkspaces: () {},
+      onOpenRun: (_, __) {},
+      attentionItems: [
+        const AxHomeAttentionItem(
+            id: 'info',
+            type: AxHomeAttentionType.executionCompleted,
+            title: 'Ordinary completion',
+            description: 'Done'),
+        ...List.generate(
+            5,
+            (index) => AxHomeAttentionItem(
+                id: 'failure-$index',
+                type: AxHomeAttentionType.executionFailed,
+                title: 'Failure $index',
+                description: 'Needs investigation',
+                spaceId: space.id,
+                createdAt: DateTime.utc(2026, 10, index + 1))),
+        const AxHomeAttentionItem(
+            id: 'private',
+            type: AxHomeAttentionType.executionFailed,
+            title: 'Inaccessible failure',
+            description: 'Private',
+            spaceId: 'revoked'),
+      ],
+    )));
+    expect(find.text('5'), findsNothing);
+    expect(find.text('Ordinary completion'), findsNothing);
+    expect(find.text('Inaccessible failure'), findsNothing);
+    expect(find.text('Failure 0'), findsNothing);
+    for (var index = 1; index <= 4; index++) {
+      expect(find.text('Failure $index'), findsOneWidget);
+    }
+  });
 
   testWidgets(
       'NewUserHome renders collaborative onboarding and value cards when no invitations exist',
@@ -348,7 +649,7 @@ void main() {
 
     expect(find.text('Needs your input'), findsOneWidget);
     expect(find.text('Authentication thread needs your input'), findsOneWidget);
-    expect(find.text('Open'), findsOneWidget);
+    expect(find.text('Open'), findsNothing);
 
     // 2. CONTINUE WORKING
     expect(find.text('Continue working'), findsOneWidget);
@@ -393,8 +694,7 @@ void main() {
     expect(acceptedInvite?.id, 'inv-1');
   });
 
-  testWidgets(
-      'For you section correctly prioritizes items and respects 5-item limit',
+  testWidgets('For you shows four items and navigates from the card',
       (tester) async {
     var notificationsOpened = false;
     var openedSpace = '';
@@ -500,8 +800,8 @@ void main() {
     expect(find.text('ChatGPT Worker authentication expired'), findsOneWidget);
 
     // Priority 5: Workspace offline (present - total 5 items reached)
-    expect(find.text('Workspace offline'), findsOneWidget);
-    expect(find.text("Workspace Mac-Mini went offline"), findsOneWidget);
+    expect(find.text('Workspace offline'), findsNothing);
+    expect(find.text("Workspace Mac-Mini went offline"), findsNothing);
 
     // Priority 6 & lower items past limit of 5:
     // 'Gemini finished reviewing Landing Page' (Priority 6) and 'Lower priority extra notification' (Priority 7) should be cut off
@@ -513,16 +813,28 @@ void main() {
     expect(notificationsOpened, isTrue);
 
     // Test action navigation on attention item
-    await tester.tap(find.text('Open'));
+    await tester.tap(find.text('Authentication thread needs your input'));
     expect(openedSpace, 'space-1');
     expect(openedThread, 'ws-auth');
   });
 
   testWidgets(
-      'For you selection ranks by priority, unread status, actionability, and recency',
+      'For you selects the latest four items actionable items regardless of priority or read state',
       (tester) async {
     final now = DateTime.now();
     final items = [
+      AxHomeAttentionItem(
+          id: 'approval',
+          type: AxHomeAttentionType.approvalRequired,
+          title: 'Approve deployment',
+          description: 'Approval needed',
+          createdAt: now.subtract(const Duration(minutes: 3))),
+      AxHomeAttentionItem(
+          id: 'worker',
+          type: AxHomeAttentionType.workerProblem,
+          title: 'Repair login',
+          description: 'Login expired',
+          createdAt: now.subtract(const Duration(minutes: 2))),
       // Same category (completed) but unread vs read:
       AxHomeAttentionItem(
         id: 'comp-read',
@@ -600,14 +912,18 @@ void main() {
       onCreateSpace: () {},
     )));
 
-    // Expect input-actionable (Priority 2) first
+    expect(
+        tester.getTopLeft(find.text('Newer Failure')).dy,
+        lessThanOrEqualTo(
+            tester.getTopLeft(find.text('Actionable input needed')).dy));
+    // Recent items remain visible regardless of priority.
     expect(find.text('Actionable input needed'), findsOneWidget);
     // Expect fail-newer & fail-older (Priority 3)
     expect(find.text('Newer Failure'), findsOneWidget);
-    expect(find.text('Older Failure'), findsOneWidget);
+    expect(find.text('Older Failure'), findsNothing);
     // Expect unread completed (Priority 6, unread) before read completed (Priority 6, read)
-    expect(find.text('Unread Task B'), findsOneWidget);
-    expect(find.text('Read Task A'), findsOneWidget);
+    expect(find.text('Unread Task B'), findsNothing);
+    expect(find.text('Read Task A'), findsNothing);
   });
 
   testWidgets(
@@ -650,14 +966,13 @@ void main() {
     expect(find.text('Decoupled Action Item'), findsOneWidget);
     expect(find.text('Item with encapsulated primary and secondary closures'),
         findsOneWidget);
-    expect(find.text('Custom Resolve'), findsOneWidget);
-    expect(find.text('Custom Dismiss'), findsOneWidget);
+    expect(find.text('Custom Resolve'), findsNothing);
+    expect(find.text('Custom Dismiss'), findsNothing);
 
-    await tester.tap(find.text('Custom Resolve'));
+    await tester.tap(find.text('Decoupled Action Item'));
     expect(primaryExecuted, isTrue);
 
-    await tester.tap(find.text('Custom Dismiss'));
-    expect(secondaryExecuted, isTrue);
+    expect(secondaryExecuted, isFalse);
   });
 
   test('AxHomeAttentionProjector cleanly maps and prioritizes domain items',
@@ -697,16 +1012,16 @@ void main() {
     expect(declinedInvite, isTrue);
 
     // 2. Open findings (Priority 2, needsInput)
-    expect(projected[1].type, AxHomeAttentionType.needsInput);
-    expect(projected[1].primaryAction?.label, 'Review →');
-    projected[1].primaryAction?.onPerform();
+    expect(projected[2].type, AxHomeAttentionType.needsInput);
+    expect(projected[2].primaryAction?.label, 'Review →');
+    projected[2].primaryAction?.onPerform();
     expect(openedSpace, 'space-1');
 
     // 3. Raw attention item (Priority 3, executionFailed)
-    expect(projected[2].type, AxHomeAttentionType.executionFailed);
-    expect(projected[2].primaryAction?.label, 'Inspect →');
+    expect(projected[1].type, AxHomeAttentionType.executionFailed);
+    expect(projected[1].primaryAction?.label, 'Inspect →');
     openedSpace = '';
-    projected[2].primaryAction?.onPerform();
+    projected[1].primaryAction?.onPerform();
     expect(openedSpace, 'space-1');
   });
 
@@ -1374,12 +1689,12 @@ void main() {
     expect(find.text('ChatGPT Worker'), findsOneWidget);
     expect(find.text('MODEL ADDED'), findsOneWidget);
     expect(find.text('New Reasoning Model'), findsOneWidget);
-    expect(find.text('Oct 8'), findsOneWidget);
+    expect(find.text('Oct 8, 2026'), findsOneWidget);
 
     expect(find.text('Gemini Worker'), findsOneWidget);
     expect(find.text('CAPABILITY ADDED'), findsOneWidget);
     expect(find.text('Structured Output Mode'), findsOneWidget);
-    expect(find.text('Oct 9'), findsOneWidget);
+    expect(find.text('Oct 9, 2026'), findsOneWidget);
   });
 
   testWidgets('AI updates See all opens the full update dialog',
@@ -1998,7 +2313,7 @@ void main() {
     // 1. For You is rendered at the top (strongest visual weight)
     expect(find.text('For you'), findsOneWidget);
     expect(find.text('Production deployment approval'), findsOneWidget);
-    expect(find.text('Approve →'), findsOneWidget);
+    expect(find.text('Approve →'), findsNothing);
 
     // 2. Running Now is present directly below For You
     expect(find.text('Running now'), findsOneWidget);
@@ -2103,7 +2418,7 @@ void main() {
 
     // Verify For You item tile is present as a row (with category badge and action button)
     expect(find.text('MacBook Pro is disconnected'), findsOneWidget);
-    expect(find.text('Reconnect →'), findsOneWidget);
+    expect(find.text('Reconnect →'), findsNothing);
 
     // Verify Running Now card is present
     expect(find.text('Optimizing database queries'), findsOneWidget);
@@ -2337,13 +2652,13 @@ void main() {
 
     // 1. Needs Input -> exact Thread deep-link
     expect(find.text('Landing Page Approval Required'), findsOneWidget);
-    await tester.tap(find.text('Review →'));
+    await tester.tap(find.text('Landing Page Approval Required'));
     expect(openedSpace, 'space-1');
     expect(openedThread, 'ws-landing');
 
     // 2. Workspace problem -> exact Workspaces deep-link
-    await tester.ensureVisible(find.text('Connect →'));
-    await tester.tap(find.text('Connect →'));
+    await tester.ensureVisible(find.text('Mac Studio is offline'));
+    await tester.tap(find.text('Mac Studio is offline'));
     expect(openedWorkspaces, isTrue);
 
     // 3. Continue Working -> exact Thread deep-link
@@ -2871,9 +3186,7 @@ void main() {
       expect(openedThread, 'space-1/ws-1');
     });
 
-    test(
-        'thread.completed triggers For You review item and Running Now suppression',
-        () {
+    test('thread.completed does not create a For You action', () {
       // Completed Threads no longer create notifications.
       expect(
         notificationFromRealtimeEvent({
@@ -2904,10 +3217,8 @@ void main() {
         onOpenThread: (pId, wsId) => openedThread = '$pId/$wsId',
       );
 
-      expect(items, hasLength(1));
-      expect(items.first.primaryAction?.label, 'Open →');
-      items.first.primaryAction?.onPerform();
-      expect(openedThread, 'space-1/ws-1');
+      expect(items, isEmpty);
+      expect(openedThread, isEmpty);
     });
 
     test('worker problem realtime events map to For You with Fix action', () {
@@ -3176,7 +3487,7 @@ void main() {
 
       expect(find.text('For you'), findsOneWidget);
       expect(find.text('Input requested for API spec'), findsOneWidget);
-      expect(find.text('Review →'), findsOneWidget);
+      expect(find.text('Review →'), findsNothing);
     });
 
     // 7. Scenario: Work running -> Expected: Running Now appears
@@ -3219,7 +3530,7 @@ void main() {
 
     // 8. Scenario: Work completes -> Expected: Running disappears, review appears
     testWidgets(
-        'Scenario: Work completes -> Expected: Running disappears, review appears',
+        'Scenario: Work completes -> Expected: Running and For you disappear',
         (tester) async {
       final completionItem = [
         const AxHomeAttentionItem(
@@ -3250,9 +3561,9 @@ void main() {
       )));
 
       expect(find.text('Running now'), findsNothing);
-      expect(find.text('For you'), findsOneWidget);
-      expect(find.text('Database schemas generated'), findsOneWidget);
-      expect(find.text('Open →'), findsOneWidget);
+      expect(find.text('For you'), findsNothing);
+      expect(find.text('Database schemas generated'), findsNothing);
+      expect(find.text('Open →'), findsNothing);
     });
 
     // 9. Scenario: Recent Thread -> Expected: Continue Working
@@ -3893,7 +4204,7 @@ void main() {
         onOpenThread: (pId, wsId) => openedThread = '$pId/$wsId',
       )));
 
-      await tester.tap(find.text('Review →'));
+      await tester.tap(find.text('Spec Review Required'));
       expect(openedThread, 'space-1/ws-spec');
 
       expect(

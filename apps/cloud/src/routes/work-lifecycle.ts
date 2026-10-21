@@ -235,7 +235,33 @@ export async function handleRetryWorkRequest(
       { status: 409 },
     );
 
-  const retrySessionStrategy = body.sessionStrategy;
+  const contextLimitExceeded =
+    typeof failedTask.error === "string" &&
+    canonicalExecutionErrorCode(failedTask.error) === "context_limit_exceeded";
+  if (contextLimitExceeded && body.clearAiHistory !== true)
+    return json(
+      {
+        error: "clear_ai_history_required",
+        message: "Clear AI History to retry a request over the context limit.",
+      },
+      { status: 409 },
+    );
+  if (contextLimitExceeded) {
+    const active = await env.CONCLAVE_DB.prepare(
+      "SELECT COUNT(*) AS count FROM work_requests WHERE thread_id = ?1 AND status IN ('queued', 'running', 'waiting')",
+    )
+      .bind(String(row.threadId))
+      .first<{ count: number }>();
+    if (active && active.count > 0)
+      throw new HttpError(
+        409,
+        `Cannot clear history with ${active.count} active Work Request(s). Cancel first.`,
+      );
+  }
+  // Clearing always starts a new Worker session.
+  const retrySessionStrategy = contextLimitExceeded
+    ? "fresh"
+    : body.sessionStrategy;
   if (
     stepKind === "implement" &&
     retrySessionStrategy !== "resume" &&
@@ -245,7 +271,11 @@ export async function handleRetryWorkRequest(
       400,
       "Choose whether the Implement retry resumes the previous session or starts fresh",
     );
-  if (stepKind !== "implement" && retrySessionStrategy !== undefined)
+  if (
+    stepKind !== "implement" &&
+    !contextLimitExceeded &&
+    retrySessionStrategy !== undefined
+  )
     throw new HttpError(400, "Session strategy only applies to Implement");
 
   const snapshot = parseJson<Record<string, unknown>>(
@@ -302,7 +332,7 @@ export async function handleRetryWorkRequest(
       stepKind,
       errorCode,
       retryNumber,
-      ...(stepKind === "implement"
+      ...(stepKind === "implement" || contextLimitExceeded
         ? { sessionStrategy: retrySessionStrategy }
         : {}),
     },
@@ -319,10 +349,33 @@ export async function handleRetryWorkRequest(
     throw new HttpError(409, "This Work Request is already being retried");
   try {
     await env.CONCLAVE_DB.batch([
+      // Over the context limit, AI History is cut off just before the latest
+      // Worker answer that precedes this request, so the new session keeps
+      // that answer and this request as its only context.
+      ...(contextLimitExceeded
+        ? [
+            env.CONCLAVE_DB.prepare(
+              `UPDATE conversations SET context_floor_sequence = COALESCE(
+                 (SELECT MAX(h.sequence) - 1 FROM conversation_history_entries h
+                   WHERE h.conversation_id = conversations.id
+                     AND h.kind = 'worker_response'
+                     AND h.sequence < (SELECT MIN(u.sequence) FROM conversation_history_entries u
+                       WHERE u.conversation_id = conversations.id AND u.work_request_id = ?2)),
+                 (SELECT MIN(u.sequence) - 1 FROM conversation_history_entries u
+                   WHERE u.conversation_id = conversations.id AND u.work_request_id = ?2),
+                 context_floor_sequence)
+               WHERE thread_id = ?1`,
+            ).bind(String(row.threadId), workRequestId),
+            env.CONCLAVE_DB.prepare(
+              "UPDATE threads SET ai_history_cleared_at = ?1, updated_at = ?1 WHERE id = ?2",
+            ).bind(now, String(row.threadId)),
+          ]
+        : []),
       // A fresh retry starts a new Work session for the whole Thread: the
       // next requests continue it instead of falling back to the old session
       // that just failed. The retry run reads the bumped generation.
-      ...(stepKind === "implement" && retrySessionStrategy === "fresh"
+      ...((stepKind === "implement" || contextLimitExceeded) &&
+      retrySessionStrategy === "fresh"
         ? [
             env.CONCLAVE_DB.prepare(
               "UPDATE threads SET work_session_generation = work_session_generation + 1, updated_at = ?1 WHERE id = ?2",
@@ -388,7 +441,7 @@ export async function handleRetryWorkRequest(
     builtinWorkflow: workflow,
     input: attachmentInput,
     retryStepKind: stepKind as StepKind,
-    ...(stepKind === "implement"
+    ...(stepKind === "implement" || contextLimitExceeded
       ? { retrySessionStrategy: retrySessionStrategy as "resume" | "fresh" }
       : {}),
     retryNumber,
@@ -398,6 +451,15 @@ export async function handleRetryWorkRequest(
       ? { retryAdoptSpaceFolder: true }
       : {}),
   });
+  if (contextLimitExceeded) {
+    await publishCollaborationEvent(
+      env,
+      "thread.work_cleared",
+      spaceId,
+      String(row.threadId),
+      { threadId: String(row.threadId) },
+    );
+  }
   return json(
     { workRequestId, runId, stepKind, retryNumber, status: "queued" },
     { status: 202 },
@@ -760,6 +822,19 @@ function requestExecutionFields(
   };
 }
 
+/** Requests created at or before this instant are hidden from AI History. */
+async function aiHistoryClearedAt(
+  env: SecurityEnv,
+  threadId: string,
+): Promise<string | null> {
+  const row = await env.CONCLAVE_DB.prepare(
+    "SELECT ai_history_cleared_at AS clearedAt FROM threads WHERE id = ?1",
+  )
+    .bind(threadId)
+    .first<{ clearedAt: string | null }>();
+  return row?.clearedAt ?? null;
+}
+
 export async function handleListWorkRequests(
   request: Request,
   env: SecurityEnv,
@@ -810,7 +885,11 @@ export async function handleListWorkRequests(
     .all<Record<string, unknown>>();
   const requests = page.results ?? [];
   if (requests.length === 0)
-    return json({ workRequests: [], nextCursor: null });
+    return json({
+      aiHistoryClearedAt: await aiHistoryClearedAt(env, threadId),
+      workRequests: [],
+      nextCursor: null,
+    });
   const ids = requests.map((row) => String(row.id));
   const turnsByRequest = await loadConversationTurns(env.CONCLAVE_DB, ids);
   const workflowRunsByRequest = await loadConversationWorkflowRuns(
@@ -1116,6 +1195,7 @@ export async function handleListWorkRequests(
   });
   const last = requests.at(-1)!;
   return json({
+    aiHistoryClearedAt: await aiHistoryClearedAt(env, threadId),
     workRequests,
     nextCursor:
       requests.length === limit
@@ -1321,131 +1401,33 @@ export async function handleClearWorkHistory(
     );
   }
 
+  // AI History is cut off, not deleted: the Conversation keeps every request
+  // and answer as they were. Worker sessions restart, and the context floor
+  // keeps cleared exchanges out of any later Worker's context.
   const now = new Date().toISOString();
-  const archive = await archivedExchangeStatements(env.CONCLAVE_DB, threadId);
-
   const statements = [
-    // Answers move into the Thread conversation before execution history goes.
-    ...archive,
-    // Delete the owning conversations so canonical history cascades legally.
     env.CONCLAVE_DB.prepare(
-      "DELETE FROM conversations WHERE thread_id = ?1",
+      `UPDATE conversations SET context_floor_sequence = COALESCE(
+         (SELECT MAX(sequence) FROM conversation_history_entries h
+           WHERE h.conversation_id = conversations.id), 0)
+       WHERE thread_id = ?1`,
     ).bind(threadId),
     env.CONCLAVE_DB.prepare(
-      "DELETE FROM work_requests WHERE thread_id = ?1",
-    ).bind(threadId),
-    env.CONCLAVE_DB.prepare(
-      "UPDATE threads SET work_session_generation = work_session_generation + 1, updated_at = ?1 WHERE id = ?2",
+      `UPDATE threads SET ai_history_cleared_at = ?1,
+         work_session_generation = work_session_generation + 1, updated_at = ?1
+       WHERE id = ?2`,
     ).bind(now, threadId),
   ];
+  const body = { threadId, cleared: true, aiHistoryClearedAt: now };
   const reply = receipt
-    ? await receipt.commit(
-        { threadId, cleared: true },
-        200,
-        (receiptStatements) =>
-          env.CONCLAVE_DB.batch([...statements, ...receiptStatements]),
+    ? await receipt.commit(body, 200, (receiptStatements) =>
+        env.CONCLAVE_DB.batch([...statements, ...receiptStatements]),
       )
     : (await env.CONCLAVE_DB.batch(statements), null);
 
   await announce();
 
-  return reply ?? json({ threadId, cleared: true });
-}
-
-/**
- * Clearing Work history removes execution diagnostics and resets Worker
- * session continuity, but the completed exchanges stay readable: each
- * completed request and its final answer become archived conversation
- * entries owned by the requester. Requests without an answer are dropped.
- */
-async function archivedExchangeStatements(
-  db: D1Database,
-  threadId: string,
-): Promise<D1PreparedStatement[]> {
-  const rows = await db
-    .prepare(
-      `SELECT wr.id, wr.requested_by_user_id AS userId, wr.created_at AS createdAt,
-        COALESCE(json_extract(wr.input_json, '$.originalRequest'),
-                 json_extract(wr.input_json, '$.request'), '') AS prompt,
-        a.answer, a.workerDisplayName, a.completedAt
-       FROM work_requests wr
-       JOIN (
-         SELECT ct.work_request_id AS workRequestId,
-           COALESCE(h.text, ct.result_text) AS answer,
-           ct.worker_display_name AS workerDisplayName,
-           ct.completed_at AS completedAt,
-           ROW_NUMBER() OVER (PARTITION BY ct.work_request_id
-             ORDER BY ct.completed_at DESC, ct.rowid DESC) AS position
-         FROM conversation_turns ct
-         LEFT JOIN conversation_history_entries h
-           ON h.turn_id = ct.id AND h.kind = 'worker_response'
-         WHERE ct.status = 'completed'
-           AND TRIM(COALESCE(h.text, ct.result_text, '')) <> ''
-       ) a ON a.workRequestId = wr.id AND a.position = 1
-       WHERE wr.thread_id = ?1 AND wr.status = 'completed'
-       ORDER BY wr.created_at, wr.id`,
-    )
-    .bind(threadId)
-    .all<{
-      id: string;
-      userId: string;
-      createdAt: string;
-      prompt: string;
-      answer: string;
-      workerDisplayName: string;
-      completedAt: string | null;
-    }>();
-  const insert = (
-    id: string,
-    userId: string,
-    body: string,
-    kind: "ai_request" | "ai_answer",
-    workRequestId: string,
-    workerDisplayName: string | null,
-    createdAt: string,
-  ) =>
-    db
-      .prepare(
-        `INSERT INTO discussion_messages
-         (id, thread_id, author_user_id, body, references_json, kind,
-          work_request_id, worker_display_name, created_at)
-         VALUES (?1, ?2, ?3, ?4, '[]', ?5, ?6, ?7, ?8)
-         ON CONFLICT(id) DO NOTHING`,
-      )
-      .bind(
-        id,
-        threadId,
-        userId,
-        body,
-        kind,
-        workRequestId,
-        workerDisplayName,
-        createdAt,
-      );
-  return (rows.results ?? []).flatMap((row) => [
-    ...(row.prompt.trim()
-      ? [
-          insert(
-            `discussion-ai-request-${row.id}`,
-            row.userId,
-            row.prompt,
-            "ai_request",
-            row.id,
-            row.workerDisplayName,
-            row.createdAt,
-          ),
-        ]
-      : []),
-    insert(
-      `discussion-ai-answer-${row.id}`,
-      row.userId,
-      row.answer,
-      "ai_answer",
-      row.id,
-      row.workerDisplayName,
-      row.completedAt ?? row.createdAt,
-    ),
-  ]);
+  return reply ?? json(body);
 }
 
 /**

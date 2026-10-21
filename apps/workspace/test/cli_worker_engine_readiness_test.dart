@@ -193,6 +193,11 @@ void _applyCommonFixtureProviderOverrides(
   provider['supportedVersions'] = [
     {'min': '0.0.0', 'maxExclusive': '1.0.0'},
   ];
+  // Live readiness is the Profile's usage command.
+  profile['usage'] = {
+    'arguments': ['run', providerScript, 'usage'],
+    'timeoutMs': 60000,
+  };
   profile['environment'] = {
     'passthrough': ['PATH', 'HOME'],
     'set': <String, String>{},
@@ -287,6 +292,10 @@ import 'dart:io';
 Future<void> main(List<String> arguments) async {
   if (arguments.length == 1 && arguments.single == '--version') {
     stdout.writeln('0.3.0');
+    return;
+  }
+  if (arguments.length == 1 && arguments.single == 'usage') {
+    stdout.writeln('fixture usage: ok');
     return;
   }
   await stdin.transform(utf8.decoder).join();

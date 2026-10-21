@@ -23,6 +23,8 @@ import {
   handleRevokePersonGrant,
 } from "../src/routes/workspace-invitations.js";
 import { handleWorkflowWorkspace } from "../src/routes/workflow-workspace.js";
+import { handleListWorkspaces } from "../src/routes/workspaces-management.js";
+import { handleListWorkspaceWorkerInventory } from "../src/routes/profiles.js";
 import { resolveWorkflowExecutionBindings } from "../src/routes/workflow-execution-configuration.js";
 
 /**
@@ -305,6 +307,85 @@ it("limits the borrower's run time per month, set by the owner", async () => {
       setQuota("lender", { maxRunSecondsPerMonth: 10 }),
     ).rejects.toMatchObject({ status: 400 });
     await expect(setQuota("lender", {})).rejects.toMatchObject({ status: 400 });
+  } finally {
+    sqlite.close();
+  }
+});
+
+it("lists a lent Workspace as shared and lets the borrower make it the default", async () => {
+  const { sqlite, env, grantGuest } = fixture();
+  const list = async (user: string) =>
+    (
+      (await (
+        await handleListWorkspaces(
+          new Request("https://cloud.test/api/workspaces", {
+            headers: { authorization: user },
+          }),
+          env,
+        )
+      ).json()) as {
+        workspaces: { id: string; role: string; shared: boolean }[];
+      }
+    ).workspaces.map(({ id, role, shared }) => ({ id, role, shared }));
+  const global = (method: string, body?: unknown) =>
+    handleWorkflowWorkspace(
+      new Request("https://cloud.test/api/workflow-workspace", {
+        method,
+        headers: { authorization: "guest" },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      }),
+      env,
+    );
+  try {
+    expect(await list("guest")).toEqual([
+      { id: "own", role: "owner", shared: false },
+    ]);
+    grantGuest();
+    expect(await list("guest")).toEqual([
+      { id: "own", role: "owner", shared: false },
+      { id: "lent", role: "member", shared: true },
+    ]);
+    // The lender still sees it as their own.
+    expect(await list("lender")).toEqual([
+      { id: "lent", role: "owner", shared: false },
+    ]);
+    const choices = (await (await global("GET")).json()) as {
+      workspaces: { id: string }[];
+    };
+    expect(choices.workspaces.map((w) => w.id)).toEqual(["own", "lent"]);
+    await global("PUT", { workspaceId: "lent", confirmReset: true });
+    expect(
+      sqlite
+        .prepare("SELECT workspace_id FROM user_workflow_settings WHERE user_id='guest'")
+        .get(),
+    ).toEqual({ workspace_id: "lent" });
+  } finally {
+    sqlite.close();
+  }
+});
+
+it("does not pass a lent Workspace on to the borrower's Space members", async () => {
+  const { sqlite, env, grantGuest, workspaceFor } = fixture();
+  const workers = async (user: string) =>
+    (
+      (await (
+        await handleListWorkspaceWorkerInventory(
+          new Request("https://cloud.test/api/workers?includeShared=true", {
+            headers: { authorization: user },
+          }),
+          env,
+        )
+      ).json()) as { workers: { id: string }[] }
+    ).workers.map((worker) => worker.id);
+  try {
+    grantGuest();
+    expect(await workers("guest")).toEqual(["worker-a"]);
+    // "friend" is in guest's Space G, which runs on the lent Workspace.
+    expect(await workers("friend")).toEqual([]);
+    // A Space member cannot pick it, and the Space shows only the selection.
+    await expect(
+      workspaceFor("PUT", "friend", { workspaceId: "lent", confirmReset: true }),
+    ).rejects.toMatchObject({ status: 403 });
   } finally {
     sqlite.close();
   }

@@ -36,9 +36,10 @@ class HistorySource extends AxFixtureDataSource {
   final clearCalls = <String>[];
   Object? clearError;
   @override
-  Future<void> clearThreadWorkHistory({required String threadId}) async {
+  Future<String?> clearThreadWorkHistory({required String threadId}) async {
     clearCalls.add(threadId);
     if (clearError != null) throw clearError!;
+    return '2026-10-21T10:00:00.000Z';
   }
 
   final calls = <({String id, int limit, String? before, bool active})>[];
@@ -80,10 +81,11 @@ void main() {
     await load;
   }
 
-  test('clear deletes remotely even when history was never opened', () async {
+  test('clear records a remote cutoff even when history was never opened',
+      () async {
     await cache.clearHistory('unopened');
     expect(source.clearCalls, ['unopened']);
-    expect(cache.peek('unopened').requests, isEmpty);
+    expect(cache.aiHistoryClearedAt('unopened'), isNotNull);
   });
 
   test('a 404 on a stale Work Request detail resets the history', () async {
@@ -123,20 +125,31 @@ void main() {
     expect(cache.peek('w').requests.single.id, '30');
   });
 
-  test('remote clear fences an outstanding head read and future refresh',
-      () async {
+  test('remote clear keeps Work and adopts the Cloud cutoff', () async {
     await seed();
-    final stale = cache.refresh('w');
-    final pending = source.pending.last;
     await cache.clearHistory('w');
     expect(source.clearCalls, ['w']);
-    pending.complete(AxWorkRequestPage(requests: [request('30')]));
-    await stale;
-    expect(cache.peek('w').requests, isEmpty);
-    final fresh = cache.refresh('w');
-    source.pending.last.complete(AxWorkRequestPage(requests: []));
-    await fresh;
-    expect(cache.peek('w').requests, isEmpty);
+    // AI History is cut off, not deleted: the Conversation keeps the request.
+    expect(cache.peek('w').requests.single.id, '30');
+    expect(cache.aiHistoryClearedAt('w'), isNotNull);
+    source.pending.last.complete(AxWorkRequestPage(
+        requests: [request('30')],
+        aiHistoryClearedAt: '2026-10-21T10:00:00.000Z'));
+    await Future<void>.delayed(Duration.zero);
+    expect(cache.peek('w').requests.single.id, '30');
+    expect(cache.aiHistoryClearedAt('w'), '2026-10-21T10:00:00.000Z');
+  });
+
+  test('pre-clear reads cannot restore an older cutoff', () async {
+    await seed();
+    final staleRead = cache.refresh('w');
+    final stalePage = source.pending.last;
+    await cache.clearHistory('w');
+    expect(cache.aiHistoryClearedAt('w'), '2026-10-21T10:00:00.000Z');
+    stalePage.complete(AxWorkRequestPage(requests: [request('30')]));
+    await staleRead;
+    expect(cache.aiHistoryClearedAt('w'), '2026-10-21T10:00:00.000Z');
+    expect(cache.peek('w').requests.single.id, '30');
   });
 
   test('confirmed remote clear fences older pages and preserves listeners',

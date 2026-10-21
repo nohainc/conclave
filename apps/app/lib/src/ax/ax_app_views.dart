@@ -2,16 +2,15 @@ part of 'ax_app.dart';
 
 extension _AxAppViews on _AxAppStateMixin {
   void _toggleTheme() {
-    _updateState(() {
-      _themeMode =
-          _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
-    });
+    _setThemeMode(
+        _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark);
   }
 
   void _setThemeMode(ThemeMode mode) {
     _updateState(() {
       _themeMode = mode;
     });
+    _themePreference.save(mode);
   }
 
   Widget _homeView() => AxDeferredListenableBuilder(
@@ -132,17 +131,8 @@ extension _AxAppViews on _AxAppStateMixin {
                         _navigateTo(AxNavigation.run(spaceId, runId)),
                     onCreateSpace: _createSpace,
                     onOpenNotifications: _showNotifications,
-                    onOpenWhatsNew: () => AxWhatsNewDialog.show(
-                      context,
-                      updates: store.productUpdates.isNotEmpty
-                          ? store.productUpdates
-                          : defaultProductUpdates,
-                      readStates: store.productUpdateReadStates.value,
-                      onOpenUpdateDetail: (update) =>
-                          store.markProductUpdateOpened(update.id),
-                      onDismissUpdate: (update) =>
-                          store.dismissProductUpdate(update.id),
-                    ),
+                    onReadAttentionItem: _readHomeAttentionItem,
+                    readAttentionItemIds: _readHomeAttentionIds,
                     onOpenUpdateDetail: (update) =>
                         store.markProductUpdateOpened(update.id),
                     onDismissUpdate: (update) =>
@@ -357,6 +347,10 @@ extension _AxAppViews on _AxAppStateMixin {
                     people: peopleState.data ?? const <AxPerson>[],
                     workspaces: _workspaceCards(),
                     workspaceWorkers: workspaceWorkers,
+                    workerUsageSource:
+                        widget.dataSource is AxWorkerUsageDataSource
+                            ? widget.dataSource as AxWorkerUsageDataSource
+                            : null,
                     initialWorkspaceId: navigation.workspaceId,
                     workflowCatalogs: store.catalogs,
                     workflowConfigurations: store.workflowConfigurations,
@@ -903,7 +897,7 @@ class _HomeThreadCollectionState extends State<_HomeThreadCollection> {
       if (bTime == null) return -1;
       return bTime.compareTo(aTime);
     });
-    return items.take(3).toList();
+    return items.take(4).toList();
   }
 
   @override

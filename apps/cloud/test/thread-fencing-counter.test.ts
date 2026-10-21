@@ -105,12 +105,7 @@ it("keeps tokens increasing after Work history is cleared", async () => {
       "W",
     );
     expect(response.status).toBe(200);
-    // The lease rows cascade away with their Work Requests...
-    expect(
-      f.sqlite.prepare("SELECT COUNT(*) AS n FROM thread_runtime_leases").get()!
-        .n,
-    ).toBe(0);
-    // ...but the Thread's counter survives, so the Workspace's recorded fence
+    // The Thread's counter survives, so the Workspace's recorded fence
     // (token 2 for lease-2) is never undercut by the next lease.
     expect(f.counter()).toBe(2);
     f.queue("R3");

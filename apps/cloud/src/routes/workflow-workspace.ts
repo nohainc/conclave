@@ -32,7 +32,7 @@ export async function loadWorkflowWorkspace(
 /**
  * Workspace a user-level workflow request addresses: the explicit one when
  * given, otherwise the user's selected Workspace. An explicit Workspace must be
- * owned by the user and not revoked.
+ * owned by the user or lent to them, and not revoked.
  */
 export async function resolveUserWorkflowWorkspace(
   env: Pick<SecurityEnv, "CONCLAVE_DB">,
@@ -45,7 +45,13 @@ export async function resolveUserWorkflowWorkspace(
   )
     .bind(requested, userId)
     .first();
-  if (!owned) throw new HttpError(404, "Workspace not found");
+  if (
+    !owned &&
+    !(await loadBorrowedWorkspaces(env, userId)).some(
+      (workspace) => workspace.id === requested,
+    )
+  )
+    throw new HttpError(404, "Workspace not found");
   return requested;
 }
 
@@ -215,16 +221,14 @@ export async function handleWorkflowWorkspace(
   )
     .bind(ownerUserId)
     .all<{ id: string; name: string }>();
-  // A Space may also run on a Workspace lent to its owner. The user-level
-  // default stays limited to Workspaces the user owns.
+  // A Space, and the user-level default, may also run on a Workspace lent to
+  // its owner; each Space then receives a grant capped by the borrower's mode.
   const choices = {
     results: [
       ...owned.results,
-      ...(spaceId
-        ? (await loadBorrowedWorkspaces(env, ownerUserId)).map(
-            ({ id, name }) => ({ id, name }),
-          )
-        : []),
+      ...(await loadBorrowedWorkspaces(env, ownerUserId)).map(
+        ({ id, name }) => ({ id, name }),
+      ),
     ],
   };
   if (request.method === "GET") {

@@ -48,6 +48,10 @@ void main() {
         ...(execution['arguments']! as List<Object?>),
       ];
 
+      profile['usage'] = {
+        'arguments': ['run', providerScript, 'usage'],
+        'timeoutMs': 60000,
+      };
       final profileBytes = utf8.encode(jsonEncode(profile));
       final root = await Directory.systemTemp.createTemp('gemini-profile-');
       final profileFile = File('${root.path}/profile.json')
@@ -425,6 +429,21 @@ void main() {
         (permissionFailure.terminal as WorkerErrorFrame).code,
         WorkerIssueCode.permissionDenied,
         reason: '${permissionFailure.terminal.toJson()}',
+      );
+
+      final quotaFailure = await exchange(
+        ExecuteRequest(
+          requestId: 'gemini-profile-quota-error',
+          assignmentId: 'gemini-quota-error',
+          prompt: 'Provider quota exhausted',
+          timeoutMs: 10000,
+          sessionPolicy: WorkerSessionPolicy.stateless,
+        ),
+      );
+      expect(
+        (quotaFailure.terminal as WorkerErrorFrame).code,
+        WorkerIssueCode.quotaExhausted,
+        reason: '${quotaFailure.terminal.toJson()}',
       );
 
       final missingTerminal = await exchange(

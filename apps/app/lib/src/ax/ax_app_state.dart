@@ -7,6 +7,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   bool isLoading = true;
   String? loadError;
   String? selectedTaskId = 'implement';
+  final Set<String> _readHomeAttentionIds = <String>{};
   final Set<String> expandedSpaceIds = <String>{};
   // Spaces whose stored `sidebarExpanded` has been applied this session, so
   // later refreshes never override a manual expand/collapse.
@@ -141,6 +142,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   bool deletingAccount = false;
   final unlinkingAccountIds = <String>{};
   String? accountUnlinkError;
+  late final ThemePreference _themePreference;
   ThemeMode _themeMode = ThemeMode.system;
   bool _desktopSidebarCollapsed = false;
   double _desktopSidebarWidth = ResizableSidebar.minWidth;
@@ -413,6 +415,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   @override
   void initState() {
     super.initState();
+    _themePreference = widget.themePreference ?? createThemePreference();
+    _themeMode = _themePreference.load();
     store = AxStore(widget.dataSource);
     store.spaces.addListener(_restoreSidebarExpansion);
     _searchQueryController.addListener(_onSearchQueryChanged);
@@ -624,10 +628,9 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
 
   Future<void> _clearChatHistory(AxThread thread) async {
     try {
-      // AI requests render in the Conversation and archive completed answers
-      // into it, so clear AI History first, then the messages.
-      await store.workHistory.clearHistory(thread.id);
+      // Cloud deletes Chat and every Work Request together.
       await store.discussion.clearHistory(thread.id);
+      store.workHistory.resetHistory(thread.id);
       _discardNotificationsFor(threadId: thread.id);
       if (mounted) _showSnackBar('Conversation and AI History cleared.');
     } catch (error) {
@@ -642,11 +645,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
 
   Future<void> _clearWorkHistory(AxThread thread) async {
     try {
+      // Only AI History is cut off; the Conversation stays as it was.
       await store.workHistory.clearHistory(thread.id);
-      // Completed AI exchanges were archived into the conversation.
-      unawaited(store.discussion
-          .synchronize(thread.id, reconcileNewest: true)
-          .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       _discardNotificationsFor(threadId: thread.id);
       if (mounted) _showSnackBar('AI History cleared.');
     } catch (error) {

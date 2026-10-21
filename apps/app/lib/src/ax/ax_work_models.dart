@@ -301,10 +301,16 @@ class AxWorkRequestCursor {
 
 class AxWorkRequestPage {
   AxWorkRequestPage(
-      {required Iterable<AxWorkRequest> requests, this.nextCursor})
+      {required Iterable<AxWorkRequest> requests,
+      this.nextCursor,
+      this.aiHistoryClearedAt})
       : requests = List.unmodifiable(requests);
   final List<AxWorkRequest> requests;
   final AxWorkRequestCursor? nextCursor;
+
+  /// Requests created at or before this instant stay in the Conversation but
+  /// are hidden from AI History.
+  final String? aiHistoryClearedAt;
 }
 
 class AxWorkRequestStatus {
@@ -896,7 +902,7 @@ abstract interface class AxDataSource {
     Map<String, dynamic>? metadata,
   });
   Future<void> deleteThread({required String threadId});
-  Future<void> clearThreadWorkHistory({required String threadId}) async =>
+  Future<String?> clearThreadWorkHistory({required String threadId}) async =>
       throw UnimplementedError('Clear work history is not available');
   Future<void> clearThreadChatHistory({required String threadId}) async =>
       throw UnimplementedError('Clear chat history is not available');
@@ -954,6 +960,7 @@ abstract interface class AxDataSource {
     required String workRequestId,
     required String stepKind,
     String? sessionStrategy,
+    bool clearAiHistory = false,
     bool confirmSideEffects = false,
   }) async =>
       throw UnimplementedError('Work Request retry is not available');

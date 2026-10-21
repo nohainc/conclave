@@ -3,6 +3,10 @@ import 'dart:io';
 const version = '0.3.0';
 
 Future<void> main(List<String> arguments) async {
+  if (arguments.length == 1 && arguments.single == 'usage') {
+    stdout.writeln('fixture usage: 0 of 100 requests used');
+    return;
+  }
   if (arguments.length == 1 && arguments.single == '--version') {
     stdout.writeln('fixture-provider $version');
     return;

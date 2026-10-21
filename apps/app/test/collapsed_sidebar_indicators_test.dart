@@ -48,6 +48,37 @@ Widget rail(AxShellContext context,
     );
 
 void main() {
+  testWidgets('logo and avatar keep their size when the sidebar collapses',
+      (tester) async {
+    const context = AxShellContext(
+      navigation: AxNavigation.home(),
+      spaces: [],
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          width: 220,
+          child: AppSidebar(
+            shellContext: context,
+            onNavigateTo: (_) {},
+            onLogout: () {},
+            onOpenAbout: () {},
+            onOpenExternal: (_) {},
+          ),
+        ),
+      ),
+    ));
+    final expandedLogoSize = tester.getSize(find.byType(Image));
+    final expandedAvatarSize = tester.getSize(find.byType(CircleAvatar));
+    expect(expandedLogoSize, const Size(28, 28));
+    expect(expandedAvatarSize, const Size(26, 26));
+
+    await tester.pumpWidget(rail(context));
+    expect(tester.getSize(find.byType(Image)), expandedLogoSize);
+    expect(tester.getSize(find.byType(CircleAvatar)), expandedAvatarSize);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('collapsed notification badge uses the premium brand color',
       (tester) async {
     final unread = ValueNotifier<int>(5);

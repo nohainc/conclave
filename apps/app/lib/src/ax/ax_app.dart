@@ -13,6 +13,7 @@ import '../navigation/ax_navigation.dart';
 import '../notifications/browser_alerts.dart';
 import '../notifications/notification_models.dart';
 import '../platform/platform_services.dart';
+import '../platform/theme_preference.dart';
 import '../realtime/realtime_client.dart';
 import '../brand.dart';
 import '../features/common/toast_overlay.dart';
@@ -53,7 +54,9 @@ class ConclaveAppShell extends StatefulWidget {
       required this.dataSource,
       this.initialUri,
       this.browserNavigation,
-      this.realtimeClient});
+      this.realtimeClient,
+      this.themePreference});
+  final ThemePreference? themePreference;
   final PlatformServices services;
   final AxDataSource dataSource;
   final Uri? initialUri;

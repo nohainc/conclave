@@ -6,9 +6,14 @@ import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'ax_fixture_data.dart';
 
 class RetrySource extends AxFixtureDataSource {
-  RetrySource({required this.allowed, required this.confirmation});
+  RetrySource(
+      {required this.allowed,
+      required this.confirmation,
+      this.contextLimit = false});
   final bool allowed;
   final bool confirmation;
+  final bool contextLimit;
+  final resets = <bool>[];
   final approvals = <bool>[];
 
   @override
@@ -31,6 +36,7 @@ class RetrySource extends AxFixtureDataSource {
                   workerId: 'worker',
                   executionPhase: 'failed',
                   workerDisplayName: 'Test Worker',
+                  errorCode: contextLimit ? 'context_limit_exceeded' : null,
                   failureCategory: 'provider_start_failed',
                   failureCategoryMessage: 'AI provider could not start',
                   retryAllowed: allowed,
@@ -43,10 +49,13 @@ class RetrySource extends AxFixtureDataSource {
       {required String workRequestId,
       required String stepKind,
       String? sessionStrategy,
+      bool clearAiHistory = false,
       bool confirmSideEffects = false}) async {
     expect(workRequestId, 'request');
     expect(stepKind, 'verify');
     approvals.add(confirmSideEffects);
+    resets.add(clearAiHistory);
+    if (clearAiHistory) expect(sessionStrategy, 'fresh');
   }
 }
 
@@ -72,6 +81,28 @@ Widget page(RetrySource source) => MaterialApp(
     )));
 
 void main() {
+  testWidgets('context limit reset requires confirmation and starts fresh',
+      (tester) async {
+    final source =
+        RetrySource(allowed: true, confirmation: false, contextLimit: true);
+    await tester.pumpWidget(page(source));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Retry'));
+    await tester.pumpAndSettle();
+    expect(find.text('Clear AI History and retry?'), findsOneWidget);
+    expect(source.resets, isEmpty);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(source.resets, isEmpty);
+    await tester.tap(find.byTooltip('Retry'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Clear and retry'));
+    await tester.pumpAndSettle();
+    expect(source.resets, [true]);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
+  });
+
   testWidgets(
       'safe retry sends no side-effect approval and shows public failure',
       (tester) async {

@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
 import '../../ax/worker_presentation.dart';
+import '../../ax/worker_usage.dart';
+import 'worker_usage_dialog.dart';
 import '../../ax/sync/ax_session_catalogs.dart';
 import '../../ax/sync/ax_workflow_configurations.dart';
 import '../../ax/ax_workspace_member_access.dart';
@@ -25,6 +27,7 @@ class WorkspacesPage extends StatefulWidget {
     super.key,
     required this.workspaces,
     this.workspaceWorkers = const [],
+    this.workerUsageSource,
     this.initialWorkspaceId,
     this.workflowCatalogs,
     this.workflowConfigurations,
@@ -41,6 +44,8 @@ class WorkspacesPage extends StatefulWidget {
     Future<void> Function(AxWorkspace)? onConnect,
   });
 
+  /// Owner-only, Profile-defined usage commands; reports remain local view state.
+  final AxWorkerUsageDataSource? workerUsageSource;
   final List<AxWorkspace> workspaces;
   final List<AxWorker> workspaceWorkers;
   final String? initialWorkspaceId;
@@ -199,6 +204,13 @@ class _WorkspacesPageState extends State<WorkspacesPage>
               ),
               const SizedBox(width: 8),
             ],
+            if (workspace.shared) ...[
+              const Chip(
+                  key: ValueKey('workspace-shared-badge'),
+                  avatar: Icon(Icons.people_outline, size: 16),
+                  label: Text('Shared with you')),
+              const SizedBox(width: 8),
+            ],
             const Spacer(),
             _StatusPill(status: _statusLabel(workspace)),
           ],
@@ -211,7 +223,12 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             workspace: workspace,
           ),
         const SizedBox(height: 16),
-        _WorkspaceCardBody(workers: workers),
+        _WorkspaceCardBody(
+          workers: workers,
+          usageSource:
+              workspace.role == 'owner' ? widget.workerUsageSource : null,
+          online: workspace.status.toLowerCase() == 'online',
+        ),
         if (catalogs != null && configurations != null) ...[
           const SizedBox(height: 24),
           WorkflowsPage(
@@ -223,7 +240,8 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             showWorkspaceAction: false,
           ),
         ],
-        if (widget.sharingSource != null) ...[
+        // A lent Workspace is used, not managed: its owner controls access.
+        if (widget.sharingSource != null && !workspace.shared) ...[
           const SizedBox(height: 24),
           WorkspaceSharingSection(
             key: ValueKey('workspace-sharing-${workspace.id}'),
@@ -235,7 +253,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             workers: widget.workspaceWorkers,
           ),
         ],
-        if (widget.memberAccessSource != null) ...[
+        if (widget.memberAccessSource != null && !workspace.shared) ...[
           const SizedBox(height: 24),
           WorkspaceMemberAccessSection(
             key: ValueKey('workspace-member-access-${workspace.id}'),
@@ -252,9 +270,13 @@ class _WorkspacesPageState extends State<WorkspacesPage>
 class _WorkspaceCardBody extends StatelessWidget {
   const _WorkspaceCardBody({
     required this.workers,
+    required this.usageSource,
+    required this.online,
   });
 
   final List<AxWorker> workers;
+  final AxWorkerUsageDataSource? usageSource;
+  final bool online;
 
   @override
   Widget build(BuildContext context) {
@@ -278,7 +300,10 @@ class _WorkspaceCardBody extends StatelessWidget {
             children: [
               for (int i = 0; i < workers.length; i++) ...[
                 if (i > 0) const SizedBox(height: gap),
-                _WorkerCard(worker: workers[i]),
+                _WorkerCard(
+                    worker: workers[i],
+                    usageSource: usageSource,
+                    online: online),
               ],
             ],
           );
@@ -305,7 +330,10 @@ class _WorkspaceCardBody extends StatelessWidget {
                       if (c > 0) const SizedBox(width: gap),
                       Expanded(
                         child: c < rows[r].length
-                            ? _WorkerCard(worker: rows[r][c])
+                            ? _WorkerCard(
+                                worker: rows[r][c],
+                                usageSource: usageSource,
+                                online: online)
                             : const SizedBox.shrink(),
                       ),
                     ],
@@ -321,7 +349,10 @@ class _WorkspaceCardBody extends StatelessWidget {
 }
 
 class _WorkerCard extends StatelessWidget {
-  const _WorkerCard({required this.worker});
+  const _WorkerCard(
+      {required this.worker, required this.usageSource, required this.online});
+  final AxWorkerUsageDataSource? usageSource;
+  final bool online;
   final AxWorker worker;
 
   @override
@@ -390,6 +421,23 @@ class _WorkerCard extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (usageSource != null)
+                            IconButton(
+                              key: ValueKey(
+                                  'workspace-worker-usage-${worker.id}'),
+                              tooltip: 'Worker usage',
+                              icon: const Icon(Icons.data_usage_rounded,
+                                  size: 18),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: online && worker.isReady
+                                  ? () => showDialog<void>(
+                                        context: context,
+                                        builder: (_) => WorkerUsageDialog(
+                                            source: usageSource!,
+                                            worker: worker),
+                                      )
+                                  : null,
+                            ),
                           const SizedBox(width: 6),
                           if (!worker.isReady)
                             const Icon(

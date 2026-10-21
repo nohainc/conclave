@@ -219,399 +219,364 @@ extension _AxAppShellViews on _AxAppStateMixin {
                 : authSignUp
                     ? 'Create your account'
                     : 'Welcome to Conclave AX';
-    return Scaffold(
-      body: Center(
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: AutofillGroup(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ConclaveBrand.logoMark(size: 52),
-                      const SizedBox(height: 16),
-                      Text(title,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.w700)),
-                      if (resetPassword ||
-                          authResetRequest ||
-                          authSignUp ||
-                          awaitingSignUpCode ||
-                          pendingDesktopAppName != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                            resetPassword
-                                ? 'Choose a strong password for your account.'
-                                : authResetRequest
-                                    ? 'Enter your email and we will send a reset link if an account exists.'
-                                    : awaitingSignUpCode
-                                        ? 'Enter the 6-digit verification code we sent to ${authEmailController.text.trim()}.'
-                                        : authSignUp
-                                            ? 'Create an account to start using Conclave AX. We will send a one-time code to verify your email.'
-                                            : 'Sign in to continue approving $pendingDesktopAppName.',
-                            textAlign: TextAlign.center),
-                      ],
-                      const SizedBox(height: 20),
-                      if (!resetPassword &&
-                          authSignUp &&
-                          !awaitingSignUpCode) ...[
-                        TextField(
-                          controller: authNameController,
-                          autofocus: true,
-                          autofillHints: const [AutofillHints.name],
-                          textInputAction: TextInputAction.next,
-                          decoration: const InputDecoration(labelText: 'Name'),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                      if (!resetPassword && !awaitingSignUpCode) ...[
-                        TextField(
-                          controller: authEmailController,
-                          autofocus: !authSignUp,
-                          keyboardType: TextInputType.emailAddress,
-                          autofillHints: const [AutofillHints.email],
-                          textInputAction: authResetRequest
-                              ? TextInputAction.done
-                              : TextInputAction.next,
-                          onSubmitted: (_) {
-                            if (authResetRequest) {
-                              _submitEmailAuth();
-                            }
-                          },
-                          decoration: const InputDecoration(labelText: 'Email'),
-                        ),
-                        if (!authResetRequest) const SizedBox(height: 10),
-                      ],
-                      if ((resetPassword || !authResetRequest) &&
-                          !awaitingSignUpCode) ...[
-                        TextField(
-                          controller: authPasswordController,
-                          autofocus: resetPassword,
-                          obscureText: !authPasswordVisible,
-                          autofillHints: [
-                            if (authSignUp || resetPassword)
-                              AutofillHints.newPassword
-                            else
-                              AutofillHints.password,
-                          ],
-                          textInputAction: (!authSignUp && !resetPassword)
-                              ? TextInputAction.done
-                              : TextInputAction.next,
-                          onSubmitted: (_) {
-                            if (!authSignUp && !resetPassword) {
-                              _submitEmailAuth();
-                            }
-                          },
-                          decoration: InputDecoration(
-                            labelText: 'Password',
-                            hintText: (authSignUp || resetPassword)
-                                ? 'At least 8 characters'
-                                : null,
-                            suffixIcon: IconButton(
-                              tooltip: authPasswordVisible
-                                  ? 'Hide password'
-                                  : 'Show password',
-                              icon: Icon(
-                                authPasswordVisible
-                                    ? Icons.visibility_off_outlined
-                                    : Icons.visibility_outlined,
-                                size: 20,
-                              ),
-                              onPressed: () => _updateState(() =>
-                                  authPasswordVisible = !authPasswordVisible),
-                            ),
-                          ),
-                        ),
-                        if (authSignUp || resetPassword) ...[
-                          const SizedBox(height: 10),
-                          TextField(
-                            controller: authConfirmPasswordController,
-                            obscureText: !authConfirmPasswordVisible,
-                            autofillHints: const [AutofillHints.newPassword],
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => _submitEmailAuth(),
-                            decoration: InputDecoration(
-                              labelText: 'Confirm password',
-                              suffixIcon: IconButton(
-                                tooltip: authConfirmPasswordVisible
-                                    ? 'Hide password'
-                                    : 'Show password',
-                                icon: Icon(
-                                  authConfirmPasswordVisible
-                                      ? Icons.visibility_off_outlined
-                                      : Icons.visibility_outlined,
-                                  size: 20,
-                                ),
-                                onPressed: () => _updateState(() =>
-                                    authConfirmPasswordVisible =
-                                        !authConfirmPasswordVisible),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                      if (awaitingSignUpCode) ...[
-                        TextField(
-                          controller: authVerificationCodeController,
-                          autofocus: true,
-                          keyboardType: TextInputType.number,
-                          autofillHints: const [AutofillHints.oneTimeCode],
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          textInputAction: TextInputAction.done,
-                          maxLength: 6,
-                          onSubmitted: (_) => _submitEmailAuth(),
-                          decoration: const InputDecoration(
-                            labelText: 'Verification code',
-                            hintText: '6-digit code',
-                            counterText: '',
-                          ),
-                        ),
-                      ],
-                      if (authError != null) ...[
-                        const SizedBox(height: 12),
-                        Semantics(
-                          liveRegion: true,
-                          child: Text(authError!,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: ConclaveColors.errorText(
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark))),
-                        ),
-                      ],
-                      if (authError == null && oauthError != null) ...[
-                        const SizedBox(height: 12),
-                        Semantics(
-                          liveRegion: true,
-                          child: Text(oauthError,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                  color: ConclaveColors.errorText(
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark))),
-                        ),
-                      ],
-                      if (authNotice != null) ...[
-                        const SizedBox(height: 12),
-                        Semantics(
-                          liveRegion: true,
-                          child: Text(authNotice!, textAlign: TextAlign.center),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: authBusy ? null : _submitEmailAuth,
-                          child: Text(authBusy
-                              ? 'Please wait…'
-                              : resetPassword
-                                  ? 'Save new password'
-                                  : authResetRequest
-                                      ? 'Email reset link'
-                                      : awaitingSignUpCode
-                                          ? 'Verify & create account'
-                                          : authSignUp
-                                              ? 'Create account'
-                                              : 'Sign in with email'),
-                        ),
-                      ),
-                      if (awaitingSignUpCode)
-                        TextButton(
-                          onPressed: authBusy ? null : _resendSignUpCode,
-                          child: const Text('Resend code'),
-                        ),
-                      if (!resetPassword && !authSignUp && !authResetRequest)
-                        Align(
-                          alignment: Alignment.center,
-                          child: TextButton(
-                            onPressed: authBusy
-                                ? null
-                                : () => _updateState(() {
-                                      authResetRequest = true;
-                                      authError = null;
-                                      authNotice = null;
-                                    }),
-                            child: const Text('Forgot password?'),
-                          ),
-                        ),
-                      if (!resetPassword && !authResetRequest && !authSignUp)
-                        TextButton(
-                          onPressed: authBusy
-                              ? null
-                              : () => _updateState(() {
-                                    authSignUp = !authSignUp;
-                                    _resetSensitiveAuthInputs();
-                                    authError = null;
-                                    authNotice = null;
-                                  }),
-                          child: const Text('New here? Create an account'),
-                        ),
-                      if (resetPassword || authResetRequest || authSignUp)
-                        TextButton(
-                          onPressed: authBusy
-                              ? null
-                              : () {
-                                  if (resetPassword) {
-                                    final nextLogin = AxNavigation.login(
-                                      returnTo: navigation.loginReturnTo,
-                                    );
-                                    browserNavigation.replace(
-                                      nextLogin.toUri(),
-                                    );
-                                    _updateState(() {
-                                      navigation = nextLogin;
-                                      _resetSensitiveAuthInputs();
-                                      authError = null;
-                                      authNotice = null;
-                                    });
-                                    return;
-                                  }
-                                  _updateState(() {
-                                    authSignUp = false;
-                                    _resetSensitiveAuthInputs();
-                                    authResetRequest = false;
-                                    authError = null;
-                                    authNotice = null;
-                                  });
-                                },
-                          child: const Text('Back to sign in'),
-                        ),
-                      if (!resetPassword &&
-                          !authResetRequest &&
-                          !authSignUp) ...[
-                        const Divider(height: 28),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: authBusy
-                                ? null
-                                : () => browserNavigation.startSocialLogin(
-                                    'github', returnTo),
-                            icon: _accountProviderIcon('github', size: 20),
-                            label: const Text('Continue with GitHub'),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: authBusy
-                                ? null
-                                : () => browserNavigation.startSocialLogin(
-                                    'google', returnTo),
-                            icon: _accountProviderIcon('google', size: 20),
-                            label: const Text('Continue with Google'),
-                          ),
-                        ),
-                      ],
-                    ],
+    return _authFormFrame(AutofillGroup(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConclaveBrand.logoMark(size: 52),
+          const SizedBox(height: 16),
+          Text(title,
+              textAlign: TextAlign.center,
+              style:
+                  const TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+          if (resetPassword ||
+              authResetRequest ||
+              authSignUp ||
+              awaitingSignUpCode ||
+              pendingDesktopAppName != null) ...[
+            const SizedBox(height: 8),
+            Text(
+                resetPassword
+                    ? 'Choose a strong password for your account.'
+                    : authResetRequest
+                        ? 'Enter your email and we will send a reset link if an account exists.'
+                        : awaitingSignUpCode
+                            ? 'Enter the 6-digit verification code we sent to ${authEmailController.text.trim()}.'
+                            : authSignUp
+                                ? 'Create an account to start using Conclave AX. We will send a one-time code to verify your email.'
+                                : 'Sign in to continue approving $pendingDesktopAppName.',
+                textAlign: TextAlign.center),
+          ],
+          const SizedBox(height: 20),
+          if (!resetPassword && authSignUp && !awaitingSignUpCode) ...[
+            TextField(
+              controller: authNameController,
+              autofocus: true,
+              autofillHints: const [AutofillHints.name],
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (!resetPassword && !awaitingSignUpCode) ...[
+            TextField(
+              controller: authEmailController,
+              autofocus: !authSignUp,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
+              textInputAction: authResetRequest
+                  ? TextInputAction.done
+                  : TextInputAction.next,
+              onSubmitted: (_) {
+                if (authResetRequest) {
+                  _submitEmailAuth();
+                }
+              },
+              decoration: const InputDecoration(labelText: 'Email'),
+            ),
+            if (!authResetRequest) const SizedBox(height: 10),
+          ],
+          if ((resetPassword || !authResetRequest) && !awaitingSignUpCode) ...[
+            TextField(
+              controller: authPasswordController,
+              autofocus: resetPassword,
+              obscureText: !authPasswordVisible,
+              autofillHints: [
+                if (authSignUp || resetPassword)
+                  AutofillHints.newPassword
+                else
+                  AutofillHints.password,
+              ],
+              textInputAction: (!authSignUp && !resetPassword)
+                  ? TextInputAction.done
+                  : TextInputAction.next,
+              onSubmitted: (_) {
+                if (!authSignUp && !resetPassword) {
+                  _submitEmailAuth();
+                }
+              },
+              decoration: InputDecoration(
+                labelText: 'Password',
+                hintText: (authSignUp || resetPassword)
+                    ? 'At least 8 characters'
+                    : null,
+                suffixIcon: IconButton(
+                  tooltip:
+                      authPasswordVisible ? 'Hide password' : 'Show password',
+                  icon: Icon(
+                    authPasswordVisible
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    size: 20,
                   ),
+                  onPressed: () => _updateState(
+                      () => authPasswordVisible = !authPasswordVisible),
                 ),
               ),
             ),
+            if (authSignUp || resetPassword) ...[
+              const SizedBox(height: 10),
+              TextField(
+                controller: authConfirmPasswordController,
+                obscureText: !authConfirmPasswordVisible,
+                autofillHints: const [AutofillHints.newPassword],
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _submitEmailAuth(),
+                decoration: InputDecoration(
+                  labelText: 'Confirm password',
+                  suffixIcon: IconButton(
+                    tooltip: authConfirmPasswordVisible
+                        ? 'Hide password'
+                        : 'Show password',
+                    icon: Icon(
+                      authConfirmPasswordVisible
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 20,
+                    ),
+                    onPressed: () => _updateState(() =>
+                        authConfirmPasswordVisible =
+                            !authConfirmPasswordVisible),
+                  ),
+                ),
+              ),
+            ],
+          ],
+          if (awaitingSignUpCode) ...[
+            TextField(
+              controller: authVerificationCodeController,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              autofillHints: const [AutofillHints.oneTimeCode],
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+              ],
+              textInputAction: TextInputAction.done,
+              maxLength: 6,
+              onSubmitted: (_) => _submitEmailAuth(),
+              decoration: const InputDecoration(
+                labelText: 'Verification code',
+                hintText: '6-digit code',
+                counterText: '',
+              ),
+            ),
+          ],
+          if (authError != null) ...[
+            const SizedBox(height: 12),
+            Semantics(
+              liveRegion: true,
+              child: Text(authError!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: ConclaveColors.errorText(
+                          Theme.of(context).brightness == Brightness.dark))),
+            ),
+          ],
+          if (authError == null && oauthError != null) ...[
+            const SizedBox(height: 12),
+            Semantics(
+              liveRegion: true,
+              child: Text(oauthError,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: ConclaveColors.errorText(
+                          Theme.of(context).brightness == Brightness.dark))),
+            ),
+          ],
+          if (authNotice != null) ...[
+            const SizedBox(height: 12),
+            Semantics(
+              liveRegion: true,
+              child: Text(authNotice!, textAlign: TextAlign.center),
+            ),
+          ],
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: authBusy ? null : _submitEmailAuth,
+              child: Text(authBusy
+                  ? 'Please wait…'
+                  : resetPassword
+                      ? 'Save new password'
+                      : authResetRequest
+                          ? 'Email reset link'
+                          : awaitingSignUpCode
+                              ? 'Verify & create account'
+                              : authSignUp
+                                  ? 'Create account'
+                                  : 'Sign in with email'),
+            ),
           ),
-        ),
+          if (awaitingSignUpCode)
+            TextButton(
+              onPressed: authBusy ? null : _resendSignUpCode,
+              child: const Text('Resend code'),
+            ),
+          if (!resetPassword && !authSignUp && !authResetRequest)
+            Align(
+              alignment: Alignment.center,
+              child: TextButton(
+                onPressed: authBusy
+                    ? null
+                    : () => _updateState(() {
+                          authResetRequest = true;
+                          authError = null;
+                          authNotice = null;
+                        }),
+                child: const Text('Forgot password?'),
+              ),
+            ),
+          if (!resetPassword && !authResetRequest && !authSignUp)
+            TextButton(
+              onPressed: authBusy
+                  ? null
+                  : () => _updateState(() {
+                        authSignUp = !authSignUp;
+                        _resetSensitiveAuthInputs();
+                        authError = null;
+                        authNotice = null;
+                      }),
+              child: const Text('New here? Create an account'),
+            ),
+          if (resetPassword || authResetRequest || authSignUp)
+            TextButton(
+              onPressed: authBusy
+                  ? null
+                  : () {
+                      if (resetPassword) {
+                        final nextLogin = AxNavigation.login(
+                          returnTo: navigation.loginReturnTo,
+                        );
+                        browserNavigation.replace(
+                          nextLogin.toUri(),
+                        );
+                        _updateState(() {
+                          navigation = nextLogin;
+                          _resetSensitiveAuthInputs();
+                          authError = null;
+                          authNotice = null;
+                        });
+                        return;
+                      }
+                      _updateState(() {
+                        authSignUp = false;
+                        _resetSensitiveAuthInputs();
+                        authResetRequest = false;
+                        authError = null;
+                        authNotice = null;
+                      });
+                    },
+              child: const Text('Back to sign in'),
+            ),
+          if (!resetPassword && !authResetRequest && !authSignUp) ...[
+            const Divider(height: 28),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: authBusy
+                    ? null
+                    : () =>
+                        browserNavigation.startSocialLogin('github', returnTo),
+                icon: _accountProviderIcon('github', size: 20),
+                label: const Text('Continue with GitHub'),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: authBusy
+                    ? null
+                    : () =>
+                        browserNavigation.startSocialLogin('google', returnTo),
+                icon: _accountProviderIcon('google', size: 20),
+                label: const Text('Continue with Google'),
+              ),
+            ),
+          ],
+        ],
       ),
-    );
+    ));
   }
 
-  Widget _desktopAuthApprovalView() {
-    final appName =
-        desktopAuthIntentStatus?.applicationName ?? 'desktop application';
-    if (desktopAuthApproved || desktopAuthCancelled) {
-      return Scaffold(
+  /// Shared sizing for login, signup, recovery and desktop authorization.
+  Widget _authFormFrame(Widget content) => Scaffold(
         body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
             child: Card(
-              margin: const EdgeInsets.all(24),
+              margin: EdgeInsets.zero,
               child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                        desktopAuthApproved
-                            ? 'Sign-in approved'
-                            : 'Sign-in canceled',
-                        style: Theme.of(context).textTheme.headlineSmall),
-                    const SizedBox(height: 12),
-                    Text(desktopAuthApproved
-                        ? 'Return to $appName to finish signing in.'
-                        : 'This sign-in request was canceled.'),
-                    const SizedBox(height: 8),
-                    const Text('You can close this page, window, or tab.'),
-                  ],
+                padding: const EdgeInsets.all(32),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: SizedBox(width: double.infinity, child: content),
                 ),
               ),
             ),
           ),
         ),
       );
+
+  Widget _desktopAuthApprovalView() {
+    final appName =
+        desktopAuthIntentStatus?.applicationName ?? 'desktop application';
+    if (desktopAuthApproved || desktopAuthCancelled) {
+      return _authFormFrame(Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(desktopAuthApproved ? 'Sign-in approved' : 'Sign-in canceled',
+              style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 12),
+          Text(desktopAuthApproved
+              ? 'Return to $appName to finish signing in.'
+              : 'This sign-in request was canceled.'),
+          const SizedBox(height: 8),
+          const Text('You can close this page, window, or tab.'),
+        ],
+      ));
     }
     final user = store.auth.viewer;
-    return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Card(
-            margin: const EdgeInsets.all(24),
-            child: Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('Sign in to $appName',
-                      style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 12),
-                  Text(desktopAuthIntentStatus == null
-                      ? 'Loading the desktop sign-in request…'
-                      : desktopAuthIntentStatus!.applicationName == null
-                          ? 'This request came from an unsupported desktop app. It cannot be approved here.'
-                          : 'Approve sign-in to $appName for ${user?.displayName ?? user?.email ?? 'your account'}? Return to that app after approval.'),
-                  const SizedBox(height: 22),
-                  if (desktopAuthError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(desktopAuthError!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error)),
-                  ],
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: desktopAuthBusy ||
-                            desktopAuthIntentStatus?.canApprove != true
-                        ? null
-                        : _approveDesktopAuth,
-                    child: Text(
-                        desktopAuthBusy ? 'Approving…' : 'Approve sign-in'),
-                  ),
-                  TextButton(
-                    onPressed:
-                        desktopAuthBusy ? null : _cancelDesktopAuthFromBrowser,
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: desktopAuthBusy
-                        ? null
-                        : () => unawaited(_switchAccountForDesktopAuth()),
-                    child: const Text('Switch account'),
-                  ),
-                ],
-              ),
-            ),
-          ),
+    return _authFormFrame(Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Sign in to $appName',
+            style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 12),
+        Text(desktopAuthIntentStatus == null
+            ? 'Loading the desktop sign-in request…'
+            : desktopAuthIntentStatus!.applicationName == null
+                ? 'This request came from an unsupported desktop app. It cannot be approved here.'
+                : 'Approve sign-in to $appName for ${user?.displayName ?? user?.email ?? 'your account'}? Return to that app after approval.'),
+        const SizedBox(height: 22),
+        if (desktopAuthError != null) ...[
+          const SizedBox(height: 8),
+          Text(desktopAuthError!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ],
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed:
+              desktopAuthBusy || desktopAuthIntentStatus?.canApprove != true
+                  ? null
+                  : _approveDesktopAuth,
+          child: Text(desktopAuthBusy ? 'Approving…' : 'Approve sign-in'),
         ),
-      ),
-    );
+        TextButton(
+          onPressed: desktopAuthBusy ? null : _cancelDesktopAuthFromBrowser,
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: desktopAuthBusy
+              ? null
+              : () => unawaited(_switchAccountForDesktopAuth()),
+          child: const Text('Switch account'),
+        ),
+      ],
+    ));
   }
 
   Future<void> _switchAccountForDesktopAuth() async {

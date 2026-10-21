@@ -34,44 +34,27 @@ HOME
 ### 1. For You (Triage Surface vs Notification Center)
 - **Distinct Responsibilities:**
   - **Notification Center:** Answers *"What happened?"* Full chronological timeline of events, reads/unreads, and historic notifications.
-  - **Home ("For You"):** Answers *"What should I care about?"* A strictly bounded (max ~5 items) triage surface displaying only items that demand the user's active attention or decision.
-- **Home Selection & Multi-Factor Ranking Algorithm:**
-  1. **Priority category** (Space invitations → Input/Approval required → Failed executions → Worker/credential issues → Workspace connectivity → Completed reviews → General findings/info).
-  2. **Unread state** (Unread items are prioritized over already-viewed items).
-  3. **Actionability** (Items requiring human action/decision e.g. Accept/Decline, Review, Fix rank ahead of passive informative items).
-  4. **Recency** (Newer items rank ahead of older items when category, unread state, and actionability are identical).
+  - Notification Center opens beside the desktop sidebar (following its resized width or collapsed icon rail) and as a full-width bottom sheet on mobile. Close, mark-read, invitation decisions, and record navigation retain their existing behavior.
+  - Notification Center records show a status title once, with optional specific event details and Space/Thread location. Generic status restatements are omitted. Each record has one leading status icon; its color indicates attention and read state, with accessible priority/read labels. Records have no trailing icons or visible priority text.
+  - **Home ("For You"):** Answers *"What should I care about?"* A strictly bounded (maximum four latest items) triage surface displaying only items that demand the user's active attention or decision.
+- **Actionable eligibility:** Include pending invitations from the authoritative invitation list, input/approval requests, execution failures, Worker/Workspace problems, and open findings. Exclude completion/informational events even when they have an Open action. Historical invitation notifications cannot keep accepted or declined invitations on Home. Only unread items appear on Home. Opening a card marks its notification read before navigation and removes it from Home; the read record remains in Inbox. Pending invitations and aggregate findings without a server notification use session-local read IDs, cleared on logout.
+- **Home Selection:** Deduplicate authorized attention items, filter out read items, order newest first by event timestamp, and show at most four. Preserve source order for equal or missing timestamps.
 - **Navigation & CTA:**
   - Explicit header CTA: `View all notifications →` opening the full Notification Center.
-  - Category badge count showing the total number of attention items.
-- **Card Structure:**
-  - Semantic category chip (e.g. `Space invitation`, `Needs your input`, `Failed execution`, `Worker needs attention`, `Workspace offline`, `Completed`).
-  - Relative timestamp (e.g. `8 minutes ago`, `24 min ago`).
-  - Item Title and contextual Subtitle (e.g. `Julia invited you to "Family Travel"`, `Owner · 8 minutes ago`).
-  - Contextual action buttons (`Decline` / `Accept`, `Review →`, `Open →`, `Inspect →`, `Fix →`, `Connect →`).
+  - No item-count badge appears beside For you.
+- **Card Structure:** Use the same bordered, rounded card and responsive two-column layout as Continue Working: category, title, right-aligned relative timestamp, and contextual preview. The whole record invokes its primary navigation action; no Inspect/Review/Open button is shown. Invitations retain explicit Accept and Decline controls.
 - **Absence Behavior:** If nothing requires attention, the section renders `const SizedBox.shrink()` (zero filler/empty placeholder text like `"Nothing needs your attention"`).
 
 ### 2. Continue Working (Phase 8 & Phase 9: Recent-Work Ranking)
 - **Purpose:** Fast resumption of ongoing collaborative work in context. Spaces are broad; the true return destination is the active Thread/conversation.
-- **Capacity:** Shows up to four ranked recent Threads (two columns on wide screens).
+- **Capacity:** Shows up to four latest authorized, non-archived Threads (two columns on wide screens).
 - **Card Structure:**
   1. **Space Name:** Uppercase tracked label (e.g., `CONCLAVE DEVELOPMENT`, `WEBSITE`).
   2. **Thread Title:** Prominent bold title (e.g., `Worker Sessions`, `Landing Page`).
   3. **Relative Time:** When the Thread last had activity (e.g., `23 min ago`, `Yesterday`).
   4. **Last Message:** A short preview (whitespace collapsed, at most two lines) prefixed with its sender, e.g. `Alex: We should persist the...`. The sender comes from the thread list `briefAuthorName` (member display name, or the Worker display name for AI answers).
   5. **Navigation:** The whole card is clickable and opens the Thread conversation (`AxNavigation.thread(spaceId, threadId)`); there is no separate button.
-- **Recent-Work Ranking Engine (`AxRecentWorkRanker`):**
-  - **Does NOT use naive `updatedAt DESC`:** Background synchronization, metadata polls, or entity updates do not push irrelevant threads to the top.
-  - **Ranking Factors:**
-    1. **Unresolved state (+1000 pts):** Active runs or threads waiting for human decisions.
-    2. **Recent user participation (+500 pts):** User authored messages or direct contributions.
-    3. **Recent worker response (+250 pts):** AI Workers replied to requests in this conversation.
-    4. **Direct membership (+100 pts):** User is an active collaborator/owner on the parent space.
-    5. **Meaningful conversation recency decay (up to +500 pts):** Time decay applied strictly to actual human and worker messages.
-  - **Exclusion Filters:**
-    - ❌ Archived Spaces
-    - ❌ Archived Threads
-    - ❌ Deleted resources
-    - ❌ Inaccessible / non-member resources
+- **Selection:** Order by descending `lastMeaningfulActivityAt`, with dated items before undated items and stable source order for ties. Active/unresolved state does not displace newer Threads. The Home cache adapter supplies up to four items. Archived Spaces/Threads and inaccessible resources remain excluded.
 - **Absence Behavior:** Omitted if no space or thread history exists.
 
 ### 3. What's New
@@ -197,7 +180,7 @@ AxHomeAttentionItem
 2. **Projector Projection (`AxHomeAttentionProjector.space(...)`):**
    - Transforms diverse inputs (invitations, background findings, system notifications) into normalized `AxHomeAttentionItem`s.
    - Binds concrete callback closures into `AxHomeAttentionAction` instances (`Accept`, `Decline`, `Review →`, `Inspect →`, `Fix →`, `Connect →`, `Open →`).
-   - Applies the 4-factor prioritization algorithm (Priority Category → Unread Status → Actionability → Recency) and truncates to the top 5 items.
+   - Orders by event recency and selects the latest four items.
 
 ---
 
@@ -243,24 +226,24 @@ AxUserProductUpdateState
 ├── updateId: String
 ├── seenAt?: DateTime     (appeared on Home)
 ├── openedAt?: DateTime   (user opened full detail / changelog)
-└── dismissedAt?: DateTime (user explicitly hid / dismissed update)
+└── dismissedAt?: DateTime (historical state retained; Home ignores it)
 ```
 - **Unread Badge Calculation:** `AxProductUpdateService.computeUnreadCount(...)` counts published, version-compatible updates where `seenAt == null` and `dismissedAt == null`.
 - **Badge Display:** The Home section title shows no unread count; the count is used only for analytics.
 
 ### 4. Home Presentation for What's New (Phase 14)
-- **Capacity:** Shows the top 2–3 newest published, non-dismissed updates (`AxProductUpdateService.getHomeUpdates(..., limit: 3)`).
+- **Capacity:** Shows up to four newest published, version-compatible updates. Home ignores historical dismissal state; no Hide control appears on Home or the full changelog.
 - **Tile Elements:**
-  1. Category badge pill (`[COLLABORATION]`, `[WORKFLOW]`, `[SECURITY]`, `[WORKSPACE]`, `[WORKER]`, `[FEATURE]`, `[IMPROVEMENT]`).
-  2. Date format: e.g. `Oct 7`.
+  1. Distinct category icon plus badge pill (`[COLLABORATION]`, `[WORKFLOW]`, `[SECURITY]`, `[WORKSPACE]`, `[WORKER]`, `[FEATURE]`, `[IMPROVEMENT]`).
+  2. Date format: e.g. `Oct 7, 2026`, right-aligned and derived from the publication timestamp.
   3. Bold title, full summary, and full details text.
   4. Rows are informational and not clickable; `See all` opens the full changelog.
-- **Empty-State Omission:** If no updates exist or all are dismissed, the section collapses completely (`const SizedBox.shrink()`) with **zero** filler text (never displays `"Nothing new."`).
+- **Empty-State Omission:** If no eligible updates exist, the section collapses completely (`const SizedBox.shrink()`) with **zero** filler text (never displays `"Nothing new."`).
 
 ### 5. Full What's New Surface (`AxWhatsNewDialog`, Phase 15)
 - **Entry Point:** Header `See all` action button on Home.
 - **Monthly Grouping:** Groups changelog entries chronologically by month and year (`October 2026`, `September 2026`, etc.).
-- **Rich Changelog Items:** Displays expanded markdown/details, publication dates, category badges, dismissal action, and external/deep-link CTAs.
+- **Rich Changelog Items:** Displays expanded markdown/details, publication dates, category badges, and external/deep-link CTAs. The full page inherits Home’s content width (up to 840 px) and has no Hide control.
 
 ---
 
@@ -293,7 +276,8 @@ AxAiCapabilityUpdate
 
 ### 2. Presentation & Filtering on Home
 - **Scoped by Active Workers:** When workers are configured in the user's workspace, Home filters AI capability updates to highlight relevant provider/worker capabilities.
-- **Card Presentation (`_AiUpdateCard`):** Displays worker identity dot, worker name, category pill badge (e.g. `[MODEL ADDED]`, `[CAPABILITY ADDED]`), publication date (`Oct 7`), bold title, and the full update text. Rows are informational: not clickable and without a `Configure →` action; `See all` opens the AI updates dialog.
+- **Capacity:** Home shows up to four newest relevant updates; `See all` retains all relevant updates and inherits Home’s content width. No Hide controls appear.
+- **Card Presentation (`_AiUpdateCard`):** Displays the original Worker brand icon (generic fallback for unknown Workers), worker name, category pill badge (e.g. `[MODEL ADDED]`, `[CAPABILITY ADDED]`), right-aligned publication date including year (`Oct 7, 2026`), bold title, and the full update text. Rows are informational: not clickable and without a `Configure →` action; `See all` opens the AI updates dialog.
 
 ---
 
@@ -377,7 +361,7 @@ Established Home establishes a strict visual hierarchy where actionable and oper
 Home Hierarchy Order
 ├── 1. For You          [Strongest]  (Approvals, Failures, Invitations, Offline issues)
 ├── 2. Running Now      [Dynamic]    (Active executions with live telemetry)
-├── 3. Continue Working [Primary]    (Daily threads and ranked recent activities)
+├── 3. Continue Working [Primary]    (Latest four Threads)
 ├── 4. What's New       [Secondary]  (Subdued product releases & changelog)
 └── 5. AI Updates       [Secondary]  (Subdued model availability & capability changes)
 ```
@@ -476,7 +460,7 @@ Home Card   For You     Notification   Sidebar Tree   Space
 - **Single Source of Truth:** `store.invitations` and `store.collaboration` own the canonical state and lifecycle for space invitations across all presentation projections.
 - **Projections over the Same State:**
   - **New-User Home:** `Join a Space` priority card.
-  - **Established-User Home:** Top-ranked `Space invitation` rows in the `For You` attention section via `AxHomeAttentionProjector`.
+  - **Established-User Home:** Recent `Space invitation` cards in the `For You` attention section via `AxHomeAttentionProjector`.
   - **Notification Center & Inbox:** `Pending invitations` section within `_showNotifications` dialog.
   - **Sidebar Space Tree:** `Pending invitations (N)` group in `SpaceTree`.
 - **Immediate Multi-Surface Updates:**
@@ -571,7 +555,7 @@ Normalized Notification Domain
   - High priority: `threadNeedsInput`, `threadFailed`, `workflowRunNeedsApproval`, `workflowRunFailed`, `workerCredentialProblem`.
   - Normal priority: `workspaceOffline`, `workerInstallFailed`, `spaceInvitationReceived`.
   - Low priority: `threadCompleted`, `workflowRunCompleted`.
-- **Home Triage Alignment:** `AxHomeAttentionProjector` maps normalized notification events cleanly into `AxHomeAttentionItem` triage rows with semantic action CTAs (`Review →`, `Inspect →`, `Fix →`, `Connect →`, `Open →`, `View →`).
+- **Home Triage Alignment:** `AxHomeAttentionProjector` maps normalized notification events cleanly into `AxHomeAttentionItem` triage rows with primary navigation bound to the whole card, plus explicit invitation decisions.
 
 ---
 
@@ -587,7 +571,7 @@ Authorization Boundary on Home Aggregation
 └── Client Aggregation Projections
     ├── For You (AxHomeAttentionProjector) ──► Strict exclusion of items referencing revoked/non-member spaces
     ├── Running Now                         ──► Active runs for revoked/non-member spaces are suppressed
-    ├── Continue Working (Recent Work)      ──► Only authorized space threads are ranked and rendered
+    ├── Continue Working (Recent Work)      ──► Only authorized space threads are ordered by recency and rendered
     └── AI Updates (AxAiCapabilityUpdate)   ──► Filtered strictly against accessible workspace workers & member spaces
 ```
 

@@ -43,4 +43,41 @@ void main() {
     await store.clearUser('u1');
     expect(await store.load(userId: 'u1', threadId: 't1'), isNull);
   });
+
+  group('withRemote', () {
+    const local = AxThreadViewState(
+      workflowReference: 'direct:2',
+      workerId: 'w',
+      model: 'local-model',
+      selectionUpdatedAt: '2026-10-21T20:00:05.000Z',
+      workDraft: 'draft',
+    );
+
+    test('Cloud selection wins when it is newer', () {
+      final state = AxThreadViewState.withRemote(local, {
+        'workflowReference': 'direct:2',
+        'model': 'cloud-model',
+        'selectionUpdatedAt': '2026-10-21T20:00:09.000Z',
+      })!;
+      expect(state.model, 'cloud-model');
+      expect(state.workDraft, 'draft');
+    });
+
+    test('newer local selection beats a stale Cloud copy', () {
+      for (final remote in [
+        {'model': 'stale', 'selectionUpdatedAt': '2026-10-21T20:00:00.000Z'},
+        // Written before selections were timestamped.
+        {'model': 'stale'},
+      ]) {
+        expect(
+            AxThreadViewState.withRemote(local, remote)!.model, 'local-model');
+      }
+    });
+
+    test('untimestamped local copy keeps the Cloud selection', () {
+      const legacy = AxThreadViewState(model: 'local-model');
+      expect(AxThreadViewState.withRemote(legacy, {'model': 'cloud'})!.model,
+          'cloud');
+    });
+  });
 }

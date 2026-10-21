@@ -58,13 +58,6 @@
     "passive": {
       "checks": [],
       "configChecks": []
-    },
-    "live": {
-      "timeoutMs": 60000,
-      "expectedFinalText": {
-        "kind": "exact",
-        "value": "OK"
-      }
     }
   },
   "execution": {
@@ -98,6 +91,33 @@
       "mode": "jsonl"
     },
     "events": [
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "assistant"
+          },
+          {
+            "kind": "one_of",
+            "selector": "$.error",
+            "values": ["rate_limit", "rate_limit_error", "usage_limit_reached"]
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_terminal_status",
+            "selector": "$.error"
+          },
+          {
+            "type": "set_provider_error",
+            "selector": "$.error"
+          },
+          {
+            "type": "mark_failure"
+          }
+        ]
+      },
       {
         "when": [
           {
@@ -242,6 +262,27 @@
     "mappings": [
       {
         "evidence": {
+          "kind": "terminal_status",
+          "value": "usage_limit_reached"
+        },
+        "issueCode": "quota_exhausted"
+      },
+      {
+        "evidence": {
+          "kind": "terminal_status",
+          "value": "rate_limit_error"
+        },
+        "issueCode": "quota_exhausted"
+      },
+      {
+        "evidence": {
+          "kind": "terminal_status",
+          "value": "rate_limit"
+        },
+        "issueCode": "quota_exhausted"
+      },
+      {
+        "evidence": {
           "kind": "stderr_pattern",
           "patternId": "cancelled"
         },
@@ -267,6 +308,13 @@
           "patternId": "provider_authentication_required"
         },
         "issueCode": "provider_authentication_required"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "quota_exhausted"
+        },
+        "issueCode": "quota_exhausted"
       },
       {
         "evidence": {

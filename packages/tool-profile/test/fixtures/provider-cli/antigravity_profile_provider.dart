@@ -4,6 +4,10 @@ import 'dart:io';
 const _livePrompt = 'Reply with exactly the word OK. Do not use tools.';
 
 Future<void> main(List<String> arguments) async {
+  if (arguments.length == 1 && arguments.single == 'usage') {
+    stdout.writeln('fixture usage: 0 of 100 requests used');
+    return;
+  }
   if (arguments.length == 1 && arguments.single == '--version') {
     stdout.writeln('agy 1.2.3');
     return;
@@ -197,6 +201,7 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
   final isMismatch = prompt == 'Continue safely';
   final isSessionConflict = prompt == 'Conflicting session';
   final isAuthFailure = prompt == 'Provider auth failure';
+  final isQuotaExhausted = prompt == 'Provider quota exhausted';
   final isPermissionFailure = prompt == 'Provider permission failure';
   final isMissingTerminal = prompt == 'Missing terminal';
   final expectedResume =
@@ -283,6 +288,8 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
       ? 'session-conflict'
       : isAuthFailure
       ? 'auth-error'
+      : isQuotaExhausted
+      ? 'quota-exhausted'
       : isPermissionFailure
       ? 'permission-error'
       : prompt == 'Continue after incompatible upgrade' ||

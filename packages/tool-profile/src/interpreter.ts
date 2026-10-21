@@ -863,7 +863,8 @@ const stderrMatchers: Record<string, RegExp> = {
     /unauthori[sz]ed|authentication required|not authenticated|sign in|login required|credentials? (missing|expired|invalid)|token expired|api key.{0,40}(not set|missing|invalid|revoked|expired)/i,
   permission_denied:
     /permission denied|approval denied|permission.{0,60}(configuration|settings)|sandbox.*(denied|blocked)|tool.*(denied|rejected)/i,
-  quota_exhausted: /quota.{0,40}(exceeded|exhausted)|rate limit/i,
+  quota_exhausted:
+    /quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota|insufficient[_ -]quota|usage[_ -]limit[_ -](?:reached|exceeded)|(?:usage|session|weekly|daily|monthly|spending|rate) limit.{0,40}(?:reached|exceeded|exhausted)|rate[_ -]limit(?:ed|[_ -]error|[_ -]exceeded)|you(?:['’]ve| have) (?:hit|reached) your (?:(?:session|usage|weekly|daily|monthly|spending) )?limit|credits? balance is too low|resource_exhausted|resource has been exhausted/i,
   provider_unavailable:
     /provider unavailable|service unavailable|temporarily unavailable/i,
   provider_failure: /.+/s,

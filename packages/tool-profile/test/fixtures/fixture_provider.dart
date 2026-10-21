@@ -11,6 +11,10 @@ Future<void> main(List<String> arguments) async {
     stdout.writeln('ready');
     return;
   }
+  if (arguments.length == 1 && arguments.single == 'usage') {
+    stdout.writeln('fixture usage: 0 of 100 requests used');
+    return;
+  }
   if (arguments.length == 2 && arguments.first == 'echo') {
     if (arguments[1] == 'Reply with exactly the word OK. Do not use tools.') {
       stdout.writeln('OK');

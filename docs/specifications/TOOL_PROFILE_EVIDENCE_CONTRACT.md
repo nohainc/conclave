@@ -98,21 +98,18 @@ Local qualification and post-publication acceptance use the same shape validated
   "providerToolVersion": "0.187.1",
   "acceptedAt": "2026-10-03T00:30:15.240Z",
   "scenarios": {
+    "activity_mapping": "passed",
     "passive_probe": "passed",
-    "live_probe": "passed",
-    "model_selection": "not_applicable",
-    "representative_thread_write": "not_applicable",
-    "durable_session_start": "passed",
-    "durable_session_resume": "passed",
-    "cancellation": "passed",
-    "timeout": "passed"
+    "usage_check": "passed"
   }
 }
 ```
 
 Cloud intentionally stores only this bounded contract for both local qualification and post-publication acceptance. The local ladder's stage durations, issue codes, and diagnostic messages remain outside the Cloud evidence object. Qualification and acceptance use separate immutable Cloud tables and IDs. A later fresh run can qualify after an earlier record expires. Cloud validates the submitted metadata and scenario statuses; it cannot independently verify the local process, provider version, or execution result, so these values are not remote device attestation.
 
-Version 2 adds `model_selection` and `not_applicable` status semantics. Cloud rejects version 1 evidence for new validation; historical version 1 rows remain stored unchanged.
+Version 2 adds `not_applicable` status semantics. Cloud rejects version 1 evidence for new validation; historical version 1 rows remain stored unchanged.
+
+The scenario set was reduced on 2026-10-21 to `activity_mapping`, `passive_probe` and `usage_check`; no scenario calls a model. Engine and CLI version ranges, the representative write, session create/resume, cancellation and timeout are no longer part of the evidence: version ranges are enforced by Workspace readiness on the user's machine, and cancellation and timeout are Engine behavior covered by Engine and supervisor tests. Evidence submitted with the earlier scenario set is rejected for new validation.
 
 Local qualification, publication, acceptance, and promotion are separate requests:
 
@@ -221,23 +218,22 @@ local execution.
 ### Gate 1: Draft → Testing local qualification
 
 Profile Lab emits qualification only after the full Test Ladder reports overall
-pass. Schema validation, Engine compatibility, executable discovery, provider
-version detection, passive probe, and live probe must pass. The sandbox must
-also execute the applicable real Engine scenarios:
+pass. The ladder has six stages: schema validation, event mapping replay,
+executable discovery, CLI version command (the command must succeed and print
+something; the value is recorded, not compared), passive probe, and provider
+usage check. No stage calls a model. The scenarios are:
 
-- `passive_probe`, `live_probe`, `cancellation`, and `timeout` are always
-  required and must be `passed`;
-- `model_selection` must be `passed` when the Profile supports model selection
-  and has an allowlisted test model, otherwise `not_applicable`;
-- `representative_thread_write` must be `passed` when the signed sandbox
-  mapping supports the scenario, otherwise `not_applicable`;
-- `durable_session_start` and `durable_session_resume` must be `passed` when
-  `session.supported` is true, otherwise `not_applicable`.
+- `passive_probe` is always required and must be `passed`;
+- `usage_check` is always required and must be `passed`; it runs the
+  Profile's `usage` command and calls no model. A Profile without a `usage`
+  command fails this stage and Cloud refuses to publish it;
+- `activity_mapping` must be `passed` when the Profile has JSONL activity
+  mappings, otherwise `not_applicable`.
 
 The sandbox emits the evidence contract only after its real Engine scenarios
 pass, and Profile Lab submits that contract to Cloud before publication. Cloud
-checks the current draft digest and identity, declared Engine/provider version
-ranges, the 90-day freshness bound, and all eight scenario statuses. It stores qualification in
+checks the current draft digest and identity, that Engine and provider
+versions are present, the 90-day freshness bound, and all three scenario statuses. It stores qualification in
 `tool_profile_local_qualification_evidence`; publication must reference that
 stored ID and Cloud repeats validation immediately before signing. This
 server-side gate validates the submitted contract; the local sandbox is the
@@ -250,17 +246,13 @@ CLI on the operator's machine. This workflow is not device attestation.
 As enforced by `validateToolProfileAcceptanceEvidence()` in `apps/cloud/src/tool-profile-validation.ts`:
 1. **Digest Equality:** `evidence.profileDigest === release.payload_digest`.
 2. **Identity Alignment:** Definition ID, release version, and logical worker type must match the database record.
-3. **Engine Range Inclusion:** `evidence.engineVersion` must fall within `profile.engineCompatibility` range `[min, maxExclusive)`.
-4. **Tool Range Inclusion:** `evidence.providerToolVersion` must fall within one of `profile.providerTool.supportedVersions` ranges.
+3. **Engine Version Recorded:** `evidence.engineVersion` must be a non-empty string. It is not compared with `profile.engineCompatibility`; Workspace enforces that range at runtime.
+4. **Tool Version Recorded:** `evidence.providerToolVersion` must be a non-empty string. It is not compared with `profile.providerTool.supportedVersions`; Workspace enforces those ranges at runtime.
 5. **Freshness:** `acceptedAt` timestamp must not be in the future (within clock skew) and must be $\le 90\text{ days}$ old.
 6. **Contract-Derived Scenarios:** Cloud expects every scenario key and derives applicable statuses from the signed Tool Profile:
+   - `activity_mapping` (`passed` when the Profile has JSONL activity mappings; otherwise `not_applicable`)
    - `passive_probe`
-   - `live_probe`
-   - `model_selection` (`passed` when model selection is supported with an allowlisted test model; otherwise `not_applicable`)
-   - `representative_thread_write` (`passed` only when the signed restricted sandbox mapping is available; otherwise `not_applicable`)
-   - `durable_session_start` and `durable_session_resume` (`passed` only when `session.supported` is true; otherwise `not_applicable`)
-   - `cancellation`
-   - `timeout`
+   - `usage_check` (always `passed`; Cloud also rejects publication of a Profile without a `usage` command)
 7. **Database Persistence:** Evidence is stored immutably in `tool_profile_acceptance_evidence` when submitted, separately from promotion. Multiple immutable records may exist for one release digest.
 
 ---

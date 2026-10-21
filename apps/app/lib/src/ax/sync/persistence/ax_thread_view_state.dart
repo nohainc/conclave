@@ -13,6 +13,7 @@ class AxThreadViewState {
     this.model,
     this.reasoningEffort,
     this.catalogRevision,
+    this.selectionUpdatedAt,
     this.chatDraft = '',
     this.workDraft = '',
     this.chatSeenId,
@@ -28,6 +29,10 @@ class AxThreadViewState {
   final String? model;
   final String? reasoningEffort;
   final String? catalogRevision;
+
+  /// When the user last changed the Workflow/Worker/model selection (UTC
+  /// ISO-8601). Decides between the local and Cloud copies on restore.
+  final String? selectionUpdatedAt;
   final String chatDraft;
   final String workDraft;
 
@@ -45,11 +50,52 @@ class AxThreadViewState {
         if (model != null) 'model': model,
         if (reasoningEffort != null) 'reasoningEffort': reasoningEffort,
         if (catalogRevision != null) 'catalogRevision': catalogRevision,
+        if (selectionUpdatedAt != null)
+          'selectionUpdatedAt': selectionUpdatedAt,
         if (chatDraft.isNotEmpty) 'chatDraft': _bounded(chatDraft),
         if (workDraft.isNotEmpty) 'workDraft': _bounded(workDraft),
         if (chatSeenId != null) 'chatSeenId': chatSeenId,
         if (workSeenId != null) 'workSeenId': workSeenId,
       };
+
+  /// Thread metadata wins over the browser-local copy for the selection
+  /// unless the local selection is newer; the drafts stay local because they
+  /// are never shared through Cloud.
+  static AxThreadViewState? withRemote(
+      AxThreadViewState? local, Map<String, dynamic> remote) {
+    if (remote.isEmpty) return local;
+    String? string(String key) {
+      final value = remote[key];
+      return value is String && value.isNotEmpty ? value : null;
+    }
+
+    // A local selection newer than the Cloud copy wins: the Cloud write may
+    // have failed, or the Thread list may predate it.
+    final localAt = DateTime.tryParse(local?.selectionUpdatedAt ?? '');
+    final remoteAt = DateTime.tryParse(string('selectionUpdatedAt') ?? '');
+    if (local != null &&
+        localAt != null &&
+        (remoteAt == null || localAt.isAfter(remoteAt))) {
+      return local;
+    }
+
+    final tab = remote['tabIndex'];
+    return AxThreadViewState(
+      tabIndex: tab is int ? tab.clamp(0, 1) : local?.tabIndex ?? 0,
+      workflowReference: string('workflowReference'),
+      workerId: string('workerId'),
+      workerTypeId: string('workerTypeId') ??
+          (local?.workerId == string('workerId') ? local?.workerTypeId : null),
+      model: string('model'),
+      reasoningEffort: string('reasoningEffort'),
+      catalogRevision: string('catalogRevision'),
+      selectionUpdatedAt: string('selectionUpdatedAt'),
+      chatDraft: local?.chatDraft ?? '',
+      workDraft: local?.workDraft ?? '',
+      chatSeenId: local?.chatSeenId,
+      workSeenId: local?.workSeenId,
+    );
+  }
 
   factory AxThreadViewState.fromJson(Map<String, dynamic> json) {
     String? string(String key) {
@@ -72,6 +118,7 @@ class AxThreadViewState {
       model: string('model'),
       reasoningEffort: string('reasoningEffort'),
       catalogRevision: string('catalogRevision'),
+      selectionUpdatedAt: string('selectionUpdatedAt'),
       chatDraft: draft('chatDraft'),
       workDraft: draft('workDraft'),
       chatSeenId: string('chatSeenId'),

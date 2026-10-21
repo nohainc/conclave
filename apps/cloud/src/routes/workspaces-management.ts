@@ -18,6 +18,8 @@ export async function handleListWorkspaces(
   const context = await securityContext(request, env, accessContext);
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT execution_workspaces.id, name, status,
+            CASE WHEN owner_user_id = ?1 THEN 'owner' ELSE 'member' END AS role,
+            CASE WHEN owner_user_id = ?1 THEN 0 ELSE 1 END AS shared,
             EXISTS (SELECT 1 FROM workspace_runtime_identities identity
                     WHERE identity.workspace_id = execution_workspaces.id
                       AND identity.revoked_at IS NULL) AS hasRuntimeIdentity,
@@ -42,8 +44,12 @@ export async function handleListWorkspaces(
             execution_workspaces.updated_at AS updatedAt
        FROM execution_workspaces
        LEFT JOIN workspace_runtime_facts f ON f.workspace_id = execution_workspaces.id
-      WHERE owner_user_id = ?1 AND status <> 'revoked'
-      ORDER BY name ASC`,
+      WHERE status <> 'revoked'
+        AND (owner_user_id = ?1
+             OR EXISTS (SELECT 1 FROM workspace_person_grants g
+                         WHERE g.workspace_id = execution_workspaces.id
+                           AND g.user_id = ?1 AND g.status = 'active'))
+      ORDER BY shared ASC, name ASC`,
   )
     .bind(context.userId)
     .all();
@@ -81,6 +87,7 @@ export async function handleListWorkspaces(
       }
       return {
         ...row,
+        shared: Boolean(row.shared),
         activeTransport,
         connectionMode:
           activeTransport === "websocket"

@@ -48,6 +48,10 @@ void main() {
       providerScript,
       ...(execution['arguments']! as List<Object?>),
     ];
+    profile['usage'] = {
+      'arguments': ['run', providerScript, 'usage'],
+      'timeoutMs': 60000,
+    };
     final profileBytes = utf8.encode(jsonEncode(profile));
     final root = await Directory.systemTemp.createTemp('codex-profile-');
     final profileFile = File('${root.path}/profile.json')

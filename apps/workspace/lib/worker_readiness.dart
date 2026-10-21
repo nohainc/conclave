@@ -633,6 +633,11 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
         failureLayer:
             issueCode == null ? null : _profileProbeFailureLayer(issueCode),
       );
+      final failedCheck = probe.checks.cast<ProbeCheck?>().firstWhere(
+            (check) => check?.status == ProbeCheckStatus.failed,
+            orElse: () => null,
+          );
+      final diagnosticDetails = probe.diagnostics ?? failedCheck?.message;
       return WorkerReadinessAssessment(
         issueCode == null && probe.ready
             ? profileProbeReadiness(worker, candidate, probe, mode)
@@ -640,6 +645,7 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
                 ? WorkerReadinessState.signInRequired
                 : WorkerReadinessState.testFailed,
         issueCode: issueCode,
+        diagnosticDetails: diagnosticDetails,
         toolName: probe.providerToolName,
         modelCatalog: probe.modelCatalog,
         profileDigest: candidate.payloadDigest,
