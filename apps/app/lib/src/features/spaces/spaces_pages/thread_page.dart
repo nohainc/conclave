@@ -1565,10 +1565,10 @@ class _ThreadPageState extends State<ThreadPage>
         }
         final historyOpen = !widget.isDraft && _aiHistoryOpen;
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        // Same active-icon color as the composer's Message / Ask AI switch.
-        final activeTabIcon = isDark
-            ? ConclaveColors.focusBorderDark
-            : ConclaveColors.primaryForegroundLight;
+        // Inactive tab: secondary text moved 6% OKLCH lightness toward the
+        // background in each theme.
+        final inactiveTab =
+            isDark ? const Color(0xffb5b6c4) : const Color(0xff43444f);
         Widget header(String title, {required bool history}) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1586,12 +1586,11 @@ class _ThreadPageState extends State<ThreadPage>
                             onPressed: () => _setAiHistoryOpen(false),
                             style: TextButton.styleFrom(
                               foregroundColor: history
-                                  ? ConclaveColors.textSecondary(isDark)
+                                  ? inactiveTab
                                   : ConclaveColors.textPrimary(isDark),
                             ),
-                            icon: Icon(Icons.chat_bubble_outline_rounded,
-                                size: 18,
-                                color: history ? null : activeTabIcon),
+                            icon: const Icon(Icons.chat_bubble_outline_rounded,
+                                size: 18),
                             label: const Text('Conversation'),
                           ),
                           if (!widget.isDraft)
@@ -1603,11 +1602,9 @@ class _ThreadPageState extends State<ThreadPage>
                               style: TextButton.styleFrom(
                                 foregroundColor: history
                                     ? ConclaveColors.textPrimary(isDark)
-                                    : ConclaveColors.textSecondary(isDark),
+                                    : inactiveTab,
                               ),
-                              icon: Icon(Icons.history_rounded,
-                                  size: 18,
-                                  color: history ? activeTabIcon : null),
+                              icon: const Icon(Icons.history_rounded, size: 18),
                               label: const Text('AI History'),
                             ),
                         ]),
