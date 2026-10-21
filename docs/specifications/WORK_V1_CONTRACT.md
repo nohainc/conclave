@@ -645,6 +645,15 @@ interface WorkRequestSnapshot {
 
 ## Work Request attachments
 
+Work v1 history and detail responses include an additive `attachments` array
+of display-only file records (`kind: "file"`, `name`, `sizeBytes`). AX renders
+these below the sent prompt in Conversation and AI History, independently of
+prompt collapsing, and preserves them across optimistic submission, status
+refresh, and its optional read cache. Bytes and storage identifiers are excluded
+from this projection. Missing arrays are treated as empty. No schema migration
+or Worker protocol change is required; existing persisted requests expose their
+saved attachment metadata after Cloud and AX are updated.
+
 Attachments are inputs to a Work Request, not Workflow definitions. A request
 may include local files and `http`/`https` references. The v1 composer accepts
 up to 10 attachments; each file is limited to 2 MiB and there is no total

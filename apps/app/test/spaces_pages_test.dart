@@ -94,6 +94,10 @@ void main() {
         'requestedByName': 'You',
         'requestedByUserId': 'user-owner',
         'prompt': 'Hello from the user',
+        'attachments': [
+          {'kind': 'file', 'name': 'photo.jpg', 'sizeBytes': 2048},
+          {'kind': 'file', 'name': 'notes.txt', 'sizeBytes': 12},
+        ],
         'workflowId': workflow.$1,
         'workflowVersion': workflow.$2,
         'status': 'completed',
@@ -191,6 +195,8 @@ void main() {
       await tester.pumpAndSettle();
       await _openAiHistory(tester);
       expect(_inAiHistory(find.text('Hello from the user')), findsOneWidget);
+      expect(_inAiHistory(find.text('photo.jpg · 2 KB')), findsOneWidget);
+      expect(_inAiHistory(find.text('notes.txt · 12 B')), findsOneWidget);
       expect(find.text('ChatGPT'), findsWidgets);
       expect(find.byTooltip('Original Model Name · Medium'), findsWidgets);
       expect(
@@ -758,21 +764,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('· Direct'), findsOneWidget);
     await _askAi(tester);
-    expect(
-        tester
-            .widget<Semantics>(
-                find.byKey(const ValueKey('work-choose-workflow')))
-            .properties
-            .enabled,
-        isFalse);
+    // No other workflows are enabled, so the More menu is hidden.
+    expect(find.byKey(const ValueKey('work-choose-workflow')), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('work-toggle-direct')));
     await tester.pumpAndSettle();
-    expect(
-        find.descendant(
-            of: find.byKey(const ValueKey('work-choose-workflow')),
-            matching: find.byIcon(Icons.keyboard_arrow_down)),
-        findsOneWidget);
     expect(find.byTooltip('Work settings'), findsNothing);
     await tester.enterText(find.byType(TextField).first, 'New work');
     await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
@@ -2121,14 +2117,10 @@ void main() {
         BorderRadius.circular(14));
     await tester.tapAt(Offset.zero);
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('work-choose-workflow')), findsOneWidget);
+    expect(find.byKey(const ValueKey('work-choose-workflow')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('work-toggle-direct')));
     await tester.pumpAndSettle();
-    expect(
-        find.descendant(
-            of: find.byKey(const ValueKey('work-choose-workflow')),
-            matching: find.text('More')),
-        findsOneWidget);
+    expect(find.text('More'), findsNothing);
     const markdownPrompt =
         '  ## Implementation\n\n- **Add tests**\n\n```dart\nfinal ready = true;\n```\n';
     expect(find.byTooltip('Show Markdown controls'), findsNothing);
@@ -2153,7 +2145,7 @@ void main() {
             .dy,
         closeTo(
             tester
-                .getCenter(find.byKey(const ValueKey('work-choose-workflow')))
+                .getCenter(find.byKey(const ValueKey('work-toggle-direct')))
                 .dy,
             1));
     expect(submittedWork, isNull);

@@ -115,6 +115,7 @@ class AxReadCacheCodec {
         'requestedByName': value.requestedByName,
         'requestedByUserId': value.requestedByUserId,
         'prompt': value.prompt,
+        'attachments': value.attachments.map((file) => file.toJson()).toList(),
         'workflowId': value.workflowId,
         'workflowVersion': value.workflowVersion,
         'workflowName': value.workflowName,

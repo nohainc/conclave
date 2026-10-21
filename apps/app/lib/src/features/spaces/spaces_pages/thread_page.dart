@@ -604,6 +604,13 @@ class _ThreadPageState extends State<ThreadPage>
       .where((workflow) =>
           canPreviewUnimplementedWorkflows(widget.viewerEmail) ||
           implementedWorkflowIds.contains(workflow.id))
+      // Workflows disabled in the configuration are not offered; Chat can
+      // never be disabled.
+      .where((workflow) =>
+          workflow.id == 'chat' ||
+          _userWorkflowConfigurations
+              .where((value) => value.workflowId == workflow.id)
+              .every((value) => value.enabled))
       .where((workflow) => workflow.id == 'chat'
           ? widget.space.effectivePermissions.chat
           : widget.space.effectivePermissions.work)

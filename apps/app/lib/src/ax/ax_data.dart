@@ -51,10 +51,15 @@ abstract class _AxApiClientCore
 
   final String baseUrl;
   final http.Client client;
+  // Transport references are separate from immutable authored request inputs.
+  final _uploadedWorkFiles = <String, String>{};
   String? _sessionToken;
   String? get sessionToken => _sessionToken;
   set sessionToken(String? value) {
-    if (value != _sessionToken) clearConditionalReads();
+    if (value != _sessionToken) {
+      clearConditionalReads();
+      _uploadedWorkFiles.clear();
+    }
     _sessionToken = value;
   }
 

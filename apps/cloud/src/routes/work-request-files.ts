@@ -150,3 +150,20 @@ export async function hydrateWorkRequestFiles(
   }
   return { ...(payload as object), input: { ...input, attachments } };
 }
+
+/** Display-only metadata for authenticated Work history and detail responses. */
+export function workRequestFileMetadata(input: Record<string, unknown>) {
+  if (!Array.isArray(input.attachments)) return [];
+  return input.attachments.flatMap((value: unknown) => {
+    if (!value || typeof value !== "object") return [];
+    const file = value as Record<string, unknown>;
+    if (file.kind !== "file") return [];
+    return [
+      {
+        kind: "file" as const,
+        name: typeof file.name === "string" ? file.name : "Attachment",
+        sizeBytes: typeof file.sizeBytes === "number" ? file.sizeBytes : 0,
+      },
+    ];
+  });
+}

@@ -232,7 +232,11 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
         references.add(attachment);
         continue;
       }
-      if (attachment['fileId'] is! String) {
+      final uploadKey = jsonEncode([threadId, attachment]);
+      var fileId = attachment['fileId'] is String
+          ? attachment['fileId'] as String
+          : _uploadedWorkFiles[uploadKey];
+      if (fileId == null) {
         final encoded = attachment['contentBase64'];
         if (encoded is! String) {
           throw const AxApiException('Attached file content is missing');
@@ -265,14 +269,19 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
             statusCode: response.statusCode,
           );
         }
-        attachment['fileId'] = file['fileId'];
+        fileId = file['fileId'] as String;
+        // Bound the in-memory cache; it is never persisted and clears on auth change.
+        if (_uploadedWorkFiles.length >= 20) {
+          _uploadedWorkFiles.remove(_uploadedWorkFiles.keys.first);
+        }
+        _uploadedWorkFiles[uploadKey] = fileId;
       }
       references.add({
         'kind': 'file',
         'name': attachment['name'],
         'mediaType': attachment['mediaType'],
         'sizeBytes': attachment['sizeBytes'],
-        'fileId': attachment['fileId'],
+        'fileId': fileId,
       });
     }
     return references;
@@ -584,6 +593,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
       requestedByUserId: requestMap['requestedByUserId']?.toString(),
       requestedByName: requestMap['requestedByName']?.toString(),
       originalRequest: requestMap['originalRequest']?.toString(),
+      attachments: AxWorkAttachment.fromList(requestMap['attachments']),
       createdAt: requestMap['createdAt']?.toString(),
       steps: steps,
       activityHistory: activityHistory,

@@ -25,6 +25,27 @@ accessibility labels, including menu controls and activity indicators.
 Application, Space, and Thread menus match the sidebar background, including
 the collapsed sidebar’s Space/Thread switcher and search popup. Composer
 attachment, workflow, and execution popups match the input background in each theme.
+Selected file attachments appear above the Work composer with their name and
+size. They are held in browser memory until Send and can be removed before
+submission; the sending state shows an uploading indicator. Selection alone
+does not mean the Worker has processed the file. The web picker accepts up to
+10 files of at most 2 MiB each; native AX file picking is not implemented.
+Cloud uploads file bytes to artifact storage, validates user/Thread ownership,
+and snapshots file references on the request. AX keeps authored attachment
+snapshots immutable and retains up to 20 recent upload references in memory,
+scoped to the Thread and file input, so explicit retries reuse the same file IDs.
+Changing the authentication session clears these references. At dispatch, Workspace receives
+file contents and writes `.conclave/inputs/<workRequestId>/file-NNN` below the
+execution directory before starting the generic CLI Worker Engine. Chat,
+Research and Implement prompts include these local paths; Plan receives
+attachment metadata. File delivery is provider-independent: reading each file
+format depends on the selected CLI/model's capabilities and Profile permissions.
+Conclave does not extract PDF/image contents or confirm that a provider read a
+file. Selected chips clear after submission. Sent user messages retain file names and
+sizes in Conversation and AI History, including after refresh; these are
+attachment records, not per-file processing receipts. History responses expose
+only display metadata, without file bytes or storage identifiers.
+
 The Work execution popup applies preferences immediately, without Cancel/Done.
 Completing an effort slider gesture accepts the selection and closes the popup.
 Its discrete effort slider sits above the model list; available Worker icons sit

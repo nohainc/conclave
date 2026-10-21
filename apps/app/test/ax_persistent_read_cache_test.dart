@@ -80,6 +80,15 @@ void main() {
     });
     final row = AxWorkRequest.fromJson({
       'id': 'R',
+      'attachments': [
+        {
+          'kind': 'file',
+          'name': 'photo.jpg',
+          'sizeBytes': 2048,
+          'contentBase64': 'DO_NOT_CACHE',
+          'fileId': 'private-storage-id'
+        }
+      ],
       'workflowRun': {
         'schemaVersion': 1,
         'id': 'workflow-run-R',
@@ -135,6 +144,12 @@ void main() {
     await first.persistence.flush();
     final second = store(backend);
     await second.hydrateReadCache();
+    expect(second.workHistory.peek('W').requests.single.attachments.single.name,
+        'photo.jpg');
+    expect(
+        row.copyWith(status: 'completed').attachments.single.sizeBytes, 2048);
+    expect(
+        row.attachments.single.toJson().containsKey('contentBase64'), isFalse);
     expect(second.workHistory.peek('W').requests.single.turns.single.toJson(),
         turn.toJson());
     expect(

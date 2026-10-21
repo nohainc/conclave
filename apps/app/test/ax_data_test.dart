@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:conclave_app/src/ax/sync/ax_idempotency.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'ax_fixture_data.dart';
@@ -324,6 +326,75 @@ void main() {
     expect(body.containsKey('reasoningEffort'), false);
     expect((body['input'] as Map)['originalRequest'], 'Hello');
   });
+  for (final withSelection in [false, true]) {
+    test(
+        'immutable file upload and response-loss retry (selection: $withSelection)',
+        () async {
+      var uploads = 0;
+      final submissions = <http.Request>[];
+      final api = AxApiClient(
+        baseUrl: 'https://conclave.test/api',
+        client: MockClient((request) async {
+          if (request.url.path.endsWith('/work-request-files')) {
+            uploads++;
+            expect(request.bodyBytes, utf8.encode('hello'));
+            return http.Response(
+                jsonEncode({
+                  'file': {'fileId': 'uploaded-file'}
+                }),
+                201);
+          }
+          submissions.add(request);
+          if (submissions.length == 1) {
+            throw http.ClientException('response lost');
+          }
+          return http.Response(
+              jsonEncode({
+                'workRequest': {'id': 'saved-request'}
+              }),
+              201);
+        }),
+      );
+      final attachments = List<Map<String, dynamic>>.unmodifiable([
+        freezeAxMutationInput({
+          'kind': 'file',
+          'name': 'note.txt',
+          'mediaType': 'text/plain',
+          'sizeBytes': 5,
+          'contentBase64': base64Encode(utf8.encode('hello')),
+        }) as Map<String, dynamic>,
+      ]);
+      Future<String> send() => withSelection
+          ? api.createWorkRequestWithSelection(
+              threadId: 'thread',
+              workflowId: 'direct',
+              prompt: 'Read this',
+              attachments: attachments,
+              idempotencyKey: 'retry-operation-0001',
+              executionSelection: const {'workerId': 'worker'})
+          : api.createWorkRequest(
+              threadId: 'thread',
+              workflowId: 'direct',
+              prompt: 'Read this',
+              attachments: attachments,
+              idempotencyKey: 'retry-operation-0001');
+      await expectLater(send(), throwsA(isA<http.ClientException>()));
+      expect(await send(), 'saved-request');
+      expect(uploads, 1);
+      expect(submissions[1].body, submissions[0].body);
+      expect(submissions[1].headers['Idempotency-Key'], 'retry-operation-0001');
+      final submitted =
+          (jsonDecode(submissions.last.body)['input']['attachments'] as List)
+              .single as Map;
+      expect(submitted['fileId'], 'uploaded-file');
+      expect(submitted.containsKey('contentBase64'), isFalse);
+      expect(attachments.single.containsKey('fileId'), isFalse);
+      api.sessionToken = 'different-session';
+      expect(await send(), 'saved-request');
+      expect(uploads, 2);
+    });
+  }
+
   test('Work submission exposes the server reason for a 400', () async {
     final client =
         _JsonClient({'error': 'Unsupported workflowId'}, statusCode: 400);

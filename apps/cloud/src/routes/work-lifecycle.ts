@@ -1,3 +1,4 @@
+import { workRequestFileMetadata } from "./work-request-files.js";
 import { loadConversationWorkflowRuns } from "./conversation-workflow-runs.js";
 import {
   loadConversationTurns,
@@ -774,6 +775,7 @@ export async function handleGetWorkRequest(
         row.workflowId,
         row.workflowVersion,
       ),
+      attachments: workRequestFileMetadata(input),
       originalRequest: String(
         row.canonicalUserText ?? input.originalRequest ?? input.request ?? "",
       ),
@@ -1168,6 +1170,7 @@ export async function handleListWorkRequests(
       turns: turnsByRequest.get(id) ?? [],
       workflowRun: workflowRunsByRequest.get(id) ?? null,
       executionConfig: snapshot.turnExecutionConfig ?? null,
+      attachments: workRequestFileMetadata(input),
       prompt: String(
         row.canonicalUserText ?? input.originalRequest ?? input.request ?? "",
       ),

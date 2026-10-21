@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   hydrateWorkRequestFiles,
+  workRequestFileMetadata,
   isWorkRequestFileId,
   verifyWorkRequestFile,
   workRequestFileKey,
@@ -25,6 +26,26 @@ function bucketWith(bytes: Uint8Array, customMetadata: Record<string, string>) {
 }
 
 describe("Work Request files", () => {
+  it("projects historical file metadata without bytes or storage identifiers", () => {
+    expect(
+      workRequestFileMetadata({
+        attachments: [
+          {
+            kind: "file",
+            name: "photo.jpg",
+            sizeBytes: 1234,
+            fileId,
+            contentBase64: "private-bytes",
+            mediaType: "image/jpeg",
+          },
+          { kind: "url", url: "https://example.com" },
+          null,
+        ],
+      }),
+    ).toEqual([{ kind: "file", name: "photo.jpg", sizeBytes: 1234 }]);
+    expect(workRequestFileMetadata({})).toEqual([]);
+  });
+
   it("accepts only generated file ids", () => {
     expect(isWorkRequestFileId(fileId)).toBe(true);
     expect(isWorkRequestFileId("../secret")).toBe(false);

@@ -422,9 +422,19 @@ class _WorkComposer extends StatelessWidget {
       ?.toString()
       .trim();
 
-  // Below this input width the Chat / Work / More rail plus the Worker
+  // Below this width (the space left for the controls beside the + and send
+  // buttons, not the whole input) the Chat / Work / More rail plus the Worker
   // selector no longer fit on one line, so the rail becomes one list.
-  static const _singleWorkflowListWidth = 560.0;
+  static const _singleWorkflowListWidth = 400.0;
+
+  static String _formatAttachmentSize(Object? bytes) {
+    final value = bytes is int ? bytes : 0;
+    if (value >= 1024 * 1024) {
+      return '${(value / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    if (value >= 1024) return '${(value / 1024).toStringAsFixed(0)} KB';
+    return '$value B';
+  }
 
   Widget _additionalControls(BuildContext context) => LayoutBuilder(
       builder: (context, constraints) => _workflowControls(
@@ -459,10 +469,10 @@ class _WorkComposer extends StatelessWidget {
         !_primaryWorkflowIds.contains(selectedWorkflow.id);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // All workflow items use normal text; the active item is marked by the
-    // sidebar's selected-item background.
+    // composer mode rail's background.
     final selectedForeground = colors.onSurface;
     final inactiveForeground = colors.onSurface;
-    final activeBackground = ConclaveColors.navigationSelectedColor(isDark);
+    final activeBackground = ConclaveColors.composerRail(isDark);
     final canSelect = canExecute && !submitting;
     final menuWorkflows = singleList ? workflows : otherWorkflows;
     final menuSelected =
@@ -594,71 +604,73 @@ class _WorkComposer extends StatelessWidget {
                   primaryWorkflow(
                       'direct', 'Work', 'Work — run a tracked Work Request'),
                 ],
-                Builder(
-                  builder: (workflowBtnContext) => Semantics(
-                    key: const ValueKey('work-choose-workflow'),
-                    label: menuSelected
-                        ? 'Choose workflow, ${selectedWorkflow.name} selected'
-                        : 'More workflows',
-                    selected: menuSelected,
-                    button: true,
-                    enabled: canSelect && menuWorkflows.isNotEmpty,
-                    child: Material(
-                      color: menuSelected ? activeBackground : controlBg,
-                      borderRadius: controlBorderRadius,
-                      child: InkWell(
+                // Hide the menu when it has nothing to list.
+                if (menuWorkflows.isNotEmpty)
+                  Builder(
+                    builder: (workflowBtnContext) => Semantics(
+                      key: const ValueKey('work-choose-workflow'),
+                      label: menuSelected
+                          ? 'Choose workflow, ${selectedWorkflow.name} selected'
+                          : 'More workflows',
+                      selected: menuSelected,
+                      button: true,
+                      enabled: canSelect && menuWorkflows.isNotEmpty,
+                      child: Material(
+                        color: menuSelected ? activeBackground : controlBg,
                         borderRadius: controlBorderRadius,
-                        onTap: canSelect && menuWorkflows.isNotEmpty
-                            ? () async {
-                                final value = await _showAnchoredMenu<String>(
-                                  buttonContext: workflowBtnContext,
-                                  itemHeight: 36.0,
-                                  items: [
-                                    for (final item in menuWorkflows)
-                                      workflowEntry(item, workflowBtnContext),
-                                  ],
-                                );
-                                if (!workflowBtnContext.mounted ||
-                                    value == null) {
-                                  return;
+                        child: InkWell(
+                          borderRadius: controlBorderRadius,
+                          onTap: canSelect && menuWorkflows.isNotEmpty
+                              ? () async {
+                                  final value = await _showAnchoredMenu<String>(
+                                    buttonContext: workflowBtnContext,
+                                    itemHeight: 36.0,
+                                    items: [
+                                      for (final item in menuWorkflows)
+                                        workflowEntry(item, workflowBtnContext),
+                                    ],
+                                  );
+                                  if (!workflowBtnContext.mounted ||
+                                      value == null) {
+                                    return;
+                                  }
+                                  onWorkflowChanged(value);
                                 }
-                                onWorkflowChanged(value);
-                              }
-                            : null,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 5),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 130),
-                                child: Text(
-                                  menuSelected
-                                      ? selectedWorkflow.name
-                                      : (singleList ? 'Workflow' : 'More'),
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                        color: menuSelected
-                                            ? selectedForeground
-                                            : inactiveForeground,
-                                      ),
+                              : null,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 5),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 130),
+                                  child: Text(
+                                    menuSelected
+                                        ? selectedWorkflow.name
+                                        : (singleList ? 'Workflow' : 'More'),
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          color: menuSelected
+                                              ? selectedForeground
+                                              : inactiveForeground,
+                                        ),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 2),
-                              const Icon(Icons.keyboard_arrow_down, size: 14),
-                            ],
+                                const SizedBox(width: 2),
+                                const Icon(Icons.keyboard_arrow_down, size: 14),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
               ]),
             ),
           ),
@@ -797,6 +809,44 @@ class _WorkComposer extends StatelessWidget {
               onRemove: onQueuedRemove ?? (_) {},
               onSendNow: onQueuedSendNow ?? (_) {},
             ),
+          if (attachments.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  for (var i = 0; i < attachments.length; i++)
+                    InputChip(
+                      key: ValueKey('work-attachment-$i'),
+                      avatar: submitting
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.insert_drive_file, size: 14),
+                      tooltip: submitting
+                          ? 'Uploading with request'
+                          : 'Ready to send',
+                      label: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 260),
+                        child: Text(
+                          '${(attachments[i]['name'] ?? 'Attachment')} · '
+                          '${_formatAttachmentSize(attachments[i]['sizeBytes'])}'
+                          '${submitting ? ' · uploading' : ' · ready to send'}',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
+                      onDeleted: canExecute && !submitting
+                          ? () => onRemoveAttachment(i)
+                          : null,
+                    ),
+                ],
+              ),
+            ),
+          ],
           MarkdownComposer(
             leadingControls: leadingControls,
             inputHeight: inputHeight,
@@ -825,37 +875,6 @@ class _WorkComposer extends StatelessWidget {
             twoRowLayout: true,
             executionControlsBuilder: (_) => _additionalControls(context),
           ),
-          if (attachments.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (var i = 0; i < attachments.length; i++)
-                  InputChip(
-                    avatar: const Icon(Icons.insert_drive_file, size: 14),
-                    label: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 220),
-                      child: Text(
-                        (attachments[i]['name'] ?? 'Attachment').toString(),
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    onDeleted: canExecute && !submitting
-                        ? () => onRemoveAttachment(i)
-                        : null,
-                  ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                'Up to 10 file attachments, 2 MB each.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          ],
           if (loadingWorkflows) const LinearProgressIndicator(),
           if (workflowCatalogError != null)
             Text(workflowCatalogError!, style: TextStyle(color: colors.error)),
@@ -1620,6 +1639,28 @@ class _WorkTimelineCard extends StatelessWidget {
                               fitContent: true,
                             ),
                           ),
+                          if (request.attachments.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                for (final file in request.attachments)
+                                  Chip(
+                                    avatar: const Icon(Icons.insert_drive_file,
+                                        size: 16),
+                                    label: ConstrainedBox(
+                                      constraints:
+                                          const BoxConstraints(maxWidth: 260),
+                                      child: Text(
+                                        '${file.name} · ${_WorkComposer._formatAttachmentSize(file.sizeBytes)}',
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),

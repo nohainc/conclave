@@ -313,11 +313,31 @@ class AxWorkRequestPage {
   final String? aiHistoryClearedAt;
 }
 
+/// Display-only attachment metadata; file bytes and storage identifiers stay out.
+class AxWorkAttachment {
+  const AxWorkAttachment({required this.name, required this.sizeBytes});
+  final String name;
+  final int sizeBytes;
+  Map<String, dynamic> toJson() =>
+      {'kind': 'file', 'name': name, 'sizeBytes': sizeBytes};
+  static List<AxWorkAttachment> fromList(Object? value) =>
+      List.unmodifiable((value is List ? value : const [])
+          .whereType<Map>()
+          .where((item) => item['kind'] == 'file')
+          .map((item) => AxWorkAttachment(
+              name: item['name'] is String
+                  ? item['name'] as String
+                  : 'Attachment',
+              sizeBytes:
+                  item['sizeBytes'] is int ? item['sizeBytes'] as int : 0)));
+}
+
 class AxWorkRequestStatus {
   const AxWorkRequestStatus({
     this.id,
     this.conversationId,
     this.executionConfig,
+    this.attachments = const [],
     this.turns = const [],
     this.workflowRun,
     this.threadId,
@@ -340,6 +360,7 @@ class AxWorkRequestStatus {
 
   final String? id;
   final String? conversationId;
+  final List<AxWorkAttachment> attachments;
   final AxTurnExecutionConfig? executionConfig;
   final List<AxConversationTurn> turns;
   final AxWorkflowRun? workflowRun;
@@ -546,6 +567,7 @@ class AxWorkRequest {
     required this.id,
     this.conversationId,
     this.executionConfig,
+    this.attachments = const [],
     this.turns = const [],
     this.workflowRun,
     required this.requestedByName,
@@ -565,6 +587,7 @@ class AxWorkRequest {
 
   final String id;
   final String? conversationId;
+  final List<AxWorkAttachment> attachments;
   final AxTurnExecutionConfig? executionConfig;
   final List<AxConversationTurn> turns;
   final AxWorkflowRun? workflowRun;
@@ -599,6 +622,7 @@ class AxWorkRequest {
           requestedByName: requestedByName,
           requestedByUserId: requestedByUserId,
           prompt: prompt,
+          attachments: attachments,
           workflowId: workflowId,
           workflowVersion: workflowVersion,
           workflowName: workflowName,
@@ -670,6 +694,7 @@ class AxWorkRequest {
       requestedByName: effectiveRequestedByName,
       requestedByUserId: rawRequestedByUserId,
       prompt: json['prompt']?.toString() ?? '',
+      attachments: AxWorkAttachment.fromList(json['attachments']),
       workflowId: json['workflowId']?.toString() ?? 'direct',
       workflowVersion: json['workflowVersion'] as int? ?? 1,
       workflowName: (snapshotName ?? json['workflowName'])?.toString(),
