@@ -1565,6 +1565,10 @@ class _ThreadPageState extends State<ThreadPage>
         }
         final historyOpen = !widget.isDraft && _aiHistoryOpen;
         final isDark = Theme.of(context).brightness == Brightness.dark;
+        // Same active-icon color as the composer's Message / Ask AI switch.
+        final activeTabIcon = isDark
+            ? ConclaveColors.focusBorderDark
+            : ConclaveColors.primaryForegroundLight;
         Widget header(String title, {required bool history}) => Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1585,8 +1589,9 @@ class _ThreadPageState extends State<ThreadPage>
                                   ? ConclaveColors.textSecondary(isDark)
                                   : ConclaveColors.textPrimary(isDark),
                             ),
-                            icon: const Icon(Icons.chat_bubble_outline_rounded,
-                                size: 18),
+                            icon: Icon(Icons.chat_bubble_outline_rounded,
+                                size: 18,
+                                color: history ? null : activeTabIcon),
                             label: const Text('Conversation'),
                           ),
                           if (!widget.isDraft)
@@ -1600,7 +1605,9 @@ class _ThreadPageState extends State<ThreadPage>
                                     ? ConclaveColors.textPrimary(isDark)
                                     : ConclaveColors.textSecondary(isDark),
                               ),
-                              icon: const Icon(Icons.history_rounded, size: 18),
+                              icon: Icon(Icons.history_rounded,
+                                  size: 18,
+                                  color: history ? activeTabIcon : null),
                               label: const Text('AI History'),
                             ),
                         ]),
