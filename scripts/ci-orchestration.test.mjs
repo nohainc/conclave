@@ -16,6 +16,14 @@ const source = (path) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 describe("CI acceptance orchestration", () => {
+  it("nightly Workspace compilation does not require a release certificate", () => {
+    expect(source(".github/workflows/nightly.yml")).toContain(
+      "bash scripts/build-workspace-macos.sh --debug --prepared",
+    );
+    expect(source(".github/workflows/release-macos.yml")).toContain(
+      "Configure Developer ID and notarization",
+    );
+  });
   it("gives both explicit Cloud fixture files exactly one test owner", () => {
     const scripts = JSON.parse(source("package.json")).scripts;
     for (const file of [

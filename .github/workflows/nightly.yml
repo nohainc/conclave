@@ -30,8 +30,8 @@ jobs:
         working-directory: apps/workspace
         run: flutter pub get
       - run: bash scripts/build-cli-worker-engine.sh
-      - name: Build Workspace with prepared dependencies
-        run: bash scripts/build-workspace-macos.sh --prepared
+      - name: Build Workspace debug bundle without release signing
+        run: bash scripts/build-workspace-macos.sh --debug --prepared
 
   profile-lab-macos:
     name: Profile Lab native build

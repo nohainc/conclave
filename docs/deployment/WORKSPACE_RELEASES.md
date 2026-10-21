@@ -37,3 +37,10 @@ The Workspace app does not yet perform a complete automatic update transaction w
 ## Trust and incident operations
 
 Use [Release Trust and Rotation](../security/RELEASE_TRUST_AND_ROTATION.md) for key separation, overlap rotation, revocation, and recovery constraints. Never store release signing seeds or publication tokens in the repository, package archives, desktop artifacts, or workflow output.
+
+## Nightly compilation
+
+The nightly macOS workflow builds Workspace in debug mode with ad-hoc signing.
+This checks native compilation and bundle assembly without installing a release
+certificate on the nightly runner. It does not validate launchd activation,
+release signing, or notarization; those require the signed release workflow.
