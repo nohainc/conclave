@@ -18,7 +18,8 @@ From the repository root in PowerShell:
 The script reuses `build-workspace-service.sh` and its canonical Engine build,
 compiles the Windows Flutter runner, checks bundle contents and creates
 `dist/conclave-workspace/conclave-workspace-windows-x64-release-preview.zip`.
-The ZIP includes the full Flutter data/DLL directory and standalone service.
+The ZIP includes the full Flutter data/DLL directory and standalone service,
+with matching Engine copies in the UI assets and beside the service.
 Keep the extracted directory together. The target machine also needs the
 Microsoft Visual C++ x64 redistributable. The preview is unsigned and has no
 installer, service registration or automatic update integration.
@@ -28,8 +29,8 @@ or on `codex/windows-workspace-preview-*` branches. It uses the repository
 Actions variable `CONCLAVE_RELEASE_TRUST_KEYS_JSON` when configured, otherwise
 the same compile-only public trust root as nightly CI. The fallback cannot
 verify production releases; this workflow is exclusively for preview builds. Its artifact is a preview,
-not a published Workspace release. Successful compilation is not lifecycle or
-security validation.
+not a published Workspace release. The workflow checks that the packaged UI stays running for eight seconds.
+This startup smoke check does not verify rendering, lifecycle or security.
 
 ## Remaining runtime gates
 

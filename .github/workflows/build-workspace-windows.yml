@@ -21,6 +21,19 @@ jobs:
           # Same compile-only trust root as nightly.yml; this is never a release.
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
         run: ./scripts/build-workspace-windows.ps1
+      - name: Smoke test packaged UI startup
+        shell: pwsh
+        run: |
+          $bundle = Join-Path $PWD 'dist/conclave-workspace/windows/release'
+          $app = Start-Process (Join-Path $bundle 'conclave_workspace.exe') -WorkingDirectory $bundle -PassThru
+          try {
+            Start-Sleep -Seconds 8
+            $app.Refresh()
+            if ($app.HasExited) { throw "Packaged UI exited early with code $($app.ExitCode)" }
+            Write-Host 'Packaged Windows UI remained running after startup.'
+          } finally {
+            if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+          }
       - name: Retain preview bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

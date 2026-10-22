@@ -58,15 +58,22 @@ try {
     # Only replace files inside this build's output folder; never touch user state.
     Get-ChildItem $Output | Remove-Item -Recurse -Force
     Copy-Item "$Build/*" $Output -Recurse -Force
-    Copy-Item (Join-Path $Root 'dist/conclave-workspace/service/conclave-service.exe') $Output
+    $ServiceBuild = Join-Path $Root 'dist/conclave-workspace/service'
+    Copy-Item (Join-Path $ServiceBuild 'conclave-service.exe') $Output
+    # The standalone service discovers assets relative to its own executable;
+    # the Flutter UI uses its data/flutter_assets copy of the same Engine.
+    Copy-Item (Join-Path $ServiceBuild 'assets') $Output -Recurse -Force
     $DartPayload = if ($Mode -eq 'release') { 'data/app.so' } else { 'data/flutter_assets/kernel_blob.bin' }
     foreach ($File in @('conclave_workspace.exe', 'flutter_windows.dll', $DartPayload,
-                        'data/flutter_assets/assets/engines/conclave_cli_worker_engine.exe', 'conclave-service.exe')) {
+                        'data/flutter_assets/assets/engines/conclave_cli_worker_engine.exe',
+                        'assets/engines/conclave_cli_worker_engine.exe', 'conclave-service.exe')) {
         if (-not (Test-Path (Join-Path $Output $File))) { throw "Bundle is missing $File" }
     }
     $BundledEngine = Join-Path $Output 'data/flutter_assets/assets/engines/conclave_cli_worker_engine.exe'
     $CanonicalEngine = Join-Path $Workspace 'assets/engines/conclave_cli_worker_engine.exe'
-    if ((Get-FileHash $BundledEngine).Hash -ne (Get-FileHash $CanonicalEngine).Hash) {
+    $ServiceEngine = Join-Path $Output 'assets/engines/conclave_cli_worker_engine.exe'
+    if ((Get-FileHash $BundledEngine).Hash -ne (Get-FileHash $CanonicalEngine).Hash -or
+        (Get-FileHash $ServiceEngine).Hash -ne (Get-FileHash $CanonicalEngine).Hash) {
         throw 'Bundled Engine does not match the canonical build.'
     }
     Copy-Item (Join-Path $Root 'docs/operations/WORKSPACE_WINDOWS_PREVIEW.md') (Join-Path $Output 'README.md')
