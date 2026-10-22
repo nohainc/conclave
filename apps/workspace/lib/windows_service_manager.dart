@@ -30,14 +30,14 @@ class WindowsWorkspaceServiceManager implements WorkspaceServiceManager {
     final id = await _identity();
     final script = r'''
 $ErrorActionPreference = 'Stop'
-$name = 'Conclave Workspace ' + $env:CONCLAVE_HOST_ID
+$name = 'Conclave Workspace ' + $env:CONCLAVE_WORKSPACE_TASK_ID
 $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
-switch ($env:CONCLAVE_HOST_OPERATION) {
+switch ($env:CONCLAVE_WORKSPACE_TASK_OPERATION) {
   'register' {
-    if ($task -and $task.Actions.Execute -ne $env:CONCLAVE_HOST_EXECUTABLE) { throw 'Existing task points to a different service; preserve state and unregister it explicitly first.' }
-    $arguments = '--data-dir "' + $env:CONCLAVE_HOST_DATA + '"'
-    $action = New-ScheduledTaskAction -Execute $env:CONCLAVE_HOST_EXECUTABLE -Argument $arguments -WorkingDirectory (Split-Path $env:CONCLAVE_HOST_EXECUTABLE)
+    if ($task -and $task.Actions.Execute -ne $env:CONCLAVE_WORKSPACE_TASK_EXECUTABLE) { throw 'Existing task points to a different service; preserve state and unregister it explicitly first.' }
+    $arguments = '--data-dir "' + $env:CONCLAVE_WORKSPACE_TASK_DATA + '"'
+    $action = New-ScheduledTaskAction -Execute $env:CONCLAVE_WORKSPACE_TASK_EXECUTABLE -Argument $arguments -WorkingDirectory (Split-Path $env:CONCLAVE_WORKSPACE_TASK_EXECUTABLE)
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
     $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
@@ -45,7 +45,7 @@ switch ($env:CONCLAVE_HOST_OPERATION) {
   }
   'start' {
     if (-not $task) { throw 'Workspace service is not registered.' }
-    if ($task.Actions.Execute -ne $env:CONCLAVE_HOST_EXECUTABLE) { throw 'Registered service path differs from this application.' }
+    if ($task.Actions.Execute -ne $env:CONCLAVE_WORKSPACE_TASK_EXECUTABLE) { throw 'Registered service path differs from this application.' }
     Start-ScheduledTask -TaskName $name
   }
   'force-stop' { if ($task) { Stop-ScheduledTask -TaskName $name } }
@@ -66,10 +66,10 @@ $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name } else { $null }
       '-EncodedCommand',
       base64Encode(bytes)
     ], environment: {
-      'CONCLAVE_HOST_ID': id,
-      'CONCLAVE_HOST_OPERATION': operation,
-      'CONCLAVE_HOST_EXECUTABLE': executable.absolute.path,
-      'CONCLAVE_HOST_DATA': dataDirectory.absolute.path,
+      'CONCLAVE_WORKSPACE_TASK_ID': id,
+      'CONCLAVE_WORKSPACE_TASK_OPERATION': operation,
+      'CONCLAVE_WORKSPACE_TASK_EXECUTABLE': executable.absolute.path,
+      'CONCLAVE_WORKSPACE_TASK_DATA': dataDirectory.absolute.path,
     }).timeout(const Duration(seconds: 30));
     if (result.exitCode != 0) {
       throw StateError('Windows service $operation failed: ${result.stderr}');

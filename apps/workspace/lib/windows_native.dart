@@ -218,8 +218,8 @@ class WindowsNative {
           int Function(Pointer<Uint16>, int, int, int, int, int, int,
               Pointer<Void>)>('CreateNamedPipeW');
       // Byte mode; local clients only; protected DACL grants only the owner SID.
-      final handle = create(name, 3 | (first ? 0x80000 : 0), 8, 32, 65536,
-          65536, 5000, attributes.cast());
+      final handle = create(name, 0x40000003 | (first ? 0x80000 : 0), 8, 32,
+          65536, 65536, 5000, attributes.cast());
       if (handle == -1) fail('CreateNamedPipe');
       return handle;
     } finally {
@@ -229,12 +229,52 @@ class WindowsNative {
     }
   }
 
+  static Pointer<Uint8> _overlapped() {
+    final overlap = allocate(32);
+    final event = _kernel.lookupFunction<
+        IntPtr Function(Pointer<Void>, Int32, Int32, Pointer<Uint16>),
+        int Function(Pointer<Void>, int, int,
+            Pointer<Uint16>)>('CreateEventW')(nullptr, 1, 0, nullptr);
+    if (event == 0) {
+      free(overlap);
+      fail('Create pipe I/O event');
+    }
+    (overlap + 24).cast<IntPtr>().value = event;
+    return overlap;
+  }
+
+  static void _freeOverlapped(Pointer<Uint8> overlap) {
+    close((overlap + 24).cast<IntPtr>().value);
+    free(overlap);
+  }
+
+  static int _completeIo(
+      int handle, Pointer<Uint8> overlap, Pointer<Uint32> count, int started) {
+    final code = started == 0 ? _error() : 0;
+    if (code != 0 && code != 997) return code; // ERROR_IO_PENDING
+    final result = _kernel.lookupFunction<
+        Int32 Function(IntPtr, Pointer<Void>, Pointer<Uint32>, Int32),
+        int Function(
+            int, Pointer<Void>, Pointer<Uint32>, int)>('GetOverlappedResult');
+    return result(handle, overlap.cast(), count, 1) != 0 ? 0 : _error();
+  }
+
   static bool acceptPipe(int handle) {
-    _error();
-    final connect = _kernel.lookupFunction<
-        Int32 Function(IntPtr, Pointer<Void>),
-        int Function(int, Pointer<Void>)>('ConnectNamedPipe');
-    return connect(handle, nullptr) != 0 || _error() == 535;
+    final overlap = _overlapped();
+    final count = allocate(4).cast<Uint32>();
+    try {
+      final connect = _kernel.lookupFunction<
+          Int32 Function(IntPtr, Pointer<Void>),
+          int Function(int, Pointer<Void>)>('ConnectNamedPipe');
+      final started = connect(handle, overlap.cast());
+      if (started == 0 && _error() == 535) {
+        return true; // Client connected first.
+      }
+      return _completeIo(handle, overlap, count, started) == 0;
+    } finally {
+      _freeOverlapped(overlap);
+      free(count);
+    }
   }
 
   static int connectPipe(String path) {
@@ -246,7 +286,7 @@ class WindowsNative {
           int Function(Pointer<Uint16>, int, int, Pointer<Void>, int, int,
               int)>('CreateFileW');
       // Identification-only SQOS prevents a pipe server impersonating its client.
-      final handle = open(name, 0xc0020000, 0, nullptr, 3, 0x110000, 0);
+      final handle = open(name, 0xc0020000, 0, nullptr, 3, 0x40110000, 0);
       if (handle == -1) fail('Open Workspace pipe');
       try {
         _verifyPipeOwner(handle);
@@ -298,19 +338,23 @@ class WindowsNative {
   static Uint8List readPipe(int handle) {
     final buffer = allocate(65536);
     final count = allocate(4).cast<Uint32>();
+    final overlap = _overlapped();
     try {
       final read = _kernel.lookupFunction<
           Int32 Function(
               IntPtr, Pointer<Void>, Uint32, Pointer<Uint32>, Pointer<Void>),
           int Function(int, Pointer<Void>, int, Pointer<Uint32>,
               Pointer<Void>)>('ReadFile');
-      if (read(handle, buffer.cast(), 65536, count, nullptr) == 0) {
-        final code = _error();
+      final started = read(handle, buffer.cast(), 65536, count, overlap.cast());
+      final code = _completeIo(handle, overlap, count, started);
+      if (code != 0) {
         if ([6, 109, 232, 233, 995].contains(code)) return Uint8List(0);
-        fail('Read Workspace pipe');
+        throw FileSystemException(
+            'Read Workspace pipe failed (Windows error $code)');
       }
       return Uint8List.fromList(buffer.asTypedList(count.value));
     } finally {
+      _freeOverlapped(overlap);
       free(buffer);
       free(count);
     }
@@ -328,13 +372,19 @@ class WindowsNative {
               Pointer<Void>)>('WriteFile');
       var offset = 0;
       while (offset < bytes.length) {
-        if (write(handle, (buffer + offset).cast(), bytes.length - offset,
-                    count, nullptr) ==
-                0 ||
-            count.value == 0) {
-          fail('Write Workspace pipe');
+        final overlap = _overlapped();
+        try {
+          final started = write(handle, (buffer + offset).cast(),
+              bytes.length - offset, count, overlap.cast());
+          final code = _completeIo(handle, overlap, count, started);
+          if (code != 0 || count.value == 0) {
+            throw FileSystemException(
+                'Write Workspace pipe failed (Windows error $code)');
+          }
+          offset += count.value;
+        } finally {
+          _freeOverlapped(overlap);
         }
-        offset += count.value;
       }
     } finally {
       free(buffer);

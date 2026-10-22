@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_workspace/windows_credentials.dart';
 import 'package:conclave_workspace/workspace_paths.dart';
+import 'package:conclave_workspace/platform_runtime.dart';
 import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/windows_native.dart';
@@ -22,6 +23,18 @@ void main() {
         await managementLines(Stream.fromIterable(bytes.map((b) => [b])))
             .toList(),
         ['{"text":"ž"}']);
+  });
+  test('Windows Work Root cannot enter family state through case variants', () {
+    final platform = _WindowsPathRuntime();
+    final family =
+        WorkspacePaths.defaultApplicationDataRoot(platform: platform);
+    final paths = WorkspacePaths(
+        WorkspacePaths.defaultWorkspaceDirectory(platform: platform),
+        platform: platform);
+    expect(
+        () => paths.validateWorkRootSeparation(Directory(
+            "${family.path.replaceAll(r'\', '/').toUpperCase()}/Work")),
+        throwsStateError);
   });
   test('Windows legacy state is preserved until its root is selected',
       () async {
@@ -131,4 +144,13 @@ void main() {
       await dir.delete(recursive: true);
     }
   }, skip: !Platform.isWindows, timeout: const Timeout(Duration(seconds: 40)));
+}
+
+class _WindowsPathRuntime extends Fake implements PlatformRuntime {
+  @override
+  String get homeDirectory => '${Directory.systemTemp.path}/conclave-path-test';
+  @override
+  String get operatingSystem => 'windows';
+  @override
+  bool get isWindows => true;
 }

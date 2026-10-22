@@ -94,8 +94,9 @@ class WindowsPipeChannel implements LocalManagementChannel {
         if (!_closed) _input.add(bytes);
       }
     } catch (error, stack) {
-      if (!_closed) _input.addError(error, stack);
+      if (!_closed && !_input.isClosed) _input.addError(error, stack);
     } finally {
+      if (!_closed) destroy();
       unawaited(_input.close());
     }
   }
@@ -110,7 +111,7 @@ class WindowsPipeChannel implements LocalManagementChannel {
         await Isolate.run(() => WindowsNative.writePipe(nativeHandle, bytes));
       }
     }).catchError((Object error, StackTrace stack) {
-      if (!_closed) _input.addError(error, stack);
+      if (!_closed && !_input.isClosed) _input.addError(error, stack);
       destroy();
     });
   }

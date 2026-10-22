@@ -82,6 +82,12 @@ class WorkspacePaths {
     return target;
   }
 
+  bool get _usesManagedWindowsLayout =>
+      platform.isWindows &&
+      _canonicalAbsolute(stateDirectory.path) ==
+          _canonicalAbsolute(
+              defaultWorkspaceDirectory(platform: platform).path);
+
   bool get _usesManagedMacLayout {
     if (platform.operatingSystem != 'macos') return false;
     return _canonical(stateDirectory.path) ==
@@ -96,9 +102,10 @@ class WorkspacePaths {
   Directory get workspaceDirectory => applicationSupportDirectory;
 
   /// The application-family root shared by Workspace and future desktop apps.
-  Directory get applicationDataRoot => _usesManagedMacLayout
-      ? defaultApplicationDataRoot(platform: platform)
-      : stateDirectory;
+  Directory get applicationDataRoot =>
+      (_usesManagedMacLayout || _usesManagedWindowsLayout)
+          ? defaultApplicationDataRoot(platform: platform)
+          : stateDirectory;
 
   /// Ensures private application state and user-owned files cannot share a
   /// directory tree. A nested path would make a runtime reset capable of
@@ -106,7 +113,7 @@ class WorkspacePaths {
   void validateWorkRootSeparation(Directory workRoot) {
     final app = _canonicalAbsolute(applicationDataRoot.path);
     final work = _canonicalAbsolute(workRoot.path);
-    final separator = Platform.pathSeparator;
+    final separator = platform.isWindows ? r'\' : Platform.pathSeparator;
     if (app == work ||
         app.startsWith('$work$separator') ||
         work.startsWith('$app$separator')) {
@@ -211,7 +218,9 @@ class WorkspacePaths {
   String _canonicalAbsolute(String path) {
     final value =
         Directory(path).absolute.path.replaceAll(RegExp(r'[/\\]+$'), '');
-    return platform.isWindows ? value.toLowerCase() : value;
+    return platform.isWindows
+        ? value.replaceAll('/', r'\').toLowerCase()
+        : value;
   }
 
   /// Moves the legacy application-managed Work Root into the user Work Root.
