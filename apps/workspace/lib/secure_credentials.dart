@@ -37,19 +37,25 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
         : 'com.conclaveax.workspace',
     String? platform,
     this.nativeKeychain,
+    this.windowsCredentialDirectory,
   }) : _platform = platform;
 
   static final Map<String, String?> _cache = {};
   static final Set<String> _loaded = {};
 
+  final Directory? windowsCredentialDirectory;
   final String service;
   final String? _platform;
   final NativeSecureCredentialBridge? nativeKeychain;
 
   String get _effectivePlatform => _platform ?? Platform.operatingSystem;
 
-  WindowsCredentials get _windows => WindowsCredentials(Directory(
-      '${WorkspacePaths.defaultWorkspaceDirectory().path}/Credentials'));
+  WindowsCredentials get _windows {
+    final root = Platform.environment['CONCLAVE_WORKSPACE_DATA_DIR'] ??
+        WorkspacePaths.defaultStateDirectory().path;
+    return WindowsCredentials(
+        windowsCredentialDirectory ?? Directory('$root/Credentials'));
+  }
 
   String _cacheKey(String key) => '$service\u0000$key';
 

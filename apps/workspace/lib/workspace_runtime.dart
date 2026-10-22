@@ -51,8 +51,10 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           '${Platform.pathSeparator}logs',
         ),
       );
-  final secureCredentialStore =
-      credentialStore ?? const PlatformSecureCredentialStore();
+  final secureCredentialStore = credentialStore ??
+      PlatformSecureCredentialStore(
+          windowsCredentialDirectory:
+              Directory('${config.dataDirectory.path}/Credentials'));
   final releaseTrustPolicy = workerTrustPolicy;
   CliWorkerEngineSupervisor? cliWorkerEngineSupervisor;
   final installationId = await InstallationIdentityStore(

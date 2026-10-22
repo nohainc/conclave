@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_workspace/windows_credentials.dart';
+import 'package:conclave_workspace/workspace_paths.dart';
+import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/windows_native.dart';
 import 'package:conclave_workspace/workspace_manager_ipc.dart';
@@ -21,6 +23,41 @@ void main() {
             .toList(),
         ['{"text":"ž"}']);
   });
+  test('Windows legacy state is preserved until its root is selected',
+      () async {
+    final root = await Directory.systemTemp.createTemp('conclave-legacy-');
+    try {
+      final legacy = Directory('${root.path}/legacy');
+      final target = Directory('${root.path}/new');
+      final identity = File('${legacy.path}/installation-id');
+      await identity.create(recursive: true);
+      await identity.writeAsString('install_original');
+      expect(
+          () => WorkspacePaths.resolveWindowsStateDirectory(
+              legacy: legacy, target: target),
+          throwsStateError);
+      expect(await identity.readAsString(), 'install_original');
+      expect(target.existsSync(), false);
+    } finally {
+      await root.delete(recursive: true);
+    }
+  });
+  test('Windows cached credentials rotate in the selected private state root',
+      () async {
+    final root = await Directory.systemTemp.createTemp('conclave-store-');
+    try {
+      final store = PlatformSecureCredentialStore(
+          service: root.path, windowsCredentialDirectory: root);
+      await store.write('account', 'initial');
+      await store.readForSynchronousConfig('account');
+      await store.write('account', 'rotated');
+      expect(store.readSync('account'), 'rotated');
+      await store.delete('account');
+      expect(store.readSync('account'), isNull);
+    } finally {
+      await root.delete(recursive: true);
+    }
+  }, skip: !Platform.isWindows);
   test('Windows service can acquire and release a process-owned power request',
       () {
     final handle = WindowsNative.acquirePowerRequest();

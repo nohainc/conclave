@@ -48,12 +48,13 @@ keys or provider credentials are needed by CI.
   Only ciphertext is written under `Credentials` in private Workspace state.
   State uses `%LOCALAPPDATA%\Conclave\Workspace`; user work defaults to
   `%USERPROFILE%\Documents\Conclave`, independently of application files.
-- A legacy `~/.conclave-workspace` subtree is moved intact only when the new
-  destination is absent. Conflicting roots or a failed move stop default
-  activation with a recoverable error; neither root is deleted or merged.
-  `--data-dir` retains its explicit-override semantics. Installation and Cloud
-  identities, registry, sessions, Profiles, Engine files, and configured Work
-  Root are retained. Existing macOS installations do not migrate.
+- Legacy `~/.conclave-workspace` state stops default activation with a
+  recoverable error. Registries may hold absolute paths, so the application does
+  not move files or guess which root is authoritative. Select the existing root
+  with `CONCLAVE_WORKSPACE_DATA_DIR` (or the service's `--data-dir`) to retain its
+  installation/Cloud identities, credentials, registry, sessions, Profiles,
+  Engine files, and configured Work Root. Existing macOS installations do not
+  migrate. No replacement Cloud Workspace is created by this recovery.
 - Management step-up uses Windows Hello, with an OS credential-dialog fallback.
   Password verification compares the returned logon SID to the current user;
   credentials are wiped from native buffers and never persisted. Cancellation

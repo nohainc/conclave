@@ -63,26 +63,23 @@ class WorkspacePaths {
     }
     if (runtime.operatingSystem == 'windows') {
       final target = defaultWorkspaceDirectory(platform: runtime);
-      if (Platform.isWindows) {
-        final legacy = Directory(
-            '${runtime.homeDirectory}/${conclaveWorkspaceIsLocalBuild ? '.conclave-workspace-local' : '.conclave-workspace'}');
-        if (legacy.existsSync()) {
-          if (target.existsSync()) {
-            throw StateError(
-                'Both legacy and current Windows Workspace state exist. Preserve both directories and select the authoritative one with --data-dir before activation.');
-          }
-          try {
-            target.parent.createSync(recursive: true);
-            legacy.renameSync(target.path);
-          } on FileSystemException {
-            throw StateError(
-                'Windows Workspace state could not be moved safely. Files were preserved; restart with --data-dir pointing to ${legacy.path}.');
-          }
-        }
-      }
-      return target;
+      final legacy = Directory(
+          '${runtime.homeDirectory}/${conclaveWorkspaceIsLocalBuild ? '.conclave-workspace-local' : '.conclave-workspace'}');
+      return resolveWindowsStateDirectory(legacy: legacy, target: target);
     }
     return defaultApplicationDataRoot(platform: runtime);
+  }
+
+  /// Legacy registries can contain absolute paths. Preserve the entire root
+  /// until its authority is explicitly selected; never rewrite identities or
+  /// move partially understood runtime/session state as a bootstrap shortcut.
+  static Directory resolveWindowsStateDirectory(
+      {required Directory legacy, required Directory target}) {
+    if (legacy.existsSync()) {
+      throw StateError(
+          'Legacy Windows Workspace state exists at ${legacy.path}. Files were preserved. Set CONCLAVE_WORKSPACE_DATA_DIR (or --data-dir for the service) to that root before activation; do not create a replacement Cloud Workspace.');
+    }
+    return target;
   }
 
   bool get _usesManagedMacLayout {
