@@ -36,6 +36,22 @@ void main() {
             "${family.path.replaceAll(r'\', '/').toUpperCase()}/Work")),
         throwsStateError);
   });
+  test('Work Root aliases cannot enter private application state', () async {
+    final root = await Directory.systemTemp.createTemp('conclave-alias-');
+    try {
+      final actual = Directory('${root.path}/state');
+      final work = Directory('${actual.path}/work');
+      await work.create(recursive: true);
+      final alias = Link('${root.path}/alias');
+      await alias.create(actual.path);
+      expect(
+          () => WorkspacePaths(Directory(alias.path))
+              .validateWorkRootSeparation(work),
+          throwsStateError);
+    } finally {
+      await root.delete(recursive: true);
+    }
+  }, skip: Platform.isWindows);
   test('Windows legacy state is preserved until its root is selected',
       () async {
     final root = await Directory.systemTemp.createTemp('conclave-legacy-');

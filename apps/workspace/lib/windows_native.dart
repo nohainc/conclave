@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
@@ -5,6 +6,8 @@ import 'dart:typed_data';
 
 /// Windows x64 platform seam. No native libraries are loaded on other hosts.
 /// All temporary buffers are released; returned Win32 handles remain caller-owned.
+typedef _WindowsWaitCallback = Void Function(Pointer<Void>, Uint8);
+
 class WindowsNative {
   WindowsNative._();
   static final _kernel = DynamicLibrary.open('kernel32.dll');
@@ -248,18 +251,76 @@ class WindowsNative {
     free(overlap);
   }
 
-  static int _completeIo(
-      int handle, Pointer<Uint8> overlap, Pointer<Uint32> count, int started) {
+  static final Map<int, Completer<void>> _waiters = {};
+  static int _nextWait = 1;
+  static void _signalIo(Pointer<Void> context, int timedOut) {
+    final waiter = _waiters[context.address];
+    if (waiter != null && !waiter.isCompleted) waiter.complete();
+  }
+
+  static final _waitCallback =
+      NativeCallable<_WindowsWaitCallback>.listener(_signalIo)
+        ..keepIsolateAlive = false;
+
+  /// Windows waits on its own thread pool and posts completion into this
+  /// isolate. Blocking FFI waits in Isolate.run can exhaust the Dart thread
+  /// pool while both peers wait for another read/write isolate to start.
+  static Future<void> _waitForIoEvent(int event) async {
+    final id = _nextWait++;
+    final waiter = Completer<void>();
+    final waitHandle = allocate(8).cast<IntPtr>();
+    final register = _kernel.lookupFunction<
+        Int32 Function(
+            Pointer<IntPtr>,
+            IntPtr,
+            Pointer<NativeFunction<_WindowsWaitCallback>>,
+            Pointer<Void>,
+            Uint32,
+            Uint32),
+        int Function(
+            Pointer<IntPtr>,
+            int,
+            Pointer<NativeFunction<_WindowsWaitCallback>>,
+            Pointer<Void>,
+            int,
+            int)>('RegisterWaitForSingleObject');
+    _waiters[id] = waiter;
+    _waitCallback.keepIsolateAlive = true;
+    var registered = false;
+    try {
+      registered = register(waitHandle, event, _waitCallback.nativeFunction,
+              Pointer<Void>.fromAddress(id), 0xffffffff, 8) !=
+          0;
+      if (!registered) fail('Register pipe completion');
+      await waiter.future;
+    } finally {
+      if (registered) {
+        // The native listener trampoline has returned before this Dart
+        // completion runs, so waiting for callback rundown cannot self-deadlock.
+        _kernel.lookupFunction<Int32 Function(IntPtr, IntPtr),
+            int Function(int, int)>('UnregisterWaitEx')(waitHandle.value, -1);
+      }
+      _waiters.remove(id);
+      if (_waiters.isEmpty) _waitCallback.keepIsolateAlive = false;
+      free(waitHandle);
+    }
+  }
+
+  static Future<int> _completeIo(int handle, Pointer<Uint8> overlap,
+      Pointer<Uint32> count, int started) async {
     final code = started == 0 ? _error() : 0;
-    if (code != 0 && code != 997) return code; // ERROR_IO_PENDING
+    if (code != 0 && code != 997) return code;
+    if (started == 0) {
+      await _waitForIoEvent((overlap + 24).cast<IntPtr>().value);
+    }
     final result = _kernel.lookupFunction<
         Int32 Function(IntPtr, Pointer<Void>, Pointer<Uint32>, Int32),
         int Function(
             int, Pointer<Void>, Pointer<Uint32>, int)>('GetOverlappedResult');
-    return result(handle, overlap.cast(), count, 1) != 0 ? 0 : _error();
+    return result(handle, overlap.cast(), count, 0) != 0 ? 0 : _error();
   }
 
-  static bool acceptPipe(int handle) {
+  static Future<bool> acceptPipe(int handle) async {
     final overlap = _overlapped();
     final count = allocate(4).cast<Uint32>();
     try {
@@ -267,10 +328,8 @@ class WindowsNative {
           Int32 Function(IntPtr, Pointer<Void>),
           int Function(int, Pointer<Void>)>('ConnectNamedPipe');
       final started = connect(handle, overlap.cast());
-      if (started == 0 && _error() == 535) {
-        return true; // Client connected first.
-      }
-      return _completeIo(handle, overlap, count, started) == 0;
+      if (started == 0 && _error() == 535) return true;
+      return await _completeIo(handle, overlap, count, started) == 0;
     } finally {
       _freeOverlapped(overlap);
       free(count);
@@ -335,7 +394,7 @@ class WindowsNative {
     }
   }
 
-  static Uint8List readPipe(int handle) {
+  static Future<Uint8List> readPipe(int handle) async {
     final buffer = allocate(65536);
     final count = allocate(4).cast<Uint32>();
     final overlap = _overlapped();
@@ -346,7 +405,7 @@ class WindowsNative {
           int Function(int, Pointer<Void>, int, Pointer<Uint32>,
               Pointer<Void>)>('ReadFile');
       final started = read(handle, buffer.cast(), 65536, count, overlap.cast());
-      final code = _completeIo(handle, overlap, count, started);
+      final code = await _completeIo(handle, overlap, count, started);
       if (code != 0) {
         if ([6, 109, 232, 233, 995].contains(code)) return Uint8List(0);
         throw FileSystemException(
@@ -360,7 +419,7 @@ class WindowsNative {
     }
   }
 
-  static void writePipe(int handle, List<int> bytes) {
+  static Future<void> writePipe(int handle, List<int> bytes) async {
     final buffer = allocate(bytes.length);
     final count = allocate(4).cast<Uint32>();
     buffer.asTypedList(bytes.length).setAll(0, bytes);
@@ -376,7 +435,7 @@ class WindowsNative {
         try {
           final started = write(handle, (buffer + offset).cast(),
               bytes.length - offset, count, overlap.cast());
-          final code = _completeIo(handle, overlap, count, started);
+          final code = await _completeIo(handle, overlap, count, started);
           if (code != 0 || count.value == 0) {
             throw FileSystemException(
                 'Write Workspace pipe failed (Windows error $code)');

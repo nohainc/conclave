@@ -80,7 +80,7 @@ class WindowsPipeChannel implements LocalManagementChannel {
   Stream<List<int>> get input => _input.stream;
 
   static Future<WindowsPipeChannel> connect(String path) async {
-    final handle = await Isolate.run(() => WindowsNative.connectPipe(path));
+    final handle = WindowsNative.connectPipe(path);
     return WindowsPipeChannel(handle);
   }
 
@@ -88,8 +88,7 @@ class WindowsPipeChannel implements LocalManagementChannel {
     final nativeHandle = handle;
     try {
       while (!_closed) {
-        final bytes =
-            await Isolate.run(() => WindowsNative.readPipe(nativeHandle));
+        final bytes = await WindowsNative.readPipe(nativeHandle);
         if (bytes.isEmpty) break;
         if (!_closed) _input.add(bytes);
       }
@@ -108,7 +107,7 @@ class WindowsPipeChannel implements LocalManagementChannel {
     final nativeHandle = handle;
     _writer = _writer.then((_) async {
       if (!_closed) {
-        await Isolate.run(() => WindowsNative.writePipe(nativeHandle, bytes));
+        await WindowsNative.writePipe(nativeHandle, bytes);
       }
     }).catchError((Object error, StackTrace stack) {
       if (!_closed && !_input.isClosed) _input.addError(error, stack);
@@ -159,8 +158,7 @@ class WindowsPipeListener {
     try {
       while (!_closed) {
         final handle = _pending!;
-        final accepted =
-            await Isolate.run(() => WindowsNative.acceptPipe(handle));
+        final accepted = await WindowsNative.acceptPipe(handle);
         _pending = null;
         if (_closed || !accepted) {
           WindowsNative.close(handle);

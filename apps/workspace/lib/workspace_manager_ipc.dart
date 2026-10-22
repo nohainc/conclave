@@ -225,15 +225,17 @@ class WorkspaceManagerIpcServer {
       }
     } on WorkspaceManagerProtocolException catch (error) {
       if (!authenticated) {
-        _write(socket, {
-          'type': 'error',
-          'protocol': workspaceManagerProtocolName,
-          'version': workspaceManagerProtocolVersion,
-          'error': {'code': error.code, 'message': error.message},
-        });
         try {
+          _write(socket, {
+            'type': 'error',
+            'protocol': workspaceManagerProtocolName,
+            'version': workspaceManagerProtocolVersion,
+            'error': {'code': error.code, 'message': error.message},
+          });
           await socket.flush().timeout(_handshakeTimeout);
-        } on Object {/* The peer may already have closed. */}
+        } on Object {
+          // Peer closure during a rejected handshake must not stop the service.
+        }
       }
     } on Object {
       // A malformed or disconnected local client is isolated to that socket.

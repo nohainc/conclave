@@ -114,11 +114,22 @@ class WorkspacePaths {
     final app = _canonicalAbsolute(applicationDataRoot.path);
     final work = _canonicalAbsolute(workRoot.path);
     final separator = platform.isWindows ? r'\' : Platform.pathSeparator;
-    if (app == work ||
-        app.startsWith('$work$separator') ||
-        work.startsWith('$app$separator')) {
-      throw StateError(
-          'Application Data Root and Work Root must be separate directories');
+    void requireSeparate(String appPath, String workPath) {
+      if (appPath == workPath ||
+          appPath.startsWith('$workPath$separator') ||
+          workPath.startsWith('$appPath$separator')) {
+        throw StateError(
+            'Application Data Root and Work Root must be separate directories');
+      }
+    }
+
+    requireSeparate(app, work);
+    // Windows junctions and 8.3 names can identify the same directory through
+    // different text paths. Admission compares physical roots once they exist.
+    if (applicationDataRoot.existsSync() && workRoot.existsSync()) {
+      requireSeparate(
+          _canonicalAbsolute(applicationDataRoot.resolveSymbolicLinksSync()),
+          _canonicalAbsolute(workRoot.resolveSymbolicLinksSync()));
     }
   }
 
