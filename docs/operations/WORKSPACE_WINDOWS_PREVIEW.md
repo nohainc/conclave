@@ -37,7 +37,7 @@ keys or provider credentials are needed by CI.
 - `WorkspaceServiceManager` owns a Task Scheduler task per installation. The
   task runs at logon as the current user, in the interactive session, without
   requesting elevation or a Windows SCM service. Stop keeps registration;
-  Cloud disconnect keeps the service available. Stop requests a graceful drain
+  Cloud disconnect keeps the service available. Stop requests graceful exit
   through the host stop marker before bounded Task Scheduler termination.
 - Management uses `\\.\pipe\conclave-workspace-<installation-id>`. The native
   adapter sets a protected owning-user SID DACL, rejects remote clients, and
@@ -54,6 +54,10 @@ keys or provider credentials are needed by CI.
   `--data-dir` retains its explicit-override semantics. Installation and Cloud
   identities, registry, sessions, Profiles, Engine files, and configured Work
   Root are retained. Existing macOS installations do not migrate.
+- Management step-up uses Windows Hello, with an OS credential-dialog fallback.
+  Password verification compares the returned logon SID to the current user;
+  credentials are wiped from native buffers and never persisted. Cancellation
+  does not authorize an action. Interactive prompts require target-device tests.
 - The service and Engine retain kill-on-close Windows Job Objects. Descendants
   cannot escape on an Engine/service crash. Forced Engine cleanup terminates
   its job. Provider CLI account state stays with the same OS user.
