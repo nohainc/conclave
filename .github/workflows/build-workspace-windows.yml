@@ -2,7 +2,7 @@ name: Build Windows Workspace preview
 
 on:
   push:
-    branches: ['codex/windows-workspace-preview-*']
+    branches: ["codex/windows-workspace-preview-*"]
   workflow_dispatch:
 
 permissions:
