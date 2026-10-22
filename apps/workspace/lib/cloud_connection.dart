@@ -4,12 +4,10 @@ import 'dart:io';
 
 import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
-    show
-        CliWorkerEngineProbeException,
-        SafeProviderDiagnostics,
-        WorkerAssignmentCancelledException;
+    show SafeProviderDiagnostics;
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 
+import 'assignment_execution_failure.dart';
 import 'assignment_journal.dart';
 import 'assignment_trace.dart';
 import 'worker_diagnostic_store.dart';
@@ -17,6 +15,8 @@ import 'workspace_connection_stage.dart';
 import 'workspace_registration.dart';
 import 'workspace_transport.dart';
 
+export 'assignment_execution_failure.dart';
+export 'websocket_workspace_transport.dart';
 export 'workspace_connection_stage.dart';
 
 part 'cloud_connection/assignment_handlers.dart';
@@ -134,166 +134,6 @@ class WorkspaceConnectionPreflightException implements Exception {
 
   @override
   String toString() => message;
-}
-
-/// A normalized assignment failure safe to report across the runtime link.
-class AssignmentExecutionFailure implements Exception {
-  const AssignmentExecutionFailure({
-    required this.code,
-    required this.message,
-    this.retryable = false,
-    this.localDiagnostic,
-  });
-
-  final String code;
-  final String message;
-  final bool retryable;
-
-  /// Redacted, bounded detail for private issue-report evidence. It is never
-  /// displayed as the Work result or included in the public report response.
-  final String? localDiagnostic;
-
-  @override
-  String toString() => message;
-}
-
-/// Converts generic Engine issue codes into the public Workspace execution
-/// error contract. Provider-neutral Engine diagnostics stay local, while
-/// Cloud receives only the stable protocol code.
-String canonicalWorkerExecutionErrorCode(Object? value) => switch (value) {
-      'provider_tool_unavailable' => 'cli_not_found',
-      'provider_authentication_required' => 'authentication_required',
-      'unsupported_provider_tool_version' => 'unsupported_cli_version',
-      'deadline_exceeded' => 'timeout',
-      'cancelled' => 'cancelled',
-      'model_not_supported' => 'model_not_supported',
-      'quota_exhausted' => 'quota_exhausted',
-      'provider_unavailable' => 'provider_unavailable',
-      'permission_denied' => 'permission_denied',
-      _ => canonicalExecutionErrorCode(value),
-    };
-
-bool isWorkerExecutionErrorRetryable(String code) => switch (code) {
-      'cancelled' ||
-      'permission_denied' ||
-      'authentication_required' ||
-      'cli_not_found' ||
-      'unsupported_cli_version' ||
-      'model_not_supported' ||
-      'quota_exhausted' =>
-        false,
-      _ => true,
-    };
-
-AssignmentExecutionFailure normalizeAssignmentExecutionFailure(Object error) {
-  if (error is AssignmentExecutionFailure) return error;
-  if (error is WorkerAssignmentCancelledException) {
-    return const AssignmentExecutionFailure(
-      code: 'cancelled',
-      message: 'The assignment was cancelled.',
-      retryable: false,
-    );
-  }
-  if (error is CliWorkerEngineProbeException) {
-    final code = canonicalWorkerExecutionErrorCode(error.issueCode);
-    return AssignmentExecutionFailure(
-      code: code,
-      message: executionErrorMessage(code),
-      retryable: isWorkerExecutionErrorRetryable(code),
-      localDiagnostic: SafeProviderDiagnostics.safeFailureDetail(
-        error.localDiagnostics ?? error.safeMessage,
-      ),
-    );
-  }
-  final detail = SafeProviderDiagnostics.safeFailureDetail(error);
-  return AssignmentExecutionFailure(
-    code: 'execution_failed',
-    message: 'The assignment could not be completed.',
-    retryable: true,
-    localDiagnostic: detail,
-  );
-}
-
-String? assignmentDiagnosticStage(String? diagnostic) {
-  if (diagnostic == null) return null;
-  try {
-    final decoded = jsonDecode(diagnostic);
-    final stage = decoded is Map ? decoded['stage'] : null;
-    return stage is String &&
-            stage.isNotEmpty &&
-            stage.length <= 64 &&
-            RegExp(r'^[A-Za-z][A-Za-z0-9_-]*$').hasMatch(stage)
-        ? stage
-        : null;
-  } on Object {
-    return null;
-  }
-}
-
-class WebSocketWorkspaceTransport implements WorkspaceTransport {
-  WebSocketWorkspaceTransport(this.socket);
-  final WebSocket socket;
-
-  @override
-  Stream<Object?> get messages => socket;
-
-  @override
-  void send(Object message) => socket.add(message);
-
-  @override
-  Future<void> sendAndWait(Object message) {
-    socket.add(message);
-    return Future<void>.value();
-  }
-
-  @override
-  Future<void> close() async {
-    try {
-      await socket.close(WebSocketStatus.normalClosure).timeout(
-        const Duration(seconds: 3),
-        onTimeout: () {
-          // Normal closure handshake timed out (e.g. network dead / wake from sleep);
-          // do not block connection cleanup.
-        },
-      );
-    } catch (_) {
-      // Ignore errors on close to ensure teardown always finishes.
-    }
-  }
-}
-
-Future<WorkspaceTransport> connectWebSocketWorkspaceTransport(
-  Uri uri, {
-  String? authToken,
-  Duration connectTimeout = const Duration(seconds: 15),
-}) async {
-  final socketUri =
-      uri.hasPort ? uri : uri.replace(port: uri.scheme == 'wss' ? 443 : 80);
-  // A fresh client discards stale pooled sockets/DNS state after sleep.
-  final client = HttpClient();
-  var expired = false;
-  final pending = WebSocket.connect(
-    socketUri.toString(),
-    customClient: client,
-    headers: authToken == null
-        ? null
-        : <String, String>{'Authorization': 'Bearer $authToken'},
-  );
-  unawaited(pending.then<void>((socket) async {
-    if (expired) await socket.close();
-  }, onError: (Object _) {}).catchError((Object _) {}));
-  late final WebSocket socket;
-  try {
-    socket = await pending.timeout(connectTimeout);
-  } on Object {
-    expired = true;
-    rethrow;
-  } finally {
-    client.close(force: true);
-  }
-
-  socket.pingInterval = const Duration(seconds: 10);
-  return WebSocketWorkspaceTransport(socket);
 }
 
 /// Flattens an `assignment.start` payload exactly as the handler does.
