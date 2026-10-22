@@ -9,8 +9,8 @@ import 'windows_native.dart';
 /// service; this adapter never starts an Engine or contacts Cloud.
 class WindowsWorkspaceServiceManager implements WorkspaceServiceManager {
   WindowsWorkspaceServiceManager({Directory? dataDirectory, File? executable})
-      : dataDirectory =
-            dataDirectory ?? WorkspaceConfigurationResolver.resolveDataDirectory(const []),
+      : dataDirectory = dataDirectory ??
+            WorkspaceConfigurationResolver.resolveDataDirectory(const []),
         executable = executable ??
             File(
                 '${File(Platform.resolvedExecutable).parent.path}/conclave-service.exe');
