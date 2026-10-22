@@ -10,7 +10,7 @@ import 'windows_native.dart';
 class WindowsWorkspaceServiceManager implements WorkspaceServiceManager {
   WindowsWorkspaceServiceManager({Directory? dataDirectory, File? executable})
       : dataDirectory =
-            dataDirectory ?? WorkspaceConfig.resolveDataDirectory(const []),
+            dataDirectory ?? WorkspaceConfigurationResolver.resolveDataDirectory(const []),
         executable = executable ??
             File(
                 '${File(Platform.resolvedExecutable).parent.path}/conclave-service.exe');
@@ -20,8 +20,9 @@ class WindowsWorkspaceServiceManager implements WorkspaceServiceManager {
     await dataDirectory.create(recursive: true);
     WindowsNative.securePath(dataDirectory.path);
     final id = await InstallationIdentityStore(dataDirectory).getOrCreate();
-    if (!RegExp(r'^[A-Za-z0-9-]{8,128}$').hasMatch(id))
+    if (!RegExp(r'^[A-Za-z0-9-]{8,128}$').hasMatch(id)) {
       throw StateError('Invalid installation identity');
+    }
     return id;
   }
 
@@ -70,8 +71,9 @@ $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name } else { $null }
       'CONCLAVE_HOST_EXECUTABLE': executable.absolute.path,
       'CONCLAVE_HOST_DATA': dataDirectory.absolute.path,
     }).timeout(const Duration(seconds: 30));
-    if (result.exitCode != 0)
+    if (result.exitCode != 0) {
       throw StateError('Windows service $operation failed: ${result.stderr}');
+    }
     return Map<String, Object?>.from(
         jsonDecode(result.stdout.toString()) as Map);
   }
@@ -101,8 +103,9 @@ $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name } else { $null }
   Future<WorkspaceServiceInfo> status() => getInfo();
   @override
   Future<WorkspaceServiceInfo> register() async {
-    if (!executable.existsSync())
+    if (!executable.existsSync()) {
       throw StateError('Bundled Workspace service is missing');
+    }
     await _run('register');
     return getInfo();
   }

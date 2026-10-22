@@ -29,8 +29,9 @@ class WindowsNative {
       .lookupFunction<Int32 Function(IntPtr), int Function(int)>('CloseHandle');
 
   static Pointer<Uint8> allocate(int bytes) {
-    if (sizeOf<IntPtr>() != 8)
+    if (sizeOf<IntPtr>() != 8) {
       throw UnsupportedError('Windows x64 is required');
+    }
     final p = _alloc(_heap, 8, bytes).cast<Uint8>();
     if (p == nullptr) throw StateError('Windows allocation failed');
     return p;
@@ -73,8 +74,9 @@ class WindowsNative {
               Pointer<Uint32>)>('GetTokenInformation');
       info(token.value, 1, nullptr, 0, needed);
       data = allocate(needed.value);
-      if (info(token.value, 1, data.cast(), needed.value, needed) == 0)
+      if (info(token.value, 1, data.cast(), needed.value, needed) == 0) {
         fail('GetTokenInformation');
+      }
       return _sidString(data.cast<Pointer<Void>>().value);
     } finally {
       close(token.value);
@@ -110,8 +112,9 @@ class WindowsNative {
               int Function(Pointer<Uint16>, int, Pointer<Pointer<Void>>,
                   Pointer<Uint32>)>(
           'ConvertStringSecurityDescriptorToSecurityDescriptorW');
-      if (convert(text, 1, output, nullptr) == 0)
+      if (convert(text, 1, output, nullptr) == 0) {
         fail('Create private security descriptor');
+      }
       return output.value;
     } finally {
       free(text);
@@ -127,8 +130,9 @@ class WindowsNative {
           Int32 Function(Pointer<Uint16>, Uint32, Pointer<Void>),
           int Function(
               Pointer<Uint16>, int, Pointer<Void>)>('SetFileSecurityW');
-      if (set(name, 0x80000004, descriptor) == 0)
+      if (set(name, 0x80000004, descriptor) == 0) {
         fail('Protect Workspace path');
+      }
     } finally {
       free(name);
       _localFree(descriptor);
@@ -159,7 +163,9 @@ class WindowsNative {
           decrypt ? 'CryptUnprotectData' : 'CryptProtectData');
       if (crypt(blob.cast(), nullptr, entropyBlob.cast(), nullptr, nullptr, 1,
               output.cast()) ==
-          0) fail('DPAPI');
+          0) {
+        fail('DPAPI');
+      }
       final length = output.cast<Uint32>().value;
       if (length > 1024 * 1024) throw StateError('Credential exceeds limit');
       return Uint8List.fromList(
@@ -301,7 +307,9 @@ class WindowsNative {
         if (write(handle, (buffer + offset).cast(), bytes.length - offset,
                     count, nullptr) ==
                 0 ||
-            count.value == 0) fail('Write Workspace pipe');
+            count.value == 0) {
+          fail('Write Workspace pipe');
+        }
         offset += count.value;
       }
     } finally {
@@ -313,8 +321,9 @@ class WindowsNative {
   static void cancelPipe(int handle, {bool server = false}) {
     _kernel.lookupFunction<Int32 Function(IntPtr, Pointer<Void>),
         int Function(int, Pointer<Void>)>('CancelIoEx')(handle, nullptr);
-    if (server)
+    if (server) {
       _kernel.lookupFunction<Int32 Function(IntPtr), int Function(int)>(
           'DisconnectNamedPipe')(handle);
+    }
   }
 }

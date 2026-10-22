@@ -41,20 +41,23 @@ Stream<String> managementLines(Stream<List<int>> input) {
         handleData: (chunk, sink) {
           for (final byte in chunk) {
             if (byte == 10) {
-              if (pending.isNotEmpty && pending.last == 13)
+              if (pending.isNotEmpty && pending.last == 13) {
                 pending.removeLast();
+              }
               sink.add(utf8.decode(pending));
               pending.clear();
             } else {
-              if (pending.length >= 1024 * 1024)
+              if (pending.length >= 1024 * 1024) {
                 throw const FormatException('IPC frame exceeds byte limit');
+              }
               pending.add(byte);
             }
           }
         },
         handleDone: (sink) {
-          if (pending.isNotEmpty)
+          if (pending.isNotEmpty) {
             sink.addError(const FormatException('Truncated IPC frame'));
+          }
           sink.close();
         },
       ));
@@ -100,8 +103,9 @@ class WindowsPipeChannel implements LocalManagementChannel {
     final bytes = utf8.encode(value);
     final nativeHandle = handle;
     _writer = _writer.then((_) async {
-      if (!_closed)
+      if (!_closed) {
         await Isolate.run(() => WindowsNative.writePipe(nativeHandle, bytes));
+      }
     }).catchError((Object error, StackTrace stack) {
       if (!_closed) _input.addError(error, stack);
       destroy();

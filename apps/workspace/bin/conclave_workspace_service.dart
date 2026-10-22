@@ -66,8 +66,9 @@ Future<void> main(List<String> args) async {
     final stopRequest = File('${dataDirectory.path}/runtime/stop-request');
     final stopTimer = Platform.isWindows
         ? Timer.periodic(const Duration(milliseconds: 250), (_) {
-            if (stopRequest.existsSync() && !stopped.isCompleted)
+            if (stopRequest.existsSync() && !stopped.isCompleted) {
               stopped.complete();
+            }
           })
         : null;
     final signals = [

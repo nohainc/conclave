@@ -14,8 +14,9 @@ class WindowsCredentials {
   String? read(String service, String key) {
     final file = _file(service, key);
     if (!file.existsSync()) return null;
-    if (file.lengthSync() > 1024 * 1024)
+    if (file.lengthSync() > 1024 * 1024) {
       throw StateError('Credential file exceeds limit');
+    }
     WindowsNative.securePath(directory.path);
     WindowsNative.securePath(file.path);
     return utf8.decode(WindowsNative.protect(

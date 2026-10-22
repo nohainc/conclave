@@ -67,9 +67,10 @@ class WorkspacePaths {
         final legacy = Directory(
             '${runtime.homeDirectory}/${conclaveWorkspaceIsLocalBuild ? '.conclave-workspace-local' : '.conclave-workspace'}');
         if (legacy.existsSync()) {
-          if (target.existsSync())
+          if (target.existsSync()) {
             throw StateError(
                 'Both legacy and current Windows Workspace state exist. Preserve both directories and select the authoritative one with --data-dir before activation.');
+          }
           try {
             target.parent.createSync(recursive: true);
             legacy.renameSync(target.path);

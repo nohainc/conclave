@@ -42,8 +42,9 @@ class MethodChannelWorkspaceServiceManager implements WorkspaceServiceManager {
 
   @override
   Future<WorkspaceServiceInfo> unregister() async {
-    if (Platform.isWindows)
+    if (Platform.isWindows) {
       return WindowsWorkspaceServiceManager().unregister();
+    }
     if (!Platform.isMacOS) {
       throw UnsupportedError(
           'Background service management is currently supported only on macOS.');
@@ -82,8 +83,9 @@ class MethodChannelWorkspaceServiceManager implements WorkspaceServiceManager {
 
   @override
   Future<void> openSettings() async {
-    if (Platform.isWindows)
+    if (Platform.isWindows) {
       return WindowsWorkspaceServiceManager().openSettings();
+    }
     if (!Platform.isMacOS) {
       throw UnsupportedError(
           'Background service settings are currently supported only on macOS.');
