@@ -7,6 +7,9 @@ Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') {
     throw 'Build Workspace for Windows on a Windows host with Flutter and Visual Studio C++ desktop tools.'
 }
+if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') {
+    throw 'This preview build currently requires a Windows x64 host.'
+}
 $Root = Split-Path $PSScriptRoot -Parent
 $Workspace = Join-Path $Root 'apps/workspace'
 foreach ($Tool in @('flutter', 'dart', 'node', 'git')) {
@@ -42,7 +45,7 @@ try {
             CONCLAVE_RELEASE_TRUST_KEYS_JSON = [string]$Trust
         } | ConvertTo-Json
         [System.IO.File]::WriteAllText($DefineFile, $Defines, [System.Text.UTF8Encoding]::new($false))
-        Invoke-Checked 'flutter' @('build', 'windows', "--$Mode", '--target-platform=windows-x64',
+        Invoke-Checked 'flutter' @('build', 'windows', "--$Mode",
             "--dart-define-from-file=$DefineFile")
     } finally {
         Pop-Location
