@@ -103,6 +103,7 @@ export const requiredProductionSmokeColumns = Object.freeze({
     "context_revision",
     "created_at",
     "updated_at",
+    "context_floor_sequence",
   ],
   conversation_work_requests: [
     "conversation_id",
@@ -352,6 +353,26 @@ export const requiredProductionSmokeTableDefinitions = Object.freeze(
           sourceDefinition = sourceDefinition.replace(
             "created_at TEXT NOT NULL,",
             `created_at TEXT NOT NULL, ${columns.join(", ")},`,
+          );
+        }
+        if (tableName === "conversations") {
+          const columns = ["0079_ai_history_cutoff.sql"].flatMap((path) => {
+            const evolution = readFileSync(
+              join(repositoryRoot, "apps/cloud/migrations-v8", path),
+              "utf8",
+            );
+            return [
+              ...evolution.matchAll(
+                new RegExp(
+                  `ALTER TABLE ${tableName}\\s+ADD COLUMN ([^;]+);`,
+                  "g",
+                ),
+              ),
+            ].map((match) => match[1]);
+          });
+          sourceDefinition = sourceDefinition.replace(
+            "updated_at TEXT NOT NULL,",
+            `updated_at TEXT NOT NULL, ${columns.join(", ")},`,
           );
         }
         const definition = sourceDefinition.replace(
