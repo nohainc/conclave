@@ -19,6 +19,22 @@ void main() {
     expect(uiParts, isNot(contains('Process.start(')));
   });
 
+  test('Workspace UI does not import the Cloud runtime or run processes', () {
+    final uiLibrary = [
+      _source('lib/main.dart'),
+      _source('lib/main/lifecycle.dart'),
+      _source('lib/main/app.dart'),
+      _source('lib/main/management.dart'),
+      _source('lib/main/shell.dart'),
+      _source('lib/main/dashboard.dart'),
+      _source('lib/main/workers.dart'),
+    ].join('\n');
+
+    expect(uiLibrary, isNot(contains("import 'cloud_connection.dart'")));
+    expect(uiLibrary, isNot(contains('Process.run(')));
+    expect(uiLibrary, isNot(contains('Process.start(')));
+  });
+
   test('the service owns Cloud and Worker subsystem composition', () {
     final runtime = _source('lib/workspace_runtime.dart');
     final manager = _source('lib/workspace_manager_service.dart');

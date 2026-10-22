@@ -13,8 +13,11 @@ import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'assignment_journal.dart';
 import 'assignment_trace.dart';
 import 'worker_diagnostic_store.dart';
+import 'workspace_connection_stage.dart';
 import 'workspace_registration.dart';
 import 'workspace_transport.dart';
+
+export 'workspace_connection_stage.dart';
 
 part 'cloud_connection/assignment_handlers.dart';
 
@@ -98,17 +101,6 @@ typedef WorkspaceAssignmentCancellationHandler = Future<bool> Function(
 typedef WorkspaceUpdateAvailableHandler = Future<void> Function(
   Map<String, Object?> payload,
 );
-
-enum WorkspaceConnectionStage {
-  validating,
-  offline,
-  connecting,
-  authenticating,
-  synchronizing,
-  ready,
-  reconnecting,
-  switchingToWebSocket,
-}
 
 /// Service-level connection state published to Cloud. It describes the Service
 /// as a transport endpoint only; Worker eligibility is reported separately

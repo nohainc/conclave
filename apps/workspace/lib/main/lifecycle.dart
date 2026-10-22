@@ -97,8 +97,7 @@ class WorkspaceLifecycleController extends ChangeNotifier {
           ));
   // Fail closed until the human session has been restored by the shell router.
   bool _managementAuthRequired = true;
-  static const _desktopChannel =
-      MethodChannel('com.conclave.workspace/desktop');
+  static final _desktopShell = DesktopShell();
   static const WorkspaceServiceManager _serviceManager =
       MethodChannelWorkspaceServiceManager();
 
@@ -689,96 +688,15 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     notifyListeners();
   }
 
-  static Future<void> openPath(String path) async {
-    try {
-      await _desktopChannel.invokeMethod<void>('openPath', path);
-    } catch (_) {
-      if (Platform.isMacOS) {
-        await Process.run('open', [path]);
-      } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [path]);
-      } else if (Platform.isWindows) {
-        await Process.run('explorer', [path]);
-      }
-    }
-  }
+  static Future<void> openPath(String path) => _desktopShell.openPath(path);
 
-  static Future<String?> chooseDirectory({String? initialPath}) async {
-    try {
-      final result = await _desktopChannel.invokeMethod<String>(
-          'chooseDirectory', initialPath);
-      if (result != null && result.trim().isNotEmpty) return result.trim();
-    } catch (_) {}
-    if (Platform.isMacOS) {
-      try {
-        final script = initialPath != null &&
-                Directory(initialPath).existsSync()
-            ? 'POSIX path of (choose folder with prompt "Select Work Root Directory" default location POSIX file "$initialPath")'
-            : 'POSIX path of (choose folder with prompt "Select Work Root Directory")';
-        final result = await Process.run('osascript', ['-e', script]);
-        if (result.exitCode == 0) {
-          final path = result.stdout.toString().trim();
-          if (path.isNotEmpty) return path;
-        }
-      } catch (_) {}
-    } else if (Platform.isLinux) {
-      try {
-        final result = await Process.run('zenity', [
-          '--file-selection',
-          '--directory',
-          '--title=Select Work Root Directory'
-        ]);
-        if (result.exitCode == 0) {
-          final path = result.stdout.toString().trim();
-          if (path.isNotEmpty) return path;
-        }
-      } catch (_) {}
-    } else if (Platform.isWindows) {
-      try {
-        final ps = '''
-Add-Type -AssemblyName System.Windows.Forms
-\$f = New-Object System.Windows.Forms.FolderBrowserDialog
-\$f.Description = "Select Work Root Directory"
-if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.SelectedPath }
-''';
-        final result =
-            await Process.run('powershell', ['-NoProfile', '-Command', ps]);
-        if (result.exitCode == 0) {
-          final path = result.stdout.toString().trim();
-          if (path.isNotEmpty) return path;
-        }
-      } catch (_) {}
-    }
-    return null;
-  }
+  static Future<String?> chooseDirectory({String? initialPath}) =>
+      _desktopShell.chooseDirectory(initialPath: initialPath);
 
-  static Future<String?> requestWorkRootAccess({String? initialPath}) async {
-    try {
-      final result = await _desktopChannel.invokeMethod<String>(
-          'requestWorkRootAccess', initialPath);
-      if (result != null && result.trim().isNotEmpty) return result.trim();
-    } catch (_) {}
-    return chooseDirectory(initialPath: initialPath);
-  }
+  static Future<String?> requestWorkRootAccess({String? initialPath}) =>
+      _desktopShell.requestWorkRootAccess(initialPath: initialPath);
 
-  static Future<void> openAX([String? url]) async {
-    try {
-      // The native handler always opens the production web app, so local
-      // builds open the local web app directly.
-      if (conclaveWorkspaceIsLocalBuild) throw StateError('local build');
-      await _desktopChannel.invokeMethod<void>('openAX');
-    } catch (_) {
-      final target = url ??
-          (conclaveWorkspaceIsLocalBuild
-              ? 'http://localhost:3000'
-              : 'https://app.conclaveax.com');
-      if (Platform.isMacOS) {
-        await Process.run('open', [target]);
-      } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [target]);
-      }
-    }
-  }
+  static Future<void> openAX([String? url]) => _desktopShell.openAX(url);
 
   void _publishMenuStatus() {
     final cloud = _managerSnapshot['cloud'];
@@ -786,31 +704,29 @@ if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.Selected
     final cloudMap = cloud is Map ? cloud : const <String, Object?>{};
     final assignmentMap =
         assignments is Map ? assignments : const <String, Object?>{};
+    final preferences =
+        WorkspaceLifecyclePreferencesStore(config.dataDirectory).readSync();
     final state = startupError != null
         ? 'Attention'
         : cloudMap['connected'] == true
             ? 'Connected'
-            : WorkspaceLifecyclePreferencesStore(config.dataDirectory)
-                        .readSync()
-                        .desiredCloudState ==
+            : preferences.desiredCloudState ==
                     DesiredCloudConnectionState.connected
                 ? 'Connecting'
                 : 'Disconnected';
-    unawaited(_desktopChannel.invokeMethod<void>('status', {
+    unawaited(_desktopShell.publishStatus({
       'state': state,
       'transportMode': cloudMap['transport'] ?? 'offline',
       'fallbackHealth': 'service managed',
       'active': assignmentMap['activeCount'] ?? 0,
       'accepting': cloudMap['acceptingNewWork'] == true,
       'draining': false,
-      'managementLocked': WorkspaceLifecyclePreferencesStore(
-            config.dataDirectory,
-          ).readSync().managementLockPreference ==
-          ManagementLockState.locked,
+      'managementLocked':
+          preferences.managementLockPreference == ManagementLockState.locked,
       'reauthRequired': _managementAuthRequired,
       'runtimeRunning': cloudMap['connected'] == true,
       'serviceRunning': uiSnapshot.serviceHealthy,
-    }).catchError((_) {}));
+    }));
   }
 
   WorkspaceUiSnapshot get _ipcUiSnapshot {

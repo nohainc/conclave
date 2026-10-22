@@ -6,10 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'brand.dart';
-import 'cloud_connection.dart';
 import 'desktop_auth.dart';
+import 'desktop_shell.dart';
 import 'friendly_computer_name.dart';
 import 'workspace.dart';
+import 'workspace_connection_stage.dart';
 import 'workspace_configuration.dart';
 import 'work_root.dart';
 import 'stopped_workspace_configuration.dart';
