@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:conclave_app/src/ax/ax_data.dart';
+import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -50,17 +51,24 @@ void main() {
         'workers': {
           'a': {
             'models': ['analysis'],
-            'efforts': null
+            'efforts': null,
+            'modelEfforts': {
+              'analysis': ['low']
+            }
           }
         }
       }
     });
     expect(access.workers['a']!.models, ['analysis']);
     expect(access.workers['a']!.efforts, isNull);
+    expect(access.workers['a']!.modelEfforts?['analysis'], ['low']);
     expect(access.toJson()['workers'], {
       'a': {
         'models': ['analysis'],
-        'efforts': null
+        'efforts': null,
+        'modelEfforts': {
+          'analysis': ['low']
+        }
       }
     });
     expect(const AxWorkspaceMemberAccess().toJson(), {'restricted': false});
@@ -113,14 +121,16 @@ void main() {
     // Deselecting one model narrows "All" to the rest.
     await tester.tap(find.byKey(const ValueKey('member-model-review-a')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('member-effort-high-a')));
+    await tester
+        .tap(find.byKey(const ValueKey('member-effort-analysis-high-a')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('member-access-save')));
     await tester.pumpAndSettle();
     expect(source.saves, hasLength(1));
     expect(source.saves.single.restricted, isTrue);
     expect(source.saves.single.workers['a']!.models, ['analysis']);
-    expect(source.saves.single.workers['a']!.efforts, ['low', 'thorough']);
+    expect(
+        source.saves.single.workers['a']!.modelEfforts?['analysis'], ['low']);
     // Saved state is clean again.
     expect(
         tester
@@ -128,6 +138,30 @@ void main() {
                 find.byKey(const ValueKey('member-access-save')))
             .onPressed,
         isNull);
+  });
+
+  testWidgets('handles independent effort selection per model', (tester) async {
+    final source = AccessSource();
+    await pump(tester, source);
+    await tester.tap(find.byKey(const ValueKey('share-worker-a')));
+    await tester.pumpAndSettle();
+    // Both models analysis and review are active.
+    // analysis has low, high; review has thorough.
+    expect(find.byKey(const ValueKey('member-effort-analysis-high-a')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('member-effort-review-thorough-a')),
+        findsOneWidget);
+    // Select low for analysis only (by toggling off high)
+    await tester
+        .tap(find.byKey(const ValueKey('member-effort-analysis-high-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('member-access-save')));
+    await tester.pumpAndSettle();
+    expect(source.saves, hasLength(1));
+    expect(source.saves.single.workers['a']!.models, isNull); // All models
+    expect(
+        source.saves.single.workers['a']!.modelEfforts?['analysis'], ['low']);
+    expect(source.saves.single.workers['a']!.modelEfforts?['review'], isNull);
   });
 
   testWidgets('load failure is retryable', (tester) async {
@@ -138,6 +172,55 @@ void main() {
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('member-access-save')), findsOneWidget);
+  });
+
+  testWidgets('displays official provider icons for workers in the table',
+      (tester) async {
+    final source = AccessSource();
+    await tester.binding.setSurfaceSize(const Size(900, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    const geminiWorker = AxWorker(
+      id: 'w-gemini',
+      workspaceId: 'ws',
+      workspaceName: 'Laptop',
+      workerTypeId: 'gemini',
+      displayName: 'Gemini',
+      status: 'ready',
+      readinessState: 'ready',
+      localConcurrencyLimit: 1,
+    );
+    const chatgptWorker = AxWorker(
+      id: 'w-chatgpt',
+      workspaceId: 'ws',
+      workspaceName: 'Laptop',
+      workerTypeId: 'chatgpt',
+      displayName: 'ChatGPT',
+      status: 'ready',
+      readinessState: 'ready',
+      localConcurrencyLimit: 1,
+    );
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: WorkspaceMemberAccessSection(
+                    workspaceId: 'ws',
+                    workers: [geminiWorker, chatgptWorker],
+                    source: source)))));
+    await tester.pumpAndSettle();
+
+    final imageWidgets = tester.widgetList<Image>(find.byType(Image)).toList();
+    expect(
+        imageWidgets.any((img) =>
+            img.image is AssetImage &&
+            (img.image as AssetImage).assetName ==
+                'assets/worker_icons/gemini.png'),
+        isTrue);
+    expect(
+        imageWidgets.any((img) =>
+            img.image is AssetImage &&
+            (img.image as AssetImage).assetName ==
+                'assets/worker_icons/chatgpt.png'),
+        isTrue);
   });
 
   test('API client reads shared Workers and manages member access', () async {

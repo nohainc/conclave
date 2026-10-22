@@ -23,6 +23,9 @@ export interface WorkspaceMemberAccessPolicy {
       {
         readonly models: readonly string[] | null;
         readonly efforts: readonly string[] | null;
+        readonly modelEfforts?: Readonly<
+          Record<string, readonly string[] | null>
+        > | null;
       }
     >
   >;
@@ -66,17 +69,51 @@ export function parseWorkspaceMemberAccessPolicy(
     throw new HttpError(400, "Too many shared Workers");
   const parsed: Record<
     string,
-    { models: string[] | null; efforts: string[] | null }
+    {
+      models: string[] | null;
+      efforts: string[] | null;
+      modelEfforts?: Record<string, string[] | null> | null;
+    }
   > = {};
   for (const [workerId, entry] of entries) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry))
       throw new HttpError(400, "Invalid shared Worker entry");
     const object = entry as Record<string, unknown>;
-    if (Object.keys(object).some((key) => !["models", "efforts"].includes(key)))
+    if (
+      Object.keys(object).some(
+        (key) => !["models", "efforts", "modelEfforts"].includes(key),
+      )
+    )
       throw new HttpError(400, "Unknown shared Worker field");
+
+    let modelEfforts: Record<string, string[] | null> | null = null;
+    if (object.modelEfforts !== undefined && object.modelEfforts !== null) {
+      if (
+        typeof object.modelEfforts !== "object" ||
+        Array.isArray(object.modelEfforts)
+      )
+        throw new HttpError(400, "modelEfforts must be an object or null");
+      const modelEntries = Object.entries(
+        object.modelEfforts as Record<string, unknown>,
+      );
+      if (modelEntries.length > MAX_VALUES)
+        throw new HttpError(400, "Too many model effort entries");
+      modelEfforts = {};
+      for (const [modelId, effs] of modelEntries) {
+        if (
+          typeof modelId !== "string" ||
+          modelId.length === 0 ||
+          modelId.length > 200
+        )
+          throw new HttpError(400, "Invalid model identifier in modelEfforts");
+        modelEfforts[modelId] = stringList(effs, `modelEfforts for ${modelId}`);
+      }
+    }
+
     parsed[workerId] = {
       models: stringList(object.models, "models"),
       efforts: stringList(object.efforts, "efforts"),
+      ...(modelEfforts !== null ? { modelEfforts } : {}),
     };
   }
   return {
@@ -147,9 +184,17 @@ export function memberSelectionError(
     (!selection.model || !shared.models.includes(selection.model))
   )
     return "Choose one of the models shared with Space members for this Worker";
+
+  const allowedEfforts =
+    selection.model &&
+    shared.modelEfforts &&
+    selection.model in shared.modelEfforts
+      ? shared.modelEfforts[selection.model]
+      : shared.efforts;
+
   if (
-    shared.efforts &&
-    (!selection.effort || !shared.efforts.includes(selection.effort))
+    allowedEfforts &&
+    (!selection.effort || !allowedEfforts.includes(selection.effort))
   )
     return "Choose one of the efforts shared with Space members for this Worker";
   return null;
@@ -168,18 +213,25 @@ export function restrictExecutionOptions<T>(
 ): T {
   if (!options || typeof options !== "object") return options;
   const source = options as Record<string, unknown>;
-  const keepEffort = (values: unknown) =>
-    Array.isArray(values)
+  const getEffortFilter = (modelId?: string) => {
+    if (modelId && shared.modelEfforts && modelId in shared.modelEfforts) {
+      return shared.modelEfforts[modelId];
+    }
+    return shared.efforts;
+  };
+  const keepEffort = (values: unknown, modelId?: string) => {
+    const allowed = getEffortFilter(modelId);
+    return Array.isArray(values)
       ? values.filter(
           (value) =>
-            typeof value === "string" &&
-            (!shared.efforts || shared.efforts.includes(value)),
+            typeof value === "string" && (!allowed || allowed.includes(value)),
         )
       : values;
-  const restrictEffort = (effort: unknown) => {
+  };
+  const restrictEffort = (effort: unknown, modelId?: string) => {
     if (!effort || typeof effort !== "object") return effort;
     const current = effort as Record<string, unknown>;
-    const values = keepEffort(current.values) as unknown[];
+    const values = keepEffort(current.values, modelId) as unknown[];
     return {
       ...current,
       values,
@@ -196,8 +248,9 @@ export function restrictExecutionOptions<T>(
   const restrictedOptions = (models.options as Record<string, unknown>[])
     .filter(allowed)
     .map((model): Record<string, unknown> => {
+      const modelId = String(model.id);
       if (Array.isArray(model.efforts)) {
-        const efforts = keepEffort(model.efforts) as unknown[];
+        const efforts = keepEffort(model.efforts, modelId) as unknown[];
         return {
           ...model,
           efforts,
@@ -206,7 +259,7 @@ export function restrictExecutionOptions<T>(
             : null,
         };
       }
-      return { ...model, effort: restrictEffort(model.effort) };
+      return { ...model, effort: restrictEffort(model.effort, modelId) };
     });
   const ids = restrictedOptions.map((model) => model.id);
   return {

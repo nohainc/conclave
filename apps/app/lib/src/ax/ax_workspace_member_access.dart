@@ -1,14 +1,25 @@
 /// Workers, models and efforts a Workspace shares with invited Space members.
 /// A null list shares every model or effort of that Worker.
 class AxSharedWorker {
-  const AxSharedWorker({this.models, this.efforts});
+  const AxSharedWorker({this.models, this.efforts, this.modelEfforts});
   final List<String>? models;
   final List<String>? efforts;
+  final Map<String, List<String>?>? modelEfforts;
   factory AxSharedWorker.fromJson(Map<String, dynamic> json) => AxSharedWorker(
         models: (json['models'] as List?)?.whereType<String>().toList(),
         efforts: (json['efforts'] as List?)?.whereType<String>().toList(),
+        modelEfforts: (json['modelEfforts'] as Map?)?.map(
+          (k, v) => MapEntry(
+            k as String,
+            (v as List?)?.whereType<String>().toList(),
+          ),
+        ),
       );
-  Map<String, dynamic> toJson() => {'models': models, 'efforts': efforts};
+  Map<String, dynamic> toJson() => {
+        'models': models,
+        'efforts': efforts,
+        if (modelEfforts != null) 'modelEfforts': modelEfforts,
+      };
 }
 
 /// Ceiling on the work a person may run on a Workspace (ADR-020). A null mode

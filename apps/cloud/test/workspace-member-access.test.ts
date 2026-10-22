@@ -105,6 +105,47 @@ describe("memberSelectionError", () => {
     ).toMatch(/efforts/);
     // Unrestricted lists share everything, including Auto.
     expect(memberSelectionError(policy, { worker: "worker-c" })).toBeNull();
+
+    const modelEffortPolicy = parseWorkspaceMemberAccessPolicy({
+      workers: {
+        "worker-m": {
+          models: ["model-1", "model-2"],
+          efforts: null,
+          modelEfforts: {
+            "model-1": ["low"],
+            "model-2": ["high"],
+          },
+        },
+      },
+    });
+    expect(
+      memberSelectionError(modelEffortPolicy, {
+        worker: "worker-m",
+        model: "model-1",
+        effort: "low",
+      }),
+    ).toBeNull();
+    expect(
+      memberSelectionError(modelEffortPolicy, {
+        worker: "worker-m",
+        model: "model-1",
+        effort: "high",
+      }),
+    ).toMatch(/efforts/);
+    expect(
+      memberSelectionError(modelEffortPolicy, {
+        worker: "worker-m",
+        model: "model-2",
+        effort: "high",
+      }),
+    ).toBeNull();
+    expect(
+      memberSelectionError(modelEffortPolicy, {
+        worker: "worker-m",
+        model: "model-2",
+        effort: "low",
+      }),
+    ).toMatch(/efforts/);
   });
   it("rejects malformed policies", () => {
     expect(() => parseWorkspaceMemberAccessPolicy({})).toThrow();
@@ -389,6 +430,26 @@ describe("shared Worker inventory", () => {
     expect(restricted.models.defaultModelId).toBeNull();
     expect(restricted.models.allowsCustomModel).toBe(false);
     expect(restricted.effort.values).toEqual(["low"]);
+
+    const restrictedByModelEfforts = restrictExecutionOptions(options, {
+      models: ["fast", "slow"],
+      efforts: null,
+      modelEfforts: {
+        fast: ["low"],
+        slow: ["high"],
+      },
+    });
+    expect(restrictedByModelEfforts.models.options).toEqual([
+      expect.objectContaining({
+        id: "fast",
+        efforts: ["low"],
+      }),
+      expect.objectContaining({
+        id: "slow",
+        efforts: ["high"],
+      }),
+    ]);
+
     // Sharing everything leaves the options as they were.
     const all = restrictExecutionOptions(options, {
       models: null,

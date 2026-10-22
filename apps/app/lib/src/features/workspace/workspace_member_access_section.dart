@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
 import '../../ax/ax_workspace_member_access.dart';
+import '../../ax/worker_presentation.dart';
 import '../common/quiet_notices.dart';
 
 /// Owner control for what invited Space members can use on a Workspace. When
@@ -129,11 +130,33 @@ class _WorkspaceMemberAccessSectionState
     bool same(List<String>? x, List<String>? y) => x == null || y == null
         ? x == y
         : x.length == y.length && x.toSet().containsAll(y);
+    bool sameMap(
+        Map<String, List<String>?>? m1, Map<String, List<String>?>? m2) {
+      final clean1 = m1 == null || m1.isEmpty
+          ? null
+          : Map.fromEntries(m1.entries.where((e) => e.value != null));
+      final clean2 = m2 == null || m2.isEmpty
+          ? null
+          : Map.fromEntries(m2.entries.where((e) => e.value != null));
+      if (clean1 == null || clean1.isEmpty) {
+        return clean2 == null || clean2.isEmpty;
+      }
+      if (clean2 == null || clean1.length != clean2.length) return false;
+      for (final entry in clean1.entries) {
+        if (!clean2.containsKey(entry.key) ||
+            !same(entry.value, clean2[entry.key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+
     for (final entry in a.entries) {
       final other = b[entry.key];
       if (other == null ||
           !same(entry.value.models, other.models) ||
-          !same(entry.value.efforts, other.efforts)) {
+          !same(entry.value.efforts, other.efforts) ||
+          !sameMap(entry.value.modelEfforts, other.modelEfforts)) {
         return false;
       }
     }
@@ -208,8 +231,9 @@ class _WorkspaceMemberAccessSectionState
         else ...[
           if (workers.isEmpty)
             Text('This Workspace has no Workers to share yet.',
-                style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-          for (final worker in workers) _workerTile(context, worker),
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
+          else
+            _buildAccessGrid(context, workers),
           const SizedBox(height: 8),
           Align(
               alignment: Alignment.centerLeft,
@@ -229,69 +253,274 @@ class _WorkspaceMemberAccessSectionState
     );
   }
 
-  Widget _workerTile(BuildContext context, AxWorker worker) {
-    final shared = _workers[worker.id];
-    final models =
-        (worker.executionOptions?.models ?? const <AxWorkerModelOption>[])
-            .where((model) => model.status != 'unavailable')
-            .toList(growable: false);
-    final efforts = <String>{
-      for (final model in models) ...model.effort.values,
-    }.toList(growable: false);
-    final modelIds = [for (final model in models) model.id];
-    Widget chips(
-        String label,
-        List<String> ids,
-        Map<String, String> names,
-        List<String>? selected,
-        ValueChanged<List<String>?> onChanged,
-        String keyPrefix) {
-      if (ids.isEmpty) return const SizedBox.shrink();
-      return Padding(
-          padding: const EdgeInsets.only(left: 16, bottom: 8),
-          child: Wrap(spacing: 8, runSpacing: 4, children: [
-            Text('$label:'),
-            FilterChip(
-                key: ValueKey('$keyPrefix-all-${worker.id}'),
-                label: const Text('All'),
-                selected: selected == null,
-                onSelected: (_) => onChanged(null)),
-            for (final id in ids)
-              FilterChip(
-                  key: ValueKey('$keyPrefix-$id-${worker.id}'),
-                  label: Text(names[id] ?? id),
-                  selected: selected == null || selected.contains(id),
-                  onSelected: (_) => onChanged(_toggle(selected, id, ids))),
-          ]));
+  Widget _workerIconWidget(BuildContext context, AxWorker worker) {
+    final presentation = WorkerPresentation.resolve(
+      worker.workerTypeId,
+      worker.displayName,
+    );
+    final workerIcon = presentation.iconAsset;
+    if (workerIcon != null) {
+      return Image.asset(
+        workerIcon,
+        width: 18,
+        height: 18,
+        fit: BoxFit.contain,
+        semanticLabel: '${worker.displayName} icon',
+      );
+    }
+    final theme = Theme.of(context);
+    return Icon(
+      worker.isReady ? Icons.smart_toy_outlined : Icons.warning_amber,
+      size: 18,
+      color: worker.isReady ? theme.colorScheme.primary : Colors.amber,
+    );
+  }
+
+  Widget _buildAccessGrid(BuildContext context, List<AxWorker> workers) {
+    final theme = Theme.of(context);
+    final allEfforts = <String>[];
+    for (final worker in workers) {
+      final models =
+          (worker.executionOptions?.models ?? const <AxWorkerModelOption>[])
+              .where((m) => m.status != 'unavailable');
+      for (final model in models) {
+        for (final eff in model.effort.values) {
+          if (!allEfforts.contains(eff)) allEfforts.add(eff);
+        }
+      }
+      if (models.isEmpty &&
+          (worker.executionOptions?.effort.supported ?? false)) {
+        for (final eff in worker.executionOptions!.effort.values) {
+          if (!allEfforts.contains(eff)) allEfforts.add(eff);
+        }
+      }
     }
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      CheckboxListTile(
-          key: ValueKey('share-worker-${worker.id}'),
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          title: Text(worker.displayName),
-          value: shared != null,
-          onChanged: _saving
-              ? null
-              : (value) => setState(() {
-                    if (value == true) {
-                      _workers[worker.id] = const AxSharedWorker();
-                    } else {
-                      _workers.remove(worker.id);
-                    }
-                  })),
-      if (shared != null) ...[
-        chips('Models', modelIds, {for (final m in models) m.id: m.name},
-            shared.models, (value) {
-          setState(() => _workers[worker.id] =
-              AxSharedWorker(models: value, efforts: shared.efforts));
-        }, 'member-model'),
-        chips('Efforts', efforts, const {}, shared.efforts, (value) {
-          setState(() => _workers[worker.id] =
-              AxSharedWorker(models: shared.models, efforts: value));
-        }, 'member-effort'),
-      ],
-    ]);
+    String effortTitle(String eff) {
+      if (eff.isEmpty) return eff;
+      return eff[0].toUpperCase() + eff.substring(1);
+    }
+
+    final rows = <DataRow>[];
+    for (final worker in workers) {
+      final shared = _workers[worker.id];
+      final models =
+          (worker.executionOptions?.models ?? const <AxWorkerModelOption>[])
+              .where((m) => m.status != 'unavailable')
+              .toList(growable: false);
+      final modelIds = [for (final m in models) m.id];
+      final isWorkerShared = shared != null;
+
+      // Worker header row
+      rows.add(
+        DataRow(
+          color: WidgetStateProperty.resolveWith(
+            (states) => theme.colorScheme.surfaceContainerHighest
+                .withValues(alpha: 0.35),
+          ),
+          cells: [
+            DataCell(Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _workerIconWidget(context, worker),
+                const SizedBox(width: 8),
+                Text(worker.displayName,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+              ],
+            )),
+            DataCell(Center(
+              child: Checkbox(
+                key: ValueKey('share-worker-${worker.id}'),
+                value: isWorkerShared,
+                onChanged: _saving
+                    ? null
+                    : (value) => setState(() {
+                          if (value == true) {
+                            _workers[worker.id] = const AxSharedWorker();
+                          } else {
+                            _workers.remove(worker.id);
+                          }
+                        }),
+              ),
+            )),
+            for (final eff in allEfforts)
+              DataCell(Center(
+                child: models.isEmpty &&
+                        (worker.executionOptions?.effort.values.contains(eff) ??
+                            false)
+                    ? Checkbox(
+                        key: ValueKey('member-effort-$eff-${worker.id}'),
+                        value: isWorkerShared &&
+                            (shared.efforts == null ||
+                                shared.efforts!.contains(eff)),
+                        onChanged: !isWorkerShared || _saving
+                            ? null
+                            : (value) {
+                                final next = _toggle(shared.efforts, eff,
+                                    worker.executionOptions!.effort.values);
+                                setState(
+                                    () => _workers[worker.id] = AxSharedWorker(
+                                          models: shared.models,
+                                          efforts: next,
+                                          modelEfforts: shared.modelEfforts,
+                                        ));
+                              },
+                      )
+                    : Text('—', style: TextStyle(color: theme.disabledColor)),
+              )),
+          ],
+        ),
+      );
+
+      // Model rows
+      for (final model in models) {
+        final isModelShared = isWorkerShared &&
+            (shared.models == null || shared.models!.contains(model.id));
+        final supportsEffort =
+            model.effort.supported && model.effort.values.isNotEmpty;
+
+        List<String>? currentEfforts;
+        if (shared != null &&
+            shared.modelEfforts != null &&
+            shared.modelEfforts!.containsKey(model.id)) {
+          currentEfforts = shared.modelEfforts![model.id];
+        } else if (shared != null && shared.efforts != null) {
+          final filtered =
+              shared.efforts!.where(model.effort.values.contains).toList();
+          currentEfforts =
+              filtered.length == model.effort.values.length ? null : filtered;
+        }
+
+        rows.add(
+          DataRow(
+            cells: [
+              DataCell(Padding(
+                padding: const EdgeInsets.only(left: 20),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.subdirectory_arrow_right,
+                        size: 16, color: theme.colorScheme.outline),
+                    const SizedBox(width: 8),
+                    Text(
+                      model.name,
+                      style: TextStyle(
+                        color: isWorkerShared ? null : theme.disabledColor,
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+              DataCell(Center(
+                child: Checkbox(
+                  key: ValueKey('member-model-${model.id}-${worker.id}'),
+                  value: isModelShared,
+                  onChanged: !isWorkerShared || _saving
+                      ? null
+                      : (value) {
+                          final nextModels =
+                              _toggle(shared.models, model.id, modelIds);
+                          Map<String, List<String>?>? nextModelEfforts;
+                          if (shared.modelEfforts != null) {
+                            final activeSet = nextModels == null
+                                ? null
+                                : Set<String>.of(nextModels);
+                            nextModelEfforts = Map.fromEntries(
+                              shared.modelEfforts!.entries.where(
+                                (e) =>
+                                    activeSet == null ||
+                                    activeSet.contains(e.key),
+                              ),
+                            );
+                            if (nextModelEfforts.isEmpty) {
+                              nextModelEfforts = null;
+                            }
+                          }
+                          setState(() => _workers[worker.id] = AxSharedWorker(
+                                models: nextModels,
+                                efforts: shared.efforts,
+                                modelEfforts: nextModelEfforts,
+                              ));
+                        },
+                ),
+              )),
+              for (final eff in allEfforts)
+                DataCell(Center(
+                  child: isModelShared &&
+                          supportsEffort &&
+                          model.effort.values.contains(eff)
+                      ? Checkbox(
+                          key: ValueKey(
+                              'member-effort-${model.id}-$eff-${worker.id}'),
+                          value: currentEfforts == null ||
+                              currentEfforts.contains(eff),
+                          onChanged: _saving
+                              ? null
+                              : (value) {
+                                  final nextEfforts = _toggle(
+                                      currentEfforts, eff, model.effort.values);
+                                  final next = Map<String, List<String>?>.of(
+                                      shared.modelEfforts ?? {});
+                                  if (nextEfforts == null) {
+                                    if (shared.efforts != null) {
+                                      next[model.id] = null;
+                                    } else {
+                                      next.remove(model.id);
+                                    }
+                                  } else {
+                                    next[model.id] = nextEfforts;
+                                  }
+                                  setState(() =>
+                                      _workers[worker.id] = AxSharedWorker(
+                                        models: shared.models,
+                                        efforts: shared.efforts,
+                                        modelEfforts:
+                                            next.isEmpty ? null : next,
+                                      ));
+                                },
+                        )
+                      : Text('—', style: TextStyle(color: theme.disabledColor)),
+                )),
+            ],
+          ),
+        );
+      }
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+          child: DataTable(
+            columnSpacing: 16,
+            horizontalMargin: 12,
+            headingRowColor: WidgetStateProperty.all(
+              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            ),
+            columns: [
+              const DataColumn(
+                label: Text('Worker / Model',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+              const DataColumn(
+                label: Center(
+                  child: Text('Share',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+              for (final eff in allEfforts)
+                DataColumn(
+                  label: Center(
+                    child: Text(effortTitle(eff),
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+            ],
+            rows: rows,
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -141,7 +141,7 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
                   child: options.isEmpty
                       ? const Text(
                           key: ValueKey('sharing-no-people'),
-                          'No one to add yet. Share a Space with someone from the People page to start.')
+                          'No one to add yet. First share a Space with someone to establish a contact. Once they accept the invitation, you can share this Workspace with them.')
                       : ListView(shrinkWrap: true, children: [
                           for (final p in options)
                             ListTile(

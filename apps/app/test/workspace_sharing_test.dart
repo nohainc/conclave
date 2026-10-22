@@ -225,13 +225,32 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('sharing-edit-guest')));
     await tester.pumpAndSettle();
     expect(find.text('Access for Guest'), findsOneWidget);
+
+    // Verify the permissions matrix grid is displayed
+    expect(find.byType(DataTable), findsOneWidget);
+    expect(find.text('Worker / Model'), findsOneWidget);
+    expect(find.text('Share'), findsOneWidget);
+    expect(find.text('Low'), findsOneWidget);
+    expect(find.text('High'), findsOneWidget);
+    expect(find.text('Thorough'), findsOneWidget);
+    expect(find.text('All efforts'), findsNothing);
+
     // No Workers shared yet, and the default mode is the safest one.
     await tester.tap(find.byKey(const ValueKey('share-worker-a')));
     await tester.pumpAndSettle();
+
+    // Toggle effort for analysis model
+    await tester
+        .tap(find.byKey(const ValueKey('member-effort-analysis-high-a')));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const ValueKey('member-access-save')));
     await tester.pumpAndSettle();
     expect(access.saved.single.mode, 'chat');
     expect(access.saved.single.workers.keys, ['a']);
+    expect(
+        access.saved.single.workers['a']?.modelEfforts?['analysis'], ['low']);
+
     await tester.tap(find.byKey(const ValueKey('person-access-reset')));
     await tester.pumpAndSettle();
     expect(access.resets, 1);
