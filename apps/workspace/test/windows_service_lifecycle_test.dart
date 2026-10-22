@@ -56,6 +56,9 @@ void main() {
 
     try {
       await start();
+      expect(
+          (client!.initialSnapshot['service'] as Map)['processState'], 'ready',
+          reason: diagnostics.toString());
       final identity =
           await File('${data.path}/installation-id').readAsString();
       await client!.request('connection.disconnect');

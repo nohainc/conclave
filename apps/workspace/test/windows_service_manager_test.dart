@@ -58,7 +58,9 @@ void main() {
               'Registered Windows task did not start IPC; Task Scheduler result ${info.lastExitCode}');
         }
       } else {
-        await client!.request('connection.disconnect');
+        expect((client!.initialSnapshot['service'] as Map)['processState'],
+            'ready');
+        await client.request('connection.disconnect');
         expect(await client.request('status'), isA<Map>());
       }
       await client?.close();

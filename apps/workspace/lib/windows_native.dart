@@ -126,7 +126,7 @@ class WindowsNative {
   }
 
   static void securePath(String path) {
-    final name = wide(File(path).absolute.path);
+    final name = wide(File(path).absolute.path.replaceAll('/', r'\'));
     final descriptor = _descriptor(inherit: true);
     final present = allocate(4).cast<Int32>();
     final defaulted = allocate(4).cast<Int32>();

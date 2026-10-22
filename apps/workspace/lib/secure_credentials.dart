@@ -51,10 +51,11 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   String get _effectivePlatform => _platform ?? Platform.operatingSystem;
 
   WindowsCredentials get _windows {
+    final selected = windowsCredentialDirectory;
+    if (selected != null) return WindowsCredentials(selected);
     final root = Platform.environment['CONCLAVE_WORKSPACE_DATA_DIR'] ??
         WorkspacePaths.defaultStateDirectory().path;
-    return WindowsCredentials(
-        windowsCredentialDirectory ?? Directory('$root/Credentials'));
+    return WindowsCredentials(Directory('$root/Credentials'));
   }
 
   String _cacheKey(String key) => '$service\u0000$key';
