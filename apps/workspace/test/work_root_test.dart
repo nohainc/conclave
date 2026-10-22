@@ -65,7 +65,7 @@ void main() {
     expect(
         WorkRootResolver(platform: FakePlatform('windows', 'C:\\Users\\tester'))
             .defaultPath,
-        'C:\\Users\\tester\\AppData\\Local\\Conclave\\Work');
+        'C:\\Users\\tester\\Documents\\Conclave');
   });
 
   test('creates and canonicalizes a custom root with hardened permissions',
