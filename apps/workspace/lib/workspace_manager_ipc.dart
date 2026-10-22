@@ -3,6 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'local_management_transport.dart';
+import 'windows_native.dart';
+export 'local_management_transport.dart' show workspaceManagerEndpoint;
+
 const workspaceManagerProtocolName = 'conclave.workspace-manager-ipc';
 const workspaceManagerProtocolVersion = 1;
 const _maxFrameBytes = 1024 * 1024;
@@ -44,25 +48,29 @@ class WorkspaceManagerIpcServer {
   final Stream<Map<String, Object?>>? eventStream;
 
   ServerSocket? _server;
-  StreamSubscription<Socket>? _acceptSubscription;
+  StreamSubscription<LocalManagementChannel>? _acceptSubscription;
+  WindowsPipeListener? _windowsListener;
   StreamSubscription<Map<String, Object?>>? _eventSubscription;
-  final Set<Socket> _clients = {};
-  final Set<Socket> _subscribers = {};
+  final Set<LocalManagementChannel> _clients = {};
+  final Set<LocalManagementChannel> _subscribers = {};
   final Random _random = Random.secure();
   String? _key;
 
   File get _keyFile => File('${runtimeDirectory.path}/manager-ipc.key');
-  String get socketPath => '${runtimeDirectory.path}/manager.sock';
+  String get socketPath => workspaceManagerEndpoint(runtimeDirectory);
 
   Future<void> start() async {
-    if (Platform.isWindows) {
-      throw UnsupportedError(
-        'Workspace Manager IPC currently requires Unix-domain socket support.',
-      );
-    }
     await runtimeDirectory.create(recursive: true);
     await _restrict(runtimeDirectory.path, directory: true);
     _key = await _loadOrCreateKey();
+    if (Platform.isWindows) {
+      final listener = WindowsPipeListener();
+      listener.start(socketPath);
+      _windowsListener = listener;
+      _acceptSubscription = listener.connections.listen(_accept);
+      _eventSubscription = eventStream?.listen(_publishEvent);
+      return;
+    }
     final socketEntity = await FileSystemEntity.type(
       socketPath,
       followLinks: false,
@@ -77,12 +85,17 @@ class WorkspaceManagerIpcServer {
     );
     _server = server;
     await _restrict(socketPath, directory: false);
-    _acceptSubscription = server.listen(_accept);
+    _acceptSubscription = server
+        .map<LocalManagementChannel>(UnixManagementChannel.new)
+        .listen(_accept);
     _eventSubscription = eventStream?.listen(_publishEvent);
   }
 
   Future<void> _restrict(String path, {required bool directory}) async {
-    if (Platform.isWindows) return;
+    if (Platform.isWindows) {
+      WindowsNative.securePath(path);
+      return;
+    }
     final result =
         await Process.run('chmod', [directory ? '700' : '600', path]);
     if (result.exitCode != 0) {
@@ -111,18 +124,15 @@ class WorkspaceManagerIpcServer {
     return key;
   }
 
-  void _accept(Socket socket) {
+  void _accept(LocalManagementChannel socket) {
     _clients.add(socket);
     unawaited(_handleClient(socket));
   }
 
-  Future<void> _handleClient(Socket socket) async {
+  Future<void> _handleClient(LocalManagementChannel socket) async {
     var authenticated = false;
     try {
-      final lines = socket
-          .cast<List<int>>()
-          .transform(utf8.decoder)
-          .transform(const LineSplitter());
+      final lines = managementLines(socket.input);
       final iterator = StreamIterator<String>(lines);
       try {
         if (!await iterator.moveNext().timeout(_handshakeTimeout)) {
@@ -261,7 +271,7 @@ class WorkspaceManagerIpcServer {
     return difference == 0;
   }
 
-  void _write(Socket socket, Map<String, Object?> message) {
+  void _write(LocalManagementChannel socket, Map<String, Object?> message) {
     final line = jsonEncode(message);
     if (utf8.encode(line).length > _maxFrameBytes) {
       _writeError(socket, null, 'response_too_large',
@@ -271,7 +281,8 @@ class WorkspaceManagerIpcServer {
     socket.write('$line\n');
   }
 
-  void _writeError(Socket socket, String? id, String code, String message) =>
+  void _writeError(LocalManagementChannel socket, String? id, String code,
+          String message) =>
       _write(socket, {
         'type': 'response',
         if (id != null) 'id': id,
@@ -280,7 +291,7 @@ class WorkspaceManagerIpcServer {
       });
 
   void _publishEvent(Map<String, Object?> event) {
-    for (final socket in List<Socket>.of(_subscribers)) {
+    for (final socket in List<LocalManagementChannel>.of(_subscribers)) {
       try {
         _write(socket, {...event, 'type': 'event'});
       } on Object {
@@ -299,6 +310,8 @@ class WorkspaceManagerIpcServer {
     _subscribers.clear();
     await _server?.close();
     _server = null;
+    await _windowsListener?.close();
+    if (Platform.isWindows) return;
     final type = await FileSystemEntity.type(socketPath, followLinks: false);
     if (type != FileSystemEntityType.notFound) {
       await File(socketPath).delete();
@@ -314,7 +327,7 @@ class WorkspaceManagerIpcClient {
     this.serviceVersion,
   );
 
-  final Socket _socket;
+  final LocalManagementChannel _socket;
   final StreamSubscription<String> _lineSubscription;
   final Map<String, Object?> initialSnapshot;
   final String serviceVersion;
@@ -330,20 +343,16 @@ class WorkspaceManagerIpcClient {
     required String key,
     Duration timeout = const Duration(seconds: 5),
   }) async {
-    final socket = await Socket.connect(
-      InternetAddress(socketPath, type: InternetAddressType.unix),
-      0,
-      timeout: timeout,
-    );
+    final LocalManagementChannel socket = Platform.isWindows
+        ? await WindowsPipeChannel.connect(socketPath).timeout(timeout)
+        : UnixManagementChannel(await Socket.connect(
+            InternetAddress(socketPath, type: InternetAddressType.unix), 0,
+            timeout: timeout));
     final firstLine = Completer<Map<String, Object?>>();
     late final StreamSubscription<String> subscription;
     var handshaken = false;
     WorkspaceManagerIpcClient? client;
-    subscription = socket
-        .cast<List<int>>()
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
+    subscription = managementLines(socket.input).listen((line) {
       if (utf8.encode(line).length > _maxFrameBytes) {
         socket.destroy();
         return;

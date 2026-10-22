@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'cli_process.dart';
 
 import 'worker_process_cleanup.dart';
 
@@ -75,7 +76,7 @@ class CliStreamingRunner {
     Duration? stallLimit,
     CliChildProcessProbe? childProcessProbe,
   }) async {
-    final process = await Process.start(
+    final process = await startCliProcess(
       executable,
       arguments,
       workingDirectory: workingDirectory,

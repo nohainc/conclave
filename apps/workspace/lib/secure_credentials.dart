@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'credential_backend.dart';
+import 'windows_credentials.dart';
+import 'workspace_paths.dart';
 import 'workspace_registration_models.dart';
 
 /// OS-backed storage for credentials used by the Workspace.
@@ -46,6 +48,9 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
 
   String get _effectivePlatform => _platform ?? Platform.operatingSystem;
 
+  WindowsCredentials get _windows => WindowsCredentials(Directory(
+      '${WorkspacePaths.defaultWorkspaceDirectory().path}/Credentials'));
+
   String _cacheKey(String key) => '$service\u0000$key';
 
   @override
@@ -53,6 +58,7 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
     if (key.isEmpty) return null;
     final cacheKey = _cacheKey(key);
     if (_loaded.contains(cacheKey)) return _cache[cacheKey];
+    if (_effectivePlatform == 'windows') return _windows.read(service, key);
     final command = currentCredentialBackend.read(service, key);
     if (command == null) return null;
     try {
@@ -117,6 +123,10 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
       throw ArgumentError('credential key and value are required');
     }
     final cacheKey = _cacheKey(key);
+    if (_effectivePlatform == 'windows') {
+      _windows.write(service, key, value);
+      return;
+    }
     if (_effectivePlatform == 'macos') {
       final keychain = nativeKeychain;
       if (keychain == null) {
@@ -151,6 +161,10 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
     final cacheKey = _cacheKey(key);
     _cache.remove(cacheKey);
     _loaded.remove(cacheKey);
+    if (_effectivePlatform == 'windows') {
+      _windows.delete(service, key);
+      return;
+    }
     if (_effectivePlatform == 'macos') {
       final keychain = nativeKeychain;
       if (keychain != null) {

@@ -28,6 +28,18 @@ class WorkspacePaths {
         conclaveWorkspaceIsLocalBuild ? 'Conclave Local' : 'Conclave',
       ]));
     }
+    if (runtime.operatingSystem == 'windows') {
+      final local =
+          Platform.isWindows ? Platform.environment['LOCALAPPDATA'] : null;
+      if (local == null && Platform.isWindows) {
+        throw StateError(
+            'LOCALAPPDATA is missing; cannot resolve Workspace state safely');
+      }
+      return Directory(_join([
+        local ?? '${runtime.homeDirectory}/AppData/Local',
+        conclaveWorkspaceIsLocalBuild ? 'Conclave Local' : 'Conclave'
+      ]));
+    }
     final folder = conclaveWorkspaceIsLocalBuild
         ? '.conclave-workspace-local'
         : '.conclave-workspace';
@@ -48,6 +60,26 @@ class WorkspacePaths {
         defaultWorkspaceDirectory(platform: runtime).path,
         'State',
       ]));
+    }
+    if (runtime.operatingSystem == 'windows') {
+      final target = defaultWorkspaceDirectory(platform: runtime);
+      if (Platform.isWindows) {
+        final legacy = Directory(
+            '${runtime.homeDirectory}/${conclaveWorkspaceIsLocalBuild ? '.conclave-workspace-local' : '.conclave-workspace'}');
+        if (legacy.existsSync()) {
+          if (target.existsSync())
+            throw StateError(
+                'Both legacy and current Windows Workspace state exist. Preserve both directories and select the authoritative one with --data-dir before activation.');
+          try {
+            target.parent.createSync(recursive: true);
+            legacy.renameSync(target.path);
+          } on FileSystemException {
+            throw StateError(
+                'Windows Workspace state could not be moved safely. Files were preserved; restart with --data-dir pointing to ${legacy.path}.');
+          }
+        }
+      }
+      return target;
     }
     return defaultApplicationDataRoot(platform: runtime);
   }
@@ -178,8 +210,11 @@ class WorkspacePaths {
 
   static String _canonical(String path) => path.replaceAll(RegExp(r'/+$'), '');
 
-  String _canonicalAbsolute(String path) =>
-      Directory(path).absolute.path.replaceAll(RegExp(r'[/\\]+$'), '');
+  String _canonicalAbsolute(String path) {
+    final value =
+        Directory(path).absolute.path.replaceAll(RegExp(r'[/\\]+$'), '');
+    return platform.isWindows ? value.toLowerCase() : value;
+  }
 
   /// Moves the legacy application-managed Work Root into the user Work Root.
   static Future<void> preserveMacWorkRoot({

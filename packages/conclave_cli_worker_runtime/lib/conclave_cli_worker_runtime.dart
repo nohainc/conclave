@@ -12,3 +12,6 @@ export 'src/platform_process_supervisor.dart';
 export 'src/cli_worker_engine_supervisor.dart';
 export 'src/profile_version_probe.dart';
 export 'src/process_name.dart';
+
+export 'src/windows_process_job.dart';
+export 'src/cli_process.dart';

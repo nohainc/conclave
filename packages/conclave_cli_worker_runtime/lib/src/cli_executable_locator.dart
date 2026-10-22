@@ -25,7 +25,7 @@ class CliExecutableLocator {
   }) async {
     if (!_validExecutableName(executable)) return null;
     final env = environment ?? Platform.environment;
-    final names = _executableNames(executable);
+    final names = _executableNames(executable, env);
     final directories = <String>[
       ...standardPaths,
       ..._osBaselinePaths(env),
@@ -63,10 +63,15 @@ class CliExecutableLocator {
     return null;
   }
 
-  List<String> _executableNames(String executable) =>
-      Platform.isWindows && !executable.contains('.')
-      ? ['$executable.exe', executable]
-      : [executable];
+  List<String> _executableNames(String executable, Map<String, String> env) {
+    if (!Platform.isWindows || executable.contains('.')) return [executable];
+    final extensions = (env['PATHEXT'] ?? '.EXE;.COM;.CMD;.BAT')
+        .split(';')
+        .map((s) => s.toLowerCase())
+        .where((s) => const {'.exe', '.com', '.cmd', '.bat'}.contains(s))
+        .toSet();
+    return [...extensions.map((ext) => '$executable$ext'), executable];
+  }
 
   bool _validExecutableName(String value) =>
       value.length <= 128 &&

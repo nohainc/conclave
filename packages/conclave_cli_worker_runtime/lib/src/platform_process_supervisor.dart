@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'cli_process.dart';
 
 import 'worker_process_cleanup.dart';
 
@@ -33,7 +34,7 @@ class StandardProcessSupervisor implements PlatformProcessSupervisor {
     Map<String, String>? environment,
     bool includeParentEnvironment = true,
   }) {
-    return Process.start(
+    return startCliProcess(
       executable,
       arguments,
       workingDirectory: workingDirectory,

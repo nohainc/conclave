@@ -55,7 +55,7 @@ Future<List<DiscoveredModel>> discoverCodexAppServerModels({
   required String idPrefix,
   Duration timeout = const Duration(seconds: 10),
 }) async {
-  final process = await Process.start(
+  final process = await startCliProcess(
     executable,
     arguments,
     workingDirectory: workingDirectory,
@@ -129,7 +129,7 @@ Future<Map<String, Object?>> readAppServerResult({
   required String method,
   Duration timeout = const Duration(seconds: 15),
 }) async {
-  final process = await Process.start(
+  final process = await startCliProcess(
     executable,
     arguments,
     workingDirectory: workingDirectory,

@@ -2,7 +2,7 @@ name: Build Windows Workspace preview
 
 on:
   push:
-    branches: ["codex/windows-workspace-preview-*"]
+    branches: ["codex/windows-workspace-preview-*", "codex/windows-runtime"]
   workflow_dispatch:
 
 permissions:
@@ -21,6 +21,19 @@ jobs:
           # Same compile-only trust root as nightly.yml; this is never a release.
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
         run: ./scripts/build-workspace-windows.ps1
+      - name: Validate Windows runtime primitives
+        shell: pwsh
+        working-directory: apps/workspace
+        run: |
+          flutter test test/windows_runtime_test.dart
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Validate Windows process jobs and CLI shims
+        shell: pwsh
+        working-directory: packages/conclave_cli_worker_runtime
+        run: |
+          dart pub get
+          dart test test/windows_cli_shim_test.dart test/windows_process_job_test.dart
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Smoke test packaged UI startup
         shell: pwsh
         run: |

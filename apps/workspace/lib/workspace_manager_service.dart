@@ -44,11 +44,6 @@ class WorkspaceManagerService {
   WorkerReadinessMonitor? _observedReadiness;
 
   Future<void> start() async {
-    if (Platform.isWindows) {
-      throw UnsupportedError(
-        'Workspace Manager IPC is not available on this Windows build.',
-      );
-    }
     final paths = WorkspacePaths(workspace.config.dataDirectory);
     _server = WorkspaceManagerIpcServer(
       runtimeDirectory: paths.runtimeDirectory,
