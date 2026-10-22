@@ -1289,13 +1289,16 @@ extension _AxAppController on _AxAppStateMixin {
     try {
       final url = await widget.dataSource.uploadAvatar(
         bytes: selected.bytes,
+        thumbnailBytes: selected.thumbnailBytes,
         mediaType: selected.mediaType,
       );
       final viewer = store.auth.viewer;
       if (viewer != null) {
         store.auth.viewer = viewer.copyWith(avatarUrl: url);
       }
-      if (mounted) _updateState(() => viewerAvatarBytes = selected!.bytes);
+      if (mounted) {
+        _updateState(() => viewerAvatarBytes = selected!.thumbnailBytes);
+      }
       await _loadViewerAvatar(url);
     } catch (error) {
       if (mounted) _showSnackBar(error.toString());
@@ -1322,8 +1325,34 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
-  /// Saves the profile name edited inline on Profile & Security.
-  Future<String?> _saveDisplayName(String name) async {
+  Future<void> _editDisplayName() async {
+    var draft = store.auth.viewer?.displayName ?? '';
+    final value = await showDialog<String>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rename profile'),
+        content: TextFormField(
+          initialValue: draft,
+          onChanged: (value) => draft = value,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          decoration: const InputDecoration(labelText: 'Name'),
+          onFieldSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(draft),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    final name = value?.trim() ?? '';
+    if (name.isEmpty || !mounted) return;
     try {
       await widget.dataSource.updateDisplayName(displayName: name);
       final viewer = store.auth.viewer;
@@ -1331,9 +1360,8 @@ extension _AxAppController on _AxAppStateMixin {
         store.auth.viewer = viewer.copyWith(displayName: name);
       }
       if (mounted) _updateState(() {});
-      return null;
     } catch (error) {
-      return error.toString();
+      if (mounted) _showSnackBar(error.toString());
     }
   }
 
@@ -1361,9 +1389,35 @@ extension _AxAppController on _AxAppStateMixin {
 
   Future<void> _unlinkAccountProvider(AxAuthAccount account) async {
     if (unlinkingAccountIds.isNotEmpty) return;
+    final sessionId = store.auth.session?.sessionId;
+    final provider = _providerLabel(account.providerId);
+    final confirmed = await showDialog<bool>(
+      context: navigatorKey.currentContext ?? context,
+      builder: (context) => AlertDialog(
+        title: Text('Unlink $provider?'),
+        content: Text(
+            'You will no longer be able to sign in with this $provider account. '
+            'Make sure you have another sign-in method before continuing.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Unlink'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true ||
+        !mounted ||
+        store.auth.session?.sessionId != sessionId ||
+        unlinkingAccountIds.isNotEmpty) {
+      return;
+    }
     unlinkingAccountIds.add(account.id);
     _updateState(() => accountUnlinkError = null);
-    final sessionId = store.auth.session?.sessionId;
     try {
       await widget.dataSource.unlinkAccount(accountId: account.id);
       if (!mounted || store.auth.session?.sessionId != sessionId) return;

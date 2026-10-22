@@ -1,6 +1,9 @@
 import { CONVERSATION_WORKFLOWS } from "@conclave/core";
 import { sqliteD1 } from "./sqlite-d1.js";
-import { conversationSubmissionStatements } from "../../src/routes/conversations.js";
+import {
+  conversationSubmissionStatements,
+  threadConversationId,
+} from "../../src/routes/conversations.js";
 import { loadConversationTurns } from "../../src/routes/conversation-turns.js";
 export async function conversationFixture(
   options: { beforeTurnLifecycleRepair?: boolean } = {},
@@ -19,6 +22,7 @@ export async function conversationFixture(
   await db.batch(
     conversationSubmissionStatements(
       db as unknown as D1Database,
+      threadConversationId("W"),
       "W",
       CONVERSATION_WORKFLOWS.chat!,
       "R",

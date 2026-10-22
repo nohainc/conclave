@@ -1,7 +1,10 @@
 import { expect, it } from "vitest";
 import { CONVERSATION_WORKFLOWS } from "@conclave/core";
 import { conversationFixture } from "./helpers/conversation.js";
-import { conversationSubmissionStatements } from "../src/routes/conversations.js";
+import {
+  conversationSubmissionStatements,
+  threadConversationId,
+} from "../src/routes/conversations.js";
 import { loadConversationWorkflowRuns } from "../src/routes/conversation-workflow-runs.js";
 import {
   recordAssignmentError,
@@ -29,6 +32,7 @@ it("one Work StepRun snapshots pending choices and spaces actual provider defaul
     await f.db.batch(
       conversationSubmissionStatements(
         f.db as unknown as D1Database,
+        threadConversationId("W"),
         "W",
         CONVERSATION_WORKFLOWS.work!,
         "WORK",
@@ -60,7 +64,8 @@ it("one Work StepRun snapshots pending choices and spaces actual provider defaul
       effort: "high",
       status: "queued",
       workerSessionId: null,
-      baseContextRevision: 0,
+      // The fixture's earlier Chat request is shared context for Work.
+      baseContextRevision: 1,
       result: null,
     });
     f.sqlite

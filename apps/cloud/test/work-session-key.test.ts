@@ -11,7 +11,7 @@ it("uses Engine-safe opaque keys and preserves the Work/direct conversation acro
   };
   const key = workStepSessionKey(params);
   expect(key).toBe(
-    `work-session-${createHash("sha256").update("thread:thread-1:direct:work-conversation").digest("hex")}`,
+    `work-session-${createHash("sha256").update("thread:thread-1:conversation").digest("hex")}`,
   );
   expect(key).toMatch(/^[A-Za-z0-9_-]+$/);
   expect(key.length).toBeLessThanOrEqual(256);
@@ -42,7 +42,7 @@ it("uses Engine-safe opaque keys and preserves the Work/direct conversation acro
   );
 });
 
-it("keeps Chat durable within a Thread and isolated from Work", () => {
+it("keeps Chat durable within a Thread and shares the session with Work", () => {
   const params = {
     workBindingId: "chat" as const,
     threadId: "thread-1",
@@ -51,7 +51,7 @@ it("keeps Chat durable within a Thread and isolated from Work", () => {
   };
   const key = workStepSessionKey(params);
   expect(key).toBe(
-    `work-session-${createHash("sha256").update("thread:thread-1:chat:conversation").digest("hex")}`,
+    `work-session-${createHash("sha256").update("thread:thread-1:conversation").digest("hex")}`,
   );
   for (const workRequestId of ["request-2", "request-3"]) {
     expect(workStepSessionKey({ ...params, workRequestId })).toBe(key);
@@ -63,7 +63,7 @@ it("keeps Chat durable within a Thread and isolated from Work", () => {
       workBindingId: "direct",
       stepKind: "implement",
     }),
-  ).not.toBe(key);
+  ).toBe(key);
   expect(
     workStepSessionKey({
       ...params,
@@ -100,7 +100,7 @@ it.each(["research", "plan", "implement", "test", "verify"])(
 );
 
 it("uses work session generation to create fresh sessions for direct Work, with gen 0 as legacy", () => {
-  const baseKey = `work-session-${createHash("sha256").update("thread:thread-1:direct:work-conversation").digest("hex")}`;
+  const baseKey = `work-session-${createHash("sha256").update("thread:thread-1:conversation").digest("hex")}`;
   const params = {
     workBindingId: "direct" as const,
     threadId: "thread-1",
@@ -114,12 +114,12 @@ it("uses work session generation to create fresh sessions for direct Work, with 
   const gen1Key = workStepSessionKey({ ...params, workSessionGeneration: 1 });
   expect(gen1Key).not.toBe(baseKey);
   expect(gen1Key).toBe(
-    `work-session-${createHash("sha256").update("thread:thread-1:direct:work-conversation:gen-1").digest("hex")}`,
+    `work-session-${createHash("sha256").update("thread:thread-1:conversation:gen-1").digest("hex")}`,
   );
   const gen2Key = workStepSessionKey({ ...params, workSessionGeneration: 2 });
   expect(gen2Key).not.toBe(gen1Key);
   expect(gen2Key).toBe(
-    `work-session-${createHash("sha256").update("thread:thread-1:direct:work-conversation:gen-2").digest("hex")}`,
+    `work-session-${createHash("sha256").update("thread:thread-1:conversation:gen-2").digest("hex")}`,
   );
 });
 

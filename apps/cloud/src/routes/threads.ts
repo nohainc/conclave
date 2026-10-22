@@ -1,3 +1,4 @@
+import { normalizeDiscussionAttachments } from "./work-request-files.js";
 import {
   loadSpacePermissions,
   requireSpaceRight,
@@ -438,6 +439,11 @@ export async function handleDeleteThread(
   return json({ ok: true, threadId });
 }
 
+function discussionMessageView(row: Record<string, unknown>) {
+  const { attachmentsJson, ...message } = row;
+  return { ...message, attachments: parseJson(attachmentsJson, []) };
+}
+
 export async function handleListDiscussionMessages(
   request: Request,
   env: SecurityEnv,
@@ -489,7 +495,7 @@ export async function handleListDiscussionMessages(
   const statement = env.CONCLAVE_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
             COALESCE(u.display_name, 'Member') AS authorName,
-            dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
+            dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
             dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
@@ -522,7 +528,7 @@ export async function handleListDiscussionMessages(
   return json({
     schemaVersion: 1,
     messages: messages.map((row) => ({
-      ...row,
+      ...discussionMessageView(row),
       references: parseJson(row.referencesJson, []),
     })),
     nextCursor,
@@ -555,7 +561,17 @@ export async function handleCreateDiscussionMessage(
   );
   const replay = await receipt?.replay();
   if (replay) return replay;
-  const content = requiredString(body.body ?? body.content, "body");
+  const attachments = await normalizeDiscussionAttachments(
+    env,
+    body.attachments,
+    threadId,
+    context.userId,
+  );
+  const rawContent = body.body ?? body.content;
+  const content =
+    attachments.length && typeof rawContent === "string" && !rawContent.trim()
+      ? ""
+      : requiredString(rawContent, "body");
   const references = discussionReferences(body.references);
   const now = new Date().toISOString();
   const id = `discussion-${crypto.randomUUID()}`;
@@ -569,8 +585,8 @@ export async function handleCreateDiscussionMessage(
   mutations.push(
     env.CONCLAVE_DB.prepare(
       `INSERT INTO discussion_messages
-       (id, thread_id, author_user_id, body, references_json, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
+       (id, thread_id, author_user_id, body, references_json, created_at, attachments_json)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
     ).bind(
       id,
       threadId,
@@ -578,6 +594,7 @@ export async function handleCreateDiscussionMessage(
       content,
       JSON.stringify(references),
       now,
+      JSON.stringify(attachments),
     ),
   );
   mutations.push(
@@ -601,6 +618,7 @@ export async function handleCreateDiscussionMessage(
       authorUserId: context.userId,
       authorName,
       body: content,
+      attachments,
       references,
       editedAt: null,
       createdAt: now,
@@ -629,7 +647,7 @@ export async function handleGetDiscussionMessage(
   const message = await env.CONCLAVE_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
       COALESCE(u.display_name, 'Member') AS authorName,
-      dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
+      dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
             dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
@@ -646,7 +664,10 @@ export async function handleGetDiscussionMessage(
     accessContext,
   );
   return json({
-    message: { ...message, references: parseJson(message.referencesJson, []) },
+    message: {
+      ...discussionMessageView(message),
+      references: parseJson(message.referencesJson, []),
+    },
   });
 }
 
@@ -659,7 +680,7 @@ export async function handleEditDiscussionMessage(
   const message = await env.CONCLAVE_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
             COALESCE(u.display_name, 'Member') AS authorName,
-            dm.body, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
+            dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
             dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
@@ -680,7 +701,12 @@ export async function handleEditDiscussionMessage(
   if ((message.kind ?? "message") !== "message")
     throw new HttpError(409, "Archived AI entries cannot be edited");
   const body = (await request.json()) as Record<string, unknown>;
-  const content = requiredString(body.body ?? body.content, "body");
+  const rawContent = body.body ?? body.content;
+  const attachments = parseJson<unknown[]>(message.attachmentsJson, []);
+  const content =
+    attachments.length && typeof rawContent === "string" && !rawContent.trim()
+      ? ""
+      : requiredString(rawContent, "body");
   const references = discussionReferences(
     body.references ?? parseJson(message.referencesJson, []),
   );
@@ -695,7 +721,14 @@ export async function handleEditDiscussionMessage(
     messageId,
     { threadId: String(message.threadId), mutations: [mutation] },
   );
-  return json({ message: { ...message, body: content, references, editedAt } });
+  return json({
+    message: {
+      ...discussionMessageView(message),
+      body: content,
+      references,
+      editedAt,
+    },
+  });
 }
 
 export async function handleDeleteDiscussionMessage(

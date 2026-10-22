@@ -92,7 +92,9 @@ class MarkdownComposer extends StatefulWidget {
       this.onSubmit,
       this.additionalControlsBuilder,
       this.executionControlsBuilder,
+      this.toolbarLeadingControls,
       this.leadingControls,
+      this.attachments,
       this.inputHeight,
       this.showControlTooltips = true,
       this.sendEnabled = true,
@@ -125,8 +127,14 @@ class MarkdownComposer extends StatefulWidget {
   final Widget Function(GlobalKey inputKey)? additionalControlsBuilder;
   final Widget Function(GlobalKey inputKey)? executionControlsBuilder;
 
+  /// Compact controls before emoji/Markdown in the two-row toolbar.
+  final Widget? toolbarLeadingControls;
+
   /// Controls in the left rail beside the input and its bottom row.
   final Widget? leadingControls;
+
+  /// File cards inside the composer, above the text control.
+  final Widget? attachments;
 
   /// Height shared by the Thread's Message and Ask AI inputs.
   final ComposerInputHeight? inputHeight;
@@ -252,6 +260,8 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
   Widget _twoRowControls() => Padding(
         padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
         child: Row(children: [
+          if (widget.toolbarLeadingControls != null)
+            widget.toolbarLeadingControls!,
           if (widget.executionControlsBuilder != null)
             Expanded(child: widget.executionControlsBuilder!(_inputKey)),
           if (widget.showEmojiPicker) _emojiButton(),
@@ -668,6 +678,10 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                           ),
                         ]),
                       if (!widget.chatStyle && !_preview) _formattingToolbar(),
+                      if (widget.attachments != null)
+                        Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: widget.attachments!),
                       if (widget.inputHeight case final height?)
                         ValueListenableBuilder<double>(
                           valueListenable: height,

@@ -1,3 +1,4 @@
+import { deleteAccountAvatars } from "../src/avatar-storage.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import { handleGetAvatar, handleUploadAvatar } from "../src/routes/profile.js";
@@ -18,6 +19,15 @@ class MemoryAvatarBucket {
     });
   }
 
+  async list({ prefix }: { prefix: string }) {
+    return {
+      objects: [...this.values.keys()]
+        .filter((key) => key.startsWith(prefix))
+        .map((key) => ({ key })),
+      truncated: false,
+    };
+  }
+
   async get(key: string) {
     const value = this.values.get(key);
     if (!value) return null;
@@ -28,8 +38,9 @@ class MemoryAvatarBucket {
     };
   }
 
-  async delete(key: string) {
-    this.values.delete(key);
+  async delete(key: string | string[]) {
+    for (const item of Array.isArray(key) ? key : [key])
+      this.values.delete(item);
   }
 }
 
@@ -57,6 +68,19 @@ describe("profile avatars", () => {
 
   afterEach(() => store.sqlite.close());
 
+  function uploadBody(type = "image/png") {
+    const form = new FormData();
+    form.set(
+      "original",
+      new File([new Uint8Array([9, 8, 7, 6])], "original", { type }),
+    );
+    form.set(
+      "thumbnail",
+      new File([new Uint8Array([1, 2, 3])], "thumbnail", { type: "image/png" }),
+    );
+    return form;
+  }
+
   const request = (
     userId: string,
     init: RequestInit = {},
@@ -72,12 +96,17 @@ describe("profile avatars", () => {
     const upload = await handleUploadAvatar(
       request("a", {
         method: "PUT",
-        headers: { "content-type": "image/png" },
-        body: new Uint8Array([1, 2, 3]),
+        body: uploadBody(),
       }),
       env,
     );
     expect(upload.status).toBe(200);
+    expect(bucket.values.size).toBe(2);
+    expect(
+      [...bucket.values.entries()].find(([key]) =>
+        key.endsWith("-original"),
+      )?.[1].bytes,
+    ).toEqual(new Uint8Array([9, 8, 7, 6]));
     const payload = (await upload.json()) as { avatarUrl: string };
     expect(payload.avatarUrl).toMatch(
       /^https:\/\/conclave\.test\/api\/users\/a\/avatar\?v=[0-9a-f-]+$/,
@@ -96,12 +125,60 @@ describe("profile avatars", () => {
     expect([...new Uint8Array(await avatar.arrayBuffer())]).toEqual([1, 2, 3]);
   });
 
+  it("replaces both files and rejects missing variants without changing storage", async () => {
+    await handleUploadAvatar(
+      request("a", { method: "PUT", body: uploadBody() }),
+      env,
+    );
+    const oldKeys = [...bucket.values.keys()];
+    await handleUploadAvatar(
+      request("a", { method: "PUT", body: uploadBody() }),
+      env,
+    );
+    expect(bucket.values.size).toBe(2);
+    for (const key of oldKeys) expect(bucket.values.has(key)).toBe(false);
+    await expect(
+      handleUploadAvatar(
+        request("a", { method: "PUT", body: new FormData() }),
+        env,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(bucket.values.size).toBe(2);
+  });
+
+  it("deletes all account variants and leftovers without touching other accounts", async () => {
+    await handleUploadAvatar(
+      request("a", { method: "PUT", body: uploadBody() }),
+      env,
+    );
+    await bucket.put(
+      "user-avatars/a/interrupted-original",
+      new ArrayBuffer(1),
+      {},
+    );
+    await bucket.put("user-avatars/b/retained", new ArrayBuffer(1), {});
+    await deleteAccountAvatars(bucket as never, "a");
+    expect([...bucket.values.keys()]).toEqual(["user-avatars/b/retained"]);
+  });
+
+  it("rolls back both files when persistence fails", async () => {
+    store.sqlite.exec(
+      "CREATE TRIGGER fail_avatar BEFORE UPDATE ON users BEGIN SELECT RAISE(ABORT, 'failed'); END",
+    );
+    await expect(
+      handleUploadAvatar(
+        request("a", { method: "PUT", body: uploadBody() }),
+        env,
+      ),
+    ).rejects.toThrow();
+    expect(bucket.values.size).toBe(0);
+  });
+
   it("does not expose avatars to unrelated users", async () => {
     await handleUploadAvatar(
       request("a", {
         method: "PUT",
-        headers: { "content-type": "image/jpeg" },
-        body: new Uint8Array([4, 5]),
+        body: uploadBody("image/jpeg"),
       }),
       env,
     );

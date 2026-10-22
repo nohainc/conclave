@@ -34,6 +34,7 @@ class DiscussionSource extends AxFixtureDataSource {
   }
 
   final sends = <Completer<AxDiscussionMessage>>[];
+  final sentAttachments = <List<Map<String, dynamic>>>[];
   final edits = <Completer<AxDiscussionMessage>>[];
   AxApiException? deleteError;
   final deletedIds = <String>[];
@@ -55,9 +56,11 @@ class DiscussionSource extends AxFixtureDataSource {
       {required String threadId,
       required String text,
       List<String> references = const [],
+      List<Map<String, dynamic>> attachments = const [],
       String? idempotencyKey}) {
     final request = Completer<AxDiscussionMessage>();
     sends.add(request);
+    sentAttachments.add(attachments);
     return request.future;
   }
 
@@ -95,6 +98,42 @@ void main() {
     cache = AxDiscussionCache(source);
   });
   Future<void> drain() => Future<void>.delayed(Duration.zero);
+
+  test(
+      'file-only optimistic messages retain attachments through confirmed history',
+      () async {
+    final files = [
+      {
+        'kind': 'file',
+        'name': 'note.txt',
+        'sizeBytes': 5,
+        'contentBase64': 'aGVsbG8='
+      }
+    ];
+    final sending = cache.send('w', '', attachments: files);
+    await drain();
+    expect(cache.peek('w').messages.single.attachments, files);
+    expect(source.sentAttachments.single, files);
+    const saved = AxDiscussionMessage(
+        id: 'saved-file',
+        threadId: 'w',
+        authorUserId: 'owner',
+        body: '',
+        createdAt: '2026-10-22',
+        attachments: [
+          {
+            'kind': 'file',
+            'name': 'note.txt',
+            'sizeBytes': 5,
+            'previewText': 'hello'
+          }
+        ]);
+    source.sends.single.complete(saved);
+    await sending;
+    expect(cache.peek('w').messages.single.attachments.single['previewText'],
+        'hello');
+    expect(saved.copyWith(body: 'caption').attachments, saved.attachments);
+  });
 
   test('5,000 Discussion messages: recent 50 and one requested older page only',
       () async {

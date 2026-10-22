@@ -478,7 +478,9 @@ extension _AxAppShellViews on _AxAppStateMixin {
                     ? null
                     : () =>
                         browserNavigation.startSocialLogin('github', returnTo),
-                icon: _accountProviderIcon('github', size: 20),
+                icon: Builder(
+                    builder: (context) =>
+                        _accountProviderIcon(context, 'github', size: 20)),
                 label: const Text('Continue with GitHub'),
               ),
             ),
@@ -490,7 +492,9 @@ extension _AxAppShellViews on _AxAppStateMixin {
                     ? null
                     : () =>
                         browserNavigation.startSocialLogin('google', returnTo),
-                icon: _accountProviderIcon('google', size: 20),
+                icon: Builder(
+                    builder: (context) =>
+                        _accountProviderIcon(context, 'google', size: 20)),
                 label: const Text('Continue with Google'),
               ),
             ),

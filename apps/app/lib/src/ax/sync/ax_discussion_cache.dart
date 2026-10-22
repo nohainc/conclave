@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'ax_idempotency.dart';
 import 'dart:async';
 import '../ax_data.dart';
@@ -397,16 +398,20 @@ class AxDiscussionCache {
   }
 
   Future<void> send(String id, String text,
-      {String? userId, String? userName}) async {
+      {String? userId,
+      String? userName,
+      List<Map<String, dynamic>> attachments = const []}) async {
     final context = _context(id);
     final scope = 'thread:$id:send-discussion';
-    final key = _attempts.keyFor(scope, text);
+    final payload = jsonEncode([text, attachments]);
+    final key = _attempts.keyFor(scope, payload);
     final temp = AxDiscussionMessage(
         id: 'temp-${DateTime.now().microsecondsSinceEpoch}-${++_temporaryId}',
         threadId: id,
         authorUserId: userId ?? '',
         authorName: userName ?? 'You',
         body: text,
+        attachments: attachments,
         createdAt: DateTime.now().toUtc().toIso8601String(),
         isMe: true);
     final fence = engine.fence(query(id).key);
@@ -424,7 +429,10 @@ class AxDiscussionCache {
             final saved = source == null
                 ? temp.copyWith(id: temp.id.replaceFirst('temp-', 'local-'))
                 : await source!.sendDiscussionMessage(
-                    threadId: id, text: text, idempotencyKey: key);
+                    threadId: id,
+                    text: text,
+                    attachments: attachments,
+                    idempotencyKey: key);
             if (saved.id.isEmpty || saved.threadId != id) {
               throw const AxApiException(
                   'Discussion response identity does not match');
@@ -432,7 +440,7 @@ class AxDiscussionCache {
             return saved;
           },
           commit: (saved, context) {
-            _attempts.complete(scope, text, key);
+            _attempts.complete(scope, payload, key);
             context.pending.remove(temp.id);
             _patch(id, saved);
           },

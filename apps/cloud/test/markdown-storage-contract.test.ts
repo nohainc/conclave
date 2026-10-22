@@ -187,7 +187,7 @@ it.each(
 it("persists and returns exact Markdown through Chat create, edit and list", async () => {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(`CREATE TABLE users (id TEXT, display_name TEXT);
-    CREATE TABLE discussion_messages (id TEXT, thread_id TEXT,
+    CREATE TABLE discussion_messages (id TEXT, thread_id TEXT, attachments_json TEXT NOT NULL DEFAULT '[]',
     author_user_id TEXT, body TEXT, references_json TEXT, edited_at TEXT, created_at TEXT,
     kind TEXT, work_request_id TEXT, worker_display_name TEXT);
     CREATE TABLE space_audit_log (id TEXT, space_id TEXT, actor_type TEXT,

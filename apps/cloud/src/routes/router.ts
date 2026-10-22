@@ -969,6 +969,22 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    const threadFileDownload = url.pathname.match(
+      /^\/api\/threads\/([^/]+)\/files\/([^/]+)$/,
+    );
+    if (
+      request.method === "GET" &&
+      threadFileDownload?.[1] &&
+      threadFileDownload[2]
+    ) {
+      return await handlers.handleDownloadThreadFile!(
+        request,
+        env,
+        threadFileDownload[1],
+        threadFileDownload[2],
+        ctx,
+      );
+    }
     const workRequestFileMatch = url.pathname.match(
       /^\/api\/threads\/([^/]+)\/work-request-files$/,
     );

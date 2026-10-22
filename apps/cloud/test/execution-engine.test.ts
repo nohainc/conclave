@@ -54,7 +54,8 @@ it("execution boundary configures next-turn choices without rewriting workflow o
     bindingId: "chat",
   });
   expect(chat.task.readOnly).toBe(true);
-  expect(chat.task.sessionKey).not.toBe(first.task.sessionKey);
+  // Chat and Work share the Thread session; permissions stay per execution.
+  expect(chat.task.sessionKey).toBe(first.task.sessionKey);
   expect(() => prepareWorkerStepExecution({ ...input, prompt: " " })).toThrow(
     /empty/,
   );

@@ -73,6 +73,7 @@ class _Source extends AxFixtureDataSource {
       {required String threadId,
       required String text,
       List<String> references = const [],
+      List<Map<String, dynamic>> attachments = const [],
       String? idempotencyKey}) async {
     chatKeys.add(idempotencyKey);
     if (loseResponse) throw StateError('response lost');

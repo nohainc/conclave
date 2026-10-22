@@ -252,9 +252,10 @@ extension _ThreadActions on _ThreadPageState {
     }
   }
 
-  /// Prompts of this Thread's earlier requests, newest first.
+  /// Prompts of this Thread's earlier requests, oldest first so the newest
+  /// sits at the bottom next to the composer.
   List<String> get _requestHistoryPrompts => [
-        for (final request in _workTimeline.reversed)
+        for (final request in _workTimeline)
           if (!request.id.startsWith('local-') &&
               request.prompt.trim().isNotEmpty)
             request.prompt
@@ -283,18 +284,13 @@ extension _ThreadActions on _ThreadPageState {
 
   Future<void> _addWorkFiles() async {
     try {
-      final selected = await work_request_files.pickWorkRequestFiles();
-      if (_workAttachments.length + selected.length > 10 ||
-          selected.any(
-              (item) => (item['sizeBytes'] as int? ?? 0) > 2 * 1024 * 1024)) {
-        throw const FormatException(
-          'Choose up to 10 files, each under 2 MB.',
-        );
-      }
-      if (mounted && selected.isNotEmpty) {
-        _updateState(
-            () => _workAttachments = [..._workAttachments, ...selected]);
-      }
+      final picked = await work_request_files.pickWorkRequestFiles(
+          existing: _workAttachments.length);
+      if (!mounted) return;
+      _updateState(() {
+        _workAttachments = [..._workAttachments, ...picked.files];
+        _workSubmitError = picked.notice;
+      });
     } on UnsupportedError catch (error) {
       if (mounted) {
         _updateState(() => _workSubmitError = error.message.toString());
@@ -616,14 +612,46 @@ extension _ThreadActions on _ThreadPageState {
     }
   }
 
+  Future<void> _pickDiscussionFiles() async {
+    final threadId = widget.thread.id;
+    try {
+      final picked = await work_request_files.pickWorkRequestFiles(
+          existing: _discussionAttachments.length);
+      if (!mounted || widget.thread.id != threadId) return;
+      _updateState(() => _discussionAttachments = [
+            ..._discussionAttachments,
+            ...picked.files
+          ]);
+      if (picked.notice case final notice?) {
+        ScaffoldMessenger.of(context)
+            .showNotice(SnackBar(content: Text(notice)));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showNotice(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
   Future<void> _sendDiscussion() async {
     if (!widget.space.effectivePermissions.chat ||
         (widget.isDraft &&
             !widget.space.effectivePermissions.manageOwnThreads)) {
       return;
     }
+    if (_discussionAttachments.length > 10) {
+      ScaffoldMessenger.of(context).showNotice(const SnackBar(
+          content: Text(
+              'Remove attachments until at most 10 remain before sending.')));
+      return;
+    }
     final text = _discussionController.text;
-    if (text.trim().isEmpty || _draftSubmitting || widget.draftBusy) return;
+    if ((text.trim().isEmpty && _discussionAttachments.isEmpty) ||
+        _draftSubmitting ||
+        widget.draftBusy) {
+      return;
+    }
     if (widget.isDraft) {
       _updateState(() => _draftSubmitting = true);
       try {
@@ -638,14 +666,20 @@ extension _ThreadActions on _ThreadPageState {
       }
       return;
     }
+    final attachments = List<Map<String, dynamic>>.of(_discussionAttachments);
+    _updateState(() => _discussionAttachments = []);
     _discussionController.clear();
     final cache = _discussionCache;
     final id = widget.thread.id;
     try {
       await cache.send(id, text,
-          userId: widget.currentUserId, userName: widget.currentUserName);
+          attachments: attachments,
+          userId: widget.currentUserId,
+          userName: widget.currentUserName);
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || widget.thread.id != id) return;
+      _updateState(() =>
+          _discussionAttachments = [...attachments, ..._discussionAttachments]);
       if (_discussionController.text.isEmpty) {
         _discussionController.text = text;
       }

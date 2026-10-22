@@ -4,6 +4,29 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test('avatar uploads send original and thumbnail as authenticated multipart',
+      () async {
+    final api = AxApiClient(
+      baseUrl: 'https://app.example/api',
+      client: MockClient((request) async {
+        expect(request.method, 'PUT');
+        expect(request.headers['authorization'], 'Bearer token');
+        expect(request.headers['content-type'],
+            startsWith('multipart/form-data;'));
+        expect(request.body, contains('name="original"'));
+        expect(request.body, contains('name="thumbnail"'));
+        expect(request.body, contains('content-type: image/jpeg'));
+        expect(request.body, contains('content-type: image/png'));
+        return http.Response(
+            '{"avatarUrl":"https://app.example/api/users/a/avatar?v=1"}', 200);
+      }),
+    )..sessionToken = 'token';
+    expect(
+        await api.uploadAvatar(
+            bytes: [1, 2], mediaType: 'image/jpeg', thumbnailBytes: [3]),
+        contains('avatar?v=1'));
+  });
+
   test('private avatars use the authenticated API origin and keep version',
       () async {
     final api = AxApiClient(

@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'sync/ax_idempotency.dart';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 
 import '../platform/http_client_stub.dart'
     if (dart.library.html) '../platform/http_client_web.dart' as platform;

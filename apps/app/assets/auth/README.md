@@ -5,6 +5,8 @@ Official provider assets, downloaded from:
 - GitHub: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
 - Google: https://developers.google.com/identity/images/g-logo.png
 
+Account marks are transparent 128px PNGs cropped edge-to-edge so both render
+at the same visual size; GitHub is tinted with the theme text color.
 The login page uses the official GitHub and Google marks at 20px in matching
 outlined provider buttons. Account settings also use these marks for linked methods.
 A provider's link action is hidden once that provider appears in the loaded

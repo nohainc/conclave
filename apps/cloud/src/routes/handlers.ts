@@ -98,6 +98,7 @@ export {
   handleCancelWorkRequest,
   handleClearWorkHistory,
   handleUploadWorkRequestFile,
+  handleDownloadThreadFile,
 } from "./work.js";
 export {
   handleListWorkerCatalog,

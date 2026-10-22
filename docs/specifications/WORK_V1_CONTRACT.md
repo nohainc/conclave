@@ -403,12 +403,15 @@ an error alone never implies that the conversation context was restored.
 The renderer passes only these inputs for each step. It does not append prior
 Worker messages or conversational sessions.
 
-Work uses one durable logical session scope per Thread's `direct` binding:
-`thread:<threadId>:direct:work-conversation`. This lets later Work
-requests continue the same Work conversation. Chat uses its own durable base,
-`thread:<threadId>:chat:conversation`, across requests in that Thread.
-Chat and Work never share a session key, even when their Worker/model match.
-Both bases are encoded using the existing Engine-safe SHA-256 key format.
+Chat and Work share one durable logical session scope per Thread:
+`thread:<threadId>:conversation` (plus `:gen-<n>` after a session reset).
+Both workflows write to the same Thread Conversation, so switching between
+Chat and Work keeps the AI history. When the same Worker/Profile handles the
+next request, it resumes the existing native session and receives only the
+canonical delta; any other Worker, Profile, or an unsupported model switch
+starts a session from the full canonical history. Read-only (Chat) versus
+writable (Work) permissions are applied per execution, not per session.
+The base is encoded using the existing Engine-safe SHA-256 key format.
 Chat requests use `mode = stateless` and never enqueue with the Thread
 mutation coordinator or acquire its lease. This does not change their durable
 provider session or read-only filesystem policy. Work/direct remains stateful,
@@ -646,23 +649,53 @@ interface WorkRequestSnapshot {
 ## Work Request attachments
 
 Work v1 history and detail responses include an additive `attachments` array
-of display-only file records (`kind: "file"`, `name`, `sizeBytes`). AX renders
-these below the sent prompt in Conversation and AI History, independently of
-prompt collapsing, and preserves them across optimistic submission, status
-refresh, and its optional read cache. Bytes and storage identifiers are excluded
-from this projection. Missing arrays are treated as empty. No schema migration
-or Worker protocol change is required; existing persisted requests expose their
-saved attachment metadata after Cloud and AX are updated.
+with `kind: "file"`, `name`, `sizeBytes`, an optional opaque `fileId`, and optional
+`previewText` / `previewImage` display fields. AX renders bevelled cards inside
+the composer above its text control and below sent prompts in Conversation and
+AI History. Cards are fixed squares; thumbnails fill them with centered cover
+cropping. Cards show no filename, size, or info control. For draft
+attachments, Close appears at the top right only while the pointer is over the
+card and removes the attachment immediately without confirmation. History
+cards show Download on hover. Clicking a card opens it: images open the
+original bytes (draft content or an authenticated download) in an in-app
+zoomable popup; other files are handed to the browser, which opens them in a
+viewer tab or the operating system's default application. Text previews and a
+generic file icon remain fallbacks when an image is unavailable. Original bytes
+remain private in R2. Missing preview fields fall back to the generic file
+icon; historical uploads are not
+backfilled. The Worker protocol is unchanged.
+
+AX creates a square JPEG thumbnail for PNG, JPEG, WebP and GIF files, limited
+to 32,000 base64 characters. A JPEG that already fits the budget is used as its
+own thumbnail. Otherwise AX center-crops to a square of at most 256 pixels
+(sharp at 2-3x density on the 96 px card), downscales in halving steps with
+high-quality smoothing, and encodes at quality 0.85, falling back to 0.75 and
+0.6 to fit. Unsupported images/documents retain a file
+card. Upload accepts the existing raw body or multipart `file`, `mediaType`, and
+optional `previewImage` fields. Cloud validates the thumbnail envelope and stores
+bounded text/image display data in a private R2 preview sidecar. When accepting a
+request it copies verified display data into the saved attachment metadata, so
+history needs no original-file download or per-card preview requests. Text
+previews contain at most 1,200 bytes of decoded plain source and are never rendered
+as active markup. D1 holds small display previews, never original file bytes.
+
+`GET /api/threads/{threadId}/files/{fileId}` requires current Thread view access
+and a reference from an accepted discussion message or Work Request. It returns
+an attachment with `private, no-store` caching and `nosniff`. Opaque IDs are not
+authorization tokens. AX downloads through its authenticated API client.
 
 Attachments are inputs to a Work Request, not Workflow definitions. A request
 may include local files and `http`/`https` references. The v1 composer accepts
 up to 10 attachments; each file is limited to 2 MiB and there is no total
-limit. Links are limited to 2,048 characters and may
+limit. The file dialog allows multi-selection in both Ask AI and Message
+modes. Each selected file is admitted in order: files over 2 MiB, and files
+beyond the remaining slots, are skipped individually and reported in one
+notice, while the rest are attached. Links are limited to 2,048 characters and may
 not embed URL credentials. The client uploads each file to
 `POST /api/threads/{threadId}/work-request-files`, which stores the bytes in R2
 bound to the uploading user and Thread and returns a server-generated `fileId`.
 Work Request creation accepts only `fileId` references that match that user,
-Thread, and size; D1 stores metadata/URL references and `fileId`, never bytes.
+Thread, and size; D1 stores metadata/URL references, bounded display previews and `fileId`, never original bytes.
 Cloud reads the bytes from R2 when it sends `assignment.start`, so they are
 transient on the wire and never persisted in D1.
 
@@ -688,6 +721,9 @@ interface WorkRequestAttachmentReference {
   name: string;
   mediaType: string;
   sizeBytes: number;
+  fileId?: string;
+  previewText?: string;
+  previewImage?: string; // bounded JPEG base64, presentation only
   url?: string;
 }
 ```

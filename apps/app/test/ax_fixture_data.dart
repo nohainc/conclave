@@ -153,6 +153,7 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
 
   @override
   Future<String> uploadAvatar({
+    required List<int> thumbnailBytes,
     required List<int> bytes,
     required String mediaType,
   }) async =>
@@ -243,10 +244,15 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
       const [];
 
   @override
+  Future<List<int>> downloadThreadFile(String threadId, String fileId) async =>
+      throw UnimplementedError('No fixture file');
+
+  @override
   Future<AxDiscussionMessage> sendDiscussionMessage({
     required String threadId,
     required String text,
     List<String> references = const [],
+    List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
   }) async =>
       AxDiscussionMessage(
@@ -256,6 +262,7 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
         authorName: 'Vitalii',
         body: text,
         references: references,
+        attachments: attachments,
         createdAt: DateTime.now().toIso8601String(),
         isMe: true,
       );

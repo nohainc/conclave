@@ -7,8 +7,8 @@ import { initialConversationTaskStatements } from "./conversation-workflow-step-
 import { MutationIdempotency } from "./mutation-idempotency.js";
 import { resolveWorkflowStepExecutionConfig } from "./workflow-step-execution-config.js";
 import {
-  conversationId,
   conversationSubmissionStatements,
+  resolveThreadConversationId,
 } from "./conversations.js";
 import {
   validateWorkRequest,
@@ -342,6 +342,8 @@ export async function handleCreateWorkRequest(
         sizeBytes: value.sizeBytes,
         fileId: value.fileId,
         contentDigest: stored.digest,
+        ...(stored.previewImage ? { previewImage: stored.previewImage } : {}),
+        ...(stored.previewText ? { previewText: stored.previewText } : {}),
       };
     }),
   );
@@ -498,16 +500,13 @@ export async function handleCreateWorkRequest(
     workflowVersion,
   );
   const selectedConversationId = conversationWorkflow
-    ? conversationId(threadId, conversationWorkflow.id)
+    ? await resolveThreadConversationId(env.CONCLAVE_DB, threadId)
     : undefined;
   if (
     body.conversationId !== undefined &&
     body.conversationId !== selectedConversationId
   ) {
-    throw new HttpError(
-      400,
-      "Conversation does not match this Thread and Workflow",
-    );
+    throw new HttpError(400, "Conversation does not match this Thread");
   }
   const workRequest: WorkRequest = {
     id: `work-request-${crypto.randomUUID()}`,
@@ -575,6 +574,7 @@ export async function handleCreateWorkRequest(
       ...(conversationWorkflow
         ? conversationSubmissionStatements(
             env.CONCLAVE_DB,
+            selectedConversationId!,
             threadId,
             conversationWorkflow,
             workRequest.id,

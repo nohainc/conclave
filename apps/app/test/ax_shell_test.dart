@@ -10,6 +10,7 @@ import 'package:conclave_app/src/features/navigation/ax_sidebar.dart';
 import 'package:conclave_app/src/features/navigation/ax_top_bar.dart';
 import 'package:conclave_app/src/navigation/ax_navigation.dart';
 import 'package:conclave_app/src/platform/platform_services.dart';
+import 'package:conclave_app/src/platform/theme_preference.dart';
 import 'package:conclave_app/src/app_shell.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 
@@ -303,19 +304,15 @@ void main() {
     expect(find.text('Account'), findsNothing);
     expect(find.text('Linked login methods'), findsNothing);
     expect(find.text('No linked methods loaded.'), findsNothing);
-    expect(find.text('Delete account'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('profile-delete-account')), findsOneWidget);
     expect(find.text('Rename'), findsNothing);
     expect(find.text('Update email'), findsNothing);
-    // The name is edited inline on the page, not in a dialog.
-    await tester.tap(find.byTooltip('Edit name'));
-    await tester.pumpAndSettle();
-    expect(find.byType(AlertDialog), findsNothing);
-    expect(
-        find.byKey(const ValueKey('inline-text-edit-field')), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('inline-text-edit-field')), findsNothing);
-    for (final entry in [('Edit email', 'Update email')]) {
+    // The name is edited in a dialog.
+    for (final entry in [
+      ('Edit name', 'Rename profile'),
+      ('Edit email', 'Update email'),
+    ]) {
       final edit = find.byTooltip(entry.$1);
       expect(edit, findsOneWidget);
       await tester.tap(edit);
@@ -327,7 +324,7 @@ void main() {
     expect(
       find.descendant(
         of: find.widgetWithText(ListTile, 'Fixture browser'),
-        matching: find.text('Revoke'),
+        matching: find.byTooltip('Revoke'),
       ),
       findsNothing,
     );
@@ -337,7 +334,7 @@ void main() {
       findsNothing,
     );
 
-    final revoke = find.text('Revoke').last;
+    final revoke = find.byTooltip('Revoke').last;
     await tester.ensureVisible(revoke);
     await tester.tap(revoke);
     await tester.pumpAndSettle();
@@ -357,38 +354,55 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    source.failUnlink = true;
-    await tester.tap(find.text('Unlink Google'));
+    await tester.tap(find.byTooltip('Unlink Google'));
     await tester.pumpAndSettle();
-    expect(find.text('Unlink Google'), findsOneWidget);
-    expect(find.text('Link Google'), findsNothing);
+    expect(find.text('Unlink Google?'), findsOneWidget);
+    expect(source.unlinkedIds, isEmpty);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(source.unlinkedIds, isEmpty);
+    expect(find.byTooltip('Unlink Google'), findsOneWidget);
+
+    source.failUnlink = true;
+    await tester.tap(find.byTooltip('Unlink Google'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Unlink'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Unlink Google'), findsOneWidget);
+    expect(find.byTooltip('Link Google'), findsNothing);
     expect(find.textContaining('Keep another sign-in method'), findsOneWidget);
     source.failUnlink = false;
     for (final label in ['Google', 'GitHub']) {
       final pending = Completer<void>();
       source.unlinkGate = pending.future;
-      await tester.tap(find.text('Unlink $label'));
+      await tester.tap(find.byTooltip('Unlink $label'));
+      await tester.pumpAndSettle();
+      expect(find.text('Unlink $label?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Unlink'));
       await tester.pump();
-      expect(find.text('Unlinking…'), findsOneWidget);
+      expect(find.byTooltip('Unlinking…'), findsOneWidget);
       if (label == 'Google') {
-        expect(
-            tester
-                .widget<TextButton>(
-                    find.widgetWithText(TextButton, 'Unlink GitHub'))
-                .onPressed,
-            isNull);
+        final button = tester.widget<IconButton>(
+          find
+              .ancestor(
+                of: find.byTooltip('Unlink GitHub'),
+                matching: find.byType(IconButton),
+              )
+              .first,
+        );
+        expect(button.onPressed, isNull);
       }
       pending.complete();
       await tester.pumpAndSettle();
-      expect(find.text('Unlink $label'), findsNothing);
-      expect(find.text('Link $label'), findsOneWidget);
+      expect(find.byTooltip('Unlink $label'), findsNothing);
+      expect(find.byTooltip('Link $label'), findsOneWidget);
     }
     expect(source.unlinkedIds, ['google', 'google', 'github']);
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('linked providers hide link buttons and share provider icons',
+  testWidgets('linked providers display with icons and link/unlink options',
       (tester) async {
     for (final providers in [
       <String>[],
@@ -410,39 +424,42 @@ void main() {
         final linked =
             providers.any((value) => value.toLowerCase() == provider);
         final label = provider == 'github' ? 'GitHub' : 'Google';
-        expect(
-            find.text('Link $label'), linked ? findsNothing : findsOneWidget);
-        expect(find.text(label), linked ? findsOneWidget : findsNothing);
+        expect(find.byTooltip('Link $label'),
+            linked ? findsNothing : findsOneWidget);
+        expect(find.byTooltip('Unlink $label'),
+            linked ? findsOneWidget : findsNothing);
+        expect(find.text(label), findsOneWidget);
         expect(
             find.byWidgetPredicate((widget) =>
                 widget is Image &&
                 widget.image is AssetImage &&
                 (widget.image as AssetImage).assetName ==
-                    'assets/auth/$provider${linked ? '' : '-link'}.png'),
+                    'assets/auth/$provider.png'),
             findsOneWidget);
         final icon = tester.widget<Image>(find.byWidgetPredicate((widget) =>
             widget is Image &&
             widget.image is AssetImage &&
             (widget.image as AssetImage).assetName ==
-                'assets/auth/$provider${linked ? '' : '-link'}.png'));
-        expect(icon.width, linked ? 24 : 16);
-        if (!linked) {
-          final row = find.byKey(const ValueKey('profile-account-links'));
-          expect(find.descendant(of: row, matching: find.text('Link $label')),
-              findsOneWidget);
-          expect(
-              find.descendant(of: row, matching: find.text('Delete account')),
-              findsOneWidget);
-          expect(find.widgetWithText(TextButton, 'Link $label'), findsNothing);
-          expect(tester.widget<Text>(find.text('Link $label')).style?.color,
-              Colors.white);
-          expect(find.widgetWithText(OutlinedButton, 'Delete account'),
-              findsNothing);
-          expect(
-              tester.widget<Text>(find.text('Link $label')).style?.decoration,
-              TextDecoration.none);
-        }
+                'assets/auth/$provider.png'));
+        expect(icon.width, 24);
+        final action = find.ancestor(
+            of: find.byTooltip('${linked ? 'Unlink' : 'Link'} $label'),
+            matching: find.byType(IconButton));
+        expect(action, findsOneWidget);
+        final button = tester.widget<IconButton>(action);
+        expect(button.color, ConclaveColors.textPrimary(false));
+        expect(button.iconSize, 20);
+        expect(tester.getSize(action), const Size(48, 48));
+        final deleteAction =
+            find.byKey(const ValueKey('profile-delete-account'));
+        expect(tester.widget<IconButton>(deleteAction).iconSize, 20);
+        expect(
+            tester.getTopRight(action).dx, tester.getTopRight(deleteAction).dx);
+        expect(
+            (button.icon as Icon).icon, linked ? Icons.link_off : Icons.link);
       }
+      expect(
+          find.byKey(const ValueKey('profile-delete-account')), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
   });
@@ -453,15 +470,19 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    for (final theme in [
-      ConclaveBrand.lightTheme(),
-      ConclaveBrand.darkTheme()
-    ]) {
+    for (final isDark in [false, true]) {
+      final mode = isDark ? ThemeMode.dark : ThemeMode.light;
+      final theme =
+          isDark ? ConclaveBrand.darkTheme() : ConclaveBrand.lightTheme();
       await tester.pumpWidget(MaterialApp(
         key: UniqueKey(),
         theme: theme,
         home: ConclaveAppShell(
           services: const DefaultPlatformServices(),
+          themePreference: ThemePreference(
+            read: () => mode.name,
+            write: (_) {},
+          ),
           dataSource: _LinkedProvidersFixture([], sessions: const [
             AxAuthSession(
                 token: 'blank',
@@ -488,7 +509,7 @@ void main() {
         expect(text.style?.fontSize, 13);
         expect(text.style?.fontFamily, theme.textTheme.bodySmall?.fontFamily);
         expect(text.style?.fontWeight, FontWeight.w500);
-        expect(text.style?.color, Colors.white);
+        expect(text.style?.color, ConclaveColors.textPrimary(isDark));
         expect(tester.getSize(finder).width, greaterThan(60));
         expect(tester.getSize(finder).height, greaterThan(0));
       }
@@ -499,12 +520,13 @@ void main() {
             find.text(index == 0 ? 'Browser session' : 'Chrome on macOS');
         final expiry = find.text('Expiry unavailable').at(index);
         expect(tester.getTopLeft(label).dx, tester.getTopLeft(expiry).dx);
-        expect(tester.widget<Text>(expiry).style?.color, Colors.white);
+        expect(tester.widget<Text>(expiry).style?.color,
+            ConclaveColors.textSecondary(isDark));
       }
       expect(find.text('Linked login methods'), findsNothing);
       expect(find.text('No linked methods loaded.'), findsNothing);
-      expect(find.text('Link GitHub'), findsOneWidget);
-      expect(find.text('Link Google'), findsOneWidget);
+      expect(find.byTooltip('Link GitHub'), findsOneWidget);
+      expect(find.byTooltip('Link Google'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
   });
@@ -541,7 +563,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    final deleteButton = find.text('Delete account').last;
+    final deleteButton = find.byKey(const ValueKey('profile-delete-account'));
     await tester.ensureVisible(deleteButton);
     await tester.tap(deleteButton);
     await tester.pumpAndSettle();

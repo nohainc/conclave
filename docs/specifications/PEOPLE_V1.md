@@ -53,3 +53,21 @@ Both paths expose the same per-Space permission editor. Read access is inherent 
 Migration `0024_space_invitation_identity.sql` adds nullable `invitee_user_id` to Space invitations. Known-Person requests persist this identity; email is a delivery-address snapshot. Inbox, Accept, Reject, pending detection, and notifications use the user ID whenever present, so email changes or reuse cannot transfer consent. Unknown/legacy pending email invitations remain email-addressed until accepted; acceptance binds them to the authenticated user ID. Existing accepted invitations are backfilled from `accepted_by_user_id`. A unique pending Space/user index supplements the pending email index. Account deletion cascades invitations addressed to that deleted identity rather than falling back to a reusable email.
 
 Apply migration 0024 after 0023, then 0025, before deploying these Cloud/AX changes. These migrations preserve accepted memberships and People relationships while cleaning persisted invitation identity and obsolete member-level invitation rights. The obsolete email-only AX writer and unused email-only authentication invitation reader are removed. There is no separate membership or global discovery API.
+
+## Account avatar files
+
+`PUT /api/profile/avatar` accepts multipart form fields `original` (JPEG, PNG,
+GIF, or WebP, up to 5 MB) and `thumbnail` (PNG, up to 128 KB). AX preserves the
+original bytes and renders a proportional PNG with a maximum dimension of 128 px
+in the browser (animated images use a still frame). Only the thumbnail is served
+by the authenticated avatar route; originals remain private for future use.
+R2 keys are `user-avatars/{accountId}/{uploadVersion}-original` and
+`user-avatars/{accountId}/{uploadVersion}-thumbnail`. The existing `avatar_url`
+column references the thumbnail. Upload versions prevent stale caching and
+concurrent file overwrites. Publication checks the prior profile reference;
+failed publication removes the new pair. Replacement deletes the prior pair.
+Account deletion removes every object under the account's avatar prefix before
+deleting the account, including interrupted-upload leftovers; storage failures
+stop deletion so it can be retried. Existing single-object avatars remain readable
+and are removed when replaced. No schema migration is required. Deploy Cloud and
+AX together because the upload request now requires both multipart files.

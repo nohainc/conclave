@@ -427,15 +427,6 @@ class _WorkComposer extends StatelessWidget {
   // selector no longer fit on one line, so the rail becomes one list.
   static const _singleWorkflowListWidth = 400.0;
 
-  static String _formatAttachmentSize(Object? bytes) {
-    final value = bytes is int ? bytes : 0;
-    if (value >= 1024 * 1024) {
-      return '${(value / (1024 * 1024)).toStringAsFixed(1)} MB';
-    }
-    if (value >= 1024) return '${(value / 1024).toStringAsFixed(0)} KB';
-    return '$value B';
-  }
-
   Widget _additionalControls(BuildContext context) => LayoutBuilder(
       builder: (context, constraints) => _workflowControls(
           context, constraints.maxWidth < _singleWorkflowListWidth));
@@ -809,45 +800,14 @@ class _WorkComposer extends StatelessWidget {
               onRemove: onQueuedRemove ?? (_) {},
               onSendNow: onQueuedSendNow ?? (_) {},
             ),
-          if (attachments.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (var i = 0; i < attachments.length; i++)
-                    InputChip(
-                      key: ValueKey('work-attachment-$i'),
-                      avatar: submitting
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.insert_drive_file, size: 14),
-                      tooltip: submitting
-                          ? 'Uploading with request'
-                          : 'Ready to send',
-                      label: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 260),
-                        child: Text(
-                          '${(attachments[i]['name'] ?? 'Attachment')} · '
-                          '${_formatAttachmentSize(attachments[i]['sizeBytes'])}'
-                          '${submitting ? ' · uploading' : ' · ready to send'}',
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ),
-                      onDeleted: canExecute && !submitting
-                          ? () => onRemoveAttachment(i)
-                          : null,
-                    ),
-                ],
-              ),
-            ),
-          ],
           MarkdownComposer(
+            attachments: attachments.isEmpty
+                ? null
+                : AttachmentCards(
+                    files: attachments,
+                    onRemove:
+                        canExecute && !submitting ? onRemoveAttachment : null,
+                  ),
             leadingControls: leadingControls,
             inputHeight: inputHeight,
             showControlTooltips: false,
@@ -1646,18 +1606,7 @@ class _WorkTimelineCard extends StatelessWidget {
                               runSpacing: 6,
                               children: [
                                 for (final file in request.attachments)
-                                  Chip(
-                                    avatar: const Icon(Icons.insert_drive_file,
-                                        size: 16),
-                                    label: ConstrainedBox(
-                                      constraints:
-                                          const BoxConstraints(maxWidth: 260),
-                                      child: Text(
-                                        '${file.name} · ${_WorkComposer._formatAttachmentSize(file.sizeBytes)}',
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ),
+                                  AttachmentCard(file: file.toJson()),
                               ],
                             ),
                           ],
@@ -2215,6 +2164,7 @@ class _DiscussionItem {
     this.isMe = true,
     this.aiKind,
     this.workRequest,
+    this.attachments = const [],
   });
 
   final String id;
@@ -2234,6 +2184,7 @@ class _DiscussionItem {
   /// Set for a Work Request still in Work history; it renders as the Work
   /// card and has no Chat message to edit or delete.
   final AxWorkRequest? workRequest;
+  final List<Map<String, dynamic>> attachments;
 }
 
 /// A Work Request still in Work history, shown in the Conversation with its
@@ -2473,6 +2424,8 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                               ),
                               const SizedBox(height: 6),
                             ],
+                            if (widget.item.attachments.isNotEmpty)
+                              AttachmentCards(files: widget.item.attachments),
                             if (_isEditing) ...[
                               MarkdownComposer(
                                 controller: _editController,
@@ -2767,6 +2720,7 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
                         style: TextStyle(fontSize: 12)),
                   )
                 : ListView.builder(
+                    key: const ValueKey('request-history-list'),
                     controller: _scroll,
                     shrinkWrap: true,
                     itemExtent: 48,

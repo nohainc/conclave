@@ -48,12 +48,15 @@ not yet acquire Conversations. Historical `direct:v1` requests remain unassociat
 
 ## Creation and revisions
 
-Initially there is one implicit Conversation per Thread and current manual
-Workflow. The first eligible Chat/Work request creates it lazily. Its ID is
-`conversation-` plus SHA-256 of the JSON array `[threadId, workflowId]`;
-it contains no provider handle. Empty Threads return no Conversations until
-a request is accepted. No explicit create/reset/rename/delete/Workflow-switch
-operation exists in this phase.
+There is one implicit Conversation per Thread, shared by every manual
+Workflow (Chat and Work). The first eligible Chat/Work request creates it
+lazily. Its ID is `conversation-` plus SHA-256 of the JSON array `[threadId]`;
+it contains no provider handle, and its `workflow_id` records the Workflow that
+opened it. Threads that already had per-workflow Conversations keep their
+oldest one (by `created_at`, then `id`) as canonical; later requests from any
+Workflow continue it, and history of the other legacy Conversation is not
+merged. Empty Threads return no Conversations until a request is accepted. No
+explicit create/reset/rename/delete operation exists in this phase.
 
 Acceptance atomically stores the Work Request, creates/increments its Conversation,
 stores an immutable association with the acceptance revision, and commits the Run,
@@ -325,8 +328,9 @@ Last model/effort describe the last successful execution, and null denotes Defau
 
 Cloud derives the opaque reference from Workspace, logical Worker, Profile
 definition, Conversation, and logical session key. Model, effort, and compatible
-Profile release changes do not change it. Current manual Conversations map one to
-one to the existing Thread/workflow session keys, preserving native continuity.
+Profile release changes do not change it. The Thread Conversation maps to one
+Thread session key shared by Chat and Work, so the same Worker/Profile resumes
+its native session across Workflows.
 A fresh-session retry changes the logical key and therefore the session generation.
 Future multiple Conversations must allocate distinct logical keys; ownership
 validation rejects using another Conversation's existing mapping.
@@ -735,8 +739,8 @@ The confirmed retry starts a fresh session in the same Thread, retaining the lat
 preceding AI answer and the failed request. Canonical history remains intact;
 the context floor excludes older exchanges. The retry API requires `clearAiHistory: true`
 for `context_limit_exceeded`. Migration `0079_ai_history_cutoff.sql` adds the
-Thread history cutoff and Conversation context floor. Chat and Work session keys
-include the Thread session generation, so subsequent requests continue the fresh
+Thread history cutoff and Conversation context floor. The shared Thread session key
+includes the Thread session generation, so subsequent requests continue the fresh
 session after a reset. Earlier exchanges remain readable in Conversation.
 Cloud reports the stable `context_limit_exceeded` error code and fixed public
 guidance in Thread history, including for previously stored fixed context-limit

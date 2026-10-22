@@ -432,6 +432,7 @@ class AxDiscussionMessage {
     this.authorName,
     required this.body,
     this.references = const [],
+    this.attachments = const [],
     this.editedAt,
     required this.createdAt,
     this.isMe = false,
@@ -446,6 +447,7 @@ class AxDiscussionMessage {
   final String? authorName;
   final String body;
   final List<String> references;
+  final List<Map<String, dynamic>> attachments;
   final String? editedAt;
   final String createdAt;
   final bool isMe;
@@ -467,6 +469,7 @@ class AxDiscussionMessage {
           authorName: authorName,
           body: body ?? this.body,
           references: references,
+          attachments: attachments,
           editedAt: editedAt ?? this.editedAt,
           createdAt: createdAt,
           isMe: isMe,
@@ -522,6 +525,11 @@ class AxDiscussionMessage {
       authorName: author,
       body: _string(json, 'body', _string(json, 'content')),
       references: refs,
+      attachments:
+          (json['attachments'] is List ? json['attachments'] as List : const [])
+              .whereType<Map>()
+              .map((file) => Map<String, dynamic>.from(file))
+              .toList(),
       editedAt: json['editedAt'] as String? ?? json['edited_at'] as String?,
       createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
       isMe: isMe,

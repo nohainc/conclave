@@ -265,6 +265,67 @@ void main() {
     expect(source.spaceReads, 3);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('switching Chat and Work keeps the last selected Worker',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final source = IntegrationSource()
+      ..defaultWorkflow = 'direct'
+      ..workers = [worker('a'), worker('b')];
+    final engine = AxSyncEngine();
+    String? submittedWorkflow;
+    Map<String, dynamic>? submittedSelection;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+                initialTab: 1,
+                space: const AxSpace(
+                    id: 's',
+                    name: 'Space',
+                    branch: '',
+                    lastActivity: '',
+                    role: 'owner'),
+                thread: const AxThread(
+                    id: 'keep',
+                    spaceId: 's',
+                    name: 'Thread',
+                    lead: '',
+                    status: 'active',
+                    brief: '',
+                    primaryWorkspace: '',
+                    queueStatus: '',
+                    canExecuteWork: true,
+                    workConfig: {'defaultWorkflowId': 'direct'}),
+                dataSource: source,
+                catalogs: AxSessionCatalogs(source, engine: engine),
+                workflowConfigurations:
+                    AxWorkflowConfigurations(source, engine: engine),
+                workHistoryCache: AxWorkHistoryCache(source, engine: engine),
+                onBackToSpace: () {},
+                onArchive: () {},
+                onRunWork: (prompt, workflow, attachments, key) async =>
+                    'accepted',
+                onRunWorkWithSelection:
+                    (prompt, workflow, attachments, key, selection) async {
+                  submittedWorkflow = workflow;
+                  submittedSelection = selection;
+                  return 'accepted';
+                }))));
+    await tester.pumpAndSettle();
+    await requestChoice(tester, 'Worker', 'Second');
+    await tester.tapAt(const Offset(790, 5));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Chat').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Discuss');
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
+    await tester.pumpAndSettle();
+    expect(submittedWorkflow, startsWith('chat'));
+    expect(submittedSelection?['workerId'], 'b');
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('Thread Work tab has no thread execution settings',
       (tester) async {
     tester.view.physicalSize = const Size(900, 1200);

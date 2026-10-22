@@ -296,6 +296,36 @@ describe("IdentityService", () => {
     expect(welcomeMessage.text).toContain("https://app.conclave.test");
   });
 
+  it("cleans avatar storage before account deletion and blocks deletion on storage failure", async () => {
+    const list = vi.fn().mockResolvedValue({
+      objects: [
+        { key: "user-avatars/a/v-original" },
+        { key: "user-avatars/a/v-thumbnail" },
+      ],
+      truncated: false,
+    });
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const options = buildBetterAuthOptions({
+      CONCLAVE_DB: {} as D1Database,
+      CONCLAVE_ENVIRONMENT: "development",
+      BETTER_AUTH_SECRET: "test-avatar-storage-secret-long-enough",
+      CONCLAVE_ARTIFACTS: { list, delete: remove } as unknown as R2Bucket,
+    });
+    await options.user.deleteUser.beforeDelete({ id: "a" });
+    expect(list).toHaveBeenCalledWith({
+      prefix: "user-avatars/a/",
+      cursor: undefined,
+    });
+    expect(remove).toHaveBeenCalledWith([
+      "user-avatars/a/v-original",
+      "user-avatars/a/v-thumbnail",
+    ]);
+    remove.mockRejectedValueOnce(new Error("storage unavailable"));
+    await expect(
+      options.user.deleteUser.beforeDelete({ id: "a" }),
+    ).rejects.toThrow("storage unavailable");
+  });
+
   it("sends the account-deleted template to the removed account's email", async () => {
     const send = vi.fn(async (_message: unknown) => ({
       messageId: "deleted-1",

@@ -1,7 +1,10 @@
 import { expect, it } from "vitest";
 import { CONVERSATION_WORKFLOWS } from "@conclave/core";
 import { conversationFixture } from "./helpers/conversation.js";
-import { conversationSubmissionStatements } from "../src/routes/conversations.js";
+import {
+  conversationSubmissionStatements,
+  threadConversationId,
+} from "../src/routes/conversations.js";
 import { loadConversationBootstrap } from "../src/routes/conversation-bootstrap.js";
 import { recordAssignmentResult } from "../src/assignment-dispatcher.js";
 
@@ -16,6 +19,7 @@ it("includes late prior replies while excluding the current request", async () =
     await f.db.batch(
       conversationSubmissionStatements(
         f.db as unknown as D1Database,
+        threadConversationId("W"),
         "W",
         CONVERSATION_WORKFLOWS.chat!,
         "R2",
@@ -100,6 +104,7 @@ it("includes late prior replies while excluding the current request", async () =
     await f.db.batch(
       conversationSubmissionStatements(
         f.db as unknown as D1Database,
+        threadConversationId("W"),
         "W",
         CONVERSATION_WORKFLOWS.chat!,
         "R3",
@@ -136,6 +141,7 @@ it("assembles Work environment and scoped prerequisite results for the receiving
     await f.db.batch(
       conversationSubmissionStatements(
         f.db as unknown as D1Database,
+        threadConversationId("W"),
         "W",
         CONVERSATION_WORKFLOWS.work!,
         "RW",
@@ -149,14 +155,13 @@ it("assembles Work environment and scoped prerequisite results for the receiving
       ('TEST','RW','test','stateless_read',1000,'test:v1','completed',1,'{"text":"Unrelated test output"}','now','now');
       INSERT INTO workflow_task_dependencies(task_id,depends_on_task_id) VALUES('VERIFY','IMPLEMENT');
       INSERT INTO artifacts(id,space_id,thread_id,work_request_id,content_digest,storage_key,created_at) VALUES('AR','P','W','RW','digest','secret-storage-key','now');`);
-    const row = f.sqlite
-      .prepare("SELECT id FROM conversations WHERE workflow_id='work'")
-      .get() as { id: string };
+    const row = { id: threadConversationId("W") };
     const result = await loadConversationBootstrap(
       f.db as unknown as D1Database,
       row.id,
       "RW",
-      0,
+      // RW follows the fixture's Chat request in the shared Thread Conversation.
+      1,
       "bootstrap",
       "VERIFY",
     );
@@ -186,14 +191,12 @@ it("assembles Work environment and scoped prerequisite results for the receiving
         f.db as unknown as D1Database,
         row.id,
         "RW",
-        0,
+        1,
         "bootstrap",
         "T",
       ),
     ).rejects.toThrow(/outside/);
-    const chatRow = f.sqlite
-      .prepare("SELECT id FROM conversations WHERE workflow_id='chat'")
-      .get() as { id: string };
+    const chatRow = row;
     const chat = JSON.parse(
       (
         await loadConversationBootstrap(
@@ -341,6 +344,7 @@ it("leaves exchanges before an AI History clear out of later context", async () 
     await f.db.batch(
       conversationSubmissionStatements(
         f.db as unknown as D1Database,
+        threadConversationId("W"),
         "W",
         CONVERSATION_WORKFLOWS.chat!,
         "R2",

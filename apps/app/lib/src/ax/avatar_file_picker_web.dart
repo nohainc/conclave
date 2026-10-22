@@ -5,10 +5,14 @@ import 'dart:html' as html;
 import 'dart:typed_data';
 
 class AxAvatarFile {
-  const AxAvatarFile({required this.bytes, required this.mediaType});
+  const AxAvatarFile(
+      {required this.bytes,
+      required this.mediaType,
+      required this.thumbnailBytes});
 
   final List<int> bytes;
   final String mediaType;
+  final List<int> thumbnailBytes;
 }
 
 Future<AxAvatarFile?> pickAvatarFile() async {
@@ -33,6 +37,40 @@ Future<AxAvatarFile> readAvatarFile(html.File file) async {
   if (!supported.contains(mediaType)) {
     throw StateError('Choose a PNG, JPEG, GIF, or WebP image.');
   }
+  final objectUrl = html.Url.createObjectUrl(file);
+  late List<int> thumbnail;
+  try {
+    final image = html.ImageElement(src: objectUrl);
+    final loaded = Completer<void>();
+    image.onLoad.first.then((_) {
+      if (!loaded.isCompleted) loaded.complete();
+    });
+    image.onError.first.then((_) {
+      if (!loaded.isCompleted) {
+        loaded.completeError(StateError('Could not decode the avatar image.'));
+      }
+    });
+    if (image.complete == true && image.naturalWidth > 0) loaded.complete();
+    await loaded.future;
+    final scale = 128 /
+        (image.naturalWidth > image.naturalHeight
+            ? image.naturalWidth
+            : image.naturalHeight);
+    final factor = scale < 1 ? scale : 1.0;
+    final canvas = html.CanvasElement(
+        width: (image.naturalWidth * factor).round().clamp(1, 128),
+        height: (image.naturalHeight * factor).round().clamp(1, 128));
+    canvas.context2D
+        .drawImageScaled(image, 0, 0, canvas.width!, canvas.height!);
+    final blob = await canvas.toBlob('image/png');
+    final thumbnailReader = html.FileReader()..readAsArrayBuffer(blob);
+    await thumbnailReader.onLoad.first;
+    final result = thumbnailReader.result;
+    thumbnail =
+        result is Uint8List ? result : (result as ByteBuffer).asUint8List();
+  } finally {
+    html.Url.revokeObjectUrl(objectUrl);
+  }
   final reader = html.FileReader();
   final completer = Completer<AxAvatarFile>();
   reader.onLoad.listen((_) {
@@ -42,6 +80,7 @@ Future<AxAvatarFile> readAvatarFile(html.File file) async {
         bytes:
             result is Uint8List ? result : (result as ByteBuffer).asUint8List(),
         mediaType: mediaType,
+        thumbnailBytes: thumbnail,
       ));
       return;
     }

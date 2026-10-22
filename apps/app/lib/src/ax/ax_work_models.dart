@@ -313,13 +313,27 @@ class AxWorkRequestPage {
   final String? aiHistoryClearedAt;
 }
 
-/// Display-only attachment metadata; file bytes and storage identifiers stay out.
+/// Attachment display metadata and opaque ID; original file bytes stay in R2.
 class AxWorkAttachment {
-  const AxWorkAttachment({required this.name, required this.sizeBytes});
+  const AxWorkAttachment(
+      {required this.name,
+      required this.sizeBytes,
+      this.previewText,
+      this.fileId,
+      this.previewImage});
   final String name;
   final int sizeBytes;
-  Map<String, dynamic> toJson() =>
-      {'kind': 'file', 'name': name, 'sizeBytes': sizeBytes};
+  final String? fileId;
+  final String? previewText;
+  final String? previewImage;
+  Map<String, dynamic> toJson() => {
+        'kind': 'file',
+        'name': name,
+        'sizeBytes': sizeBytes,
+        if (fileId != null) 'fileId': fileId,
+        if (previewText != null) 'previewText': previewText,
+        if (previewImage != null) 'previewImage': previewImage
+      };
   static List<AxWorkAttachment> fromList(Object? value) =>
       List.unmodifiable((value is List ? value : const [])
           .whereType<Map>()
@@ -328,6 +342,9 @@ class AxWorkAttachment {
               name: item['name'] is String
                   ? item['name'] as String
                   : 'Attachment',
+              fileId: item['fileId'] as String?,
+              previewText: item['previewText'] as String?,
+              previewImage: item['previewImage'] as String?,
               sizeBytes:
                   item['sizeBytes'] is int ? item['sizeBytes'] as int : 0)));
 }
@@ -808,6 +825,7 @@ abstract interface class AxDataSource {
   Future<String> confirmEmailChange({required String code}) async =>
       throw UnimplementedError('Email changes are not available');
   Future<String> uploadAvatar({
+    required List<int> thumbnailBytes,
     required List<int> bytes,
     required String mediaType,
   }) async =>
@@ -1012,10 +1030,13 @@ abstract interface class AxDataSource {
       int limit = 50,
       String? before,
       String? after});
+  Future<List<int>> downloadThreadFile(String threadId, String fileId) async =>
+      throw UnimplementedError('File downloads are not available');
   Future<AxDiscussionMessage> sendDiscussionMessage({
     required String threadId,
     required String text,
     List<String> references = const [],
+    List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
   }) async =>
       throw UnimplementedError('Discussion messages are not available');

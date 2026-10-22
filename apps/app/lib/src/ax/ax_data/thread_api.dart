@@ -220,12 +220,11 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
   }
 
   /// Uploads picked file bytes to Cloud storage and returns file references.
-  /// Each picked map is updated in place with its `fileId`, so a retried
-  /// submission reuses the upload and keeps the same idempotent request body.
+  /// An in-memory cache reuses uploads for retries of the same picked file,
+  /// retaining a stable file reference and idempotent request body.
   Future<List<Map<String, dynamic>>> _uploadWorkRequestFiles(
-    String threadId,
-    List<Map<String, dynamic>> attachments,
-  ) async {
+      String threadId, List<Map<String, dynamic>> attachments,
+      {bool discussion = false}) async {
     final references = <Map<String, dynamic>>[];
     for (final attachment in attachments) {
       if (attachment['kind'] != 'file') {
@@ -243,13 +242,27 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
         }
         final name = Uri.encodeQueryComponent(
             attachment['name']?.toString() ?? 'Attachment');
-        final response = await client.post(
-          Uri.parse('$baseUrl/threads/$threadId/work-request-files?name=$name'),
-          headers: _headers(
-              contentType: attachment['mediaType']?.toString() ??
-                  'application/octet-stream'),
-          body: base64Decode(encoded),
-        );
+        final preview = attachment['previewImage'];
+        final url = Uri.parse(
+            '$baseUrl/threads/$threadId/work-request-files?name=$name${discussion ? "&purpose=discussion" : ""}');
+        final http.Response response;
+        if (preview is String) {
+          final request = http.MultipartRequest('POST', url)
+            ..headers.addAll(_headers())
+            ..fields['mediaType'] = attachment['mediaType']?.toString() ??
+                'application/octet-stream'
+            ..fields['previewImage'] = preview
+            ..files.add(http.MultipartFile.fromBytes(
+                'file', base64Decode(encoded),
+                filename: attachment['name']?.toString() ?? 'Attachment'));
+          response = await http.Response.fromStream(await client.send(request));
+        } else {
+          response = await client.post(url,
+              headers: _headers(
+                  contentType: attachment['mediaType']?.toString() ??
+                      'application/octet-stream'),
+              body: base64Decode(encoded));
+        }
         dynamic body;
         try {
           body = jsonDecode(response.body);
@@ -782,12 +795,26 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
   }
 
   @override
+  Future<List<int>> downloadThreadFile(String threadId, String fileId) async {
+    final response = await client.get(
+        Uri.parse('$baseUrl/threads/$threadId/files/$fileId'),
+        headers: _headers());
+    if (response.statusCode != 200) {
+      throw AxApiException('File download failed (${response.statusCode})');
+    }
+    return response.bodyBytes;
+  }
+
+  @override
   Future<AxDiscussionMessage> sendDiscussionMessage({
     required String threadId,
     required String text,
     List<String> references = const [],
+    List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
   }) async {
+    attachments =
+        await _uploadWorkRequestFiles(threadId, attachments, discussion: true);
     final response = await client.post(
       Uri.parse('$baseUrl/threads/$threadId/discussion-messages'),
       headers: {
@@ -796,6 +823,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
       },
       body: jsonEncode({
         'body': text,
+        'attachments': attachments,
         'references': references,
       }),
     );

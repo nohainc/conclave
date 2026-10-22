@@ -95,6 +95,7 @@ export function sqliteD1(
     "0077_person_grant_run_time_quota.sql",
     "0078_discussion_ai_entries.sql",
     "0079_ai_history_cutoff.sql",
+    "0080_discussion_attachments.sql",
   ]) {
     sqlite.exec(
       readFileSync(

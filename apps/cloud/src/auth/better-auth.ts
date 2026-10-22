@@ -1,3 +1,4 @@
+import { deleteAccountAvatars } from "../avatar-storage.js";
 import { publishPeopleProfileChanged } from "../people.js";
 import {
   classifyEmailDeliveryFailure,
@@ -31,6 +32,7 @@ const EMAIL_CHANGE_OTP_PREFIX = "email-change-otp:";
 
 export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> &
   EmailSenderEnvironment & {
+    CONCLAVE_ARTIFACTS?: Env["CONCLAVE_ARTIFACTS"];
     CONCLAVE_ENVIRONMENT: string;
     CONCLAVE_E2E?: string;
     BETTER_AUTH_SECRET?: string;
@@ -376,6 +378,10 @@ export function buildBetterAuthOptions(
       changeEmail: { enabled: false },
       deleteUser: {
         enabled: true,
+        beforeDelete: async (user: { id: string }) => {
+          if (env.CONCLAVE_ARTIFACTS)
+            await deleteAccountAvatars(env.CONCLAVE_ARTIFACTS, user.id);
+        },
         afterDelete: async (user: { email: string; name?: string | null }) => {
           try {
             await sendTemplateEmail(env, {

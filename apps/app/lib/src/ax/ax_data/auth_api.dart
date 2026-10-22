@@ -117,14 +117,20 @@ mixin _AuthApi on _AxApiClientCore {
 
   @override
   Future<String> uploadAvatar({
+    required List<int> thumbnailBytes,
     required List<int> bytes,
     required String mediaType,
   }) async {
-    final response = await client.put(
-      Uri.parse('$baseUrl/profile/avatar'),
-      headers: _headers(contentType: mediaType),
-      body: bytes,
-    );
+    final upload =
+        http.MultipartRequest('PUT', Uri.parse('$baseUrl/profile/avatar'))
+          ..headers.addAll(_headers())
+          ..files.add(http.MultipartFile.fromBytes('original', bytes,
+              filename: 'original', contentType: MediaType.parse(mediaType)))
+          ..files.add(http.MultipartFile.fromBytes('thumbnail', thumbnailBytes,
+              filename: 'thumbnail.png',
+              contentType: MediaType('image', 'png')));
+    upload.headers.remove('content-type');
+    final response = await http.Response.fromStream(await client.send(upload));
     if (response.statusCode < 200 || response.statusCode >= 300) {
       var message = 'Avatar upload failed (${response.statusCode})';
       try {

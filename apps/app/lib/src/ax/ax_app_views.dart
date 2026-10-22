@@ -373,63 +373,84 @@ extension _AxAppViews on _AxAppStateMixin {
                             : null,
                   ))));
 
-  Widget _accountProviderIcon(String providerId, {double size = 24}) {
+  Widget _accountProviderIcon(BuildContext context, String providerId,
+      {double size = 24}) {
     final provider = providerId.toLowerCase();
     if (provider != 'github' && provider != 'google') {
       return Icon(Icons.account_circle_outlined, size: size);
     }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(3),
-      child: ColoredBox(
-        color: Colors.white,
-        child: Image.asset('assets/auth/$provider.png',
-            width: size, height: size, excludeFromSemantics: true),
+    // Both marks are transparent, edge-to-edge 128px assets so they render at
+    // the same visual size. The monochrome GitHub mark follows the theme text
+    // color; the Google mark keeps its official colors.
+    return Image.asset('assets/auth/$provider.png',
+        width: size,
+        height: size,
+        color: provider == 'github'
+            ? ConclaveColors.textPrimary(
+                Theme.of(context).brightness == Brightness.dark)
+            : null,
+        excludeFromSemantics: true);
+  }
+
+  /// Text action for revoking all sessions.
+  Widget _profileTextButton(BuildContext context,
+      {required String label, required VoidCallback? onPressed}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        foregroundColor: ConclaveColors.textPrimary(isDark),
+        disabledForegroundColor: ConclaveColors.neutralText(isDark),
       ),
+      child: Text(label),
     );
   }
 
-  Widget _profileActionLink(
+  Widget _profileIconButton(BuildContext context,
       {required String label,
-      required Widget icon,
-      required VoidCallback? onTap,
-      bool destructive = false}) {
-    final color = onTap == null
-        ? Theme.of(context).disabledColor
-        : destructive
-            ? ConclaveColors.errorText(
-                Theme.of(context).brightness == Brightness.dark)
-            : Colors.white;
-    return Semantics(
-      link: true,
-      enabled: onTap != null,
-      child: InkWell(
-        onTap: onTap,
-        mouseCursor:
-            onTap == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            icon,
-            const SizedBox(width: 6),
-            Text(label,
-                style: TextStyle(
-                    color: color,
-                    fontSize: 13,
-                    decoration: TextDecoration.none)),
-          ]),
-        ),
-      ),
+      required IconData icon,
+      required VoidCallback? onPressed,
+      bool busy = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return IconButton(
+      tooltip: label,
+      iconSize: 20,
+      constraints: const BoxConstraints.tightFor(width: 48, height: 48),
+      alignment: Alignment.center,
+      color: ConclaveColors.textPrimary(isDark),
+      disabledColor: ConclaveColors.neutralText(isDark),
+      onPressed: onPressed,
+      icon: busy
+          ? Semantics(
+              label: label,
+              child: SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: ConclaveColors.neutralText(isDark),
+                ),
+              ),
+            )
+          : Icon(icon),
     );
   }
 
   Widget _profileEditableValue(String value,
-          {required String tooltip, required VoidCallback onEdit}) =>
+          {required String tooltip,
+          required VoidCallback onEdit,
+          TextStyle? style}) =>
       Row(
         children: [
-          Flexible(child: Text(value, overflow: TextOverflow.ellipsis)),
+          Flexible(
+              child:
+                  Text(value, style: style, overflow: TextOverflow.ellipsis)),
           IconButton(
             tooltip: tooltip,
             onPressed: onEdit,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            padding: EdgeInsets.zero,
             icon: const Icon(Icons.edit_outlined, size: 17),
           ),
         ],
@@ -437,8 +458,10 @@ extension _AxAppViews on _AxAppStateMixin {
 
   Widget _profileSecurityView() => ListenableBuilder(
       listenable: store.profileSecurityChanges,
-      builder: (context, _) => _profileSecurityBody());
-  Widget _profileSecurityBody() {
+      builder: (context, _) => _profileSecurityBody(context));
+  // Use the builder context: the State context sits above MaterialApp and
+  // would not see the active theme.
+  Widget _profileSecurityBody(BuildContext context) {
     final viewer = store.auth.viewer;
     final security = accountSecurity;
     // Session changes and server-state resets can clear the lists while the
@@ -478,9 +501,8 @@ extension _AxAppViews on _AxAppStateMixin {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Tooltip(
+              Row(children: [
+                Tooltip(
                   message: avatarUploadBusy ? 'Uploading…' : 'Change avatar',
                   child: IconButton(
                     key: const ValueKey('profile-avatar-upload'),
@@ -488,10 +510,11 @@ extension _AxAppViews on _AxAppStateMixin {
                     padding: EdgeInsets.zero,
                     icon: avatarUploadBusy
                         ? const SizedBox(
-                            width: 40,
-                            height: 40,
+                            width: 72,
+                            height: 72,
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : CircleAvatar(
+                            radius: 36,
                             backgroundColor: ConclaveColors.primarySoftColor(
                                 Theme.of(context).brightness ==
                                     Brightness.dark),
@@ -503,6 +526,7 @@ extension _AxAppViews on _AxAppStateMixin {
                                       color: ConclaveColors.primaryForeground(
                                           Theme.of(context).brightness ==
                                               Brightness.dark),
+                                      fontSize: 24,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   )
@@ -510,90 +534,117 @@ extension _AxAppViews on _AxAppStateMixin {
                           ),
                   ),
                 ),
-                title: InlineTextEdit(
-                  value: viewer?.displayName ?? 'Conclave user',
-                  tooltip: 'Edit name',
-                  label: 'Name',
-                  onSave: _saveDisplayName,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _profileEditableValue(
+                        viewer?.displayName ?? 'Conclave user',
+                        tooltip: 'Edit name',
+                        onEdit: _editDisplayName,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      _profileEditableValue(
+                        viewer?.email ?? 'Email unavailable',
+                        tooltip: 'Edit email',
+                        onEdit: _editEmail,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: ConclaveColors.textSecondary(
+                                Theme.of(context).brightness ==
+                                    Brightness.dark)),
+                      ),
+                    ],
+                  ),
                 ),
-                subtitle: _profileEditableValue(
-                  viewer?.email ?? 'Email unavailable',
-                  tooltip: 'Edit email',
-                  onEdit: _editEmail,
+                const SizedBox(width: 16),
+                IconButton(
+                  key: const ValueKey('profile-delete-account'),
+                  tooltip: deletingAccount ? 'Deleting…' : 'Delete account',
+                  onPressed: deletingAccount ? null : _deleteAccount,
+                  iconSize: 20,
+                  constraints:
+                      const BoxConstraints.tightFor(width: 48, height: 48),
+                  alignment: Alignment.center,
+                  color: ConclaveColors.errorText(
+                      Theme.of(context).brightness == Brightness.dark),
+                  icon: deletingAccount
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.delete_forever_outlined),
                 ),
-              ),
+              ]),
             ],
           ),
         ),
+        const SizedBox(height: 24),
         if (accountUnlinkError != null)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Text(accountUnlinkError!,
                 style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ),
-        if (accountSecurityLoading || linkedAccounts.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: accountSecurityLoading
-                ? const Center(child: CircularProgressIndicator())
-                : Column(
-                    children: [
-                      ...linkedAccounts.map((account) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: _accountProviderIcon(account.providerId),
-                            title: Text(_providerLabel(account.providerId)),
-                            trailing: ['google', 'github']
-                                    .contains(account.providerId.toLowerCase())
-                                ? TextButton(
-                                    onPressed: unlinkingAccountIds.isNotEmpty
-                                        ? null
-                                        : () => _unlinkAccountProvider(account),
-                                    child: Text(unlinkingAccountIds
-                                            .contains(account.id)
-                                        ? 'Unlinking…'
-                                        : 'Unlink ${_providerLabel(account.providerId)}'),
-                                  )
-                                : Icon(Icons.verified_outlined,
-                                    color:
-                                        Theme.of(context).colorScheme.primary),
-                          )),
-                    ],
-                  ),
-          ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            key: const ValueKey('profile-account-links'),
-            children: [
-              if (!accountSecurityLoading &&
-                  !linkedProviders.contains('github')) ...[
-                _profileActionLink(
-                    label: 'Link GitHub',
-                    icon: Image.asset('assets/auth/github-link.png',
-                        width: 16, height: 16, excludeFromSemantics: true),
-                    onTap: () => _linkAccountProvider('github')),
-                const SizedBox(width: 20),
-              ],
-              if (!accountSecurityLoading &&
-                  !linkedProviders.contains('google')) ...[
-                _profileActionLink(
-                    label: 'Link Google',
-                    icon: Image.asset('assets/auth/google-link.png',
-                        width: 16, height: 16, excludeFromSemantics: true),
-                    onTap: () => _linkAccountProvider('google')),
-                const SizedBox(width: 20),
-              ],
-              _profileActionLink(
-                  label: deletingAccount ? 'Deleting…' : 'Delete account',
-                  icon: Icon(Icons.delete_forever_outlined,
-                      size: 18,
-                      color: ConclaveColors.errorText(
-                          Theme.of(context).brightness == Brightness.dark)),
-                  destructive: true,
-                  onTap: deletingAccount ? null : _deleteAccount),
-            ],
-          ),
-        ),
+        if (accountSecurityLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else ...[
+          for (final provider in ['google', 'github']) ...[
+            Builder(builder: (context) {
+              final isLinked = linkedProviders.contains(provider);
+              final account = isLinked
+                  ? linkedAccounts
+                      .firstWhere((a) => a.providerId.toLowerCase() == provider)
+                  : null;
+              final isUnlinking =
+                  account != null && unlinkingAccountIds.contains(account.id);
+              final isUnlinkBusy = unlinkingAccountIds.isNotEmpty;
+              final label = _providerLabel(provider);
+
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: _accountProviderIcon(context, provider),
+                title: Text(label),
+                trailing: isLinked
+                    ? _profileIconButton(
+                        context,
+                        label: isUnlinking ? 'Unlinking…' : 'Unlink $label',
+                        icon: Icons.link_off,
+                        busy: isUnlinking,
+                        onPressed: isUnlinkBusy
+                            ? null
+                            : () => _unlinkAccountProvider(account!),
+                      )
+                    : _profileIconButton(
+                        context,
+                        label: 'Link $label',
+                        icon: Icons.link,
+                        onPressed: () => _linkAccountProvider(provider),
+                      ),
+              );
+            }),
+          ],
+          ...linkedAccounts
+              .where((a) =>
+                  !['google', 'github'].contains(a.providerId.toLowerCase()))
+              .map((account) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: _accountProviderIcon(context, account.providerId),
+                    title: Text(_providerLabel(account.providerId)),
+                    trailing: Icon(
+                      Icons.verified_outlined,
+                      color: ConclaveColors.primaryForeground(
+                          Theme.of(context).brightness == Brightness.dark),
+                    ),
+                  )),
+        ],
         const SizedBox(height: 24),
         _profileSection(
           title: 'Active sessions',
@@ -602,15 +653,13 @@ extension _AxAppViews on _AxAppStateMixin {
             final hasOtherSessions = sessions.any(
               (session) => !_isCurrentAccountSession(session),
             );
-            return TextButton(
-              onPressed: accountSecurityLoading ||
-                      revokingAllAccountSessions ||
-                      !hasOtherSessions
-                  ? null
-                  : _revokeAllAccountSessions,
-              child:
-                  Text(revokingAllAccountSessions ? 'Revoking…' : 'Revoke all'),
-            );
+            return _profileTextButton(context,
+                onPressed: accountSecurityLoading ||
+                        revokingAllAccountSessions ||
+                        !hasOtherSessions
+                    ? null
+                    : _revokeAllAccountSessions,
+                label: revokingAllAccountSessions ? 'Revoking…' : 'Revoke all');
           }),
           child: accountSecurityLoading
               ? const Center(child: CircularProgressIndicator())
@@ -646,7 +695,11 @@ extension _AxAppViews on _AxAppStateMixin {
                                             ?.copyWith(
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w500,
-                                                color: Colors.white),
+                                                color:
+                                                    ConclaveColors.textPrimary(
+                                                        Theme.of(context)
+                                                                .brightness ==
+                                                            Brightness.dark)),
                                         textAlign: TextAlign.start,
                                         softWrap: true,
                                       )),
@@ -661,7 +714,12 @@ extension _AxAppViews on _AxAppStateMixin {
                                         style: Theme.of(context)
                                             .textTheme
                                             .bodySmall
-                                            ?.copyWith(color: Colors.white)),
+                                            ?.copyWith(
+                                                color: ConclaveColors
+                                                    .textSecondary(
+                                                        Theme.of(context)
+                                                                .brightness ==
+                                                            Brightness.dark))),
                                   ),
                                 ],
                               ),
@@ -679,33 +737,25 @@ extension _AxAppViews on _AxAppStateMixin {
                                                 .textTheme
                                                 .bodySmall
                                                 ?.copyWith(
-                                                    color: Colors.white,
+                                                    color: ConclaveColors
+                                                        .textPrimary(Theme.of(
+                                                                    context)
+                                                                .brightness ==
+                                                            Brightness.dark),
                                                     fontWeight:
                                                         FontWeight.w500)),
                                       )
-                                    : TextButton(
+                                    : _profileIconButton(context,
+                                        icon: Icons.logout,
+                                        busy: isRevoking,
                                         onPressed: isRevoking ||
                                                 revokingAllAccountSessions
                                             ? null
                                             : () =>
                                                 _revokeAccountSession(session),
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: Colors.white,
-                                          padding: EdgeInsets.zero,
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
-                                          alignment: Alignment.centerRight,
-                                          textStyle: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                  fontWeight: FontWeight.w500),
-                                        ),
-                                        child: Text(isRevoking
+                                        label: isRevoking
                                             ? 'Revoking…'
                                             : 'Revoke'),
-                                      ),
                               ),
                             ),
                           ],

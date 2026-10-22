@@ -1,3 +1,4 @@
+import { avatarObjectKeys } from "../avatar-storage.js";
 import { securityContext, HttpError, json } from "./http-security.js";
 import type { SecurityEnv } from "./http-security.js";
 
@@ -22,7 +23,7 @@ export function avatarUrlFor(
   if (!value) return null;
   if (!value.startsWith("r2://")) return value;
   const key = value.slice("r2://".length);
-  const version = key.split("/").pop() ?? key;
+  const version = (key.split("/").pop() ?? key).replace(/-thumbnail$/, "");
   const url = new URL(
     `/api/users/${encodeURIComponent(userId)}/avatar`,
     request.url,
@@ -39,19 +40,57 @@ export async function handleUploadAvatar(
   const context = await securityContext(request, env, ctx);
   if (request.method !== "PUT") throw new HttpError(405, "Use PUT for avatars");
 
-  const mediaType =
-    request.headers.get("content-type")?.split(";", 1)[0]?.trim() ?? "";
-  if (!AVATAR_TYPES.has(mediaType)) {
-    throw new HttpError(415, "Avatar must be a JPEG, PNG, GIF, or WebP image");
+  // Bound the entire multipart body before parsing, including untrusted lengths.
+  const limit = MAX_AVATAR_BYTES + 256 * 1024;
+  const reader = request.body?.getReader();
+  if (!reader) throw new HttpError(400, "Avatar files are required");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel();
+      throw new HttpError(413, "Avatar upload is too large");
+    }
+    chunks.push(value);
   }
-  const declaredLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_AVATAR_BYTES) {
-    throw new HttpError(413, "Avatar image must be 5 MB or smaller");
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
   }
-  const body = await request.arrayBuffer();
-  if (body.byteLength === 0 || body.byteLength > MAX_AVATAR_BYTES) {
-    throw new HttpError(413, "Avatar image must be between 1 byte and 5 MB");
+  let form: FormData;
+  try {
+    form = await new Request(request.url, {
+      method: "PUT",
+      headers: request.headers,
+      body: bytes,
+    }).formData();
+  } catch {
+    throw new HttpError(400, "Upload original and thumbnail image files");
   }
+  const original = form.get("original");
+  const thumbnail = form.get("thumbnail");
+  if (!(original instanceof File) || !(thumbnail instanceof File))
+    throw new HttpError(400, "Original and thumbnail files are required");
+  if (!AVATAR_TYPES.has(original.type) || thumbnail.type !== "image/png")
+    throw new HttpError(
+      415,
+      "Original must be an image and thumbnail must be PNG",
+    );
+  if (
+    !original.size ||
+    original.size > MAX_AVATAR_BYTES ||
+    !thumbnail.size ||
+    thumbnail.size > 128 * 1024
+  )
+    throw new HttpError(
+      413,
+      "Original must be 1 byte–5 MB and thumbnail 1 byte–128 KB",
+    );
   const bucket = env.CONCLAVE_ARTIFACTS;
   if (!bucket) throw new HttpError(503, "Avatar storage is not configured");
 
@@ -62,25 +101,38 @@ export async function handleUploadAvatar(
     .first<{ avatarUrl: string | null }>();
   if (!old) throw new HttpError(404, "User not found");
 
-  const key = `user-avatars/${context.userId}/${crypto.randomUUID()}`;
-  await bucket.put(key, body, {
-    httpMetadata: { contentType: mediaType },
-    customMetadata: { userId: context.userId },
-  });
+  const version = crypto.randomUUID();
+  const key = `user-avatars/${context.userId}/${version}-thumbnail`;
+  const originalKey = key.replace(/-thumbnail$/, "-original");
   const storedValue = `r2://${key}`;
   try {
-    await env.CONCLAVE_DB.prepare(
-      "UPDATE users SET avatar_url = ?1, updated_at = ?2 WHERE id = ?3",
+    await bucket.put(originalKey, await original.arrayBuffer(), {
+      httpMetadata: { contentType: original.type },
+      customMetadata: { userId: context.userId },
+    });
+    await bucket.put(key, await thumbnail.arrayBuffer(), {
+      httpMetadata: { contentType: thumbnail.type },
+      customMetadata: { userId: context.userId },
+    });
+    const updated = await env.CONCLAVE_DB.prepare(
+      "UPDATE users SET avatar_url = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'active' AND avatar_url IS ?4",
     )
-      .bind(storedValue, new Date().toISOString(), context.userId)
+      .bind(
+        storedValue,
+        new Date().toISOString(),
+        context.userId,
+        old.avatarUrl,
+      )
       .run();
+    if (updated.meta.changes !== 1)
+      throw new HttpError(409, "Profile changed; retry the upload");
   } catch (error) {
-    await bucket.delete(key).catch(() => undefined);
+    await bucket.delete([key, originalKey]).catch(() => undefined);
     throw error;
   }
 
   const oldKey = avatarKey(old.avatarUrl);
-  if (oldKey) await bucket.delete(oldKey).catch(() => undefined);
+  if (oldKey) await bucket.delete(avatarObjectKeys(oldKey));
   return json({
     avatarUrl: avatarUrlFor(request, context.userId, storedValue),
   });

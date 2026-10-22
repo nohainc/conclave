@@ -706,6 +706,7 @@ class _ThreadPageState extends State<ThreadPage>
   bool get _submittingWork =>
       widget.draftBusy || _draftSubmitting || _workPresentation.submitting;
   List<Map<String, dynamic>> _workAttachments = [];
+  List<Map<String, dynamic>> _discussionAttachments = [];
   Map<String, dynamic> _workExecutionSelection = {};
   List<AxWorker> _spaceWorkers = const [];
   List<AxWorker> _eligibleWorkers = const [];
@@ -1264,7 +1265,11 @@ class _ThreadPageState extends State<ThreadPage>
   void didUpdateWidget(ThreadPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     final threadChanged = oldWidget.thread.id != widget.thread.id;
-    if (threadChanged) _invalidateInteractionCallbacks();
+    if (threadChanged) {
+      _invalidateInteractionCallbacks();
+      _discussionAttachments = [];
+      _workAttachments = [];
+    }
     if (oldWidget.thread.id != widget.thread.id &&
         _threadViewStateRestored &&
         oldWidget.currentUserId != null &&
@@ -1545,7 +1550,21 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AttachmentDownloadScope(
+        load: (file) async {
+          final source = widget.dataSource;
+          if (source == null) {
+            throw StateError('File downloads are unavailable');
+          }
+          return source.downloadThreadFile(
+              widget.thread.id, file['fileId'] as String);
+        },
+        download: (file, bytes) async => work_request_files.saveThreadFile(
+            bytes, file['name']?.toString() ?? 'Attachment'),
+        child: _buildThread(context),
+      );
+
+  Widget _buildThread(BuildContext context) {
     AxRenderDiagnostics.instance.widgetRebuild(
       component: 'ThreadPage',
       threadId: widget.thread.id,
@@ -1741,6 +1760,7 @@ class _ThreadPageState extends State<ThreadPage>
               : message.authorUserId,
           date: date,
           text: message.body,
+          attachments: message.attachments,
           sentAt: date == null ? null : _chatTimestamp(date),
           editedAt: edited == null ? null : _chatTimestamp(edited),
           editedDate: edited,
@@ -2023,6 +2043,52 @@ class _ThreadPageState extends State<ThreadPage>
       : _discussionComposer(twoPane: twoPane);
 
   Widget _discussionComposer({bool twoPane = false}) => MarkdownComposer(
+        attachments: _discussionAttachments.isEmpty
+            ? null
+            : AttachmentCards(
+                files: _discussionAttachments,
+                onRemove: (index) =>
+                    _updateState(() => _discussionAttachments.removeAt(index))),
+        toolbarLeadingControls: widget.isDraft
+            ? null
+            : Align(
+                widthFactor: 1,
+                alignment: Alignment.centerLeft,
+                child: Builder(
+                  builder: (buttonContext) => IconButton(
+                    key: const ValueKey('message-add-attachments'),
+                    tooltip: 'Add attachments',
+                    icon: const Icon(Icons.add, size: 16),
+                    onPressed: () async {
+                      final value = await _showAnchoredMenu<String>(
+                        buttonContext: buttonContext,
+                        itemHeight: 36,
+                        items: [
+                          ConclaveMenuEntry<String>(
+                            value: 'files',
+                            child: MenuItemButton(
+                              style: ConclaveMenuStyle.item(
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark),
+                              leadingIcon:
+                                  const Icon(Icons.attach_file, size: 16),
+                              onPressed: widget
+                                          .space.effectivePermissions.chat &&
+                                      !widget.draftBusy &&
+                                      !_draftSubmitting
+                                  ? () => Navigator.pop(buttonContext, 'files')
+                                  : null,
+                              child: const Text('Add files',
+                                  style: ConclaveMenuStyle.textStyle),
+                            ),
+                          ),
+                        ],
+                      );
+                      if (!buttonContext.mounted || value != 'files') return;
+                      await _pickDiscussionFiles();
+                    },
+                  ),
+                )),
         leadingControls: _composerModeControls(),
         inputHeight: _composerInputHeight,
         showControlTooltips: false,
@@ -2128,7 +2194,28 @@ class _ThreadPageState extends State<ThreadPage>
           _updateState(() {
             _markSelectionChangedByUser();
             _workflow = value;
-            _workExecutionSelection = {};
+            // Keep the last Worker, model and effort across Chat/Work so the
+            // shared Thread conversation can reuse its Worker Session. Fall
+            // back to the Workflow binding only when it fixes the Worker.
+            final policy = _availableWorkflows
+                .where((item) => item.reference == value)
+                .firstOrNull
+                ?.executionPolicy;
+            final kept = <String, dynamic>{
+              if (policy?.userSelectsWorker == true) ...{
+                if (_workExecutionSelection.containsKey('workerId'))
+                  'workerId': _workExecutionSelection['workerId'],
+                if (_workExecutionSelection.containsKey('catalogRevision'))
+                  'catalogRevision': _workExecutionSelection['catalogRevision'],
+                if (policy!.userSelectsModel &&
+                    _workExecutionSelection.containsKey('model'))
+                  'model': _workExecutionSelection['model'],
+                if (policy.userSelectsEffort &&
+                    _workExecutionSelection.containsKey('reasoningEffort'))
+                  'reasoningEffort': _workExecutionSelection['reasoningEffort'],
+              },
+            };
+            _workExecutionSelection = kept;
           });
           _scheduleThreadViewStateSave();
         },

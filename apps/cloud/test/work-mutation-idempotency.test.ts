@@ -202,7 +202,7 @@ describe("Work mutation identity through response loss", () => {
     ).toEqual({ n: 0 });
     f.sqlite.close();
   });
-  it("separates Chat and Work Conversations through request creation", async () => {
+  it("continues one Thread Conversation across Chat and Work requests", async () => {
     const f = fixture();
     const work = (await (await f.submit()).json()) as {
       workRequest: { conversationId: string };
@@ -210,7 +210,7 @@ describe("Work mutation identity through response loss", () => {
     const chat = (await (
       await f.submit("Discuss", "chat-operation-000000001", "chat")
     ).json()) as typeof work;
-    expect(chat.workRequest.conversationId).not.toBe(
+    expect(chat.workRequest.conversationId).toBe(
       work.workRequest.conversationId,
     );
     expect(
@@ -219,10 +219,7 @@ describe("Work mutation identity through response loss", () => {
           "SELECT workflow_id, conversation_revision FROM conversations ORDER BY workflow_id",
         )
         .all(),
-    ).toEqual([
-      { workflow_id: "chat", conversation_revision: 1 },
-      { workflow_id: "work", conversation_revision: 1 },
-    ]);
+    ).toEqual([{ workflow_id: "work", conversation_revision: 2 }]);
     f.sqlite.close();
   });
   it("concurrent and later explicit retries create one request, Run, audit record and runtime instance", async () => {

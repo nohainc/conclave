@@ -26,7 +26,7 @@ function bucketWith(bytes: Uint8Array, customMetadata: Record<string, string>) {
 }
 
 describe("Work Request files", () => {
-  it("projects historical file metadata without bytes or storage identifiers", () => {
+  it("projects historical metadata with opaque download IDs and no original bytes or storage paths", () => {
     expect(
       workRequestFileMetadata({
         attachments: [
@@ -42,7 +42,7 @@ describe("Work Request files", () => {
           null,
         ],
       }),
-    ).toEqual([{ kind: "file", name: "photo.jpg", sizeBytes: 1234 }]);
+    ).toEqual([{ kind: "file", name: "photo.jpg", sizeBytes: 1234, fileId }]);
     expect(workRequestFileMetadata({})).toEqual([]);
   });
 

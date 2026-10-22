@@ -100,6 +100,7 @@ class AxReadCacheCodec {
         'authorName': value.authorName,
         'body': value.body,
         'references': value.references,
+        'attachments': value.attachments,
         'editedAt': value.editedAt,
         'createdAt': value.createdAt,
         'kind': value.kind,

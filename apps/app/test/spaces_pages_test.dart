@@ -4,6 +4,7 @@ import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:conclave_app/src/features/common/attachment_cards.dart';
 import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
@@ -195,8 +196,10 @@ void main() {
       await tester.pumpAndSettle();
       await _openAiHistory(tester);
       expect(_inAiHistory(find.text('Hello from the user')), findsOneWidget);
-      expect(_inAiHistory(find.text('photo.jpg · 2 KB')), findsOneWidget);
-      expect(_inAiHistory(find.text('notes.txt · 12 B')), findsOneWidget);
+      expect(_inAiHistory(find.byType(AttachmentCard)), findsNWidgets(2));
+      expect(_inAiHistory(find.byIcon(Icons.info_outline)), findsNothing);
+      expect(_inAiHistory(find.text('2.0 KB')), findsNothing);
+      expect(_inAiHistory(find.text('12 B')), findsNothing);
       expect(find.text('ChatGPT'), findsWidgets);
       expect(find.byTooltip('Original Model Name · Medium'), findsWidgets);
       expect(
@@ -861,6 +864,31 @@ void main() {
       expect(selected('message'), isTrue);
       expect(selected('ai'), isFalse);
       expectIconOnlySelection('message');
+      final addFiles = find.byKey(const ValueKey('message-add-attachments'));
+      final emoji = find.byKey(const ValueKey('emoji-picker-button'));
+      expect(
+          tester.getCenter(addFiles).dx, lessThan(tester.getCenter(emoji).dx));
+      expect(tester.getCenter(addFiles).dy, tester.getCenter(emoji).dy);
+      final markup = find.ancestor(
+          of: find.byIcon(Icons.text_format),
+          matching: find.byType(IconButton));
+      final send = find.byKey(const ValueKey('composer-send-Send message'));
+      expect(tester.getRect(emoji).left - tester.getRect(addFiles).right,
+          lessThanOrEqualTo(8));
+      expect(tester.getRect(markup).left - tester.getRect(emoji).right,
+          inInclusiveRange(0, 8));
+      expect(tester.getCenter(markup).dy, tester.getCenter(emoji).dy);
+      expect(tester.getCenter(send).dy, tester.getCenter(emoji).dy);
+      expect(tester.getRect(send).left - tester.getRect(markup).right,
+          greaterThan(40));
+
+      expect(find.byIcon(Icons.attach_file), findsNothing);
+      await tester.tap(addFiles);
+      await tester.pumpAndSettle();
+      expect(find.text('Add files'), findsOneWidget);
+      expect(find.byIcon(Icons.attach_file), findsOneWidget);
+      await tester.tapAt(const Offset(1, 1));
+      await tester.pumpAndSettle();
       expect(messageSwitch.width, 28);
       await tester.tap(find.byKey(const ValueKey('composer-mode-ai')));
       await tester.pumpAndSettle();
@@ -2200,6 +2228,61 @@ void main() {
     await tester.binding.setSurfaceSize(null);
   });
 
+  testWidgets('request history lists newest last; Up selects the newest',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          height: 700,
+          child: ThreadPage(
+            space: const AxSpace(
+                id: 'space-1',
+                name: 'Space',
+                branch: '',
+                lastActivity: '',
+                role: 'owner'),
+            thread: const AxThread(
+                id: 'thread-1',
+                spaceId: 'space-1',
+                name: 'Stream',
+                lead: '',
+                status: 'active',
+                brief: '',
+                primaryWorkspace: '',
+                queueStatus: ''),
+            dataSource: _HistoryPromptDataSource([
+              _workRequest('request-1', 'Older prompt'),
+              _workRequest('request-2', 'Newer prompt'),
+            ]),
+            currentUserId: 'user-owner',
+            onBackToSpace: _noop,
+            onArchive: _noop,
+            initialTab: 1,
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpAndSettle();
+    await _askAi(tester);
+    final composer = find.byType(TextField).last;
+    await tester.showKeyboard(composer);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    final list = find.byKey(const ValueKey('request-history-list'));
+    final older =
+        find.descendant(of: list, matching: find.text('Older prompt'));
+    final newer =
+        find.descendant(of: list, matching: find.text('Newer prompt'));
+    expect(tester.getTopLeft(older).dy, lessThan(tester.getTopLeft(newer).dy));
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(composer).controller!.text, 'Newer prompt');
+  });
+
   testWidgets('Work history uses slow fallback and scoped reconnect discovery',
       (tester) async {
     final events = StreamController<Map<String, dynamic>>.broadcast();
@@ -3290,6 +3373,7 @@ class _MarkdownDiscussionDataSource extends AxFixtureDataSource {
       {required String threadId,
       required String text,
       List<String> references = const [],
+      List<Map<String, dynamic>> attachments = const [],
       String? idempotencyKey}) async {
     createdSource = text;
     return AxDiscussionMessage(
@@ -3605,6 +3689,7 @@ class _CurrentWorkflowUiDataSource extends _VersionedWorkflowDataSource {
       {required String threadId,
       required String text,
       List<String> references = const [],
+      List<Map<String, dynamic>> attachments = const [],
       String? idempotencyKey}) {
     discussionWrites++;
     return super.sendDiscussionMessage(
@@ -3811,6 +3896,13 @@ class _MembersTabTestDataSource extends AxFixtureDataSource {
       createdAt: DateTime.now().toIso8601String(),
     );
   }
+}
+
+class _HistoryPromptDataSource extends _WorkHistoryDataSource {
+  _HistoryPromptDataSource(super.requests);
+  @override
+  Future<List<AxBuiltinWorkflow>> loadBuiltinWorkflowCatalog() =>
+      _CurrentWorkflowUiDataSource().loadBuiltinWorkflowCatalog();
 }
 
 class _SimpleConversationDataSource extends _WorkHistoryDataSource {
