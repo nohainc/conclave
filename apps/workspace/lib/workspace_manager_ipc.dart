@@ -231,6 +231,9 @@ class WorkspaceManagerIpcServer {
           'version': workspaceManagerProtocolVersion,
           'error': {'code': error.code, 'message': error.message},
         });
+        try {
+          await socket.flush().timeout(_handshakeTimeout);
+        } on Object {/* The peer may already have closed. */}
       }
     } on Object {
       // A malformed or disconnected local client is isolated to that socket.

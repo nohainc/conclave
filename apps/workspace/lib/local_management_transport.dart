@@ -8,6 +8,7 @@ import 'windows_native.dart';
 abstract interface class LocalManagementChannel {
   Stream<List<int>> get input;
   void write(String value);
+  Future<void> flush();
   void destroy();
 }
 
@@ -18,6 +19,8 @@ class UnixManagementChannel implements LocalManagementChannel {
   Stream<List<int>> get input => socket;
   @override
   void write(String value) => socket.write(value);
+  @override
+  Future<void> flush() => socket.flush();
   @override
   void destroy() => socket.destroy();
 }
@@ -112,6 +115,8 @@ class WindowsPipeChannel implements LocalManagementChannel {
     });
   }
 
+  @override
+  Future<void> flush() => _writer;
   @override
   void destroy() {
     if (_closed) return;
