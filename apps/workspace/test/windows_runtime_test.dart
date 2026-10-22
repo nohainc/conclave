@@ -52,6 +52,13 @@ void main() {
       await store.readForSynchronousConfig('account');
       await store.write('account', 'rotated');
       expect(store.readSync('account'), 'rotated');
+      final other = PlatformSecureCredentialStore(
+          service: root.path,
+          windowsCredentialDirectory:
+              Directory('${root.path}/other-installation'));
+      await other.write('account', 'other-installation');
+      expect(store.readSync('account'), 'rotated');
+      expect(other.readSync('account'), 'other-installation');
       await store.delete('account');
       expect(store.readSync('account'), isNull);
     } finally {

@@ -63,9 +63,11 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   @override
   String? readSync(String key) {
     if (key.isEmpty) return null;
+    // DPAPI is available synchronously. Read the selected root directly so
+    // separate installations and credential rotations cannot share stale cache.
+    if (_effectivePlatform == 'windows') return _windows.read(service, key);
     final cacheKey = _cacheKey(key);
     if (_loaded.contains(cacheKey)) return _cache[cacheKey];
-    if (_effectivePlatform == 'windows') return _windows.read(service, key);
     final command = currentCredentialBackend.read(service, key);
     if (command == null) return null;
     try {
@@ -91,6 +93,9 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   @override
   Future<String?> read(String key) async {
     if (key.isEmpty) return null;
+    // DPAPI is available synchronously. Read the selected root directly so
+    // separate installations and credential rotations cannot share stale cache.
+    if (_effectivePlatform == 'windows') return _windows.read(service, key);
     final cacheKey = _cacheKey(key);
     if (_loaded.contains(cacheKey)) return _cache[cacheKey];
     if (_effectivePlatform == 'macos') {
