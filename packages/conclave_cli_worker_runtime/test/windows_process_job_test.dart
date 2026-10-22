@@ -28,6 +28,7 @@ void main() {
           'CSV',
           '/NH',
         ]);
+        expect(processes.exitCode, 0, reason: processes.stderr.toString());
         expect(processes.stdout.toString(), isNot(contains('"$childPid"')));
         expect(await errors, isEmpty);
       } finally {

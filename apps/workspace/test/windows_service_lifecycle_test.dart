@@ -62,7 +62,8 @@ void main() {
       final identity =
           await File('${data.path}/installation-id').readAsString();
       await client!.request('connection.disconnect');
-      expect(await client!.request('status'), isA<Map>());
+      expect(await client!.request('service.getHealth'),
+          containsPair('healthy', true));
       final duplicate = await Process.run(executable, [
         '--once',
         '--data-dir',
@@ -71,7 +72,8 @@ void main() {
         work.path
       ]).timeout(const Duration(seconds: 15));
       expect(duplicate.exitCode, isNot(0));
-      expect(await client!.request('status'), isA<Map>());
+      expect(await client!.request('service.getHealth'),
+          containsPair('healthy', true));
       await stop();
       await start();
       expect(

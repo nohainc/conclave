@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:conclave_workspace/windows_native.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_workspace/windows_service_manager.dart';
@@ -32,6 +34,26 @@ void main() {
       expect((await manager.register()).registered, true);
       final identity = InstallationIdentityStore(data).readSync();
       expect(identity, startsWith('install_'));
+      final definition = await Process.run('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        r'''
+$ErrorActionPreference = 'Stop'
+$x = [xml](Export-ScheduledTask -TaskName ('Conclave Workspace ' + $env:CONCLAVE_TEST_INSTALLATION))
+$id = [string]$x.Task.Principals.Principal.UserId
+if (-not $id.StartsWith('S-')) { $id = ([System.Security.Principal.NTAccount]::new($id)).Translate([System.Security.Principal.SecurityIdentifier]).Value }
+@{ sid = $id; logonType = [string]$x.Task.Principals.Principal.LogonType; runLevel = [string]$x.Task.Principals.Principal.RunLevel } | ConvertTo-Json -Compress
+'''
+      ], environment: {
+        'CONCLAVE_TEST_INSTALLATION': identity!
+      });
+      expect(definition.exitCode, 0, reason: definition.stderr.toString());
+      expect(jsonDecode(definition.stdout.toString()), {
+        'sid': WindowsNative.currentSid,
+        'logonType': 'InteractiveToken',
+        'runLevel': 'LeastPrivilege',
+      });
       await manager.start();
       var ready = false;
       final until = DateTime.now().add(const Duration(seconds: 20));
@@ -61,11 +83,15 @@ void main() {
         expect((client!.initialSnapshot['service'] as Map)['processState'],
             'ready');
         await client.request('connection.disconnect');
-        expect(await client.request('status'), isA<Map>());
+        expect(await client.request('service.getHealth'),
+            containsPair('healthy', true));
       }
       await client?.close();
       client = null;
-      expect((await manager.stop()).registered, true);
+      final stopped = await manager.stop();
+      expect(stopped.registered, true);
+      expect(stopped.processRunning, false);
+      expect(stopped.lastExitCode, 0);
       expect((await manager.unregister()).registered, false);
       expect(InstallationIdentityStore(data).readSync(), identity);
     } finally {
