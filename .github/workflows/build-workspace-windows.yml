@@ -24,8 +24,10 @@ jobs:
       - name: Validate Windows runtime primitives
         shell: pwsh
         working-directory: apps/workspace
+        env:
+          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\windows\release\conclave-service.exe
         run: |
-          flutter test test/windows_runtime_test.dart
+          flutter test test/windows_runtime_test.dart test/windows_service_lifecycle_test.dart
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Validate Windows process jobs and CLI shims
         shell: pwsh

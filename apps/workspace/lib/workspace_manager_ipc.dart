@@ -494,9 +494,9 @@ class WorkspaceManagerIpcClient {
     if (_closed) return;
     _closed = true;
     _failPending(const SocketException('Workspace service client closed.'));
+    _socket.destroy();
     await _lineSubscription.cancel();
     await _events.close();
-    _socket.destroy();
   }
 }
 

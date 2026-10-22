@@ -1,51 +1,75 @@
-# Workspace Windows build preview
+# Workspace Windows runtime candidate
 
-The Windows runner and build pipeline are a UI/build preview. They do not yet
-provide an operational Workspace execution host. Windows support is incomplete.
+Windows x64 source support includes the Flutter management UI, standalone Dart
+Workspace Service, and separately supervised generic CLI Worker Engine. The
+package is an unsigned qualification candidate, with manual updates; Windows
+installer packaging and release signing remain separate ADR-021 phases.
 
-## Build on Windows x64
+## Build and run
 
-Install Flutter, Node.js, Git for Windows (including Bash), and Visual Studio
-with Desktop development with C++ and the Windows SDK. Run `flutter doctor -v`.
-Supply `CONCLAVE_RELEASE_TRUST_KEYS_JSON` with the same public Ed25519 release
-trust roots used by other Workspace builds; no signing private keys are needed.
-From the repository root in PowerShell:
+Install Flutter, Node.js, Git for Windows Bash, and Visual Studio with Desktop
+development with C++ and the Windows SDK. Run `flutter doctor -v`. Supply
+`CONCLAVE_RELEASE_TRUST_KEYS_JSON` with your public application-release trust
+roots, then run from PowerShell at the repository root:
 
 ```powershell
 ./scripts/build-workspace-windows.ps1
 ```
 
-The script reuses `build-workspace-service.sh` and its canonical Engine build,
-compiles the Windows Flutter runner, checks bundle contents and creates
+The script uses the canonical Engine/service build scripts and creates
 `dist/conclave-workspace/conclave-workspace-windows-x64-release-preview.zip`.
-The ZIP includes the full Flutter data/DLL directory and standalone service,
-with matching Engine copies in the UI assets and beside the service.
-Keep the extracted directory together. The target machine also needs the
-Microsoft Visual C++ x64 redistributable. The preview is unsigned and has no
-installer, service registration or automatic update integration.
+Extract the entire ZIP to a stable per-user installation directory. The target
+machine needs the Microsoft Visual C++ x64 redistributable. Open
+`conclave_workspace.exe` and use the existing service/Cloud management workflow.
+Moving an installation changes its scheduled task executable path; stop and
+unregister the old task before registering the new path. Existing data is kept.
+For manual updates, stop the service, replace the complete application directory,
+and start the service again. Do not replace individual Engine or service files.
 
-The **Build Windows Workspace preview** GitHub Actions workflow runs manually
-or on `codex/windows-workspace-preview-*` branches. It uses the repository
-Actions variable `CONCLAVE_RELEASE_TRUST_KEYS_JSON` when configured, otherwise
-the same compile-only public trust root as nightly CI. The fallback cannot
-verify production releases; this workflow is exclusively for preview builds. Its artifact is a preview,
-not a published Workspace release. The workflow checks that the packaged UI stays running for eight seconds.
-This startup smoke check does not verify rendering, lifecycle or security.
+The **Build Windows Workspace preview** Actions workflow builds on Windows and
+runs native runtime, compiled-service lifecycle, and UI startup tests. It uses
+configured public trust roots or the existing nightly CI-only public root. A
+CI-root build cannot verify production application releases. No private release
+keys or provider credentials are needed by CI.
 
-## Remaining runtime gates
+## Platform behavior
 
-Follow ADR-021 before enabling Windows execution:
+- `WorkspaceServiceManager` owns a Task Scheduler task per installation. The
+  task runs at logon as the current user, in the interactive session, without
+  requesting elevation or a Windows SCM service. Stop keeps registration;
+  Cloud disconnect keeps the service available. Stop requests a graceful drain
+  through the host stop marker before bounded Task Scheduler termination.
+- Management uses `\\.\pipe\conclave-workspace-<installation-id>`. The native
+  adapter sets a protected owning-user SID DACL, rejects remote clients, and
+  verifies the pipe owner before sending the existing capability key. Existing
+  protocol/version/authentication semantics remain; input is byte-bounded before
+  JSON decoding. No TCP listener is introduced.
+- Workspace credentials use CurrentUser DPAPI with service/account entropy.
+  Only ciphertext is written under `Credentials` in private Workspace state.
+  State uses `%LOCALAPPDATA%\Conclave\Workspace`; user work defaults to
+  `%USERPROFILE%\Documents\Conclave`, independently of application files.
+- A legacy `~/.conclave-workspace` subtree is moved intact only when the new
+  destination is absent. Conflicting roots or a failed move stop default
+  activation with a recoverable error; neither root is deleted or merged.
+  `--data-dir` retains its explicit-override semantics. Installation and Cloud
+  identities, registry, sessions, Profiles, Engine files, and configured Work
+  Root are retained. Existing macOS installations do not migrate.
+- The service and Engine retain kill-on-close Windows Job Objects. Descendants
+  cannot escape on an Engine/service crash. Forced Engine cleanup terminates
+  its job. Provider CLI account state stays with the same OS user.
+- CLI discovery respects bounded PATHEXT executable suffixes. Standard npm
+  `.cmd`/`.bat` launchers are resolved to Node entry points and invoked directly,
+  preserving literal arguments without a command shell. Arbitrary batch wrappers
+  are rejected; declare a direct executable in their Profile. CLI authentication
+  and supported-platform environment/path rules remain Profile-owned.
 
-- `WorkspaceServiceManager` per-user interactive logon task adapter.
-- Owning-user-only named pipe with remote-client rejection and existing IPC auth.
-- DPAPI CurrentUser credential storage and protected application-state paths.
-- `%LOCALAPPDATA%\Conclave\Workspace` paths without altering existing macOS data.
-- Engine Job Object cleanup and safe PATHEXT / command-shim invocation.
-- Windows device checks for duplicate-owner locking, reboot/logon, stop/start,
-  Cloud disconnect, credential persistence, and provider CLI execution.
+## Qualification gates
 
-The existing Windows IPC startup explicitly fails closed. The management UI
-reports unsupported service management. Do not use this preview for real
-assignments or claim that compiling the service enables Windows operation.
-No existing installation, Cloud Workspace identity, credentials, or Work Root
-is migrated by adding this runner.
+Automated evidence covers IPC authentication/restart, bounded framing, DPAPI
+ciphertext/rotation, compiled-service duplicate ownership/disconnect/restart,
+Engine descendant cleanup, literal CLI arguments, and UI process startup.
+These checks do not establish successful model execution with every published
+Profile, interactive logon/reboot behavior, Windows signing/SmartScreen handling,
+or rendered UI quality. Retain target-device evidence for those claims before a
+Windows production release. A compatible Profile and a CLI logged in as the
+service user are required for real assignments.

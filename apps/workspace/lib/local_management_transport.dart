@@ -35,26 +35,29 @@ String workspaceManagerEndpoint(Directory runtime) {
 /// Enforces the byte bound before decoding or retaining an unterminated frame.
 Stream<String> managementLines(Stream<List<int>> input) {
   final pending = <int>[];
-  return input.transform(StreamTransformer<List<int>, String>.fromHandlers(
-    handleData: (chunk, sink) {
-      for (final byte in chunk) {
-        if (byte == 10) {
-          if (pending.isNotEmpty && pending.last == 13) pending.removeLast();
-          sink.add(utf8.decode(pending));
-          pending.clear();
-        } else {
-          if (pending.length >= 1024 * 1024)
-            throw const FormatException('IPC frame exceeds byte limit');
-          pending.add(byte);
-        }
-      }
-    },
-    handleDone: (sink) {
-      if (pending.isNotEmpty)
-        sink.addError(const FormatException('Truncated IPC frame'));
-      sink.close();
-    },
-  ));
+  return input
+      .cast<List<int>>()
+      .transform(StreamTransformer<List<int>, String>.fromHandlers(
+        handleData: (chunk, sink) {
+          for (final byte in chunk) {
+            if (byte == 10) {
+              if (pending.isNotEmpty && pending.last == 13)
+                pending.removeLast();
+              sink.add(utf8.decode(pending));
+              pending.clear();
+            } else {
+              if (pending.length >= 1024 * 1024)
+                throw const FormatException('IPC frame exceeds byte limit');
+              pending.add(byte);
+            }
+          }
+        },
+        handleDone: (sink) {
+          if (pending.isNotEmpty)
+            sink.addError(const FormatException('Truncated IPC frame'));
+          sink.close();
+        },
+      ));
 }
 
 class WindowsPipeChannel implements LocalManagementChannel {
