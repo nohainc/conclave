@@ -8,6 +8,7 @@ import 'package:conclave_profile_lab/profile_lab_session_store.dart';
 import 'package:conclave_profile_lab/theme/profile_lab_theme.dart';
 import 'package:conclave_profile_lab/views/draft_test_workbench.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Controller extends ProfileLabController {
@@ -17,12 +18,22 @@ class _Controller extends ProfileLabController {
             sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths));
 
   int saves = 0;
+  bool failValidation = false;
+
   @override
   Future<void> saveCurrentDraft(
       {String author = 'developer', String notes = ''}) async {
     saves++;
     isDirty = false;
     notifyListeners();
+  }
+
+  @override
+  Future<void> validateCurrentDraft() async {
+    if (failValidation) {
+      throw StateError('Candidate validation failed: schema mismatch');
+    }
+    return super.validateCurrentDraft();
   }
 }
 
@@ -66,32 +77,24 @@ void main() {
                 builder: (_, __) => DraftTestWorkbench(controller: c)))));
   }
 
-  testWidgets(
-      'editor-first workbench keeps tests collapsed and preserves edits',
+  testWidgets('workbench provides JSON and Tests sub-tabs and preserves edits',
       (tester) async {
     await mount(tester, const Size(1400, 850));
     expect(find.text('LOCAL DRAFTS'), findsNothing);
     expect(find.text('Split View'), findsNothing);
     expect(find.text('Editor Only'), findsNothing);
     expect(find.text('Test Bench Only'), findsNothing);
-    expect(find.text('Worker Profile · revision 1'), findsOneWidget);
-    final editor = find.byKey(const ValueKey('profile-json-editor'));
-    expect(find.text('Profile Tests'), findsNothing);
-    await tester.tap(find.byTooltip('Show tests'));
+    expect(find.text('Revision 1'), findsOneWidget);
+    expect(find.text('Worker Profile · revision 1'), findsNothing);
+    expect(find.byKey(const ValueKey('profile-json-editor')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('sub-tab-tests')));
     await tester.pump();
     expect(find.text('Test Results'), findsOneWidget);
-    expect(find.text('Event Mapping'), findsOneWidget);
-    final replayButton = find.widgetWithText(OutlinedButton, 'Replay fixtures');
-    await tester.ensureVisible(replayButton);
-    await tester.tap(replayButton);
+    expect(find.text('Event Mapping'), findsNothing);
+    expect(find.text('Local acceptance evidence'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Run Full Test'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('sub-tab-json')));
     await tester.pump();
-    expect(find.textContaining('passed'), findsWidgets);
-    expect(find.widgetWithText(FilledButton, 'Publish'), findsOneWidget);
-    final before = tester.getSize(editor).height;
-    await tester.drag(
-        find.byKey(const ValueKey('workbench-divider')), const Offset(0, 40));
-    await tester.pump();
-    expect(tester.getSize(editor).height, greaterThan(before));
     final changed = '${c.currentJsonText}\n';
     await tester.enterText(find.byType(EditableText), changed);
     await tester.pump();
@@ -100,17 +103,17 @@ void main() {
     final run = tester.widget<OutlinedButton>(
         find.widgetWithText(OutlinedButton, 'Run tests'));
     expect(run.onPressed, isNull);
-    await tester.tap(find.byTooltip('Collapse editor'));
+    await tester.tap(find.byKey(const Key('sub-tab-tests')));
     await tester.pump();
-    expect(find.byType(EditableText), findsNothing);
-    expect(find.text('Profile Tests'), findsOneWidget);
-    await tester.tap(find.byTooltip('Show editor'));
+    await tester.tap(find.byKey(const Key('sub-tab-json')));
     await tester.pump();
     expect(
         tester.widget<EditableText>(find.byType(EditableText)).controller.text,
         changed);
     expect(find.text('Inspector'), findsNothing);
     expect(find.byTooltip('Focus editor'), findsNothing);
+    expect(find.byTooltip('Collapse editor'), findsNothing);
+    expect(find.byTooltip('Collapse tests'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -148,27 +151,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-      'advanced actions stay in overflow and format updates the dirty editor',
+  testWidgets('direct sidebar actions format JSON and compare profiles',
       (tester) async {
     await mount(tester, const Size(1200, 800));
     expect(find.text('AI Repair'), findsNothing);
     expect(find.text('AI Proposal'), findsNothing);
-    c.updateJsonText(jsonEncode(c.currentDraft!.profile));
-    await tester.pump();
-    await tester.tap(find.byTooltip('More candidate actions'));
-    await tester.pumpAndSettle();
-    for (final action in [
-      'Format JSON',
-      'Compare with current Profile',
-      'Profile history',
-    ]) {
-      expect(find.text(action), findsOneWidget);
-    }
+    expect(find.text('Profile history'), findsNothing);
     expect(find.text('Restore saved Profile'), findsNothing);
     expect(find.text('Restore recovery snapshot'), findsNothing);
-    expect(find.text('AI Repair'), findsNothing);
-    await tester.tap(find.text('Format JSON'));
+    expect(find.widgetWithText(OutlinedButton, 'Format JSON'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Compare'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Reload from file'),
+        findsOneWidget);
+
+    c.updateJsonText(jsonEncode(c.currentDraft!.profile));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Format JSON'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 800));
     expect(
@@ -178,8 +176,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-      'failed tests expose contextual repair and narrow panes remain usable',
+  testWidgets('sub-tabs and narrow panes remain usable when tests fail',
       (tester) async {
     await mount(tester, const Size(760, 520));
     expect(find.text('AI Repair'), findsNothing);
@@ -189,23 +186,82 @@ void main() {
     c.testStatusMessage = 'Provider test failed';
     c.notifyListeners();
     await tester.pump();
-    await tester.tap(find.byTooltip('Collapse editor'));
+
+    // Switch to Tests sub-tab
+    await tester.tap(find.byKey(const Key('sub-tab-tests')));
     await tester.pump();
-    expect(find.text('Repair Profile'), findsOneWidget);
-    await tester.ensureVisible(find.text('Repair Profile'));
+    expect(find.text('Retry'), findsOneWidget);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await tester.tap(find.byTooltip('Collapse tests'));
+
+    // Switch back to JSON sub-tab
+    await tester.tap(find.byKey(const Key('sub-tab-json')));
     await tester.pump();
     expect(find.byType(EditableText), findsOneWidget);
-    expect(find.text('Profile Tests'), findsNothing);
-    await tester.tap(find.byTooltip('Show tests'));
-    await tester.pump();
-    final divider = find.byKey(const ValueKey('workbench-divider'));
-    final before = tester.getTopLeft(divider).dy;
-    await tester.drag(divider, const Offset(0, -35));
-    await tester.pump();
-    expect(tester.getTopLeft(divider).dy, lessThan(before));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Validate displays error popup with copy icon that copies error message',
+      (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await mount(tester, const Size(1200, 800));
+    c.isDirty = false;
+    c.failValidation = true;
+    c.notifyListeners();
+    await tester.pump();
+
+    final validateBtn = find.widgetWithText(OutlinedButton, 'Validate');
+    expect(validateBtn, findsOneWidget);
+    await tester.tap(validateBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Candidate validation failed: schema mismatch'),
+        findsOneWidget);
+    final copyBtn = find.byKey(const Key('copy-error-message-button'));
+    expect(copyBtn, findsOneWidget);
+    await tester.tap(copyBtn);
+    await tester.pumpAndSettle();
+
+    expect(copied, contains('Candidate validation failed: schema mismatch'));
+    expect(find.text('Error message copied'), findsOneWidget);
+  });
+
+  testWidgets(
+      'continuous JSON validation banner exposes copy icon on invalid JSON',
+      (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copied = (call.arguments as Map)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await mount(tester, const Size(1200, 800));
+    c.updateJsonText('{ invalid');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
+
+    final copyBannerBtn = find.byKey(const Key('copy-json-validation-error'));
+    expect(copyBannerBtn, findsOneWidget);
+    await tester.tap(copyBannerBtn);
+    await tester.pump();
+
+    expect(copied, contains('Invalid JSON'));
+    expect(find.text('Validation error copied'), findsOneWidget);
   });
 }

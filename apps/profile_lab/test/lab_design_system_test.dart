@@ -20,9 +20,9 @@ class _Controller extends ProfileLabController {
       : super(
             paths: paths,
             sessionStore: ProfileLabSessionStore.inMemoryForTesting(paths));
-  int saves = 0, catalog = 0, activity = 0, draftRefresh = 0;
+  int saves = 0, catalog = 0, draftRefresh = 0;
   @override
-  Future<void> ensureAreaData(LabArea tab) async {}
+  Future<void> ensureWorkerCatalog() async {}
   @override
   Future<void> saveCurrentDraft(
       {String author = 'developer', String notes = ''}) async {
@@ -33,11 +33,6 @@ class _Controller extends ProfileLabController {
   @override
   Future<void> fetchCloudCatalog() async {
     catalog++;
-  }
-
-  @override
-  Future<void> fetchCloudAudit({bool? definitionOnly}) async {
-    activity++;
   }
 
   @override
@@ -110,16 +105,6 @@ void main() {
     };
     c.currentProfileRevision = 1;
     c.currentProfileDigest = c.currentDraft!.payloadDigest;
-    c.cloudAuditEvents = [
-      {
-        'id': 'event',
-        'profileDefinitionId': 'chatgpt-codex',
-        'releaseVersion': 1,
-        'action': 'published_for_testing',
-        'createdAt': '2026-10-05',
-        'actorDisplayName': 'Operator'
-      }
-    ];
   });
   tearDown(() async {
     c.dispose();
@@ -164,15 +149,12 @@ void main() {
     c.currentDraft = null;
     await key(t, LogicalKeyboardKey.keyR);
     expect(c.catalog, 1);
-    c.selectedArea = LabArea.audit;
-    await key(t, LogicalKeyboardKey.keyR);
-    expect(c.activity, 1);
     showDialog<void>(
         context: page,
         builder: (_) => const AlertDialog(title: Text('Confirmation')));
     await t.pumpAndSettle();
     await key(t, LogicalKeyboardKey.keyR);
-    expect(c.activity, 1);
+    expect(c.catalog, 1);
     expect(t.takeException(), isNull);
   });
   for (final size in [const Size(800, 700), const Size(1440, 1000)]) {
@@ -182,7 +164,6 @@ void main() {
       t.view.devicePixelRatio = 1;
       addTearDown(t.view.resetPhysicalSize);
       addTearDown(t.view.resetDevicePixelRatio);
-      c.selectedArea = LabArea.workers;
       await t.pumpWidget(RepaintBoundary(
           key: const ValueKey('capture'),
           child: ProfileLabApp(key: const ValueKey('workers'), controller: c)));
@@ -200,12 +181,6 @@ void main() {
               .writeAsBytes(bytes!.buffer.asUint8List());
           image.dispose();
         });
-      }
-      for (final tab in [LabArea.audit]) {
-        c.selectedArea = tab;
-        await t.pumpWidget(ProfileLabApp(key: ValueKey(tab), controller: c));
-        await t.pump();
-        expect(t.takeException(), isNull, reason: '$tab at $size');
       }
     });
   }

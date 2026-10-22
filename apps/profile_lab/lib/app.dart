@@ -4,13 +4,9 @@ import 'package:flutter/services.dart';
 import 'controllers/profile_lab_controller.dart';
 import 'profile_lab_cloud_config.dart';
 import 'theme/profile_lab_theme.dart';
-import 'views/audit_view.dart';
 import 'widgets/lab_shortcuts.dart';
 import 'widgets/lab_components.dart';
-import 'utils/profile_lab_messages.dart';
-import 'views/cloud_settings_dialog.dart';
 import 'views/workers_view.dart';
-import 'views/issue_reports_view.dart';
 
 class ProfileLabApp extends StatefulWidget {
   const ProfileLabApp({super.key, required this.controller});
@@ -28,7 +24,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
     widget.controller.addListener(_onStateChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        widget.controller.ensureAreaData(widget.controller.selectedArea);
+        widget.controller.ensureWorkerCatalog();
       }
     });
   }
@@ -77,88 +73,16 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                       ),
                       child: Row(
                         children: [
-                          Image.asset(
-                            'assets/branding/conclave_logo_32.png',
-                            width: 24,
-                            height: 24,
-                            fit: BoxFit.contain,
-                            errorBuilder: (ctx, err, stack) => const Icon(
-                                Icons.science,
-                                color: ProfileLabTheme.primaryAccent,
-                                size: 24),
-                          ),
-                          const SizedBox(width: 10),
-                          if (MediaQuery.sizeOf(context).width >= 1000)
-                            const Text(
-                              'CONCLAVE',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 13,
-                                  letterSpacing: 1.2),
-                            ),
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: ProfileLabTheme.primaryAccent
-                                  .withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'Profile Lab',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.8,
-                                color: ProfileLabTheme.primaryAccent,
-                              ),
-                            ),
-                          ),
+                          ConclaveBrand.logoMark(size: 26),
                           const SizedBox(width: 12),
-
-                          // Primary areas (Workers, Activity)
-                          Expanded(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                children: [
-                                  _AreaButton(
-                                    label: 'Workers',
-                                    icon: Icons.engineering,
-                                    selected: c.selectedArea == LabArea.workers,
-                                    onTap: () => c.setArea(LabArea.workers),
-                                  ),
-                                  if (c.labAccess?.issueSupport == true)
-                                    _AreaButton(
-                                      label: 'Issues',
-                                      icon: Icons.bug_report_outlined,
-                                      selected:
-                                          c.selectedArea == LabArea.issues,
-                                      onTap: () => c.setArea(LabArea.issues),
-                                    ),
-                                  _AreaButton(
-                                    label: 'Activity',
-                                    icon: Icons.history_edu,
-                                    selected: c.selectedArea == LabArea.audit,
-                                    onTap: () => c.setArea(LabArea.audit),
-                                  ),
-                                ],
-                              ),
+                          Text(
+                            'Conclave Profile Lab',
+                            style: ConclaveTypography.wordmark.copyWith(
+                              fontSize: 14,
+                              color: Colors.white,
                             ),
                           ),
-
-                          const SizedBox(width: 12),
-                          IconButton(
-                            icon: const Icon(Icons.cloud_outlined, size: 17),
-                            tooltip: 'Cloud connection: ${c.cloudUrl}',
-                            onPressed: () =>
-                                CloudSettingsDialog.show(context, c),
-                          ),
-                          CopyMessageButton(
-                            tooltip: 'Copy all messages',
-                            message: profileLabMessageReport(c),
-                          ),
+                          const Spacer(),
                           // Profile Lab Human Authentication Boundary
                           if (c.isSigningIn)
                             Container(
@@ -229,8 +153,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                                           ? null
                                           : () async {
                                               await c.refreshLabAccess();
-                                              await c.ensureAreaData(
-                                                  c.selectedArea);
+                                              await c.ensureWorkerCatalog();
                                             },
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(
@@ -310,7 +233,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                         message: c.draftError!,
                       ),
 
-                    // Tab view content
+                    // Main content
                     Expanded(
                       child: c.currentSession == null ||
                               c.labAccess == null ||
@@ -320,11 +243,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                               title: 'Profile Lab access is unavailable',
                               description:
                                   'Check access or sign in with the authorized owner account.')
-                          : switch (c.selectedArea) {
-                              LabArea.workers => WorkersView(controller: c),
-                              LabArea.issues => IssueReportsView(controller: c),
-                              LabArea.audit => AuditView(controller: c),
-                            },
+                          : WorkersView(controller: c),
                     ),
                   ],
                 ),
@@ -370,37 +289,6 @@ class _ProfileLabSignInError extends StatelessWidget {
           ],
         ),
       );
-}
-
-class _AreaButton extends StatelessWidget {
-  const _AreaButton({
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-        padding: const EdgeInsets.only(right: 6),
-        child: Semantics(
-            selected: selected,
-            child: TextButton.icon(
-                style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: selected
-                        ? ProfileLabTheme.primaryAccent.withValues(alpha: 0.2)
-                        : null),
-                onPressed: onTap,
-                icon: Icon(icon, size: 18),
-                label: Text(label))));
-  }
 }
 
 /// Shown only in local development builds so they cannot be mistaken for the

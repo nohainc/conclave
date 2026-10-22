@@ -1,4 +1,3 @@
-import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import '../widgets/lab_components.dart';
 import '../widgets/worker_brand_icon.dart';
@@ -45,7 +44,6 @@ class _WorkersViewState extends State<WorkersView> {
   @override
   Widget build(BuildContext context) {
     final c = widget.controller;
-    final workers = c.cloudWorkers;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -54,364 +52,24 @@ class _WorkersViewState extends State<WorkersView> {
         _WorkerTabBar(controller: c),
         const Divider(height: 1, color: ProfileLabTheme.borderColor),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final narrow = constraints.maxWidth < 760;
-              final sidebarWidth = narrow
-                  ? constraints.maxWidth
-                  : (constraints.maxWidth * .26).clamp(128.0, 224.0) + 20;
-
-              return Flex(
-                direction: narrow ? Axis.vertical : Axis.horizontal,
-                children: [
-                  // Left pane: Workers List
-                  Container(
-                    width: sidebarWidth,
-                    height: narrow ? 220 : null,
-                    decoration: const BoxDecoration(
-                      color: ProfileLabTheme.darkSurface,
-                      border: Border(
-                        right: BorderSide(color: ProfileLabTheme.borderColor),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (c.currentSession == null)
-                          Container(
-                            margin: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: ProfileLabTheme.darkSurface,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                  color: ProfileLabTheme.borderColor),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Cloud Catalog Unauthenticated',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 11,
-                                    color: ProfileLabTheme.warnColor,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Sign in with Profile Lab credentials to query the dynamic Cloud catalog.',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: ProfileLabTheme.secondaryText,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                ElevatedButton.icon(
-                                  icon: const Icon(Icons.login, size: 14),
-                                  label: const Text(
-                                    'Sign In to Cloud',
-                                    style: TextStyle(fontSize: 11),
-                                  ),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor:
-                                        ProfileLabTheme.primaryAccent,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  onPressed: () => c.signInWithBrowser(),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                        if (c.workerCatalogError != null)
-                          Column(
-                            children: [
-                              Text(
-                                c.workerCatalogUnauthorized
-                                    ? 'Catalog access unauthorized'
-                                    : 'Catalog refresh failed',
-                              ),
-                              Text(c.workerCatalogError!),
-                              TextButton(
-                                onPressed: c.isLoadingWorkerCatalog
-                                    ? null
-                                    : c.fetchCloudCatalog,
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        // Workers list
-                        Expanded(
-                          child: workers.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    c.currentSession == null
-                                        ? 'Sign in to fetch catalog.'
-                                        : c.isLoadingWorkerCatalog
-                                            ? 'Fetching catalog...'
-                                            : c.workerCatalogError ??
-                                                (c.hasLoadedWorkerCatalog
-                                                    ? 'No logical workers found.'
-                                                    : 'Catalog has not been loaded.'),
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: ProfileLabTheme.secondaryText,
-                                    ),
-                                  ),
-                                )
-                              : ListView.builder(
-                                  padding: const EdgeInsets.all(8),
-                                  itemCount: workers.length,
-                                  itemBuilder: (context, index) {
-                                    final worker = workers[index];
-                                    final workerTypeId =
-                                        worker['workerTypeId'] as String? ?? '';
-                                    final isSelected = c.selectedCloudWorker?[
-                                            'workerTypeId'] ==
-                                        workerTypeId;
-
-                                    final status =
-                                        _determineStatus(c, worker, isSelected);
-
-                                    return Padding(
-                                      padding: const EdgeInsets.only(bottom: 2),
-                                      child: _WorkerSelectorTile(
-                                        key: Key(
-                                            'worker-selector-$workerTypeId'),
-                                        worker: worker,
-                                        selected: isSelected,
-                                        status: status,
-                                        onTap: () => c.selectWorker(worker),
-                                      ),
-                                    );
-                                  },
-                                ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Right pane: Selected Worker Details and Subviews
-                  Expanded(
-                    child: c.selectedCloudWorker == null
-                        ? const EmptyState(
-                            title: 'Select a Worker',
-                            description:
-                                'Choose a logical Worker from the Cloud catalog.',
-                          )
-                        : Column(
-                            children: [
-                              if (c.definitionsError != null)
-                                Text(c.definitionsError!),
-                              Expanded(
-                                child: DraftTestWorkbench(
-                                  controller: c,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  static _WorkerListStatus _determineStatus(
-    ProfileLabController c,
-    Map<String, dynamic> worker,
-    bool isSelected,
-  ) {
-    if (isSelected && c.isTesting) {
-      return _WorkerListStatus.checking;
-    }
-    final lifecycleState =
-        (worker['lifecycleState'] as String? ?? '').toLowerCase();
-    if (lifecycleState == 'retired') {
-      return _WorkerListStatus.retired;
-    }
-    if (lifecycleState == 'disabled') {
-      return _WorkerListStatus.disabled;
-    }
-
-    final currentRevision = (worker['currentRevision'] as num?)?.toInt() ?? 0;
-    if (isSelected) {
-      final selectedState = c.selectedWorkerState;
-      if (selectedState.lastTestResult == 'fail') {
-        return _WorkerListStatus.attention;
-      }
-      if (selectedState.hasLocalCandidate &&
-          selectedState.status == WorkerLifecycleStatus.testsPassed) {
-        return _WorkerListStatus.ready;
-      }
-    }
-
-    if (currentRevision > 0) {
-      return _WorkerListStatus.ready;
-    }
-    return _WorkerListStatus.setupRequired;
-  }
-}
-
-enum _WorkerListStatus {
-  ready('Ready'),
-  checking('Testing'),
-  attention('Needs attention'),
-  setupRequired('Setup required'),
-  disabled('Disabled'),
-  retired('Retired'),
-  unknown('Status unavailable');
-
-  const _WorkerListStatus(this.label);
-
-  final String label;
-}
-
-/// A Worker entry in the Workers list: provider mark, name, and a trailing
-/// readiness indicator.
-class _WorkerSelectorTile extends StatelessWidget {
-  const _WorkerSelectorTile({
-    required this.worker,
-    required this.selected,
-    required this.status,
-    required this.onTap,
-    super.key,
-  });
-
-  final Map<String, dynamic> worker;
-  final bool selected;
-  final _WorkerListStatus status;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final type = worker['workerTypeId'] as String? ?? '';
-    final name = worker['displayName'] as String? ?? type;
-    final cliName = worker['providerToolName'] as String? ?? 'Provider CLI';
-    final foreground = selected ? colors.onPrimaryContainer : colors.onSurface;
-
-    return Semantics(
-      selected: selected,
-      button: true,
-      label: '$name, $cliName, ${status.label}',
-      excludeSemantics: true,
-      child: Material(
-        color: selected ? colors.primaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          hoverColor: colors.onSurface.withValues(alpha: .06),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: Row(children: [
-              WorkerBrandIcon(
-                workerTypeId: type,
-                name: name,
-                profileDefinitionId: worker['profileDefinitionId'] as String?,
-                providerToolName: worker['providerToolName'] as String?,
-                size: 36,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+          child: c.selectedCloudWorker == null
+              ? const EmptyState(
+                  title: 'Select a Worker',
+                  description:
+                      'Choose a logical Worker from the Cloud catalog.',
+                )
+              : Column(
                   children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: foreground,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      cliName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: selected
-                            ? colors.onPrimaryContainer.withValues(alpha: .75)
-                            : colors.onSurfaceVariant,
+                    if (c.definitionsError != null) Text(c.definitionsError!),
+                    Expanded(
+                      child: DraftTestWorkbench(
+                        controller: c,
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 6),
-              _WorkerStatusIcon(status: status, type: type),
-            ]),
-          ),
         ),
-      ),
-    );
-  }
-}
-
-class _WorkerStatusIcon extends StatelessWidget {
-  const _WorkerStatusIcon({required this.status, required this.type});
-
-  final _WorkerListStatus status;
-  final String type;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    final key = Key('worker-status-$type-${status.name}');
-    if (status == _WorkerListStatus.checking) {
-      return Tooltip(
-        message: status.label,
-        child: SizedBox(
-          key: key,
-          width: 16,
-          height: 16,
-          child: const CircularProgressIndicator(strokeWidth: 2),
-        ),
-      );
-    }
-    final (icon, color) = switch (status) {
-      _WorkerListStatus.ready => (Icons.check_circle, ConclaveBrand.success),
-      _WorkerListStatus.attention => (Icons.error, ConclaveBrand.warning),
-      _WorkerListStatus.setupRequired => (
-          Icons.add_circle_outline,
-          colors.onSurfaceVariant
-        ),
-      _WorkerListStatus.disabled => (
-          Icons.pause_circle_outline,
-          colors.onSurfaceVariant
-        ),
-      _WorkerListStatus.retired => (
-          Icons.archive_outlined,
-          colors.onSurfaceVariant
-        ),
-      _WorkerListStatus.unknown => (
-          Icons.help_outline,
-          colors.onSurfaceVariant
-        ),
-      _WorkerListStatus.checking => throw StateError('handled above'),
-    };
-    return Tooltip(
-      message: status.label,
-      child: Icon(icon, key: key, size: 18, color: color),
+      ],
     );
   }
 }
@@ -507,7 +165,8 @@ class _WorkerTabBar extends StatelessWidget {
                         profileDefinitionId:
                             worker['profileDefinitionId'] as String?,
                         providerToolName: worker['providerToolName'] as String?,
-                        size: 18,
+                        size: 20,
+                        transparentBackground: true,
                       ),
                       const SizedBox(width: 8),
                       Text(

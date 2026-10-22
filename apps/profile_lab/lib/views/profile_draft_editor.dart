@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../controllers/profile_lab_controller.dart';
 import '../theme/profile_lab_theme.dart';
+import '../utils/profile_lab_security.dart';
 
 /// Schema-aware Tool Profile v1 candidate editor with live validation,
 /// structured summary panels, compare, and recovery options.
@@ -229,6 +230,41 @@ class _ProfileDraftEditorState extends State<ProfileDraftEditor> {
                                         ),
                                       ),
                                     ),
+                                    if (c.jsonValidationError != null) ...[
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        key: const Key(
+                                            'copy-json-validation-error'),
+                                        tooltip: 'Copy validation error',
+                                        visualDensity: VisualDensity.compact,
+                                        icon: const Icon(
+                                          Icons.copy,
+                                          size: 16,
+                                          color: ProfileLabTheme.failColor,
+                                        ),
+                                        onPressed: () async {
+                                          final text =
+                                              'Invalid JSON${c.jsonValidationLocation == null ? '' : ' · ${c.jsonValidationLocation}'} · ${c.jsonValidationError}';
+                                          await Clipboard.setData(
+                                            ClipboardData(
+                                              text: ProfileLabSecurity
+                                                  .redactSecrets(text),
+                                            ),
+                                          );
+                                          if (!context.mounted) return;
+                                          final m =
+                                              ScaffoldMessenger.of(context);
+                                          m.hideCurrentSnackBar();
+                                          m.showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                  'Validation error copied'),
+                                              duration: Duration(seconds: 2),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),

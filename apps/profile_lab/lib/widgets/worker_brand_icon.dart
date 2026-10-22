@@ -38,6 +38,7 @@ class WorkerBrandIcon extends StatelessWidget {
     this.profileDefinitionId,
     this.providerToolName,
     this.size = 24,
+    this.transparentBackground = false,
     super.key,
   });
 
@@ -46,6 +47,7 @@ class WorkerBrandIcon extends StatelessWidget {
   final String? profileDefinitionId;
   final String? providerToolName;
   final double size;
+  final bool transparentBackground;
 
   @override
   Widget build(BuildContext context) {
@@ -60,11 +62,17 @@ class WorkerBrandIcon extends StatelessWidget {
       child: Container(
         width: size,
         height: size,
-        padding: EdgeInsets.all(size * .14),
+        padding: transparentBackground
+            ? EdgeInsets.zero
+            : EdgeInsets.all(size * .14),
         decoration: BoxDecoration(
-          color: asset == null ? colors.surfaceContainerHighest : Colors.white,
+          color: transparentBackground
+              ? Colors.transparent
+              : (asset == null ? colors.surfaceContainerHighest : Colors.white),
           borderRadius: BorderRadius.circular(size * .28),
-          border: Border.all(color: ConclaveColors.borderDark),
+          border: transparentBackground
+              ? null
+              : Border.all(color: ConclaveColors.borderDark),
         ),
         alignment: Alignment.center,
         child: asset == null

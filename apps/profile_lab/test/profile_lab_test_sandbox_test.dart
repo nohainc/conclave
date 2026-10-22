@@ -1,10 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_profile_lab/bundled_cli_worker_engine_loader.dart';
 import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/worker_profile_fixture.dart';
@@ -76,91 +74,6 @@ void main() {
         sandbox.executeTestLadder(candidate: candidate),
         throwsA(isA<FileSystemException>()),
       );
-    });
-
-    test('runs a trusted model proposal through the generic Engine', () async {
-      final providerBin = Directory('${temp.path}/model-provider-bin')
-        ..createSync(recursive: true);
-      final provider = File('${providerBin.path}/fixture-provider');
-      final profile = buildTestWorkerProfile(
-        profileDefinitionId: 'model-runner',
-        releaseVersion: 3,
-        logicalWorkerTypeId: 'model-worker',
-        model: {
-          'supported': true,
-          'arguments': ['--model', '{{model}}'],
-          'allowlist': ['model'],
-          'unknownModelPolicy': 'profile_allowlist',
-          'catalog': [
-            {
-              'id': 'model',
-              'name': 'Model',
-              'supportedReasoningEfforts': ['careful']
-            }
-          ],
-        },
-        execution: {
-          'arguments': [
-            'run',
-            {'modelArguments': true},
-            {
-              'ifPresent': 'reasoningEffort',
-              'values': ['--effort', '{{reasoningEffort}}']
-            }
-          ],
-          'stdin': {'mode': 'raw_text', 'value': '{{prompt}}'},
-          'output': {'mode': 'plain_text'},
-          'events': <Object?>[],
-        },
-      );
-      final profileDigest =
-          sha256.convert(utf8.encode(canonicalJson(profile))).toString();
-      final proposal = Map<String, Object?>.from(profile)
-        ..['description'] = 'proposed by the fixture model';
-      await provider.writeAsString('''#!/bin/sh
-if [ "\$1" = '--version' ]; then echo '0.3.0'; exit 0; fi
-for arg in "\$@"; do echo "\$arg"; done > '${temp.path}/proposal-argv.txt'
-cat >/dev/null
-cat <<'CONCLAVE_MODEL_OUTPUT'
-${jsonEncode(proposal)}
-CONCLAVE_MODEL_OUTPUT
-''');
-      await Process.run('chmod', ['700', provider.path]);
-      final engine = await loadBundledCliWorkerEngine(
-        enginesDirectory: Directory('${temp.path}/engine-cache'),
-      );
-      expect(engine, isNotNull);
-
-      final sandbox = ProfileLabTestSandbox(
-        sandboxRoot: sandboxRoot,
-        engineExecutable: engine!,
-        environmentOverrides: {
-          'PATH':
-              '${providerBin.path}${Platform.isWindows ? ';' : ':'}${Platform.environment['PATH'] ?? ''}',
-        },
-      );
-      final admission = ToolProfileReleaseAdmission(
-        profile: profile,
-        profileDefinitionId: 'model-runner',
-        releaseVersion: 3,
-        logicalWorkerTypeId: 'model-worker',
-        providerToolName: 'Fixture CLI',
-        payloadDigest: profileDigest,
-        channel: 'stable',
-      );
-
-      final output = await sandbox.runTrustedModelProposal(
-        modelProfile: admission,
-        prompt: 'Propose a safe Draft change.',
-        model: 'model',
-        reasoningEffort: 'careful',
-      );
-
-      expect(jsonDecode(output), proposal);
-      expect(File('${temp.path}/proposal-argv.txt').readAsLinesSync(),
-          ['run', '--model', 'model', '--effort', 'careful']);
-      expect(sandboxRoot.listSync(), isEmpty,
-          reason: 'The model request sandbox is removed after execution.');
     });
 
     test('derives evidence scenarios from the Profile', () {

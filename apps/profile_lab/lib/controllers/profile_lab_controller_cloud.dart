@@ -62,7 +62,6 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     jsonValidationError = null;
     resetDraftTestState();
     currentCloudProfileSnapshot = null;
-    currentProfileHistory = [];
     currentProfileRevision = 0;
     currentProfileDigest = null;
     candidateCloudValidatedDigest = null;
@@ -113,45 +112,6 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     }
   }
 
-  /// Loads signed historical snapshots on demand for the selected Worker.
-  Future<void> fetchCurrentProfileHistory() =>
-      _refresh('profile-history', _fetchCurrentProfileHistory);
-
-  Future<void> _fetchCurrentProfileHistory() async {
-    final workerTypeId = selectedCloudWorker?['workerTypeId'] as String?;
-    if (workerTypeId == null || workerTypeId.isEmpty) return;
-    currentProfileHistory =
-        await apiClient.fetchWorkerProfileHistory(workerTypeId);
-    notifyListeners();
-  }
-
-  /// Restores a prior snapshot through Cloud's atomic V9 restore path.
-  Future<void> restoreCurrentProfileRevision({
-    required int targetRevision,
-    required String restorationReason,
-  }) =>
-      _refresh('restore-profile', () async {
-        if (selectedCloudWorker == null) return;
-        final workerTypeId = selectedCloudWorker!['workerTypeId'] as String?;
-        if (workerTypeId == null || workerTypeId.isEmpty) return;
-        if (!canPublish) {
-          throw StateError(
-            'Profile Lab authorization is required to restore a Profile.',
-          );
-        }
-        final snapshot = await apiClient.restoreWorkerProfile(
-          workerTypeId: workerTypeId,
-          expectedRevision: currentProfileRevision,
-          targetRevision: targetRevision,
-          restorationReason: restorationReason,
-        );
-        await _adoptPublishedSnapshot(
-          snapshot,
-          notes: 'Restored Profile revision $targetRevision',
-        );
-        await _fetchCurrentProfileHistory();
-      });
-
   Future<void> _adoptPublishedSnapshot(
     Map<String, dynamic> snapshot, {
     required String notes,
@@ -185,41 +145,6 @@ mixin _ProfileLabCloudOperations on _ProfileLabControllerState {
     jsonValidationLocation = null;
     resetDraftTestState();
     await refreshEvidence();
-    notifyListeners();
-  }
-
-  /// Fetches audit events globally or scoped to the current definition.
-  @override
-  Future<void> fetchCloudAudit({bool? definitionOnly}) => _refresh(
-        'audit:${(definitionOnly ?? auditFilterCurrentDefinition) ? selectedDefinitionId : null}',
-        () => _fetchCloudAudit(definitionOnly: definitionOnly),
-      );
-
-  Future<void> _fetchCloudAudit({bool? definitionOnly}) async {
-    if (definitionOnly != null) {
-      auditFilterCurrentDefinition = definitionOnly;
-    }
-    final generation = _cloudGeneration;
-    final defId = auditFilterCurrentDefinition ? selectedDefinitionId : null;
-    auditError = null;
-
-    try {
-      final result = await apiClient.fetchAudit(defId);
-      if (generation != _cloudGeneration ||
-          defId !=
-              (auditFilterCurrentDefinition ? selectedDefinitionId : null)) {
-        return;
-      }
-      cloudAuditEvents = result.map((event) => event.toJson()).toList();
-    } catch (e) {
-      if (generation != _cloudGeneration ||
-          defId !=
-              (auditFilterCurrentDefinition ? selectedDefinitionId : null)) {
-        return;
-      }
-      auditError = 'Failed to fetch audit: $e';
-      cloudError = auditError;
-    }
     notifyListeners();
   }
 

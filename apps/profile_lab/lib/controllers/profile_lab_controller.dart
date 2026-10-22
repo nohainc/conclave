@@ -13,7 +13,6 @@ import '../profile_lab_cloud_config.dart';
 import '../profile_lab_paths.dart';
 import '../profile_lab_session_store.dart';
 import '../profile_lab_test_sandbox.dart';
-import '../utils/profile_lab_model_proposals.dart';
 import '../utils/profile_payload_migrations.dart';
 import '../utils/profile_activity_mapping_fixtures.dart';
 
@@ -25,9 +24,6 @@ part 'profile_lab_controller_drafts.dart';
 part 'profile_lab_controller_testing.dart';
 part 'profile_lab_controller_session.dart';
 part 'profile_lab_controller_cloud.dart';
-part 'profile_lab_controller_ai.dart';
-
-enum LabArea { workers, issues, audit }
 
 class TestExecutionLog {
   const TestExecutionLog({
@@ -70,7 +66,6 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   final ProfileLabCloudSettingsStore _cloudSettingsStore;
   ProfileAdminApiClient? _apiClientOverride;
 
-  LabArea selectedArea = LabArea.workers;
   List<String> draftDefinitionIds = [];
   String? selectedDefinitionId;
   LocalDraftProfileCandidate? currentDraft;
@@ -96,7 +91,6 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
 
   /// These fields bind local eligibility to the one current Worker Profile.
   Map<String, dynamic>? currentCloudProfileSnapshot;
-  List<Map<String, dynamic>> currentProfileHistory = [];
   int currentProfileRevision = 0;
   String? currentProfileDigest;
   String? candidateCloudValidatedDigest;
@@ -139,37 +133,22 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   List<Map<String, dynamic>> cloudWorkers = [];
   Map<String, dynamic>? selectedCloudWorker;
   Map<String, dynamic>? selectedCloudDefinition;
-  List<Map<String, dynamic>> cloudAuditEvents = [];
   bool isSubmittingCloudEvidence = false;
-  bool isGeneratingAiProposal = false;
-  List<ProfileLabAiModelOption> availableAiModels = [];
-  String? aiProposalError;
   String? profileFilePath;
   String? profileFileError;
   bool profileFileUpdateAvailable = false;
-  Map<String, Object?>? pendingAiProvenance;
-  ProfileLabTestSandbox? _activeAiSandbox;
   final Map<String, Future<void>> _refreshes = {};
   final Set<String> _loaded = {};
   int _cloudGeneration = 0;
   bool get isPublishing => _refreshes.containsKey('publish');
-  bool get isLoadingProfileHistory => _refreshes.containsKey('profile-history');
-  bool get isRestoringProfile => _refreshes.containsKey('restore-profile');
   bool get isValidatingCandidate =>
       _refreshes.containsKey('validate-candidate');
   bool get isSavingLocally => _refreshes.containsKey('save-local-draft');
   bool get isScanningProviders => _refreshes.containsKey('providers');
-  String? auditError;
-  String? issueReportsError;
-  bool isLoadingIssueReports = false;
-  List<Map<String, dynamic>> issueReports = [];
-  List<Map<String, dynamic>> issueReportGroups = [];
-  Map<String, dynamic>? selectedIssueReport;
   String? definitionsError;
   String? draftError;
   String? startupError;
   bool get isLoadingWorkerCatalog => _refreshes.containsKey('catalog');
-  bool get isLoadingAudit => _refreshes.keys.any((k) => k.startsWith('audit:'));
   String? workerCatalogError;
   bool workerCatalogUnauthorized = false;
   bool get hasLoadedWorkerCatalog => _loaded.contains('catalog');
@@ -238,7 +217,6 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
       });
 
   String? cloudError;
-  bool auditFilterCurrentDefinition = false;
   ProfileAdminApiClient get apiClient =>
       _apiClientOverride ??
       ProfileAdminApiClient(baseUrl: cloudUrl, session: currentSession);
@@ -256,83 +234,15 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   SelectedWorkerState get selectedWorkerState =>
       SelectedWorkerState.fromController(this as ProfileLabController);
 
-  void setArea(LabArea area) {
-    selectedArea = area;
-    notifyListeners();
-    unawaited(Future<void>.microtask(() => ensureAreaData(area)));
-  }
-
-  Future<void> ensureAreaData(LabArea area) async {
+  /// Loads the Worker catalog once an authorized session is available.
+  Future<void> ensureWorkerCatalog() async {
     if (currentSession == null ||
         _disposed ||
         labAccess?.profilesAdmin != true ||
         labAccessError != null) {
       return;
     }
-    switch (area) {
-      case LabArea.workers:
-        if (!hasLoadedWorkerCatalog) await fetchCloudCatalog();
-      case LabArea.issues:
-        if (!_loaded.contains('issues')) await fetchIssueReports();
-      case LabArea.audit:
-        await fetchCloudAudit();
-    }
-  }
-
-  Future<void> fetchIssueReports() => _refresh('issues', _fetchIssueReports);
-
-  Future<void> _fetchIssueReports() async {
-    isLoadingIssueReports = true;
-    issueReportsError = null;
-    notifyListeners();
-    try {
-      final reports = await apiClient.fetchIssueReports();
-      final groups = await apiClient.fetchIssueReportGroups();
-      issueReports = reports.map((item) => item.toJson()).toList();
-      issueReportGroups = groups.map((item) => item.toJson()).toList();
-      _loaded.add('issues');
-    } catch (error) {
-      issueReportsError = 'Failed to load issue reports: $error';
-      _loaded.remove('issues');
-    } finally {
-      isLoadingIssueReports = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> selectIssueReport(String id) async {
-    try {
-      selectedIssueReport = await apiClient.fetchIssueReport(id);
-      notifyListeners();
-    } catch (error) {
-      issueReportsError = 'Failed to load issue report: $error';
-      notifyListeners();
-    }
-  }
-
-  Future<void> updateIssueReport(
-    String id, {
-    String? status,
-    String? note,
-    String? groupId,
-    bool clearGroup = false,
-  }) async {
-    try {
-      await apiClient.updateIssueReport(
-        id,
-        status: status,
-        note: note,
-        groupId: groupId,
-        clearGroup: clearGroup,
-      );
-      await fetchIssueReports();
-      if (selectedIssueReport?['report']?['id'] == id) {
-        await selectIssueReport(id);
-      }
-    } catch (error) {
-      issueReportsError = 'Failed to update issue report: $error';
-      notifyListeners();
-    }
+    if (!hasLoadedWorkerCatalog) await fetchCloudCatalog();
   }
 
   void setApiClientForTesting(ProfileAdminApiClient client) {
@@ -395,21 +305,13 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
     _loaded.clear();
     labAccess = null;
     labAccessError = null;
-    auditError = null;
-    issueReportsError = null;
-    isLoadingIssueReports = false;
-    issueReports = [];
-    issueReportGroups = [];
-    selectedIssueReport = null;
     definitionsError = null;
     workerCatalogError = null;
     workerCatalogUnauthorized = false;
     cloudWorkers = [];
     selectedCloudWorker = null;
     selectedCloudDefinition = null;
-    cloudAuditEvents = [];
     currentCloudProfileSnapshot = null;
-    currentProfileHistory = [];
     currentProfileRevision = 0;
     currentProfileDigest = null;
     candidateCloudValidatedDigest = null;
@@ -424,7 +326,6 @@ abstract class _ProfileLabControllerState extends ChangeNotifier {
   Future<void> discoverInstalledProviders();
   Future<void> loadSavedSession();
   Future<void> fetchCloudCatalog();
-  Future<void> fetchCloudAudit({bool? definitionOnly});
 }
 
 class ProfileLabController extends _ProfileLabControllerState
@@ -432,8 +333,7 @@ class ProfileLabController extends _ProfileLabControllerState
         _ProfileLabDraftOperations,
         _ProfileLabTestOperations,
         _ProfileLabSessionOperations,
-        _ProfileLabCloudOperations,
-        _ProfileLabAiOperations {
+        _ProfileLabCloudOperations {
   ProfileLabController({
     required super.paths,
     super.processSupervisor,
@@ -441,12 +341,4 @@ class ProfileLabController extends _ProfileLabControllerState
     super.sessionStore,
     super.sandboxEnvironmentOverrides,
   });
-
-  void applyAiDraftProposal({
-    required Map<String, dynamic> profile,
-    required Map<String, Object?> provenance,
-  }) {
-    pendingAiProvenance = Map<String, Object?>.from(provenance);
-    updateJsonText(const JsonEncoder.withIndent('  ').convert(profile));
-  }
 }

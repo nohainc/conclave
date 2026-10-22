@@ -140,7 +140,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
   @override
   Future<void> selectDraft(String profileDefinitionId) async {
     selectedDefinitionId = profileDefinitionId;
-    pendingAiProvenance = null;
     currentDraft = await store.loadDraft(profileDefinitionId);
     if (currentDraft != null) {
       final migrated = migrateProfilePayload(currentDraft!.profile);
@@ -253,7 +252,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
   /// Reverts modified text back to the last saved draft payload on disk.
   Future<void> revertCurrentDraft() async {
     if (selectedDefinitionId == null) return;
-    pendingAiProvenance = null;
     await selectDraft(selectedDefinitionId!);
   }
 
@@ -289,11 +287,9 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
       profileJson: decoded,
       author: author,
       notes: notes,
-      provenance: pendingAiProvenance ??
-          const <String, Object?>{'kind': 'local_candidate'},
+      provenance: const <String, Object?>{'kind': 'local_candidate'},
     );
     currentMetadata = await store.loadDraftMetadata(selectedDefinitionId!);
-    pendingAiProvenance = null;
     isDirty = false;
     jsonValidationLocation = null;
     await refreshEvidence();

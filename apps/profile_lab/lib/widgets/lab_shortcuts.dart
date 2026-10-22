@@ -34,8 +34,7 @@ class _LabShortcutsState extends State<LabShortcuts> {
 
   void _save() {
     final c = widget.controller;
-    if (c.selectedArea != LabArea.workers ||
-        c.currentDraft == null ||
+    if (c.currentDraft == null ||
         !c.isDirty ||
         c.jsonValidationError != null ||
         c.isTesting ||
@@ -51,18 +50,11 @@ class _LabShortcutsState extends State<LabShortcuts> {
     if (c.isTesting || c.isPublishing || c.isSavingLocally) {
       return;
     }
-    switch (c.selectedArea) {
-      case LabArea.issues:
-        if (!c.isLoadingIssueReports) _perform(c.fetchIssueReports);
-      case LabArea.audit:
-        if (!c.isLoadingAudit) _perform(() => c.fetchCloudAudit());
-      case LabArea.workers:
-        if (c.currentDraft != null) {
-          // refreshEvidence checks Cloud state without replacing the editor text.
-          _perform(c.refreshEvidence);
-        } else if (!c.isLoadingWorkerCatalog) {
-          _perform(c.fetchCloudCatalog);
-        }
+    if (c.currentDraft != null) {
+      // refreshEvidence checks Cloud state without replacing the editor text.
+      _perform(c.refreshEvidence);
+    } else if (!c.isLoadingWorkerCatalog) {
+      _perform(c.fetchCloudCatalog);
     }
   }
 

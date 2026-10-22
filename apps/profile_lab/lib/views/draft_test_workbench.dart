@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../utils/profile_lab_security.dart';
 import '../widgets/lab_components.dart';
 
 import '../controllers/profile_lab_controller.dart';
@@ -8,7 +9,6 @@ import '../theme/profile_lab_theme.dart';
 import 'profile_draft_editor.dart';
 import 'profile_release_diff_view.dart';
 import 'profile_publish_confirmation_dialog.dart';
-import 'profile_history_dialog.dart';
 import 'test_bench_view.dart';
 
 /// Worker-scoped candidate authoring and test execution.
@@ -27,9 +27,7 @@ class DraftTestWorkbench extends StatefulWidget {
 }
 
 class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
-  bool _showEditor = true;
-  bool _showTests = false;
-  double _editorFraction = 0.68;
+  int _selectedTabIndex = 0; // 0: JSON, 1: Tests
   bool _saving = false;
 
   Future<void> _perform(Future<void> Function() action) async {
@@ -38,9 +36,47 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
       await action();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final errorMessage = 'Could not complete action: $error';
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
           SnackBar(
-            content: CopyableMessage('Could not complete action: $error'),
+            backgroundColor: ProfileLabTheme.failColor,
+            behavior: SnackBarBehavior.floating,
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SelectableText(
+                    errorMessage,
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ),
+                ),
+                IconButton(
+                  key: const Key('copy-error-message-button'),
+                  tooltip: 'Copy error message',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.copy, size: 18, color: Colors.white),
+                  onPressed: () async {
+                    await Clipboard.setData(
+                      ClipboardData(
+                        text: ProfileLabSecurity.redactSecrets(errorMessage),
+                      ),
+                    );
+                    if (!mounted) return;
+                    final m = ScaffoldMessenger.of(context);
+                    m.hideCurrentSnackBar();
+                    m.showSnackBar(
+                      const SnackBar(
+                        content: Text('Error message copied'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         );
       }
@@ -77,8 +113,6 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
         c.formatCurrentJson();
       case 'compare':
         _compare();
-      case 'history':
-        ProfileHistoryDialog.show(context, c);
     }
   }
 
@@ -112,7 +146,7 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
   }
 
   Future<void> _runTests() async {
-    setState(() => _showTests = true);
+    setState(() => _selectedTabIndex = 1);
     await _perform(widget.controller.runTestLadder);
   }
 
@@ -124,70 +158,91 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
     }
   }
 
-  Widget _panes(ProfileLabController c) => LayoutBuilder(
-        builder: (context, constraints) {
-          final both = _showEditor && _showTests;
-          final available = constraints.maxHeight - (both ? 12 : 0);
-          final minimumEditor = available < 500 ? available * 0.5 : 220.0;
-          final minimumTests = available < 500 ? available * 0.25 : 180.0;
-          final maximumEditor = math.max(
-            minimumEditor,
-            available - minimumTests,
-          );
-          final editorExtent = both
-              ? (available * _editorFraction)
-                  .clamp(minimumEditor, maximumEditor)
-              : constraints.maxHeight;
-          final testsExtent = available - editorExtent;
-          return Column(
+  Widget _contentArea(ProfileLabController c) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Sub-tabs: JSON and Tests
+        Container(
+          color: ProfileLabTheme.darkSurface,
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
             children: [
-              if (_showEditor)
-                SizedBox(
-                  height: editorExtent,
-                  width: double.infinity,
-                  child: ProfileDraftEditor(
-                    controller: c,
-                  ),
-                ),
-              if (both)
-                SizedBox(
-                  height: 12,
-                  width: double.infinity,
-                  child: Semantics(
-                    label: 'Resize editor and tests',
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.resizeRow,
-                      child: GestureDetector(
-                        key: const ValueKey('workbench-divider'),
-                        behavior: HitTestBehavior.opaque,
-                        onPanUpdate: (details) => setState(() {
-                          _editorFraction =
-                              (_editorFraction + details.delta.dy / available)
-                                  .clamp(0.35, 0.85);
-                        }),
-                        child: const ColoredBox(
-                          color: ProfileLabTheme.darkSurface,
-                          child: Center(
-                            child: Icon(Icons.drag_handle,
-                                size: 12, color: ProfileLabTheme.secondaryText),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              if (_showTests)
-                SizedBox(
-                  height: both ? testsExtent : constraints.maxHeight,
-                  width: double.infinity,
-                  child: TestBenchView(controller: c),
-                ),
-              if (!_showEditor && !_showTests)
-                const Expanded(child: SizedBox()),
+              _subTabButton(
+                title: 'JSON',
+                icon: Icons.code,
+                index: 0,
+              ),
+              const SizedBox(width: 8),
+              _subTabButton(
+                title: 'Tests',
+                icon: Icons.science_outlined,
+                index: 1,
+              ),
             ],
-          );
-        },
-      );
+          ),
+        ),
+        const Divider(height: 1, color: ProfileLabTheme.borderColor),
+        Expanded(
+          child: IndexedStack(
+            index: _selectedTabIndex,
+            children: [
+              ProfileDraftEditor(controller: c),
+              TestBenchView(controller: c),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _subTabButton({
+    required String title,
+    required IconData icon,
+    required int index,
+  }) {
+    final isSelected = _selectedTabIndex == index;
+    return InkWell(
+      key: Key('sub-tab-${title.toLowerCase()}'),
+      onTap: () => setState(() => _selectedTabIndex = index),
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? ProfileLabTheme.primaryAccent.withValues(alpha: 0.18)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: isSelected
+                ? ProfileLabTheme.primaryAccent
+                : ProfileLabTheme.borderColor,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? Colors.white : ProfileLabTheme.secondaryText,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color:
+                    isSelected ? Colors.white : ProfileLabTheme.secondaryText,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -224,7 +279,7 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
         c.isPublishing;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final sidebarWidth = constraints.maxWidth < 600 ? 160.0 : 200.0;
+        final sidebarWidth = constraints.maxWidth < 650 ? 170.0 : 200.0;
         final sidebar = Container(
           width: sidebarWidth,
           color: ProfileLabTheme.darkSurface,
@@ -234,63 +289,12 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Worker Profile · revision ${c.currentProfileRevision}',
+                  'Revision ${c.currentProfileRevision}',
                   key: const ValueKey('draft-status'),
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    StatusBadge(
-                      label: c.isDirty ? 'Unsaved' : 'Saved',
-                      status: c.isDirty ? LabStatus.warning : LabStatus.success,
-                      icon: c.isDirty
-                          ? Icons.edit_outlined
-                          : Icons.check_circle_outline,
-                    ),
-                    StatusBadge(
-                      label:
-                          c.jsonValidationError == null ? 'Valid' : 'Invalid',
-                      status: c.jsonValidationError == null
-                          ? LabStatus.success
-                          : LabStatus.error,
-                      icon: c.jsonValidationError == null
-                          ? Icons.data_object
-                          : Icons.error_outline,
-                    ),
-                    StatusBadge(
-                      label: c.isTesting
-                          ? 'Running'
-                          : !c.testResultMatchesDraft ||
-                                  c.lastTestResult == null
-                              ? 'Not Run'
-                              : c.lastTestResult == 'pass'
-                                  ? 'Tests Passed'
-                                  : 'Tests Failed',
-                      status: c.isTesting
-                          ? LabStatus.neutral
-                          : !c.testResultMatchesDraft ||
-                                  c.lastTestResult == null
-                              ? LabStatus.neutral
-                              : c.lastTestResult == 'pass'
-                                  ? LabStatus.success
-                                  : LabStatus.error,
-                      icon: c.isTesting
-                          ? Icons.hourglass_top
-                          : c.lastTestResult == 'pass' &&
-                                  c.testResultMatchesDraft
-                              ? Icons.check_circle_outline
-                              : c.lastTestResult == 'fail' &&
-                                      c.testResultMatchesDraft
-                                  ? Icons.error_outline
-                                  : Icons.science_outlined,
-                    ),
-                  ],
                 ),
                 const SizedBox(height: 12),
                 const Divider(height: 1, color: ProfileLabTheme.borderColor),
@@ -338,70 +342,34 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                 ),
                 const SizedBox(height: 12),
                 const Divider(height: 1, color: ProfileLabTheme.borderColor),
-                const SizedBox(height: 8),
-                Wrap(
-                  alignment: WrapAlignment.spaceAround,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    IconButton(
-                      tooltip: _showEditor ? 'Collapse editor' : 'Show editor',
-                      icon: const Icon(Icons.code, size: 18),
-                      isSelected: _showEditor,
-                      onPressed: () => setState(() {
-                        _showEditor = !_showEditor;
-                        if (!_showEditor) _showTests = true;
-                      }),
-                    ),
-                    IconButton(
-                      tooltip: _showTests ? 'Collapse tests' : 'Show tests',
-                      icon: const Icon(Icons.science_outlined, size: 18),
-                      isSelected: _showTests,
-                      onPressed: () => setState(() {
-                        _showTests = !_showTests;
-                        if (!_showTests) _showEditor = true;
-                      }),
-                    ),
-                    IconButton(
-                      key: const ValueKey('reload-profile-file'),
-                      tooltip: c.profileFileUpdateAvailable
-                          ? 'Reload Profile from file (file changed)'
-                          : 'Reload Profile from file',
-                      icon: Icon(
-                        c.profileFileUpdateAvailable
-                            ? Icons.sync_problem
-                            : Icons.refresh,
-                        size: 18,
-                      ),
-                      onPressed: locked ? null : _reloadProfileFile,
-                    ),
-                    PopupMenuButton<String>(
-                      tooltip: 'More candidate actions',
-                      onSelected: _advanced,
-                      itemBuilder: (_) => [
-                        PopupMenuItem(
-                          value: 'reload',
-                          enabled: !locked,
-                          child: Text(c.profileFileUpdateAvailable
-                              ? 'Reload Profile from file… (file changed)'
-                              : 'Reload Profile from file…'),
-                        ),
-                        PopupMenuItem(
-                          value: 'format',
-                          enabled: !locked,
-                          child: const Text('Format JSON'),
-                        ),
-                        const PopupMenuItem(
-                          value: 'compare',
-                          child: Text('Compare with current Profile'),
-                        ),
-                        PopupMenuItem(
-                          value: 'history',
-                          enabled: true,
-                          child: const Text('Profile history'),
-                        ),
-                      ],
-                    ),
-                  ],
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  key: const ValueKey('reload-profile-file'),
+                  icon: Icon(
+                    c.profileFileUpdateAvailable
+                        ? Icons.sync_problem
+                        : Icons.refresh,
+                    size: 16,
+                  ),
+                  label: Text(
+                    c.profileFileUpdateAvailable
+                        ? 'Reload (changed)'
+                        : 'Reload from file',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onPressed: locked ? null : _reloadProfileFile,
+                ),
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.format_align_left, size: 16),
+                  label: const Text('Format JSON'),
+                  onPressed: locked ? null : () => _advanced('format'),
+                ),
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.compare_arrows, size: 16),
+                  label: const Text('Compare'),
+                  onPressed: () => _advanced('compare'),
                 ),
               ],
             ),
@@ -413,7 +381,7 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
           children: [
             sidebar,
             const VerticalDivider(width: 1, color: ProfileLabTheme.borderColor),
-            Expanded(child: _panes(c)),
+            Expanded(child: _contentArea(c)),
           ],
         );
       },

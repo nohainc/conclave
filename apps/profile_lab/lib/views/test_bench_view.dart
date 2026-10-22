@@ -1,12 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../widgets/lab_components.dart';
 
 import '../controllers/profile_lab_controller.dart';
 import '../profile_lab_test_sandbox.dart';
 import '../theme/profile_lab_theme.dart';
-import 'ai_repair_loop_dialog.dart';
-import 'event_mapping_test_view.dart';
 
 /// Testing and local evidence belong to the active local candidate.
 class TestBenchView extends StatelessWidget {
@@ -158,7 +155,6 @@ class TestBenchView extends StatelessWidget {
             running: running,
             elapsed: elapsed,
           ),
-          EventMappingTestView(controller: c),
           if (c.isTesting && !running)
             const Padding(
               padding: EdgeInsets.only(top: 8),
@@ -200,7 +196,7 @@ class TestBenchView extends StatelessWidget {
                     Text(
                       completed
                           ? '$passed/12 passed${notApplicable > 0 ? " · $notApplicable not applicable" : ""}'
-                          : 'Saved local acceptance evidence',
+                          : 'Saved test results',
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 16,
@@ -251,23 +247,6 @@ class TestBenchView extends StatelessWidget {
                 title: const Text('Test stages'),
                 children: [
                   for (final item in stages) _StageResult(stage: item),
-                ],
-              ),
-            if (evidence != null)
-              ExpansionTile(
-                key: ValueKey('local-evidence-${draft.payloadDigest}'),
-                title: const Text('Local acceptance evidence'),
-                subtitle: Text(
-                  'Saved for this exact candidate digest · Cloud revalidates it on publication',
-                ),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: SelectableText(
-                      const JsonEncoder.withIndent('  ').convert(evidence),
-                      style: ProfileLabTheme.monoStyle,
-                    ),
-                  ),
                 ],
               ),
           ],
@@ -344,11 +323,6 @@ class TestBenchView extends StatelessWidget {
       OutlinedButton(
         onPressed: enabled ? () => c.runTestLadder() : null,
         child: const Text('Retry'),
-      ),
-      OutlinedButton.icon(
-        icon: const Icon(Icons.auto_awesome, size: 16),
-        onPressed: enabled ? () => AiRepairLoopDialog.show(context, c) : null,
-        label: const Text('Repair Profile'),
       ),
     ];
   }

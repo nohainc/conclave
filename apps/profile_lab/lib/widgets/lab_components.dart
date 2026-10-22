@@ -5,33 +5,59 @@ import '../utils/profile_lab_security.dart';
 import '../theme/profile_lab_theme.dart';
 
 class CopyMessageButton extends StatelessWidget {
-  const CopyMessageButton(
-      {super.key, required this.message, this.tooltip = 'Copy message'});
+  const CopyMessageButton({
+    super.key,
+    required this.message,
+    this.tooltip = 'Copy message',
+    this.color,
+    this.iconSize = 18,
+  });
+
   final String message, tooltip;
+  final Color? color;
+  final double iconSize;
+
   @override
   Widget build(BuildContext context) => IconButton(
+        key: const Key('copy-message-button'),
         tooltip: tooltip,
-        icon: const Icon(Icons.copy_outlined, size: 18),
+        visualDensity: VisualDensity.compact,
+        icon: Icon(Icons.copy, size: iconSize, color: color),
         onPressed: () async {
           await Clipboard.setData(
               ClipboardData(text: ProfileLabSecurity.redactSecrets(message)));
           if (context.mounted) {
-            ScaffoldMessenger.maybeOf(context)
-                ?.showSnackBar(const SnackBar(content: Text('Message copied')));
+            final messenger = ScaffoldMessenger.maybeOf(context);
+            messenger?.hideCurrentSnackBar();
+            messenger?.showSnackBar(
+              const SnackBar(
+                content: Text('Message copied'),
+                duration: Duration(seconds: 2),
+              ),
+            );
           }
         },
       );
 }
 
 class CopyableMessage extends StatelessWidget {
-  const CopyableMessage(this.message, {super.key, this.style});
+  const CopyableMessage(
+    this.message, {
+    super.key,
+    this.style,
+    this.iconColor,
+  });
+
   final String message;
   final TextStyle? style;
+  final Color? iconColor;
+
   @override
   Widget build(BuildContext context) =>
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         Expanded(child: SelectableText(message, style: style)),
-        CopyMessageButton(message: message),
+        const SizedBox(width: 8),
+        CopyMessageButton(message: message, color: iconColor),
       ]);
 }
 
