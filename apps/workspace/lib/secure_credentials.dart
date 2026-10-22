@@ -125,6 +125,8 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
     final cacheKey = _cacheKey(key);
     if (_effectivePlatform == 'windows') {
       _windows.write(service, key, value);
+      _cache[cacheKey] = value;
+      _loaded.add(cacheKey);
       return;
     }
     if (_effectivePlatform == 'macos') {

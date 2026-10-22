@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_workspace/windows_credentials.dart';
+import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/windows_native.dart';
 import 'package:conclave_workspace/workspace_manager_ipc.dart';
 import 'package:conclave_workspace/local_management_transport.dart';
@@ -44,8 +45,7 @@ void main() {
   }, skip: !Platform.isWindows);
   test('Windows pipe authenticates, rejects bad keys, and restarts', () async {
     final dir = await Directory.systemTemp.createTemp('conclave-pipe-');
-    await File('${dir.path}/installation-id')
-        .writeAsString('test-${DateTime.now().microsecondsSinceEpoch}');
+    await InstallationIdentityStore(dir).getOrCreate();
     WorkspaceManagerIpcServer makeServer() => WorkspaceManagerIpcServer(
           runtimeDirectory: Directory('${dir.path}/runtime'),
           serviceVersion: 'windows-test',

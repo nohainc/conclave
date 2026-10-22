@@ -20,7 +20,7 @@ class WindowsWorkspaceServiceManager implements WorkspaceServiceManager {
     await dataDirectory.create(recursive: true);
     WindowsNative.securePath(dataDirectory.path);
     final id = await InstallationIdentityStore(dataDirectory).getOrCreate();
-    if (!RegExp(r'^[A-Za-z0-9-]{8,128}$').hasMatch(id)) {
+    if (!RegExp(r'^[A-Za-z0-9._-]{8,128}$').hasMatch(id)) {
       throw StateError('Invalid installation identity');
     }
     return id;

@@ -29,7 +29,7 @@ String workspaceManagerEndpoint(Directory runtime) {
   if (!Platform.isWindows) return '${runtime.path}/manager.sock';
   final id =
       File('${runtime.parent.path}/installation-id').readAsStringSync().trim();
-  if (!RegExp(r'^[A-Za-z0-9-]{8,128}$').hasMatch(id)) {
+  if (!RegExp(r'^[A-Za-z0-9._-]{8,128}$').hasMatch(id)) {
     throw StateError('Workspace installation identity is missing or invalid');
   }
   return r'\\.\pipe\conclave-workspace-' + id;
