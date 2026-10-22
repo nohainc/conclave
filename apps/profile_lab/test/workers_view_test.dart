@@ -52,8 +52,16 @@ void main() {
     ];
     await tester.pumpWidget(
         MaterialApp(home: Scaffold(body: WorkersView(controller: controller))));
-    expect(find.descendant(of: find.byKey(const Key('worker-tab-chatgpt')), matching: find.text('ChatGPT')), findsOneWidget);
-    expect(find.descendant(of: find.byKey(const Key('worker-tab-gemini')), matching: find.text('Gemini')), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('worker-tab-chatgpt')),
+            matching: find.text('ChatGPT')),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('worker-tab-gemini')),
+            matching: find.text('Gemini')),
+        findsOneWidget);
     expect(find.text('agy'), findsOneWidget);
     expect(find.text('codex'), findsOneWidget);
     expect(find.byKey(const Key('worker-selector-gemini')), findsOneWidget);
@@ -121,8 +129,16 @@ void main() {
 
     // Verify sidebar displays Worker name, CLI name, and status.
     expect(find.byKey(const Key('worker-selector-chatgpt')), findsOneWidget);
-    expect(find.descendant(of: find.byKey(const Key('worker-selector-chatgpt')), matching: find.text('ChatGPT')), findsOneWidget);
-    expect(find.descendant(of: find.byKey(const Key('worker-tab-chatgpt')), matching: find.text('ChatGPT')), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('worker-selector-chatgpt')),
+            matching: find.text('ChatGPT')),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('worker-tab-chatgpt')),
+            matching: find.text('ChatGPT')),
+        findsOneWidget);
     expect(find.text('codex'), findsOneWidget);
 
     // Verify top/first panel header with worker name, CLI name, and profile chips was deleted.

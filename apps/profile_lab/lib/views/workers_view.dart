@@ -181,12 +181,14 @@ class _WorkersViewState extends State<WorkersView> {
                                             'workerTypeId'] ==
                                         workerTypeId;
 
-                                    final status = _determineStatus(c, worker, isSelected);
+                                    final status =
+                                        _determineStatus(c, worker, isSelected);
 
                                     return Padding(
                                       padding: const EdgeInsets.only(bottom: 2),
                                       child: _WorkerSelectorTile(
-                                        key: Key('worker-selector-$workerTypeId'),
+                                        key: Key(
+                                            'worker-selector-$workerTypeId'),
                                         worker: worker,
                                         selected: isSelected,
                                         status: status,
@@ -246,8 +248,7 @@ class _WorkersViewState extends State<WorkersView> {
       return _WorkerListStatus.disabled;
     }
 
-    final currentRevision =
-        (worker['currentRevision'] as num?)?.toInt() ?? 0;
+    final currentRevision = (worker['currentRevision'] as num?)?.toInt() ?? 0;
     if (isSelected) {
       final selectedState = c.selectedWorkerState;
       if (selectedState.lastTestResult == 'fail') {
@@ -323,8 +324,7 @@ class _WorkerSelectorTile extends StatelessWidget {
               WorkerBrandIcon(
                 workerTypeId: type,
                 name: name,
-                profileDefinitionId:
-                    worker['profileDefinitionId'] as String?,
+                profileDefinitionId: worker['profileDefinitionId'] as String?,
                 providerToolName: worker['providerToolName'] as String?,
                 size: 36,
               ),
@@ -506,8 +506,7 @@ class _WorkerTabBar extends StatelessWidget {
                         name: name,
                         profileDefinitionId:
                             worker['profileDefinitionId'] as String?,
-                        providerToolName:
-                            worker['providerToolName'] as String?,
+                        providerToolName: worker['providerToolName'] as String?,
                         size: 18,
                       ),
                       const SizedBox(width: 8),

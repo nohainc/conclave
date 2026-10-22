@@ -732,4 +732,3 @@ class _FindReplaceBar extends StatelessWidget {
     );
   }
 }
-

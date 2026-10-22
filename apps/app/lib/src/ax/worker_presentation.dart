@@ -27,13 +27,20 @@ class WorkerPresentation {
     }
 
     final WorkerPresentation brand;
-    if (matches(const ['chatgpt', 'openai', 'codex'])) {
+    if (matches(const ['chatgpt', 'openai']) ||
+        ((type.isEmpty || type == 'custom' || type == 'worker') &&
+            (nameLower.contains('chatgpt') || nameLower.contains('openai')))) {
       brand = const WorkerPresentation(
           name: 'ChatGPT', iconAsset: 'assets/worker_icons/chatgpt.png');
-    } else if (matches(const ['gemini', 'google', 'antigravity', 'agy'])) {
+    } else if (matches(const ['gemini', 'google', 'agy']) ||
+        ((type.isEmpty || type == 'custom' || type == 'worker') &&
+            (nameLower.contains('gemini') || nameLower.contains('google')))) {
       brand = const WorkerPresentation(
           name: 'Gemini', iconAsset: 'assets/worker_icons/gemini.png');
-    } else if (matches(const ['claude', 'anthropic'])) {
+    } else if (matches(const ['claude', 'anthropic']) ||
+        ((type.isEmpty || type == 'custom' || type == 'worker') &&
+            (nameLower.contains('claude') ||
+                nameLower.contains('anthropic')))) {
       brand = const WorkerPresentation(
           name: 'Claude', iconAsset: 'assets/worker_icons/claude.png');
     } else {

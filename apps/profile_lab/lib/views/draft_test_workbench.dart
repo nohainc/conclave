@@ -124,8 +124,6 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
     }
   }
 
-
-
   Widget _panes(ProfileLabController c) => LayoutBuilder(
         builder: (context, constraints) {
           final both = _showEditor && _showTests;
@@ -256,7 +254,8 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                           : Icons.check_circle_outline,
                     ),
                     StatusBadge(
-                      label: c.jsonValidationError == null ? 'Valid' : 'Invalid',
+                      label:
+                          c.jsonValidationError == null ? 'Valid' : 'Invalid',
                       status: c.jsonValidationError == null
                           ? LabStatus.success
                           : LabStatus.error,
@@ -267,21 +266,24 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                     StatusBadge(
                       label: c.isTesting
                           ? 'Running'
-                          : !c.testResultMatchesDraft || c.lastTestResult == null
+                          : !c.testResultMatchesDraft ||
+                                  c.lastTestResult == null
                               ? 'Not Run'
                               : c.lastTestResult == 'pass'
                                   ? 'Tests Passed'
                                   : 'Tests Failed',
                       status: c.isTesting
                           ? LabStatus.neutral
-                          : !c.testResultMatchesDraft || c.lastTestResult == null
+                          : !c.testResultMatchesDraft ||
+                                  c.lastTestResult == null
                               ? LabStatus.neutral
                               : c.lastTestResult == 'pass'
                                   ? LabStatus.success
                                   : LabStatus.error,
                       icon: c.isTesting
                           ? Icons.hourglass_top
-                          : c.lastTestResult == 'pass' && c.testResultMatchesDraft
+                          : c.lastTestResult == 'pass' &&
+                                  c.testResultMatchesDraft
                               ? Icons.check_circle_outline
                               : c.lastTestResult == 'fail' &&
                                       c.testResultMatchesDraft

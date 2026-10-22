@@ -87,4 +87,3 @@ class WorkerBrandIcon extends StatelessWidget {
     );
   }
 }
-

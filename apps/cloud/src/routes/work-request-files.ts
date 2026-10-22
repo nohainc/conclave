@@ -238,10 +238,13 @@ export function fileTextPreview(
     !/\.(txt|md|csv|json|yaml|yml|dart|ts|js|py|log)$/i.test(name)
   )
     return undefined;
-  return new TextDecoder()
-    .decode(body.slice(0, 1200))
-    .replace(/\u0000/g, "")
-    .slice(0, 1200);
+  return (
+    new TextDecoder()
+      .decode(body.slice(0, 1200))
+      // eslint-disable-next-line no-control-regex -- Remove null bytes from decoded text preview.
+      .replace(/\u0000/g, "")
+      .slice(0, 1200)
+  );
 }
 
 /** Uses verified object metadata, never client-authored preview content. */
