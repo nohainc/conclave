@@ -342,6 +342,13 @@ class WindowsNative {
     }
   }
 
+  static void flushPipe(int handle) {
+    final flush =
+        _kernel.lookupFunction<Int32 Function(IntPtr), int Function(int)>(
+            'FlushFileBuffers');
+    if (flush(handle) == 0) fail('Drain Workspace pipe');
+  }
+
   static void cancelPipe(int handle, {bool server = false}) {
     _kernel.lookupFunction<Int32 Function(IntPtr, Pointer<Void>),
         int Function(int, Pointer<Void>)>('CancelIoEx')(handle, nullptr);

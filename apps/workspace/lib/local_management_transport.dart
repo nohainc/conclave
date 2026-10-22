@@ -116,7 +116,20 @@ class WindowsPipeChannel implements LocalManagementChannel {
   }
 
   @override
-  Future<void> flush() => _writer;
+  Future<void> flush() async {
+    await _writer;
+    if (server && !_closed) {
+      final nativeHandle = handle;
+      // DisconnectNamedPipe discards unread data. Drain the error response
+      // before closing a rejected handshake, with the caller's timeout bound.
+      try {
+        await Isolate.run(() => WindowsNative.flushPipe(nativeHandle));
+      } on Object {
+        if (!_closed) rethrow;
+      }
+    }
+  }
+
   @override
   void destroy() {
     if (_closed) return;
