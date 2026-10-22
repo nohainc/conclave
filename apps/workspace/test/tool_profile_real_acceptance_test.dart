@@ -104,11 +104,6 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
     }
   }
 
-  Future<void> notApplicableScenario(String name) async {
-    (evidence['scenarios'] as Map<String, Object?>)[name] = 'not_applicable';
-    await _writeEvidence(evidence, evidenceDirectory);
-  }
-
   try {
     await scenario('passive_probe', () async {
       final engine = await _EngineClient.start(

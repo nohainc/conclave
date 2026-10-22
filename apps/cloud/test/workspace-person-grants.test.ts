@@ -18,6 +18,14 @@ vi.mock("../src/routes/handlers.js", async (original) => ({
     workerCatalogRevisions: {},
   }),
 }));
+vi.mock("../src/routes/thread-policy.js", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  validateWorkflowWorkerEligibility: async () => ({
+    issues: [],
+    primaryWorkspaceId: "lent",
+    workerCatalogRevisions: {},
+  }),
+}));
 import {
   handlePersonGrantQuota,
   handleRevokePersonGrant,
@@ -33,7 +41,10 @@ import { resolveWorkflowExecutionBindings } from "../src/routes/workflow-executi
  */
 function fixture() {
   const { sqlite, db } = sqliteD1();
-  sqlite.exec(`INSERT INTO users(id,email,display_name,created_at,updated_at)
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS worker_profiles(worker_type_id TEXT, revision INTEGER, profile_json TEXT, digest TEXT);
+    CREATE TABLE IF NOT EXISTS worker_profile_history(worker_type_id TEXT, revision INTEGER, profile_json TEXT, digest TEXT);
+    ALTER TABLE workspace_worker_inventory ADD COLUMN model_catalog_json TEXT;
+    INSERT INTO users(id,email,display_name,created_at,updated_at)
       VALUES('lender','lender@test','L','now','now'),('guest','guest@test','G','now','now'),('friend','friend@test','F','now','now');
     INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES('G','guest','Guest space','now','now');
     INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at)
@@ -356,7 +367,9 @@ it("lists a lent Workspace as shared and lets the borrower make it the default",
     await global("PUT", { workspaceId: "lent", confirmReset: true });
     expect(
       sqlite
-        .prepare("SELECT workspace_id FROM user_workflow_settings WHERE user_id='guest'")
+        .prepare(
+          "SELECT workspace_id FROM user_workflow_settings WHERE user_id='guest'",
+        )
         .get(),
     ).toEqual({ workspace_id: "lent" });
   } finally {
@@ -384,7 +397,10 @@ it("does not pass a lent Workspace on to the borrower's Space members", async ()
     expect(await workers("friend")).toEqual([]);
     // A Space member cannot pick it, and the Space shows only the selection.
     await expect(
-      workspaceFor("PUT", "friend", { workspaceId: "lent", confirmReset: true }),
+      workspaceFor("PUT", "friend", {
+        workspaceId: "lent",
+        confirmReset: true,
+      }),
     ).rejects.toMatchObject({ status: 403 });
   } finally {
     sqlite.close();
