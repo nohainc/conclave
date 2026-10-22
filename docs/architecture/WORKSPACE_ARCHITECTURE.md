@@ -394,3 +394,12 @@ compatibility; separate effort remains per turn. Work history uses frozen public
 assignment labels and never the current inventory to relabel an old execution.
 See [execution options](../specifications/WORKER_EXECUTION_OPTIONS_V2.md#phase-8--immutable-execution-resolution-and-history)
 for snapshot fields and rollout order.
+
+### Windows build preview
+
+The Windows Flutter runner and `scripts/build-workspace-windows.ps1` provide
+an unsigned UI preview build through the manual Windows Actions workflow.
+The script reuses the canonical Engine/service build scripts and packages the
+complete Flutter output with the standalone service. This does not enable the
+Windows runtime: ADR-021 service, IPC, credential, path and process-supervision
+gates remain open. See [preview operations](../operations/WORKSPACE_WINDOWS_PREVIEW.md).
