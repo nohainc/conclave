@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'cli_process.dart';
 import 'dart:typed_data';
 import 'worker_process_cleanup.dart';

@@ -68,7 +68,7 @@ bool AuthenticateCurrentWindowsUser(HWND owner, const std::string& reason) {
       winrt::Windows::Foundation::IAsyncOperation<UserConsentVerificationResult>
           operation{nullptr};
       winrt::check_hresult(interop->RequestVerificationForWindowAsync(owner,
-          winrt::get_abi(message), winrt::guid_of<decltype(operation)>(),
+          reinterpret_cast<HSTRING>(winrt::get_abi(message)), winrt::guid_of<decltype(operation)>(),
           winrt::put_abi(operation)));
       // Cancellation or a rejected verification is final, not another prompt.
       return operation.get() == UserConsentVerificationResult::Verified;
