@@ -281,3 +281,11 @@ production registration or session. Start the local API/web stack first with
 and run at the same time on one Mac; each has its own state directory,
 per-installation lock, IPC socket, and service. The Swift host derives the
 LaunchAgent label from its bundle identifier.
+
+## Windows build preview
+
+A Windows Flutter runner and manually dispatched Windows build workflow are
+available for an **unsigned UI preview**. Windows runtime support remains
+incomplete: the service manager, secure named-pipe IPC, DPAPI, and Engine process
+supervision still require ADR-021 implementation and Windows device validation.
+See [Windows preview build instructions](../../docs/operations/WORKSPACE_WINDOWS_PREVIEW.md).
