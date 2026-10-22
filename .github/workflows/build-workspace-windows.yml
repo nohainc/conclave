@@ -5,6 +5,10 @@ on:
     branches: ["codex/windows-workspace-preview-*", "codex/windows-runtime"]
   workflow_dispatch:
 
+concurrency:
+  group: windows-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

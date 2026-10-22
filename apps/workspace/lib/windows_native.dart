@@ -29,6 +29,9 @@ class WindowsNative {
       .lookupFunction<Int32 Function(IntPtr), int Function(int)>('CloseHandle');
 
   static Pointer<Uint8> allocate(int bytes) {
+    // Resolve GetLastError before an operation can fail: lazy GetProcAddress
+    // initialization itself may overwrite the thread's error code.
+    _error();
     if (sizeOf<IntPtr>() != 8) {
       throw UnsupportedError('Windows x64 is required');
     }
@@ -125,16 +128,35 @@ class WindowsNative {
   static void securePath(String path) {
     final name = wide(File(path).absolute.path);
     final descriptor = _descriptor(inherit: true);
+    final present = allocate(4).cast<Int32>();
+    final defaulted = allocate(4).cast<Int32>();
+    final dacl = allocate(8).cast<Pointer<Void>>();
     try {
-      final set = _advapi.lookupFunction<
-          Int32 Function(Pointer<Uint16>, Uint32, Pointer<Void>),
-          int Function(
-              Pointer<Uint16>, int, Pointer<Void>)>('SetFileSecurityW');
-      if (set(name, 0x80000004, descriptor) == 0) {
-        fail('Protect Workspace path');
+      final getDacl = _advapi.lookupFunction<
+          Int32 Function(Pointer<Void>, Pointer<Int32>, Pointer<Pointer<Void>>,
+              Pointer<Int32>),
+          int Function(Pointer<Void>, Pointer<Int32>, Pointer<Pointer<Void>>,
+              Pointer<Int32>)>('GetSecurityDescriptorDacl');
+      if (getDacl(descriptor, present, dacl, defaulted) == 0 ||
+          present.value == 0 ||
+          dacl.value == nullptr) {
+        throw StateError('Workspace private DACL is missing');
       }
+      final set = _advapi.lookupFunction<
+          Uint32 Function(Pointer<Uint16>, Uint32, Uint32, Pointer<Void>,
+              Pointer<Void>, Pointer<Void>, Pointer<Void>),
+          int Function(Pointer<Uint16>, int, int, Pointer<Void>, Pointer<Void>,
+              Pointer<Void>, Pointer<Void>)>('SetNamedSecurityInfoW');
+      final code =
+          set(name, 1, 0x80000004, nullptr, nullptr, dacl.value, nullptr);
+      if (code != 0)
+        throw FileSystemException(
+            'Protect Workspace path failed (Windows error $code)', path);
     } finally {
       free(name);
+      free(present);
+      free(defaulted);
+      free(dacl);
       _localFree(descriptor);
     }
   }
@@ -207,6 +229,7 @@ class WindowsNative {
   }
 
   static bool acceptPipe(int handle) {
+    _error();
     final connect = _kernel.lookupFunction<
         Int32 Function(IntPtr, Pointer<Void>),
         int Function(int, Pointer<Void>)>('ConnectNamedPipe');
