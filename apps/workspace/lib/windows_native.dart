@@ -149,9 +149,10 @@ class WindowsNative {
               Pointer<Void>, Pointer<Void>)>('SetNamedSecurityInfoW');
       final code =
           set(name, 1, 0x80000004, nullptr, nullptr, dacl.value, nullptr);
-      if (code != 0)
+      if (code != 0) {
         throw FileSystemException(
             'Protect Workspace path failed (Windows error $code)', path);
+      }
     } finally {
       free(name);
       free(present);
@@ -352,7 +353,7 @@ class WindowsNative {
 
   static int acquirePowerRequest() {
     final text = wide('Conclave Workspace is running');
-    final context = allocate(16);
+    final context = allocate(32);
     (context + 4).cast<Uint32>().value = 1;
     (context + 8).cast<Pointer<Uint16>>().value = text;
     var handle = -1;
@@ -362,7 +363,7 @@ class WindowsNative {
       final set = _kernel.lookupFunction<Int32 Function(IntPtr, Uint32),
           int Function(int, int)>('PowerSetRequest');
       handle = create(context.cast());
-      if (handle == -1 || set(handle, 0) == 0) {
+      if (handle == -1 || set(handle, 1) == 0) {
         if (handle != -1) close(handle);
         fail('Prevent system sleep');
       }
@@ -375,7 +376,7 @@ class WindowsNative {
 
   static void releasePowerRequest(int handle) {
     _kernel.lookupFunction<Int32 Function(IntPtr, Uint32),
-        int Function(int, int)>('PowerClearRequest')(handle, 0);
+        int Function(int, int)>('PowerClearRequest')(handle, 1);
     close(handle);
   }
 }

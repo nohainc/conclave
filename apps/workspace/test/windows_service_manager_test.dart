@@ -59,7 +59,7 @@ void main() {
         }
       } else {
         await client!.request('connection.disconnect');
-        expect(await client!.request('status'), isA<Map>());
+        expect(await client.request('status'), isA<Map>());
       }
       await client?.close();
       client = null;
