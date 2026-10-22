@@ -6,6 +6,8 @@ import 'package:conclave_workspace/local_worker_registry.dart';
 import 'package:conclave_workspace/platform_runtime.dart';
 import 'package:conclave_workspace/worker_readiness.dart';
 import 'package:conclave_workspace/worker_check_progress.dart';
+import 'package:conclave_worker_protocol/conclave_worker_protocol.dart'
+    show ProbeCheck, ProbeCheckStatus;
 
 import 'support/logical_worker_catalog_fixture.dart';
 
@@ -97,6 +99,50 @@ void main() {
     expect(events.last.issueCode, 'provider_authentication_required');
     expect((await registry.list()).single.activationState,
         LocalWorkerActivationState.disabled);
+  });
+
+  test('completed checks carry each Engine check and survive IPC encoding',
+      () async {
+    final directory = await Directory.systemTemp.createTemp('worker-steps-');
+    addTearDown(() => directory.delete(recursive: true));
+    final registry = LocalWorkerRegistry(
+      dataDirectory: directory,
+      workspaceId: 'workspace-steps',
+      platform: _ReadinessPlatform(),
+      idGenerator: () => 'worker-gemini',
+    );
+    await registry.create(
+        catalogEntry: logicalWorkerCatalogFixture('gemini'),
+        localPermissions: const ['repository:read']);
+    final monitor = WorkerReadinessMonitor(
+      registry: registry,
+      assessWorker: (_) async => WorkerReadinessAssessment(
+        WorkerReadinessState.ready,
+        toolVersion: '99.0.0',
+        checks: [
+          ProbeCheck(
+              code: 'provider_tool_version',
+              status: ProbeCheckStatus.passed,
+              message: 'Provider CLI version 99.0.0 detected.'),
+          ProbeCheck(
+              code: 'provider_live_execution',
+              status: ProbeCheckStatus.passed,
+              message: 'Usage command succeeded.'),
+        ],
+      ),
+    );
+    addTearDown(monitor.dispose);
+
+    await monitor.checkNow(mode: LocalWorkerProbeMode.live);
+
+    final progress = monitor.checks['gemini']!;
+    expect(progress.outcome, WorkerCheckOutcome.passed);
+    final decoded = WorkerCheckProgress.fromJson(progress.toJson())!;
+    expect(decoded.steps.map((step) => (step.code, step.status)), [
+      ('provider_tool_version', 'passed'),
+      ('provider_live_execution', 'passed'),
+    ]);
+    expect((await registry.list()).single.lastLiveTestPassed, isTrue);
   });
 
   test('rechecks local Workers and syncs changed readiness state', () async {

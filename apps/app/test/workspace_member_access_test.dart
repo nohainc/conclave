@@ -199,12 +199,22 @@ void main() {
       readinessState: 'ready',
       localConcurrencyLimit: 1,
     );
+    const claudeWorker = AxWorker(
+      id: 'w-claude',
+      workspaceId: 'ws',
+      workspaceName: 'Laptop',
+      workerTypeId: 'claude',
+      displayName: 'Claude',
+      status: 'ready',
+      readinessState: 'ready',
+      localConcurrencyLimit: 1,
+    );
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: SingleChildScrollView(
                 child: WorkspaceMemberAccessSection(
                     workspaceId: 'ws',
-                    workers: [geminiWorker, chatgptWorker],
+                    workers: [geminiWorker, chatgptWorker, claudeWorker],
                     source: source)))));
     await tester.pumpAndSettle();
 
@@ -220,6 +230,12 @@ void main() {
             img.image is AssetImage &&
             (img.image as AssetImage).assetName ==
                 'assets/worker_icons/chatgpt.png'),
+        isTrue);
+    expect(
+        imageWidgets.any((img) =>
+            img.image is AssetImage &&
+            (img.image as AssetImage).assetName ==
+                'assets/worker_icons/claude.png'),
         isTrue);
   });
 

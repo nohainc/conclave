@@ -300,37 +300,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
     notifyListeners();
   }
 
-  Future<void> applyRecommendedProviderCompatibilityRange({
-    required String min,
-    required String maxExclusive,
-  }) async {
-    if (selectedDefinitionId == null || currentDraft == null) return;
-    try {
-      final decoded = Map<String, Object?>.from(
-        jsonDecode(currentJsonText) as Map,
-      );
-      final tool = Map<String, Object?>.from(decoded['providerTool'] as Map);
-      final ranges = tool['supportedVersions'];
-      final parsed = EngineProfile.parse(utf8.encode(canonicalJson(decoded)));
-      if (ranges is List &&
-          ranges.isNotEmpty &&
-          !ToolProfileCompatibility.hasPlaceholderProviderRange(parsed)) {
-        return;
-      }
-      tool['supportedVersions'] = [
-        {'min': min, 'maxExclusive': maxExclusive},
-      ];
-      decoded['providerTool'] = tool;
-      updateJsonText(const JsonEncoder.withIndent('  ').convert(decoded));
-      await saveCurrentDraft(
-        notes: 'Set provider compatibility from tested version $min',
-      );
-    } on Object catch (error) {
-      jsonValidationError = 'Could not apply provider compatibility: $error';
-      notifyListeners();
-    }
-  }
-
   Future<void> createNewDraft({
     required String profileDefinitionId,
     required String workerTypeId,
@@ -354,7 +323,6 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
           'source': 'stdout',
           'extract': {'kind': 'regex_capture', 'patternId': 'semver'},
         },
-        'supportedVersions': <Map<String, String>>[],
       },
       'environment': {
         'passthrough': ['PATH', 'HOME'],

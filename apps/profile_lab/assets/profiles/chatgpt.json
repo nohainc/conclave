@@ -626,12 +626,6 @@
     },
     "executableCandidates": ["codex"],
     "name": "Codex CLI",
-    "supportedVersions": [
-      {
-        "maxExclusive": "0.190.0",
-        "min": "0.158.0"
-      }
-    ],
     "versionProbe": {
       "arguments": ["--version"],
       "extract": {

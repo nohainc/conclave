@@ -13,24 +13,6 @@ export class ToolProfileRegistryError extends Error {
     this.name = "ToolProfileRegistryError";
   }
 }
-export function validateProviderCompatibilityForPublication(
-  profile: ToolProfileV1,
-): void {
-  try {
-    validateToolProfileV1(profile, {
-      requireProviderCompatibility: true,
-      rejectPlaceholderProviderRange: true,
-    });
-  } catch (error) {
-    throw new ToolProfileRegistryError(
-      409,
-      error instanceof Error
-        ? error.message
-        : "Provider compatibility is invalid",
-    );
-  }
-}
-
 export interface ToolProfileRegistryEnvironment {
   readonly CONCLAVE_DB: D1Database;
 }
@@ -55,8 +37,8 @@ const acceptanceScenarios = [
 /**
  * Scenarios Profile Lab must report for a publishable candidate. Every
  * published Profile must declare a usage command, so the usage check always
- * applies; no scenario calls a model. Engine and CLI version ranges are not
- * part of the evidence: Workspace enforces them on the user's machine.
+ * applies; no scenario calls a model. The detected CLI version records test evidence; it does not restrict
+ * which CLI versions may use the Profile.
  */
 export function toolProfileAcceptanceScenarioStatuses(
   profile: ToolProfileV1,

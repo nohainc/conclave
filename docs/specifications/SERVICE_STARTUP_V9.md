@@ -19,8 +19,8 @@ validated, executable Profile snapshots in memory.
 - Warm-up runs at Service start and on every catalog coordinator event.
 - Each accepted assignment pins its plan (`pinnedLaunchPlan`) at admission;
   later activations do not change a queued assignment.
-- No compatible plan returns promptly `worker_not_ready` (or
-  `unsupported_provider_tool_version`) with a diagnostic `reason`
+- No compatible plan returns promptly `worker_not_ready` with a diagnostic
+  `reason` (the installed provider CLI version never blocks a plan)
   (`noProfile`, `incompatibleEngine`, `catalog_not_synchronized`,
   `worker_type_not_in_catalog`, ...).
 - Unsigned development drafts bypass the cache.

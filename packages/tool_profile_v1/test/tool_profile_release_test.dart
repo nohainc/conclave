@@ -87,6 +87,19 @@ Map<String, Object?> validProfileMap({
 
 void main() {
   group('Tool Profile Release & Candidate Primitives', () {
+    test('Profiles omit CLI ranges without changing the candidate payload', () {
+      final profile = validProfileMap();
+      (profile['providerTool'] as Map).remove('supportedVersions');
+      final parsed = EngineProfile.parse(utf8.encode(canonicalJson(profile)));
+      expect(parsed.providerTool.containsKey('supportedVersions'), isFalse);
+      expect(
+          parsed
+              .resolveForProviderVersion('99.0.0')
+              .providerTool
+              .containsKey('supportedVersions'),
+          isFalse);
+    });
+
     test('incomplete provider ranges are valid Draft state only', () async {
       final profile = validProfileMap();
       (profile['providerTool'] as Map<String, Object?>)['supportedVersions'] =
@@ -162,8 +175,7 @@ void main() {
       expect(id1.toString(), 'chatgpt-codex@12');
     });
 
-    test('ToolProfileCompatibility checks engine and provider version bounds',
-        () {
+    test('ToolProfileCompatibility checks engine version bounds', () {
       final sampleProfile = validProfileMap();
 
       final profile =
@@ -175,13 +187,6 @@ void main() {
           isFalse);
       expect(ToolProfileCompatibility.isEngineCompatible(profile, '0.9.0'),
           isFalse);
-
-      expect(ToolProfileCompatibility.isProviderCompatible(profile, '0.5.2'),
-          isTrue);
-      expect(ToolProfileCompatibility.isProviderCompatible(profile, '1.0.0'),
-          isFalse);
-      expect(
-          ToolProfileCompatibility.isProviderCompatible(profile, null), isTrue);
     });
 
     test('provider compatibility overrides resolve deterministically', () {
@@ -203,8 +208,10 @@ void main() {
       expect(resolved.providerTool['versionProbe'],
           containsPair('arguments', ['--version', '--machine']));
       expect(resolved.json['compatibilityOverrides'], isEmpty);
-      expect(() => profile.resolveForProviderVersion('1.0.0'),
-          throwsA(isA<FormatException>()));
+      // A version outside every supported range uses the base Profile.
+      final outside = profile.resolveForProviderVersion('1.0.0');
+      expect(outside.execution['arguments'], isNot(['override', '{{prompt}}']));
+      expect(identical(outside, profile), isTrue);
     });
 
     test('compatibility override unknown fields are rejected', () {

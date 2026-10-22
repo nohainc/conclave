@@ -33,6 +33,25 @@ const template = (name: string): Record<string, any> =>
   );
 
 describe("Tool Profile v1 canonical schema", () => {
+  it.each(["chatgpt", "claude", "gemini"])(
+    "accepts the %s Profile file for publication without CLI ranges",
+    (worker) => {
+      const profile = validateToolProfileV1(
+        JSON.parse(
+          readFileSync(
+            new URL(
+              `../../../apps/profile_lab/assets/profiles/${worker}.json`,
+              import.meta.url,
+            ),
+            "utf8",
+          ),
+        ),
+      );
+      expect(profile.logicalWorkerTypeId).toBe(worker);
+      expect(profile.providerTool).not.toHaveProperty("supportedVersions");
+    },
+  );
+
   it.each([
     "chatgpt-codex.v1",
     "chatgpt-codex.v2",
@@ -86,6 +105,16 @@ describe("Tool Profile v1 canonical schema", () => {
     );
   });
 
+  it("accepts a Profile without provider version ranges without changing its payload", () => {
+    const profile = fixture("fixture-cli.v1");
+    delete profile.providerTool.supportedVersions;
+    const parsed = validateToolProfileV1(profile);
+    expect(parsed.providerTool).not.toHaveProperty("supportedVersions");
+    expect(
+      resolveToolProfileCompatibility(parsed, "99.0.0").overrideIndex,
+    ).toBeNull();
+  });
+
   it("materializes exactly one provider compatibility override", () => {
     const profile = fixture("fixture-cli.v1");
     profile.compatibilityOverrides = [
@@ -104,9 +133,9 @@ describe("Tool Profile v1 canonical schema", () => {
       "--version",
       "--machine",
     ]);
-    expect(() => resolveToolProfileCompatibility(profile, "0.4.0")).toThrow(
-      /not supported/,
-    );
+    expect(
+      resolveToolProfileCompatibility(profile, "0.4.0").overrideIndex,
+    ).toBeNull();
   });
 
   it("rejects plaintext credentials through the shared validator", () => {

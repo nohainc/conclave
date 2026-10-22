@@ -89,10 +89,10 @@ class MainFlutterWindow: NSWindow {
       messenger: flutterViewController.engine.binaryMessenger
     )
 
-    self.minSize = NSSize(width: 750, height: 650)
+    self.minSize = NSSize(width: 750, height: 420)
     var frame = self.frame
     frame.size.width = 750
-    frame.size.height = 650
+    frame.size.height = 480
     self.setFrame(frame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)

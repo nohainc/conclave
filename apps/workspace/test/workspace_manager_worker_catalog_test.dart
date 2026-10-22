@@ -3,8 +3,45 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_workspace/workspace_manager_worker_catalog.dart';
 import 'package:conclave_workspace/worker_check_progress.dart';
+import 'package:conclave_workspace/workspace_manager_ipc.dart';
 
 void main() {
+  test('per-Worker updates send one scoped command without a full refresh',
+      () async {
+    final requests = <(String, Map<String, Object?>)>[];
+    final catalog =
+        IpcWorkspaceWorkerCatalog((command, {payload = const {}}) async {
+      requests.add((command, payload));
+      return {'descriptors': [], 'views': [], 'localRegistryLoaded': true};
+    });
+    addTearDown(catalog.dispose);
+    await catalog.refreshWorker('gemini');
+    expect(requests, hasLength(1));
+    expect(requests.single.$1, 'workers.refreshWorker');
+    expect(requests.single.$2, {'workerTypeId': 'gemini'});
+    expect(catalog.snapshot.localRegistryLoaded, isTrue);
+  });
+
+  test(
+      'an old service gets an actionable update error without refreshing all Workers',
+      () async {
+    var calls = 0;
+    final catalog =
+        IpcWorkspaceWorkerCatalog((command, {payload = const {}}) async {
+      calls++;
+      throw const WorkspaceManagerProtocolException(
+          'unsupported_command', 'old service');
+    });
+    addTearDown(catalog.dispose);
+    await expectLater(
+        catalog.refreshWorker('gemini'),
+        throwsA(isA<WorkspaceManagerProtocolException>()
+            .having((e) => e.code, 'code', 'service_update_required')
+            .having((e) => e.message, 'recovery',
+                contains('after active work finishes'))));
+    expect(calls, 1);
+  });
+
   test('Worker catalog refresh and activation are forwarded over IPC',
       () async {
     final commands = <(String, Map<String, Object?>)>[];

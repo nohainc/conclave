@@ -4,7 +4,10 @@ import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:conclave_design/conclave_design.dart';
+import 'package:conclave_app/src/features/common/markdown_composer.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -138,8 +141,97 @@ void main() {
     expect(find.byKey(const ValueKey('worker-usage-panel')), findsOneWidget);
     expect(find.text('Choose a Worker to read its usage.'), findsOneWidget);
 
+    for (final width in [900.0, 390.0]) {
+      await tester.binding.setSurfaceSize(Size(width, 1200));
+      await tester.pumpAndSettle();
+      final layer = tester
+          .getRect(find.byKey(const ValueKey('worker-usage-layer-background')));
+      final input = tester.getRect(find.byType(MarkdownComposer));
+      expect(layer.left, input.left + 8);
+      expect(layer.right, input.right - 8);
+      expect(layer.bottom, input.top + 10);
+      expect(find.byTooltip('Refresh usage').hitTestable(), findsOneWidget);
+      expect(find.byTooltip('Close usage'), findsNothing);
+      expect(tester.takeException(), isNull);
+    }
+
+    // Keyboard focus changes alone do not dismiss the report.
+    final panel =
+        tester.widget<AxWorkerUsagePanel>(find.byType(AxWorkerUsagePanel));
+    await tester.showKeyboard(find.byType(TextField).last);
+    await tester.pumpAndSettle();
+    expect(panel.controller.visible, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('worker-usage-panel')), findsNothing);
+
+    panel.controller.showMessage('Usage reopened');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Refresh usage'));
+    await tester.pumpAndSettle();
+    expect(panel.controller.visible, isTrue);
     await tester.tap(find.byKey(const ValueKey('work-add-attachments')));
     await tester.pumpAndSettle();
+    expect(panel.controller.visible, isFalse);
     expect(find.byKey(const ValueKey('work-menu-usage')), findsNothing);
   });
+
+  for (final brightness in Brightness.values) {
+    testWidgets('usage attached variant preserves standalone card $brightness',
+        (tester) async {
+      final controller = AxWorkerUsageController(_UsageDataSource());
+      addTearDown(controller.dispose);
+      controller.showMessage(List.filled(80, 'Long usage report').join('\n'));
+      Future<void> show(bool attached) => tester.pumpWidget(MaterialApp(
+            theme: ThemeData(brightness: brightness),
+            home: Scaffold(
+              body: Column(children: [
+                AxWorkerUsagePanel(
+                  controller: controller,
+                  onRefresh: () {},
+                  attached: attached,
+                ),
+              ]),
+            ),
+          ));
+      await show(true);
+      await tester.pumpAndSettle();
+      final background =
+          find.byKey(const ValueKey('worker-usage-layer-background'));
+      expect(tester.getSize(background).height, lessThanOrEqualTo(250));
+      expect(
+          (tester.widget<DecoratedBox>(background).decoration as BoxDecoration)
+              .color,
+          ConclaveColors.composerRail(brightness == Brightness.dark));
+      expect(find.byTooltip('Close usage'), findsNothing);
+      expect(tester.takeException(), isNull);
+
+      await tester.dragFrom(
+          tester.getTopLeft(background) + const Offset(40, 180),
+          const Offset(0, -100));
+      await tester.pumpAndSettle();
+      expect(controller.visible, isTrue);
+      expect(
+          tester
+              .state<ScrollableState>(find.byType(Scrollable).first)
+              .position
+              .pixels,
+          greaterThan(0));
+
+      // The default used by the Workspace dialog retains its card and margin.
+      controller.showMessage('Standalone report');
+      await show(false);
+      await tester.pumpAndSettle();
+      expect(background, findsNothing);
+      final panel = tester
+          .widget<Container>(find.byKey(const ValueKey('worker-usage-panel')));
+      final context = tester.element(find.byType(AxWorkerUsagePanel));
+      expect((panel.decoration as BoxDecoration).color,
+          Theme.of(context).colorScheme.surfaceContainerHighest);
+      expect(panel.margin, const EdgeInsets.only(bottom: 8));
+      await tester.tap(find.byTooltip('Close usage'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('worker-usage-panel')), findsNothing);
+    });
+  }
 }

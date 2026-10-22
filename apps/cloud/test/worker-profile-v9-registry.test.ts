@@ -107,6 +107,7 @@ describe("V9 Worker Profile registry", () => {
     const { env, sqlite } = setup();
     try {
       const first = makeProfile("fixture-worker", 1);
+      delete (first.providerTool as Record<string, unknown>).supportedVersions;
       const firstValidation = await validateWorkerProfileCandidate(
         "fixture-worker",
         first,
@@ -121,6 +122,9 @@ describe("V9 Worker Profile registry", () => {
         actorUserId: "profile-lab",
       });
       expect(published.revision).toBe(1);
+      expect(published.profile.providerTool).not.toHaveProperty(
+        "supportedVersions",
+      );
 
       await expect(
         publishWorkerProfile({

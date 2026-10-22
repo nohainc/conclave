@@ -5,6 +5,41 @@ enum WorkerCheckPhase { profile, probe, save }
 
 enum WorkerCheckOutcome { running, passed, failed }
 
+/// One Engine check reported by a completed readiness probe, such as the CLI
+/// version, model list, Profile-defined command/config check, or account check.
+/// Workspace displays exactly these returned checks; it does not repeat Profile
+/// Lab's schema-validation or event-replay authoring tests.
+class WorkerCheckStep {
+  const WorkerCheckStep({
+    required this.code,
+    required this.status,
+    required this.message,
+  });
+
+  final String code;
+
+  /// `passed`, `warning`, `failed`, or `skipped`.
+  final String status;
+  final String message;
+
+  Map<String, Object?> toJson() =>
+      {'code': code, 'status': status, 'message': message};
+
+  static WorkerCheckStep? fromJson(Object? value) {
+    if (value is! Map ||
+        value['code'] is! String ||
+        value['status'] is! String ||
+        value['message'] is! String) {
+      return null;
+    }
+    return WorkerCheckStep(
+      code: value['code'] as String,
+      status: value['status'] as String,
+      message: value['message'] as String,
+    );
+  }
+}
+
 class WorkerCheckProgress {
   const WorkerCheckProgress({
     required this.mode,
@@ -13,6 +48,7 @@ class WorkerCheckProgress {
     required this.startedAt,
     this.completedAt,
     this.issueCode,
+    this.steps = const [],
   });
 
   final String mode;
@@ -22,6 +58,9 @@ class WorkerCheckProgress {
   final String? completedAt;
   final String? issueCode;
 
+  /// Engine checks from the completed probe; empty while running.
+  final List<WorkerCheckStep> steps;
+
   Map<String, Object?> toJson() => {
         'schemaVersion': 1,
         'mode': mode,
@@ -30,6 +69,8 @@ class WorkerCheckProgress {
         'startedAt': startedAt,
         if (completedAt != null) 'completedAt': completedAt,
         if (issueCode != null) 'issueCode': issueCode,
+        if (steps.isNotEmpty)
+          'steps': [for (final step in steps) step.toJson()],
       };
 
   static WorkerCheckProgress? fromJson(Object? value) {
@@ -53,6 +94,11 @@ class WorkerCheckProgress {
       startedAt: value['startedAt'] as String,
       completedAt: value['completedAt'] as String?,
       issueCode: value['issueCode'] as String?,
+      steps: [
+        if (value['steps'] case final List steps)
+          for (final step in steps.map(WorkerCheckStep.fromJson))
+            if (step != null) step,
+      ],
     );
   }
 }

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'worker_check_progress.dart';
+import 'workspace_manager_ipc.dart';
 
 import 'local_worker_registry.dart';
 import 'tool_profile_catalog.dart';
@@ -79,6 +80,24 @@ class IpcWorkspaceWorkerCatalog extends WorkspaceNotifier
       // Display caching is best-effort; IPC remains authoritative.
     }
     notifyListeners();
+  }
+
+  @override
+  Future<void> refreshWorker(String workerTypeId) async {
+    try {
+      final result = await _request('workers.refreshWorker', payload: {
+        'workerTypeId': workerTypeId,
+      });
+      if (result is Map) acceptSnapshot(Map<String, Object?>.from(result));
+    } on WorkspaceManagerProtocolException catch (error) {
+      if (error.code != 'unsupported_command') rethrow;
+      throw const WorkspaceManagerProtocolException(
+        'service_update_required',
+        'The running Workspace Service predates per-Worker updates. '
+            'Install or rebuild the current Workspace app, then restart its service '
+            'after active work finishes and try again.',
+      );
+    }
   }
 
   @override

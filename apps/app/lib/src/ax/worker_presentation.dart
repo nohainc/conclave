@@ -5,30 +5,35 @@ class WorkerPresentation {
   final String name;
   final String? iconAsset;
 
-  static WorkerPresentation resolve(String? workerTypeId, String? displayName) {
+  static WorkerPresentation resolve(
+    String? workerTypeId,
+    String? displayName, {
+    String? profileDefinitionId,
+    String? providerToolName,
+  }) {
     final type = workerTypeId?.trim().toLowerCase() ?? '';
     final nameLower = displayName?.trim().toLowerCase() ?? '';
+    final profileLower = profileDefinitionId?.trim().toLowerCase() ?? '';
+    final toolLower = providerToolName?.trim().toLowerCase() ?? '';
+
+    bool matches(List<String> tokens) {
+      for (final token in tokens) {
+        if (type == token || type.contains(token)) return true;
+        if (nameLower.contains(token)) return true;
+        if (profileLower.contains(token)) return true;
+        if (toolLower.contains(token)) return true;
+      }
+      return false;
+    }
 
     final WorkerPresentation brand;
-    if (type == 'chatgpt' ||
-        type == 'openai' ||
-        type.contains('chatgpt') ||
-        ((type.isEmpty || type == 'custom' || type == 'worker') &&
-            (nameLower.contains('chatgpt') || nameLower.contains('openai')))) {
+    if (matches(const ['chatgpt', 'openai', 'codex'])) {
       brand = const WorkerPresentation(
           name: 'ChatGPT', iconAsset: 'assets/worker_icons/chatgpt.png');
-    } else if (type == 'gemini' ||
-        type.contains('gemini') ||
-        ((type.isEmpty || type == 'custom' || type == 'worker') &&
-            (nameLower.contains('gemini') || nameLower.contains('google')))) {
+    } else if (matches(const ['gemini', 'google', 'antigravity', 'agy'])) {
       brand = const WorkerPresentation(
           name: 'Gemini', iconAsset: 'assets/worker_icons/gemini.png');
-    } else if (type == 'claude' ||
-        type == 'anthropic' ||
-        type.contains('claude') ||
-        ((type.isEmpty || type == 'custom' || type == 'worker') &&
-            (nameLower.contains('claude') ||
-                nameLower.contains('anthropic')))) {
+    } else if (matches(const ['claude', 'anthropic'])) {
       brand = const WorkerPresentation(
           name: 'Claude', iconAsset: 'assets/worker_icons/claude.png');
     } else {

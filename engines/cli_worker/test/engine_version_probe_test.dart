@@ -22,7 +22,7 @@ void main() {
   });
 
   test(
-    'probe returns the extracted version even when its range rejects it',
+    'a CLI version outside supportedVersions does not block the probe',
     () async {
       final profile =
           jsonDecode(
@@ -48,7 +48,7 @@ void main() {
               as Map<String, Object?>;
       passive['checks'] = [
         {
-          'id': 'must-not-run',
+          'id': 'runs-after-version',
           'arguments': ['--version'],
           'timeoutMs': 10000,
           'successExitCodes': [0],
@@ -124,12 +124,20 @@ void main() {
         isTrue,
       );
       final result = decodeWorkerFrame(lines.current) as ProbeResult;
-      expect(result.ready, isFalse);
-      expect(result.issueCode, WorkerIssueCode.unsupportedProviderToolVersion);
-      expect(result.providerToolVersion, matches(RegExp(r'^\d+\.\d+\.\d+')));
       expect(
-        result.checks.any((check) => check.code == 'must_not_run'),
-        isFalse,
+        result.issueCode,
+        isNot(WorkerIssueCode.unsupportedProviderToolVersion),
+      );
+      expect(result.providerToolVersion, matches(RegExp(r'^\d+\.\d+\.\d+')));
+      final version = result.checks.singleWhere(
+        (check) => check.code == 'provider_tool_version',
+      );
+      expect(version.status, ProbeCheckStatus.passed);
+      expect(version.message, contains(result.providerToolVersion));
+      // Later checks run: the version range is informational only.
+      expect(
+        result.checks.any((check) => check.code == 'runs_after_version'),
+        isTrue,
       );
     },
   );

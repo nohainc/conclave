@@ -57,11 +57,6 @@ abstract final class ToolProfileReleaseVerifier {
       throw const FormatException(
           'Profile release identity or metadata mismatch');
     }
-    final providerCompatibility =
-        (profile['providerTool'] as Map)['supportedVersions'];
-    if (providerCompatibility is! List || providerCompatibility.isEmpty) {
-      throw const FormatException('Profile provider compatibility is invalid');
-    }
     return ToolProfileReleaseAdmission(
       profile: freezeJson(profile) as Map<String, Object?>,
       profileDefinitionId: profileDefinitionId,

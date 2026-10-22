@@ -45,6 +45,10 @@ abstract interface class WorkspaceWorkerCatalogClient {
   WorkerCatalogSnapshot get snapshot;
   WorkerDescriptor? entryForWorker(String workerTypeId);
   Future<void> refresh({bool force = false});
+
+  /// Checks one Worker for a newer Cloud catalog entry and Profile release,
+  /// leaving every other Worker untouched.
+  Future<void> refreshWorker(String workerTypeId);
   Future<void> refreshLocalWorkers();
   Future<void> ensureWorkerProfileAvailable(
     String workerTypeId, {
@@ -79,6 +83,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
   WorkerCatalogSnapshot get snapshot => _snapshot;
   Future<void>? _activeRefresh;
   final Map<String, Future<void>> _activeProfileSyncs = {};
+  final Map<String, Future<void>> _activeWorkerRefreshes = {};
   List<LocalWorker> _localWorkers = const [];
   bool _localRegistryLoaded = false;
   String? _localRegistryError;
@@ -97,7 +102,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
   Future<ToolProfileResolution<ToolProfileCandidate>> resolveProfileForWorker({
     required String workerTypeId,
     required String engineVersion,
-    String? providerCliVersion,
     bool synchronizeIfUnavailable = true,
   }) async {
     final descriptor = await ensureCatalogEntry(workerTypeId);
@@ -111,7 +115,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
       logicalWorkerTypeId: workerTypeId,
       profileDefinitionId: descriptor.profileDefinitionId,
       engineVersion: engineVersion,
-      providerCliVersion: providerCliVersion,
       ensureAvailable: synchronizeIfUnavailable
           ? () => ensureWorkerProfileAvailable(
                 workerTypeId,
@@ -136,7 +139,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
           eligibleProfile = (await resolveProfileForWorker(
             workerTypeId: worker.workerTypeId,
             engineVersion: engineVersion,
-            providerCliVersion: worker.toolVersion,
             synchronizeIfUnavailable: false,
           ))
               .release;
@@ -377,6 +379,47 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
     }
   }
 
+  @override
+  Future<void> refreshWorker(String workerTypeId) {
+    // A full refresh already covers this Worker.
+    final activeRefresh = _activeRefresh;
+    if (activeRefresh != null) return activeRefresh;
+    final active = _activeWorkerRefreshes[workerTypeId];
+    if (active != null) return active;
+    final operation = _refreshSingleWorker(workerTypeId);
+    _activeWorkerRefreshes[workerTypeId] = operation;
+    return operation.whenComplete(() {
+      if (identical(_activeWorkerRefreshes[workerTypeId], operation)) {
+        _activeWorkerRefreshes.remove(workerTypeId);
+      }
+    });
+  }
+
+  Future<void> _refreshSingleWorker(String workerTypeId) async {
+    // The current generation is reused so concurrent per-Worker Profile
+    // syncs for other Workers keep publishing their results.
+    final generation = _generation;
+    if (catalog.canSyncCatalogRemotely) {
+      try {
+        final current = await catalog.syncCatalog();
+        _publishCatalog(current, generation, catalogConfirmed: true);
+        await _notifyCatalogReconciled();
+      } on Object catch (error) {
+        _publish(
+          _snapshot.copyWith(
+              catalogError: 'Cloud Worker catalog could not be loaded: $error'),
+          generation,
+        );
+      }
+    }
+    final entry = catalog.entryForWorker(workerTypeId) ??
+        _snapshot.descriptors
+            .where((worker) => worker.workerTypeId == workerTypeId)
+            .firstOrNull;
+    if (entry != null) await _syncAndResolveWorker(entry, generation);
+    await refreshLocalWorkers();
+  }
+
   /// Ensures a single assignment/readiness fallback uses the same Profile
   /// synchronization and selection policy as the full catalog refresh.
   @override
@@ -476,15 +519,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
     WorkerDescriptor entry,
     int generation,
   ) async {
-    List<LocalWorker> workers = const [];
-    try {
-      workers = await registry?.list() ?? const <LocalWorker>[];
-    } on Object {
-      // Catalog and local Profile state remain visible during registry errors.
-    }
-    final worker = workers
-        .where((item) => item.workerTypeId == entry.workerTypeId)
-        .firstOrNull;
     final definitionId = entry.profileDefinitionId;
     try {
       final resolver = ToolProfileResolver(releaseStore);
@@ -492,13 +526,10 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
         logicalWorkerTypeId: entry.workerTypeId,
         profileDefinitionId: definitionId,
         engineVersion: cliWorkerEngineVersion,
-        providerCliVersion: worker?.toolVersion,
       );
       if (!resolution.isAvailable) {
         final incompatible = resolution.reason ==
-                ToolProfileUnavailableReason.unsupportedProviderVersion ||
-            resolution.reason ==
-                ToolProfileUnavailableReason.incompatibleEngineVersion;
+            ToolProfileUnavailableReason.incompatibleEngineVersion;
         _setProfile(
           entry.workerTypeId,
           WorkerProfileResolution(
@@ -510,8 +541,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
                 'No eligible current Worker Profile is available for this '
                     'Worker. Refresh the current published Profile or '
                     'restore connectivity to use the authorized cache.',
-              ToolProfileUnavailableReason.unsupportedProviderVersion =>
-                'The installed Provider CLI version is not supported by the current Profile.',
               ToolProfileUnavailableReason.incompatibleEngineVersion =>
                 'The current Profile is not compatible with this Engine version.',
               null => 'No compatible Worker Profile is available.',

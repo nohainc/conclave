@@ -1,6 +1,7 @@
 import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import '../widgets/lab_components.dart';
+import '../widgets/worker_brand_icon.dart';
 
 import '../controllers/profile_lab_controller.dart';
 import '../theme/profile_lab_theme.dart';
@@ -16,19 +17,10 @@ class WorkersView extends StatefulWidget {
 }
 
 class _WorkersViewState extends State<WorkersView> {
-  final TextEditingController _searchController = TextEditingController();
-  String _filter = '';
-  bool _sidebarCollapsed = false;
-
   @override
   void initState() {
     super.initState();
     widget.controller.addListener(_onControllerChanged);
-    _searchController.addListener(() {
-      setState(() {
-        _filter = _searchController.text.trim().toLowerCase();
-      });
-    });
   }
 
   void _onControllerChanged() {
@@ -47,126 +39,44 @@ class _WorkersViewState extends State<WorkersView> {
   @override
   void dispose() {
     widget.controller.removeListener(_onControllerChanged);
-    _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final c = widget.controller;
-    final workers = c.cloudWorkers.where((w) {
-      if (_filter.isEmpty) return true;
-      final typeId = (w['workerTypeId'] ?? '').toString().toLowerCase();
-      final name = (w['displayName'] ?? '').toString().toLowerCase();
-      final tool = (w['providerToolName'] ?? '').toString().toLowerCase();
-      return typeId.contains(_filter) ||
-          name.contains(_filter) ||
-          tool.contains(_filter);
-    }).toList();
+    final workers = c.cloudWorkers;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final narrow = constraints.maxWidth < 760;
-        return Flex(
-          direction: narrow ? Axis.vertical : Axis.horizontal,
-          children: [
-            // Left pane: Workers List
-            Container(
-              width: narrow
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Horizontal tab controls for the 3 workers after the HUD
+        _WorkerTabBar(controller: c),
+        const Divider(height: 1, color: ProfileLabTheme.borderColor),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 760;
+              final sidebarWidth = narrow
                   ? constraints.maxWidth
-                  : _sidebarCollapsed
-                      ? 56
-                      : 220,
-              height: narrow ? 220 : null,
-              decoration: const BoxDecoration(
-                color: ProfileLabTheme.darkSurface,
-                border: Border(
-                  right: BorderSide(color: ProfileLabTheme.borderColor),
-                ),
-              ),
-              child: _sidebarCollapsed && !narrow
-                  ? _CollapsedWorkerRail(
-                      workers: workers,
-                      selectedWorkerTypeId:
-                          c.selectedCloudWorker?['workerTypeId'] as String?,
-                      onExpand: () => setState(() => _sidebarCollapsed = false),
-                      onSelect: c.selectWorker,
-                    )
-                  : Column(
+                  : (constraints.maxWidth * .26).clamp(128.0, 224.0) + 20;
+
+              return Flex(
+                direction: narrow ? Axis.vertical : Axis.horizontal,
+                children: [
+                  // Left pane: Workers List
+                  Container(
+                    width: sidebarWidth,
+                    height: narrow ? 220 : null,
+                    decoration: const BoxDecoration(
+                      color: ProfileLabTheme.darkSurface,
+                      border: Border(
+                        right: BorderSide(color: ProfileLabTheme.borderColor),
+                      ),
+                    ),
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Search & refresh header
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              if (!narrow)
-                                IconButton(
-                                  tooltip: 'Collapse Worker sidebar',
-                                  icon:
-                                      const Icon(Icons.chevron_left, size: 18),
-                                  visualDensity: VisualDensity.compact,
-                                  onPressed: () =>
-                                      setState(() => _sidebarCollapsed = true),
-                                ),
-                              Expanded(
-                                child: TextField(
-                                  controller: _searchController,
-                                  style: const TextStyle(fontSize: 12),
-                                  decoration: InputDecoration(
-                                    hintText: 'Filter workers...',
-                                    hintStyle: const TextStyle(
-                                      fontSize: 12,
-                                      color: ProfileLabTheme.secondaryText,
-                                    ),
-                                    prefixIcon: const Icon(
-                                      Icons.search,
-                                      size: 16,
-                                      color: ProfileLabTheme.secondaryText,
-                                    ),
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 8,
-                                    ),
-                                    filled: true,
-                                    fillColor: ProfileLabTheme.darkBackground,
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: const BorderSide(
-                                        color: ProfileLabTheme.borderColor,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: const BorderSide(
-                                        color: ProfileLabTheme.borderColor,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              IconButton(
-                                icon: c.isLoadingWorkerCatalog
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: ProfileLabTheme.primaryAccent,
-                                        ),
-                                      )
-                                    : const Icon(Icons.refresh, size: 18),
-                                tooltip: 'Refresh Cloud Catalog (⌘R)',
-                                onPressed: c.isLoadingWorkerCatalog
-                                    ? null
-                                    : () => c.fetchCloudCatalog(),
-                              ),
-                            ],
-                          ),
-                        ),
-
                         if (c.currentSession == null)
                           Container(
                             margin: const EdgeInsets.symmetric(
@@ -252,9 +162,7 @@ class _WorkersViewState extends State<WorkersView> {
                                             ? 'Fetching catalog...'
                                             : c.workerCatalogError ??
                                                 (c.hasLoadedWorkerCatalog
-                                                    ? (_filter.isEmpty
-                                                        ? 'No logical workers found.'
-                                                        : 'No matching workers.')
+                                                    ? 'No logical workers found.'
                                                     : 'Catalog has not been loaded.'),
                                     style: const TextStyle(
                                       fontSize: 12,
@@ -263,6 +171,7 @@ class _WorkersViewState extends State<WorkersView> {
                                   ),
                                 )
                               : ListView.builder(
+                                  padding: const EdgeInsets.all(8),
                                   itemCount: workers.length,
                                   itemBuilder: (context, index) {
                                     final worker = workers[index];
@@ -271,178 +180,356 @@ class _WorkersViewState extends State<WorkersView> {
                                     final isSelected = c.selectedCloudWorker?[
                                             'workerTypeId'] ==
                                         workerTypeId;
-                                    final toolName =
-                                        worker['providerToolName'] as String? ??
-                                            '';
-                                    final currentRevision =
-                                        (worker['currentRevision'] as num?)
-                                            ?.toInt();
 
-                                    final String profileStatus = isSelected
-                                        ? c.selectedWorkerState
-                                            .conciseProfileStatus
-                                        : currentRevision == null
-                                            ? 'No Profile'
-                                            : 'Current r$currentRevision';
+                                    final status = _determineStatus(c, worker, isSelected);
 
-                                    return WorkerSidebarItem(
-                                      name: worker['displayName'] as String? ??
-                                          workerTypeId,
-                                      identity: toolName.isEmpty
-                                          ? workerTypeId
-                                          : '$workerTypeId · CLI: $toolName',
-                                      profileStatus: profileStatus,
-                                      selected: isSelected,
-                                      onTap: () => c.selectWorker(worker),
+                                    return Padding(
+                                      padding: const EdgeInsets.only(bottom: 2),
+                                      child: _WorkerSelectorTile(
+                                        key: Key('worker-selector-$workerTypeId'),
+                                        worker: worker,
+                                        selected: isSelected,
+                                        status: status,
+                                        onTap: () => c.selectWorker(worker),
+                                      ),
                                     );
                                   },
                                 ),
                         ),
                       ],
                     ),
-            ),
+                  ),
 
-            // Right pane: Selected Worker Details and Subviews
-            Expanded(
-              child: c.selectedCloudWorker == null
-                  ? const EmptyState(
-                      title: 'Select a Worker',
-                      description:
-                          'Choose a logical Worker from the Cloud catalog.',
-                    )
-                  : Column(
-                      children: [
-                        if (c.definitionsError != null)
-                          Text(c.definitionsError!),
-                        _WorkerSubViewHeader(controller: c),
-                        Expanded(
-                          child: DraftTestWorkbench(
-                            controller: c,
-                            onFocusChanged: (focused) {
-                              if (!narrow &&
-                                  mounted &&
-                                  focused != _sidebarCollapsed) {
-                                setState(() => _sidebarCollapsed = focused);
-                              }
-                            },
+                  // Right pane: Selected Worker Details and Subviews
+                  Expanded(
+                    child: c.selectedCloudWorker == null
+                        ? const EmptyState(
+                            title: 'Select a Worker',
+                            description:
+                                'Choose a logical Worker from the Cloud catalog.',
+                          )
+                        : Column(
+                            children: [
+                              if (c.definitionsError != null)
+                                Text(c.definitionsError!),
+                              Expanded(
+                                child: DraftTestWorkbench(
+                                  controller: c,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
-            ),
-          ],
-        );
-      },
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
     );
+  }
+
+  static _WorkerListStatus _determineStatus(
+    ProfileLabController c,
+    Map<String, dynamic> worker,
+    bool isSelected,
+  ) {
+    if (isSelected && c.isTesting) {
+      return _WorkerListStatus.checking;
+    }
+    final lifecycleState =
+        (worker['lifecycleState'] as String? ?? '').toLowerCase();
+    if (lifecycleState == 'retired') {
+      return _WorkerListStatus.retired;
+    }
+    if (lifecycleState == 'disabled') {
+      return _WorkerListStatus.disabled;
+    }
+
+    final currentRevision =
+        (worker['currentRevision'] as num?)?.toInt() ?? 0;
+    if (isSelected) {
+      final selectedState = c.selectedWorkerState;
+      if (selectedState.lastTestResult == 'fail') {
+        return _WorkerListStatus.attention;
+      }
+      if (selectedState.hasLocalCandidate &&
+          selectedState.status == WorkerLifecycleStatus.testsPassed) {
+        return _WorkerListStatus.ready;
+      }
+    }
+
+    if (currentRevision > 0) {
+      return _WorkerListStatus.ready;
+    }
+    return _WorkerListStatus.setupRequired;
   }
 }
 
-class _CollapsedWorkerRail extends StatelessWidget {
-  const _CollapsedWorkerRail({
-    required this.workers,
-    required this.selectedWorkerTypeId,
-    required this.onExpand,
-    required this.onSelect,
-  });
+enum _WorkerListStatus {
+  ready('Ready'),
+  checking('Testing'),
+  attention('Needs attention'),
+  setupRequired('Setup required'),
+  disabled('Disabled'),
+  retired('Retired'),
+  unknown('Status unavailable');
 
-  final List<Map<String, dynamic>> workers;
-  final String? selectedWorkerTypeId;
-  final VoidCallback onExpand;
-  final Future<void> Function(Map<String, dynamic>) onSelect;
+  const _WorkerListStatus(this.label);
 
-  @override
-  Widget build(BuildContext context) => Column(
-        children: [
-          IconButton(
-            tooltip: 'Show Worker sidebar',
-            icon: const Icon(Icons.chevron_right, size: 18),
-            onPressed: onExpand,
-          ),
-          const Divider(height: 1, color: ProfileLabTheme.borderColor),
-          for (final worker in workers)
-            IconButton(
-              tooltip: worker['displayName'] as String? ??
-                  worker['workerTypeId'] as String? ??
-                  'Worker',
-              icon: Icon(
-                worker['workerTypeId'] == selectedWorkerTypeId
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: worker['workerTypeId'] == selectedWorkerTypeId
-                    ? ProfileLabTheme.primaryAccent
-                    : ProfileLabTheme.secondaryText,
-              ),
-              onPressed: () => onSelect(worker),
-            ),
-        ],
-      );
+  final String label;
 }
 
-class _WorkerSubViewHeader extends StatelessWidget {
-  const _WorkerSubViewHeader({required this.controller});
+/// A Worker entry in the Workers list: provider mark, name, and a trailing
+/// readiness indicator.
+class _WorkerSelectorTile extends StatelessWidget {
+  const _WorkerSelectorTile({
+    required this.worker,
+    required this.selected,
+    required this.status,
+    required this.onTap,
+    super.key,
+  });
 
-  final ProfileLabController controller;
+  final Map<String, dynamic> worker;
+  final bool selected;
+  final _WorkerListStatus status;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final worker = controller.selectedCloudWorker;
-    final workerTypeId = worker?['workerTypeId'] as String? ?? '';
-    final displayName = worker?['displayName'] as String? ?? workerTypeId;
-    final toolName = worker?['providerToolName'] as String? ?? '';
-    final workerState = controller.selectedWorkerState;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final type = worker['workerTypeId'] as String? ?? '';
+    final name = worker['displayName'] as String? ?? type;
+    final cliName = worker['providerToolName'] as String? ?? 'Provider CLI';
+    final foreground = selected ? colors.onPrimaryContainer : colors.onSurface;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: const BoxDecoration(
-        color: ProfileLabTheme.darkSurface,
-        border: Border(
-          bottom: BorderSide(color: ProfileLabTheme.borderColor),
-        ),
-      ),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text(displayName,
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-          _HeaderChip(label: workerTypeId, monospace: true),
-          _HeaderChip(
-              label: 'CLI · ${toolName.isEmpty ? "unknown" : toolName}'),
-          _HeaderChip(
-            label: controller.currentProfileRevision > 0
-                ? 'Profile r${controller.currentProfileRevision}'
-                : 'Profile not published',
+    return Semantics(
+      selected: selected,
+      button: true,
+      label: '$name, $cliName, ${status.label}',
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? colors.primaryContainer : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: colors.onSurface.withValues(alpha: .06),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(children: [
+              WorkerBrandIcon(
+                workerTypeId: type,
+                name: name,
+                profileDefinitionId:
+                    worker['profileDefinitionId'] as String?,
+                providerToolName: worker['providerToolName'] as String?,
+                size: 36,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: foreground,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                    ),
+                    Text(
+                      cliName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: selected
+                            ? colors.onPrimaryContainer.withValues(alpha: .75)
+                            : colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              _WorkerStatusIcon(status: status, type: type),
+            ]),
           ),
-          StatusBadge(label: workerState.conciseProfileStatus),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _HeaderChip extends StatelessWidget {
-  const _HeaderChip({required this.label, this.monospace = false});
+class _WorkerStatusIcon extends StatelessWidget {
+  const _WorkerStatusIcon({required this.status, required this.type});
 
-  final String label;
-  final bool monospace;
+  final _WorkerListStatus status;
+  final String type;
 
   @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-        decoration: BoxDecoration(
-          color: ProfileLabTheme.darkBackground,
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(color: ProfileLabTheme.borderColor),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontFamily: monospace ? ConclaveTypography.fontFamilyMono : null,
-            color: ProfileLabTheme.secondaryText,
-          ),
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final key = Key('worker-status-$type-${status.name}');
+    if (status == _WorkerListStatus.checking) {
+      return Tooltip(
+        message: status.label,
+        child: SizedBox(
+          key: key,
+          width: 16,
+          height: 16,
+          child: const CircularProgressIndicator(strokeWidth: 2),
         ),
       );
+    }
+    final (icon, color) = switch (status) {
+      _WorkerListStatus.ready => (Icons.check_circle, ConclaveBrand.success),
+      _WorkerListStatus.attention => (Icons.error, ConclaveBrand.warning),
+      _WorkerListStatus.setupRequired => (
+          Icons.add_circle_outline,
+          colors.onSurfaceVariant
+        ),
+      _WorkerListStatus.disabled => (
+          Icons.pause_circle_outline,
+          colors.onSurfaceVariant
+        ),
+      _WorkerListStatus.retired => (
+          Icons.archive_outlined,
+          colors.onSurfaceVariant
+        ),
+      _WorkerListStatus.unknown => (
+          Icons.help_outline,
+          colors.onSurfaceVariant
+        ),
+      _WorkerListStatus.checking => throw StateError('handled above'),
+    };
+    return Tooltip(
+      message: status.label,
+      child: Icon(icon, key: key, size: 18, color: color),
+    );
+  }
+}
+
+class _WorkerTabBar extends StatelessWidget {
+  const _WorkerTabBar({required this.controller});
+
+  final ProfileLabController controller;
+
+  static const List<Map<String, String>> _defaultWorkers = [
+    {
+      'workerTypeId': 'chatgpt',
+      'displayName': 'ChatGPT',
+      'profileDefinitionId': 'chatgpt-codex',
+      'providerToolName': 'codex',
+    },
+    {
+      'workerTypeId': 'claude',
+      'displayName': 'Claude',
+      'profileDefinitionId': 'claude-code',
+      'providerToolName': 'claude',
+    },
+    {
+      'workerTypeId': 'gemini',
+      'displayName': 'Gemini',
+      'profileDefinitionId': 'gemini-antigravity',
+      'providerToolName': 'agy',
+    },
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final c = controller;
+    final selectedTypeId = c.selectedCloudWorker?['workerTypeId'] as String? ??
+        c.selectedWorkerState.workerTypeId;
+
+    // Use loaded cloud workers or default to the canonical 3 workers
+    final workersList = <Map<String, dynamic>>[];
+    for (final def in _defaultWorkers) {
+      final match = c.cloudWorkers.firstWhere(
+        (w) => w['workerTypeId'] == def['workerTypeId'],
+        orElse: () => def,
+      );
+      workersList.add(match);
+    }
+    // Also include any other cloud workers not in the canonical 3
+    for (final w in c.cloudWorkers) {
+      final typeId = w['workerTypeId'] as String?;
+      if (typeId != null &&
+          !workersList.any((existing) => existing['workerTypeId'] == typeId)) {
+        workersList.add(w);
+      }
+    }
+
+    return Container(
+      color: ProfileLabTheme.darkSurface,
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: workersList.map((worker) {
+            final typeId = worker['workerTypeId'] as String? ?? '';
+            final name = worker['displayName'] as String? ?? typeId;
+            final isSelected = selectedTypeId == typeId;
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InkWell(
+                key: Key('worker-tab-$typeId'),
+                onTap: () => c.selectWorker(worker),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? ProfileLabTheme.primaryAccent.withValues(alpha: 0.18)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: isSelected
+                          ? ProfileLabTheme.primaryAccent
+                          : ProfileLabTheme.borderColor,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      WorkerBrandIcon(
+                        workerTypeId: typeId,
+                        name: name,
+                        profileDefinitionId:
+                            worker['profileDefinitionId'] as String?,
+                        providerToolName:
+                            worker['providerToolName'] as String?,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        name,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.w500,
+                          color: isSelected
+                              ? Colors.white
+                              : ProfileLabTheme.secondaryText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
 }

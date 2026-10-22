@@ -13,5 +13,20 @@ void main() {
     expect(chat.name, 'My worker');
     expect(chat.iconAsset, 'assets/worker_icons/chatgpt.png');
     expect(WorkerPresentation.resolve('gemini', '').name, 'Gemini');
+    expect(WorkerPresentation.resolve('claude', '').iconAsset,
+        'assets/worker_icons/claude.png');
+    expect(WorkerPresentation.resolve('custom', 'Claude Code').iconAsset,
+        'assets/worker_icons/claude.png');
+    expect(
+        WorkerPresentation.resolve('custom', 'Codex Worker',
+                profileDefinitionId: 'chatgpt-codex', providerToolName: 'codex')
+            .iconAsset,
+        'assets/worker_icons/chatgpt.png');
+    expect(
+        WorkerPresentation.resolve('custom', 'Antigravity CLI',
+                profileDefinitionId: 'gemini-antigravity',
+                providerToolName: 'agy')
+            .iconAsset,
+        'assets/worker_icons/gemini.png');
   });
 }

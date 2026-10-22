@@ -13,13 +13,13 @@
       }
     },
     {
-      "name": "unsupported",
+      "name": "outside-former-range",
       "fixture": "version/unsupported.txt",
       "exitCode": 0,
       "expected": {
         "version": "99.0.0",
-        "supported": false,
-        "issueCode": "unsupported_provider_tool_version"
+        "supported": true,
+        "issueCode": null
       }
     },
     {
@@ -41,8 +41,14 @@
         "ready": true,
         "providerVersion": "0.3.0",
         "checks": [
-          { "code": "provider_tool_version", "status": "passed" },
-          { "code": "fixture_auth", "status": "passed" }
+          {
+            "code": "provider_tool_version",
+            "status": "passed"
+          },
+          {
+            "code": "fixture_auth",
+            "status": "passed"
+          }
         ],
         "issueCode": null
       }
@@ -54,8 +60,14 @@
         "ready": false,
         "providerVersion": "0.3.0",
         "checks": [
-          { "code": "provider_tool_version", "status": "passed" },
-          { "code": "fixture_auth", "status": "failed" }
+          {
+            "code": "provider_tool_version",
+            "status": "passed"
+          },
+          {
+            "code": "fixture_auth",
+            "status": "failed"
+          }
         ],
         "issueCode": "provider_authentication_required"
       }

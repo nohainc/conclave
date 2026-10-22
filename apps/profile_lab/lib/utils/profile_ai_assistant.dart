@@ -164,7 +164,7 @@ class ProfileAiHeuristicRepairService {
               'source': 'stdout',
               'extract': {'kind': 'regex_capture', 'patternId': 'semver'}
             };
-            tool['supportedVersions'] = <Map<String, String>>[];
+            tool.remove('supportedVersions');
             base['providerTool'] = tool;
             break;
           case 'passive_probe':

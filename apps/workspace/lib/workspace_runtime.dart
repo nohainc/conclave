@@ -296,11 +296,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             .ensureWorkerProfileAvailable(worker.workerTypeId)
             .catchError((_) {}));
       }
-      final unsupported = result.unavailable ==
-          WorkerLaunchUnavailable.unsupportedProviderVersion;
-      final code = unsupported
-          ? 'unsupported_provider_tool_version'
-          : 'worker_not_ready';
+      const code = 'worker_not_ready';
       throw AssignmentExecutionFailure(
         code: code,
         message: executionErrorMessage(code),
@@ -371,11 +367,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
               );
         final prepare = prepared?.plan;
         if (prepare != null) return prepare;
-        final unsupported = prepared?.unavailable ==
-            WorkerLaunchUnavailable.unsupportedProviderVersion;
-        final code = unsupported
-            ? 'unsupported_provider_tool_version'
-            : 'worker_not_ready';
+        const code = 'worker_not_ready';
         throw AssignmentExecutionFailure(
           code: code,
           message: executionErrorMessage(code),

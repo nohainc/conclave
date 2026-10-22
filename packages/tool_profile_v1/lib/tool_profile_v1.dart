@@ -69,25 +69,12 @@ class EngineProfile {
   /// Materializes the one provider-version override selected by the detected
   /// CLI version. Overlapping overrides are rejected during parsing, so this
   /// operation is deterministic and never depends on declaration order.
+  ///
+  /// The detected version never rejects a CLI: a version outside every
+  /// override range, or one that is not SemVer, uses the base
+  /// Profile without overrides.
   EngineProfile resolveForProviderVersion(String providerVersion) {
-    final supportedVersions = providerTool['supportedVersions'];
-    final supported = isSemanticVersion(providerVersion) &&
-        supportedVersions is List &&
-        supportedVersions.whereType<Map>().any(
-              (range) =>
-                  range['min'] is String &&
-                  range['maxExclusive'] is String &&
-                  semanticVersionInRange(
-                    providerVersion,
-                    range['min'] as String,
-                    range['maxExclusive'] as String,
-                  ),
-            );
-    if (!isSemanticVersion(providerVersion) || !supported) {
-      throw const FormatException(
-        'Provider CLI version is not supported by this Profile',
-      );
-    }
+    if (!isSemanticVersion(providerVersion)) return this;
     final overrides = (json['compatibilityOverrides'] as List)
         .whereType<Map>()
         .where((override) {
@@ -227,28 +214,6 @@ class EngineProfile {
     if (versionExtract['kind'] != 'regex_capture' ||
         versionExtract['patternId'] != 'semver') {
       throw const FormatException('provider version extraction is invalid');
-    }
-    final supportedVersions = tool['supportedVersions'];
-    if (supportedVersions is! List || supportedVersions.length > 16) {
-      throw const FormatException('provider compatibility ranges are invalid');
-    }
-    for (final value in supportedVersions) {
-      if (value is! Map ||
-          value.keys.toSet().difference(const {
-            'min',
-            'maxExclusive',
-          }).isNotEmpty ||
-          value['min'] is! String ||
-          value['maxExclusive'] is! String) {
-        throw const FormatException('provider compatibility range is invalid');
-      }
-      final min = value['min'] as String;
-      final max = value['maxExclusive'] as String;
-      if (!isSemanticVersion(min) ||
-          !isSemanticVersion(max) ||
-          compareSemanticVersions(min, max) >= 0) {
-        throw const FormatException('provider compatibility range is invalid');
-      }
     }
     final execution = _object(json['execution'], 'execution');
     final args = execution['arguments'];

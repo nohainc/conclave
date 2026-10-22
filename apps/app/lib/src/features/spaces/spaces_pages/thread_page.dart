@@ -5,7 +5,7 @@ class ThreadPage extends StatefulWidget {
   @visibleForTesting
   static void resetWorkQueues() {
     _ThreadPageState._queuedWorkByThread.clear();
-    _ThreadPageState._pausedWorkQueues.clear();
+    _ThreadPageState._workQueuePauses.clear();
   }
 
   const ThreadPage({
@@ -111,14 +111,16 @@ class _ThreadPageState extends State<ThreadPage>
   /// oldest first. Kept for the app session so leaving the Thread page and
   /// returning keeps the queue; see `_dispatchQueuedWork`.
   static final _queuedWorkByThread = <String, List<_QueuedWorkMessage>>{};
-  static final _pausedWorkQueues = <String>{};
+
+  /// Paused queues keep their messages until the user resumes them.
+  static final _workQueuePauses = <String, _WorkQueuePause>{};
   bool _dispatchingQueuedWork = false;
   String get _workQueueKey =>
       '${widget.currentUserId ?? ''}|${widget.thread.id}';
-  bool get _workQueuePaused => _pausedWorkQueues.contains(_workQueueKey);
-  set _workQueuePaused(bool paused) => paused
-      ? _pausedWorkQueues.add(_workQueueKey)
-      : _pausedWorkQueues.remove(_workQueueKey);
+  _WorkQueuePause? get _workQueuePause => _workQueuePauses[_workQueueKey];
+  set _workQueuePause(_WorkQueuePause? pause) => pause == null
+      ? _workQueuePauses.remove(_workQueueKey)
+      : _workQueuePauses[_workQueueKey] = pause;
   final _workHistoryController = ScrollController();
   late final AxWorkerUsageController _workerUsage = AxWorkerUsageController(
       widget.dataSource is AxWorkerUsageDataSource
@@ -452,6 +454,16 @@ class _ThreadPageState extends State<ThreadPage>
           ? null
           : (response, request.error, request.status == 'failed');
       replies[request.id] = reply;
+      // A failed request stops the queue: later messages would build on a
+      // result that never arrived, so they wait until the user resumes.
+      if (reply != null &&
+          reply.$3 &&
+          previous != null &&
+          previous.containsKey(request.id) &&
+          (previous[request.id] as (String?, String?, bool)?)?.$3 != true &&
+          _workQueue.isNotEmpty) {
+        _workQueuePause ??= _WorkQueuePause.failure;
+      }
       if (previous != null) {
         if (!previous.containsKey(request.id)) {
           // Prepending a history page must not move the viewport.
@@ -2184,7 +2196,8 @@ class _ThreadPageState extends State<ThreadPage>
         historyPrompts: _requestHistoryOpen ? _requestHistoryPrompts : null,
         historyOpenDirection: _requestHistoryDirection,
         queuedMessages: widget.isDraft ? const [] : List.of(_workQueue),
-        queuePaused: _workQueuePaused,
+        queuePause: _workQueuePause,
+        onQueuePauseChanged: (paused) => _setWorkQueuePaused(paused),
         onQueuedEdit: _editQueuedWork,
         onQueuedRemove: _removeQueuedWork,
         onQueuedSendNow: (message) => unawaited(_sendQueuedWorkNow(message)),

@@ -521,10 +521,9 @@ const profileSchema = z
               .strict(),
           })
           .strict(),
-        // Empty means provider compatibility has not been established yet.
-        // Cloud publication and signed-release admission require a non-empty
-        // range after local qualification.
-        supportedVersions: z.array(versionRange).max(16),
+        // Retained for existing payloads only; new Profiles omit CLI support
+        // ranges. These values never gate execution or publication.
+        supportedVersions: z.array(versionRange).max(16).optional(),
       })
       .strict(),
     environment: z
@@ -1063,7 +1062,7 @@ export const toolProfileV1Schema = profileSchema.superRefine((profile, ctx) => {
     ["engineCompatibility"],
     ctx,
   );
-  profile.providerTool.supportedVersions.forEach((range, index) =>
+  profile.providerTool.supportedVersions?.forEach((range, index) =>
     validateRange(
       range.min,
       range.maxExclusive,
@@ -1192,13 +1191,6 @@ export function parseToolProfileV1(input: unknown): ToolProfileV1 {
   return profile;
 }
 
-export interface ToolProfileValidationOptions {
-  /** Require at least one bounded provider CLI compatibility range. */
-  requireProviderCompatibility?: boolean;
-  /** Reject the historical near-universal placeholder compatibility range. */
-  rejectPlaceholderProviderRange?: boolean;
-}
-
 export class ToolProfileValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -1211,30 +1203,9 @@ export class ToolProfileValidationError extends Error {
  * published. The structural schema remains strict, so unknown fields are
  * rejected at every schema level rather than silently discarded.
  */
-export function validateToolProfileV1(
-  input: unknown,
-  options: ToolProfileValidationOptions = {},
-): ToolProfileV1 {
+export function validateToolProfileV1(input: unknown): ToolProfileV1 {
   const profile = parseToolProfileV1(input);
   rejectPlaintextCredentialMaterial(profile);
-  const ranges = profile.providerTool.supportedVersions;
-  if (options.requireProviderCompatibility && ranges.length === 0) {
-    throw new ToolProfileValidationError(
-      "Provider compatibility must be configured before publication",
-    );
-  }
-  if (
-    options.rejectPlaceholderProviderRange &&
-    ranges.some(
-      (range) =>
-        compareVersion(range.min, "1.0.0") <= 0 &&
-        compareVersion(range.maxExclusive, "50.0.0") >= 0,
-    )
-  ) {
-    throw new ToolProfileValidationError(
-      "Provider compatibility contains an unsupported placeholder range",
-    );
-  }
   return profile;
 }
 
@@ -1295,16 +1266,7 @@ export function resolveToolProfileCompatibility(
 ): ResolvedToolProfile {
   const profile = validateToolProfileV1(input);
   if (!semver.safeParse(providerVersion).success) {
-    throw new ToolProfileValidationError("Provider CLI version is invalid");
-  }
-  if (
-    !profile.providerTool.supportedVersions.some((range) =>
-      isSemverInRange(providerVersion, range),
-    )
-  ) {
-    throw new ToolProfileValidationError(
-      "Provider CLI version is not supported by this Profile",
-    );
+    return { profile, providerVersion, overrideIndex: null };
   }
   const matches = profile.compatibilityOverrides
     .map((override, index) => ({ override, index }))

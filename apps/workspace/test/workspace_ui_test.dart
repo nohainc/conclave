@@ -539,8 +539,8 @@ void main() {
     expect(find.text('Start Service'), findsOneWidget);
     expect(find.text('Workers'), findsWidgets);
     await openWorkers(tester);
-    expect(find.text('ChatGPT'), findsOneWidget);
-    expect(find.text('Gemini'), findsOneWidget);
+    expect(_workerName('chatgpt', 'ChatGPT'), findsOneWidget);
+    expect(_workerName('gemini', 'Gemini'), findsOneWidget);
     await tester.tap(find.widgetWithText(Tab, 'Workspace'));
     await tester.pumpAndSettle();
     final workspacePage = find.byType(SingleChildScrollView).first;
@@ -1004,7 +1004,7 @@ void main() {
     // The registered Workspace has no enrollment form.
     expect(find.text('Connect this Workspace'), findsNothing);
     expect(find.text('Start Service'), findsNothing);
-    expect(find.text('Unregister'), findsNothing);
+    expect(find.text('Unregister workspace'), findsNothing);
 
     // Removed sections are not on the Workspace tab
     expect(find.text('Current Work'), findsNothing);
@@ -1014,7 +1014,7 @@ void main() {
 
   testWidgets('Workspace owns live parallel capacity and sleep settings',
       (tester) async {
-    tester.view.physicalSize = const Size(1000, 1800);
+    tester.view.physicalSize = const Size(750, 458);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -1024,6 +1024,8 @@ void main() {
         tester,
         const WorkspaceUiSnapshot(
           mode: WorkspaceUiMode.ready,
+          activeTransportMode: 'http_long_poll',
+          appVersion: '9.9.9',
           title: 'Ready',
           detail: '',
           registered: true,
@@ -1045,14 +1047,50 @@ void main() {
           sleep = value;
         });
     await tester.pumpAndSettle();
+    expect(find.text('v9.9.9'), findsNothing);
+    expect(find.textContaining('Cloud connected · HTTPS'), findsOneWidget);
+    expect(find.textContaining('HTTPS fallback'), findsNothing);
     final card = find.byType(WorkerSlotsCard);
     expect(card, findsOneWidget);
+    final nameField = find.widgetWithText(TextField, 'Workspace name');
+    final rootField = find.widgetWithText(TextField, 'Work Root');
+    expect(tester.getTopLeft(nameField).dy, tester.getTopLeft(rootField).dy);
+    final workspaceTab = find.widgetWithText(Tab, 'Workspace');
+    final workersTab = find.widgetWithText(Tab, 'Workers');
+    expect(
+        (tester.getTopLeft(workspaceTab).dx +
+                tester.getBottomRight(workersTab).dx) /
+            2,
+        closeTo(375, 1));
+    await tester.ensureVisible(find.text('Disconnect'));
+    expect(tester.getBottomRight(find.text('Disconnect')).dy, lessThan(458));
+    expect(tester.takeException(), isNull);
+
+    final sleepSetting = find.byKey(const Key('prevent-sleep-setting'));
+    final workRoot = find.widgetWithText(TextField, 'Work Root');
+    expect(tester.getTopLeft(sleepSetting).dy,
+        greaterThan(tester.getTopLeft(workRoot).dy));
+    expect(tester.getTopLeft(card).dy,
+        greaterThan(tester.getTopLeft(sleepSetting).dy));
+    expect(
+        tester
+            .widget<Text>(
+                find.text('Keep this computer awake while the service runs.'))
+            .style
+            ?.fontSize,
+        lessThan(
+            tester.widget<Text>(find.text('Prevent sleep')).style?.fontSize ??
+                16));
+    expect(find.byKey(const ValueKey('parallel-slots-meter')), findsOneWidget);
     expect(find.byKey(const Key('worker-selector-chatgpt')), findsNothing);
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('parallel-slots-select')));
     await tester.tap(find.byKey(const ValueKey('parallel-slots-select')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('3').last);
     await tester.pumpAndSettle();
     expect(selected, 3);
+    await tester.ensureVisible(find.text('Prevent sleep'));
     await tester.tap(find.text('Prevent sleep'));
     await tester.pumpAndSettle();
     expect(sleep, false);
@@ -1090,11 +1128,11 @@ void main() {
     expect(find.text('Workspace Service'), findsNothing);
     expect(find.text('Conclave Cloud'), findsNothing);
     expect(find.text('Start Service'), findsOneWidget);
-    expect(find.text('Unregister'), findsOneWidget);
+    expect(find.text('Unregister workspace'), findsOneWidget);
     expect(find.text('Connect'), findsNothing);
 
     await tester.tap(find.text('Start Service'));
-    await tester.tap(find.text('Unregister'));
+    await tester.tap(find.text('Unregister workspace'));
     expect(startServiceCalls, 1);
     expect(unregisterServiceCalls, 1);
     expect(registerServiceCalls, 0);
@@ -1129,7 +1167,7 @@ void main() {
     expect(find.text('Connect'), findsNothing);
   });
 
-  testWidgets('unregistered host exposes Register Service separately',
+  testWidgets('unregistered host exposes Register workspace separately',
       (tester) async {
     var registerCalls = 0;
     await pumpDashboard(
@@ -1148,9 +1186,40 @@ void main() {
       signedIn: true,
       onRegisterService: () async => registerCalls++,
     );
-    expect(find.text('Register Service'), findsOneWidget);
-    await tester.tap(find.text('Register Service'));
+    expect(find.text('Register workspace'), findsOneWidget);
+    await tester.tap(find.text('Register workspace'));
     expect(registerCalls, 1);
+  });
+
+  testWidgets(
+      'unregistering the service unlocks the name of an existing Cloud Workspace',
+      (tester) async {
+    String? changedName;
+    await pumpDashboard(
+        tester,
+        const WorkspaceUiSnapshot(
+          mode: WorkspaceUiMode.offline,
+          title: 'Stopped',
+          detail: '',
+          registered: true,
+          workspaceId: 'existing-workspace',
+          workspaceName: 'Office Mac',
+          serviceInfo: WorkspaceServiceInfo(
+            registration: WorkspaceBackgroundServiceRegistration.notRegistered,
+            supported: true,
+            helperPresent: true,
+            plistPresent: true,
+          ),
+        ),
+        signedIn: true,
+        onChangeWorkspaceName: (name) async => changedName = name);
+    final field = find.widgetWithText(TextField, 'Workspace name');
+    expect(tester.widget<TextField>(field).enabled, isTrue);
+    expect(tester.widget<TextField>(field).readOnly, isFalse);
+    await tester.enterText(field, 'Renamed Mac');
+    await tester.pump();
+    expect(changedName, 'Renamed Mac');
+    expect(find.text('Register workspace'), findsOneWidget);
   });
 
   testWidgets('header overflow menu provides AX, updates, and about',
@@ -1397,8 +1466,8 @@ void main() {
     );
 
     expect(find.text('Workers'), findsNothing);
-    expect(find.text('ChatGPT'), findsNothing);
-    expect(find.text('Gemini'), findsNothing);
+    expect(_workerName('chatgpt', 'ChatGPT'), findsNothing);
+    expect(_workerName('gemini', 'Gemini'), findsNothing);
     expect(find.text('Add Worker'), findsNothing);
   });
 
@@ -1523,12 +1592,12 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('worker-catalog-chatgpt')));
     await tester.pumpAndSettle();
 
-    expect(find.text('ChatGPT'), findsOneWidget);
-    expect(find.text('Gemini'), findsOneWidget);
+    expect(_workerName('chatgpt', 'ChatGPT'), findsOneWidget);
+    expect(_workerName('gemini', 'Gemini'), findsOneWidget);
     expect(find.text('Setup required'), findsOneWidget);
-    expect(find.text('Provider tool: codex'), findsOneWidget);
-    expect(find.text('Provider tool: agy'), findsNothing);
-    expect(find.text('Installed CLI version: Not detected'), findsOneWidget);
+    expect(_workerDetail('provider-cli', 'codex'), findsOneWidget);
+    expect(_workerDetail('provider-cli', 'agy'), findsNothing);
+    expect(_workerDetail('installed-version', 'Not detected'), findsOneWidget);
     expect(find.textContaining('Capabilities:'), findsNothing);
     expect(find.text('Diagnostics'), findsNothing);
     expect(find.text('Set up ChatGPT'), findsNothing);
@@ -1545,7 +1614,7 @@ void main() {
     await tester.tap(find.byKey(const Key('worker-selector-gemini')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('worker-catalog-chatgpt')), findsNothing);
-    expect(find.text('Provider tool: agy'), findsOneWidget);
+    expect(_workerDetail('provider-cli', 'agy'), findsOneWidget);
   });
 
   testWidgets(
@@ -1634,21 +1703,23 @@ void main() {
     await openWorkers(tester);
     expect(workerCatalogLoads, 1);
 
-    expect(find.text('ChatGPT'), findsOneWidget);
-    expect(find.text('Gemini'), findsOneWidget);
-    expect(find.text('Dynamic Test Worker'), findsOneWidget);
+    expect(_workerName('chatgpt', 'ChatGPT'), findsOneWidget);
+    expect(_workerName('gemini', 'Gemini'), findsOneWidget);
+    expect(_workerName('dynamic-test-worker', 'Dynamic Test Worker'),
+        findsOneWidget);
     expect(find.text('Profile unavailable'), findsOneWidget);
     expect(find.byKey(const Key('worker-catalog-gemini')), findsNothing);
     expect(find.text('Diagnostics'), findsNothing);
-    final refreshButton = tester.widget<IconButton>(
-      find.widgetWithIcon(IconButton, Icons.refresh),
-    );
-    expect(refreshButton.onPressed, isNotNull);
+    // Update checks are per Worker; there is no tab-wide refresh button.
+    expect(find.widgetWithIcon(IconButton, Icons.refresh), findsNothing);
+    final checkUpdates = tester.widget<ButtonStyleButton>(
+        find.byKey(const Key('worker-check-updates-chatgpt')));
+    expect(checkUpdates.onPressed, isNotNull);
   });
 
   testWidgets('fixed catalog rows merge local Worker status by type',
       (tester) async {
-    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.physicalSize = const Size(1280, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -1705,13 +1776,42 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('worker-catalog-chatgpt')));
     await tester.pumpAndSettle();
 
-    expect(find.text('ChatGPT'), findsOneWidget);
-    expect(find.text('Gemini'), findsOneWidget);
-    expect(find.text('Disabled'), findsOneWidget);
+    expect(_workerName('chatgpt', 'ChatGPT'), findsOneWidget);
+    expect(_workerName('gemini', 'Gemini'), findsOneWidget);
+    expect(find.byKey(const Key('worker-status-chatgpt-disabled')),
+        findsOneWidget);
     expect(find.text('Profile unavailable'), findsOneWidget);
     expect(find.text('Needs attention'), findsNothing);
-    expect(find.text('Provider tool: Codex CLI'), findsOneWidget);
-    expect(find.text('Installed CLI version: 1.2.3'), findsOneWidget);
+    expect(_workerDetail('provider-cli', 'Codex CLI'), findsOneWidget);
+
+    // The Worker button carries the name and CLI; the details do not repeat
+    // them, and all four actions form a right-hand column.
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('worker-selector-chatgpt')),
+            matching: find.text('Codex CLI')),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('worker-catalog-chatgpt')),
+            matching: find.text('ChatGPT')),
+        findsNothing);
+    final actionTops = {
+      for (final label in [
+        'Check for updates',
+        'Test',
+        'Enable',
+        'Enable full access'
+      ])
+        tester
+            .getTopLeft(find.ancestor(
+                of: find.text(label),
+                matching: find.byWidgetPredicate(
+                    (widget) => widget is ButtonStyleButton)))
+            .dy
+    };
+    expect(actionTops, hasLength(4));
+    expect(_workerDetail('installed-version', '1.2.3'), findsOneWidget);
     expect(find.textContaining('Test failed (execution_test_failed)'),
         findsOneWidget);
     expect(find.byTooltip('Copy test details'), findsOneWidget);
@@ -1722,9 +1822,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('worker-catalog-chatgpt')), findsNothing);
     expect(find.text('Live test required'), findsOneWidget);
-    expect(find.text('Provider tool: agy'), findsOneWidget);
+    expect(_workerDetail('provider-cli', 'agy'), findsOneWidget);
     expect(find.text('Needs attention'), findsNothing);
-    expect(find.text('Execution permissions: Restricted'), findsOneWidget);
+
+    // Each list entry shows the provider mark and a readiness indicator.
+    expect(find.byKey(const Key('worker-brand-icon-chatgpt')), findsWidgets);
+    expect(find.byKey(const Key('worker-brand-icon-gemini')), findsWidgets);
+    expect(find.byKey(const Key('worker-status-chatgpt-disabled')),
+        findsOneWidget);
+    expect(find.byKey(const Key('worker-status-gemini-attention')),
+        findsOneWidget);
+
+    // The selected entry uses the theme's matched container/foreground pair.
+    final colors = Theme.of(
+      tester.element(find.byKey(const Key('worker-selector-gemini'))),
+    ).colorScheme;
+    final selectedName = tester.widget<Text>(_workerName('gemini', 'Gemini'));
+    final otherName = tester.widget<Text>(_workerName('chatgpt', 'ChatGPT'));
+    expect(selectedName.style?.color, colors.onPrimaryContainer);
+    expect(otherName.style?.color, colors.onSurface);
   });
 
   testWidgets('testing a disabled Worker preserves activation', (tester) async {
@@ -1769,10 +1885,9 @@ void main() {
     );
     await openWorkers(tester);
     final chatGptCard = find.byKey(const Key('worker-catalog-chatgpt'));
-    expect(
-      find.descendant(of: chatGptCard, matching: find.text('Disabled')),
-      findsOneWidget,
-    );
+    // Activation is shown on the Worker button, not in the details.
+    expect(find.byKey(const Key('worker-status-chatgpt-disabled')),
+        findsOneWidget);
     expect(
       find.descendant(
           of: chatGptCard, matching: find.text('Live test required')),
@@ -1789,14 +1904,11 @@ void main() {
     expect(registry.workers.single.activationState,
         LocalWorkerActivationState.disabled);
     expect(registry.workers.single.lastLiveTestPassed, isTrue);
-    expect(
-      find.descendant(of: chatGptCard, matching: find.text('Disabled')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: chatGptCard, matching: find.text('Ready')),
-      findsOneWidget,
-    );
+    // Activation is shown on the Worker button, not in the details.
+    expect(find.byKey(const Key('worker-status-chatgpt-disabled')),
+        findsOneWidget);
+    // A ready Worker shows no attention panel; readiness is on the button.
+    expect(find.byKey(const Key('worker-attention-chatgpt')), findsNothing);
     expect(
       find.descendant(
           of: chatGptCard, matching: find.textContaining('Profile ·')),
@@ -1853,14 +1965,11 @@ void main() {
     );
     await openWorkers(tester);
     final chatGptCard = find.byKey(const Key('worker-catalog-chatgpt'));
-    expect(
-      find.descendant(of: chatGptCard, matching: find.text('Disabled')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: chatGptCard, matching: find.text('Ready')),
-      findsOneWidget,
-    );
+    // Activation is shown on the Worker button, not in the details.
+    expect(find.byKey(const Key('worker-status-chatgpt-disabled')),
+        findsOneWidget);
+    // A ready Worker shows no attention panel; readiness is on the button.
+    expect(find.byKey(const Key('worker-attention-chatgpt')), findsNothing);
     await tester.tap(find.text('Test').first);
     await tester.pump();
     await tester.runAsync(
@@ -1872,10 +1981,9 @@ void main() {
     expect(registry.workers.single.activationState,
         LocalWorkerActivationState.disabled);
     expect(registry.workers.single.lastLiveTestPassed, isFalse);
-    expect(
-      find.descendant(of: chatGptCard, matching: find.text('Disabled')),
-      findsOneWidget,
-    );
+    // Activation is shown on the Worker button, not in the details.
+    expect(find.byKey(const Key('worker-status-chatgpt-disabled')),
+        findsOneWidget);
     expect(
       find.descendant(of: chatGptCard, matching: find.text('Live test failed')),
       findsOneWidget,
@@ -1989,8 +2097,8 @@ void main() {
     );
     await openWorkers(tester);
 
-    expect(find.text('ChatGPT'), findsOneWidget);
-    expect(find.text('Gemini'), findsOneWidget);
+    expect(_workerName('chatgpt', 'ChatGPT'), findsOneWidget);
+    expect(_workerName('gemini', 'Gemini'), findsOneWidget);
     expect(find.text('internal-tool'), findsOneWidget);
     await tester
         .ensureVisible(find.byKey(const Key('worker-selector-internal-tool')));
@@ -2192,7 +2300,7 @@ void main() {
 
     expect(find.text('Browse'), findsOneWidget);
 
-    // Case 2: Registered but disconnected workspace remains editable locally.
+    // Case 2: Registration locks the name; a stopped service permits Work Root changes.
     await pumpDashboard(
       tester,
       const WorkspaceUiSnapshot(
@@ -2225,16 +2333,18 @@ void main() {
         .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Reset'));
     expect(resetBtn.onPressed, isNotNull);
 
-    // Workspace name remains editable while disconnected.
+    // Registration locks the name even while disconnected.
     final regNameField = tester
         .widget<TextField>(find.widgetWithText(TextField, 'Registered Mac'));
-    expect(regNameField.readOnly, isFalse);
-    expect(regNameField.enabled, isTrue);
+    expect(regNameField.readOnly, isTrue);
+    expect(regNameField.enabled, isFalse);
 
     // Work Root remains read-only while its browse action controls mutations.
     final regWorkRootField = tester
         .widget<TextField>(find.widgetWithText(TextField, '/workspace/root'));
     expect(regWorkRootField.enabled, isTrue);
+    expect(find.text('Parallel executions'), findsOneWidget);
+    expect(find.text('Start the service to view slot usage.'), findsOneWidget);
     expect(find.text('Browse'), findsOneWidget);
     expect(
         tester
@@ -2336,6 +2446,18 @@ void main() {
       return stopped.future;
     });
     expect(find.text('Service running · Cloud disconnected'), findsOneWidget);
+    expect(
+        tester
+            .widget<TextField>(find.widgetWithText(TextField, 'Workspace name'))
+            .enabled,
+        isFalse);
+    expect(
+        tester
+            .widget<TextField>(find.widgetWithText(TextField, 'Work Root'))
+            .enabled,
+        isFalse);
+    expect(find.text('Parallel executions'), findsOneWidget);
+
     expect(find.text('Start Service'), findsNothing);
     await tester.tap(find.text('Stop Service'));
     await tester.pump();
@@ -2352,3 +2474,18 @@ void main() {
     expect(find.text('Stop Service'), findsOneWidget);
   });
 }
+
+Finder _workerName(String workerTypeId, String name) => find.descendant(
+      of: find.byKey(Key('worker-selector-$workerTypeId')),
+      matching: find.text(name),
+    );
+
+Finder _workerDetail(String detail, String value) => find.byWidgetPredicate(
+      (widget) =>
+          widget is SelectableText &&
+          widget.key is ValueKey<String> &&
+          (widget.key! as ValueKey<String>)
+              .value
+              .startsWith('worker-summary-') &&
+          (widget.data?.contains(value) ?? false),
+    );

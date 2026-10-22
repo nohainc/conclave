@@ -410,35 +410,26 @@ class CliWorkerEngine {
       );
       final version = versionResult.version;
       if (versionResult.exitCode != 0 || version == null) {
+        // The CLI must start and answer its version command; which version
+        // it reports is informational only.
         throw const EngineProviderException(
-          WorkerIssueCode.unsupportedProviderToolVersion,
-          'Provider CLI version could not be verified',
+          WorkerIssueCode.providerToolUnavailable,
+          'Provider CLI did not report a version',
         );
       }
       _providerVersion = version;
-      if (!versionResult.supported) {
-        issue = WorkerIssueCode.unsupportedProviderToolVersion;
-        checks.add(
-          ProbeCheck(
-            code: 'provider_tool_version',
-            status: ProbeCheckStatus.failed,
-            message: 'Provider CLI version is not supported by this Profile.',
-          ),
-        );
-      } else {
-        _profile = _admittedProfile.resolveForProviderVersion(version);
-        _providerActivityAdapter = ProviderActivityAdapter.fromProfile(
-          _profile.json,
-        );
-        checks.add(
-          ProbeCheck(
-            code: 'provider_tool_version',
-            status: ProbeCheckStatus.passed,
-            message: 'Provider CLI version is supported.',
-          ),
-        );
-      }
-      if (issue == null && _profile.model['discovery'] is Map) {
+      _profile = _admittedProfile.resolveForProviderVersion(version);
+      _providerActivityAdapter = ProviderActivityAdapter.fromProfile(
+        _profile.json,
+      );
+      checks.add(
+        ProbeCheck(
+          code: 'provider_tool_version',
+          status: ProbeCheckStatus.passed,
+          message: 'Provider CLI version $version detected.',
+        ),
+      );
+      if (_profile.model['discovery'] is Map) {
         _modelCatalog = await _discoverModels(
           executable,
           env,
@@ -458,133 +449,130 @@ class CliWorkerEngine {
           ),
         );
       }
-      if (issue == null) {
-        final passive = _map(_profile.probe['passive']);
-        final commands = passive['checks'];
-        if (commands is List) {
-          for (final raw in commands) {
-            final check = _map(raw);
-            final result = await _commandRunner.run(
-              executable,
-              _stringList(
-                check['arguments'],
-              ).map((argument) => _template(argument, versionContext)).toList(),
-              environment: env,
-              workingDirectory: Directory.current.path,
-              timeout: remaining(profileLimitMs: _int(check['timeoutMs'])),
-            );
-            final success = _intList(
-              check['successExitCodes'],
-            ).contains(result.exitCode);
-            final id = _string(check['id']);
-            checks.add(
-              ProbeCheck(
-                code: id.replaceAll('-', '_'),
-                status: success
-                    ? ProbeCheckStatus.passed
-                    : ProbeCheckStatus.failed,
-                message: success
-                    ? 'Local provider check passed.'
-                    : 'Local provider check failed.',
-              ),
-            );
-            if (!success) issue ??= _string(check['failureIssueCode']);
-          }
+      final passive = _map(_profile.probe['passive']);
+      final commands = passive['checks'];
+      if (commands is List) {
+        for (final raw in commands) {
+          final check = _map(raw);
+          final result = await _commandRunner.run(
+            executable,
+            _stringList(
+              check['arguments'],
+            ).map((argument) => _template(argument, versionContext)).toList(),
+            environment: env,
+            workingDirectory: Directory.current.path,
+            timeout: remaining(profileLimitMs: _int(check['timeoutMs'])),
+          );
+          final success = _intList(
+            check['successExitCodes'],
+          ).contains(result.exitCode);
+          final id = _string(check['id']);
+          checks.add(
+            ProbeCheck(
+              code: id.replaceAll('-', '_'),
+              status: success
+                  ? ProbeCheckStatus.passed
+                  : ProbeCheckStatus.failed,
+              message: success
+                  ? 'Local provider check passed.'
+                  : 'Local provider check failed.',
+            ),
+          );
+          if (!success) issue ??= _string(check['failureIssueCode']);
         }
-        final configChecks = passive['configChecks'];
-        if (configChecks is List) {
-          for (final rawCheck in configChecks) {
-            final outcome = await _runConfigCheck(_map(rawCheck));
-            checks.add(outcome.check);
-            if (outcome.issueCode != null) issue ??= outcome.issueCode;
-          }
+      }
+      final configChecks = passive['configChecks'];
+      if (configChecks is List) {
+        for (final rawCheck in configChecks) {
+          final outcome = await _runConfigCheck(_map(rawCheck));
+          checks.add(outcome.check);
+          if (outcome.issueCode != null) issue ??= outcome.issueCode;
         }
-        if (request.mode == WorkerProbeMode.live && issue == null) {
-          final usageSpec = _profile.usage;
-          if (usageSpec != null) {
-            final profileTimeoutMs = _int(usageSpec['timeoutMs']);
-            final liveTimeout = remaining(profileLimitMs: profileTimeoutMs);
-            final workingDirectory = Directory.current.path;
-            final usageContext = ProfileVersionProbe.buildContext(
-              profile: _profile,
+      }
+      if (request.mode == WorkerProbeMode.live && issue == null) {
+        final usageSpec = _profile.usage;
+        if (usageSpec != null) {
+          final profileTimeoutMs = _int(usageSpec['timeoutMs']);
+          final liveTimeout = remaining(profileLimitMs: profileTimeoutMs);
+          final workingDirectory = Directory.current.path;
+          final usageContext = ProfileVersionProbe.buildContext(
+            profile: _profile,
+            workingDirectory: workingDirectory,
+            homeDirectory: Platform.environment['HOME'] ?? workingDirectory,
+            workerStateDirectory: options.statePath,
+          );
+          final usageArguments = _stringList(
+            usageSpec['arguments'],
+          ).map((argument) => _template(argument, usageContext)).toList();
+          final rpc = usageSpec['jsonRpc'];
+          final CliCommandResult result;
+          if (rpc is Map) {
+            final rpcResult = await readAppServerResult(
+              executable: executable,
+              arguments: usageArguments,
+              environment: _environment(),
               workingDirectory: workingDirectory,
-              homeDirectory: Platform.environment['HOME'] ?? workingDirectory,
-              workerStateDirectory: options.statePath,
+              method: _string(rpc['method']),
+              timeout: liveTimeout,
             );
-            final usageArguments = _stringList(
-              usageSpec['arguments'],
-            ).map((argument) => _template(argument, usageContext)).toList();
-            final rpc = usageSpec['jsonRpc'];
-            final CliCommandResult result;
-            if (rpc is Map) {
-              final rpcResult = await readAppServerResult(
-                executable: executable,
-                arguments: usageArguments,
-                environment: _environment(),
-                workingDirectory: workingDirectory,
-                method: _string(rpc['method']),
-                timeout: liveTimeout,
-              );
-              result = CliCommandResult(
-                exitCode: 0,
-                stdout:
-                    '${const JsonEncoder.withIndent('  ').convert(rpcResult)}\n',
-                stderr: '',
-              );
-            } else {
-              result = await _commandRunner.run(
-                executable,
-                usageArguments,
-                environment: _environment(),
-                workingDirectory: workingDirectory,
-                timeout: liveTimeout,
-              );
-            }
-            // Live mode checks the provider account through the Profile's
-            // usage command instead of calling a model, so a limit on one
-            // model cannot fail the whole Worker. The command must succeed and
-            // print something.
-            final livePassed =
-                result.exitCode == 0 && result.stdout.trim().isNotEmpty;
-            checks.add(
-              ProbeCheck(
-                code: 'provider_live_execution',
-                status: livePassed
-                    ? ProbeCheckStatus.passed
-                    : ProbeCheckStatus.failed,
-                message: livePassed
-                    ? 'Provider answered the usage command.'
-                    : 'Provider usage command '
-                          '${result.exitCode == 0 ? 'returned no output' : 'failed (exit ${result.exitCode})'}. '
-                          'Arguments: ${usageArguments.join(' ')}. '
-                          'Stderr: ${_liveStderrExcerpt(result.stderr)}',
-              ),
+            result = CliCommandResult(
+              exitCode: 0,
+              stdout:
+                  '${const JsonEncoder.withIndent('  ').convert(rpcResult)}\n',
+              stderr: '',
             );
-            if (!livePassed) {
-              issue ??= WorkerIssueCode.providerFailure;
-            }
           } else {
-            // Live mode is the usage check; it never calls a model. A Profile
-            // without a usage command cannot be live-tested.
-            checks.add(
-              ProbeCheck(
-                code: 'provider_live_execution',
-                status: ProbeCheckStatus.failed,
-                message: 'This Tool Profile declares no usage command.',
-              ),
+            result = await _commandRunner.run(
+              executable,
+              usageArguments,
+              environment: _environment(),
+              workingDirectory: workingDirectory,
+              timeout: liveTimeout,
             );
-            issue ??= WorkerIssueCode.providerFailure;
           }
-        } else if (request.mode == WorkerProbeMode.live && issue != null) {
+          // Live mode checks the provider account through the Profile's
+          // usage command instead of calling a model, so a limit on one
+          // model cannot fail the whole Worker. The command must succeed and
+          // print something.
+          final livePassed =
+              result.exitCode == 0 && result.stdout.trim().isNotEmpty;
           checks.add(
             ProbeCheck(
               code: 'provider_live_execution',
-              status: ProbeCheckStatus.warning,
-              message:
-                  'Live check was skipped because passive readiness failed.',
+              status: livePassed
+                  ? ProbeCheckStatus.passed
+                  : ProbeCheckStatus.failed,
+              message: livePassed
+                  ? 'Provider answered the usage command.'
+                  : 'Provider usage command '
+                        '${result.exitCode == 0 ? 'returned no output' : 'failed (exit ${result.exitCode})'}. '
+                        'Arguments: ${usageArguments.join(' ')}. '
+                        'Stderr: ${_liveStderrExcerpt(result.stderr)}',
             ),
           );
+          if (!livePassed) {
+            issue ??= WorkerIssueCode.providerFailure;
+          }
+        } else {
+          // Live mode is the usage check; it never calls a model. A Profile
+          // without a usage command cannot be live-tested.
+          checks.add(
+            ProbeCheck(
+              code: 'provider_live_execution',
+              status: ProbeCheckStatus.failed,
+              message: 'This Tool Profile declares no usage command.',
+            ),
+          );
+          issue ??= WorkerIssueCode.providerFailure;
         }
+      } else if (request.mode == WorkerProbeMode.live && issue != null) {
+        checks.add(
+          ProbeCheck(
+            code: 'provider_live_execution',
+            status: ProbeCheckStatus.warning,
+            message: 'Live check was skipped because passive readiness failed.',
+          ),
+        );
       }
     } on EngineProviderException catch (error) {
       issue = error.issueCode;
@@ -862,8 +850,9 @@ class CliWorkerEngine {
       context: context,
       deadline: const Duration(seconds: 10),
     );
-    if (!result.supported || result.version == null)
-      throw const FormatException('Unsupported CLI version');
+    if (result.version == null) {
+      throw const FormatException('Provider CLI version could not be read');
+    }
     _providerVersion = result.version;
     _modelCatalog = await _discoverModels(
       executable,

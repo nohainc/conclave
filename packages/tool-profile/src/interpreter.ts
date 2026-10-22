@@ -326,48 +326,7 @@ function timeoutValues(
   };
 }
 
-function compareSemver(left: string, right: string): number {
-  const parse = (value: string) => {
-    const match =
-      /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
-        value,
-      );
-    if (!match) return null;
-    return {
-      core: match.slice(1, 4).map(Number),
-      prerelease: match[4]?.split(".") ?? null,
-    };
-  };
-  const a = parse(left);
-  const b = parse(right);
-  if (!a || !b) return Number.NaN;
-  for (let index = 0; index < 3; index++) {
-    if (a.core[index] !== b.core[index])
-      return a.core[index]! < b.core[index]! ? -1 : 1;
-  }
-  if (a.prerelease === null || b.prerelease === null) {
-    if (a.prerelease === b.prerelease) return 0;
-    return a.prerelease === null ? 1 : -1;
-  }
-  const length = Math.max(a.prerelease.length, b.prerelease.length);
-  for (let index = 0; index < length; index++) {
-    const partA = a.prerelease[index];
-    const partB = b.prerelease[index];
-    if (partA === undefined || partB === undefined) {
-      if (partA === partB) return 0;
-      return partA === undefined ? -1 : 1;
-    }
-    if (partA === partB) continue;
-    const numericA = /^(0|[1-9]\d*)$/.test(partA);
-    const numericB = /^(0|[1-9]\d*)$/.test(partB);
-    if (numericA && numericB) return Number(partA) < Number(partB) ? -1 : 1;
-    if (numericA !== numericB) return numericA ? -1 : 1;
-    return partA < partB ? -1 : 1;
-  }
-  return 0;
-}
-
-/** Extracts only the schema's fixed SemVer pattern and checks Profile support. */
+/** Extracts the informational CLI version using the schema's fixed SemVer pattern. */
 export function extractProfileProviderVersion(
   profileInput: ToolProfileV1,
   input: ProviderVersionProbeInput,
@@ -396,16 +355,7 @@ export function extractProfileProviderVersion(
       issueCode: "unsupported_provider_tool_version",
     };
   }
-  const supported = profile.providerTool.supportedVersions.some((range) => {
-    const minimum = compareSemver(version, range.min);
-    const maximum = compareSemver(version, range.maxExclusive);
-    return minimum >= 0 && maximum < 0;
-  });
-  return {
-    version,
-    supported,
-    issueCode: supported ? null : "unsupported_provider_tool_version",
-  };
+  return { version, supported: true, issueCode: null };
 }
 
 /** Evaluates passive readiness from bounded synthetic provider/config evidence. */

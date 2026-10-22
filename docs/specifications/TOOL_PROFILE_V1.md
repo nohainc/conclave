@@ -189,13 +189,7 @@ Conceptual:
         "kind": "regex_capture",
         "patternId": "semver"
       }
-    },
-    "supportedVersions": [
-      {
-        "min": "0.176.0",
-        "maxExclusive": "0.190.0"
-      }
-    ]
+    }
   }
 }
 ~~~
@@ -203,16 +197,23 @@ Conceptual:
 The Engine executes `providerTool.executableCandidates`' discovered executable
 with the declared `versionProbe.arguments`, bounded by `versionProbe.timeoutMs`.
 It extracts only from the configured `source` stream and applies the declared
-`extract` rule before checking `supportedVersions`. The CLI Worker Engine and
-Profile Lab use the same shared runtime interpreter for this operation.
+`extract` rule. The CLI Worker Engine and Profile Lab use the same shared
+runtime interpreter for this operation.
 
-An empty `supportedVersions` array represents an incomplete mutable Draft before
-provider discovery. It is not publishable or admissible as a signed release.
-After a successful local version probe, Profile Lab may suggest a bounded range
-starting at the discovered version and ending at the next minor boundary. This
-does not claim compatibility with older versions. Cloud publication rejects an
-empty range list and obvious near-universal placeholder ranges such as
-`0.0.1` to `99.0.0`; qualification must also record the exact tested version.
+The detected CLI version is informational. Profiles do not declare provider CLI
+support ranges. Bundled Profile files and new Profile Lab drafts omit
+`providerTool.supportedVersions`; both Dart and TypeScript validators accept its
+absence without adding a default field or changing the candidate digest.
+Existing payloads that contain the field remain readable, but its values never
+gate readiness, execution, admission, or publication. Version-specific overrides
+are selected solely by their own `providerVersion` ranges (section 23); versions
+outside those ranges use the base Profile.
+
+The version probe still requires the CLI to start and answer its version command.
+Profile Lab records the exact tested version as evidence, without inferring
+support limits from that test. Publication continues to require fresh evidence
+for the exact candidate digest; removing ranges changes the digest and requires
+retesting before publication. Engine compatibility bounds remain enforced.
 
 ### 6.1 Discovery restrictions
 
@@ -732,7 +733,8 @@ A release may contain small bounded compatibility overrides.
 
 Requirements:
 - bounded number;
-- non-overlapping provider-version ranges;
+- non-overlapping provider-version ranges (a CLI version that matches no
+  override runs the base Profile; overrides never reject a version);
 - only `executionArguments`, `versionProbeArguments`, `progress`, and
   `errorMappings` may be overridden in v1;
 - fixtures for every range.

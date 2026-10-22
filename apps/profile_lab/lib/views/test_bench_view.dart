@@ -13,23 +13,6 @@ class TestBenchView extends StatelessWidget {
   const TestBenchView({super.key, required this.controller});
   final ProfileLabController controller;
 
-  Future<void> _perform(
-    BuildContext context,
-    Future<void> Function() action,
-  ) async {
-    try {
-      await action();
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: CopyableMessage('Could not complete action: $error'),
-          ),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = controller;
@@ -357,26 +340,11 @@ class TestBenchView extends StatelessWidget {
     bool enabled,
   ) {
     final c = controller;
-    final min = stage?.details['suggestedMin'];
-    final max = stage?.details['suggestedMaxExclusive'];
     return [
       OutlinedButton(
         onPressed: enabled ? () => c.runTestLadder() : null,
         child: const Text('Retry'),
       ),
-      if (stage?.stageId == 'cli_version' && min is String && max is String)
-        OutlinedButton(
-          onPressed: enabled
-              ? () => _perform(
-                    context,
-                    () => c.applyRecommendedProviderCompatibilityRange(
-                      min: min,
-                      maxExclusive: max,
-                    ),
-                  )
-              : null,
-          child: const Text('Apply version range'),
-        ),
       OutlinedButton.icon(
         icon: const Icon(Icons.auto_awesome, size: 16),
         onPressed: enabled ? () => AiRepairLoopDialog.show(context, c) : null,

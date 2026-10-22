@@ -611,9 +611,9 @@ class ProfileLabTestSandbox {
 
     // --- STAGE 4: CLI Version Command ---
     // Only checks that the CLI understands its version command and answers
-    // with something. The value is recorded, never compared: the local dev
-    // environment says nothing about users' machines, and Workspace enforces
-    // the Profile's supported range at runtime.
+    // with something. The value is recorded, never compared: Profiles support
+    // every CLI version, and Workspace runs this same check when it verifies a
+    // Worker.
     final s4Timer = Stopwatch()..start();
     if (haltExecution) {
       s4Timer.stop();

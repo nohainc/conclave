@@ -100,6 +100,31 @@ separate lifecycle semantics.
 
 ## Worker subsystem
 
+Workspace verification retains the CLI Engine probe checks: the version
+command, model discovery when declared, each Profile-defined passive command and
+config check, and the usage/account command for a live test. Passive availability
+checks do not run the usage command. A CLI discovery/start failure appears as
+`provider_tool`; successful discovery is implicit in the version result and is
+not an additional synthetic success. Model discovery can warn when a cached
+catalog is retained. These probes never call a model and do not repeat Profile
+Lab's schema-validation or event-replay authoring tests. Status icons accompany
+each returned check and the last-check timestamps; an unavailable saved result
+is marked unknown rather than inferred as successful. Detailed evidence remains
+visible without a separate verification heading or overall-result row. CLI
+version, model discovery and authentication/sign-in check rows are hidden from
+the management UI only; all probes and their service evidence remain unchanged.
+Workspace name is editable while the service is stopped and either Cloud
+registration has not happened or the local service is explicitly unregistered. Work Root is locked
+while the service is starting, running or stopping. Parallel capacity remains
+visible while stopped, with mutations and polling disabled until the service
+is available again.
+
+Per-Worker updates use `workers.refreshWorker` with `workerTypeId`. An older
+running service that rejects the command must be replaced with the current app's
+helper and restarted after active work finishes. The UI explains this recovery;
+it does not fall back to refreshing every Worker or restart active work.
+
+
 `WorkspaceWorkerSubsystem` is the service composition boundary. It owns the
 local Worker registry, catalog/profile resolution, Profile/readiness checks,
 Engine supervision, and the small API used by runtime and IPC:

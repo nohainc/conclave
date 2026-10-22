@@ -12,7 +12,6 @@ enum ToolProfileResolutionSource {
 
 enum ToolProfileUnavailableReason {
   noEligibleRelease,
-  unsupportedProviderVersion,
   incompatibleEngineVersion,
 }
 
@@ -93,40 +92,11 @@ abstract final class ToolProfileCompatibility {
     }
   }
 
-  static bool isProviderCompatible(
-    EngineProfile profile,
-    String? providerCliVersion,
-  ) {
-    if (providerCliVersion == null) return true;
-    final ranges = profile.providerTool['supportedVersions'];
-    if (ranges is! List) return false;
-    for (final range in ranges) {
-      if (range is! Map ||
-          range['min'] is! String ||
-          range['maxExclusive'] is! String) {
-        continue;
-      }
-      try {
-        if (semanticVersionInRange(
-          providerCliVersion,
-          range['min'] as String,
-          range['maxExclusive'] as String,
-        )) {
-          return true;
-        }
-      } on FormatException {
-        continue;
-      }
-    }
-    return false;
-  }
-
   static bool isCandidateCompatible({
     required ToolProfileCandidate candidate,
     required String logicalWorkerTypeId,
     required String profileDefinitionId,
     required String engineVersion,
-    String? providerCliVersion,
   }) {
     if (candidate.logicalWorkerTypeId != logicalWorkerTypeId ||
         candidate.profileDefinitionId != profileDefinitionId) {
@@ -136,8 +106,9 @@ abstract final class ToolProfileCompatibility {
       final profile = EngineProfile.parse(
         utf8.encode(canonicalJson(candidate.profile)),
       );
-      return isEngineCompatible(profile, engineVersion) &&
-          isProviderCompatible(profile, providerCliVersion);
+      // Provider CLI versions are not a compatibility gate: a Profile supports
+      // every CLI version. Overrides use their own providerVersion ranges.
+      return isEngineCompatible(profile, engineVersion);
     } on Object {
       return false;
     }

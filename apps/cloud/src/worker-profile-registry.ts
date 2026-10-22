@@ -6,7 +6,6 @@ import {
   profileDigest,
   validateId,
   validateWorkerProfilePublicationEvidence,
-  validateProviderCompatibilityForPublication,
   type ToolProfileRegistryEnvironment,
   type WorkerProfilePublicationEvidence,
 } from "./tool-profile-validation.js";
@@ -14,7 +13,6 @@ import {
 export {
   ToolProfileRegistryError,
   validateWorkerProfilePublicationEvidence,
-  validateProviderCompatibilityForPublication,
 } from "./tool-profile-validation.js";
 export type {
   ToolProfileRegistryEnvironment,
@@ -325,7 +323,6 @@ export async function validateWorkerProfileCandidate(
       "Profile logical Worker does not match the requested Worker",
     );
   }
-  validateProviderCompatibilityForPublication(parsed.profile);
   const digest = await profileDigest(parsed.payload);
   if (
     candidateDigest !== undefined &&

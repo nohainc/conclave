@@ -8,13 +8,11 @@ final class ProfileVersionProbeResult {
   const ProfileVersionProbeResult({
     required this.exitCode,
     required this.version,
-    required this.supported,
     this.output = '',
   });
 
   final int exitCode;
   final String? version;
-  final bool supported;
 
   /// The probe's configured output stream, trimmed and capped at 200
   /// characters. Profile Lab only checks that the CLI answered.
@@ -25,7 +23,8 @@ final class ProfileVersionProbeResult {
 ///
 /// This is shared by the CLI Worker Engine and Profile Lab so local
 /// qualification and Workspace readiness apply the same command, timeout,
-/// output-source, extraction, and supported-range rules.
+/// output-source, and extraction rules. The detected version is informational
+/// and selects version-specific overrides; it never rejects a CLI.
 abstract final class ProfileVersionProbe {
   static Map<String, String> buildContext({
     required EngineProfile profile,
@@ -87,9 +86,6 @@ abstract final class ProfileVersionProbe {
     return ProfileVersionProbeResult(
       exitCode: result.exitCode,
       version: version,
-      supported:
-          version != null &&
-          ToolProfileCompatibility.isProviderCompatible(profile, version),
       output: () {
         final trimmed = source.trim();
         return trimmed.length > 200 ? trimmed.substring(0, 200) : trimmed;

@@ -19,7 +19,6 @@ class ToolProfileResolver {
     required String logicalWorkerTypeId,
     required String profileDefinitionId,
     required String engineVersion,
-    String? providerCliVersion,
     Future<void> Function()? ensureAvailable,
   }) async {
     final draft = await store.developmentProfiles
@@ -29,22 +28,19 @@ class ToolProfileResolver {
           source: ToolProfileResolutionSource.draft,
           logicalWorkerTypeId: logicalWorkerTypeId,
           profileDefinitionId: profileDefinitionId,
-          engineVersion: engineVersion,
-          providerCliVersion: providerCliVersion);
+          engineVersion: engineVersion);
       if (result.isAvailable || ensureAvailable == null) return result;
     }
     var result = await _resolveV9(
         logicalWorkerTypeId: logicalWorkerTypeId,
         profileDefinitionId: profileDefinitionId,
-        engineVersion: engineVersion,
-        providerCliVersion: providerCliVersion);
+        engineVersion: engineVersion);
     if (!result.isAvailable && ensureAvailable != null) {
       await ensureAvailable();
       result = await _resolveV9(
           logicalWorkerTypeId: logicalWorkerTypeId,
           profileDefinitionId: profileDefinitionId,
-          engineVersion: engineVersion,
-          providerCliVersion: providerCliVersion);
+          engineVersion: engineVersion);
     }
     return result;
   }
@@ -53,7 +49,6 @@ class ToolProfileResolver {
     required String logicalWorkerTypeId,
     required String profileDefinitionId,
     required String engineVersion,
-    required String? providerCliVersion,
   }) async {
     WorkerProfileSnapshotAdmission? current;
     try {
@@ -75,8 +70,7 @@ class ToolProfileResolver {
           source: ToolProfileResolutionSource.active,
           logicalWorkerTypeId: logicalWorkerTypeId,
           profileDefinitionId: profileDefinitionId,
-          engineVersion: engineVersion,
-          providerCliVersion: providerCliVersion);
+          engineVersion: engineVersion);
     }
     final lastKnownGood =
         await store.lastKnownGoodWorkerProfile(logicalWorkerTypeId);
@@ -88,8 +82,7 @@ class ToolProfileResolver {
         source: ToolProfileResolutionSource.lastKnownGood,
         logicalWorkerTypeId: logicalWorkerTypeId,
         profileDefinitionId: profileDefinitionId,
-        engineVersion: engineVersion,
-        providerCliVersion: providerCliVersion);
+        engineVersion: engineVersion);
   }
 
   ToolProfileResolution<ToolProfileCandidate> _checkCandidate(
@@ -98,7 +91,6 @@ class ToolProfileResolver {
     required String logicalWorkerTypeId,
     required String profileDefinitionId,
     required String engineVersion,
-    required String? providerCliVersion,
   }) {
     if (candidate.logicalWorkerTypeId != logicalWorkerTypeId ||
         candidate.profileDefinitionId != profileDefinitionId) {
@@ -112,12 +104,6 @@ class ToolProfileResolver {
           profile, engineVersion)) {
         return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
             ToolProfileUnavailableReason.incompatibleEngineVersion);
-      }
-      if (providerCliVersion != null &&
-          !ToolProfileCompatibility.isProviderCompatible(
-              profile, providerCliVersion)) {
-        return const ToolProfileResolution<ToolProfileCandidate>.unavailable(
-            ToolProfileUnavailableReason.unsupportedProviderVersion);
       }
       return ToolProfileResolution<ToolProfileCandidate>.selected(
           source: source, release: candidate);

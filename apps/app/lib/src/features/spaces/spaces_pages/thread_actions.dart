@@ -45,8 +45,10 @@ extension _ThreadActions on _ThreadPageState {
     // the message waits its turn; [_dispatchQueuedWork] sends it later.
     if (_activeWorkRequests.isNotEmpty || _workQueue.isNotEmpty) {
       _updateState(() {
+        // A pause belongs to the messages it held; the first message of a
+        // new queue always starts unpaused.
+        if (_workQueue.isEmpty) _workQueuePause = null;
         _workQueue.add(message);
-        _workQueuePaused = false;
       });
       _dispatchQueuedWork();
       return;
@@ -65,12 +67,19 @@ extension _ThreadActions on _ThreadPageState {
   List<_QueuedWorkMessage> get _workQueue =>
       _ThreadPageState._queuedWorkByThread.putIfAbsent(_workQueueKey, () => []);
 
+  /// Pauses or resumes sending queued messages. Resuming sends the next one
+  /// as soon as nothing is processing.
+  void _setWorkQueuePaused(bool paused) {
+    _updateState(() => _workQueuePause = paused ? _WorkQueuePause.user : null);
+    if (!paused) _dispatchQueuedWork();
+  }
+
   /// Sends the next queued message once nothing is processing. A failed send
-  /// pauses the queue until the user sends or edits a message.
+  /// or a failed request pauses the queue until the user resumes it.
   void _dispatchQueuedWork() {
     if (widget.isDraft ||
         _dispatchingQueuedWork ||
-        _workQueuePaused ||
+        _workQueuePause != null ||
         _submittingWork ||
         // Until this Thread's requests are loaded, a processing request may be
         // missing from the timeline, and the queue would be sent too early.
@@ -131,10 +140,7 @@ extension _ThreadActions on _ThreadPageState {
         );
         if (!cancelled || !mounted) return;
       }
-      _updateState(() {
-        _workQueue.remove(message);
-        _workQueuePaused = false;
-      });
+      _updateState(() => _workQueue.remove(message));
       _followLatestWork();
       await _submitWorkMessage(message, fromQueue: true);
       if (mounted) _followLatestWork();
@@ -178,7 +184,6 @@ extension _ThreadActions on _ThreadPageState {
         _workQueue.removeAt(index);
       }
       _workAttachments = List.of(message.attachments);
-      _workQueuePaused = false;
     });
     _requestController.value = TextEditingValue(
       text: message.text,
@@ -230,7 +235,7 @@ extension _ThreadActions on _ThreadPageState {
         // The page was left mid-send: keep the message queued for the return.
         (_ThreadPageState._queuedWorkByThread[queueKey] ??= [])
             .insert(0, message);
-        _ThreadPageState._pausedWorkQueues.add(queueKey);
+        _ThreadPageState._workQueuePauses[queueKey] = _WorkQueuePause.failure;
         return;
       }
       if (!mounted ||
@@ -242,7 +247,7 @@ extension _ThreadActions on _ThreadPageState {
         if (fromQueue) {
           // Keep the message first in line and wait for the user.
           _workQueue.insert(0, message);
-          _workQueuePaused = true;
+          _workQueuePause = _WorkQueuePause.failure;
           return;
         }
         // Authored form data stays in this form; mutation/history state is shared.

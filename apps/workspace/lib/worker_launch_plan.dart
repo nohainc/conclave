@@ -51,9 +51,6 @@ enum WorkerLaunchUnavailable {
   /// The Profile exists but is not compatible with this Engine version.
   incompatibleEngine,
 
-  /// The installed provider CLI version is not supported by the Profile.
-  unsupportedProviderVersion,
-
   /// The Profile resolved but its execution file could not be prepared.
   profileFileUnavailable,
 }
@@ -200,7 +197,6 @@ class WorkerLaunchPlanCache {
         logicalWorkerTypeId: workerTypeId,
         profileDefinitionId: profileDefinitionId,
         engineVersion: engineVersion,
-        providerCliVersion: providerCliVersion,
       );
     } on Object {
       return const WorkerLaunchPlanResult.unavailable(
@@ -211,8 +207,6 @@ class WorkerLaunchPlanCache {
       return WorkerLaunchPlanResult.unavailable(switch (resolution.reason) {
         ToolProfileUnavailableReason.incompatibleEngineVersion =>
           WorkerLaunchUnavailable.incompatibleEngine,
-        ToolProfileUnavailableReason.unsupportedProviderVersion =>
-          WorkerLaunchUnavailable.unsupportedProviderVersion,
         _ => WorkerLaunchUnavailable.noProfile,
       });
     }

@@ -108,12 +108,11 @@ void main() {
     expect(result.fromCache, isFalse);
   });
 
-  test('reports a specific reason for an unsupported provider version',
-      () async {
+  test('any installed provider CLI version can launch the Profile', () async {
     await activate(1);
     final result = await resolve(provider: '9.9.9');
-    expect(
-        result.unavailable, WorkerLaunchUnavailable.unsupportedProviderVersion);
+    expect(result.isReady, isTrue);
+    expect(result.plan!.providerCliVersion, '9.9.9');
   });
 
   test('reports a missing Profile promptly instead of fetching one', () async {

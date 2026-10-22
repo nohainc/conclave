@@ -109,17 +109,8 @@ void main() {
     expect(
         tester.widget<EditableText>(find.byType(EditableText)).controller.text,
         changed);
-    await tester.tap(find.byTooltip('Show Inspector'));
-    await tester.pump();
-    expect(find.text('Inspector'), findsOneWidget);
-    await tester.tap(find.byTooltip('Hide Inspector'));
-    await tester.pump();
     expect(find.text('Inspector'), findsNothing);
-    await tester.tap(find.byTooltip('Focus editor'));
-    await tester.pump();
-    expect(find.text('Profile Tests'), findsNothing);
-    await tester.tap(find.byTooltip('Exit focused editor'));
-    await tester.pump();
+    expect(find.byTooltip('Focus editor'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -170,13 +161,13 @@ void main() {
     for (final action in [
       'Format JSON',
       'Compare with current Profile',
-      'Restore saved Profile',
-      'Restore recovery snapshot',
       'Profile history',
-      'AI Repair'
     ]) {
       expect(find.text(action), findsOneWidget);
     }
+    expect(find.text('Restore saved Profile'), findsNothing);
+    expect(find.text('Restore recovery snapshot'), findsNothing);
+    expect(find.text('AI Repair'), findsNothing);
     await tester.tap(find.text('Format JSON'));
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 800));

@@ -257,13 +257,15 @@ class _WorkspaceMemberAccessSectionState
     final presentation = WorkerPresentation.resolve(
       worker.workerTypeId,
       worker.displayName,
+      profileDefinitionId: worker.profileDefinitionId,
+      providerToolName: worker.providerToolName,
     );
     final workerIcon = presentation.iconAsset;
     if (workerIcon != null) {
       return Image.asset(
         workerIcon,
-        width: 18,
-        height: 18,
+        width: 20,
+        height: 20,
         fit: BoxFit.contain,
         semanticLabel: '${worker.displayName} icon',
       );
@@ -271,7 +273,7 @@ class _WorkspaceMemberAccessSectionState
     final theme = Theme.of(context);
     return Icon(
       worker.isReady ? Icons.smart_toy_outlined : Icons.warning_amber,
-      size: 18,
+      size: 20,
       color: worker.isReady ? theme.colorScheme.primary : Colors.amber,
     );
   }
@@ -324,8 +326,17 @@ class _WorkspaceMemberAccessSectionState
               children: [
                 _workerIconWidget(context, worker),
                 const SizedBox(width: 8),
-                Text(worker.displayName,
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text(
+                  worker.displayName.trim().isNotEmpty
+                      ? worker.displayName
+                      : WorkerPresentation.resolve(
+                          worker.workerTypeId,
+                          worker.displayName,
+                          profileDefinitionId: worker.profileDefinitionId,
+                          providerToolName: worker.providerToolName,
+                        ).name,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
               ],
             )),
             DataCell(Center(

@@ -10,6 +10,51 @@ void main() {
       );
 
   testWidgets(
+      'capacity stays visible offline without IPC and refreshes on restart',
+      (tester) async {
+    var reads = 0;
+    Future<Map<String, Object?>> load() async {
+      reads++;
+      return {
+        'active': 1,
+        'queued': 0,
+        'limit': 4,
+        'activeAssignmentIds': ['a']
+      };
+    }
+
+    Widget view(bool available) => wrap(WorkerSlotsCard(
+          serviceAvailable: available,
+          load: load,
+          setSlots: (_) async => {},
+          reset: () async => {},
+        ));
+    await tester.pumpWidget(view(true));
+    await tester.pump();
+    expect(reads, 1);
+    await tester.pumpWidget(view(false));
+    await tester.pump(const Duration(seconds: 6));
+    expect(reads, 1);
+    expect(find.text('Parallel executions'), findsOneWidget);
+    expect(find.text('Slots 1/4 in use'), findsOneWidget);
+    expect(
+        tester
+            .widget<DropdownButtonFormField<int>>(
+                find.byKey(const ValueKey('parallel-slots-select')))
+            .onChanged,
+        isNull);
+    expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Reset slots'))
+            .onPressed,
+        isNull);
+    await tester.pumpWidget(view(true));
+    await tester.pump();
+    expect(reads, 2);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
       'WorkerSlotsCard renders usage line, waiting line, 8+ warning, and out-of-sync note',
       (tester) async {
     var payload = <String, Object?>{
@@ -23,6 +68,7 @@ void main() {
       wrap(
         WorkerSlotsCard(
           load: () async => payload,
+          reset: () async => payload,
           setSlots: (slots) async {
             payload = <String, Object?>{
               ...payload,
@@ -40,6 +86,20 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Slots 1/4 in use'), findsOneWidget);
+    expect(
+        tester.widget<Text>(find.text('Parallel executions')).style?.fontWeight,
+        FontWeight.w400);
+    final reset = find.widgetWithText(TextButton, 'Reset slots');
+    expect(reset, findsOneWidget);
+    expect(tester.getCenter(reset).dy,
+        closeTo(tester.getCenter(find.text('Slots 1/4 in use')).dy, 1));
+
+    expect(find.textContaining('Maximum simultaneous requests'), findsNothing);
+    final selector = find.byKey(const ValueKey('parallel-slots-select'));
+    expect(tester.getCenter(selector).dy,
+        closeTo(tester.getCenter(find.text('Parallel executions')).dy, 1));
+    expect(tester.getCenter(selector).dx,
+        greaterThan(tester.getCenter(find.text('Parallel executions')).dx));
     expect(find.byKey(const ValueKey('parallel-slots-waiting')), findsNothing);
     expect(
       find.byKey(const ValueKey('parallel-slots-high-warning')),

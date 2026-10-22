@@ -847,6 +847,8 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
     final presentation = WorkerPresentation.resolve(
       worker.workerTypeId,
       worker.displayName,
+      profileDefinitionId: worker.profileDefinitionId,
+      providerToolName: worker.providerToolName,
     );
     final workerIcon = presentation.iconAsset;
     if (workerIcon != null) {

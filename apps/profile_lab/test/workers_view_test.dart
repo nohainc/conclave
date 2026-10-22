@@ -52,9 +52,12 @@ void main() {
     ];
     await tester.pumpWidget(
         MaterialApp(home: Scaffold(body: WorkersView(controller: controller))));
-    expect(find.text('ChatGPT'), findsOneWidget);
-    expect(find.text('Gemini'), findsOneWidget);
-    expect(find.text('gemini · CLI: agy'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('worker-tab-chatgpt')), matching: find.text('ChatGPT')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('worker-tab-gemini')), matching: find.text('Gemini')), findsOneWidget);
+    expect(find.text('agy'), findsOneWidget);
+    expect(find.text('codex'), findsOneWidget);
+    expect(find.byKey(const Key('worker-selector-gemini')), findsOneWidget);
+    expect(find.byKey(const Key('worker-selector-chatgpt')), findsOneWidget);
   });
 
   testWidgets(
@@ -116,14 +119,15 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    // Check sidebar displays Profile status
-    expect(find.textContaining('Profile:'), findsOneWidget);
+    // Verify sidebar displays Worker name, CLI name, and status.
+    expect(find.byKey(const Key('worker-selector-chatgpt')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('worker-selector-chatgpt')), matching: find.text('ChatGPT')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('worker-tab-chatgpt')), matching: find.text('ChatGPT')), findsOneWidget);
+    expect(find.text('codex'), findsOneWidget);
 
-    // Check the compact header displays the Worker identity and provider CLI.
-    expect(find.text('ChatGPT'), findsWidgets);
-    expect(find.text('chatgpt'), findsWidgets);
-    expect(find.text('CLI · codex'), findsOneWidget);
-    expect(find.text('Profile not published'), findsOneWidget);
+    // Verify top/first panel header with worker name, CLI name, and profile chips was deleted.
+    expect(find.text('CLI · codex'), findsNothing);
+    expect(find.text('Profile not published'), findsNothing);
     expect(find.text('Overview'), findsNothing);
     expect(find.text('Draft & Test'), findsNothing);
   });

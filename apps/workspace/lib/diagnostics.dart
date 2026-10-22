@@ -192,7 +192,6 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
           logicalWorkerTypeId: worker.workerTypeId,
           profileDefinitionId: profileDefinitionId,
           engineVersion: cliWorkerEngineVersion,
-          providerCliVersion: worker.toolVersion,
         );
         toolProfile = {
           'profileDefinitionId': profileDefinitionId,

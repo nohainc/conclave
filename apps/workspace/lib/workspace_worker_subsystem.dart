@@ -72,6 +72,17 @@ class WorkspaceWorkerSubsystem {
     }
   }
 
+  /// Checks a single Worker for catalog and Profile updates, then re-runs its
+  /// availability check. Other Workers are not contacted.
+  Future<void> refreshWorker(String workerTypeId) async {
+    await catalog?.refreshWorker(workerTypeId);
+    await readiness.checkNow(
+      mode: LocalWorkerProbeMode.passive,
+      workerTypeId: workerTypeId,
+      includeDisabled: true,
+    );
+  }
+
   Future<void> refreshReadiness({
     LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
     String? workerTypeId,

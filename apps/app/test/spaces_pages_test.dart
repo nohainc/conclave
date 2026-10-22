@@ -1256,24 +1256,190 @@ void main() {
       expect(tester.takeException(), isNull);
     }
   });
-  testWidgets('messages sent while a request runs are queued and sent next',
+  for (final brightness in Brightness.values) {
+    testWidgets(
+        'messages sent while a request runs are queued and sent next $brightness',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 1400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final data = _SlowSubmissionDataSource()..ready.complete([]);
+      AxWorkRequest running(String status) => AxWorkRequest(
+            id: 'running-1',
+            requestedByName: 'You',
+            requestedByUserId: 'user-owner',
+            prompt: 'First request',
+            workflowId: 'direct',
+            workflowVersion: 1,
+            status: status,
+            createdAt: '2026-10-06T10:00:00Z',
+            steps: const [],
+            finalText: status == 'completed' ? 'First answer' : null,
+          );
+      data.requests = [running('running')];
+      final prompts = <String>[];
+      await tester.pumpWidget(MaterialApp(
+          theme: ThemeData(brightness: brightness),
+          home: Scaffold(
+              body: ThreadPage(
+            initialTab: 1,
+            space: const AxSpace(
+                id: 'space-1',
+                name: 'Space',
+                branch: '',
+                lastActivity: '',
+                role: 'owner'),
+            thread: const AxThread(
+                id: 'thread-1',
+                spaceId: 'space-1',
+                name: 'Stream',
+                lead: '',
+                status: 'active',
+                brief: '',
+                primaryWorkspace: '',
+                queueStatus: ''),
+            dataSource: data,
+            currentUserId: 'user-owner',
+            onBackToSpace: _noop,
+            onArchive: _noop,
+            onRunWork: (prompt, __, ___, key) async {
+              prompts.add(prompt);
+              return 'saved-${prompts.length}';
+            },
+          ))));
+      await tester.pumpAndSettle();
+      await _askAi(tester);
+      final send = find.byKey(const ValueKey('composer-send-Send request'));
+      for (final text in ['Second', 'Third', 'Dropped']) {
+        await tester.enterText(find.byType(TextField).first, text);
+        await tester.tap(send);
+        await tester.pumpAndSettle();
+      }
+      expect(prompts, isEmpty);
+      expect(find.text('Cancel previous request?'), findsNothing);
+      expect(find.byKey(const ValueKey('work-queue-panel')), findsOneWidget);
+      expect(find.textContaining('Queued · 3'), findsOneWidget);
+
+      final divider = find.byKey(const ValueKey('work-queue-panel-divider'));
+      expect(divider, findsNothing);
+
+      // Usage, history and queue can coexist. Only the queue nearest the input
+      // extends behind it; the upper layers meet the next panel without overlap.
+      final usage =
+          tester.widget<AxWorkerUsagePanel>(find.byType(AxWorkerUsagePanel));
+      usage.controller.showMessage('Usage alongside queued requests');
+      await tester.pumpAndSettle();
+      expect(divider, findsOneWidget);
+      expect(find.textContaining('Queued · 3'), findsOneWidget);
+      await tester.showKeyboard(find.byType(TextField).first);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      final usageLayer = tester
+          .getRect(find.byKey(const ValueKey('worker-usage-layer-background')));
+      final historyLayer = tester.getRect(
+          find.byKey(const ValueKey('request-history-layer-background')));
+      final queuePanel =
+          tester.getRect(find.byKey(const ValueKey('work-queue-panel')));
+      expect(usageLayer.bottom, historyLayer.top);
+      expect(historyLayer.bottom, queuePanel.top);
+      expect(usageLayer.left, historyLayer.left);
+      expect(historyLayer.left, queuePanel.left);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .getRect(
+                  find.byKey(const ValueKey('worker-usage-layer-background')))
+              .bottom,
+          tester.getTopLeft(find.byKey(const ValueKey('work-queue-panel'))).dy);
+      usage.controller.dismiss();
+      await tester.pumpAndSettle();
+      expect(divider, findsNothing);
+
+      // History alone also separates its content from the visible queue.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(divider, findsOneWidget);
+      expect(find.textContaining('Queued · 3'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(divider, findsNothing);
+
+      final queueHeader = tester
+          .widget<Container>(find.byKey(const ValueKey('work-queue-header')));
+      final isDark = brightness == Brightness.dark;
+      expect(queueHeader.color, ConclaveColors.primarySoftColor(isDark));
+      expect(queueHeader.color, isNot(ConclaveColors.composerRail(isDark)));
+      expect(queueHeader.color, isNot(ConclaveColors.canvas(isDark)));
+      expect(
+          queueHeader.color, isNot(ConclaveColors.composerBackground(isDark)));
+
+      // The queue is an inset back layer of the input, with no gap. Its
+      // decorative overlap must not cover the input or hide the queue controls.
+      for (final width in [1200.0, 390.0]) {
+        await tester.binding.setSurfaceSize(Size(width, 1400));
+        await tester.pumpAndSettle();
+        final queue =
+            tester.getRect(find.byKey(const ValueKey('work-queue-panel')));
+        final layer = tester
+            .getRect(find.byKey(const ValueKey('work-queue-layer-background')));
+        final composer = tester.getRect(find.byType(MarkdownComposer));
+        expect(queue.bottom, composer.top);
+        expect(queue.left, composer.left + 8);
+        expect(queue.right, composer.right - 8);
+        expect(layer.bottom, composer.top + 10);
+        expect(find.byTooltip('Pause queue').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Edit').hitTestable(), findsNWidgets(3));
+        expect(find.byTooltip('Send now').hitTestable(), findsNWidgets(3));
+        expect(find.byTooltip('Remove from queue').hitTestable(),
+            findsNWidgets(3));
+        expect(send.hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }
+
+      // Remove one; edit another back into the composer and queue it again.
+      await tester.tap(find.byTooltip('Remove from queue').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Dropped'), findsNothing);
+      await tester.tap(find.byTooltip('Edit').last);
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .widget<TextField>(find.byType(TextField).first)
+              .controller!
+              .text,
+          'Third');
+      await tester.enterText(find.byType(TextField).first, 'Third edited');
+      await tester.tap(send);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Queued · 2'), findsOneWidget);
+
+      data.requests = [running('completed')];
+      await AxWorkHistoryCache.forSource(data).refresh('thread-1');
+      await tester.pumpAndSettle();
+      // Only the head of the queue is sent; the next waits for it to finish.
+      expect(prompts, ['Second']);
+      expect(find.textContaining('Queued · 1'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+  testWidgets('a failed request pauses the queue until the user resumes it',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final data = _SlowSubmissionDataSource()..ready.complete([]);
-    AxWorkRequest running(String status) => AxWorkRequest(
-          id: 'running-1',
+    AxWorkRequest request(String id, String status) => AxWorkRequest(
+          id: id,
           requestedByName: 'You',
           requestedByUserId: 'user-owner',
-          prompt: 'First request',
+          prompt: 'Request $id',
           workflowId: 'direct',
           workflowVersion: 1,
           status: status,
-          createdAt: '2026-10-06T10:00:00Z',
+          createdAt: '2026-10-06T10:00:0${id.length % 10}Z',
           steps: const [],
-          finalText: status == 'completed' ? 'First answer' : null,
+          finalText: status == 'completed' ? 'Answer $id' : null,
         );
-    data.requests = [running('running')];
+    data.requests = [request('r1', 'running')];
     final prompts = <String>[];
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -1306,36 +1472,67 @@ void main() {
     await tester.pumpAndSettle();
     await _askAi(tester);
     final send = find.byKey(const ValueKey('composer-send-Send request'));
-    for (final text in ['Second', 'Third', 'Dropped']) {
+    for (final text in ['Second', 'Third']) {
       await tester.enterText(find.byType(TextField).first, text);
       await tester.tap(send);
       await tester.pumpAndSettle();
     }
-    expect(prompts, isEmpty);
-    expect(find.text('Cancel previous request?'), findsNothing);
-    expect(find.byKey(const ValueKey('work-queue-panel')), findsOneWidget);
-    expect(find.textContaining('Queued · 3'), findsOneWidget);
 
-    // Remove one; edit another back into the composer and queue it again.
-    await tester.tap(find.byTooltip('Remove from queue').last);
-    await tester.pumpAndSettle();
-    expect(find.text('Dropped'), findsNothing);
-    await tester.tap(find.byTooltip('Edit').last);
-    await tester.pumpAndSettle();
-    expect(
-        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
-        'Third');
-    await tester.enterText(find.byType(TextField).first, 'Third edited');
-    await tester.tap(send);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Queued · 2'), findsOneWidget);
-
-    data.requests = [running('completed')];
+    // The running request fails: nothing is sent and the queue is paused.
+    data.requests = [request('r1', 'failed')];
     await AxWorkHistoryCache.forSource(data).refresh('thread-1');
     await tester.pumpAndSettle();
-    // Only the head of the queue is sent; the next waits for it to finish.
+    expect(prompts, isEmpty);
+    expect(find.textContaining('paused after an error'), findsOneWidget);
+
+    // Queueing another message does not resume a paused queue.
+    await tester.enterText(find.byType(TextField).first, 'Fourth');
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    expect(prompts, isEmpty);
+    expect(find.textContaining('Queued · 3'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Resume queue'));
+    await tester.pumpAndSettle();
     expect(prompts, ['Second']);
+
+    // The user pauses the queue; finishing the request sends nothing.
+    await tester.tap(find.byTooltip('Pause queue'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Queued · 2 — paused'), findsOneWidget);
+    data.requests = [request('r1', 'failed'), request('saved-1', 'completed')];
+    await AxWorkHistoryCache.forSource(data).refresh('thread-1');
+    await tester.pumpAndSettle();
+    expect(prompts, ['Second']);
+
+    await tester.tap(find.byTooltip('Resume queue'));
+    await tester.pumpAndSettle();
+    expect(prompts, ['Second', 'Third']);
+
+    // A pause left on an emptied queue does not hold the next first message.
+    final finished = [request('r1', 'failed'), request('saved-1', 'completed')];
+    data.requests = [...finished, request('saved-2', 'running')];
+    await AxWorkHistoryCache.forSource(data).refresh('thread-1');
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Fifth');
+    await tester.tap(send);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Pause queue'));
+    await tester.pumpAndSettle();
+    while (find.byTooltip('Remove from queue').evaluate().isNotEmpty) {
+      await tester.tap(find.byTooltip('Remove from queue').first);
+      await tester.pumpAndSettle();
+    }
+    expect(find.byKey(const ValueKey('work-queue-panel')), findsNothing);
+    await tester.enterText(find.byType(TextField).first, 'Sixth');
+    await tester.tap(send);
+    await tester.pumpAndSettle();
     expect(find.textContaining('Queued · 1'), findsOneWidget);
+    expect(find.textContaining('paused'), findsNothing);
+    data.requests = [...finished, request('saved-2', 'completed')];
+    await AxWorkHistoryCache.forSource(data).refresh('thread-1');
+    await tester.pumpAndSettle();
+    expect(prompts, ['Second', 'Third', 'Sixth']);
     expect(tester.takeException(), isNull);
   });
   testWidgets('sending a queued message scrolls to the latest content',
@@ -2278,9 +2475,41 @@ void main() {
     final newer =
         find.descendant(of: list, matching: find.text('Newer prompt'));
     expect(tester.getTopLeft(older).dy, lessThan(tester.getTopLeft(newer).dy));
+    for (final width in [1400.0, 390.0]) {
+      await tester.binding.setSurfaceSize(Size(width, 900));
+      await tester.pumpAndSettle();
+      final history =
+          tester.getRect(find.byKey(const ValueKey('request-history-panel')));
+      final layer = tester.getRect(
+          find.byKey(const ValueKey('request-history-layer-background')));
+      final input = tester.getRect(find.byType(MarkdownComposer));
+      expect(history.bottom, input.top);
+      expect(history.left, input.left + 8);
+      expect(history.right, input.right - 8);
+      expect(layer.bottom, input.top + 10);
+      expect(older.hitTestable(), findsOneWidget);
+      expect(newer.hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(composer).controller!.text, 'Newer prompt');
+    expect(list, findsNothing);
+
+    await tester.enterText(composer, '');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(list, findsNothing);
+    expect(tester.widget<TextField>(composer).focusNode!.hasFocus, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    await tester.tap(older);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(composer).controller!.text, 'Older prompt');
+    expect(list, findsNothing);
   });
 
   testWidgets('Work history uses slow fallback and scoped reconnect discovery',

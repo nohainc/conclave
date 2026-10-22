@@ -314,7 +314,6 @@ void main() {
           final resolution = await coordinator.resolveProfileForWorker(
             workerTypeId: logicalWorker.workerTypeId,
             engineVersion: cliWorkerEngineVersion,
-            providerCliVersion: logicalWorker.providerCliVersion,
           );
           final release = resolution.release;
           if (release == null) {

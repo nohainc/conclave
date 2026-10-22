@@ -28,6 +28,7 @@ import 'local_worker_permissions.dart' show minParallelSlots, maxParallelSlots;
 import 'worker_readiness.dart';
 import 'worker_check_progress.dart';
 import 'workspace_worker_view.dart';
+import 'worker_brand_icon.dart';
 
 export 'copyable_messages.dart' show showCopyableErrorSnackBar;
 export 'workspace_worker_view.dart'

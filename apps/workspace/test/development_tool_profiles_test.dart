@@ -66,8 +66,7 @@ void main() {
     final resolution = await resolver.resolveForWorker(
         logicalWorkerTypeId: 'fixture-worker',
         profileDefinitionId: 'fixture-cli',
-        engineVersion: '1.0.0',
-        providerCliVersion: '0.3.0');
+        engineVersion: '1.0.0');
     expect(resolution.source, ToolProfileResolutionSource.draft);
     expect(resolution.release!.isPublished, isFalse);
     expect(resolution.release, isA<LocalDraftProfileCandidate>());
@@ -85,7 +84,7 @@ void main() {
         throwsStateError);
   });
 
-  test('checks identity, Engine and provider compatibility', () async {
+  test('checks identity and Engine compatibility', () async {
     await expectLater(
         development.load('fixture-cli', 'other-worker'), throwsFormatException);
     final resolver = ToolProfileResolver(store);
@@ -96,14 +95,6 @@ void main() {
                 engineVersion: '9.0.0'))
             .reason,
         ToolProfileUnavailableReason.incompatibleEngineVersion);
-    expect(
-        (await resolver.resolveForWorker(
-                logicalWorkerTypeId: 'fixture-worker',
-                profileDefinitionId: 'fixture-cli',
-                engineVersion: '1.0.0',
-                providerCliVersion: '9.0.0'))
-            .reason,
-        ToolProfileUnavailableReason.unsupportedProviderVersion);
   });
 
   test('pins a run payload and rejects snapshot tampering', () async {

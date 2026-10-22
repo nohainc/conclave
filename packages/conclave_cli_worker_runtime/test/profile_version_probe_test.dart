@@ -59,7 +59,6 @@ void main() {
 
       expect(result.exitCode, 0);
       expect(result.version, '1.2.3');
-      expect(result.supported, isTrue);
     },
   );
 

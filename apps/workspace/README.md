@@ -22,6 +22,19 @@ credentials, resolves current Tool Profiles, launches the generic CLI Worker
 Engine, enforces local permissions, supervises execution, and reports safe
 readiness/status back to Conclave Cloud.
 
+The macOS window opens at 750 × 480 pixels (minimum 750 × 420). Workspace
+settings put the name and Work Root on one row, with compact sleep and parallel
+capacity controls below. The centered tab selector stays above the settings; management buttons and
+expanded recovery content remain reachable by scrolling in shorter windows.
+
+Workspace name is editable while the service is stopped and either Cloud
+registration has not happened or the local service is explicitly unregistered. Work Root can be
+changed while the service is stopped; starting the service disables it. Parallel
+executions stays visible while stopped, with unavailable controls disabled and
+any last loaded usage retained. Worker check details omit CLI-version,
+model-list and sign-in rows from the UI only; the Engine still runs these checks
+and their evidence remains in service state.
+
 Its GUI is intentionally minimal and local-first:
 - account sign-in and explicit service start/stop;
 - Workers;

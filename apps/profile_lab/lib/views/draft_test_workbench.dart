@@ -6,7 +6,6 @@ import '../widgets/lab_components.dart';
 import '../controllers/profile_lab_controller.dart';
 import '../theme/profile_lab_theme.dart';
 import 'profile_draft_editor.dart';
-import 'ai_repair_loop_dialog.dart';
 import 'profile_release_diff_view.dart';
 import 'profile_publish_confirmation_dialog.dart';
 import 'profile_history_dialog.dart';
@@ -30,9 +29,7 @@ class DraftTestWorkbench extends StatefulWidget {
 class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
   bool _showEditor = true;
   bool _showTests = false;
-  bool _showInspector = false;
   double _editorFraction = 0.68;
-  bool _focusMode = false;
   bool _saving = false;
 
   Future<void> _perform(Future<void> Function() action) async {
@@ -80,22 +77,8 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
         c.formatCurrentJson();
       case 'compare':
         _compare();
-      case 'revert':
-        _perform(c.revertCurrentDraft);
-      case 'recovery':
-        _perform(() async {
-          final restored = await c.restoreLatestRecoverySnapshot();
-          if (!restored && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                  content: Text('No recovery snapshot is available.')),
-            );
-          }
-        });
       case 'history':
         ProfileHistoryDialog.show(context, c);
-      case 'repair':
-        AiRepairLoopDialog.show(context, c);
     }
   }
 
@@ -141,17 +124,7 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
     }
   }
 
-  void _toggleFocusMode() {
-    setState(() {
-      _focusMode = !_focusMode;
-      if (_focusMode) {
-        _showEditor = true;
-        _showTests = false;
-        _showInspector = false;
-      }
-    });
-    widget.onFocusChanged?.call(_focusMode);
-  }
+
 
   Widget _panes(ProfileLabController c) => LayoutBuilder(
         builder: (context, constraints) {
@@ -176,7 +149,6 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
                   width: double.infinity,
                   child: ProfileDraftEditor(
                     controller: c,
-                    showInspector: _showInspector,
                   ),
                 ),
               if (both)
@@ -252,207 +224,197 @@ class _DraftTestWorkbenchState extends State<DraftTestWorkbench> {
         c.isTesting ||
         c.isValidatingCandidate ||
         c.isPublishing;
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final sidebarWidth = constraints.maxWidth < 600 ? 160.0 : 200.0;
+        final sidebar = Container(
+          width: sidebarWidth,
           color: ProfileLabTheme.darkSurface,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Worker Profile · revision ${c.currentProfileRevision}',
-                key: const ValueKey('draft-status'),
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Worker Profile · revision ${c.currentProfileRevision}',
+                  key: const ValueKey('draft-status'),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  StatusBadge(
-                    label: c.isDirty ? 'Unsaved' : 'Saved',
-                    status: c.isDirty ? LabStatus.warning : LabStatus.success,
-                    icon: c.isDirty
-                        ? Icons.edit_outlined
-                        : Icons.check_circle_outline,
-                  ),
-                  StatusBadge(
-                    label: c.jsonValidationError == null ? 'Valid' : 'Invalid',
-                    status: c.jsonValidationError == null
-                        ? LabStatus.success
-                        : LabStatus.error,
-                    icon: c.jsonValidationError == null
-                        ? Icons.data_object
-                        : Icons.error_outline,
-                  ),
-                  StatusBadge(
-                    label: c.isTesting
-                        ? 'Running'
-                        : !c.testResultMatchesDraft || c.lastTestResult == null
-                            ? 'Not Run'
-                            : c.lastTestResult == 'pass'
-                                ? 'Tests Passed'
-                                : 'Tests Failed',
-                    status: c.isTesting
-                        ? LabStatus.neutral
-                        : !c.testResultMatchesDraft || c.lastTestResult == null
-                            ? LabStatus.neutral
-                            : c.lastTestResult == 'pass'
-                                ? LabStatus.success
-                                : LabStatus.error,
-                    icon: c.isTesting
-                        ? Icons.hourglass_top
-                        : c.lastTestResult == 'pass' && c.testResultMatchesDraft
-                            ? Icons.check_circle_outline
-                            : c.lastTestResult == 'fail' &&
-                                    c.testResultMatchesDraft
-                                ? Icons.error_outline
-                                : Icons.science_outlined,
-                  ),
-                  const SizedBox(width: 2),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.save_outlined, size: 16),
-                    label: const Text('Save'),
-                    onPressed:
-                        locked || !c.isDirty || c.jsonValidationError != null
-                            ? null
-                            : () => _perform(c.saveCurrentDraft),
-                  ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.verified_outlined, size: 16),
-                    label: const Text('Validate'),
-                    onPressed:
-                        locked || c.isDirty || c.jsonValidationError != null
-                            ? null
-                            : () => _perform(c.validateCurrentDraft),
-                  ),
-                  OutlinedButton.icon(
-                    icon: const Icon(Icons.science_outlined, size: 16),
-                    label: const Text('Run tests'),
-                    onPressed:
-                        locked || c.isDirty || c.jsonValidationError != null
-                            ? null
-                            : _runTests,
-                  ),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.cloud_upload_outlined, size: 16),
-                    label: const Text('Publish'),
-                    onPressed: locked ||
-                            c.isDirty ||
-                            c.jsonValidationError != null ||
-                            !c.candidateIsCloudValidated ||
-                            !c.testResultMatchesDraft ||
-                            c.lastTestResult != 'pass' ||
-                            !c.activityMappingTestMatchesDraft ||
-                            c.lastActivityMappingReplay?.status == 'failed'
-                        ? null
-                        : _publish,
-                  ),
-                  IconButton(
-                    tooltip: _showEditor ? 'Collapse editor' : 'Show editor',
-                    icon: const Icon(Icons.code, size: 18),
-                    isSelected: _showEditor,
-                    onPressed: () => setState(() {
-                      _showEditor = !_showEditor;
-                      if (!_showEditor) _showTests = true;
-                    }),
-                  ),
-                  IconButton(
-                    tooltip: _showTests ? 'Collapse tests' : 'Show tests',
-                    icon: const Icon(Icons.science_outlined, size: 18),
-                    isSelected: _showTests,
-                    onPressed: () => setState(() {
-                      _showTests = !_showTests;
-                      if (!_showTests) _showEditor = true;
-                    }),
-                  ),
-                  IconButton(
-                    tooltip:
-                        _showInspector ? 'Hide Inspector' : 'Show Inspector',
-                    icon: const Icon(Icons.view_sidebar_outlined, size: 18),
-                    isSelected: _showInspector,
-                    onPressed: () => setState(() {
-                      _showInspector = !_showInspector;
-                      if (_showInspector) _showEditor = true;
-                    }),
-                  ),
-                  IconButton(
-                    key: const ValueKey('reload-profile-file'),
-                    tooltip: c.profileFileUpdateAvailable
-                        ? 'Reload Profile from file (file changed)'
-                        : 'Reload Profile from file',
-                    icon: Icon(
-                      c.profileFileUpdateAvailable
-                          ? Icons.sync_problem
-                          : Icons.refresh,
-                      size: 18,
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    StatusBadge(
+                      label: c.isDirty ? 'Unsaved' : 'Saved',
+                      status: c.isDirty ? LabStatus.warning : LabStatus.success,
+                      icon: c.isDirty
+                          ? Icons.edit_outlined
+                          : Icons.check_circle_outline,
                     ),
-                    onPressed: locked ? null : _reloadProfileFile,
-                  ),
-                  IconButton(
-                    tooltip:
-                        _focusMode ? 'Exit focused editor' : 'Focus editor',
-                    icon: Icon(
-                      _focusMode ? Icons.fullscreen_exit : Icons.fullscreen,
-                      size: 18,
+                    StatusBadge(
+                      label: c.jsonValidationError == null ? 'Valid' : 'Invalid',
+                      status: c.jsonValidationError == null
+                          ? LabStatus.success
+                          : LabStatus.error,
+                      icon: c.jsonValidationError == null
+                          ? Icons.data_object
+                          : Icons.error_outline,
                     ),
-                    isSelected: _focusMode,
-                    onPressed: _toggleFocusMode,
-                  ),
-                  PopupMenuButton<String>(
-                    tooltip: 'More candidate actions',
-                    onSelected: _advanced,
-                    itemBuilder: (_) => [
-                      PopupMenuItem(
-                        value: 'reload',
-                        enabled: !locked,
-                        child: Text(c.profileFileUpdateAvailable
-                            ? 'Reload Profile from file… (file changed)'
-                            : 'Reload Profile from file…'),
+                    StatusBadge(
+                      label: c.isTesting
+                          ? 'Running'
+                          : !c.testResultMatchesDraft || c.lastTestResult == null
+                              ? 'Not Run'
+                              : c.lastTestResult == 'pass'
+                                  ? 'Tests Passed'
+                                  : 'Tests Failed',
+                      status: c.isTesting
+                          ? LabStatus.neutral
+                          : !c.testResultMatchesDraft || c.lastTestResult == null
+                              ? LabStatus.neutral
+                              : c.lastTestResult == 'pass'
+                                  ? LabStatus.success
+                                  : LabStatus.error,
+                      icon: c.isTesting
+                          ? Icons.hourglass_top
+                          : c.lastTestResult == 'pass' && c.testResultMatchesDraft
+                              ? Icons.check_circle_outline
+                              : c.lastTestResult == 'fail' &&
+                                      c.testResultMatchesDraft
+                                  ? Icons.error_outline
+                                  : Icons.science_outlined,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1, color: ProfileLabTheme.borderColor),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.save_outlined, size: 16),
+                  label: const Text('Save'),
+                  onPressed:
+                      locked || !c.isDirty || c.jsonValidationError != null
+                          ? null
+                          : () => _perform(c.saveCurrentDraft),
+                ),
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.verified_outlined, size: 16),
+                  label: const Text('Validate'),
+                  onPressed:
+                      locked || c.isDirty || c.jsonValidationError != null
+                          ? null
+                          : () => _perform(c.validateCurrentDraft),
+                ),
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.science_outlined, size: 16),
+                  label: const Text('Run tests'),
+                  onPressed:
+                      locked || c.isDirty || c.jsonValidationError != null
+                          ? null
+                          : _runTests,
+                ),
+                const SizedBox(height: 6),
+                FilledButton.icon(
+                  icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                  label: const Text('Publish'),
+                  onPressed: locked ||
+                          c.isDirty ||
+                          c.jsonValidationError != null ||
+                          !c.candidateIsCloudValidated ||
+                          !c.testResultMatchesDraft ||
+                          c.lastTestResult != 'pass' ||
+                          !c.activityMappingTestMatchesDraft ||
+                          c.lastActivityMappingReplay?.status == 'failed'
+                      ? null
+                      : _publish,
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1, color: ProfileLabTheme.borderColor),
+                const SizedBox(height: 8),
+                Wrap(
+                  alignment: WrapAlignment.spaceAround,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    IconButton(
+                      tooltip: _showEditor ? 'Collapse editor' : 'Show editor',
+                      icon: const Icon(Icons.code, size: 18),
+                      isSelected: _showEditor,
+                      onPressed: () => setState(() {
+                        _showEditor = !_showEditor;
+                        if (!_showEditor) _showTests = true;
+                      }),
+                    ),
+                    IconButton(
+                      tooltip: _showTests ? 'Collapse tests' : 'Show tests',
+                      icon: const Icon(Icons.science_outlined, size: 18),
+                      isSelected: _showTests,
+                      onPressed: () => setState(() {
+                        _showTests = !_showTests;
+                        if (!_showTests) _showEditor = true;
+                      }),
+                    ),
+                    IconButton(
+                      key: const ValueKey('reload-profile-file'),
+                      tooltip: c.profileFileUpdateAvailable
+                          ? 'Reload Profile from file (file changed)'
+                          : 'Reload Profile from file',
+                      icon: Icon(
+                        c.profileFileUpdateAvailable
+                            ? Icons.sync_problem
+                            : Icons.refresh,
+                        size: 18,
                       ),
-                      PopupMenuItem(
-                        value: 'format',
-                        enabled: !locked,
-                        child: const Text('Format JSON'),
-                      ),
-                      const PopupMenuItem(
-                        value: 'compare',
-                        child: Text('Compare with current Profile'),
-                      ),
-                      PopupMenuItem(
-                        value: 'revert',
-                        enabled: !locked && c.isDirty,
-                        child: const Text('Restore saved Profile'),
-                      ),
-                      PopupMenuItem(
-                        value: 'recovery',
-                        enabled: !locked,
-                        child: const Text('Restore recovery snapshot'),
-                      ),
-                      PopupMenuItem(
-                        value: 'history',
-                        enabled: true,
-                        child: const Text('Profile history'),
-                      ),
-                      PopupMenuItem(
-                        value: 'repair',
-                        enabled: !locked && !c.isDirty,
-                        child: const Text('AI Repair'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
+                      onPressed: locked ? null : _reloadProfileFile,
+                    ),
+                    PopupMenuButton<String>(
+                      tooltip: 'More candidate actions',
+                      onSelected: _advanced,
+                      itemBuilder: (_) => [
+                        PopupMenuItem(
+                          value: 'reload',
+                          enabled: !locked,
+                          child: Text(c.profileFileUpdateAvailable
+                              ? 'Reload Profile from file… (file changed)'
+                              : 'Reload Profile from file…'),
+                        ),
+                        PopupMenuItem(
+                          value: 'format',
+                          enabled: !locked,
+                          child: const Text('Format JSON'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'compare',
+                          child: Text('Compare with current Profile'),
+                        ),
+                        PopupMenuItem(
+                          value: 'history',
+                          enabled: true,
+                          child: const Text('Profile history'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-        Expanded(child: _panes(c)),
-      ],
+        );
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            sidebar,
+            const VerticalDivider(width: 1, color: ProfileLabTheme.borderColor),
+            Expanded(child: _panes(c)),
+          ],
+        );
+      },
     );
   }
 }

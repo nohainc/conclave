@@ -488,6 +488,15 @@ class WorkspaceManagerService {
         await (workerSubsystem?.refresh(force: true) ??
             workspace.workerCatalogCoordinator?.refresh(force: true));
         return _workerCatalogSnapshot();
+      case 'workers.refreshWorker':
+        final refreshType = payload['workerTypeId'];
+        if (refreshType is! String || refreshType.isEmpty) {
+          throw const WorkspaceManagerProtocolException(
+              'invalid_request', 'workerTypeId is required.');
+        }
+        await (workerSubsystem?.refreshWorker(refreshType) ??
+            workspace.workerCatalogCoordinator?.refreshWorker(refreshType));
+        return _workerCatalogSnapshot();
       case 'workers.ensureProfile':
         final workerTypeId = payload['workerTypeId'];
         if (workerTypeId is! String) {

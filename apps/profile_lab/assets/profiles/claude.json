@@ -23,13 +23,7 @@
         "kind": "regex_capture",
         "patternId": "semver"
       }
-    },
-    "supportedVersions": [
-      {
-        "min": "2.1.287",
-        "maxExclusive": "3.0.0"
-      }
-    ]
+    }
   },
   "environment": {
     "passthrough": [

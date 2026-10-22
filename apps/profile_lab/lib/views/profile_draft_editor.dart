@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,11 +7,9 @@ import '../theme/profile_lab_theme.dart';
 /// Schema-aware Tool Profile v1 candidate editor with live validation,
 /// structured summary panels, compare, and recovery options.
 class ProfileDraftEditor extends StatefulWidget {
-  const ProfileDraftEditor(
-      {super.key, required this.controller, this.showInspector = false});
+  const ProfileDraftEditor({super.key, required this.controller});
 
   final ProfileLabController controller;
-  final bool showInspector;
 
   @override
   State<ProfileDraftEditor> createState() => _ProfileDraftEditorState();
@@ -369,20 +365,7 @@ class _ProfileDraftEditorState extends State<ProfileDraftEditor> {
                                     ],
                                   ),
                                 );
-                                if (!widget.showInspector) return editor;
-                                final inspector =
-                                    _StructuredSummaryPanel(controller: c);
-                                return constraints.maxWidth >= 680
-                                    ? Row(children: [
-                                        Expanded(child: editor),
-                                        const VerticalDivider(width: 1),
-                                        SizedBox(width: 280, child: inspector)
-                                      ])
-                                    : Column(children: [
-                                        Expanded(child: editor),
-                                        const Divider(height: 1),
-                                        Expanded(child: inspector)
-                                      ]);
+                                return editor;
                               },
                             ),
                           ),
@@ -750,193 +733,3 @@ class _FindReplaceBar extends StatelessWidget {
   }
 }
 
-/// Structured Summary Panel rendering live parsed fields from the candidate JSON payload.
-class _StructuredSummaryPanel extends StatelessWidget {
-  const _StructuredSummaryPanel({required this.controller});
-
-  final ProfileLabController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    Map<String, dynamic>? parsedJson;
-    try {
-      final decoded = jsonDecode(controller.currentJsonText);
-      if (decoded is Map<String, dynamic>) {
-        parsedJson = decoded;
-      }
-    } catch (_) {}
-
-    if (parsedJson == null || controller.jsonValidationError != null) {
-      return Container(
-        color: ProfileLabTheme.darkSurface,
-        padding: const EdgeInsets.all(16),
-        child: const Center(
-          child: Text(
-            'Fix Profile validation errors to view the Inspector.',
-            style: TextStyle(fontSize: 11, color: ProfileLabTheme.failColor),
-          ),
-        ),
-      );
-    }
-
-    final providerTool =
-        parsedJson['providerTool'] as Map<String, dynamic>? ?? {};
-    final candidates =
-        (providerTool['executableCandidates'] as List?)?.cast<String>() ?? [];
-    final discovery = providerTool['discovery'] as Map<String, dynamic>? ?? {};
-    final env = parsedJson['environment'] as Map<String, dynamic>? ?? {};
-    final sandbox = parsedJson['sandbox'] as Map<String, dynamic>? ?? {};
-
-    return Container(
-      color: ProfileLabTheme.darkSurface,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          const Text('Inspector',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: ProfileLabTheme.secondaryText)),
-          const SizedBox(height: 8),
-
-          // Identity Card
-          _SummaryCard(
-            title: 'Profile Identity',
-            icon: Icons.badge,
-            children: [
-              _SummaryRow(
-                  label: 'Definition ID',
-                  value:
-                      parsedJson['profileDefinitionId']?.toString() ?? 'n/a'),
-              _SummaryRow(
-                  label: 'Worker Type ID',
-                  value:
-                      parsedJson['logicalWorkerTypeId']?.toString() ?? 'n/a'),
-              _SummaryRow(
-                  label: 'Candidate payload version',
-                  value: 'v${parsedJson['releaseVersion']}'),
-              _SummaryRow(
-                  label: 'Engine Family',
-                  value: parsedJson['engineFamily']?.toString() ?? 'n/a'),
-              _SummaryRow(
-                  label: 'Saved digest',
-                  value: controller.currentDraft?.payloadDigest ?? 'n/a'),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Provider Tool Card
-          _SummaryCard(
-            title: 'Provider Tool Identity',
-            icon: Icons.terminal,
-            children: [
-              _SummaryRow(
-                  label: 'Tool Name',
-                  value: providerTool['name']?.toString() ?? 'n/a'),
-              _SummaryRow(label: 'Executables', value: candidates.join(', ')),
-              _SummaryRow(
-                  label: 'PATH Search',
-                  value: (discovery['allowPathSearch'] ?? false).toString()),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Environment & Security Card
-          _SummaryCard(
-            title: 'Environment & Sandbox',
-            icon: Icons.security,
-            children: [
-              _SummaryRow(
-                  label: 'Pass-Through Env',
-                  value: ((env['passthrough'] as List?)?.join(', ')) ?? 'none'),
-              _SummaryRow(
-                  label: 'Sandbox modes',
-                  value:
-                      (sandbox['mappings'] as Map?)?.keys.join(', ') ?? 'none'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({
-    required this.title,
-    required this.icon,
-    required this.children,
-  });
-
-  final String title;
-  final IconData icon;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: ProfileLabTheme.darkBackground,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: ProfileLabTheme.borderColor),
-      ),
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: ProfileLabTheme.primaryAccent),
-              const SizedBox(width: 6),
-              Expanded(
-                  child: Text(title,
-                      style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white))),
-            ],
-          ),
-          const Divider(height: 12, color: ProfileLabTheme.borderColor),
-          ...children,
-        ],
-      ),
-    );
-  }
-}
-
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11,
-                color: ProfileLabTheme.secondaryText,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: ConclaveTypography.monoSmall
-                  .copyWith(color: ConclaveColors.textPrimaryDark),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

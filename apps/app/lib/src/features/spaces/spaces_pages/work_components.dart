@@ -183,7 +183,8 @@ class _WorkComposer extends StatelessWidget {
     this.onHistorySelected,
     this.onHistoryClosed,
     this.queuedMessages = const [],
-    this.queuePaused = false,
+    this.queuePause,
+    this.onQueuePauseChanged,
     this.onQueuedEdit,
     this.onQueuedRemove,
     this.onQueuedSendNow,
@@ -247,7 +248,8 @@ class _WorkComposer extends StatelessWidget {
   final List<_QueuedWorkMessage> queuedMessages;
 
   /// True after a queued message failed to send; the queue waits for the user.
-  final bool queuePaused;
+  final _WorkQueuePause? queuePause;
+  final ValueChanged<bool>? onQueuePauseChanged;
   final ValueChanged<_QueuedWorkMessage>? onQueuedEdit;
   final ValueChanged<_QueuedWorkMessage>? onQueuedRemove;
   final ValueChanged<_QueuedWorkMessage>? onQueuedSendNow;
@@ -766,16 +768,20 @@ class _WorkComposer extends StatelessWidget {
     bool isDark,
     ColorScheme colors,
   ) {
-    return Container(
-      padding: EdgeInsets.zero,
+    return Focus(
+      canRequestFocus: false,
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.escape &&
+            (usageController?.visible ?? false)) {
+          usageController!.dismiss();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (usageController != null)
-            AxWorkerUsagePanel(
-              controller: usageController!,
-              onRefresh: () => _runComposerCommand(_usageCommand),
-            ),
           if (usageController?.supported ?? false)
             _SlashCommandPalette(
               textController: requestController,
@@ -785,20 +791,34 @@ class _WorkComposer extends StatelessWidget {
                 _runComposerCommand(command);
               },
             ),
+          if (usageController != null)
+            AxWorkerUsagePanel(
+              controller: usageController!,
+              onRefresh: () => _runComposerCommand(_usageCommand),
+              attached: true,
+              joinsInput: historyPrompts == null && queuedMessages.isEmpty,
+            ),
           if (historyPrompts != null)
             _RequestHistoryPanel(
               prompts: historyPrompts!,
+              joinsInput: queuedMessages.isEmpty,
               openDirection: historyOpenDirection,
               onSelected: onHistorySelected ?? (_) {},
               onClosed: onHistoryClosed ?? () {},
             ),
           if (queuedMessages.isNotEmpty)
-            _QueuedMessagesPanel(
-              messages: queuedMessages,
-              paused: queuePaused,
-              onEdit: onQueuedEdit ?? (_) {},
-              onRemove: onQueuedRemove ?? (_) {},
-              onSendNow: onQueuedSendNow ?? (_) {},
+            ListenableBuilder(
+              listenable: Listenable.merge([usageController]),
+              builder: (context, _) => _QueuedMessagesPanel(
+                messages: queuedMessages,
+                pause: queuePause,
+                hasPanelAbove: historyPrompts != null ||
+                    (usageController?.visible ?? false),
+                onPauseChanged: onQueuePauseChanged ?? (_) {},
+                onEdit: onQueuedEdit ?? (_) {},
+                onRemove: onQueuedRemove ?? (_) {},
+                onSendNow: onQueuedSendNow ?? (_) {},
+              ),
             ),
           MarkdownComposer(
             attachments: attachments.isEmpty
@@ -963,10 +983,18 @@ class _SlashCommandPalette extends StatelessWidget {
 /// it when it cannot be normalized or the user asks for the original.
 class AxWorkerUsagePanel extends StatelessWidget {
   const AxWorkerUsagePanel(
-      {super.key, required this.controller, required this.onRefresh});
+      {super.key,
+      required this.controller,
+      required this.onRefresh,
+      this.attached = false,
+      this.joinsInput = true});
 
   final AxWorkerUsageController controller;
   final VoidCallback onRefresh;
+
+  /// Composer-only presentation; dialogs retain the standalone card.
+  final bool attached;
+  final bool joinsInput;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -987,12 +1015,13 @@ class AxWorkerUsagePanel extends StatelessWidget {
               ? parseWorkerUsage(report.output, now: report.fetchedAt)
               : null;
           final showTable = parsed != null && !controller.showOriginal;
-          return Container(
+          final panel = Container(
             key: const ValueKey('worker-usage-panel'),
-            margin: const EdgeInsets.only(bottom: 8),
+            margin:
+                attached ? EdgeInsets.zero : const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
             decoration: BoxDecoration(
-              color: colors.surfaceContainerHighest,
+              color: attached ? null : colors.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
@@ -1034,11 +1063,12 @@ class AxWorkerUsagePanel extends StatelessWidget {
                     icon: const Icon(Icons.refresh, size: 16),
                     onPressed: controller.loading ? null : onRefresh,
                   ),
-                  IconButton(
-                    tooltip: 'Close usage',
-                    icon: const Icon(Icons.close, size: 16),
-                    onPressed: controller.dismiss,
-                  ),
+                  if (!attached)
+                    IconButton(
+                      tooltip: 'Close usage',
+                      icon: const Icon(Icons.close, size: 16),
+                      onPressed: controller.dismiss,
+                    ),
                 ]),
                 if (controller.loading)
                   const Padding(
@@ -1083,6 +1113,18 @@ class AxWorkerUsagePanel extends StatelessWidget {
                   Text('Output was shortened.',
                       style: Theme.of(context).textTheme.bodySmall),
               ],
+            ),
+          );
+          if (!attached) return panel;
+          return TapRegion(
+            onTapOutside: (_) => controller.dismiss(),
+            child: _ComposerPanelLayer(
+              backgroundKey: const ValueKey('worker-usage-layer-background'),
+              joinsInput: joinsInput,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 240),
+                child: SingleChildScrollView(child: panel),
+              ),
             ),
           );
         },
@@ -2618,12 +2660,14 @@ class _RequestHistoryPanel extends StatefulWidget {
     required this.openDirection,
     required this.onSelected,
     required this.onClosed,
+    this.joinsInput = true,
   });
 
   final List<String> prompts;
   final int openDirection;
   final ValueChanged<String> onSelected;
   final VoidCallback onClosed;
+  final bool joinsInput;
 
   @override
   State<_RequestHistoryPanel> createState() => _RequestHistoryPanelState();
@@ -2683,9 +2727,10 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return _ComposerPanelLayer(
+      backgroundKey: const ValueKey('request-history-layer-background'),
+      joinsInput: widget.joinsInput,
       child: TapRegion(
         onTapOutside: (_) => widget.onClosed(),
         child: Focus(
@@ -2708,10 +2753,11 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
             return KeyEventResult.handled;
           },
           child: Container(
+            key: const ValueKey('request-history-panel'),
             constraints: const BoxConstraints(maxHeight: 192),
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              border: Border.all(color: colors.outlineVariant),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: widget.prompts.isEmpty
                 ? const Padding(
@@ -2729,7 +2775,7 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
                       onTap: () => _select(index),
                       child: Container(
                         color: index == _selected
-                            ? colors.primary.withValues(alpha: 0.12)
+                            ? ConclaveColors.navigationSelectedColor(isDark)
                             : null,
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 6),
@@ -2765,50 +2811,93 @@ class _QueuedWorkMessage {
   final String workflow;
 }
 
-/// Queued messages above the composer, styled like the request history panel.
+/// Why queued messages are not being sent.
+enum _WorkQueuePause {
+  /// A send or the processing request failed.
+  failure,
+
+  /// The user paused the queue.
+  user,
+}
+
+/// An inset queue layer whose background extends behind the active composer.
 class _QueuedMessagesPanel extends StatelessWidget {
   const _QueuedMessagesPanel({
     required this.messages,
-    required this.paused,
+    required this.pause,
+    required this.onPauseChanged,
     required this.onEdit,
     required this.onRemove,
     required this.onSendNow,
+    required this.hasPanelAbove,
   });
 
   final List<_QueuedWorkMessage> messages;
-  final bool paused;
+  final _WorkQueuePause? pause;
+  final ValueChanged<bool> onPauseChanged;
   final ValueChanged<_QueuedWorkMessage> onEdit;
   final ValueChanged<_QueuedWorkMessage> onRemove;
   final ValueChanged<_QueuedWorkMessage> onSendNow;
+  final bool hasPanelAbove;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     const iconConstraints = BoxConstraints.tightFor(width: 28, height: 28);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+    return _ComposerPanelLayer(
+      backgroundKey: const ValueKey('work-queue-layer-background'),
       child: Container(
         key: const ValueKey('work-queue-panel'),
         constraints: const BoxConstraints(maxHeight: 192),
-        decoration: BoxDecoration(
-          border: Border.all(color: colors.outlineVariant),
-          borderRadius: BorderRadius.circular(8),
-        ),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
-              child: Text(
-                paused
-                    ? 'Queued · ${messages.length} — sending paused after an error'
-                    : 'Queued · ${messages.length}',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: paused ? colors.error : colors.onSurfaceVariant,
-                ),
+            if (hasPanelAbove)
+              Divider(
+                key: const ValueKey('work-queue-panel-divider'),
+                height: 1,
+                thickness: 1,
+                color: ConclaveColors.navigationBorder(isDark),
               ),
+            Container(
+              key: const ValueKey('work-queue-header'),
+              color: ConclaveColors.primarySoftColor(isDark),
+              padding: const EdgeInsets.fromLTRB(12, 2, 4, 0),
+              child: Row(children: [
+                Expanded(
+                  child: Text(
+                    switch (pause) {
+                      _WorkQueuePause.failure =>
+                        'Queued · ${messages.length} — paused after an error',
+                      _WorkQueuePause.user =>
+                        'Queued · ${messages.length} — paused',
+                      null => 'Queued · ${messages.length}',
+                    },
+                    key: const ValueKey('work-queue-status'),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: pause == _WorkQueuePause.failure
+                          ? colors.error
+                          : colors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  key: const ValueKey('work-queue-pause-toggle'),
+                  tooltip: pause == null ? 'Pause queue' : 'Resume queue',
+                  iconSize: 16,
+                  constraints: iconConstraints,
+                  padding: EdgeInsets.zero,
+                  onPressed: () => onPauseChanged(pause == null),
+                  icon: Icon(pause == null
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded),
+                ),
+              ]),
             ),
             Flexible(
               child: ListView.builder(
@@ -2869,4 +2958,46 @@ class _QueuedMessagesPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Shared geometry for composer panels. Only the nearest panel extends its
+/// background behind the input; upper panels end flush against the next layer.
+class _ComposerPanelLayer extends StatelessWidget {
+  const _ComposerPanelLayer({
+    required this.backgroundKey,
+    required this.child,
+    this.joinsInput = true,
+  });
+
+  final Key backgroundKey;
+  final Widget child;
+  final bool joinsInput;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              bottom: joinsInput ? -10 : 0,
+              child: DecoratedBox(
+                key: backgroundKey,
+                decoration: BoxDecoration(
+                  color: ConclaveColors.composerRail(
+                      Theme.of(context).brightness == Brightness.dark),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(10)),
+              child: child,
+            ),
+          ],
+        ),
+      );
 }

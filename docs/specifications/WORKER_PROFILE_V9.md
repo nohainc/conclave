@@ -82,9 +82,11 @@ multiple active Profiles for one logical Worker.
 7. **Stable execution snapshot:** An execution MUST use the Profile snapshot
    selected at activation/assignment time. Later publication, restoration, or
    cache refresh MUST NOT rewrite that execution's Profile identity.
-8. **Multiple provider CLI versions:** One Profile MAY declare supported
-   provider CLI version ranges and bounded version-specific overrides. These
-   overrides modify the same Profile; they are not separate Profiles.
+8. **Multiple provider CLI versions:** Profiles support all provider CLI
+   versions and omit `providerTool.supportedVersions`. Bounded version-specific
+   overrides MAY adjust behavior using their own `providerVersion` ranges;
+   unmatched versions use the base Profile. Test evidence records the exact
+   tested version without defining a support range.
 9. **Restoration is republishing:** A known-good historical Profile MAY be
    restored, but Cloud MUST publish it as a new current revision. History MUST
    NOT be exposed as a separate active release channel.

@@ -6,7 +6,7 @@ import 'workspace_notifier.dart';
 
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
-    show ToolProfileCompatibility, ToolProfileResolution;
+    show ToolProfileResolution;
 
 import 'local_worker_registry.dart';
 import 'cli_worker_engine_supervisor.dart';
@@ -31,6 +31,7 @@ class WorkerReadinessAssessment {
     this.replaceToolPath = false,
     this.modelCatalog,
     this.profileDigest,
+    this.checks = const [],
   });
 
   final WorkerReadinessState state;
@@ -44,6 +45,9 @@ class WorkerReadinessAssessment {
   final bool replaceToolPath;
   final DiscoveredModelCatalog? modelCatalog;
   final String? profileDigest;
+
+  /// Individual Engine checks from the probe, in execution order.
+  final List<ProbeCheck> checks;
 }
 
 class WorkerReadinessMonitor extends WorkspaceNotifier {
@@ -80,7 +84,8 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
 
   void _progress(String type, LocalWorkerProbeMode mode, WorkerCheckPhase phase,
       {WorkerCheckOutcome outcome = WorkerCheckOutcome.running,
-      String? issueCode}) {
+      String? issueCode,
+      List<ProbeCheck> checks = const []}) {
     final prior = _checks[type];
     _checks[type] = WorkerCheckProgress(
       mode: mode.name,
@@ -93,6 +98,14 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
           ? null
           : DateTime.now().toUtc().toIso8601String(),
       issueCode: issueCode,
+      steps: [
+        for (final check in checks)
+          WorkerCheckStep(
+            code: check.code,
+            status: check.status.name,
+            message: check.message,
+          ),
+      ],
     );
     notifyListeners();
   }
@@ -225,17 +238,6 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
             issueCode = result.issueCode ?? 'provider_failure';
             return false;
           }
-          if (result.providerToolVersion != null &&
-              !ToolProfileCompatibility.isCandidateCompatible(
-                candidate: candidate,
-                logicalWorkerTypeId: workerTypeId,
-                profileDefinitionId: candidate.profileDefinitionId,
-                engineVersion: cliWorkerEngineVersion,
-                providerCliVersion: result.providerToolVersion,
-              )) {
-            issueCode = 'unsupported_provider_tool_version';
-            return false;
-          }
           return true;
         },
       );
@@ -326,7 +328,7 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
       }
       _progress(worker.workerTypeId, mode, WorkerCheckPhase.profile);
       try {
-        await _checkWorker(worker, mode);
+        final checks = await _checkWorker(worker, mode);
         final updated = await registry.find(worker.id);
         final passed = mode == LocalWorkerProbeMode.live
             ? updated?.lastLiveTestPassed == true
@@ -337,7 +339,8 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
                 passed ? WorkerCheckOutcome.passed : WorkerCheckOutcome.failed,
             issueCode: mode == LocalWorkerProbeMode.live
                 ? updated?.lastLiveTestIssueCode
-                : updated?.readinessIssueCode);
+                : updated?.readinessIssueCode,
+            checks: checks);
       } on Object {
         _progress(
             worker.workerTypeId, mode, _checks[worker.workerTypeId]!.phase,
@@ -348,7 +351,9 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
     }
   }
 
-  Future<void> _checkWorker(
+  /// Runs one check and records the result. Returns the Engine's individual
+  /// checks for progress reporting.
+  Future<List<ProbeCheck>> _checkWorker(
       LocalWorker worker, LocalWorkerProbeMode mode) async {
     WorkerReadinessAssessment assessment;
     try {
@@ -399,7 +404,7 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
               assessment.replaceToolPath && assessment.toolPath == null,
         ),
       );
-      return;
+      return assessment.checks;
     }
 
     final passed = assessment.state == WorkerReadinessState.ready;
@@ -437,6 +442,7 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
             assessment.replaceToolPath && assessment.toolPath == null,
       ),
     );
+    return assessment.checks;
   }
 
   String _safeTestDetails(WorkerReadinessAssessment assessment) {
@@ -523,7 +529,6 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
       resolution = await workerCatalogCoordinator!.resolveProfileForWorker(
         workerTypeId: worker.workerTypeId,
         engineVersion: cliWorkerEngineVersion,
-        providerCliVersion: worker.toolVersion,
         // Catalog refresh invokes readiness after downloading Profiles. Never
         // wait on that refresh from a readiness check: it may be waiting on us.
         synchronizeIfUnavailable: false,
@@ -589,6 +594,7 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
         toolVersion: probe.providerToolVersion,
         replaceToolName: true,
         replaceToolVersion: true,
+        checks: probe.checks,
         diagnosticDetails:
             'Unsigned development Profile; local loopback execution only.',
       );
@@ -608,17 +614,7 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
             : const Duration(seconds: 20),
       );
       final actualVersion = probe.providerToolVersion;
-      final providerCompatible = actualVersion == null ||
-          ToolProfileCompatibility.isCandidateCompatible(
-            candidate: candidate,
-            logicalWorkerTypeId: worker.workerTypeId,
-            profileDefinitionId: profileDefinitionId,
-            engineVersion: cliWorkerEngineVersion,
-            providerCliVersion: actualVersion,
-          );
-      final issueCode = !providerCompatible
-          ? 'unsupported_provider_tool_version'
-          : probe.issueCode;
+      final issueCode = probe.issueCode;
       await _recordToolProfileDiagnostic(
         worker,
         runId: runId,
@@ -652,6 +648,7 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
         toolVersion: actualVersion,
         replaceToolName: true,
         replaceToolVersion: true,
+        checks: probe.checks,
       );
     }
     if (candidate == null) {

@@ -40,6 +40,14 @@ void main() {
         socketPath: '${root.path}/runtime/manager.sock', key: key);
     addTearDown(client.close);
     await client.subscribe();
+    await expectLater(
+        client.request('workers.refreshWorker'),
+        throwsA(isA<WorkspaceManagerProtocolException>()
+            .having((e) => e.code, 'code', 'invalid_request')));
+    expect(
+        await client.request('workers.refreshWorker',
+            payload: {'workerTypeId': 'chatgpt'}),
+        isA<Map>());
     final runningEvent = client.events.firstWhere((event) {
       final catalog = event['workerCatalog'];
       if (event['name'] != 'worker.catalogChanged' || catalog is! Map) {

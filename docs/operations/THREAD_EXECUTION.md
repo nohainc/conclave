@@ -125,3 +125,33 @@ ready, enabled Workers on online Workspaces you own; shared Workspace usage
 remains owner-only. The report opens in a local dialog with refresh,
 original-output, and close controls. It does not create a Thread message or Work
 Request. Workers without a usage command show an unavailable report.
+
+### Queued messages in the composer
+
+Messages queued while an AI request runs appear as an inset layer extending
+upward from behind the active input. The queue and input share rounded styling;
+the queue background overlaps behind the input without covering its controls.
+The queue remains scrollable and retains Edit, Send now, Remove, and Pause/Resume
+actions. When it empties, the composer returns to its normal single-input shape.
+The queue header uses the soft accent background in both themes, distinct from
+the conversation canvas, panel content, and input background. A thin divider
+above it appears while usage or command history is open, keeping the boundary
+between panels clear without hiding queued messages or their controls.
+
+The command history opened with Arrow Up/Down in an empty AI input uses the same
+inset layer and rounded styling. Arrow keys move the selection, Enter or a click
+copies a request into the input, and Escape closes history and restores input
+focus. History remains scrollable above the input on desktop and narrow screens.
+The selected history row uses the same active background as sidebar Space and
+Thread items in both light and dark themes.
+
+The composer's `/usage` report uses the same attached styling, with a scrollable
+view capped at 240 pixels. Usage, command history, and queue form a continuous
+stack: only the panel nearest the input extends behind it, while upper panels
+end against the next layer. Slash suggestions remain above the stack as a
+separate suggestion list. Usage opened from Workspaces retains its standalone
+dialog card, including refresh, summary/original output, and close controls.
+The Conversation usage panel has no close icon: click outside it or press Escape
+while interacting with the composer to dismiss it. Interactions inside the panel
+and keyboard focus changes alone keep it open. The standalone Workspace dialog
+retains its close button.

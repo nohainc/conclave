@@ -135,12 +135,12 @@ describe("Tool Profile v1 pure interpreter", () => {
       context({ providerVersion: "0.180.5" }),
     );
     expect(args[0]).toBe("override");
-    expect(() =>
+    expect(
       expandExecutionArguments(
         profile,
         context({ providerVersion: "0.190.0" }),
-      ),
-    ).toThrow(/not supported/);
+      )[0],
+    ).not.toBe("override");
   });
 
   it("preserves sandbox policy in every Codex compatibility argument layout", () => {

@@ -4,6 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('ProviderVersionMatrix', () {
     test(
+        'omitted ranges are unrestricted while tested versions remain evidence',
+        () {
+      final matrix = ProviderVersionMatrix.fromProfileAndEvidence(profile: {
+        'providerTool': {'name': 'codex'}
+      }, evidenceList: []);
+      expect(matrix.declaredRangeSummary, 'All CLI versions');
+      expect(matrix.testedVersions, isEmpty);
+    });
+    test(
         'extracts declared bounds and physical test evidence strictly separating supported vs tested',
         () {
       final profile = <String, Object?>{

@@ -47,6 +47,52 @@ void main() {
     'sortOrder': 1,
   };
 
+  test('refreshWorker syncs only the requested Worker Profile', () async {
+    final otherDescriptor = {
+      ...descriptor,
+      'workerTypeId': 'fixture-cli-other',
+      'displayName': 'Fixture CLI Other',
+      'profileDefinitionId': 'fixture-profile-other',
+      'sortOrder': 2,
+    };
+    var catalogLoads = 0;
+    final profileLoads = <String>[];
+    var readinessRuns = 0;
+    final catalog = ToolProfileCatalogClient(
+      cloudUri: Uri.https('cloud.example', '/'),
+      store: store,
+      trustPolicy: signing.trustPolicy,
+      workerCatalogLoader: () async {
+        catalogLoads++;
+        return [descriptor, otherDescriptor];
+      },
+      currentProfileLoader: (workerTypeId) async {
+        profileLoads.add(workerTypeId);
+        throw StateError('no published Profile in this test');
+      },
+      trustRefresher: () async {},
+    );
+    addTearDown(catalog.close);
+    final controller = WorkerCatalogCoordinator(
+      catalog: catalog,
+      releaseStore: store,
+      refreshReadiness: () async => readinessRuns++,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.refreshWorker('fixture-cli');
+
+    expect(catalogLoads, 1);
+    expect(profileLoads, ['fixture-cli']);
+    expect(readinessRuns, 0, reason: 'no all-Worker readiness sweep');
+    expect(controller.snapshot.catalogConfirmed, isTrue);
+    expect(
+      controller.snapshot.workers
+          .map((worker) => worker.descriptor?.workerTypeId),
+      containsAll(['fixture-cli', 'fixture-cli-other']),
+    );
+  });
+
   test('renders cached catalog before refresh and runs one canonical pipeline',
       () async {
     const secondDescriptor = {

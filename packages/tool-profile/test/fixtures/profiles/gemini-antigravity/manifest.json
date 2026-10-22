@@ -13,13 +13,13 @@
       }
     },
     {
-      "name": "unsupported",
+      "name": "outside-former-range",
       "fixture": "version/unsupported.txt",
       "exitCode": 0,
       "expected": {
         "version": "2.0.0",
-        "supported": false,
-        "issueCode": "unsupported_provider_tool_version"
+        "supported": true,
+        "issueCode": null
       }
     },
     {

@@ -36,7 +36,7 @@ class ProviderVersionMatrix {
 
   /// Formatted declared range summary string (e.g. "0.180.0 – 0.190.0").
   String get declaredRangeSummary =>
-      declaredRanges.isEmpty ? 'Not configured' : declaredRanges.join(', ');
+      declaredRanges.isEmpty ? 'All CLI versions' : declaredRanges.join(', ');
 
   /// Formatted tested versions summary string (e.g. "0.187.2").
   String get testedVersionsSummary => testedVersions.isEmpty

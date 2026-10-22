@@ -101,7 +101,7 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
             WorkspaceBackgroundServiceRegistration.serviceMissing;
     final transportLabel = switch (snapshot.activeTransportMode) {
       'websocket' => 'WebSocket',
-      'http_long_poll' => 'HTTPS fallback',
+      'http_long_poll' => 'HTTPS',
       _ => null,
     };
     final connectionLabel = serviceNotRegistered
@@ -140,14 +140,6 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                         'Conclave Workspace',
                         style:
                             ConclaveTypography.wordmark.copyWith(fontSize: 14),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'v${snapshot.appVersion}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500,
-                        ),
                       ),
                       const SizedBox(width: 10),
                       Container(
@@ -283,6 +275,8 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
 
           if (showWorkers)
             TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.center,
               onTap: (index) => setState(() => _selectedTab = index),
               tabs: const [Tab(text: 'Workspace'), Tab(text: 'Workers')],
             ),
@@ -504,11 +498,6 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
         !isConnecting &&
         widget.snapshot.serviceInfo.process !=
             WorkspaceServiceProcessStatus.stopped;
-    // Protect identity and user file location while the service owns them.
-    final canEditWorkspaceSettings = !widget.snapshot.serviceProcessRunning &&
-        !widget.snapshot.serviceRunning &&
-        !widget.snapshot.cloudConnected;
-
     final serviceInfo = widget.snapshot.serviceInfo;
     final serviceRegistrationMissing = serviceInfo.registration ==
             WorkspaceBackgroundServiceRegistration.notRegistered ||
@@ -519,7 +508,7 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
     // An unknown host snapshot is used while the native manager is still
     // being queried. Keep the existing Start Service affordance during that
     // short window; an explicit notRegistered/serviceMissing response is what
-    // renders the Register Service state.
+    // renders the Register workspace state.
     final serviceRegistered = !serviceRegistrationMissing &&
         (serviceInfo.registered ||
             widget.snapshot.serviceRunning ||
@@ -539,6 +528,13 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
     final ipcReady = widget.snapshot.serviceIpcReady ||
         widget.snapshot.serviceRunning ||
         serviceInfo.ipc == WorkspaceServiceIpcStatus.ready;
+    final canEditWorkRoot = !serviceProcessRunning &&
+        serviceInfo.process != WorkspaceServiceProcessStatus.starting &&
+        serviceInfo.process != WorkspaceServiceProcessStatus.stopping;
+    final canEditWorkspaceName = !serviceProcessRunning &&
+        (!isRegistered ||
+            serviceInfo.registration ==
+                WorkspaceBackgroundServiceRegistration.notRegistered);
     final cloudRegistered = isRegistered;
     final serviceActionInProgress = _serviceActionPending ||
         serviceInfo.process == WorkspaceServiceProcessStatus.starting ||
@@ -555,56 +551,82 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextField(
-                controller: _nameController,
-                enabled: canEditWorkspaceSettings &&
-                    widget.onChangeWorkspaceName != null,
-                readOnly: !canEditWorkspaceSettings ||
-                    widget.onChangeWorkspaceName == null,
-                maxLength: 200,
-                onChanged: widget.onChangeWorkspaceName,
-                decoration: const InputDecoration(
-                  labelText: 'Workspace name',
-                  border: OutlineInputBorder(),
-                  counterText: '',
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                    child: TextField(
+                  controller: _nameController,
+                  enabled: canEditWorkspaceName &&
+                      widget.onChangeWorkspaceName != null,
+                  readOnly: !canEditWorkspaceName ||
+                      widget.onChangeWorkspaceName == null,
+                  maxLength: 200,
+                  onChanged: widget.onChangeWorkspaceName,
+                  decoration: const InputDecoration(
+                    labelText: 'Workspace name',
+                    border: OutlineInputBorder(),
+                    counterText: '',
+                  ),
+                )),
+                const SizedBox(width: 12),
+                Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _workRootController,
+                      enabled: canEditWorkRoot,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'Work Root',
+                        hintText: 'Not configured',
+                        border: const OutlineInputBorder(),
+                        suffixIcon: Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: TextButton.icon(
+                            onPressed: canEditWorkRoot &&
+                                    widget.onChangeWorkRoot != null
+                                ? _browseWorkRoot
+                                : null,
+                            icon: const Icon(Icons.folder_open, size: 16),
+                            label: const Text('Browse'),
+                          ),
+                        ),
+                      ),
+                    )),
+              ]),
+              const SizedBox(height: 8),
+              ListTile(
+                key: const Key('prevent-sleep-setting'),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                visualDensity: VisualDensity.compact,
+                title: const Text('Prevent sleep'),
+                subtitle: Text(
+                  'Keep this computer awake while the service runs.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _workRootController,
-                enabled: canEditWorkspaceSettings,
-                readOnly: true,
-                decoration: InputDecoration(
-                  labelText: 'Work Root',
-                  hintText: 'Not configured',
-                  border: const OutlineInputBorder(),
-                  suffixIcon: Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: TextButton.icon(
-                      onPressed: canEditWorkspaceSettings &&
-                              widget.onChangeWorkRoot != null
-                          ? _browseWorkRoot
-                          : null,
-                      icon: const Icon(Icons.folder_open, size: 16),
-                      label: const Text('Browse'),
+                onTap: widget.onChangePreventSleep == null
+                    ? null
+                    : () => widget.onChangePreventSleep!(!widget.preventSleep),
+                trailing: SizedBox(
+                  width: 42,
+                  height: 32,
+                  child: Transform.scale(
+                    scale: .75,
+                    child: Switch(
+                      value: widget.preventSleep,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      onChanged: widget.onChangePreventSleep?.call,
                     ),
                   ),
                 ),
               ),
-              if (ipcReady && widget.onLoadSlots != null)
-                WorkerSlotsCard(
-                  load: widget.onLoadSlots!,
-                  reset: widget.onResetSlots,
-                  setSlots: widget.onSetParallelSlots,
-                ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Prevent sleep'),
-                subtitle: const Text(
-                  'Prevent automatic sleep while the Workspace service is running. Turning this off may interrupt work if the computer sleeps.',
-                ),
-                value: widget.preventSleep,
-                onChanged: widget.onChangePreventSleep?.call,
+              WorkerSlotsCard(
+                serviceAvailable: serviceProcessRunning &&
+                    ipcReady &&
+                    widget.onLoadSlots != null,
+                load: widget.onLoadSlots,
+                reset: widget.onResetSlots,
+                setSlots: widget.onSetParallelSlots,
               ),
               const SizedBox(height: 16),
               Row(
@@ -631,7 +653,7 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
                                       widget.onRegisterService!,
                                     ),
                             icon: const Icon(Icons.app_registration, size: 16),
-                            label: const Text('Register Service'),
+                            label: const Text('Register workspace'),
                           )
                         else if (serviceProcessRunning)
                           FilledButton.icon(
@@ -692,7 +714,7 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
                                     ),
                             icon: const Icon(Icons.remove_circle_outline,
                                 size: 16),
-                            label: const Text('Unregister'),
+                            label: const Text('Unregister workspace'),
                           ),
                         if (!cloudRegistered)
                           FilledButton.icon(

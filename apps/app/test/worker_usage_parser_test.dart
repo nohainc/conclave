@@ -184,7 +184,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         theme: ThemeData.dark(),
         home: Scaffold(
-            body: AxWorkerUsagePanel(controller: ok, onRefresh: () {}))));
+            body: AxWorkerUsagePanel(
+                controller: ok, onRefresh: () {}, attached: true))));
     await tester.pump(const Duration(milliseconds: 300));
     final darkBar = tester
         .widgetList<LinearProgressIndicator>(
@@ -198,6 +199,10 @@ void main() {
     await tester.pump();
     expect(find.byKey(const ValueKey('worker-usage-table')), findsNothing);
     expect(find.byKey(const ValueKey('worker-usage-text')), findsOneWidget);
+    expect(ok.visible, isTrue);
+    await tester.tap(find.byKey(const ValueKey('worker-usage-text')));
+    await tester.pump();
+    expect(ok.visible, isTrue);
 
     final bad = await pump('something new');
     await tester.pumpWidget(MaterialApp(
