@@ -58,6 +58,8 @@ keys or provider credentials are needed by CI.
   Password verification compares the returned logon SID to the current user;
   credentials are wiped from native buffers and never persisted. Cancellation
   does not authorize an action. Interactive prompts require target-device tests.
+- Prevent Sleep uses a process-owned Windows system power request. The request
+  is cleared when disabled and released by Windows if the service exits.
 - The service and Engine retain kill-on-close Windows Job Objects. Descendants
   cannot escape on an Engine/service crash. Forced Engine cleanup terminates
   its job. Provider CLI account state stays with the same OS user.

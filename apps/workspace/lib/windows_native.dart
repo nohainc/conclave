@@ -349,4 +349,33 @@ class WindowsNative {
           'DisconnectNamedPipe')(handle);
     }
   }
+
+  static int acquirePowerRequest() {
+    final text = wide('Conclave Workspace is running');
+    final context = allocate(16);
+    (context + 4).cast<Uint32>().value = 1;
+    (context + 8).cast<Pointer<Uint16>>().value = text;
+    var handle = -1;
+    try {
+      final create = _kernel.lookupFunction<IntPtr Function(Pointer<Void>),
+          int Function(Pointer<Void>)>('PowerCreateRequest');
+      final set = _kernel.lookupFunction<Int32 Function(IntPtr, Uint32),
+          int Function(int, int)>('PowerSetRequest');
+      handle = create(context.cast());
+      if (handle == -1 || set(handle, 0) == 0) {
+        if (handle != -1) close(handle);
+        fail('Prevent system sleep');
+      }
+      return handle;
+    } finally {
+      free(text);
+      free(context);
+    }
+  }
+
+  static void releasePowerRequest(int handle) {
+    _kernel.lookupFunction<Int32 Function(IntPtr, Uint32),
+        int Function(int, int)>('PowerClearRequest')(handle, 0);
+    close(handle);
+  }
 }

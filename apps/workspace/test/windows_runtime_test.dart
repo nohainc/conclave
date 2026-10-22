@@ -21,6 +21,11 @@ void main() {
             .toList(),
         ['{"text":"ž"}']);
   });
+  test('Windows service can acquire and release a process-owned power request',
+      () {
+    final handle = WindowsNative.acquirePowerRequest();
+    WindowsNative.releasePowerRequest(handle);
+  }, skip: !Platform.isWindows);
   test('DPAPI persists ciphertext and binds service/account', () async {
     final dir = await Directory.systemTemp.createTemp('conclave-dpapi-');
     try {

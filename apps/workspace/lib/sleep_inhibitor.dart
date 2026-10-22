@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'windows_native.dart';
 
 import 'workspace_lifecycle_store.dart';
 
@@ -21,9 +22,10 @@ class SleepInhibitor {
 
   Timer? _timer;
   Process? _process;
+  int? _windowsPowerRequest;
   bool _busy = false;
 
-  bool get isHeld => _process != null;
+  bool get isHeld => _process != null || _windowsPowerRequest != null;
 
   Future<void> begin() async {
     await _sync();
@@ -39,6 +41,18 @@ class SleepInhibitor {
         wanted = store.readSync().preventSleep;
       } on Object {
         // Unreadable preferences fall back to the default (on).
+      }
+      if (Platform.isWindows) {
+        if (wanted && _windowsPowerRequest == null) {
+          try {
+            _windowsPowerRequest = WindowsNative.acquirePowerRequest();
+          } on Object catch (error) {
+            stderr.writeln('Prevent sleep unavailable: $error');
+          }
+        } else if (!wanted) {
+          _release();
+        }
+        return;
       }
       if (wanted && _process == null && (platformIsMacOS ?? Platform.isMacOS)) {
         final arguments = ['-i', '-w', '$pid'];
@@ -61,6 +75,9 @@ class SleepInhibitor {
   }
 
   void _release() {
+    final request = _windowsPowerRequest;
+    _windowsPowerRequest = null;
+    if (request != null) WindowsNative.releasePowerRequest(request);
     _process?.kill();
     _process = null;
   }
