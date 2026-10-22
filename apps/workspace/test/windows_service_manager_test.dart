@@ -43,7 +43,10 @@ $ErrorActionPreference = 'Stop'
 $x = [xml](Export-ScheduledTask -TaskName ('Conclave Workspace ' + $env:CONCLAVE_TEST_INSTALLATION))
 $id = [string]$x.Task.Principals.Principal.UserId
 if (-not $id.StartsWith('S-')) { $id = ([System.Security.Principal.NTAccount]::new($id)).Translate([System.Security.Principal.SecurityIdentifier]).Value }
-@{ sid = $id; logonType = [string]$x.Task.Principals.Principal.LogonType; runLevel = [string]$x.Task.Principals.Principal.RunLevel } | ConvertTo-Json -Compress
+# Task Scheduler may omit the schema-default LeastPrivilege value.
+$level = [string]$x.Task.Principals.Principal.RunLevel
+if (-not $level) { $level = 'LeastPrivilege' }
+@{ sid = $id; logonType = [string]$x.Task.Principals.Principal.LogonType; runLevel = $level } | ConvertTo-Json -Compress
 '''
       ], environment: {
         'CONCLAVE_TEST_INSTALLATION': identity!
