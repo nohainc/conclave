@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import 'workspace_background_service.dart';
+import 'windows_service_manager.dart';
 
 /// Flutter adapter for the native macOS SMAppService bridge.
 ///
@@ -15,6 +16,7 @@ class MethodChannelWorkspaceServiceManager implements WorkspaceServiceManager {
 
   @override
   Future<WorkspaceServiceInfo> getInfo() async {
+    if (Platform.isWindows) return WindowsWorkspaceServiceManager().getInfo();
     if (!Platform.isMacOS) {
       return const UnsupportedWorkspaceServiceManager().status();
     }
@@ -28,6 +30,7 @@ class MethodChannelWorkspaceServiceManager implements WorkspaceServiceManager {
 
   @override
   Future<WorkspaceServiceInfo> register() async {
+    if (Platform.isWindows) return WindowsWorkspaceServiceManager().register();
     if (!Platform.isMacOS) {
       throw UnsupportedError(
           'Background service management is currently supported only on macOS.');
@@ -39,6 +42,9 @@ class MethodChannelWorkspaceServiceManager implements WorkspaceServiceManager {
 
   @override
   Future<WorkspaceServiceInfo> unregister() async {
+    if (Platform.isWindows) {
+      return WindowsWorkspaceServiceManager().unregister();
+    }
     if (!Platform.isMacOS) {
       throw UnsupportedError(
           'Background service management is currently supported only on macOS.');
@@ -49,6 +55,15 @@ class MethodChannelWorkspaceServiceManager implements WorkspaceServiceManager {
   }
 
   Future<WorkspaceServiceInfo> _invokeLifecycle(String method) async {
+    if (Platform.isWindows) {
+      final manager = WindowsWorkspaceServiceManager();
+      return switch (method) {
+        'startService' => manager.start(),
+        'stopService' => manager.stop(),
+        'restartService' => manager.restart(),
+        _ => throw ArgumentError.value(method),
+      };
+    }
     if (!Platform.isMacOS) {
       throw UnsupportedError(
           'Background service management is currently supported only on macOS.');
@@ -68,6 +83,9 @@ class MethodChannelWorkspaceServiceManager implements WorkspaceServiceManager {
 
   @override
   Future<void> openSettings() async {
+    if (Platform.isWindows) {
+      return WindowsWorkspaceServiceManager().openSettings();
+    }
     if (!Platform.isMacOS) {
       throw UnsupportedError(
           'Background service settings are currently supported only on macOS.');

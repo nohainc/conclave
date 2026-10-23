@@ -6,6 +6,7 @@ import '../lib/src/cli_worker_engine.dart';
 Future<void> main(List<String> arguments) async {
   setCurrentProcessName('conclave-agent');
   try {
+    initializeWindowsProcessJob();
     final options = EngineOptions.parse(arguments);
     await CliWorkerEngine(options: options).run();
   } on FormatException catch (error) {

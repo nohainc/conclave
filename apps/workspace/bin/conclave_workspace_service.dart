@@ -14,7 +14,10 @@ import 'package:conclave_workspace/workspace_manager_service.dart';
 /// graph; Flutter is used by the separate desktop management application.
 Future<void> main(List<String> args) async {
   setCurrentProcessName('conclave-service');
+  initializeWindowsProcessJob();
   final dataDirectory = WorkspaceConfig.resolveDataDirectory(args);
+  final initialStop = File('${dataDirectory.path}/runtime/stop-request');
+  if (Platform.isWindows && initialStop.existsSync()) initialStop.deleteSync();
   final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
   final registration = WorkspaceRegistrationStore(dataDirectory).readSync();
   final config = WorkspaceConfig.fromArgs(args);
@@ -60,13 +63,23 @@ Future<void> main(List<String> args) async {
       if (!stopped.isCompleted) stopped.complete();
     }
 
+    final stopRequest = File('${dataDirectory.path}/runtime/stop-request');
+    final stopTimer = Platform.isWindows
+        ? Timer.periodic(const Duration(milliseconds: 250), (_) {
+            if (stopRequest.existsSync() && !stopped.isCompleted) {
+              stopped.complete();
+            }
+          })
+        : null;
     final signals = [
-      ProcessSignal.sigterm.watch().listen(stopOnSignal),
+      if (!Platform.isWindows)
+        ProcessSignal.sigterm.watch().listen(stopOnSignal),
       ProcessSignal.sigint.watch().listen(stopOnSignal),
     ];
     try {
       await stopped.future;
     } finally {
+      stopTimer?.cancel();
       for (final signal in signals) {
         await signal.cancel();
       }

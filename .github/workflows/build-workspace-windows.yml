@@ -2,8 +2,12 @@ name: Build Windows Workspace preview
 
 on:
   push:
-    branches: ["codex/windows-workspace-preview-*"]
+    branches: ["codex/windows-workspace-preview-*", "codex/windows-runtime"]
   workflow_dispatch:
+
+concurrency:
+  group: windows-runtime-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -15,12 +19,40 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-flutter
-      - name: Build unsigned UI preview, service and generic Engine
+      - name: Build standalone service and generic Engine
+        shell: bash
+        env:
+          # Compile-only trust root; this workflow never publishes a release.
+          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
+        run: bash scripts/build-workspace-service.sh
+      - name: Validate Windows runtime primitives and service lifecycle
+        shell: pwsh
+        working-directory: apps/workspace
+        env:
+          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\service\conclave-service.exe
+        run: |
+          flutter test test/windows_runtime_test.dart test/windows_service_lifecycle_test.dart test/windows_service_manager_test.dart
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Validate Windows process jobs and CLI shims
+        shell: pwsh
+        working-directory: packages/conclave_cli_worker_runtime
+        run: |
+          dart pub get
+          dart test test/windows_cli_shim_test.dart test/windows_process_job_test.dart
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build and package Windows UI
         shell: pwsh
         env:
-          # Same compile-only trust root as nightly.yml; this is never a release.
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
         run: ./scripts/build-workspace-windows.ps1
+      - name: Validate packaged service layout
+        shell: pwsh
+        working-directory: apps/workspace
+        env:
+          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\windows\release\conclave-service.exe
+        run: |
+          flutter test test/windows_service_lifecycle_test.dart
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Smoke test packaged UI startup
         shell: pwsh
         run: |
