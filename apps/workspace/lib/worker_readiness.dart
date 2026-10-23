@@ -652,6 +652,9 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
       );
     }
     if (candidate == null) {
+      final activationIssue = workerCatalogCoordinator?.snapshot
+          .profiles[worker.workerTypeId]?.details?['issueCode'] as String?;
+      final issueCode = activationIssue ?? 'tool_profile_unavailable';
       await _recordToolProfileDiagnostic(
         worker,
         runId: runId,
@@ -659,13 +662,15 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
         durationMs: timer.elapsedMilliseconds,
         profileDefinitionId: profileDefinitionId,
         profileResolutionSource: 'unavailable',
-        issueCode: 'tool_profile_unavailable',
-        failureLayer: 'profile',
+        issueCode: issueCode,
+        failureLayer: _profileProbeFailureLayer(issueCode),
       );
-      return const WorkerReadinessAssessment(
+      return WorkerReadinessAssessment(
         WorkerReadinessState.runtimeUnavailable,
-        issueCode: 'tool_profile_unavailable',
-        diagnosticDetails: 'No current Worker Profile is available.',
+        issueCode: issueCode,
+        diagnosticDetails: activationIssue == null
+            ? 'No current Worker Profile is available.'
+            : 'Profile downloaded; activation probe failed ($issueCode).',
       );
     }
     await _recordToolProfileDiagnostic(

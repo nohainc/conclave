@@ -864,7 +864,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       ),
       home: Scaffold(
         body: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 750, minHeight: 650),
+          constraints: const BoxConstraints(minWidth: 750, minHeight: 420),
           child: lifecycle.hidden
               ? const Center(
                   child: Text('Workspace is running in the background.'))

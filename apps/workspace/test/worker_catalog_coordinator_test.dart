@@ -47,6 +47,60 @@ void main() {
     'sortOrder': 1,
   };
 
+  test('missing CLI preserves staged Profile and reports activation cause',
+      () async {
+    final candidate = await _snapshot(
+        signing,
+        buildTestWorkerProfile(
+          profileDefinitionId: 'fixture-profile',
+          logicalWorkerTypeId: 'fixture-cli',
+        ),
+        revision: 1);
+    final catalog = ToolProfileCatalogClient(
+      cloudUri: Uri.https('cloud.example', '/'),
+      store: store,
+      trustPolicy: signing.trustPolicy,
+      workerCatalogLoader: () async => [descriptor],
+      currentProfileLoader: (_) async => candidate,
+      trustRefresher: () async {},
+      candidateValidator: (_, __) async =>
+          throw const WorkerProfileProbeFailure('provider_tool_unavailable'),
+    );
+    addTearDown(catalog.close);
+    final registry = LocalWorkerRegistry(
+      dataDirectory: Directory('${directory.path}/workspace'),
+      workspaceId: 'workspace-fixture',
+    );
+    final local = await registry.create(
+        catalogEntry: WorkerDescriptor.fromJson(descriptor));
+    final controller = WorkerCatalogCoordinator(
+      catalog: catalog,
+      releaseStore: store,
+      registry: registry,
+    );
+    addTearDown(controller.dispose);
+    await controller.refresh(force: true);
+    expect(await store.currentWorkerProfile('fixture-cli'), isNull);
+    expect(await store.hasWorkerProfileCache('fixture-cli'), isTrue);
+    final view = controller.snapshot.workers.single;
+    expect(view.availabilityLabel, 'Provider CLI not found');
+    expect(view.availabilityDetail,
+        contains('Profile downloaded; activation blocked'));
+    expect(view.issueCode, 'provider_tool_unavailable');
+    final monitor = WorkerReadinessMonitor(
+      registry: registry,
+      toolProfileReleaseStore: store,
+      workerCatalogCoordinator: controller,
+      cliWorkerEngineSupervisor:
+          CliWorkerEngineSupervisor(engineExecutable: '/unused'),
+      workerStateDirectory: (_) => Directory('${directory.path}/worker'),
+    );
+    addTearDown(monitor.dispose);
+    await monitor.checkNow(includeDisabled: true);
+    expect((await registry.find(local.id))!.readinessIssueCode,
+        'provider_tool_unavailable');
+  });
+
   test('refreshWorker syncs only the requested Worker Profile', () async {
     final otherDescriptor = {
       ...descriptor,

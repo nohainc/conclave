@@ -24,6 +24,12 @@ typedef ToolProfileRevocationHandler = Future<void> Function(
   Set<String> affectedWorkerTypeIds,
 );
 
+/// A verified download whose local activation probe failed.
+class WorkerProfileProbeFailure implements Exception {
+  const WorkerProfileProbeFailure(this.issueCode);
+  final String issueCode;
+}
+
 /// Downloads the current Worker catalog and Profile snapshots, activating a
 /// candidate only after local verification and optional probing succeeds.
 class ToolProfileCatalogClient {

@@ -148,7 +148,11 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
               mode: WorkerProbeMode.passive,
               timeout: const Duration(seconds: 20),
             );
-            return result.ready;
+            if (!result.ready) {
+              throw WorkerProfileProbeFailure(
+                  result.issueCode ?? 'provider_failure');
+            }
+            return true;
           },
           onRevocationsApplied: (workerTypeIds) async {
             for (final workerTypeId in workerTypeIds) {

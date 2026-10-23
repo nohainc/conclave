@@ -100,6 +100,13 @@ separate lifecycle semantics.
 
 ## Worker subsystem
 
+A downloaded Profile remains staged when its activation probe fails. The
+management snapshot retains the probe issue (for example
+`provider_tool_unavailable`) and reports “Profile downloaded; activation blocked”
+instead of a download failure. Readiness preserves that cause when no active
+Profile exists. CLI detection without probe evidence is displayed as “Not checked”.
+Cloud registration does not establish local CLI or Profile readiness.
+
 Workspace verification retains the CLI Engine probe checks: the version
 command, model discovery when declared, each Profile-defined passive command and
 config check, and the usage/account command for a live test. Passive availability

@@ -101,6 +101,9 @@ class WorkerCatalogWorkerState {
 
   String? get issueCode {
     final worker = localWorker;
+    final activationIssue =
+        profileAvailability.details?['issueCode'] as String?;
+    if (activationIssue != null) return activationIssue;
     if (_latestLivePassed) return null;
     return worker?.lastLiveTestPassed == false
         ? worker?.lastLiveTestIssueCode ?? worker?.readinessIssueCode
@@ -117,7 +120,11 @@ class WorkerCatalogWorkerState {
     }
     if (profileState == WorkspaceWorkerProfileState.error ||
         profileState == WorkspaceWorkerProfileState.unavailable) {
-      return 'Profile unavailable';
+      final activationIssue =
+          profileAvailability.details?['issueCode'] as String?;
+      return activationIssue == null
+          ? 'Profile unavailable'
+          : workerIssueLabel(activationIssue);
     }
     if (localWorker == null) return 'Setup required';
     if (profileState != WorkspaceWorkerProfileState.ready) {
@@ -211,6 +218,7 @@ WorkspaceWorkerState deriveWorkspaceWorkerState(WorkerCatalogWorkerState view) {
     return WorkspaceWorkerState.authenticationRequired;
   }
   if (view.providerToolState == WorkspaceProviderToolState.missing ||
+      view.issueCode == 'provider_tool_unavailable' ||
       worker.readinessIssueCode == 'cli_not_found' ||
       worker.lastLiveTestIssueCode == 'cli_not_found') {
     return WorkspaceWorkerState.providerToolMissing;
@@ -258,7 +266,7 @@ extension WorkspaceWorkerProfileStateLabel on WorkspaceWorkerProfileState {
         WorkspaceWorkerProfileState.resolving => 'Resolving',
         WorkspaceWorkerProfileState.syncing => 'Downloading',
         WorkspaceWorkerProfileState.ready => 'Available',
-        WorkspaceWorkerProfileState.unavailable => 'Not downloaded',
+        WorkspaceWorkerProfileState.unavailable => 'Unavailable',
         WorkspaceWorkerProfileState.incompatible => 'Incompatible',
         WorkspaceWorkerProfileState.error => 'Error',
       };

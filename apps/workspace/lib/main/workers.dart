@@ -246,7 +246,7 @@ class _WorkersTabState extends State<_WorkersTab> {
     final version = worker?.toolVersion ??
         (view.providerToolState == WorkspaceProviderToolState.missing
             ? 'Not installed'
-            : 'Not detected');
+            : 'Not checked');
     final revision = profile?['revision'] ?? profile?['releaseVersion'];
     return Row(
       key: Key('worker-catalog-${entry.workerTypeId}'),
@@ -443,7 +443,7 @@ class _WorkersTabState extends State<_WorkersTab> {
     final worker = view.localWorker!;
     final toolName = worker.toolName ?? 'Provider CLI';
     final toolVersion = switch (view.providerToolState) {
-      WorkspaceProviderToolState.unknown => 'Not detected',
+      WorkspaceProviderToolState.unknown => 'Not checked',
       WorkspaceProviderToolState.missing => 'Not installed',
       WorkspaceProviderToolState.available => worker.toolVersion ?? 'Available',
     };

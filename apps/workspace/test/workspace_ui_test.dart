@@ -1597,7 +1597,7 @@ void main() {
     expect(find.text('Setup required'), findsOneWidget);
     expect(_workerDetail('provider-cli', 'codex'), findsOneWidget);
     expect(_workerDetail('provider-cli', 'agy'), findsNothing);
-    expect(_workerDetail('installed-version', 'Not detected'), findsOneWidget);
+    expect(_workerDetail('installed-version', 'Not checked'), findsOneWidget);
     expect(find.textContaining('Capabilities:'), findsNothing);
     expect(find.text('Diagnostics'), findsNothing);
     expect(find.text('Set up ChatGPT'), findsNothing);

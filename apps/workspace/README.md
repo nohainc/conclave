@@ -22,7 +22,7 @@ credentials, resolves current Tool Profiles, launches the generic CLI Worker
 Engine, enforces local permissions, supervises execution, and reports safe
 readiness/status back to Conclave Cloud.
 
-The macOS window opens at 750 × 480 pixels (minimum 750 × 420). Workspace
+The desktop window opens at 750 × 480 pixels (minimum 750 × 420). Workspace
 settings put the name and Work Root on one row, with compact sleep and parallel
 capacity controls below. The centered tab selector stays above the settings; management buttons and
 expanded recovery content remain reachable by scrolling in shorter windows.

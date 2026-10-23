@@ -248,7 +248,9 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
 
   WorkspaceProviderToolState _providerToolState(LocalWorker? worker) {
     if (worker == null) return WorkspaceProviderToolState.unknown;
-    if (worker.readinessIssueCode == 'cli_not_found' ||
+    if (worker.readinessIssueCode == 'provider_tool_unavailable' ||
+        worker.lastLiveTestIssueCode == 'provider_tool_unavailable' ||
+        worker.readinessIssueCode == 'cli_not_found' ||
         worker.lastLiveTestIssueCode == 'cli_not_found') {
       return WorkspaceProviderToolState.missing;
     }
@@ -496,8 +498,12 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
             worker.workerTypeId,
             WorkerProfileResolution(
               state: WorkspaceWorkerProfileState.error,
-              message:
-                  'Profile download failed: ${SafeProviderDiagnostics.redact(error.toString())}',
+              details: error is WorkerProfileProbeFailure
+                  ? {'issueCode': error.issueCode}
+                  : null,
+              message: error is WorkerProfileProbeFailure
+                  ? 'Profile downloaded; activation blocked: ${workerIssueLabel(error.issueCode)}. ${workerIssueRecovery(error.issueCode)}'
+                  : 'Profile download failed: ${SafeProviderDiagnostics.redact(error.toString())}',
             ),
             generation);
       }
