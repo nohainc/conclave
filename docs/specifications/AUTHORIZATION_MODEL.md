@@ -84,24 +84,26 @@ Provider credentials stay in the local provider CLI configuration. Runtime crede
 
 Space membership remains the boundary for reading. Owners retain all member
 rights and control Space settings and every Thread. For other members, the
-owner can set three explicit booleans: `chat`, `work`, and
-`manageOwnThreads`. The Members tab shows these in a checkbox grid; only the
-owner can edit it, and the Owner badge appears beside the owner's name. Thread
+owner can set four explicit booleans: `chat`, `useOwnWorkers`, `work`, and
+`manageOwnThreads`. The Members tab shows these in a checkbox grid, with
+"Own Workers in Chat" next to Chat; only the owner can edit it, and the Owner badge appears beside the owner's name. Thread
 lists show the creator's email below the title when that person is not the
 Space owner. The current Thread creation identity is its immutable
 creation-time `lead_user_id`; the API does not reassign this field.
 
 The v1 rights map lives at `spaces.settings_json.memberPermissions[userId]`.
-Missing maps preserve role defaults: collaborators have Chat, Work and own
-Thread management; viewers can read; owners have all rights. Workspace
+Missing maps preserve role defaults: collaborators have Chat, own Workers in
+Chat, Work and own Thread management; viewers can read; owners have all rights. Workspace
 attachment requires an explicit grant for non-owners; member invitations remain
 owner-only.
 Malformed stored overrides fail closed. Removing a member removes their override
 and revokes their contributed Workspace Grants.
 
 `PATCH /api/spaces/:id/members/:userId/permissions` accepts
-`{ permissions: { chat, work, manageOwnThreads } }`.
-All three fields must be booleans; extra fields are rejected. Owner rights
+`{ permissions: { chat, useOwnWorkers, work, manageOwnThreads } }`.
+All four fields must be booleans; extra fields are rejected. `useOwnWorkers`
+is stored and returned as false whenever `chat` is false, and a stored
+override without it grants no own Workers. Owner rights
 cannot be changed. Existing role presets remain available through the role
 endpoint and reset the member's explicit rights to that preset. Space and
 member read models include effective `permissions`. Ordinary Space responses
@@ -117,6 +119,24 @@ Migration 0022 converts existing Space-wide Work denials to per-workflow disable
 flags and removes `settings.allowWork`; obsolete writes receive 400. History is
 preserved, and accepted runs retain their execution evidence. Already-running
 provider calls are not cancelled by a settings change.
+
+Own Workers in Chat (`useOwnWorkers`) lets a member answer the Chat workflow
+with a Worker from a Workspace they own, instead of a Worker from the Space's
+Workflow Workspace. Only Workers the member owns qualify; Workers other people
+share with them (Person Grants, the Space Workspace) do not. On first use the
+member's Workspace receives a read-only Space grant (`repository:read`, one
+concurrent assignment) made by that member and audited as
+`chat.own_workspace.authorized`. Admission rejects a non-Chat workflow, a
+missing right, or a Worker the requester does not own. Dispatch rejects any
+Chat candidate outside the Space Workflow Workspace unless the requester owns
+it and currently holds the right (`own_worker_not_allowed`), so other members
+can never run someone's personal Worker. The Worker sees only the
+conversation context the Thread provides and runs in its owner's Workspace,
+not in Space files. The assignment snapshot records `workerOwnerUserId` and
+`workerOwnerName`; `workerOwnerName` is set only when the Worker ran outside
+the Space Workflow Workspace. Conversation turns expose it, and the message
+header shows it after the Worker name; responses from the Space Workspace show
+no owner.
 
 Own Thread management permits creation and management of Threads created by
 that member, while the owner can manage every Thread. It does not grant rights
@@ -145,6 +165,15 @@ Invitation acceptance cannot rewrite an existing member's rights.
 Migration 0025 removes obsolete `inviteMembers` snapshots from persisted Space
 settings. Deploy Cloud before the updated AX app. Older clients cannot bypass
 the owner-only invitation boundary or current member rights.
+
+## Private notes
+
+A note is visible to and changeable by its owner only. Space owners, other
+members, and Workers cannot read it, and notes are never added to Thread or
+Worker context. A Thread note needs Thread view access when it is read or
+saved through the Thread; the owner keeps the note in My Notes after the
+Thread is deleted or they lose access to it. See
+[AX server state: Private notes](../architecture/AX_SERVER_STATE.md#private-notes).
 
 ## People
 

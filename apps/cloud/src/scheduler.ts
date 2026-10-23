@@ -273,6 +273,13 @@ export async function selectSpaceExecutionTarget(
             (SELECT conversation_id FROM conversation_work_requests WHERE work_request_id = wr.id) AS conversation_id,
             (SELECT cr.conversation_revision - 1 FROM conversation_work_requests cr WHERE cr.work_request_id = wr.id) AS base_context_revision,
             ew.name AS workspace_name, ew.owner_user_id, ew.status AS workspace_status,
+            owner_user.display_name AS workspace_owner_name,
+            (SELECT CASE WHEN sws.space_id IS NOT NULL THEN sws.workspace_id
+                         ELSE uws.workspace_id END
+               FROM spaces s
+               LEFT JOIN space_workflow_settings sws ON sws.space_id = s.id
+               LEFT JOIN user_workflow_settings uws ON uws.user_id = s.owner_user_id
+              WHERE s.id = g.space_id) AS space_workflow_workspace_id,
             wri.id AS runtime_identity_id,
             i.worker_id, i.worker_type_id,
             catalog.display_name AS worker_display_name,
@@ -305,6 +312,7 @@ export async function selectSpaceExecutionTarget(
      FROM workspace_space_grants g
      LEFT JOIN thread_execution_policies ep ON ep.thread_id = ?4
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
+     LEFT JOIN users owner_user ON owner_user.id = ew.owner_user_id
      LEFT JOIN work_requests wr ON wr.id = ?5 AND wr.thread_id = ?4
      JOIN workspace_runtime_identities wri ON wri.workspace_id = ew.id AND wri.revoked_at IS NULL
      JOIN workspace_worker_inventory i ON i.workspace_id = ew.id
@@ -493,6 +501,17 @@ export async function selectSpaceExecutionTarget(
       }
       if (!grantPolicyValid) {
         reject("workspace_grant_policy_invalid");
+        continue;
+      }
+      // Outside the Space's Workflow Workspace, Chat runs only on a Workspace
+      // the requester owns, and only while the Space allows own Workers.
+      if (
+        workflowId === "chat" &&
+        workspaceId !== String(row.space_workflow_workspace_id ?? "") &&
+        (String(row.owner_user_id) !== request.requesterUserId ||
+          !rights.useOwnWorkers)
+      ) {
+        reject("own_worker_not_allowed");
         continue;
       }
       if (statefulLease && workspaceId !== statefulLease.workspaceId) {
@@ -698,6 +717,14 @@ export async function selectSpaceExecutionTarget(
         workerTypeId,
         grantId: String(row.grant_id),
         workerDisplayName: String(row.worker_display_name ?? workerTypeId),
+        workerOwnerUserId: String(row.owner_user_id),
+        // Named only for a Worker outside the Space Workflow Workspace, so
+        // the header calls out a member's own Worker but not the Space's.
+        workerOwnerName:
+          workspaceId !== String(row.space_workflow_workspace_id ?? "") &&
+          typeof row.workspace_owner_name === "string"
+            ? row.workspace_owner_name
+            : null,
         engineVersion: String(row.engine_version),
         profileDefinitionId: String(row.profile_definition_id),
         profileReleaseVersion: Number(row.profile_release_version),

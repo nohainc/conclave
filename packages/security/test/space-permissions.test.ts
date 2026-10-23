@@ -33,3 +33,19 @@ it("keeps role defaults only when the override is absent, and fails closed for m
     ),
   ).toEqual({ ...none, chat: true });
 });
+
+it("grants own Workers only together with Chat", () => {
+  expect(defaultSpaceMemberPermissions("collaborator").useOwnWorkers).toBe(
+    true,
+  );
+  expect(defaultSpaceMemberPermissions("viewer").useOwnWorkers).toBe(false);
+  const stored = (value: Record<string, boolean>) =>
+    spaceMemberPermissions(
+      "collaborator",
+      { memberPermissions: { member: value } },
+      "member",
+    ).useOwnWorkers;
+  expect(stored({ chat: true, useOwnWorkers: true })).toBe(true);
+  expect(stored({ chat: false, useOwnWorkers: true })).toBe(false);
+  expect(stored({ chat: true })).toBe(false);
+});

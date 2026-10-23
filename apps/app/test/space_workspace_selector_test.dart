@@ -46,8 +46,10 @@ void main() {
     final selector = find.byKey(const ValueKey('space-workspace'));
     expect(tester.getRect(selector).top,
         greaterThan(tester.getRect(find.text('Settings')).bottom));
-    expect(tester.getRect(selector).top,
-        greaterThan(tester.getRect(find.text('Members')).bottom));
+    expect(tester.getRect(selector).bottom,
+        lessThan(tester.getRect(find.text('Members')).top));
+    expect(tester.getRect(find.text('Members')).bottom,
+        lessThan(tester.getRect(find.text('Archived Threads')).top));
 
     expect(find.textContaining('Following the default Workspace: First'),
         findsOneWidget);
@@ -92,6 +94,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getRect(find.byKey(const ValueKey('space-workspace'))).top,
         greaterThan(tester.getRect(find.text('Settings')).bottom));
+    expect(tester.getRect(find.text('Settings')).bottom,
+        lessThan(tester.getRect(find.text('Members')).top));
+    expect(tester.getRect(find.text('Members')).bottom,
+        lessThan(tester.getRect(find.text('Archived Threads')).top));
     expect(tester.takeException(), isNull);
   });
 

@@ -21,38 +21,45 @@ function fixture() {
   );
   sqlite
     .prepare(
-      "INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES('m','S','alice','owner',?,?)",
+      "INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES('bob','bob@test','bob','now','now')",
     )
-    .run(created, created);
+    .run();
+  sqlite
+    .prepare(
+      "INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES('m','S','alice','owner',?,?),('m2','S','bob','collaborator',?,?)",
+    )
+    .run(created, created, created, created);
   sqlite
     .prepare(
       "INSERT INTO threads(id,space_id,name,status,lead_user_id,created_at,updated_at) VALUES('T','S','T','active','alice',?,?)",
     )
     .run(created, created);
-  const env = {
-    CONCLAVE_ENVIRONMENT: "development",
-    CONCLAVE_DB: db,
-    TEST_AUTHENTICATION: async () => ({
-      userId: "alice",
-      user: {
-        id: "alice",
-        email: "alice@test",
-        displayName: "alice",
-        status: "active",
-      },
-      workspaceId: "",
-      spaceRoles: { S: "owner" },
-      sessionId: "test",
-      clientType: "web",
-    }),
-  } as unknown as SecurityEnv;
+  const envFor = (userId: string) =>
+    ({
+      CONCLAVE_ENVIRONMENT: "development",
+      CONCLAVE_DB: db,
+      TEST_AUTHENTICATION: async () => ({
+        userId,
+        user: {
+          id: userId,
+          email: `${userId}@test`,
+          displayName: userId,
+          status: "active",
+        },
+        workspaceId: "",
+        spaceRoles: { S: userId === "alice" ? "owner" : "collaborator" },
+        sessionId: "test",
+        clientType: "web",
+      }),
+    }) as unknown as SecurityEnv;
+  const env = envFor("alice");
   const patch = (body: unknown) =>
     new Request("https://test/api", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-  return { env, patch };
+  return { env, envFor, patch, sqlite };
 }
 
 it("stores Thread view state in metadata without touching updatedAt", async () => {
@@ -136,6 +143,63 @@ it("stores Space sidebar state in Space settings and validates it", async () => 
       patch({ settings: { sidebarExpanded: "yes" } }),
       env,
       "S",
+    ),
+  ).rejects.toMatchObject({ status: 400 });
+});
+
+it("keeps each member's Thread view state separate", async () => {
+  const { env, envFor, patch, sqlite } = fixture();
+  const bob = envFor("bob");
+  // Both members can manage the Thread: Alice owns the Space, Bob leads it.
+  sqlite.exec("UPDATE threads SET lead_user_id = 'bob'");
+  const select = (workerId: string) =>
+    patch({
+      metadata: {
+        viewState: { workerId, selectionUpdatedAt: "2026-10-21T20:00:00.000Z" },
+      },
+    });
+  expect(
+    (await handleUpdateThread(select("alice-worker"), env, "T")).status,
+  ).toBe(200);
+  expect(
+    (await handleUpdateThread(select("bob-worker"), bob, "T")).status,
+  ).toBe(200);
+  const viewState = async (who: SecurityEnv) =>
+    (
+      (await (await handleListSpaceThreads(patch({}), who, "S")).json()) as {
+        threads: { metadata: { viewState?: { workerId?: string } } }[];
+      }
+    ).threads[0]!.metadata.viewState?.workerId;
+  expect(await viewState(env)).toBe("alice-worker");
+  expect(await viewState(bob)).toBe("bob-worker");
+  // A shared copy from before per-user storage is never shown to anyone.
+  sqlite.exec(
+    `UPDATE threads SET metadata_json = json_set(metadata_json, '$.viewState', json('{"workerId":"shared"}'))`,
+  );
+  expect(await viewState(env)).toBe("alice-worker");
+});
+
+it("clamps a future selection time to the server clock", async () => {
+  const { env, patch } = fixture();
+  const response = await handleUpdateThread(
+    patch({
+      metadata: {
+        viewState: { selectionUpdatedAt: "2999-01-01T00:00:00.000Z" },
+      },
+    }),
+    env,
+    "T",
+  );
+  const body = (await response.json()) as {
+    thread: { metadata: { viewState: { selectionUpdatedAt: string } } };
+  };
+  const at = Date.parse(body.thread.metadata.viewState.selectionUpdatedAt);
+  expect(at).toBeLessThanOrEqual(Date.now());
+  await expect(
+    handleUpdateThread(
+      patch({ metadata: { viewState: { selectionUpdatedAt: "soon" } } }),
+      env,
+      "T",
     ),
   ).rejects.toMatchObject({ status: 400 });
 });

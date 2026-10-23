@@ -5,6 +5,14 @@ extension _AxAppRunDetails on _AxAppStateMixin {
     switch (navigation.kind) {
       case AxRouteKind.people:
         return PeoplePage(people: store.people);
+      case AxRouteKind.notes:
+        final source = widget.dataSource;
+        if (source is! AxNotesDataSource) break;
+        return NotesPage(
+          source: source as AxNotesDataSource,
+          onOpenThread: (spaceId, threadId) =>
+              _navigateTo(AxNavigation.thread(spaceId, threadId)),
+        );
       case AxRouteKind.archivedSpaces:
         return ArchivedSpacesPage(
           archivedSpaces: store.archivedSpaces,

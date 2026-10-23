@@ -38,6 +38,7 @@ function candidate(overrides: Record<string, unknown> = {}) {
     expires_at: null,
     workspace_name: "Contributor Workspace",
     owner_user_id: "user-contributor",
+    space_workflow_workspace_id: "workspace-a",
     workspace_status: "online",
     runtime_identity_id: "runtime-a",
     worker_id: "worker-a",
@@ -948,6 +949,56 @@ it("rechecks granular rights at dispatch and ignores the retired Space-wide swit
       { ...request, workBindingId: "chat" },
     ),
   ).not.toBeNull();
+});
+
+it("runs Chat outside the Space Workspace only on the requester's own Workspace while own Workers are allowed", async () => {
+  const request = {
+    spaceId: "space-a",
+    requesterUserId: "user-a",
+    role: "collaborator",
+    capabilities: ["repository"],
+    workBindingId: "chat" as const,
+  };
+  const own = candidate({
+    workspace_id: "workspace-own",
+    owner_user_id: "user-a",
+    workspace_owner_name: "Alice",
+  });
+  const allowed = await selectSpaceExecutionTarget(db([own]), request);
+  expect(allowed?.workspaceId).toBe("workspace-own");
+  expect(allowed?.permissionSnapshot).toMatchObject({
+    workerOwnerUserId: "user-a",
+    workerOwnerName: "Alice",
+  });
+  const denied = {
+    memberPermissions: {
+      "user-a": {
+        chat: true,
+        useOwnWorkers: false,
+        work: true,
+        manageOwnThreads: true,
+      },
+    },
+  };
+  expect(
+    await selectSpaceExecutionTarget(
+      db([own], "collaborator", null, undefined, denied),
+      request,
+    ),
+  ).toBeNull();
+  // A Worker of the Space Workflow Workspace is not attributed to its owner.
+  const spaceTarget = await selectSpaceExecutionTarget(
+    db([candidate({ workspace_owner_name: "Owner" })]),
+    request,
+  );
+  expect(spaceTarget?.permissionSnapshot.workerOwnerName).toBeNull();
+  // Another member's personal Workspace never serves this requester.
+  expect(
+    await selectSpaceExecutionTarget(
+      db([candidate({ workspace_id: "workspace-other" })]),
+      request,
+    ),
+  ).toBeNull();
 });
 
 it("revalidates exact model and effort at dispatch without fallback", async () => {

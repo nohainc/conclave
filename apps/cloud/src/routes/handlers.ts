@@ -73,6 +73,12 @@ export {
 } from "./workspaces.js";
 export { handleSetPin, handleSetPinOrder } from "./pins.js";
 export {
+  handleCreateNote,
+  handleListNotes,
+  handleNote,
+  handleThreadNote,
+} from "./notes.js";
+export {
   handleListNotifications,
   handleMarkNotificationsRead,
 } from "./notifications.js";

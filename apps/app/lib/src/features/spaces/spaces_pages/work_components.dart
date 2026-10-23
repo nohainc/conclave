@@ -1461,6 +1461,7 @@ class _WorkTimelineCard extends StatelessWidget {
             senderStep?.status == 'running' ||
             response?.isNotEmpty == true);
     final senderName = isWorkerResponse ? workerName : 'Conclave';
+    final workerOwnerName = senderTurn?.workerOwnerName?.trim();
     final workerIcon = presentation.iconAsset;
 
     final frozenModelName = senderTurn?.modelName ?? senderStep?.modelName;
@@ -1693,6 +1694,19 @@ class _WorkTimelineCard extends StatelessWidget {
                                 color: metaColor,
                               ),
                             ),
+                            if (isWorkerResponse &&
+                                workerOwnerName?.isNotEmpty == true) ...[
+                              const SizedBox(width: 4),
+                              Tooltip(
+                                message: 'Worker owned by $workerOwnerName',
+                                child: Text(
+                                  "· $workerOwnerName's Worker",
+                                  key: const ValueKey('worker-owner-label'),
+                                  style:
+                                      TextStyle(fontSize: 12, color: metaColor),
+                                ),
+                              ),
+                            ],
                             if (isWorkerResponse &&
                                 formattedModelInfo != null) ...[
                               const SizedBox(width: 6),

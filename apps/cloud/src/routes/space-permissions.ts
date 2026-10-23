@@ -22,10 +22,15 @@ export function validateMemberPermissions(
   ) {
     throw new HttpError(
       400,
-      "All three member permissions must be boolean values",
+      "All member permissions must be boolean values",
     );
   }
-  return value as SpaceMemberPermissions;
+  const permissions = value as SpaceMemberPermissions;
+  // Own Workers are a Chat refinement; denying Chat also denies them.
+  return {
+    ...permissions,
+    useOwnWorkers: permissions.chat && permissions.useOwnWorkers,
+  };
 }
 
 export async function loadSpacePermissions(

@@ -131,6 +131,9 @@ function projectInventoryRow(
     id: String(row.worker_id),
     workspaceId: String(row.workspace_id),
     workspaceName: String(row.workspace_name),
+    // Shared Workers belong to someone else; only owned ones may answer Chat
+    // as the viewer's own Worker in a Space.
+    shared: masked,
     workerTypeId: String(row.worker_type_id),
     displayName:
       row.catalog_display_name == null

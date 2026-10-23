@@ -169,6 +169,8 @@ export interface ConversationTurn {
   readonly workerId: string;
   readonly workerTypeId: string;
   readonly workerDisplayName: string;
+  /** Display name of the person whose Workspace ran the turn, when known. */
+  readonly workerOwnerName?: string | null;
   readonly profileId: string;
   readonly profileVersion: number;
   readonly modelId: string | null;

@@ -1102,6 +1102,29 @@ only pinned item or when reordering is unavailable. Unpinned Spaces and Threads 
 the shared `threadOrder` setting is no longer edited from the sidebar). Unpinned Spaces stay newest-activity first. Space settings stay owner-only and are not used for pins. No wire
 version change; the field is additive.
 
+### Private notes
+
+Notes belong to a user, not to a Space or Thread. `user_notes`
+(`0081_user_notes.sql`) holds `title`, `body`, a `revision`, and an optional
+link (`thread_id`, `space_id`, `linked_title`) with no foreign keys, so
+deleting a Thread or Space, or leaving it, never deletes a note; only deleting
+the user does. Reads report `linked: true` only while the Thread exists and
+the owner is still a member of its Space; otherwise the note is detached and
+shows the saved Thread title. There is no warning on Thread deletion because
+nothing is lost.
+
+- `GET /api/notes`, `POST /api/notes`, and `GET`/`PUT`/`DELETE
+  /api/notes/:id` serve the caller's own notes (My Notes, `/notes`).
+- `GET`/`PUT /api/threads/:id/note` serve the caller's single note for a
+  Thread (the Thread's Notes tab) and require Thread view access. `GET`
+  returns `note: null` until the first `PUT` creates it.
+- Every update sends the `revision` it edited; a stale one gets 409 and the
+  editor reloads the latest text instead of overwriting it.
+
+Notes are never published as collaboration events, never shown to other
+members or Space owners, and never included in Worker context. The app saves
+automatically shortly after typing stops.
+
 ## Phase 9: Persisted sidebar and Thread view state
 
 Presentation state follows the user across browsers through metadata, never
@@ -1111,9 +1134,15 @@ through execution paths:
   `thread.metadata`): `viewState` holds `tabIndex` (0 Chat, 1 Work),
   `workflowReference`, `workerId`, `workerTypeId`, `model`,
   `reasoningEffort`, `catalogRevision`, and `selectionUpdatedAt` (UTC
-  ISO-8601 time of the user's last selection change). `PATCH /threads/:id` accepts
+  ISO-8601 time of the user's last selection change). View state is personal:
+  it is stored per user under `metadata.viewStates[userId]`, and Thread
+  responses return only the caller's entry as `metadata.viewState`, so one
+  member's selection never replaces another's. A shared top-level `viewState`
+  written before per-user storage is ignored. `PATCH /threads/:id` accepts
   `{ "metadata": { "viewState": { ... } } }` as a JSON merge patch (`null`
-  clears a key). The route validates keys and bounds values, and a
+  clears a key) and scopes it to the caller. A `selectionUpdatedAt` ahead of
+  the server clock is clamped to it, so a device with a fast clock cannot
+  outrank later choices. The route validates keys and bounds values, and a
   metadata-only write does not change `updatedAt`, so it never reorders the
   sidebar. Writing requires Thread manage access. Drafts stay browser-local.
 - **Space** (`spaces.settings_json`): `threadOrder` (unique Thread ids) and
@@ -1125,11 +1154,17 @@ load, and never writes defaults over a stored choice while it is pending. The
 stored Space order places Threads missing from it (new ones) first, then the
 listed Threads in order; reordering uses the Thread menu's Move Up/Down.
 
-Restore rules: when the stored `workerId` no longer exists (Worker rebuilt or
-re-registered), the app re-binds by the stable `workerTypeId` and refreshes
-`catalogRevision`; model and effort codes are kept as saved. A stored
-`workflowReference` whose version was superseded resolves to the current version
-of the same workflow id. Leaving a Thread writes its Cloud `viewState` for that
+Only explicit Thread choices are stored: the Workflow configuration default
+shown when nothing is chosen is never written as the Thread's Worker, model,
+or effort. Restore rules: when the stored `workerId` no longer exists (Worker
+rebuilt or re-registered), the app re-binds by the stable `workerTypeId` only
+when exactly one of the viewer's Workers (Space Workspace or own) has that
+type, and refreshes `catalogRevision`; model and effort codes are kept as
+saved. A stored `workflowReference` whose version was superseded resolves to
+the current version of the same workflow id; a stored Workflow that no longer
+exists falls back to the default Workflow but keeps the stored Worker, model,
+and effort. Switching to a Workflow that fixes its own Worker and back restores
+the last Worker selection. Leaving a Thread writes its Cloud `viewState` for that
 Thread, and a selection still waiting for the catalogs is saved as-is rather
 than replaced by defaults. An explicit Workflow/Worker/model change made while
 that selection is pending supersedes it, so the late restore cannot overwrite
@@ -1144,14 +1179,16 @@ continue to reconcile Work history.
 ### Space landing composition
 
 The Space landing page starts with the Space name and description when present,
-then Workspace selection and a same-width Create a new thread field. Creation
+then a Create a new thread field. Creation
 requires an explicit name unique within the Space (trimmed and case-insensitive,
 including archived Threads); cached Thread queries provide inline validation,
 and Cloud remains authoritative for concurrent conflicts. Errors display below
 the field. The Space page has no message composers or Discussion/Work tabs.
 Workspace selection retains owner editing and read-only display for other members.
 The landing content shares the Members title’s left edge at all viewport widths.
-The Members section follows, collapsed by default and expandable from its title,
+Below the field, Settings (when available), Members, and Archived Threads appear
+in that order. Settings holds Workspace selection. Members is collapsed by
+default and expandable from its title,
 with a rotating arrow immediately beside the Members label;
 Share Space is in the member grid’s name/email
 column header. Member permissions and invitations observe existing Space queries.
@@ -1270,7 +1307,8 @@ provider diagnostics remain outside conversation messages.
 
 The sidebar lists active Threads only. The Space landing page does not repeat
 active Threads; below the Thread name field it shows three collapsed areas:
-**Archived Threads**, **Members**, and **Settings**. Archived Threads come from
+**Settings** (when available), **Members**, and **Archived Threads**, in that
+order. Archived Threads come from
 the same Space-scoped query cache as the sidebar. Authorized managers restore an
 archived Thread from its row's actions menu; the collaboration mutation updates
 the shared cache so the Thread returns to the sidebar. Archiving does not delete

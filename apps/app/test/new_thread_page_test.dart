@@ -47,8 +47,8 @@ void main() {
       (tester) async {
     await pump(tester, create: (_) async => thread, open: (_) {});
     final title = find.text('Archived Threads');
-    expect(tester.getRect(title).bottom,
-        lessThan(tester.getRect(find.text('Members')).top));
+    expect(tester.getRect(find.text('Members')).bottom,
+        lessThan(tester.getRect(title).top));
     expect(find.byKey(const ValueKey('space-thread-filter')), findsNothing);
     expect(find.text('Existing'), findsNothing);
     await tester.tap(title);

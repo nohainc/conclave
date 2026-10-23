@@ -6,6 +6,7 @@ import {
   type BuiltinWorkflowDefinition,
 } from "@conclave/core";
 import { HttpError, type SecurityEnv } from "./http-security.js";
+import { loadSpacePermissions } from "./space-permissions.js";
 import { validateWorkflowWorkerEligibility } from "./handlers.js";
 import {
   MONTHLY_RUN_SECONDS_SQL,
@@ -99,23 +100,33 @@ export async function resolveWorkflowExecutionBindings(
     spaceId,
     definition.id,
   );
-  if (!space.workspaceId)
-    throw new HttpError(
-      422,
-      "Choose a Workspace in Workflows before sending a request",
-    );
   const configuration = space.configurations[0]
     ? parseUserWorkflowConfiguration(definition, space.configurations[0])
     : undefined;
   const effective = resolveUserWorkflowConfiguration(definition, configuration);
   if (!effective.enabled)
     throw new HttpError(422, "Workflow is disabled in this Space");
+  const ownWorkspaceId = await ownChatWorkerWorkspace(
+    env,
+    userId,
+    spaceId,
+    space.workspaceId,
+    definition,
+    override?.workerId,
+  );
+  if (ownWorkspaceId) {
+    await ensureOwnChatWorkspaceGrant(env, userId, spaceId, ownWorkspaceId);
+  } else if (!space.workspaceId)
+    throw new HttpError(
+      422,
+      "Choose a Workspace in Workflows before sending a request",
+    );
   const inventory = await env.CONCLAVE_DB.prepare(
     `SELECT i.worker_id AS workerId, i.workspace_id AS workspaceId
      FROM workspace_worker_inventory i
      WHERE i.workspace_id = ?1 ORDER BY i.workspace_id, i.worker_id`,
   )
-    .bind(space.workspaceId)
+    .bind(ownWorkspaceId ?? space.workspaceId)
     .all<{ workerId: string; workspaceId: string }>();
   // Invited members may only use what the Workspace owner shares with them.
   const workspaceOwner = await env.CONCLAVE_DB.prepare(
@@ -132,6 +143,7 @@ export async function resolveWorkflowExecutionBindings(
     .bind(spaceId)
     .first<{ ownerUserId: string }>();
   if (
+    !ownWorkspaceId &&
     workspaceOwner &&
     spaceOwner &&
     workspaceOwner.ownerUserId !== spaceOwner.ownerUserId &&
@@ -169,7 +181,10 @@ export async function resolveWorkflowExecutionBindings(
       );
   }
   const memberPolicy =
-    workspaceOwner && workspaceOwner.ownerUserId !== userId
+    !ownWorkspaceId &&
+    space.workspaceId &&
+    workspaceOwner &&
+    workspaceOwner.ownerUserId !== userId
       ? await loadEffectiveMemberAccess(env, space.workspaceId, userId)
       : null;
   const requested: Record<
@@ -258,4 +273,83 @@ export async function resolveWorkflowExecutionBindings(
     }
   }
   return requested;
+}
+
+/**
+ * Chat may run on a Worker from a Workspace the requester owns, outside the
+ * Space's Workflow Workspace, when the Space grants `useOwnWorkers`. Workers
+ * other people share with the requester never qualify. Returns that
+ * Workspace, or null when the Space Workspace rules apply.
+ */
+async function ownChatWorkerWorkspace(
+  env: SecurityEnv,
+  userId: string,
+  spaceId: string,
+  spaceWorkspaceId: string | null,
+  definition: BuiltinWorkflowDefinition,
+  workerId: string | null | undefined,
+): Promise<string | null> {
+  if (definition.id !== "chat" || !workerId) return null;
+  const worker = await env.CONCLAVE_DB.prepare(
+    `SELECT i.workspace_id AS workspaceId
+       FROM workspace_worker_inventory i
+       JOIN execution_workspaces ew ON ew.id = i.workspace_id
+      WHERE i.worker_id = ?1 AND ew.owner_user_id = ?2
+        AND ew.status != 'revoked'`,
+  )
+    .bind(workerId, userId)
+    .first<{ workspaceId: string }>();
+  if (!worker?.workspaceId || worker.workspaceId === spaceWorkspaceId)
+    return null;
+  const policy = await loadSpacePermissions(env, userId, spaceId);
+  if (!policy.rights.useOwnWorkers)
+    throw new HttpError(
+      403,
+      "chat: Using your own Workers is not allowed in this Space",
+    );
+  return worker.workspaceId;
+}
+
+/**
+ * The requester's own Workspace answers Chat in the Space through a
+ * read-only grant they make; it never allows writes or shell execution.
+ */
+async function ensureOwnChatWorkspaceGrant(
+  env: SecurityEnv,
+  userId: string,
+  spaceId: string,
+  workspaceId: string,
+) {
+  const existing = await env.CONCLAVE_DB.prepare(
+    "SELECT status, expires_at AS expiresAt FROM workspace_space_grants WHERE space_id=?1 AND workspace_id=?2 AND status IN ('active','suspended')",
+  )
+    .bind(spaceId, workspaceId)
+    .first<{ status: string; expiresAt: string | null }>();
+  const now = new Date().toISOString();
+  if (existing) {
+    if (
+      existing.status === "suspended" ||
+      (existing.expiresAt && existing.expiresAt <= now)
+    )
+      throw new HttpError(
+        409,
+        "chat: Your Workspace grant for this Space is suspended or expired",
+      );
+    return;
+  }
+  await env.CONCLAVE_DB.batch([
+    env.CONCLAVE_DB.prepare(
+      "INSERT INTO workspace_space_grants(id,space_id,workspace_id,granted_by_user_id,status,allowed_permissions_json,concurrency_json,created_at,updated_at) VALUES(?1,?2,?3,?4,'active','[\"repository:read\"]','{\"maxConcurrentAssignments\":1}',?5,?5)",
+    ).bind(crypto.randomUUID(), spaceId, workspaceId, userId, now),
+    env.CONCLAVE_DB.prepare(
+      "INSERT INTO space_audit_log(id,space_id,actor_type,actor_id,action,target_type,target_id,details_json,created_at) VALUES(?1,?2,'user',?3,'chat.own_workspace.authorized','execution_workspace',?4,?5,?6)",
+    ).bind(
+      crypto.randomUUID(),
+      spaceId,
+      userId,
+      workspaceId,
+      JSON.stringify({ workspaceId, permissions: ["repository:read"] }),
+      now,
+    ),
+  ]);
 }

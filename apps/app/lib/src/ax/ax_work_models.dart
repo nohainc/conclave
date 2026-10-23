@@ -172,6 +172,7 @@ class AxConversationTurn {
         workerId = json['workerId'] as String,
         workerTypeId = json['workerTypeId'] as String,
         workerDisplayName = json['workerDisplayName'] as String,
+        workerOwnerName = json['workerOwnerName'] as String?,
         profileId = json['profileId'] as String,
         profileVersion = json['profileVersion'] as int,
         modelId = json['modelId'] as String?,
@@ -200,6 +201,9 @@ class AxConversationTurn {
   final String workerId;
   final String workerTypeId;
   final String workerDisplayName;
+
+  /// Person whose Workspace ran this turn, when Cloud recorded it.
+  final String? workerOwnerName;
   final String profileId;
   final int profileVersion;
   final String? modelId;
@@ -228,6 +232,7 @@ class AxConversationTurn {
         'workerId': workerId,
         'workerTypeId': workerTypeId,
         'workerDisplayName': workerDisplayName,
+        if (workerOwnerName != null) 'workerOwnerName': workerOwnerName,
         'profileId': profileId,
         'profileVersion': profileVersion,
         'modelId': modelId,

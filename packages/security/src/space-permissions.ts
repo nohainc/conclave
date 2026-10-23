@@ -1,6 +1,7 @@
 /** Version 1 product rights, independent of provider and Workspace permissions. */
 export const SPACE_MEMBER_PERMISSION_KEYS = [
   "chat",
+  "useOwnWorkers",
   "work",
   "manageOwnThreads",
 ] as const;
@@ -17,6 +18,7 @@ export function defaultSpaceMemberPermissions(
   const collaborator = role === "collaborator";
   return {
     chat: owner || collaborator,
+    useOwnWorkers: owner || collaborator,
     work: owner || collaborator,
     manageOwnThreads: owner || collaborator,
   };
@@ -51,6 +53,8 @@ export function spaceMemberPermissions(
   const value = parseSpaceSettings(override);
   return {
     chat: value.chat === true,
+    // Own Workers answer only in Chat; without Chat the right has no effect.
+    useOwnWorkers: value.chat === true && value.useOwnWorkers === true,
     work: value.work === true,
     manageOwnThreads: value.manageOwnThreads === true,
   };

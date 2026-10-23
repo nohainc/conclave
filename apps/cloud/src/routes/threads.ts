@@ -146,7 +146,7 @@ export async function handleListSpaceThreads(
       updatedAt: String(row.updatedAt ?? ""),
     };
     return {
-      ...threadMetadata(row),
+      ...threadMetadata(row, context.userId),
       canConfigureWork: canManageThread(
         context.userId,
         effectiveMembership,
@@ -223,18 +223,21 @@ export async function handleCreateThread(
     thread: {
       canConfigureWork: true,
       canExecuteWork: true,
-      ...threadMetadata({
-        id,
-        spaceId,
-        name,
-        status: "active",
-        accessPolicyJson: JSON.stringify(accessPolicy),
-        leadUserId: context.userId,
-        creatorEmail: context.user.email,
-        creatorIsOwner: creatorPolicy.role === "owner" ? 1 : 0,
-        createdAt: now,
-        updatedAt: now,
-      }),
+      ...threadMetadata(
+        {
+          id,
+          spaceId,
+          name,
+          status: "active",
+          accessPolicyJson: JSON.stringify(accessPolicy),
+          leadUserId: context.userId,
+          creatorEmail: context.user.email,
+          creatorIsOwner: creatorPolicy.role === "owner" ? 1 : 0,
+          createdAt: now,
+          updatedAt: now,
+        },
+        context.userId,
+      ),
     },
   };
   const write = (receipts: D1PreparedStatement[]) =>
@@ -286,7 +289,7 @@ export async function handleUpdateThread(
   const metadataPatch =
     body.metadata === undefined
       ? undefined
-      : normalizeThreadMetadataPatch(body.metadata);
+      : normalizeThreadMetadataPatch(body.metadata, context.userId);
   // A metadata-only write is presentation state, not Thread activity: it must
   // not reorder the sidebar by bumping updated_at.
   const metadataOnly =
@@ -391,20 +394,23 @@ export async function handleUpdateThread(
   );
   return json({
     thread: {
-      ...threadMetadata({
-        id: thread.id,
-        spaceId: thread.spaceId,
-        name,
-        status,
-        accessPolicyJson: JSON.stringify(accessPolicy),
-        workConfigJson: savedWorkConfigJson,
-        metadataJson: savedMetadataJson,
-        leadUserId: thread.lead.userId,
-        creatorEmail: creator?.email,
-        creatorIsOwner: creator?.ownerUserId === thread.lead.userId ? 1 : 0,
-        createdAt: thread.createdAt,
-        updatedAt,
-      }),
+      ...threadMetadata(
+        {
+          id: thread.id,
+          spaceId: thread.spaceId,
+          name,
+          status,
+          accessPolicyJson: JSON.stringify(accessPolicy),
+          workConfigJson: savedWorkConfigJson,
+          metadataJson: savedMetadataJson,
+          leadUserId: thread.lead.userId,
+          creatorEmail: creator?.email,
+          creatorIsOwner: creator?.ownerUserId === thread.lead.userId ? 1 : 0,
+          createdAt: thread.createdAt,
+          updatedAt,
+        },
+        context.userId,
+      ),
       canConfigureWork: true,
       canExecuteWork: canExecuteThread(
         context.userId,

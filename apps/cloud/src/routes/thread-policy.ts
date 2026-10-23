@@ -91,9 +91,16 @@ const VIEW_STATE_STRING_KEYS = [
 /**
  * Validates a Thread metadata patch. Values are merged with JSON merge-patch
  * semantics, so `null` clears a key. Only presentation state is accepted.
+ *
+ * View state is personal: the caller's `viewState` is stored under
+ * `viewStates[userId]`, so one member's selection never replaces another's.
+ * A `selectionUpdatedAt` ahead of the server clock is clamped to it, so a
+ * device with a fast clock cannot outrank later choices made elsewhere.
  */
 export function normalizeThreadMetadataPatch(
   value: unknown,
+  userId: string,
+  now: string = new Date().toISOString(),
 ): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new HttpError(400, "metadata must be an object");
@@ -101,7 +108,7 @@ export function normalizeThreadMetadataPatch(
   if (Object.keys(input).some((key) => key !== "viewState"))
     throw new HttpError(400, "metadata contains unsupported keys");
   if (input.viewState === undefined) return {};
-  if (input.viewState === null) return { viewState: null };
+  if (input.viewState === null) return { viewStates: { [userId]: null } };
   if (typeof input.viewState !== "object" || Array.isArray(input.viewState))
     throw new HttpError(400, "metadata.viewState must be an object");
   const viewState = input.viewState as Record<string, unknown>;
@@ -124,7 +131,17 @@ export function normalizeThreadMetadataPatch(
       throw new HttpError(400, `metadata.viewState.${key} is invalid`);
     patch[key] = entry;
   }
-  return { viewState: patch };
+  const at = patch.selectionUpdatedAt;
+  if (typeof at === "string") {
+    const time = Date.parse(at);
+    if (Number.isNaN(time))
+      throw new HttpError(
+        400,
+        "metadata.viewState.selectionUpdatedAt is invalid",
+      );
+    if (time > Date.parse(now)) patch.selectionUpdatedAt = now;
+  }
+  return { viewStates: { [userId]: patch } };
 }
 
 /** JSON merge-patch (RFC 7386), matching SQLite json_patch. */
@@ -148,8 +165,23 @@ export function mergeMetadata(
   return result;
 }
 
+/** Returns only the viewer's own view state, as `viewState`. */
+function viewerMetadata(
+  metadata: Record<string, unknown>,
+  viewerUserId: string,
+): Record<string, unknown> {
+  // A shared top-level `viewState` predates per-user storage and is ignored.
+  const { viewStates, viewState: _shared, ...rest } = metadata;
+  const own =
+    viewStates && typeof viewStates === "object" && !Array.isArray(viewStates)
+      ? (viewStates as Record<string, unknown>)[viewerUserId]
+      : undefined;
+  return own && typeof own === "object" ? { ...rest, viewState: own } : rest;
+}
+
 export function threadMetadata(
   row: Record<string, unknown>,
+  viewerUserId: string,
 ): Record<string, unknown> {
   const accessPolicy = parseJson<Record<string, unknown>>(
     row.accessPolicyJson ?? row.access_policy_json,
@@ -173,9 +205,12 @@ export function threadMetadata(
       defaultWorkflowId: "full_cycle",
       bindings: {},
     }),
-    metadata: parseJson<Record<string, unknown>>(
-      row.metadataJson ?? row.metadata_json,
-      {},
+    metadata: viewerMetadata(
+      parseJson<Record<string, unknown>>(
+        row.metadataJson ?? row.metadata_json,
+        {},
+      ),
+      viewerUserId,
     ),
     primaryWorkspace:
       accessPolicy.primaryWorkspaceId ??

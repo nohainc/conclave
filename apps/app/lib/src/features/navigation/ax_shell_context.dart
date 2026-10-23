@@ -280,6 +280,8 @@ class AxShellContext {
             navigation.threadId == target.threadId;
       case AxRouteKind.people:
         return navigation.kind == AxRouteKind.people;
+      case AxRouteKind.notes:
+        return navigation.kind == AxRouteKind.notes;
       case AxRouteKind.archivedSpaces:
         return navigation.kind == AxRouteKind.archivedSpaces;
       case AxRouteKind.workspaces:

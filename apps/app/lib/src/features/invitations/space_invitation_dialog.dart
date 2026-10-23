@@ -293,6 +293,7 @@ class _SpaceInvitationDialogState extends State<SpaceInvitationDialog> {
                       style: Theme.of(context).textTheme.titleMedium),
                   for (final entry in const {
                     'chat': 'Use Chat',
+                    'useOwnWorkers': 'Use own Workers in Chat',
                     'work': 'Use Work',
                     'manageOwnThreads': 'Manage own threads'
                   }.entries)
@@ -301,10 +302,20 @@ class _SpaceInvitationDialogState extends State<SpaceInvitationDialog> {
                         contentPadding: EdgeInsets.zero,
                         title: Text(entry.value),
                         value: (_permissions[entry.key] ?? false) &&
-                            allowed[entry.key] == true,
-                        onChanged: !_sending && allowed[entry.key] == true
-                            ? (value) => setState(
-                                () => _permissions[entry.key] = value == true)
+                            allowed[entry.key] == true &&
+                            (entry.key != 'useOwnWorkers' ||
+                                _permissions['chat'] == true),
+                        // Own Workers refine Chat; denying Chat denies them.
+                        onChanged: !_sending &&
+                                allowed[entry.key] == true &&
+                                (entry.key != 'useOwnWorkers' ||
+                                    _permissions['chat'] == true)
+                            ? (value) => setState(() {
+                                  _permissions[entry.key] = value == true;
+                                  if (entry.key == 'chat' && value != true) {
+                                    _permissions['useOwnWorkers'] = false;
+                                  }
+                                })
                             : null),
                 ],
                 if (_sent > 0)

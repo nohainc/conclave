@@ -835,6 +835,41 @@ export async function routeWorkerRequest(
       );
     }
 
+    if (url.pathname === "/api/notes") {
+      if (request.method === "GET")
+        return await handlers.handleListNotes!(request, env, ctx);
+      if (request.method === "POST")
+        return await handlers.handleCreateNote!(request, env, ctx);
+    }
+    const noteMatch = url.pathname.match(/^\/api\/notes\/([^/]+)$/);
+    if (
+      noteMatch?.[1] &&
+      (request.method === "GET" ||
+        request.method === "PUT" ||
+        request.method === "DELETE")
+    ) {
+      return await handlers.handleNote!(
+        request,
+        env,
+        decodeURIComponent(noteMatch[1]),
+        ctx,
+      );
+    }
+    const threadNoteMatch = url.pathname.match(
+      /^\/api\/threads\/([^/]+)\/note$/,
+    );
+    if (
+      threadNoteMatch?.[1] &&
+      (request.method === "GET" || request.method === "PUT")
+    ) {
+      return await handlers.handleThreadNote!(
+        request,
+        env,
+        threadNoteMatch[1],
+        ctx,
+      );
+    }
+
     if (url.pathname === "/api/pins/order" && request.method === "PUT") {
       return await handlers.handleSetPinOrder!(request, env, ctx);
     }

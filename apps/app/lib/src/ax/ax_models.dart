@@ -258,18 +258,35 @@ class AxPhaseItem {
 
 class AxSpacePermissions {
   const AxSpacePermissions(
-      {this.chat = false, this.work = false, this.manageOwnThreads = false});
+      {this.chat = false,
+      bool useOwnWorkers = false,
+      this.work = false,
+      this.manageOwnThreads = false})
+      : _useOwnWorkers = useOwnWorkers;
   final bool chat, work, manageOwnThreads;
+  final bool _useOwnWorkers;
+
+  /// Chat only: the member may answer with Workers from Workspaces they own.
+  /// Denying Chat also denies it.
+  bool get useOwnWorkers => chat && _useOwnWorkers;
   factory AxSpacePermissions.forRole(String role) => AxSpacePermissions(
       chat: role == 'owner' || role == 'collaborator',
+      useOwnWorkers: role == 'owner' || role == 'collaborator',
       work: role == 'owner' || role == 'collaborator',
       manageOwnThreads: role == 'owner' || role == 'collaborator');
   factory AxSpacePermissions.fromJson(Map json) => AxSpacePermissions(
       chat: json['chat'] == true,
+      useOwnWorkers: json['useOwnWorkers'] == true,
       work: json['work'] == true,
       manageOwnThreads: json['manageOwnThreads'] == true);
-  Map<String, bool> toJson() =>
-      {'chat': chat, 'work': work, 'manageOwnThreads': manageOwnThreads};
+
+  /// Key order is the members table column order.
+  Map<String, bool> toJson() => {
+        'chat': chat,
+        'useOwnWorkers': useOwnWorkers,
+        'work': work,
+        'manageOwnThreads': manageOwnThreads
+      };
 }
 
 class AxThread {
@@ -759,11 +776,15 @@ class AxWorker {
     this.providerToolVersion,
     this.modelOptions = const {},
     this.executionOptions,
+    this.shared = false,
   });
 
   final String id;
   final String workspaceId;
   final String workspaceName;
+
+  /// Shared with the viewer by another person; not the viewer's own Worker.
+  final bool shared;
   final String workerTypeId;
   final String displayName;
   final String? description;
@@ -819,6 +840,32 @@ class AxWorker {
         profileReleaseVersion: json['profileReleaseVersion'] as int?,
         providerToolName: json['providerToolName']?.toString(),
         providerToolVersion: json['providerToolVersion']?.toString(),
+        shared: json['shared'] == true,
+      );
+
+  /// The same Worker shown under another name, for example with its Workspace.
+  AxWorker withDisplayName(String value) => AxWorker(
+        id: id,
+        workspaceId: workspaceId,
+        workspaceName: workspaceName,
+        workerTypeId: workerTypeId,
+        displayName: value,
+        description: description,
+        catalogLifecycleState: catalogLifecycleState,
+        catalogVisibilityState: catalogVisibilityState,
+        status: status,
+        readinessState: readinessState,
+        activationState: activationState,
+        attentionReasonCode: attentionReasonCode,
+        localConcurrencyLimit: localConcurrencyLimit,
+        engineVersion: engineVersion,
+        profileDefinitionId: profileDefinitionId,
+        profileReleaseVersion: profileReleaseVersion,
+        providerToolName: providerToolName,
+        providerToolVersion: providerToolVersion,
+        modelOptions: modelOptions,
+        executionOptions: executionOptions,
+        shared: shared,
       );
 }
 

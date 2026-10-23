@@ -443,6 +443,91 @@ void main() {
     expect(saved?.reasoningEffort, 'removed-effort');
     await tester.pumpWidget(const SizedBox());
   });
+  Future<AxThreadViewState?> restoreAndResave(WidgetTester tester,
+      {required List<AxWorker> workers, AxThreadViewState? saved}) async {
+    tester.view.physicalSize = const Size(900, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final source = IntegrationSource()
+      ..defaultWorkflow = 'direct'
+      ..workers = workers
+      ..values = [
+        AxUserWorkflowConfiguration(
+            workflowId: 'direct',
+            defaults: const AxWorkflowSelection(worker: 'a'))
+      ];
+    final engine = AxSyncEngine();
+    final store = MemoryAxThreadViewStateStore();
+    if (saved != null) {
+      await store.save(userId: 'user', threadId: 'thread', state: saved);
+    }
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+                initialTab: 1,
+                space: const AxSpace(
+                    id: 's',
+                    name: 'Space',
+                    branch: '',
+                    lastActivity: '',
+                    role: 'owner'),
+                thread: const AxThread(
+                    id: 'thread',
+                    spaceId: 's',
+                    name: 'Thread',
+                    lead: '',
+                    status: 'active',
+                    brief: '',
+                    primaryWorkspace: '',
+                    queueStatus: '',
+                    canExecuteWork: true),
+                currentUserId: 'user',
+                dataSource: source,
+                catalogs: AxSessionCatalogs(source, engine: engine),
+                workflowConfigurations:
+                    AxWorkflowConfigurations(source, engine: engine),
+                workHistoryCache: AxWorkHistoryCache(source, engine: engine),
+                threadViewStateStore: store,
+                onBackToSpace: () {},
+                onArchive: () {}))));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'draft');
+    await tester.pump(const Duration(milliseconds: 250));
+    final result = await store.load(userId: 'user', threadId: 'thread');
+    await tester.pumpWidget(const SizedBox());
+    return result;
+  }
+
+  testWidgets('the Workflow default Worker is never saved as the Thread choice',
+      (tester) async {
+    final saved =
+        await restoreAndResave(tester, workers: [worker('a'), worker('b')]);
+    expect(saved?.workDraft, 'draft');
+    expect(saved?.workerId, isNull);
+  });
+
+  testWidgets('a superseded saved Workflow keeps the saved Worker',
+      (tester) async {
+    final saved = await restoreAndResave(tester,
+        workers: [worker('a'), worker('b')],
+        saved: const AxThreadViewState(
+            tabIndex: 1, workflowReference: 'removed:v1', workerId: 'b'));
+    expect(saved?.workerId, 'b');
+  });
+
+  testWidgets(
+      'a saved own Worker is not re-bound to a Space Worker of its type',
+      (tester) async {
+    final saved = await restoreAndResave(tester,
+        workers: [worker('a'), worker('b', workspaceId: 'mine')],
+        saved: const AxThreadViewState(
+            tabIndex: 1,
+            workflowReference: 'direct:v1',
+            workerId: 'b',
+            workerTypeId: 'custom'));
+    expect(saved?.workerId, 'b');
+  });
 }
 
 Future<void> requestChoice(

@@ -137,6 +137,29 @@ describe("Space member permissions contract v1", () => {
       ),
     ).rejects.toMatchObject({ status: 400 });
   });
+  it("disables own Workers whenever Chat is denied", async () => {
+    await rights("member", { ...none, useOwnWorkers: true });
+    const response = await handleListSpaceMembers(req("owner", {}, "GET"), env, "S");
+    const members = (
+      (await response.json()) as {
+        members: Array<{ userId: string; permissions: typeof all }>;
+      }
+    ).members;
+    expect(
+      members.find((member) => member.userId === "member")?.permissions,
+    ).toMatchObject({ chat: false, useOwnWorkers: false });
+    await rights("member", { ...none, chat: true, useOwnWorkers: true });
+    const allowed = (
+      (await (
+        await handleListSpaceMembers(req("owner", {}, "GET"), env, "S")
+      ).json()) as {
+        members: Array<{ userId: string; permissions: typeof all }>;
+      }
+    ).members;
+    expect(
+      allowed.find((member) => member.userId === "member")?.permissions,
+    ).toMatchObject({ chat: true, useOwnWorkers: true });
+  });
   it("separates Chat, Work and own-thread management even for a member who created the thread", async () => {
     await rights("member", { ...none, chat: true });
     await expect(

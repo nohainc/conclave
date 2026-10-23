@@ -367,6 +367,67 @@ void main() {
   }
 
   for (final workflow in ['chat', 'direct']) {
+    testWidgets('$workflow response header names the Worker owner',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final rows = [
+        AxWorkRequest.fromJson({
+          'id': 'O',
+          'requestedByName': 'User',
+          'prompt': 'Request O',
+          'workflowId': workflow,
+          'workflowVersion': workflow == 'chat' ? 1 : 2,
+          'workflowName': workflow == 'chat' ? 'Chat' : 'Work',
+          'status': 'completed',
+          'createdAt': '2026-10-07T10:00:00Z',
+          'turns': [
+            turnFixture(id: 'O', requestId: 'O').toJson()
+              ..['workflowId'] = workflow
+              ..['workflowVersion'] = workflow == 'chat' ? 1 : 2
+              ..['workerOwnerName'] = 'Alice'
+          ],
+          'steps': [
+            {
+              'kind': 'implement',
+              'status': 'completed',
+              'workerId': 'worker-a',
+              'assignmentId': 'assignment-O',
+              'workerTypeId': 'chatgpt',
+              'workerDisplayName': 'ChatGPT',
+            }
+          ],
+        })
+      ];
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: ThreadPage(
+        initialTab: 1,
+        space: const AxSpace(
+            id: 'space-1',
+            name: 'Space',
+            branch: '',
+            lastActivity: '',
+            role: 'owner'),
+        thread: const AxThread(
+            id: 'stream-1',
+            spaceId: 'space-1',
+            name: 'Stream',
+            lead: '',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: '',
+            queueStatus: ''),
+        dataSource: _WorkHistoryDataSource(rows),
+        onBackToSpace: _noop,
+        onArchive: _noop,
+      ))));
+      await tester.pumpAndSettle();
+      expect(_inConversation(find.text('ChatGPT')), findsOneWidget);
+      expect(_inConversation(find.text("· Alice's Worker")), findsOneWidget);
+      expect(_inConversation(find.byTooltip('Worker owned by Alice')),
+          findsOneWidget);
+    });
     testWidgets('$workflow response details use immutable model and effort',
         (tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 1400));

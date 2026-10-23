@@ -1,4 +1,5 @@
 import '../features/people/people_page.dart';
+import '../features/notes/notes_page.dart';
 import '../features/common/quiet_notices.dart';
 import '../features/common/thread_dialogs.dart';
 import 'dart:async';

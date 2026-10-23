@@ -12,6 +12,8 @@ export interface SpaceMembership {
   readonly role: SpaceRole;
   readonly permissions?: {
     readonly chat: boolean;
+    /** Chat only: the member may answer with Workers from Workspaces they own. */
+    readonly useOwnWorkers: boolean;
     readonly work: boolean;
     readonly manageOwnThreads: boolean;
   };

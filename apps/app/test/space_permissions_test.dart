@@ -1,6 +1,8 @@
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:conclave_app/src/ax/ax_workflow_configuration.dart';
 import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'ax_fixture_data.dart';
 
@@ -77,6 +79,43 @@ class PermissionSource extends AxFixtureDataSource {
       ];
 }
 
+AxWorker _worker(String id, String workspaceId, {bool shared = false}) =>
+    AxWorker(
+        id: id,
+        workspaceId: workspaceId,
+        workspaceName: 'Workspace $workspaceId',
+        workerTypeId: 'chatgpt',
+        displayName: 'ChatGPT',
+        status: 'ready',
+        readinessState: 'ready',
+        localConcurrencyLimit: 1,
+        shared: shared);
+
+/// Space Workspace "space-ws"; the viewer owns "own-ws" and borrows "lent-ws".
+class OwnWorkersSource extends PermissionSource
+    implements
+        AxWorkflowWorkspaceDataSource,
+        AxSpaceWorkflowConfigurationDataSource {
+  @override
+  Future<List<AxUserWorkflowConfiguration>> loadSpaceWorkflowConfigurations(
+          String spaceId) async =>
+      const [];
+  @override
+  Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => [
+        _worker('space-worker', 'space-ws', shared: true),
+        _worker('own-worker', 'own-ws'),
+        _worker('lent-worker', 'lent-ws', shared: true),
+      ];
+  @override
+  Future<AxWorkflowWorkspaceSettings> loadWorkflowWorkspace(
+          {String? spaceId}) async =>
+      const AxWorkflowWorkspaceSettings(workspaceId: 'space-ws');
+  @override
+  Future<AxWorkflowWorkspaceSettings> selectWorkflowWorkspace(
+          {String? spaceId, String? workspaceId, bool inherit = false}) =>
+      loadWorkflowWorkspace(spaceId: spaceId);
+}
+
 Widget page(PermissionSource source, {AxSpace space = ownerSpace}) =>
     MaterialApp(
         home: Scaffold(
@@ -135,6 +174,43 @@ void main() {
         isTrue);
     await tester.pump(const Duration(seconds: 5));
   });
+  testWidgets(
+      'own Workers sit next to Chat and are disabled when Chat is denied',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final source = PermissionSource();
+    await tester.pumpWidget(page(source));
+    await tester.pumpAndSettle();
+    final table = tester.widget<DataTable>(find.byType(DataTable));
+    expect(
+        find.descendant(
+            of: find.byWidget(table.columns[2].label),
+            matching: find.byTooltip('Own Workers in Chat')),
+        findsOneWidget);
+    Checkbox own() => tester.widget<Checkbox>(
+        find.byKey(const ValueKey('permission-member-useOwnWorkers')));
+    expect(own().value, isTrue);
+    expect(own().onChanged, isNotNull);
+    await tester.tap(find.byKey(const ValueKey('permission-member-chat')));
+    await tester.pumpAndSettle();
+    expect(source.memberRights.chat, isFalse);
+    expect(source.memberRights.useOwnWorkers, isFalse);
+    expect(own().value, isFalse);
+    expect(own().onChanged, isNull);
+    await tester.pump(const Duration(seconds: 5));
+  });
+  test('own Workers require Chat in the permission model', () {
+    expect(
+        AxSpacePermissions.fromJson({'chat': false, 'useOwnWorkers': true})
+            .useOwnWorkers,
+        isFalse);
+    expect(
+        AxSpacePermissions.fromJson({'chat': true, 'useOwnWorkers': true})
+            .toJson()
+            .keys,
+        ['chat', 'useOwnWorkers', 'work', 'manageOwnThreads']);
+  });
   testWidgets('member actions follow explicit rights, not collaborator role',
       (tester) async {
     final source = PermissionSource();
@@ -191,4 +267,41 @@ void main() {
     expect(find.text('Work workflow'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+  for (final allowed in [true, false]) {
+    testWidgets(
+        'Chat offers only owned Workers outside the Space Workspace (allowed: $allowed)',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 1100));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: ThreadPage(
+        space: AxSpace(
+            id: 'S',
+            name: 'Space',
+            branch: '',
+            lastActivity: '',
+            role: 'collaborator',
+            permissions:
+                AxSpacePermissions(chat: true, useOwnWorkers: allowed)),
+        thread:
+            memberThread.copyWith(workConfig: {'defaultWorkflowId': 'chat'}),
+        dataSource: OwnWorkersSource(),
+        initialTab: 1,
+        onBackToSpace: () {},
+        onArchive: () {},
+      ))));
+      await tester.pumpAndSettle();
+      final selector = tester
+          .widget<ModelEffortSelector>(find.byType(ModelEffortSelector).first);
+      final ids = selector.catalog.workers.map((worker) => worker.id).toList();
+      expect(ids, contains('space-worker'));
+      expect(ids.contains('own-worker'), allowed);
+      expect(ids, isNot(contains('lent-worker')));
+      if (allowed) {
+        expect(selector.catalog.worker('own-worker')?.name,
+            'ChatGPT · Workspace own-ws');
+      }
+    });
+  }
 }

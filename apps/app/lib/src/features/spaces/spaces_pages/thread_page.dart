@@ -154,6 +154,22 @@ class _ThreadPageState extends State<ThreadPage>
   // AI History stays mounted once opened so switching keeps both lists and
   // their scroll positions; a positioned pane is revealed without hiding.
   late bool _aiHistoryMounted = _aiHistoryOpen;
+  // The caller's private Thread note; mounted on first open like AI History.
+  bool _notesOpen = false;
+  bool _notesMounted = false;
+
+  AxNotesDataSource? get _notesSource => widget.dataSource is AxNotesDataSource
+      ? widget.dataSource as AxNotesDataSource
+      : null;
+
+  void _setNotesOpen(bool open) {
+    if (open == _notesOpen) return;
+    setState(() {
+      _notesOpen = open;
+      _notesMounted |= open;
+    });
+  }
+
   bool _chatPositioned = false;
   bool _workPositioned = false;
 
@@ -720,8 +736,24 @@ class _ThreadPageState extends State<ThreadPage>
   List<Map<String, dynamic>> _workAttachments = [];
   List<Map<String, dynamic>> _discussionAttachments = [];
   Map<String, dynamic> _workExecutionSelection = {};
+
+  /// The last Worker selection, kept while a Workflow that fixes its own
+  /// Worker is selected so switching back restores the Thread's choice.
+  Map<String, dynamic> _lastWorkerSelection = {};
   List<AxWorker> _spaceWorkers = const [];
   List<AxWorker> _eligibleWorkers = const [];
+
+  /// Workers from Workspaces the viewer owns outside the Space Workspace.
+  /// They answer only the Chat workflow, when the Space allows own Workers.
+  List<AxWorker> _ownChatWorkers = const [];
+  bool get _chatWorkflowSelected =>
+      _effectiveWorkflow.split(':').first == 'chat';
+  List<AxWorker> get _composerWorkers => _chatWorkflowSelected
+      ? [..._spaceWorkers, ..._ownChatWorkers]
+      : _spaceWorkers;
+  List<AxWorker> get _composerEligibleWorkers => _chatWorkflowSelected
+      ? [..._eligibleWorkers, ..._ownChatWorkers.where((w) => w.isReady)]
+      : _eligibleWorkers;
   AxWorkflowConfigurations? _workflowConfigurations;
   void Function()? _cancelWorkflowConfigurations;
   void Function()? _cancelWorkflowDefault;
@@ -747,27 +779,17 @@ class _ThreadPageState extends State<ThreadPage>
     });
   }
 
-  String? _selectionValue(String key) {
-    if (_workExecutionSelection.containsKey(key)) {
-      final value = _workExecutionSelection[key];
-      return value is String && value.isNotEmpty ? value : null;
-    }
-    final bindings = _composerWorkConfig['bindings'];
-    if (bindings is! Map) return null;
-    final definition = _availableWorkflows
-        .where((item) => item.reference == _effectiveWorkflow)
-        .firstOrNull;
-    final stepKind = definition?.composerBindingId;
-    final binding = stepKind == null ? null : bindings[stepKind];
-    if (binding is! Map) return null;
-    final value = binding[key];
+  /// The Thread's own choice only. The Workflow binding shown when nothing
+  /// is chosen is a default and must not be persisted as the Thread's choice.
+  String? _explicitSelectionValue(String key) {
+    final value = _workExecutionSelection[key];
     return value is String && value.isNotEmpty ? value : null;
   }
 
   AxThreadViewState _currentThreadViewState() {
     final pending = _pendingThreadViewState;
-    final workerId = _selectionValue('workerId');
-    final workerTypeId = _spaceWorkers
+    final workerId = _explicitSelectionValue('workerId');
+    final workerTypeId = _composerWorkers
             .where((worker) => worker.id == workerId)
             .firstOrNull
             ?.workerTypeId ??
@@ -781,13 +803,13 @@ class _ThreadPageState extends State<ThreadPage>
           : (_effectiveWorkflow.isEmpty ? null : _effectiveWorkflow),
       workerId: pending != null ? pending.workerId : workerId,
       workerTypeId: pending != null ? pending.workerTypeId : workerTypeId,
-      model: pending != null ? pending.model : _selectionValue('model'),
+      model: pending != null ? pending.model : _explicitSelectionValue('model'),
       reasoningEffort: pending != null
           ? pending.reasoningEffort
-          : _selectionValue('reasoningEffort'),
+          : _explicitSelectionValue('reasoningEffort'),
       catalogRevision: pending != null
           ? pending.catalogRevision
-          : _selectionValue('catalogRevision'),
+          : _explicitSelectionValue('catalogRevision'),
       selectionUpdatedAt:
           pending != null ? pending.selectionUpdatedAt : _selectionUpdatedAt,
       chatDraft: _discussionController.text,
@@ -880,19 +902,21 @@ class _ThreadPageState extends State<ThreadPage>
             : _currentWorkflowVersions(_availableWorkflows)
                 .where((item) => item.id == savedId)
                 .firstOrNull);
-    if (workflow == null) {
-      if (!_loadingWorkflows) _pendingThreadViewState = null;
-      return;
-    }
-    _workflow = workflow.reference;
+    // A saved Workflow that no longer exists falls back to the default
+    // Workflow but keeps the saved Worker, model and effort.
+    if (workflow == null && _loadingWorkflows) return;
+    if (workflow != null) _workflow = workflow.reference;
     var workerId = saved.workerId;
     var catalogRevision = saved.catalogRevision;
+    final knownWorkers = [..._spaceWorkers, ..._ownChatWorkers];
     if (workerId != null && _spaceWorkers.isNotEmpty) {
       // Worker IDs can change when a Worker is rebuilt or re-registered; the
-      // Worker type code does not. Re-bind by code when the ID is gone.
-      var worker = _spaceWorkers.where((w) => w.id == workerId).firstOrNull;
+      // Worker type code does not. Re-bind by code when the ID is gone. The
+      // viewer's own Workers count too, so a saved own Worker is never
+      // swapped for a Space Worker of the same type.
+      var worker = knownWorkers.where((w) => w.id == workerId).firstOrNull;
       if (worker == null && saved.workerTypeId != null) {
-        final sameType = _spaceWorkers
+        final sameType = knownWorkers
             .where((w) => w.workerTypeId == saved.workerTypeId)
             .toList();
         final ready = sameType.where((w) => w.isReady).toList();
@@ -1108,6 +1132,18 @@ class _ThreadPageState extends State<ThreadPage>
     _spaceWorkers = workers
         .where((worker) => worker.workspaceId == _selectedWorkflowWorkspaceId)
         .toList();
+    // Until the Space Workspace is known, a Worker cannot be told apart from
+    // the Space's own, so none is offered as the viewer's own.
+    _ownChatWorkers = widget.space.effectivePermissions.useOwnWorkers &&
+            _selectedWorkflowWorkspaceId != null
+        ? [
+            for (final worker in workers)
+              if (!worker.shared &&
+                  worker.workspaceId != _selectedWorkflowWorkspaceId)
+                worker.withDisplayName(
+                    '${worker.displayName} · ${worker.workspaceName}'),
+          ]
+        : const [];
     _eligibleWorkers = _spaceWorkers
         .where((worker) =>
             worker.activationState == 'enabled' &&
@@ -1302,6 +1338,7 @@ class _ThreadPageState extends State<ThreadPage>
         oldWidget.dataSource != widget.dataSource ||
         oldWidget.currentUserId != widget.currentUserId) {
       _workExecutionSelection = {};
+      _lastWorkerSelection = {};
       _reportedIssues.clear();
       _reportedIssueKeys.clear();
       _issueReportErrors.clear();
@@ -1367,6 +1404,7 @@ class _ThreadPageState extends State<ThreadPage>
       _openChatPending = _openWorkPending = true;
       _chatPositioned = _workPositioned = false;
       _aiHistoryMounted = _aiHistoryOpen;
+      _notesOpen = _notesMounted = false;
       // Activity is keyed by assignment, so it is kept: returning to a Thread
       // shows its earlier operations immediately while details reload.
       _cancelTerminalActivityChecks();
@@ -1601,13 +1639,16 @@ class _ThreadPageState extends State<ThreadPage>
             });
           });
         }
-        final historyOpen = !widget.isDraft && _aiHistoryOpen;
+        final notesOpen = !widget.isDraft && _notesOpen && _notesSource != null;
+        final historyOpen = !widget.isDraft && _aiHistoryOpen && !notesOpen;
         final isDark = Theme.of(context).brightness == Brightness.dark;
         // Inactive tab: secondary text moved 6% OKLCH lightness toward the
         // background in each theme.
         final inactiveTab =
             isDark ? const Color(0xffb5b6c4) : const Color(0xff43444f);
-        Widget header(String title, {required bool history}) => Column(
+        Widget header(String title,
+                {required bool history, bool notes = false}) =>
+            Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(
@@ -1620,10 +1661,15 @@ class _ThreadPageState extends State<ThreadPage>
                           TextButton.icon(
                             key: ValueKey(history
                                 ? 'ai-history-conversation'
-                                : 'conversation-tab'),
-                            onPressed: () => _setAiHistoryOpen(false),
+                                : notes
+                                    ? 'notes-conversation'
+                                    : 'conversation-tab'),
+                            onPressed: () {
+                              _setNotesOpen(false);
+                              _setAiHistoryOpen(false);
+                            },
                             style: TextButton.styleFrom(
-                              foregroundColor: history
+                              foregroundColor: history || notes
                                   ? inactiveTab
                                   : ConclaveColors.textPrimary(isDark),
                             ),
@@ -1635,8 +1681,13 @@ class _ThreadPageState extends State<ThreadPage>
                             TextButton.icon(
                               key: ValueKey(history
                                   ? 'ai-history-tab'
-                                  : 'ai-history-toggle'),
-                              onPressed: () => _setAiHistoryOpen(true),
+                                  : notes
+                                      ? 'notes-ai-history'
+                                      : 'ai-history-toggle'),
+                              onPressed: () {
+                                _setNotesOpen(false);
+                                _setAiHistoryOpen(true);
+                              },
                               style: TextButton.styleFrom(
                                 foregroundColor: history
                                     ? ConclaveColors.textPrimary(isDark)
@@ -1645,10 +1696,28 @@ class _ThreadPageState extends State<ThreadPage>
                               icon: const Icon(Icons.history_rounded, size: 18),
                               label: const Text('AI History'),
                             ),
+                          if (!widget.isDraft && _notesSource != null)
+                            TextButton.icon(
+                              key: ValueKey(notes
+                                  ? 'notes-tab'
+                                  : history
+                                      ? 'ai-history-notes'
+                                      : 'notes-toggle'),
+                              onPressed: () => _setNotesOpen(true),
+                              style: TextButton.styleFrom(
+                                foregroundColor: notes
+                                    ? ConclaveColors.textPrimary(isDark)
+                                    : inactiveTab,
+                              ),
+                              icon: const Icon(Icons.sticky_note_2_outlined,
+                                  size: 18),
+                              label: const Text('Notes'),
+                            ),
                         ]),
                       ),
                     ),
                     if (!widget.isDraft &&
+                        !notes &&
                         (history
                                 ? widget.onClearAiHistory
                                 : widget.onClearConversation) !=
@@ -1669,7 +1738,8 @@ class _ThreadPageState extends State<ThreadPage>
                 const SizedBox(height: 16),
               ],
             );
-        Widget pane(String name, Widget content, {bool history = false}) =>
+        Widget pane(String name, Widget content,
+                {bool history = false, bool notes = false}) =>
             Padding(
                 key: ValueKey('thread-$name-padding'),
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -1677,7 +1747,7 @@ class _ThreadPageState extends State<ThreadPage>
                   key: ValueKey('thread-$name-pane'),
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    header(name, history: history),
+                    header(name, history: history, notes: notes),
                     if (widget.isDraft) content else Expanded(child: content),
                   ],
                 ));
@@ -1690,12 +1760,20 @@ class _ThreadPageState extends State<ThreadPage>
               ? conversation
               : IndexedStack(
                   key: const ValueKey('thread-panes'),
-                  index: historyOpen ? 1 : 0,
+                  index: notesOpen
+                      ? 2
+                      : historyOpen
+                          ? 1
+                          : 0,
                   sizing: StackFit.expand,
                   children: [
                     conversation,
                     if (_aiHistoryMounted || historyOpen)
                       pane('AI History', _work(context), history: true)
+                    else
+                      const SizedBox.shrink(),
+                    if (_notesMounted || notesOpen)
+                      pane('Notes', _notes(), notes: true)
                     else
                       const SizedBox.shrink(),
                   ],
@@ -1716,6 +1794,17 @@ class _ThreadPageState extends State<ThreadPage>
           ),
         );
       }),
+    );
+  }
+
+  Widget _notes() {
+    final source = _notesSource!;
+    final threadId = widget.thread.id;
+    return NoteEditor(
+      key: ValueKey('thread-note-$threadId'),
+      load: () => source.loadThreadNote(threadId),
+      save: ({required title, required body, revision}) =>
+          source.saveThreadNote(threadId, body: body, revision: revision),
     );
   }
 
@@ -2154,8 +2243,8 @@ class _ThreadPageState extends State<ThreadPage>
         workflow: _effectiveWorkflow,
         workflowCatalog: _availableWorkflows,
         workConfig: _composerWorkConfig,
-        spaceWorkers: _spaceWorkers,
-        eligibleWorkers: _eligibleWorkers,
+        spaceWorkers: _composerWorkers,
+        eligibleWorkers: _composerEligibleWorkers,
         loadingWorkflows: _loadingWorkflows,
         workflowCatalogError: _workflowCatalogError,
         canExecute: _canExecute,
@@ -2214,18 +2303,24 @@ class _ThreadPageState extends State<ThreadPage>
                 .where((item) => item.reference == value)
                 .firstOrNull
                 ?.executionPolicy;
+            // Own Workers answer only Chat; leaving Chat drops them.
+            if (_workExecutionSelection.containsKey('workerId')) {
+              _lastWorkerSelection = Map.of(_workExecutionSelection);
+            }
+            final source = _lastWorkerSelection;
+            final keepsWorker = value.split(':').first == 'chat' ||
+                !_ownChatWorkers.any((w) => w.id == source['workerId']);
             final kept = <String, dynamic>{
-              if (policy?.userSelectsWorker == true) ...{
-                if (_workExecutionSelection.containsKey('workerId'))
-                  'workerId': _workExecutionSelection['workerId'],
-                if (_workExecutionSelection.containsKey('catalogRevision'))
-                  'catalogRevision': _workExecutionSelection['catalogRevision'],
-                if (policy!.userSelectsModel &&
-                    _workExecutionSelection.containsKey('model'))
-                  'model': _workExecutionSelection['model'],
+              if (policy?.userSelectsWorker == true && keepsWorker) ...{
+                if (source.containsKey('workerId'))
+                  'workerId': source['workerId'],
+                if (source.containsKey('catalogRevision'))
+                  'catalogRevision': source['catalogRevision'],
+                if (policy!.userSelectsModel && source.containsKey('model'))
+                  'model': source['model'],
                 if (policy.userSelectsEffort &&
-                    _workExecutionSelection.containsKey('reasoningEffort'))
-                  'reasoningEffort': _workExecutionSelection['reasoningEffort'],
+                    source.containsKey('reasoningEffort'))
+                  'reasoningEffort': source['reasoningEffort'],
               },
             };
             _workExecutionSelection = kept;

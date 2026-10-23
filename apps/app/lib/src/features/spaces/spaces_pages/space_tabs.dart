@@ -221,6 +221,8 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
             runSpacing: 6,
             children: [
               _permissionLegendItem(Icons.chat_bubble_outline, 'Chat workflow'),
+              _permissionLegendItem(
+                  Icons.smart_toy_outlined, 'Own Workers in Chat'),
               _permissionLegendItem(Icons.work_outline, 'Work workflow'),
               _permissionLegendItem(Icons.forum_outlined, 'Own threads'),
             ],
@@ -259,6 +261,8 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                           ],
                         )),
                         _permissionColumn(Icons.chat_bubble_outline, 'Chat'),
+                        _permissionColumn(
+                            Icons.smart_toy_outlined, 'Own Workers in Chat'),
                         _permissionColumn(Icons.work_outline, 'Work'),
                         _permissionColumn(Icons.forum_outlined, 'Own threads'),
                         const DataColumn(
@@ -339,10 +343,17 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                                           materialTapTargetSize:
                                               MaterialTapTargetSize.shrinkWrap,
                                           visualDensity: VisualDensity.compact,
+                                          // Own Workers refine Chat; they
+                                          // stay off while Chat is denied.
                                           onChanged: isOwner &&
                                                   member.role != 'owner' &&
-                                                  !_savingMembers
-                                                      .contains(member.userId)
+                                                  !_savingMembers.contains(
+                                                      member.userId) &&
+                                                  (entry.key !=
+                                                          'useOwnWorkers' ||
+                                                      member
+                                                          .effectivePermissions
+                                                          .chat)
                                               ? (value) => _setMemberPermission(
                                                   member,
                                                   entry.key,

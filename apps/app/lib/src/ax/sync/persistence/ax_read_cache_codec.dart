@@ -70,6 +70,7 @@ class AxReadCacheCodec {
         'profileReleaseVersion': value.profileReleaseVersion,
         'providerToolName': value.providerToolName,
         'providerToolVersion': value.providerToolVersion,
+        if (value.shared) 'shared': true,
         if (value.executionOptions != null)
           'executionOptions': value.executionOptions!.toJson(),
       };

@@ -38,6 +38,7 @@ import '../../ax/sync/ax_collaboration_mutations.dart';
 import '../../brand.dart';
 import '../workflows/workflow_visibility.dart';
 import '../common/markdown_composer.dart';
+import '../notes/note_editor.dart';
 import '../common/attachment_cards.dart';
 import '../common/conclave_markdown_body.dart';
 import '../common/collapsible_own_message.dart';
