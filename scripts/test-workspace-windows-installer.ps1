@@ -21,6 +21,16 @@ foreach ($File in @('conclave_workspace.exe', 'conclave-service.exe', $Engine)) 
         throw "Installed file mismatch: $File"
     }
 }
+$PreviousService = $env:CONCLAVE_TEST_WINDOWS_SERVICE
+Push-Location (Join-Path $Root 'apps/workspace')
+try {
+    $env:CONCLAVE_TEST_WINDOWS_SERVICE = Join-Path $Target 'conclave-service.exe'
+    flutter test test/windows_service_lifecycle_test.dart
+    if ($LASTEXITCODE -ne 0) { throw 'Installed service lifecycle test failed.' }
+} finally {
+    $env:CONCLAVE_TEST_WINDOWS_SERVICE = $PreviousService
+    Pop-Location
+}
 # Repeat installation to exercise the stable AppId upgrade path.
 Run-Setup
 $App = Start-Process (Join-Path $Target 'conclave_workspace.exe') -WorkingDirectory $Target -PassThru

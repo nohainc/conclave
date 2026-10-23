@@ -15,6 +15,7 @@ AppPublisher=Conclave
 DefaultDirName={localappdata}\Programs\Conclave\Workspace
 DefaultGroupName=Conclave
 PrivilegesRequired=lowest
+MinVersion=10.0.17763
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDir}
@@ -65,5 +66,5 @@ function InitializeUninstall(): Boolean;
 begin
   Result := not WorkspaceRunning();
   if not Result then
-    MsgBox('Stop the Workspace Service and close Conclave Workspace before uninstalling. Your data will be preserved.', mbError, MB_OK);
+    SuppressibleMsgBox('Stop the Workspace Service and close Conclave Workspace before uninstalling. Your data will be preserved.', mbError, MB_OK, IDOK);
 end;
