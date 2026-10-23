@@ -98,7 +98,7 @@ class WorkspaceConfigurationResolver {
             Platform.environment['CONCLAVE_WORKSPACE_WORK_ROOT'];
     final secureStore = credentialStore ??
         PlatformSecureCredentialStore(
-            windowsCredentialDirectory:
+            credentialDirectory:
                 Directory('${dataDirectory.path}/Credentials'));
     final runtimeToken = workspaceRuntimeId == null
         ? null

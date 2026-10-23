@@ -53,7 +53,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       );
   final secureCredentialStore = credentialStore ??
       PlatformSecureCredentialStore(
-          windowsCredentialDirectory:
+          credentialDirectory:
               Directory('${config.dataDirectory.path}/Credentials'));
   final releaseTrustPolicy = workerTrustPolicy;
   CliWorkerEngineSupervisor? cliWorkerEngineSupervisor;

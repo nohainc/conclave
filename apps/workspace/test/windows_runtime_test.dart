@@ -76,14 +76,14 @@ void main() {
     final root = await Directory.systemTemp.createTemp('conclave-store-');
     try {
       final store = PlatformSecureCredentialStore(
-          service: root.path, windowsCredentialDirectory: root);
+          service: root.path, credentialDirectory: root);
       await store.write('account', 'initial');
       await store.readForSynchronousConfig('account');
       await store.write('account', 'rotated');
       expect(store.readSync('account'), 'rotated');
       final other = PlatformSecureCredentialStore(
           service: root.path,
-          windowsCredentialDirectory:
+          credentialDirectory:
               Directory('${root.path}/other-installation'));
       await other.write('account', 'other-installation');
       expect(store.readSync('account'), 'rotated');
