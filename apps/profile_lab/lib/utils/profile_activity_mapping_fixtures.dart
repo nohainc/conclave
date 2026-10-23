@@ -169,5 +169,40 @@ _ProfileActivityFixture? _fixtureFor(String provider) {
       ],
     );
   }
+  if (normalized.contains('copilot')) {
+    // Shape observed from a real `copilot --output-format json` run (CLI
+    // 1.0.103). Only identifiers and event types are kept; tool arguments,
+    // shell output and message text are omitted. The second tool call is a
+    // synthetic repeat of the first.
+    return const _ProfileActivityFixture('copilot-events/success.jsonl', [
+      {'type': 'session.tools_updated', 'data': {}},
+      {'type': 'unknown.provider.event', 'data': {}},
+      {
+        'type': 'assistant.turn_start',
+        'data': {'turnId': '0'},
+      },
+      {
+        'type': 'tool.execution_start',
+        'data': {'toolCallId': 'tool-call-1', 'toolName': 'bash'},
+      },
+      {
+        'type': 'tool.execution_complete',
+        'data': {'toolCallId': 'tool-call-1', 'success': true},
+      },
+      {
+        'type': 'tool.execution_start',
+        'data': {'toolCallId': 'tool-call-2', 'toolName': 'create'},
+      },
+      {
+        'type': 'tool.execution_complete',
+        'data': {'toolCallId': 'tool-call-2', 'success': true},
+      },
+      {
+        'type': 'assistant.message',
+        'data': {'content': '[redacted fixture text]'},
+      },
+      {'type': 'result', 'exitCode': 0},
+    ]);
+  }
   return null;
 }
