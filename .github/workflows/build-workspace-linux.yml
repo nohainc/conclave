@@ -29,7 +29,7 @@ jobs:
       - name: Validate Linux runtime adapters
         working-directory: apps/workspace
         run: |
-          flutter pub get --enforce-lockfile
+          flutter pub get
           flutter test test/linux_runtime_test.dart test/sleep_inhibitor_test.dart test/secure_credentials_test.dart
       - name: Build and package Linux bundle
         run: bash scripts/build-workspace-linux.sh release
