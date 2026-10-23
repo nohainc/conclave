@@ -43,9 +43,40 @@ class WorkspacePaths {
     final folder = conclaveWorkspaceIsLocalBuild
         ? '.conclave-workspace-local'
         : '.conclave-workspace';
-    return Directory(
-        '${runtime.homeDirectory}${Platform.pathSeparator}$folder');
+    final legacy =
+        Directory('${runtime.homeDirectory}${Platform.pathSeparator}$folder');
+    if (runtime.operatingSystem == 'linux') {
+      return resolveLinuxStateDirectory(
+        legacy: legacy,
+        target: linuxXdgStateDirectory(
+          homeDirectory: runtime.homeDirectory,
+          xdgStateHome:
+              Platform.isLinux ? Platform.environment['XDG_STATE_HOME'] : null,
+        ),
+      );
+    }
+    return legacy;
   }
+
+  /// `$XDG_STATE_HOME/conclave/workspace` (ADR-021 §2.5). A relative
+  /// XDG value is invalid per the XDG spec and falls back to the default.
+  static Directory linuxXdgStateDirectory({
+    required String homeDirectory,
+    String? xdgStateHome,
+  }) {
+    final base = xdgStateHome != null && xdgStateHome.startsWith('/')
+        ? xdgStateHome
+        : '$homeDirectory/.local/state';
+    return Directory(
+        '$base/conclave/${conclaveWorkspaceIsLocalBuild ? 'workspace-local' : 'workspace'}');
+  }
+
+  /// Earlier Linux service runs used `~/.conclave-workspace`. That root keeps
+  /// its authority in place so installation and runtime identities, the
+  /// credential, registry, Profiles, and sessions are never moved or forked.
+  static Directory resolveLinuxStateDirectory(
+          {required Directory legacy, required Directory target}) =>
+      legacy.existsSync() ? legacy : target;
 
   static Directory defaultWorkspaceDirectory({PlatformRuntime? platform}) =>
       Directory(_join([

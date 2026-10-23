@@ -282,6 +282,13 @@ and run at the same time on one Mac; each has its own state directory,
 per-installation lock, IPC socket, and service. The Swift host derives the
 LaunchAgent label from its bundle identifier.
 
+## Linux candidate
+
+Linux includes a systemd user unit per installation, Unix-socket IPC, a
+recorded Secret Service or user-only file credential store, XDG state, and
+process-group/cgroup cleanup. Build with `bash scripts/build-workspace-linux.sh`
+on a Linux host. See the [Linux operations guide](../../docs/operations/WORKSPACE_LINUX.md).
+
 ## Windows runtime candidate
 
 Windows x64 includes per-user scheduled-task service management, owner-only named

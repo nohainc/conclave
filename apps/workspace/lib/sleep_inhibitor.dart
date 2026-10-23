@@ -6,18 +6,22 @@ import 'workspace_lifecycle_store.dart';
 
 /// Keeps the computer awake while the Workspace service runs and the
 /// `preventSleep` preference is on. macOS uses `caffeinate -i -w <pid>`, so the
-/// assertion is released by the OS even if the service is killed.
+/// assertion is released by the OS even if the service is killed. Linux holds a
+/// logind `systemd-inhibit` lock; a killed service's helper is reaped with the
+/// systemd unit's cgroup.
 class SleepInhibitor {
   SleepInhibitor(
     this.store, {
     this.pollInterval = const Duration(seconds: 5),
     this.platformIsMacOS,
+    this.platformIsLinux,
     this.start,
   });
 
   final WorkspaceLifecyclePreferencesStore store;
   final Duration pollInterval;
   final bool? platformIsMacOS;
+  final bool? platformIsLinux;
   final Future<Process> Function(List<String> arguments)? start;
 
   Timer? _timer;
@@ -54,11 +58,23 @@ class SleepInhibitor {
         }
         return;
       }
-      if (wanted && _process == null && (platformIsMacOS ?? Platform.isMacOS)) {
-        final arguments = ['-i', '-w', '$pid'];
+      final macOS = platformIsMacOS ?? Platform.isMacOS;
+      final linux = platformIsLinux ?? Platform.isLinux;
+      if (wanted && _process == null && (macOS || linux)) {
+        final arguments = macOS
+            ? ['-i', '-w', '$pid']
+            : [
+                '--what=sleep:idle',
+                '--who=Conclave Workspace',
+                '--why=Workspace service is running',
+                '--mode=block',
+                'sleep',
+                'infinity',
+              ];
         try {
           final process = await (start?.call(arguments) ??
-              Process.start('/usr/bin/caffeinate', arguments));
+              Process.start(macOS ? '/usr/bin/caffeinate' : 'systemd-inhibit',
+                  arguments));
           _process = process;
           unawaited(process.exitCode.then((_) {
             if (identical(_process, process)) _process = null;

@@ -318,18 +318,23 @@ registration is behind `WorkspaceServiceManager`. Linux and Windows support is
 decided in [ADR-021](../decisions/ADR-021-workspace-service-linux-windows.md)
 and is implemented in platform adapters. Windows x64 runtime source support
 includes per-user logon tasks, owner-only named pipes, DPAPI and process jobs;
-release qualification remains gated by Windows device evidence. Linux service
-registration remains a future phase.
+release qualification remains gated by Windows device evidence. Linux source
+support includes systemd user units, Unix-socket IPC, and a recorded Secret
+Service or `0600` file credential store; see the
+[Linux operations guide](../operations/WORKSPACE_LINUX.md).
 
-- Linux: systemd user unit, or a foreground headless mode for containers;
-  Unix-domain socket IPC; Secret Service, `systemd-creds`, or a `0600` file;
-  XDG state directories.
+- Linux: systemd user unit, or the service as a foreground main process for
+  containers; Unix-domain socket IPC under the `0700` state root; Secret
+  Service or a `0600` file, selected once per state root and recorded
+  (`systemd-creds` is not implemented); `$XDG_STATE_HOME/conclave/workspace`,
+  with an existing legacy `~/.conclave-workspace` root kept in place.
 - Windows: per-user logon task in the interactive session (not a Service
   Control Manager service); named-pipe IPC restricted to the owning user;
   DPAPI secret store; `%LOCALAPPDATA%\Conclave\Workspace`.
 - On every platform the Service, Engine, and provider CLIs run as the same
   user that owns the CLI logins; Conclave never manages provider credentials.
-- Headless hosts are managed through a `conclave-workspace` IPC client.
+- Headless hosts are managed through a `conclave-workspace` IPC client
+  (planned; not implemented yet).
 
 ### Profile-declared model discovery
 
