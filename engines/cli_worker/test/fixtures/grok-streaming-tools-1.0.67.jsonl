@@ -1,0 +1,50 @@
+{"type":"thought","data":"The"}
+{"type":"thought","data":" user"}
+{"type":"thought","data":" wants"}
+{"type":"thought","data":" me"}
+{"type":"thought","data":" to"}
+{"type":"thought","data":":\n"}
+{"type":"thought","data":"1"}
+{"type":"thought","data":"."}
+{"type":"thought","data":" First"}
+{"type":"thought","data":" say"}
+{"type":"thought","data":" \""}
+{"type":"thought","data":"checking"}
+{"type":"thought","data":"\""}
+{"type":"text","data":"checking"}
+{"type":"usage","usage":{"input_tokens":7935,"output_tokens":335,"cache_read_input_tokens":8576,"cache_creation_input_tokens":0,"reasoning_tokens":257}}
+{"type":"tool_call","toolCallId":"call-32a54325-d1ec-4a29-bfb7-4a60b4847a37-0","title":"read_file","kind":"read","status":"pending","toolName":"read_file","rawInput":{"target_file":"/private/tmp/grokdemo/a.txt"},"content":[],"locations":[]}
+{"type":"tool_call_update","toolCallId":"call-32a54325-d1ec-4a29-bfb7-4a60b4847a37-0","status":null,"content":[],"locations":[{"path":"/private/tmp/grokdemo/a.txt"}]}
+{"type":"tool_call","toolCallId":"call-32a54325-d1ec-4a29-bfb7-4a60b4847a37-1","title":"run_terminal_command","kind":"execute","status":"pending","toolName":"run_terminal_command","rawInput":{"command":"echo hi","description":"Print hi in the shell"},"content":[],"locations":[]}
+{"type":"tool_call_update","toolCallId":"call-32a54325-d1ec-4a29-bfb7-4a60b4847a37-1","status":null,"content":[{"type":"content","content":{"type":"text","text":"Print hi in the shell"}}],"locations":[]}
+{"type":"tool_call","toolCallId":"call-32a54325-d1ec-4a29-bfb7-4a60b4847a37-2","title":"search_replace","kind":"edit","status":"pending","toolName":"search_replace","rawInput":{"file_path":"/private/tmp/grokdemo/b.txt","new_string":"bye","old_string":""},"content":[],"locations":[]}
+{"type":"tool_call_update","toolCallId":"call-32a54325-d1ec-4a29-bfb7-4a60b4847a37-2","status":null,"content":[{"type":"diff","path":"/private/tmp/grokdemo/b.txt","oldText":"","newText":"bye"}],"locations":[{"path":"/private/tmp/grokdemo/b.txt"}]}
+{"type":"tool_call_update","toolCallId":"call-32a54325-d1ec-4a29-bfb7-4a60b4847a37-1","status":"in_progress","content":[{"type":"content","content":{"type":"text","text":""}}],"locations":[]}
+{"type":"tool_call_update","toolCallId":"call-32a54325-d1ec-4a29-bfb7-4a60b4847a37-0","status":"completed","content":[{"type":"content","content":{"type":"text","text":"1\u2192hello\n"}}],"locations":[]}
+{"type":"tool_call_update","toolCallId":"call-32a54325-d1ec-4a29-bfb7-4a60b4847a37-2","status":"completed","content":[{"type":"diff","path":"/private/tmp/grokdemo/b.txt","oldText":"","newText":"bye","_meta":{"details":[{"old_string":"","old_line":1,"new_string":"bye","new_line":1,"context_before":"","context_after":"","line_prefix":""}]}}],"locations":[]}
+{"type":"tool_call_update","toolCallId":"call-32a54325-d1ec-4a29-bfb7-4a60b4847a37-1","status":"in_progress","content":[{"type":"content","content":{"type":"text","text":"hi\n"}}],"locations":[]}
+{"type":"tool_call_update","toolCallId":"call-32a54325-d1ec-4a29-bfb7-4a60b4847a37-1","status":"completed","content":[{"type":"content","content":{"type":"text","text":"hi\n"}}],"locations":[]}
+{"type":"thought","data":"The"}
+{"type":"thought","data":" user"}
+{"type":"thought","data":" asked"}
+{"type":"thought","data":" me"}
+{"type":"thought","data":" to"}
+{"type":"thought","data":" finally"}
+{"type":"thought","data":" answer"}
+{"type":"thought","data":" with"}
+{"type":"thought","data":" the"}
+{"type":"thought","data":" content"}
+{"type":"thought","data":" of"}
+{"type":"thought","data":" a"}
+{"type":"thought","data":".txt"}
+{"type":"thought","data":"."}
+{"type":"thought","data":" The"}
+{"type":"thought","data":" content"}
+{"type":"thought","data":" is"}
+{"type":"thought","data":" \""}
+{"type":"thought","data":"hello"}
+{"type":"thought","data":"\"."}
+{"type":"thought","data":"\n"}
+{"type":"text","data":"hello"}
+{"type":"usage","usage":{"input_tokens":510,"output_tokens":44,"cache_read_input_tokens":16384,"cache_creation_input_tokens":0,"reasoning_tokens":43}}
+{"type":"end","stopReason":"end_turn","sessionId":"01a16ab7-c68a-72d2-90da-bdbbfc983ea4","requestId":"aa504625-1168-4115-9cb5-ab0ed5b20267","cwd":"/private/tmp/grokdemo","usage":{"input_tokens":8445,"cache_read_input_tokens":24960,"cache_creation_input_tokens":0,"output_tokens":379,"reasoning_tokens":300,"total_tokens":33784},"num_turns":2,"total_cost_usd":0.031644,"total_cost_usd_ticks":316440000,"modelUsage":{"grok-4.7":{"inputTokens":8445,"outputTokens":379,"cacheReadInputTokens":24960,"cacheCreationInputTokens":0,"modelCalls":2,"costUSD":0.031644}}}

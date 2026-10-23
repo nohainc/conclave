@@ -233,6 +233,18 @@ refreshes the synchronized editor state.
 
 ## 6. Workspace verification, caching, and activation
 
+An authenticated, non-revoked Workspace runtime MAY fetch a catalog Worker's
+current published Profile before configuring that Worker locally. The read
+endpoint MUST NOT require a `workspace_worker_inventory` row: Profile sync
+precedes local setup and inventory publication. Runtime authentication and
+published Profile identity, schema and digest checks remain required. Profile
+download alone does not configure, enable, or authorize execution of a Worker.
+When a verified download cannot yet be probed because no local Worker record
+exists, the Service reports the Profile as `staged` (`Downloaded`) and the
+Worker as `Setup required`. It MUST NOT label that expected setup state a
+Profile error or activate the staged payload before probing. Failed downloads,
+invalid snapshots and incompatible Engines retain their actual failure states.
+
 Workspace MUST treat Cloud as the authority for the current Profile but MUST
 remain able to operate from its verified local cache when synchronization is
 temporarily unavailable.

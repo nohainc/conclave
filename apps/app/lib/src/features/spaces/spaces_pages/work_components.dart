@@ -676,7 +676,7 @@ class _WorkComposer extends StatelessWidget {
                   .firstOrNull;
               final asset = WorkerPresentation.resolve(
                       worker?.workerTypeId, capability.name)
-                  .iconAsset;
+                  .iconAssetForBrightness(Theme.of(context).brightness);
               return asset == null
                   ? const Icon(Icons.smart_toy_outlined, size: 22)
                   : Image.asset(asset, width: 22, height: 22);
@@ -1138,8 +1138,36 @@ class _UsageTable extends StatelessWidget {
 
   final DateTime now;
 
+  static const _labelStyle = TextStyle(fontSize: 12);
+
+  /// Width of the label column: the widest label of this report, measured with
+  /// the displayed font and text scale, plus a gap. Each Worker reports
+  /// different labels, so a fixed width either wastes space or wraps. Capped
+  /// at 40% of the row so the bars keep room on narrow screens.
+  double _labelWidth(BuildContext context, double maxWidth) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final style = DefaultTextStyle.of(context).style.merge(_labelStyle);
+    var widest = 0.0;
+    for (final window in usage.windows) {
+      final painter = TextPainter(
+        text: TextSpan(text: window.label, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: scaler,
+        maxLines: 1,
+      )..layout();
+      if (painter.width > widest) widest = painter.width;
+      painter.dispose();
+    }
+    final width = widest.ceilToDouble() + 12;
+    return maxWidth.isFinite ? width.clamp(0, maxWidth * 0.4) : width;
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => LayoutBuilder(
+      builder: (context, constraints) =>
+          _build(context, _labelWidth(context, constraints.maxWidth)));
+
+  Widget _build(BuildContext context, double labelWidth) {
     final small = Theme.of(context).textTheme.bodySmall;
     final dark = Theme.of(context).brightness == Brightness.dark;
     String? group;
@@ -1159,8 +1187,9 @@ class _UsageTable extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(children: [
           SizedBox(
-              width: 70,
-              child: Text(window.label, style: const TextStyle(fontSize: 12))),
+              key: const ValueKey('worker-usage-label'),
+              width: labelWidth,
+              child: Text(window.label, style: _labelStyle)),
           Expanded(
             child: LinearProgressIndicator(
                 value: (window.usedPercent / 100).clamp(0.0, 1.0),
@@ -1462,7 +1491,8 @@ class _WorkTimelineCard extends StatelessWidget {
             response?.isNotEmpty == true);
     final senderName = isWorkerResponse ? workerName : 'Conclave';
     final workerOwnerName = senderTurn?.workerOwnerName?.trim();
-    final workerIcon = presentation.iconAsset;
+    final workerIcon =
+        presentation.iconAssetForBrightness(Theme.of(context).brightness);
 
     final frozenModelName = senderTurn?.modelName ?? senderStep?.modelName;
     String? formattedModelInfo;

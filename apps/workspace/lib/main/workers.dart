@@ -8,6 +8,7 @@ class _WorkersTab extends StatefulWidget {
     this.onReadinessCheck,
     this.onConfigureWorker,
     this.onSetWorkerEnabled,
+    this.onRemoveWorker,
     this.onSetFullLocalAccess,
     this.requireStepUp,
     super.key,
@@ -19,6 +20,7 @@ class _WorkersTab extends StatefulWidget {
   final Future<void> Function(WorkerDescriptor worker)? onConfigureWorker;
   final Future<void> Function(String workerId, bool enabled)?
       onSetWorkerEnabled;
+  final Future<bool> Function(String workerId)? onRemoveWorker;
   final Future<void> Function(String workerId, bool enabled)?
       onSetFullLocalAccess;
   final Future<bool> Function(String reason)? requireStepUp;
@@ -107,6 +109,7 @@ class _WorkersTabState extends State<_WorkersTab> {
         catalog.localRegistryLoaded &&
         catalog.localRegistryError == null;
     final workers = _sortedWorkers(catalog);
+    final available = _availableToAdd(catalog);
     final selected = workers
         .where((worker) => _typeOf(worker) == _selectedType(catalog))
         .firstOrNull;
@@ -127,6 +130,19 @@ class _WorkersTabState extends State<_WorkersTab> {
                 key: const PageStorageKey('worker-list-scroll'),
                 padding: const EdgeInsets.all(8),
                 children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: OutlinedButton.icon(
+                      key: const Key('worker-add'),
+                      onPressed: canConfigure &&
+                              widget.serviceAvailable &&
+                              available.isNotEmpty
+                          ? () => _addWorker(available)
+                          : null,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add Worker'),
+                    ),
+                  ),
                   for (final worker in workers)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 2),
@@ -155,8 +171,11 @@ class _WorkersTabState extends State<_WorkersTab> {
                     else
                       _buildLogicalWorkerCard(selected, canConfigure, theme)
                   else
-                    const Text(
-                        'No Workers are available in the Cloud catalog.'),
+                    Text(
+                        key: const Key('workers-empty'),
+                        available.isEmpty && catalog.descriptors.isEmpty
+                            ? 'No Workers are available in the Cloud catalog.'
+                            : 'No Workers in this Workspace yet. Use Add Worker to choose the provider CLI you use.'),
                   if (catalog.catalogError case final error?)
                     CopyableMessageText(error),
                   if (catalog.localRegistryError case final error?)
@@ -168,16 +187,88 @@ class _WorkersTabState extends State<_WorkersTab> {
     ]);
   }
 
-  /// Workers in alphabetical order of their display name, so the list and
-  /// the default selection do not depend on catalog order.
+  /// Added Workers in alphabetical order of their display name, so the list
+  /// and the default selection do not depend on catalog order. Catalog
+  /// entries not added to this Workspace appear only in the Add picker.
   static List<WorkerCatalogWorkerState> _sortedWorkers(
           WorkerCatalogSnapshot catalog) =>
-      [...catalog.workers]..sort((a, b) {
+      [...catalog.workers.where((worker) => worker.localWorker != null)]
+        ..sort((a, b) {
           final byName = _nameOf(a).toLowerCase().compareTo(
                 _nameOf(b).toLowerCase(),
               );
           return byName != 0 ? byName : _typeOf(a).compareTo(_typeOf(b));
         });
+
+  static List<WorkerDescriptor> _availableToAdd(WorkerCatalogSnapshot catalog) {
+    final added = catalog.workers
+        .map((worker) => worker.localWorker?.workerTypeId)
+        .whereType<String>()
+        .toSet();
+    return [
+      ...catalog.descriptors
+          .where((descriptor) => !added.contains(descriptor.workerTypeId))
+    ]..sort((a, b) =>
+        a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+  }
+
+  Future<void> _addWorker(List<WorkerDescriptor> available) async {
+    final picked = await showDialog<WorkerDescriptor>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Add Worker'),
+        children: [
+          for (final descriptor in available)
+            SimpleDialogOption(
+              key: Key('worker-add-${descriptor.workerTypeId}'),
+              onPressed: () => Navigator.of(context).pop(descriptor),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(descriptor.displayName),
+                subtitle: Text(descriptor.providerToolName),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _selectedWorkerType = picked.workerTypeId);
+    await _configureCatalogWorker(picked);
+  }
+
+  Future<void> _removeWorker(String name, LocalWorker worker) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove $name?'),
+        content: const Text(
+            'The Worker stops taking new work. If work is running, it is '
+            'removed when that work finishes. Its settings are not kept; '
+            'adding it again starts from scratch.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('worker-remove-confirm'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _runWorkerAction(worker.workerTypeId, name, () async {
+      final removed = await widget.onRemoveWorker!.call(worker.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(removed
+            ? '$name was removed.'
+            : '$name will be removed when its current work finishes.'),
+      ));
+    });
+  }
 
   static String _nameOf(WorkerCatalogWorkerState worker) =>
       worker.descriptor?.displayName ?? _typeOf(worker);
@@ -192,6 +283,12 @@ class _WorkersTabState extends State<_WorkersTab> {
         (widget.serviceAvailable &&
             progress?.outcome == WorkerCheckOutcome.running)) {
       return _WorkerListStatus.checking;
+    }
+    if (worker.localWorker != null &&
+        (widget.catalogCoordinator?.snapshot.removingWorkerIds
+                .contains(worker.localWorker!.id) ??
+            false)) {
+      return _WorkerListStatus.removing;
     }
     if (worker.descriptor == null) return _WorkerListStatus.retired;
     if (worker.localWorker == null) return _WorkerListStatus.setupRequired;
@@ -225,7 +322,12 @@ class _WorkersTabState extends State<_WorkersTab> {
     final busy = _updatingWorkerTypes.contains(entry.workerTypeId) ||
         (widget.serviceAvailable &&
             progress?.outcome == WorkerCheckOutcome.running);
-    final canAct = canConfigure && widget.serviceAvailable && !busy;
+    final removing = worker != null &&
+        (widget.catalogCoordinator?.snapshot.removingWorkerIds
+                .contains(worker.id) ??
+            false);
+    final canAct =
+        canConfigure && widget.serviceAvailable && !busy && !removing;
     final disabled =
         worker?.activationState == LocalWorkerActivationState.disabled;
     final models = profile?['hasModelDiscovery'] == false
@@ -270,6 +372,13 @@ class _WorkersTabState extends State<_WorkersTab> {
                   style: theme.textTheme.bodySmall),
             const SizedBox(height: 20),
             _buildVerification(view, progress),
+            if (removing) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Removing after current work finishes. This Worker takes no new work.',
+                key: Key('worker-removing-${entry.workerTypeId}'),
+              ),
+            ],
             if (_actionErrors[entry.workerTypeId] case final error?) ...[
               const SizedBox(height: 8),
               CopyableMessageText(error,
@@ -351,6 +460,17 @@ class _WorkersTabState extends State<_WorkersTab> {
                     child: Text(worker.fullLocalAccessAuthorized
                         ? 'Disable full access'
                         : 'Enable full access'),
+                  ),
+                  OutlinedButton.icon(
+                    key: Key('worker-remove-${entry.workerTypeId}'),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.colorScheme.error,
+                        padding: const EdgeInsets.symmetric(horizontal: 12)),
+                    onPressed: canAct && widget.onRemoveWorker != null
+                        ? () => _removeWorker(entry.displayName, worker)
+                        : null,
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: Text(removing ? 'Removing…' : 'Remove'),
                   ),
                 ],
               ]
@@ -451,6 +571,20 @@ class _WorkersTabState extends State<_WorkersTab> {
       key: Key('retired-worker-${worker.workerTypeId}'),
       padding: const EdgeInsets.only(bottom: 12),
       child: ListTile(
+        trailing: widget.onRemoveWorker == null
+            ? null
+            : OutlinedButton.icon(
+                key: Key('worker-remove-${worker.workerTypeId}'),
+                onPressed: widget.serviceAvailable &&
+                        !_updatingWorkerTypes.contains(worker.workerTypeId) &&
+                        !(widget.catalogCoordinator?.snapshot.removingWorkerIds
+                                .contains(worker.id) ??
+                            false)
+                    ? () => _removeWorker(worker.workerTypeId, worker)
+                    : null,
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Remove'),
+              ),
         title: Text(worker.workerTypeId,
             style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Column(
@@ -554,9 +688,13 @@ class _WorkersTabState extends State<_WorkersTab> {
   }
 
   Future<void> _runCatalogAction(
-      WorkerDescriptor entry, Future<void> Function() action) async {
-    if (!_updatingWorkerTypes.add(entry.workerTypeId)) return;
-    _actionErrors.remove(entry.workerTypeId);
+          WorkerDescriptor entry, Future<void> Function() action) =>
+      _runWorkerAction(entry.workerTypeId, entry.displayName, action);
+
+  Future<void> _runWorkerAction(
+      String workerTypeId, String name, Future<void> Function() action) async {
+    if (!_updatingWorkerTypes.add(workerTypeId)) return;
+    _actionErrors.remove(workerTypeId);
     setState(() {});
     try {
       await action();
@@ -564,15 +702,15 @@ class _WorkersTabState extends State<_WorkersTab> {
       if (mounted) setState(() {});
     } on Object catch (error) {
       if (mounted) {
-        _actionErrors[entry.workerTypeId] = error.toString();
+        _actionErrors[workerTypeId] = error.toString();
         showCopyableErrorSnackBar(
           context,
-          'Could not complete the action for ${entry.displayName}. Try again or review the Worker status.\n$error',
+          'Could not complete the action for $name. Try again or review the Worker status.\n$error',
         );
       }
     } finally {
-      _updatingWorkerTypes.remove(entry.workerTypeId);
-      _actionStages.remove(entry.workerTypeId);
+      _updatingWorkerTypes.remove(workerTypeId);
+      _actionStages.remove(workerTypeId);
       if (mounted) setState(() {});
     }
   }
@@ -584,6 +722,7 @@ enum _WorkerListStatus {
   attention('Needs attention'),
   setupRequired('Setup required'),
   disabled('Disabled'),
+  removing('Removing'),
   retired('Retired'),
   unknown('Status unavailable');
 
@@ -730,6 +869,10 @@ class _WorkerStatusIcon extends StatelessWidget {
         ),
       _WorkerListStatus.disabled => (
           Icons.pause_circle_outline,
+          colors.onSurfaceVariant
+        ),
+      _WorkerListStatus.removing => (
+          Icons.hourglass_bottom,
           colors.onSurfaceVariant
         ),
       _WorkerListStatus.retired => (

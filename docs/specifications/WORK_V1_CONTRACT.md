@@ -268,6 +268,14 @@ are part of the immutable Workflow version.
 
 ## Before submission
 
+Selecting a Workflow Workspace authorizes Cloud scheduling for its ready,
+locally enabled Workers. Inventory synchronization reconciles that scheduling
+state for Workers configured or verified after the selection, and also repairs
+existing disabled scheduling rows on unchanged inventory reports. It does not
+enable locally disabled or unready Workers, and preserves draining Workers and
+Cloud concurrency limits. Assignment admission still checks active grants,
+permissions, Workspace connectivity and Thread policy independently.
+
 Before creating a Work Request, Cloud resolves every required Step binding and
 checks that each Worker exists, belongs to an active Space Workspace grant,
 is enabled locally and for Cloud scheduling, and is Ready. Cloud also checks

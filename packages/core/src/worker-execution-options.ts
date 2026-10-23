@@ -29,6 +29,8 @@ interface WorkerExecutionOptionsBase {
 interface WorkerModelOptionsBase {
   readonly supported: boolean;
   readonly discovery: "profile_catalog" | "provider_catalog";
+  /** A matching runtime catalog was received, even if it lists no models. */
+  readonly catalogAvailable?: boolean;
   readonly allowsCustomModel: boolean;
   readonly allowedModelIds: readonly string[];
   /** null preserves provider Auto; metadata never materializes a selection. */
@@ -83,7 +85,8 @@ export function validateWorkerExecutionSelection(
     return "Worker catalog changed; refresh and confirm the selection";
   if (
     options.models.discovery === "provider_catalog" &&
-    options.models.options.length === 0
+    options.models.options.length === 0 &&
+    options.models.catalogAvailable !== true
   )
     return "Worker capabilities are unavailable; refresh the Workspace catalog";
   if (

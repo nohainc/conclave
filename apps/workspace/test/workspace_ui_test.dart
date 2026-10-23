@@ -539,8 +539,9 @@ void main() {
     expect(find.text('Start Service'), findsOneWidget);
     expect(find.text('Workers'), findsWidgets);
     await openWorkers(tester);
-    expect(_workerName('chatgpt', 'ChatGPT'), findsOneWidget);
-    expect(_workerName('gemini', 'Gemini'), findsOneWidget);
+    // A new Workspace starts blank; catalog Workers are offered by Add.
+    expect(find.byKey(const Key('workers-empty')), findsOneWidget);
+    expect(_workerName('chatgpt', 'ChatGPT'), findsNothing);
     await tester.tap(find.widgetWithText(Tab, 'Workspace'));
     await tester.pumpAndSettle();
     final workspacePage = find.byType(SingleChildScrollView).first;
@@ -1568,12 +1569,14 @@ void main() {
     });
   }
 
-  testWidgets('Workers page renders each Cloud catalog entry', (tester) async {
+  testWidgets('Workers page starts blank and adds a Worker from the catalog',
+      (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    final configured = <String>[];
     await pumpDashboard(
       tester,
       const WorkspaceUiSnapshot(
@@ -1587,34 +1590,22 @@ void main() {
         workspaceName: 'Office Mac',
       ),
       localWorkerRegistry: _FakeWorkerRegistry([]),
+      onConfigureWorker: (worker) async => configured.add(worker.workerTypeId),
     );
     await openWorkers(tester);
-    await tester.ensureVisible(find.byKey(const Key('worker-catalog-chatgpt')));
-    await tester.pumpAndSettle();
 
-    expect(_workerName('chatgpt', 'ChatGPT'), findsOneWidget);
-    expect(_workerName('gemini', 'Gemini'), findsOneWidget);
-    expect(find.text('Setup required'), findsOneWidget);
-    expect(_workerDetail('provider-cli', 'codex'), findsOneWidget);
-    expect(_workerDetail('provider-cli', 'agy'), findsNothing);
-    expect(_workerDetail('installed-version', 'Not checked'), findsOneWidget);
-    expect(find.textContaining('Capabilities:'), findsNothing);
-    expect(find.text('Diagnostics'), findsNothing);
-    expect(find.text('Set up ChatGPT'), findsNothing);
-    expect(find.text('Set up Gemini'), findsNothing);
-    expect(find.text('Save Worker'), findsNothing);
-    expect(find.text('Save readiness'), findsNothing);
-    expect(find.text('Readiness'), findsNothing);
-    expect(find.text('Add Worker'), findsNothing);
-    expect(find.text('No local Workers configured'), findsNothing);
-    expect(find.byKey(const Key('worker-type-selector')), findsNothing);
-    expect(find.text('Configure'), findsOneWidget);
-    expect(find.byKey(const Key('worker-catalog-gemini')), findsNothing);
-    await tester.ensureVisible(find.byKey(const Key('worker-selector-gemini')));
-    await tester.tap(find.byKey(const Key('worker-selector-gemini')));
+    expect(find.byKey(const Key('workers-empty')), findsOneWidget);
+    expect(find.byKey(const Key('worker-selector-chatgpt')), findsNothing);
+    expect(find.byKey(const Key('worker-selector-gemini')), findsNothing);
+    expect(find.text('Configure'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('worker-add')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('worker-catalog-chatgpt')), findsNothing);
-    expect(_workerDetail('provider-cli', 'agy'), findsOneWidget);
+    expect(find.byKey(const Key('worker-add-chatgpt')), findsOneWidget);
+    expect(find.byKey(const Key('worker-add-gemini')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('worker-add-gemini')));
+    await tester.pumpAndSettle();
+    expect(configured, ['gemini']);
   });
 
   testWidgets(
@@ -1703,18 +1694,15 @@ void main() {
     await openWorkers(tester);
     expect(workerCatalogLoads, 1);
 
-    expect(_workerName('chatgpt', 'ChatGPT'), findsOneWidget);
-    expect(_workerName('gemini', 'Gemini'), findsOneWidget);
-    expect(_workerName('dynamic-test-worker', 'Dynamic Test Worker'),
-        findsOneWidget);
-    expect(find.text('Profile unavailable'), findsOneWidget);
+    // Catalog entries that are not added stay out of the Worker list and
+    // are offered by the Add picker regardless of local Profiles.
+    expect(find.byKey(const Key('workers-empty')), findsOneWidget);
     expect(find.byKey(const Key('worker-catalog-gemini')), findsNothing);
     expect(find.text('Diagnostics'), findsNothing);
-    // Update checks are per Worker; there is no tab-wide refresh button.
     expect(find.widgetWithIcon(IconButton, Icons.refresh), findsNothing);
-    final checkUpdates = tester.widget<ButtonStyleButton>(
-        find.byKey(const Key('worker-check-updates-chatgpt')));
-    expect(checkUpdates.onPressed, isNotNull);
+    final add =
+        tester.widget<ButtonStyleButton>(find.byKey(const Key('worker-add')));
+    expect(add.onPressed, isNull, reason: 'no Configure handler is wired');
   });
 
   testWidgets('fixed catalog rows merge local Worker status by type',
@@ -2097,9 +2085,9 @@ void main() {
     );
     await openWorkers(tester);
 
-    expect(_workerName('chatgpt', 'ChatGPT'), findsOneWidget);
-    expect(_workerName('gemini', 'Gemini'), findsOneWidget);
-    expect(find.text('internal-tool'), findsOneWidget);
+    expect(_workerName('chatgpt', 'ChatGPT'), findsNothing);
+    expect(_workerName('gemini', 'Gemini'), findsNothing);
+    expect(_workerName('internal-tool', 'internal-tool'), findsOneWidget);
     await tester
         .ensureVisible(find.byKey(const Key('worker-selector-internal-tool')));
     await tester.tap(find.byKey(const Key('worker-selector-internal-tool')));

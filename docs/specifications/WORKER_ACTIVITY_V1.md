@@ -53,9 +53,10 @@ names and nesting differ.
 
 ## Provider normalization
 
-Profiles for the current Codex JSONL, agy stream-JSON and Claude Code
-stream-JSON formats may declare `activity.adapter` (`codex-jsonl`,
-`agy-stream-json` or `claude-stream-json`) with
+Profiles for the current Codex JSONL, agy stream-JSON, Claude Code
+stream-JSON and Grok Build streaming-JSON formats may declare
+`activity.adapter` (`codex-jsonl`, `agy-stream-json`, `claude-stream-json` or
+`grok-streaming-json`) with
 `activity.schemaVersion: 1`. The generic Engine uses the adapter only for
 provider lifecycle families that the bounded selector grammar cannot represent:
 tool failures, intermediate tool updates, missing provider identifiers,
@@ -71,6 +72,17 @@ Engine emits a bounded diagnostic activity once per diagnostic class for
 malformed JSON, unsupported event shapes, and provider errors. Unsupported CLI
 versions fail through the existing Profile compatibility gate before execution;
 they are not silently normalized as a compatible stream.
+
+The `grok-streaming-json` adapter reads Grok Build `--output-format
+streaming-json`. It reports `Thinking` once per stretch of `thought` chunks
+(thought text is never read), joins `text` chunks into one narration row per
+segment between tool calls (re-reported at most every two seconds), and pairs
+`tool_call` with the `tool_call_update` whose `status` is `completed` or
+`failed` by `toolCallId`. Tool titles come from the tool name; the summary
+reads only `command`, `pattern`, `query`, `url`, a file or directory name, or
+`description` from `rawInput`, masked and bounded. Tool output is never read.
+The final answer is built by the Profile's `append_final_text` /
+`clear_final_text` actions, not by the adapter.
 
 The `claude-stream-json` adapter reads Claude Code `--output-format
 stream-json` messages. Tool calls live inside the `content` array of whole

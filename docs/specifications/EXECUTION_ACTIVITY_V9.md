@@ -44,7 +44,8 @@ by event identity and never treats activity as the terminal result authority.
 
 Declarative Profile mappings handle stable scalar provider events. Stateful
 interpretation belongs to the generic Engine adapter boundary. The current
-adapters are `codex-jsonl`, `agy-stream-json` and `claude-stream-json`;
+adapters are `codex-jsonl`, `agy-stream-json`, `claude-stream-json` and
+`grok-streaming-json`;
 adding a provider adapter does not change Cloud, Service or AX. Replay fixtures must be sanitized and may contain only provider event
 shapes and safe identifiers, not prompts, output, credentials or file data.
 

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:flutter/material.dart';
@@ -38,7 +40,143 @@ const _gemini =
     'Gemini Models\tFive Hour Limit Remaining\t100%\t2026-10-17T13:34:56Z\n'
     'Gemini 4 Argon\tGemini 4 Argon Weekly Limit\t75%\t2026-10-24T08:34:56Z\n';
 
+/// GitHub Copilot `account.getQuota` on a Free plan (CLI 1.0.103).
+const _copilot = '''
+{
+  "quotaSnapshots": {
+    "chat": {"isUnlimitedEntitlement": false, "entitlementRequests": 200,
+      "usedRequests": 2, "overage": 0, "remainingPercentage": 99,
+      "resetDate": "2026-10-23T18:49:24.741Z", "hasQuota": true},
+    "completions": {"isUnlimitedEntitlement": false,
+      "entitlementRequests": 2000, "usedRequests": 0, "overage": 0,
+      "remainingPercentage": 100, "resetDate": "2026-10-23T18:49:24.741Z",
+      "hasQuota": true},
+    "premium_interactions": {"isUnlimitedEntitlement": false,
+      "entitlementRequests": 0, "usedRequests": 0, "overage": 0,
+      "remainingPercentage": 0, "resetDate": "2026-10-23T18:49:24.741Z",
+      "hasQuota": false}
+  }
+}
+''';
+
+const _grok = {
+  'config': {
+    'creditUsagePercent': 69.0,
+    'currentPeriod': {
+      'type': 'USAGE_PERIOD_TYPE_WEEKLY',
+      'start': '2026-10-23T21:07:15.175+00:00',
+      'end': '2026-10-30T21:07:15.175+00:00',
+    },
+    'prepaidBalance': {'val': 0},
+    'isUnifiedBillingUser': true,
+    'billingPeriodStart': '2026-10-23T21:07:15.175+00:00',
+    'billingPeriodEnd': '2026-10-30T21:07:15.175+00:00',
+  },
+  'subscription_tier': 'Free',
+};
+
 void main() {
+  test('Grok billing uses the common weekly usage window', () {
+    final window = parseWorkerUsage(jsonEncode(_grok))!.windows.single;
+    expect(window.label, 'Week');
+    expect(window.usedPercent, 69);
+    expect(window.remainingPercent, 31);
+    expect(window.resetsAt, DateTime.parse('2026-10-30T21:07:15.175Z'));
+  });
+
+  test('Grok validates percentages and preserves raw fallback on bad reports',
+      () {
+    for (final value in [-1, 101, '69', null]) {
+      expect(
+          parseWorkerUsage(jsonEncode({
+            'config': {
+              'creditUsagePercent': value,
+            }
+          })),
+          isNull);
+    }
+    expect(parseWorkerUsage('{"config":'), isNull);
+    expect(
+        parseWorkerUsage(jsonEncode({
+          'config': {
+            'creditUsagePercent': 69,
+            'currentPeriod': {'end': 'invalid'},
+          }
+        })),
+        isNull);
+    for (final value in [0, 100]) {
+      expect(
+          parseWorkerUsage(jsonEncode({
+            'config': {
+              'creditUsagePercent': value,
+            }
+          }))!
+              .windows
+              .single
+              .usedPercent,
+          value);
+    }
+  });
+
+  test('Grok uses billing end when current period is absent', () {
+    final usage = parseWorkerUsage(jsonEncode({
+      'config': {
+        'creditUsagePercent': 20,
+        'billingPeriodEnd': '2026-10-30T23:07:15+02:00',
+      }
+    }))!;
+    expect(usage.windows.single.label, 'Credits');
+    expect(
+        usage.windows.single.resetsAt, DateTime.utc(2026, 10, 30, 21, 7, 15));
+  });
+
+  testWidgets('Grok billing renders the shared table and retains original JSON',
+      (tester) async {
+    final output = jsonEncode(_grok);
+    final controller = AxWorkerUsageController(_Source(output));
+    addTearDown(controller.dispose);
+    await controller.load(
+        workspaceId: 'w', workerId: 'grok', workerName: 'Grok');
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body:
+                AxWorkerUsagePanel(controller: controller, onRefresh: () {}))));
+    expect(find.byKey(const ValueKey('worker-usage-table')), findsOneWidget);
+    expect(find.text('Week'), findsOneWidget);
+    expect(find.text('69% used'), findsOneWidget);
+    expect(
+        tester
+            .widget<LinearProgressIndicator>(
+                find.byType(LinearProgressIndicator))
+            .value,
+        0.69);
+    await tester
+        .tap(find.byKey(const ValueKey('worker-usage-toggle-original')));
+    await tester.pump();
+    expect(find.text(output), findsOneWidget);
+  });
+
+  test('Copilot quota report', () {
+    final now = DateTime.utc(2026, 10, 23, 20);
+    final usage = parseWorkerUsage(_copilot, now: now)!;
+    expect(usage.windows.map((w) => w.label),
+        ['Chat requests', 'Code completions']);
+    expect(usage.windows[0].usedPercent, 1);
+    expect(usage.windows[1].usedPercent, 0);
+    // The reported reset equals the snapshot time (past), so none is shown.
+    expect(usage.windows.every((w) => w.resetsAt == null), isTrue);
+    expect(usage.notes, [
+      'Chat requests: 2 of 200 used',
+      'Code completions: 0 of 2000 used',
+      'Premium requests: not included in this plan',
+    ]);
+    final future = parseWorkerUsage(
+        _copilot.replaceAll('2026-10-23T18:49:24.741Z', '2026-11-01T00:00:00Z'),
+        now: now)!;
+    expect(future.windows[0].resetsAt, DateTime.utc(2026, 11));
+    expect(usageResetLabel(future.windows[0], now), 'Resets in 8 d 4 hr 0 min');
+  });
+
   test('Claude report', () {
     final usage = parseWorkerUsage(_claude, now: DateTime.utc(2026, 10, 17))!;
     expect(usage.windows.map((w) => w.label), ['Session', 'Week']);

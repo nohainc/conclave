@@ -8,6 +8,7 @@ String? workerBrandIconAsset({
   required String workerTypeId,
   String? profileDefinitionId,
   String? providerToolName,
+  Brightness brightness = Brightness.light,
 }) {
   final keys = [workerTypeId, profileDefinitionId, providerToolName]
       .whereType<String>()
@@ -23,7 +24,10 @@ String? workerBrandIconAsset({
     return 'assets/worker_icons/claude.png';
   }
   if (matches(const ['copilot'])) {
-    return 'assets/worker_icons/copilot.png';
+    return 'assets/worker_icons/copilot-${brightness == Brightness.dark ? 'dark' : 'light'}.png';
+  }
+  if (matches(const ['grok', 'xai'])) {
+    return 'assets/worker_icons/grok-${brightness == Brightness.dark ? 'dark' : 'light'}.png';
   }
   if (matches(const ['gemini', 'google'])) {
     return 'assets/worker_icons/gemini.png';
@@ -31,7 +35,7 @@ String? workerBrandIconAsset({
   return null;
 }
 
-/// A provider mark on a light tile so dark marks stay visible in dark mode.
+/// A provider mark with theme-aware monochrome variants.
 /// Unknown Workers show the first letter of [name].
 class WorkerBrandIcon extends StatelessWidget {
   const WorkerBrandIcon({
@@ -55,8 +59,11 @@ class WorkerBrandIcon extends StatelessWidget {
       workerTypeId: workerTypeId,
       profileDefinitionId: profileDefinitionId,
       providerToolName: providerToolName,
+      brightness: Theme.of(context).brightness,
     );
     final colors = Theme.of(context).colorScheme;
+    final themedMark = asset?.endsWith('-dark.png') == true ||
+        asset?.endsWith('-light.png') == true;
     final initial = name.trim().isEmpty ? '?' : name.trim()[0].toUpperCase();
     return ExcludeSemantics(
       child: Container(
@@ -64,7 +71,9 @@ class WorkerBrandIcon extends StatelessWidget {
         height: size,
         padding: EdgeInsets.all(size * .14),
         decoration: BoxDecoration(
-          color: asset == null ? colors.surfaceContainerHighest : Colors.white,
+          color: asset == null || themedMark
+              ? colors.surfaceContainerHighest
+              : Colors.white,
           borderRadius: BorderRadius.circular(size * .28),
           border: Border.all(color: colors.outlineVariant),
         ),

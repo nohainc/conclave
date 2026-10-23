@@ -42,6 +42,7 @@ class ProviderActivityAdapter {
           'codex-jsonl',
           'agy-stream-json',
           'claude-stream-json',
+          'grok-streaming-json',
         }.contains(declared)) {
       return ProviderActivityAdapter._(declared);
     }
@@ -92,6 +93,7 @@ class ProviderActivityAdapter {
         declarativeMatched: declarativeMatched,
       ),
       'claude-stream-json' => _normalizeClaude(event),
+      'grok-streaming-json' => _normalizeGrok(event),
       _ => _diagnostic('unsupported_adapter'),
     };
   }
@@ -951,6 +953,175 @@ class ProviderActivityAdapter {
     }
     final rest = finalText.substring(i).trim();
     return rest.isEmpty ? null : rest;
+  }
+
+  // Grok Build `--output-format streaming-json` sends the answer only as
+  // `text` chunks; the Profile builds the final text declaratively with
+  // `append_final_text` / `clear_final_text`. The adapter reports activity.
+  final _NarrationBuffer _grokText = _NarrationBuffer();
+  var _grokSegment = 0;
+  var _grokThinking = false;
+  final Map<String, String> _grokToolTitles = <String, String>{};
+  final Map<String, String> _grokToolSummaries = <String, String>{};
+
+  /// Grok streams thoughts and text a few characters at a time. Thinking is
+  /// reported once per stretch of thought; text is joined per segment (the
+  /// text between tool calls) and re-reported at most once per
+  /// [narrationInterval]. Tool rows use the provider `toolCallId`. Only tool
+  /// names and a few well-known input keys are read; thought text, tool
+  /// output and file contents never are.
+  List<ProviderActivityObservation> _normalizeGrok(Map event) {
+    final type = event['type'];
+    if (type is! String) return _diagnostic('missing_event_type');
+    switch (type) {
+      case 'thought':
+        if (_grokThinking) return const [];
+        _grokThinking = true;
+        return const <ProviderActivityObservation>[
+          ProviderActivityObservation(
+            type: 'model.status',
+            status: 'updated',
+            title: 'Thinking',
+          ),
+        ];
+      case 'text':
+        _grokThinking = false;
+        final delta = event['data'];
+        if (delta is String && _grokText.text.length < _maxNarrationBuffer) {
+          _grokText.text.write(delta);
+        }
+        final last = _grokText.lastEmittedAt;
+        final now = clock();
+        if (last != null && now.difference(last) < narrationInterval) {
+          return const [];
+        }
+        return _grokNarration(now);
+      case 'tool_call':
+        _grokThinking = false;
+        final flushed = _grokNarration(clock());
+        _grokSegment += 1;
+        _grokText.text.clear();
+        _grokText.lastEmitted = null;
+        _grokText.lastEmittedAt = null;
+        final name = _safeText(event['toolName']) ?? 'tool';
+        final id = _safeText(event['toolCallId']);
+        final title = _grokToolTitle(name);
+        final summary = _grokToolSummary(event['rawInput']);
+        if (id != null) {
+          if (_grokToolTitles.length >= 256) {
+            _grokToolTitles.clear();
+            _grokToolSummaries.clear();
+          }
+          _grokToolTitles[id] = title;
+          if (summary != null) _grokToolSummaries[id] = summary;
+        }
+        return <ProviderActivityObservation>[
+          ...flushed,
+          ProviderActivityObservation(
+            type: 'tool.started',
+            status: 'running',
+            title: title,
+            activityId:
+                id ??
+                _activityId(
+                  null,
+                  family: 'grok-tool',
+                  toolKind: name,
+                  terminal: false,
+                ),
+            details: {
+              ..._toolDetails(name),
+              if (summary != null) 'summary': summary,
+              if (id == null) 'identifierSource': 'generated',
+            },
+          ),
+        ];
+      case 'tool_call_update':
+        final status = event['status'];
+        if (status != 'completed' && status != 'failed') return const [];
+        final id = _safeText(event['toolCallId']);
+        if (id == null) return const [];
+        final failed = status == 'failed';
+        final title = _grokToolTitles.remove(id);
+        final summary = _grokToolSummaries.remove(id);
+        return <ProviderActivityObservation>[
+          ProviderActivityObservation(
+            type: failed ? 'tool.failed' : 'tool.completed',
+            status: failed ? 'failed' : 'completed',
+            title: _claudeFinishedTitle(title, failed: failed),
+            activityId: id,
+            details: {if (summary != null) 'summary': summary},
+          ),
+        ];
+      case 'end':
+        final flushed = _grokNarration(clock());
+        _grokText.text.clear();
+        _grokText.lastEmitted = null;
+        _grokText.lastEmittedAt = null;
+        _grokSegment = 0;
+        _grokThinking = false;
+        _grokToolTitles.clear();
+        _grokToolSummaries.clear();
+        return flushed;
+      case 'error':
+        return const <ProviderActivityObservation>[
+          ProviderActivityObservation(
+            type: 'model.status',
+            status: 'failed',
+            title: 'Provider reported an error',
+            details: {'diagnostic': 'provider_error'},
+          ),
+        ];
+      case 'usage' || 'available_commands':
+        return const [];
+    }
+    return _diagnostic('unsupported_event');
+  }
+
+  List<ProviderActivityObservation> _grokNarration(DateTime now) {
+    final narration = _narrationExcerpt(_grokText.text.toString());
+    if (narration == null || narration == _grokText.lastEmitted) {
+      return const [];
+    }
+    _grokText.lastEmittedAt = now;
+    _grokText.lastEmitted = narration;
+    return <ProviderActivityObservation>[
+      _narrationObservation(narration, activityId: 'grok-msg-$_grokSegment'),
+    ];
+  }
+
+  /// A fixed, user-facing title for a Grok Build tool name. The titles match
+  /// the Claude ones so finished rows reuse [_claudeFinishedTitle].
+  String _grokToolTitle(String name) => switch (name) {
+    'run_terminal_command' ||
+    'get_command_or_subagent_output' ||
+    'kill_command_or_subagent' ||
+    'monitor' => 'Running a command',
+    'read_file' || 'list_dir' || 'grep' => 'Reading files',
+    'search_replace' || 'write' => 'Editing files',
+    'web_search' || 'web_fetch' => 'Searching the web',
+    'spawn_subagent' => 'Working with a sub-agent',
+    'todo_write' => 'Updating the plan',
+    'use_tool' || 'search_tool' => 'Using a connected tool',
+    _ => 'Running a tool',
+  };
+
+  String? _grokToolSummary(Object? input) {
+    if (input is! Map) return null;
+    for (final key in const ['command', 'pattern', 'query', 'url']) {
+      final value = _shortSummary(input[key]);
+      if (value != null) return value;
+    }
+    for (final key in const [
+      'target_file',
+      'file_path',
+      'target_directory',
+      'path',
+    ]) {
+      final value = _shortSummary(input[key], path: true);
+      if (value != null) return value;
+    }
+    return _shortSummary(input['description']);
   }
 
   /// Ids of Claude background commands that are running right now.

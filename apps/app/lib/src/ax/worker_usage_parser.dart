@@ -52,7 +52,17 @@ AxParsedUsage? parseWorkerUsage(String output, {DateTime? now}) {
   final text = output.trim();
   if (text.isEmpty) return null;
   try {
-    if (text.startsWith('{')) return _parseCodex(text);
+    if (text.startsWith('{')) {
+      final json = jsonDecode(text);
+      if (json is Map &&
+          json['config'] is Map &&
+          (json['config'] as Map).containsKey('creditUsagePercent')) {
+        return _parseGrok(json['config'] as Map);
+      }
+      return text.contains('"quotaSnapshots"')
+          ? _parseCopilot(text, now ?? DateTime.now())
+          : _parseCodex(text);
+    }
     if (text.contains('Current session') || text.contains('Current week')) {
       return _parseClaude(text, now ?? DateTime.now());
     }
@@ -136,6 +146,85 @@ AxParsedUsage? _parseCodex(String text) {
   }
   return AxParsedUsage(windows: windows, notes: notes);
 }
+
+/// Grok ACP billing reports the percentage already consumed, not remaining.
+/// Keep monetary balances in the original output: their units are unspecified.
+AxParsedUsage? _parseGrok(Map config) {
+  final used = config['creditUsagePercent'];
+  if (used is! num || !_validPercent(used)) return null;
+  final period = config['currentPeriod'];
+  if (period != null && period is! Map) return null;
+  final type = period is Map ? period['type'] : null;
+  final label = switch (type) {
+    'USAGE_PERIOD_TYPE_WEEKLY' => 'Week',
+    'USAGE_PERIOD_TYPE_MONTHLY' => 'Month',
+    'USAGE_PERIOD_TYPE_DAILY' => 'Day',
+    _ => 'Credits',
+  };
+  final end =
+      (period is Map ? period['end'] : null) ?? config['billingPeriodEnd'];
+  final reset = end is String ? DateTime.tryParse(end) : null;
+  if (end != null && reset == null) return null;
+  return AxParsedUsage(windows: [
+    AxUsageWindow(
+      label: label,
+      usedPercent: used.toDouble(),
+      resetsAt: reset?.toUtc(),
+    ),
+  ]);
+}
+
+const _copilotQuotas = {
+  'chat': 'Chat requests',
+  'completions': 'Code completions',
+  'premium_interactions': 'Premium requests',
+};
+
+/// GitHub Copilot `account.getQuota`: monthly request allowances. Its
+/// `resetDate` has been observed equal to the snapshot time (already past), so
+/// only a future reset is shown.
+AxParsedUsage? _parseCopilot(String text, DateTime now) {
+  final json = jsonDecode(text);
+  if (json is! Map) return null;
+  final snapshots = json['quotaSnapshots'];
+  if (snapshots is! Map) return null;
+  final windows = <AxUsageWindow>[];
+  final notes = <String>[];
+  for (final entry in _copilotQuotas.entries) {
+    final quota = snapshots[entry.key];
+    if (quota == null) continue;
+    if (quota is! Map) return null;
+    final label = entry.value;
+    if (quota['isUnlimitedEntitlement'] == true) {
+      notes.add('$label: unlimited');
+      continue;
+    }
+    final entitlement = quota['entitlementRequests'];
+    final used = quota['usedRequests'];
+    if (entitlement is! num || used is! num || used < 0) return null;
+    if (entitlement <= 0) {
+      notes.add('$label: not included in this plan');
+      continue;
+    }
+    final percent = (used / entitlement * 100).clamp(0, 100).toDouble();
+    final reset = DateTime.tryParse('${quota['resetDate']}');
+    windows.add(AxUsageWindow(
+      label: label,
+      usedPercent: percent,
+      resetsAt: reset != null && reset.isAfter(now) ? reset : null,
+    ));
+    notes.add('$label: ${_count(used)} of ${_count(entitlement)} used');
+    final overage = quota['overage'];
+    if (overage is num && overage > 0) {
+      notes.add('$label: ${_count(overage)} over the allowance');
+    }
+  }
+  if (windows.isEmpty) return null;
+  return AxParsedUsage(windows: windows, notes: notes);
+}
+
+String _count(num value) =>
+    value == value.roundToDouble() ? '${value.toInt()}' : '$value';
 
 AxParsedUsage? _parseGemini(String text) {
   final windows = <AxUsageWindow>[];
@@ -232,7 +321,8 @@ String usageResetLabel(AxUsageWindow window, DateTime now) {
   final remaining = at.difference(now);
   if (remaining <= Duration.zero) return 'Reset time reached — refresh usage';
   final minutes = (remaining.inMilliseconds / 60000).ceil();
-  final weekly = window.label.startsWith('Week');
+  // Weekly and multi-day (for example monthly) windows count in days.
+  final weekly = window.label.startsWith('Week') || minutes >= 2880;
   final days = minutes ~/ 1440;
   final hours = weekly ? minutes % 1440 ~/ 60 : minutes ~/ 60;
   return 'Resets in ${weekly ? '$days d ' : ''}$hours hr ${minutes % 60} min';

@@ -115,18 +115,20 @@ void main() {
       await coordinator.refresh(force: true);
       final entry = coordinator.entryForWorker('dynamic-test-worker');
       expect(entry?.displayName, 'Dynamic Test Worker');
-      expect(
-        (await profileStore.currentWorkerProfile('dynamic-test-worker'))
-            ?.revision,
-        1,
-      );
 
+      // Adding the Worker (Configure) downloads its Profile.
       final initialWorker =
           await LocalWorkerSetupService(registry: registry).createCatalogWorker(
         entry: entry!,
         permissions: const ['repository:read'],
       );
       await coordinator.refreshLocalWorkers();
+      await coordinator.ensureWorkerProfileAvailable('dynamic-test-worker');
+      expect(
+        (await profileStore.currentWorkerProfile('dynamic-test-worker'))
+            ?.revision,
+        1,
+      );
 
       // Simulate a Cloud-side Worker addition and Profile update, then restart
       // Workspace with Cloud unreachable. The durable local state must win.
@@ -383,7 +385,9 @@ void main() {
             ?.revision,
         2,
       );
-      expect(postRestartProfileRequests, 2);
+      // The offline-added catalog Worker is not added here, so only the
+      // configured Worker's Profile is requested.
+      expect(postRestartProfileRequests, 1);
 
       // Cloud retires the Worker while offline. The cached active catalog and
       // current Profile remains authoritative until the next successful sync.

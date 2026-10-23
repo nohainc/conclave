@@ -42,6 +42,7 @@ The initial official Workers are:
 | `chatgpt` | ChatGPT | CLI Worker Engine + `chatgpt-codex` Profile -> Codex CLI | one stable catalog slot |
 | `gemini` | Gemini | CLI Worker Engine + `gemini-antigravity` Profile -> `agy` | one stable catalog slot |
 | `copilot` | Copilot | CLI Worker Engine + `copilot-cli` Profile -> GitHub Copilot CLI (`copilot`) | one stable catalog slot (testing stage) |
+| `grok` | Grok | CLI Worker Engine + `grok-cli` Profile -> xAI Grok Build CLI (`grok`) | one stable catalog slot (testing stage) |
 
 These are the initial entries, not an exhaustive list of Worker Types. New
 approved entries can use an existing Engine family and the supported Profile
@@ -249,6 +250,10 @@ gemini
 copilot
   engineFamily: cli
   profileDefinitionId: copilot-cli
+
+grok
+  engineFamily: cli
+  profileDefinitionId: grok-cli
 ~~~
 
 The Profile release itself is selected by Workspace from trusted compatible
@@ -266,6 +271,8 @@ Examples:
 - ChatGPT/Codex uses its locally configured Codex authentication.
 - Gemini uses its locally configured Antigravity/Google authentication.
 - Copilot uses its locally configured GitHub Copilot CLI login.
+- Grok uses its locally configured Grok CLI login (`grok login`) or the
+  user's own `XAI_API_KEY` environment.
 
 Workspace may show safe readiness guidance returned by Engine/Profile but does
 not reimplement provider login flows.

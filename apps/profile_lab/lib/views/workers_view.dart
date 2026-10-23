@@ -99,6 +99,12 @@ class _WorkerTabBar extends StatelessWidget {
       'providerToolName': 'copilot',
     },
     {
+      'workerTypeId': 'grok',
+      'displayName': 'Grok',
+      'profileDefinitionId': 'grok-cli',
+      'providerToolName': 'grok',
+    },
+    {
       'workerTypeId': 'gemini',
       'displayName': 'Gemini',
       'profileDefinitionId': 'gemini-antigravity',

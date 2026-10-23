@@ -270,11 +270,15 @@ function validateContext(
     );
     const values =
       selected?.supportedReasoningEfforts ??
-      profile.model.supportedReasoningEfforts ??
-      [];
+      profile.model.supportedReasoningEfforts;
+    // Without a declared list the efforts come from runtime discovery (for
+    // example Grok's per-model effort probe); the Engine checks the request
+    // against that discovered catalog, which this interpreter cannot see.
+    const discoveredOnly =
+      values === undefined && profile.model.discovery !== undefined;
     if (
       profile.model.executionOptions?.effortSupported === false ||
-      !values.includes(context.reasoningEffort)
+      (!discoveredOnly && !(values ?? []).includes(context.reasoningEffort))
     ) {
       throw new ProfileInterpreterError(
         "Effort is not supported by the selected model/Profile",
@@ -949,6 +953,12 @@ export function interpretProfileExecution(
         } else if (action.type === "set_final_text") {
           const value = selectProfileValue(event, action.selector);
           if (typeof value === "string") finalText = boundedText(value);
+        } else if (action.type === "append_final_text") {
+          const value = selectProfileValue(event, action.selector);
+          if (typeof value === "string")
+            finalText = boundedText((finalText ?? "") + value);
+        } else if (action.type === "clear_final_text") {
+          finalText = null;
         } else if (action.type === "set_terminal_status") {
           const value = selectProfileValue(event, action.selector);
           if (typeof value === "string") terminalStatus = value.slice(0, 256);

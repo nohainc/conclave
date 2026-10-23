@@ -42,7 +42,60 @@ class _UsageDataSource extends AxFixtureDataSource
       const AxWorkerUsageReport(status: 'ok', output: 'raw report');
 }
 
+class _ReportDataSource extends _UsageDataSource {
+  _ReportDataSource(this.output);
+
+  final String output;
+
+  @override
+  Future<AxWorkerUsageReport> readWorkerUsage({
+    required String workspaceId,
+    required String workerId,
+  }) async =>
+      AxWorkerUsageReport(status: 'ok', output: output);
+}
+
+const _copilotUsage = '{"quotaSnapshots": {'
+    '"chat": {"entitlementRequests": 200, "usedRequests": 2},'
+    '"completions": {"entitlementRequests": 2000, "usedRequests": 0}}}';
+const _claudeUsage = 'Current session: 6% used\n'
+    'Current week (all models): 21% used\n';
+
 void main() {
+  testWidgets('usage label column fits the widest label of each report',
+      (tester) async {
+    Future<double> labelWidth(String output) async {
+      final controller = AxWorkerUsageController(_ReportDataSource(output));
+      addTearDown(controller.dispose);
+      await controller.load(
+          workspaceId: 'workspace-1', workerId: 'worker-1', workerName: 'W');
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 640,
+            child: AxWorkerUsagePanel(controller: controller, onRefresh: () {}),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      final labels = find.byKey(const ValueKey('worker-usage-label'));
+      expect(labels, findsNWidgets(2));
+      final widths = {
+        for (var i = 0; i < 2; i++) tester.getSize(labels.at(i)).width,
+      };
+      expect(widths, hasLength(1), reason: 'rows stay aligned');
+      return widths.single;
+    }
+
+    final copilot = await labelWidth(_copilotUsage);
+    final completions = find.text('Code completions');
+    // One line: no wrapped "s" on a second line.
+    expect(tester.getSize(completions).height, lessThan(20));
+    final claude = await labelWidth(_claudeUsage);
+    expect(claude, lessThan(copilot));
+    expect(tester.takeException(), isNull);
+  });
+
   test('usage controller shows the provider report unchanged', () async {
     final controller = AxWorkerUsageController(_UsageDataSource());
     await controller.load(

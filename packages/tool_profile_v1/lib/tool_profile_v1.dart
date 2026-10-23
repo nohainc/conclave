@@ -311,10 +311,13 @@ class EngineProfile {
           'extract',
           'resumeArguments',
           'requireObservedIdMatch',
+          'executionPolicyBound',
         },
         'session');
     if (session['supported'] is! bool ||
-        session['requireObservedIdMatch'] is! bool) {
+        session['requireObservedIdMatch'] is! bool ||
+        (session['executionPolicyBound'] != null &&
+            session['executionPolicyBound'] is! bool)) {
       throw const FormatException('session policy is invalid');
     }
     final sessionFormatId = _text(session, 'formatId');
@@ -694,12 +697,12 @@ void _validateUsageCommand(Object? value) {
     _expectOnly(rpc, const {'method', 'framing'}, 'usage.jsonRpc');
     final framing = rpc['framing'];
     if (framing != null &&
-        !const {'newline', 'content_length'}.contains(framing)) {
+        !const {'newline', 'content_length', 'acp'}.contains(framing)) {
       throw const FormatException('usage.jsonRpc.framing is invalid');
     }
     final method = rpc['method'];
     if (method is! String ||
-        !RegExp(r'^[A-Za-z][A-Za-z0-9/._-]{0,255}$').hasMatch(method)) {
+        !RegExp(r'^[A-Za-z_][A-Za-z0-9/._-]{0,255}$').hasMatch(method)) {
       throw const FormatException('usage.jsonRpc.method is invalid');
     }
   }
@@ -723,8 +726,12 @@ void _validateActivityMappings(Object? value) {
     throw const FormatException('activity mapping container is invalid');
   }
   if (value['adapter'] != null &&
-      !const {'codex-jsonl', 'agy-stream-json', 'claude-stream-json'}
-          .contains(value['adapter'])) {
+      !const {
+        'codex-jsonl',
+        'agy-stream-json',
+        'claude-stream-json',
+        'grok-streaming-json',
+      }.contains(value['adapter'])) {
     throw const FormatException('activity adapter is invalid');
   }
   if (value['schemaVersion'] != null && value['schemaVersion'] != 1) {

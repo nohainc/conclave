@@ -56,4 +56,50 @@ void main() {
       throwsFormatException,
     );
   });
+
+  group('Copilot SDK models.list', () {
+    test('a Free account (empty list) offers no explicit model', () {
+      final models = parseCopilotSdkModels({
+        'models': <Object?>[],
+        'imageModels': <Object?>[],
+      }, '');
+      // The client's provider-default choice (Auto) is all that remains.
+      expect(models, isEmpty);
+    });
+
+    test('maps names and efforts and skips disabled models', () {
+      final models = parseCopilotSdkModels(
+        {
+          'models': [
+            {
+              'id': 'claude-sonnet-5.5',
+              'name': 'Claude Sonnet 5.5',
+              'policy': {'state': 'enabled'},
+              'supportedReasoningEfforts': ['low', 'medium', 'high'],
+              'defaultReasoningEffort': 'medium',
+            },
+            {
+              'id': 'gpt-5-mini',
+              'policy': {'state': 'disabled'},
+            },
+            {'id': 'grok-4.5'},
+          ],
+        },
+        '',
+        excludeIds: const {'grok-4.5'},
+      );
+      expect(models.map((m) => m.id), ['claude-sonnet-5.5']);
+      final sonnet = models.single;
+      expect(sonnet.name, 'Claude Sonnet 5.5');
+      expect(sonnet.supportedReasoningEfforts, ['low', 'medium', 'high']);
+      expect(sonnet.defaultReasoningEffort, 'medium');
+    });
+
+    test('rejects a malformed result', () {
+      expect(
+        () => parseCopilotSdkModels({'data': []}, ''),
+        throwsFormatException,
+      );
+    });
+  });
 }

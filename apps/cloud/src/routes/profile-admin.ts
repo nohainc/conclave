@@ -216,10 +216,9 @@ export async function handleRestoreV9WorkerProfile(
   return json(snapshotResponse(snapshot), { status: 200 });
 }
 
-async function requireAuthorizedWorkspaceWorker(
+async function requireAuthorizedWorkspaceRuntime(
   request: Request,
   env: SecurityEnv,
-  workerTypeId: string,
 ): Promise<void> {
   const url = new URL(request.url);
   const runtimeId = url.searchParams.get("workspaceRuntimeId");
@@ -233,17 +232,6 @@ async function requireAuthorizedWorkspaceWorker(
   if (!runtime) {
     throw new HttpError(401, "Workspace runtime credential is invalid");
   }
-  const inventory = await env.CONCLAVE_DB.prepare(
-    `SELECT worker_id
-         FROM workspace_worker_inventory
-        WHERE workspace_id = ?1 AND worker_type_id = ?2
-        LIMIT 1`,
-  )
-    .bind(runtime.executionWorkspaceId, workerTypeId)
-    .first<{ worker_id: string }>();
-  if (!inventory) {
-    throw new HttpError(404, "Worker is not available in this Workspace");
-  }
 }
 
 export async function handleGetWorkspaceV9WorkerProfile(
@@ -251,7 +239,10 @@ export async function handleGetWorkspaceV9WorkerProfile(
   env: SecurityEnv,
   workerTypeId: string,
 ): Promise<Response> {
-  await requireAuthorizedWorkspaceWorker(request, env, workerTypeId);
+  // Profile synchronization precedes local configuration and inventory
+  // publication. Any authenticated runtime can read the current catalog
+  // Profile; local installation is not an authorization prerequisite.
+  await requireAuthorizedWorkspaceRuntime(request, env);
   return json(
     snapshotResponse(await getCurrentWorkerProfile(env, workerTypeId)),
   );

@@ -247,4 +247,26 @@ export async function recordWorkspaceWorkerInventory(
         .run();
     }
   }
+  // Workspace selection authorizes scheduling for ready, locally enabled
+  // Workers, including ones configured after the Workspace was selected.
+  // Reconcile even unchanged reports so an existing disabled row can recover.
+  await env.CONCLAVE_DB.prepare(
+    `UPDATE worker_scheduling
+        SET state = 'enabled', updated_at = ?2
+      WHERE state = 'disabled'
+        AND worker_id IN (
+          SELECT i.worker_id FROM workspace_worker_inventory i
+           WHERE i.workspace_id = ?1
+             AND i.activation_state = 'enabled'
+             AND i.readiness_state = 'ready'
+             AND (
+               EXISTS (SELECT 1 FROM user_workflow_settings u
+                        WHERE u.workspace_id = i.workspace_id)
+               OR EXISTS (SELECT 1 FROM space_workflow_settings s
+                           WHERE s.workspace_id = i.workspace_id)
+             )
+        )`,
+  )
+    .bind(workspaceId, now)
+    .run();
 }

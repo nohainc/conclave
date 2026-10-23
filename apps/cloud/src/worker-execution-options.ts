@@ -271,6 +271,7 @@ export function spaceWorkerExecutionOptions(
   };
   let runtimeRevision: string | undefined;
   let catalogStale = false;
+  let catalogAvailable = false;
   try {
     const parsed =
       WorkspaceWorkerInventoryEntrySchema.shape.modelCatalog.safeParse(
@@ -285,6 +286,7 @@ export function spaceWorkerExecutionOptions(
       parsed.data.profileDigest === profileDigest &&
       parsed.data.providerToolVersion === providerVersion
     ) {
+      catalogAvailable = true;
       runtimeRevision = parsed.data.catalogRevision;
       catalogStale = parsed.data.stale === true;
     }
@@ -318,6 +320,7 @@ export function spaceWorkerExecutionOptions(
     models: {
       supported: model.supported,
       discovery: model.discovery ? "provider_catalog" : "profile_catalog",
+      ...(model.discovery ? { catalogAvailable } : {}),
       allowsCustomModel:
         model.supported &&
         !model.discovery &&

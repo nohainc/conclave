@@ -672,7 +672,14 @@ class CliWorkerEngine {
               timeout:
                   timeout ?? Duration(milliseconds: _int(spec['timeoutMs'])),
             )
-          : format == 'clap_possible_values'
+          : format == 'copilot_sdk_rpc'
+          ? await _discoverCopilotModels(
+              executable,
+              env,
+              spec,
+              timeout ?? Duration(milliseconds: _int(spec['timeoutMs'])),
+            )
+          : format == 'clap_possible_values' || format == 'indented_list'
           ? await _discoverClapModels(
               executable,
               env,
@@ -699,6 +706,9 @@ class CliWorkerEngine {
       );
       await cache.save(catalog);
       return catalog;
+    } on EngineProviderException {
+      // A sign-in problem must reach the user; a stale list would hide it.
+      rethrow;
     } on Object {
       // Retain the last successful list only for this exact Profile and CLI.
       if (cached != null) {
@@ -728,6 +738,32 @@ class CliWorkerEngine {
     return parseDiscoveredModels(result.stdout, _string(spec['idPrefix']));
   }
 
+  Future<List<DiscoveredModel>> _discoverCopilotModels(
+    String executable,
+    Map<String, String> env,
+    Map<String, Object?> spec,
+    Duration timeout,
+  ) async {
+    try {
+      return await discoverCopilotSdkModels(
+        executable: executable,
+        arguments: _stringList(spec['arguments']),
+        environment: env,
+        workingDirectory: options.statePath,
+        idPrefix: _string(spec['idPrefix']),
+        excludeIds: spec['excludeIds'] == null
+            ? const {}
+            : _stringList(spec['excludeIds']).toSet(),
+        timeout: timeout,
+      );
+    } on ProviderNotAuthenticatedException catch (error) {
+      throw EngineProviderException(
+        WorkerIssueCode.providerAuthenticationRequired,
+        error.message,
+      );
+    }
+  }
+
   /// The CLI rejects the bare flag, so the exit code is expected to be
   /// non-zero; the list is read from stdout and stderr.
   Future<List<DiscoveredModel>> _discoverClapModels(
@@ -743,16 +779,58 @@ class CliWorkerEngine {
       workingDirectory: options.statePath,
       timeout: timeout,
     );
-    return parseClapPossibleValues(
-      '${result.stdout}\n${result.stderr}',
+    // clap prints possible values on stderr; a model list is ordinary stdout,
+    // and indented stderr diagnostics must not read as model IDs.
+    final indented = _string(spec['format']) == 'indented_list';
+    final parse = indented ? parseIndentedModelList : parseClapPossibleValues;
+    final models = parse(
+      indented ? '${result.stdout}' : '${result.stdout}\n${result.stderr}',
       _string(spec['idPrefix']),
       catalog: [
         for (final entry in _profile.model['catalog'] as List? ?? const [])
           if (entry is Map) Map<String, Object?>.from(entry),
       ],
-      defaultEfforts: _stringList(_profile.model['supportedReasoningEfforts']),
-      excludeIds: _stringList(spec['excludeIds']).toSet(),
+      defaultEfforts: _profile.model['supportedReasoningEfforts'] == null
+          ? const []
+          : _stringList(_profile.model['supportedReasoningEfforts']),
+      // Both lists are optional in the Profile schema.
+      excludeIds: spec['excludeIds'] == null
+          ? const {}
+          : _stringList(spec['excludeIds']).toSet(),
     );
+    final probe = spec['effortProbe'];
+    if (probe is! Map) return models;
+    // One bounded call per model; the CLI rejects the invalid effort and
+    // lists that model's efforts before any model request is made.
+    final arguments = _stringList(probe['arguments']);
+    final probeTimeout = Duration(milliseconds: _int(probe['timeoutMs']));
+    // At most 32 probes; any further models keep their Profile efforts.
+    return Future.wait([
+      for (final model in models.take(32))
+        _commandRunner
+            .run(
+              executable,
+              [
+                for (final argument in arguments)
+                  argument.replaceAll('{{model}}', model.id),
+              ],
+              environment: env,
+              workingDirectory: options.statePath,
+              timeout: probeTimeout,
+            )
+            .then(
+              (result) =>
+                  parseUseOneOfEfforts('${result.stdout}\n${result.stderr}'),
+              onError: (Object _) => const <String>[],
+            )
+            .then(
+              (efforts) => DiscoveredModel(
+                id: model.id,
+                name: model.name,
+                supportedReasoningEfforts: efforts,
+              ),
+            ),
+    ]).then((probed) => [...probed, ...models.skip(32)]);
   }
 
   DiscoveredModel _restoreModelStatus(
@@ -1302,6 +1380,9 @@ class CliWorkerEngine {
                   request.workerSession?.bootstrap != null,
               allowContextSynchronization:
                   request.workerSession?.bootstrap?.turnRevision != null,
+              executionPolicy: request.executionPolicy.wireValue,
+              executionPolicyBound:
+                  sessionProfile['executionPolicyBound'] == true,
               onSessionRead: (value) => storedSession = value,
             );
     } on FormatException catch (error) {
@@ -1677,6 +1758,7 @@ class CliWorkerEngine {
               synchronizedContextRevision:
                   bootstrap?.turnRevision ?? bootstrap?.contextRevision,
               synchronizedHistorySequence: bootstrap?.throughSequence,
+              executionPolicy: request.executionPolicy.wireValue,
             );
           } on Object catch (error) {
             await _write(
@@ -2397,6 +2479,16 @@ class CliWorkerEngine {
             sessionId = value;
           }
           if (type == 'set_final_text' && value is String) finalText = value;
+          // Providers that stream the answer only as chunks build it here.
+          // The cap keeps one byte past the result limit so an oversized
+          // answer still fails the limit check below instead of truncating.
+          if (type == 'append_final_text' && value is String) {
+            final joined = '${finalText is String ? finalText : ''}$value';
+            finalText = joined.length > 512 * 1024 + 1
+                ? joined.substring(0, 512 * 1024 + 1)
+                : joined;
+          }
+          if (type == 'clear_final_text') finalText = null;
           if (type == 'set_terminal_status' && value is String)
             terminalStatus = value;
           if (type == 'set_provider_error' && value is List) {

@@ -375,7 +375,8 @@ class _WorkerCard extends StatelessWidget {
       profileDefinitionId: worker.profileDefinitionId,
       providerToolName: worker.providerToolName,
     );
-    final workerIcon = presentation.iconAsset;
+    final workerIcon =
+        presentation.iconAssetForBrightness(Theme.of(context).brightness);
     final isDark = theme.brightness == Brightness.dark;
 
     final Widget iconWidget = workerIcon != null

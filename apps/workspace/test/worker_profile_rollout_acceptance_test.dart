@@ -116,14 +116,6 @@ void main() {
       );
       addTearDown(coordinator.dispose);
 
-      await coordinator.refresh(force: true);
-      expect(profileFetches, {'chatgpt': 1, 'gemini': 1});
-      expect(
-        coordinator.snapshot.profiles.values
-            .map((profile) => profile.state)
-            .toSet(),
-        {WorkspaceWorkerProfileState.ready},
-      );
       final chatgptWorker =
           await LocalWorkerSetupService(registry: registry).createCatalogWorker(
         entry: WorkerDescriptor.fromJson(
@@ -136,6 +128,13 @@ void main() {
         ],
       );
       await coordinator.refreshLocalWorkers();
+      await coordinator.refresh(force: true);
+      // Only the added Worker downloads its Profile; Gemini stays catalog-only.
+      expect(profileFetches, {'chatgpt': 1});
+      expect(coordinator.snapshot.profiles['chatgpt']!.state,
+          WorkspaceWorkerProfileState.ready);
+      expect(coordinator.snapshot.profiles['gemini']!.state,
+          WorkspaceWorkerProfileState.unavailable);
       expect(chatgptWorker.workerTypeId, 'chatgpt');
       await coordinator.setFullLocalAccess(chatgptWorker.id, true);
       expect((await registry.find(chatgptWorker.id))!.fullLocalAccessAuthorized,
@@ -189,7 +188,7 @@ void main() {
         revision: 2,
       );
       await coordinator.refresh(force: true);
-      expect(profileFetches, {'chatgpt': 2, 'gemini': 2});
+      expect(profileFetches, {'chatgpt': 2});
       expect((await store.currentWorkerProfile('chatgpt'))?.revision, 2);
       expect((await store.lastKnownGoodWorkerProfile('chatgpt'))?.revision, 1);
       expect(

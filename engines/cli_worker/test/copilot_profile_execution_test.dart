@@ -91,10 +91,52 @@ List<Map<String, Object?>> _events({required int exitCode}) => [
   },
 ];
 
-/// Copilot CLI 1.0.103 stderr for a bare `copilot --model` (exit code 2).
-const _modelListError =
-    "error: a value is required for '--model <model>' but none was supplied\n"
-    '  [possible values: auto, claude-haiku-4.5, gpt-5.3-codex, kimi-k3]';
+/// Answers `copilot --headless --stdio` SDK calls with Content-Length
+/// framing, as Copilot CLI 1.0.103 does. `models.list` follows the SDK
+/// `ModelInfo` shape; the disabled model must not be offered.
+const _sdkServer = r'''
+Future<void> serveSdk() async {
+  final bytes = <int>[];
+  await for (final chunk in stdin) {
+    bytes.addAll(chunk);
+    while (true) {
+      final text = latin1.decode(bytes);
+      final split = text.indexOf('\r\n\r\n');
+      if (split < 0) break;
+      final length = int.parse(text.substring(0, split).split(':')[1].trim());
+      if (bytes.length < split + 4 + length) break;
+      final request = jsonDecode(
+          utf8.decode(bytes.sublist(split + 4, split + 4 + length))) as Map;
+      bytes.removeRange(0, split + 4 + length);
+      final result = switch (request['method']) {
+        'auth.getStatus' => {'isAuthenticated': true, 'login': 'fixture'},
+        'models.list' => {
+            'models': [
+              {
+                'id': 'gpt-5.3-codex',
+                'name': 'GPT-5.3-Codex',
+                'policy': {'state': 'enabled'},
+                'supportedReasoningEfforts': ['low', 'medium', 'high', 'xhigh'],
+                'defaultReasoningEffort': 'medium',
+              },
+              {
+                'id': 'kimi-k3',
+                'name': 'Kimi K3',
+                'policy': {'state': 'disabled'},
+              },
+            ],
+          },
+        _ => null,
+      };
+      final body = utf8.encode(
+          jsonEncode({'jsonrpc': '2.0', 'id': request['id'], 'result': result}));
+      stdout.add(utf8.encode('Content-Length: ${body.length}\r\n\r\n'));
+      stdout.add(body);
+      await stdout.flush();
+    }
+  }
+}
+''';
 
 /// Copilot CLI 1.0.103 stderr when no login is available (exit code 1).
 const _authError = 'Error: No authentication information found.';
@@ -125,9 +167,8 @@ void main(List<String> args) async {
     stdout.writeln('GitHub Copilot CLI 1.0.103.');
     return;
   }
-  if (args.length == 1 && args.single == '--model') {
-    stderr.writeln(${jsonEncode(_modelListError)});
-    exitCode = 2;
+  if (args.contains('--headless')) {
+    await serveSdk();
     return;
   }
   final prompt = await stdin.transform(utf8.decoder).join();
@@ -149,6 +190,7 @@ void main(List<String> args) async {
   }
   exitCode = $exitCode;
 }
+$_sdkServer
 ''');
       // Replace only executable resolution; keep the Profile's own arguments
       // after the fake provider path.

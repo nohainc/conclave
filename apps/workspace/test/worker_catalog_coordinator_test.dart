@@ -47,6 +47,49 @@ void main() {
     'sortOrder': 1,
   };
 
+  test('downloads a Profile only after the Worker is added', () async {
+    final candidate = await _snapshot(
+        signing,
+        buildTestWorkerProfile(
+          profileDefinitionId: 'fixture-profile',
+          logicalWorkerTypeId: 'fixture-cli',
+        ),
+        revision: 1);
+    final registry = LocalWorkerRegistry(
+      dataDirectory: Directory('${directory.path}/workspace'),
+      workspaceId: 'workspace-fixture',
+    );
+    final catalog = ToolProfileCatalogClient(
+      cloudUri: Uri.https('cloud.example', '/'),
+      store: store,
+      trustPolicy: signing.trustPolicy,
+      workerCatalogLoader: () async => [descriptor],
+      currentProfileLoader: (_) async => candidate,
+      trustRefresher: () async {},
+      candidateValidator: (_, __) async => (await registry.list()).isNotEmpty,
+    );
+    addTearDown(catalog.close);
+    final controller = WorkerCatalogCoordinator(
+      catalog: catalog,
+      releaseStore: store,
+      registry: registry,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.refresh(force: true);
+
+    // Catalog entries the user has not added are display metadata only.
+    expect(await registry.list(), isEmpty);
+    expect(await store.hasWorkerProfileCache('fixture-cli'), isFalse);
+    expect(controller.snapshot.workers.single.localWorker, isNull);
+
+    await registry.create(catalogEntry: WorkerDescriptor.fromJson(descriptor));
+    await controller.refreshWorker('fixture-cli');
+    expect((await store.currentWorkerProfile('fixture-cli'))?.revision, 1);
+    expect(controller.snapshot.workers.single.profileState,
+        WorkspaceWorkerProfileState.ready);
+  });
+
   test('missing CLI preserves staged Profile and reports activation cause',
       () async {
     final candidate = await _snapshot(
@@ -422,8 +465,8 @@ void main() {
     final claudeState = controller.snapshot.workers
         .singleWhere((state) => state.descriptor?.workerTypeId == 'claude');
     expect(claudeState.localWorker, isNull);
-    expect(claudeState.profileAvailability.state,
-        WorkspaceWorkerProfileState.error);
+    // Not added to this Workspace, so its Profile is never downloaded.
+    expect(await store.hasWorkerProfileCache('claude'), isFalse);
     expect(claudeState.readiness, isNull);
     expect((await registry.list()).map((worker) => worker.workerTypeId),
         ['fixture-cli']);

@@ -37,6 +37,27 @@ class ProfileExecutionOptions {
   void validate({required bool durableSessions}) {
     void fail() =>
         throw const FormatException('Invalid Profile execution options');
+    bool validEffortProbe(Object? raw) {
+      if (raw == null) return true;
+      if (raw is! Map ||
+          raw.keys.any((key) =>
+              !const {'arguments', 'timeoutMs', 'format'}.contains(key)) ||
+          raw['format'] != 'use_one_of' ||
+          raw['timeoutMs'] is! int ||
+          (raw['timeoutMs'] as int) < 100 ||
+          (raw['timeoutMs'] as int) > 10000) return false;
+      final args = raw['arguments'];
+      return args is List &&
+          args.isNotEmpty &&
+          args.length <= 32 &&
+          args.every((v) =>
+              v is String &&
+              v.isNotEmpty &&
+              v.length <= 256 &&
+              !RegExp(r'[\x00-\x1f\x7f]').hasMatch(v)) &&
+          args.any((v) => (v as String).contains('{{model}}'));
+    }
+
     List<String> values(Object? raw, {int limit = 16}) {
       if (raw == null) return const [];
       if (raw is! List ||
@@ -69,13 +90,20 @@ class ProfileExecutionOptions {
                 'format',
                 'idPrefix',
                 'effortVariants',
-                'excludeIds'
+                'excludeIds',
+                'effortProbe'
               }.contains(key)) ||
+          !validEffortProbe(discovery['effortProbe']) ||
           (selections.isNotEmpty && derivesEffortVariants) ||
           !validEffortVariants(discovery['effortVariants']) ||
           discovery['schemaVersion'] != 1 ||
-          !const {'tsv', 'codex_app_server', 'clap_possible_values'}
-              .contains(discovery['format']) ||
+          !const {
+            'tsv',
+            'codex_app_server',
+            'clap_possible_values',
+            'copilot_sdk_rpc',
+            'indented_list'
+          }.contains(discovery['format']) ||
           (discovery['excludeIds'] != null &&
               (discovery['excludeIds'] is! List ||
                   (discovery['excludeIds'] as List).length > 128 ||

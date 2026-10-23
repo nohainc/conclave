@@ -367,9 +367,22 @@ void main() {
         for (final d in descriptors)
           {
             'descriptor': d.toJson(),
-            'localState': 'notConfigured',
+            'localState': 'configured',
             'profileState': 'ready',
             'providerToolState': 'unknown',
+            // Only Workers added to the Workspace are listed.
+            'localWorker': {
+              'workerId': 'local-${d.workerTypeId}',
+              'workspaceId': 'workspace',
+              'productWorkerTypeId': d.workerTypeId,
+              'activationState': 'enabled',
+              'readinessState': 'ready',
+              'localPermissions': <String>[],
+              'localConcurrencyLimit': 5,
+              'revision': 1,
+              'createdAt': '2026-10-19T10:00:00Z',
+              'updatedAt': '2026-10-19T10:00:00Z',
+            },
           }
       ],
     };

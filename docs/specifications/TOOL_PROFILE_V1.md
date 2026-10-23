@@ -505,6 +505,8 @@ Allowed actions v1:
 ~~~text
 set_session
 set_final_text
+append_final_text
+clear_final_text
 set_terminal_status
 set_provider_error
 emit_progress
@@ -513,6 +515,14 @@ mark_failure
 ~~~
 
 No arbitrary state mutation is permitted.
+
+`append_final_text` appends the selected string to the final text, for
+providers that stream the answer only as chunks (Grok Build `streaming-json`
+`text` events). `clear_final_text` takes no selector and discards the text
+built so far; the Grok Profile clears on each `tool_call` so text written
+before a tool call stays narration and the final text is the answer after the
+last tool call. The appended text has the same 512 KiB result limit as
+`set_final_text`.
 
 `set_provider_error` also accepts a selector that yields a list. A non-empty list
 is a list of actions the provider refused to run (for example AGY's
@@ -602,6 +612,19 @@ When durable session is requested:
 - an observed provider session ID must exist;
 - resumed observed ID must equal the stored expected ID;
 - mismatch is a hard session-resume failure.
+
+`session.executionPolicyBound` (optional, default `false`) declares that the
+provider fixes its sandbox when a native session is created and refuses to
+resume it under another one. Grok Build does this: resuming a `--sandbox
+read-only` session with `--sandbox workspace` exits 1 with `cannot resume this
+session under sandbox profile`. The Engine records the execution policy
+(`provider_default`, `restricted`, `full_access`) with each stored session.
+For a bound Profile, a turn whose policy differs from the stored one does not
+resume: when the request carries a canonical Conversation bootstrap the Engine
+starts a fresh native session from the full bootstrap and replaces the stored
+mapping; without a bootstrap it fails with `session_resume_failed`. Records
+without a stored policy count as different. Unbound Profiles resume across
+policy changes as before.
 
 `formatId` identifies the provider's local session-ID format. A Profile Release
 must include its own format in `compatibleFormatIds`; it may include an older
@@ -975,7 +998,49 @@ model's name and `supportedReasoningEfforts` (an empty list means no effort
 choice), every other listed ID gets `model.supportedReasoningEfforts` and a name
 derived from its ID (`gpt-5.3-codex` -> `GPT-5.3 Codex`). Discovered IDs in
 `discovery.excludeIds` are never offered. A catalog entry never adds a model the
-CLI did not list. Model Auto remains the provider default;
+CLI did not list. The starter Copilot Profile no longer uses this format: the
+`--model` list is what the CLI recognizes, not what the account may select
+(Free plans allow Auto only, so explicit IDs fail with "model is not
+available").
+
+`format: "indented_list"` (starter Grok Profile, `arguments: ["models"]`)
+reads a human model list from stdout with one model per indented line,
+optionally bulleted with `*` or `-` and followed by a parenthesized note such
+as `(default)`. Unindented lines (headings, sign-in notes) and stderr are
+ignored. Names and efforts come from `model.catalog` for known IDs and
+otherwise from `model.supportedReasoningEfforts`, exactly as for
+`clap_possible_values`; `excludeIds` is honored. An empty list fails
+discovery.
+
+`discovery.effortProbe` (optional, `format: "use_one_of"`) discovers each
+model's efforts from the CLI itself instead of a Profile list. For each
+discovered model (at most 32) the Engine runs the declared `arguments` with
+`{{model}}` replaced by the model ID, within `timeoutMs`, and reads the list
+after `use one of:` in stdout or stderr, for example Grok Build's
+`unknown effort level 'conclave-effort-probe'; use one of: xhigh, high,
+medium, low`. Efforts are ordered lowest first. A model whose output names no
+efforts (Grok: `grok-4.6 isn't in the model catalog`), or whose probe fails or
+times out, is offered without an effort choice. The arguments must pass an
+effort the CLI rejects before any model request; Grok 1.0.67 does so in about
+one second and records only an empty local session (system prompt and probe
+input, no model turn). Results are cached with the discovered catalog per
+Profile digest and CLI version. The TypeScript reference interpreter skips the
+static effort check when a Profile declares discovery and no effort list; the
+Engine validates against the discovered catalog.
+
+`format: "copilot_sdk_rpc"` (starter Copilot Profile, `arguments:
+["--headless", "--stdio"]`) asks the CLI's own SDK server, over
+Content-Length-framed JSON-RPC, for the signed-in account's models. The Engine
+calls `auth.getStatus`; when it is not authenticated discovery fails with
+`provider_authentication_required` and the message "Run `copilot login`, or
+sign in with `gh auth login`" (a sign-in failure is never hidden behind a stale
+cached list). It then calls `models.list`; each model's `id`, `name`,
+`supportedReasoningEfforts` and `defaultReasoningEffort` become the catalog,
+and models whose `policy.state` is `disabled` are skipped. No `auto` entry is
+added: Copilot run without `--model` already picks a model automatically, which
+is exactly the client's own provider-default "Auto" choice. A Free account
+(empty `models.list`) therefore offers only that Auto. The Profile
+carries no catalog or effort rules for this format. Model Auto remains the provider default;
 explicit discovered IDs and per-model efforts are checked locally and by Cloud
 with no substitution. The app-server protocol is used only for discovery;
 execution remains generic CLI Worker Engine behavior.
@@ -1020,10 +1085,14 @@ A Profile may declare a top-level `usage` object:
   calculate usage differently, so the Profile owns how usage is read and the
   text travels unchanged. AX alone may normalize it for display
   (`worker_usage_parser.dart`): the format is detected from the text (Claude
-  `Current session/week` lines, Codex `rateLimits` JSON, Gemini tab-separated
-  rows) and shown as per-window used percent and a live reset countdown.
+  `Current session/week` lines, Codex `rateLimits` JSON, Copilot
+  `quotaSnapshots` JSON, Gemini tab-separated rows) and shown as per-window used percent and a live reset countdown.
   Session/5-hour windows use `Resets in 1 hr 29 min`; weekly windows use
-  `Resets in 2 d 2 hr 30 min`. Countdown minutes round up; elapsed resets
+  `Resets in 2 d 2 hr 30 min`, as does any reset two or more days away.
+  Copilot shows chat and completion allowances as used/entitled requests;
+  unlimited or plan-excluded allowances (for example premium requests on
+  Free) become notes. Its `resetDate` has been observed equal to the snapshot
+  time, so only a future reset is shown. Countdown minutes round up; elapsed resets
   prompt a usage refresh. Claude named-zone reset text is resolved with the
   bundled IANA timezone database against the report fetch date (next occurrence
   when the year or date is omitted); unrecognized reset text stays as printed.
@@ -1038,11 +1107,20 @@ A Profile may declare a top-level `usage` object:
   Profile declares `-p /usage`; Gemini declares `-p /usage` (agy) and ChatGPT
   uses the Codex app-server rate-limit call. Copilot calls `account.getQuota`
   on `copilot --headless --stdio` with `content_length` framing (CLI 1.0.103
-  answers `-p /usage` as an ordinary prompt, which would spend credits). AX has
-  no Copilot summary format yet, so it shows the raw JSON.
+  answers `-p /usage` as an ordinary prompt, which would spend credits).
+  Grok declares `grok models`: Grok Build has no account quota command
+  (`grok usage <SESSION_ID>` reports one session's spend, and `-p /usage` is
+  sent to the model), so its report shows the sign-in state and available
+  models, with no model call. `grok models` exits 0 even when signed out
+  (it prints `You are not authenticated.`), so this check proves the CLI
+  runs, not that it is signed in.
   See the [local Copilot verification](../acceptance/real-provider/2026-10-23/copilot.md)
   for captured statistics, model/effort limits, and the framing distinction.
 - Cloud relays on demand: `POST /api/workspaces/:workspaceId/workers/:workerId/usage`
   (Workspace owner only) sends `worker.usage.request`; the Service replies with
   `worker.usage.result`. Results are never stored in Cloud or posted to a Thread.
 - AX exposes it as `Usage` in the composer `+` menu and as the `/usage` command.
+
+Grok CLI discovery additionally permits the reviewed home-relative installation
+location `{{home}}/.grok/bin`; executable selection still uses the generic Engine
+discovery path.

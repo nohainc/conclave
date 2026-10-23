@@ -624,3 +624,105 @@ it("publishes the v2 catalog effort matrix without reconstructing provider suppo
       ?.models.options,
   ).toEqual([]);
 });
+
+it("allows provider Auto with a matching empty catalog but rejects missing or mismatched discovery", async () => {
+  const { spaceWorkerExecutionOptions } =
+    await import("../src/worker-execution-options.js");
+  const { validateWorkerExecutionSelection } = await import("@conclave/core");
+  const payload = JSON.stringify({
+    model: {
+      supported: true,
+      unknownModelPolicy: "pass_through",
+      discovery: { idPrefix: "" },
+    },
+  });
+  const digest = "a".repeat(64);
+  const catalog = {
+    schemaVersion: 2,
+    profileDigest: digest,
+    providerToolVersion: "1.0.0",
+    discoveredAt: "2026-10-23T00:00:00Z",
+    catalogRevision: "b".repeat(64),
+    models: [],
+  };
+  const options = (value: unknown) =>
+    spaceWorkerExecutionOptions(payload, "1.0.0", value, digest)!;
+  expect(
+    validateWorkerExecutionSelection(options(catalog), null, null),
+  ).toBeNull();
+  expect(
+    validateWorkerExecutionSelection(options(catalog), "invented", null),
+  ).toContain("not available");
+  expect(
+    validateWorkerExecutionSelection(options(catalog), null, "high"),
+  ).toContain("not available");
+  for (const invalid of [
+    undefined,
+    {},
+    { ...catalog, profileDigest: "c".repeat(64) },
+    { ...catalog, providerToolVersion: "2.0.0" },
+  ]) {
+    expect(
+      validateWorkerExecutionSelection(options(invalid), null, null),
+    ).toContain("capabilities are unavailable");
+  }
+  expect(
+    validateWorkerExecutionSelection(
+      options({ ...catalog, stale: true }),
+      null,
+      null,
+    ),
+  ).toContain("stale");
+});
+
+it("offers each discovered Grok model only the efforts its CLI listed", async () => {
+  const { spaceWorkerExecutionOptions } =
+    await import("../src/worker-execution-options.js");
+  const digest = "d".repeat(64);
+  const profile = readFileSync(
+    new URL(
+      "../../profile_lab/assets/profiles/grok.json",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  // The signed Grok Profile declares no model or effort list.
+  expect(JSON.parse(profile).model).not.toHaveProperty(
+    "supportedReasoningEfforts",
+  );
+  expect(JSON.parse(profile).model).not.toHaveProperty("catalog");
+  const result = spaceWorkerExecutionOptions(
+    profile,
+    "1.0.67",
+    {
+      schemaVersion: 2,
+      profileDigest: digest,
+      providerToolVersion: "1.0.67",
+      catalogRevision: "e".repeat(64),
+      discoveredAt: "2026-10-24T00:00:00.000Z",
+      models: [
+        {
+          id: "grok-4.7",
+          name: "Grok 4.7",
+          efforts: ["low", "medium", "high", "xhigh"],
+          status: "listed",
+          selectionMode: "separate",
+        },
+        {
+          id: "grok-mini",
+          name: "Grok Mini",
+          efforts: [],
+          status: "listed",
+          selectionMode: "separate",
+        },
+      ],
+    },
+    digest,
+  );
+  expect(
+    result?.models.options.map((option) => [option.id, option.efforts]),
+  ).toEqual([
+    ["grok-4.7", ["low", "medium", "high", "xhigh"]],
+    ["grok-mini", []],
+  ]);
+});

@@ -1,5 +1,49 @@
 # Copilot CLI local verification — 2026-10-23
 
+## First-time Workspace configuration
+
+The Workspace Profile endpoint previously required a matching Cloud inventory
+row before returning a published Profile. A new Worker has no inventory row
+until configured, but Workspace synchronizes its Profile before configuration.
+That ordering reproducibly returned HTTP 404 and produced `Profile error` /
+`Profile unavailable` warnings for an otherwise published Worker. Configure
+could make the prerequisite appear later, but the initial error was a Cloud
+authorization-order defect rather than evidence of an invalid Copilot Profile.
+
+The endpoint now requires a valid, non-revoked Workspace runtime credential
+and reads the current catalog Profile without requiring local inventory.
+Unknown Workers and missing Profiles still return 404; corrupt Profiles still
+fail verification. Download does not enable or configure the Worker.
+The Service also distinguishes a successful download awaiting configuration
+from an unavailable Profile: it reports `staged` with the label `Downloaded`
+and `Setup required`. The payload remains inactive until a configured local
+Worker's probe succeeds. Real download, verification and probe errors retain
+their error presentation.
+
+The SQLite-backed Cloud bootstrap/authentication tests passed (10 tests across
+two files). Workspace's catalog coordinator and Worker view tests passed (17),
+including a new case that stages the Profile with an empty registry, displays
+`Setup required`, and activates it only after configuration and validation.
+This scope exercises the changed HTTP read boundary and the Service's local
+setup/presentation path without consuming provider quota.
+`pnpm validate:workspace` also passed: analysis, 549 tests (21 skipped), and
+`scripts/check-workspace-service.sh`, which compiled the standalone Service,
+started it headlessly against temporary state, and stopped it cleanly.
+
+`pnpm validate:cloud` completed type checks; its tests reported 835 passed and
+302 failed. The failures reproduce the existing fixture migration-order and
+Profile-JSON constraint problems recorded below. `pnpm validate:engine`
+stopped at the existing runtime-test formatting difference recorded below.
+Neither component gate is claimed as passing.
+
+Rollout requires a Cloud deployment and a rebuilt Workspace Service/client for
+the additive `staged` Profile display state. Rebuilding Workspace alone cannot
+change the server-side check. No database migration or provider Profile
+republishing is required. Deployed application behavior has not been verified
+by these source tests.
+
+## Earlier provider probes
+
 Tested macOS arm64, Copilot CLI 1.0.103, candidate Profile revision 6,
 and the source CLI Worker Engine advertising version 1.3.0. Sanitized
 executable observations are retained in [copilot.json](copilot.json).
@@ -149,3 +193,23 @@ contract was changed. Existing unrelated working-tree changes were preserved.
 References: [CLI usage](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/overview),
 [SDK client](https://github.com/github/copilot-sdk/blob/main/nodejs/src/client.ts),
 [SDK RPC definitions](https://github.com/github/copilot-sdk/blob/main/nodejs/src/generated/rpc.ts).
+
+## Account-aware model discovery (Profile release 10)
+
+`copilot --model` lists every model the CLI knows, so a Free account was
+offered models that failed with "is not available". Release 10 uses
+`format: "copilot_sdk_rpc"` instead: `auth.getStatus`, then `models.list` on
+`copilot --headless --stdio`.
+
+On this machine (Free plan, `access_type_sku: free_limited_copilot`, signed in
+through `gh`) `models.list` returned an empty list and the probe passed.
+Discovery adds no `auto` entry: `copilot -p` without `--model` reported
+`session.auto_mode_resolved` and answered, so the client's own Auto (no model)
+already means Copilot Auto; an extra entry showed Auto twice in AX. With an empty `HOME` and no `gh` on `PATH`, discovery
+reported `provider_authentication_required` with the sign-in instructions.
+Paid-plan efforts come from each model's `supportedReasoningEfforts`; this has
+only been checked against a replayed SDK response, not a paid account.
+
+`gh` is not required: `auth.getStatus` reports `authType: gh-cli` here, but a
+`copilot login` session works the same way. Usage already reads
+`account.getQuota` from the same server, so `gh api` adds nothing.

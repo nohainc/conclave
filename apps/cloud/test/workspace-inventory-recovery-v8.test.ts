@@ -56,6 +56,18 @@ describe("v8 Workspace inventory recovery", () => {
         "utf8",
       ),
     );
+    for (const migration of [
+      "0018_user_workflow_configurations.sql",
+      "0020_space_workflow_configurations.sql",
+      "0022_workflow_workspace_selection.sql",
+    ]) {
+      database.exec(
+        readFileSync(
+          new URL(`../migrations-v8/${migration}`, import.meta.url),
+          "utf8",
+        ),
+      );
+    }
     database.exec(
       readFileSync(
         fileURLToPath(
@@ -226,6 +238,9 @@ describe("v8 Workspace inventory recovery", () => {
     database.exec("PRAGMA foreign_keys = ON");
     for (const migration of [
       "0001_conclave_v8.sql",
+      "0018_user_workflow_configurations.sql",
+      "0020_space_workflow_configurations.sql",
+      "0022_workflow_workspace_selection.sql",
       "0029_worker_model_discovery.sql",
       "0070_workspace_parallel_slots.sql",
       "0071_assignment_engine_liveness.sql",

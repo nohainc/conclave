@@ -1,9 +1,22 @@
+import 'package:flutter/material.dart' show Brightness;
+
 /// Product branding only. Execution options come from Worker Profiles.
 class WorkerPresentation {
   const WorkerPresentation({required this.name, this.iconAsset});
 
   final String name;
   final String? iconAsset;
+
+  /// Selects the bundled mark for the current surface theme.
+  String? iconAssetForBrightness(Brightness brightness) {
+    for (final worker in ['copilot', 'grok']) {
+      if (iconAsset == 'assets/worker_icons/$worker.png') {
+        final theme = brightness == Brightness.dark ? 'dark' : 'light';
+        return 'assets/worker_icons/$worker-$theme.png';
+      }
+    }
+    return iconAsset;
+  }
 
   static WorkerPresentation resolve(
     String? workerTypeId,
@@ -48,6 +61,11 @@ class WorkerPresentation {
             nameLower.contains('copilot'))) {
       brand = const WorkerPresentation(
           name: 'Copilot', iconAsset: 'assets/worker_icons/copilot.png');
+    } else if (matches(const ['grok', 'xai']) ||
+        ((type.isEmpty || type == 'custom' || type == 'worker') &&
+            nameLower.contains('grok'))) {
+      brand = const WorkerPresentation(
+          name: 'Grok', iconAsset: 'assets/worker_icons/grok.png');
     } else {
       brand = const WorkerPresentation(name: 'Worker');
     }

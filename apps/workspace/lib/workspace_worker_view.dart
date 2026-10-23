@@ -33,6 +33,7 @@ enum WorkspaceWorkerState {
 enum WorkspaceWorkerProfileState {
   resolving,
   syncing,
+  staged,
   ready,
   unavailable,
   incompatible,
@@ -205,7 +206,8 @@ WorkspaceWorkerState deriveWorkspaceWorkerState(WorkerCatalogWorkerState view) {
     return WorkspaceWorkerState.runtimeUnavailable;
   }
   if (view.localState == WorkspaceLocalWorkerState.notConfigured) {
-    return view.profileState == WorkspaceWorkerProfileState.ready
+    return view.profileState == WorkspaceWorkerProfileState.ready ||
+            view.profileState == WorkspaceWorkerProfileState.staged
         ? WorkspaceWorkerState.setupRequired
         : WorkspaceWorkerState.profileUnavailable;
   }
@@ -265,6 +267,7 @@ extension WorkspaceWorkerProfileStateLabel on WorkspaceWorkerProfileState {
   String get label => switch (this) {
         WorkspaceWorkerProfileState.resolving => 'Resolving',
         WorkspaceWorkerProfileState.syncing => 'Downloading',
+        WorkspaceWorkerProfileState.staged => 'Downloaded',
         WorkspaceWorkerProfileState.ready => 'Available',
         WorkspaceWorkerProfileState.unavailable => 'Unavailable',
         WorkspaceWorkerProfileState.incompatible => 'Incompatible',

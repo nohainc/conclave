@@ -635,18 +635,81 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+  testWidgets('composer prompts for a Worker when saved Worker is removed',
+      (tester) async {
+    const saved =
+        ExecutionSelection(worker: 'worker', model: 'one', effort: 'deep');
+    final changes = <ExecutionSelection>[];
+    Future<void> render(List<WorkerSelectionCapability> workers) =>
+        tester.pumpWidget(MaterialApp(
+            home: Scaffold(
+                body: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: ModelEffortSelector(
+                      compact: true,
+                      immediatePopup: true,
+                      showWorkerInCompactSummary: false,
+                      catalog: ExecutionSelectionCatalog(workers),
+                      value: saved,
+                      onChanged: changes.add,
+                    )))));
+
+    await render([worker]);
+    expect(find.text('One · Deep'), findsOneWidget);
+    await render([]);
+    expect(find.text('Select a Worker'), findsOneWidget);
+    expect(find.textContaining('Unavailable'), findsNothing);
+    expect(find.text('One · Deep'), findsNothing);
+    expect(changes, isEmpty);
+
+    // The placeholder still opens the picker, including after inventory returns.
+    await tester.tap(find.byKey(const ValueKey('execution-open')));
+    await tester.pumpAndSettle();
+    expect(find.text('No models available'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    await render([worker]);
+    expect(find.text('One · Deep'), findsOneWidget);
+    expect(changes, isEmpty);
+  });
+
+  testWidgets('composer with no saved selection prompts for a Worker',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ModelEffortSelector(
+                compact: true,
+                showWorkerInCompactSummary: false,
+                catalog: const ExecutionSelectionCatalog([]),
+                value: const ExecutionSelection(),
+                onChanged: (_) {}))));
+    expect(find.text('Select a Worker'), findsOneWidget);
+    expect(find.textContaining('Select model'), findsNothing);
+  });
+
   testWidgets('compact result can show only model and effort', (tester) async {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: ModelEffortSelector(
                 compact: true,
                 showWorkerInCompactSummary: false,
+                workerIconBuilder: (selected) => Icon(Icons.smart_toy_outlined,
+                    key: ValueKey('selected-icon-${selected.id}')),
                 catalog: const ExecutionSelectionCatalog([worker]),
                 value: const ExecutionSelection(
                     worker: 'worker', model: 'one', effort: 'deep'),
                 onChanged: (_) {}))));
     expect(find.text('One · Deep'), findsOneWidget);
     expect(find.textContaining('Worker'), findsNothing);
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey('execution-open')),
+            matching: find.byKey(const ValueKey('selected-icon-worker'))),
+        findsOneWidget);
+    final icon = tester.widget<Semantics>(
+        find.byKey(const ValueKey('execution-selected-worker-icon')));
+    expect(icon.properties.label, 'Worker');
+    expect(tester.takeException(), isNull);
   });
   testWidgets('compact combined selections never render Auto', (tester) async {
     const gemini = WorkerSelectionCapability(

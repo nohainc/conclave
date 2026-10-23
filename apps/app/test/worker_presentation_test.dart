@@ -1,7 +1,26 @@
 import 'package:conclave_app/src/ax/worker_presentation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('monochrome marks follow the surface brightness', () {
+    for (final worker in ['copilot', 'grok']) {
+      final presentation = WorkerPresentation.resolve(worker, '');
+      expect(presentation.iconAssetForBrightness(Brightness.light),
+          'assets/worker_icons/$worker-light.png');
+      expect(presentation.iconAssetForBrightness(Brightness.dark),
+          'assets/worker_icons/$worker-dark.png');
+    }
+    expect(
+        WorkerPresentation.resolve('claude', '')
+            .iconAssetForBrightness(Brightness.dark),
+        'assets/worker_icons/claude.png');
+    expect(
+        WorkerPresentation.resolve('unknown', '')
+            .iconAssetForBrightness(Brightness.dark),
+        isNull);
+  });
+
   test(
       'catalog names override branding and new workers have a generic fallback',
       () {
@@ -18,6 +37,9 @@ void main() {
     final copilot = WorkerPresentation.resolve('copilot', '');
     expect(copilot.name, 'Copilot');
     expect(copilot.iconAsset, 'assets/worker_icons/copilot.png');
+    final grok = WorkerPresentation.resolve('grok', '');
+    expect(grok.name, 'Grok');
+    expect(grok.iconAsset, 'assets/worker_icons/grok.png');
     expect(WorkerPresentation.resolve('custom', 'Claude Code').iconAsset,
         'assets/worker_icons/claude.png');
     expect(

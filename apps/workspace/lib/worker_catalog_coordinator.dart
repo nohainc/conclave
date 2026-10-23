@@ -26,6 +26,7 @@ class WorkerCatalogSnapshot {
     this.refreshing = false,
     this.localRegistryLoaded = false,
     this.localRegistryError,
+    this.removingWorkerIds = const {},
   });
 
   final Map<String, WorkerCheckProgress> checks;
@@ -37,6 +38,10 @@ class WorkerCatalogSnapshot {
   final bool refreshing;
   final bool localRegistryLoaded;
   final String? localRegistryError;
+
+  /// Local Worker IDs that take no new work and are removed once their
+  /// current work finishes.
+  final Set<String> removingWorkerIds;
 }
 
 abstract interface class WorkspaceWorkerCatalogClient {
@@ -323,7 +328,8 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
       if (cached.isNotEmpty) {
         _publishCatalog(cached, generation, refreshing: true);
         await _notifyCatalogReconciled();
-        cachedProfileResolution = _resolveProfiles(cached, generation);
+        cachedProfileResolution =
+            _resolveProfiles(_addedWorkers(cached), generation);
       }
     } on Object {
       // A malformed cache is ignored; the Cloud catalog remains authoritative.
@@ -357,7 +363,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
     );
     await _notifyCatalogReconciled();
     await cachedProfileResolution;
-    await _syncAndResolveProfiles(current, generation);
+    await _syncAndResolveProfiles(_addedWorkers(current), generation);
     _refreshingReadiness = true;
     try {
       await refreshReadiness?.call();
@@ -452,6 +458,17 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
     await _syncAndResolveWorker(entry, _generation);
   }
 
+  /// Catalog entries the user added to this Workspace. Profiles are only
+  /// downloaded and verified for these; the rest of the Cloud catalog is
+  /// display metadata for the Add Worker picker.
+  List<WorkerDescriptor> _addedWorkers(List<WorkerDescriptor> descriptors) {
+    if (registry == null) return descriptors;
+    final added = _localWorkers.map((worker) => worker.workerTypeId).toSet();
+    return descriptors
+        .where((descriptor) => added.contains(descriptor.workerTypeId))
+        .toList(growable: false);
+  }
+
   Future<void> _syncAndResolveProfiles(
     List<WorkerDescriptor> workers,
     int generation,
@@ -480,6 +497,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
     WorkerDescriptor worker,
     int generation,
   ) async {
+    List<ToolProfileCandidate> downloaded;
     _setProfile(
       worker.workerTypeId,
       const WorkerProfileResolution(
@@ -488,7 +506,7 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
       generation,
     );
     try {
-      await catalog.syncWorkerProfiles(worker.workerTypeId);
+      downloaded = await catalog.syncWorkerProfiles(worker.workerTypeId);
     } on Object catch (error) {
       // A verified cached Profile can remain usable when Cloud is unavailable.
       await _resolveAndSetProfile(worker, generation);
@@ -510,6 +528,28 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
       return;
     }
     await _resolveAndSetProfile(worker, generation);
+    // The Service cannot probe a first-time Worker until Configure creates
+    // its local record. A verified download is staged, not execution-ready.
+    if (downloaded.isNotEmpty &&
+        _localRegistryLoaded &&
+        _localRegistryError == null &&
+        !_localWorkers
+            .any((local) => local.workerTypeId == worker.workerTypeId) &&
+        _snapshot.profiles[worker.workerTypeId]?.state ==
+            WorkspaceWorkerProfileState.unavailable) {
+      _setProfile(
+        worker.workerTypeId,
+        WorkerProfileResolution(
+          state: WorkspaceWorkerProfileState.staged,
+          details: {
+            'definitionId': worker.profileDefinitionId,
+          },
+          message:
+              'Profile downloaded. Configure this Worker, then run a live test.',
+        ),
+        generation,
+      );
+    }
   }
 
   Future<void> _resolveProfiles(
@@ -606,17 +646,24 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
       for (final worker in _snapshot.descriptors)
         worker.workerTypeId: worker.profileDefinitionId,
     };
+    final added =
+        _addedWorkers(workers).map((worker) => worker.workerTypeId).toSet();
     final nextProfiles = {
       for (final worker in workers)
-        worker.workerTypeId: previousDefinitions[worker.workerTypeId] ==
-                worker.profileDefinitionId
-            ? previous[worker.workerTypeId] ??
-                const WorkerProfileResolution(
-                  state: WorkspaceWorkerProfileState.resolving,
-                )
-            : const WorkerProfileResolution(
-                state: WorkspaceWorkerProfileState.resolving,
-              ),
+        worker.workerTypeId: !added.contains(worker.workerTypeId)
+            // Not added here: no Profile is resolved, so none is pending.
+            ? const WorkerProfileResolution(
+                state: WorkspaceWorkerProfileState.unavailable,
+              )
+            : previousDefinitions[worker.workerTypeId] ==
+                    worker.profileDefinitionId
+                ? previous[worker.workerTypeId] ??
+                    const WorkerProfileResolution(
+                      state: WorkspaceWorkerProfileState.resolving,
+                    )
+                : const WorkerProfileResolution(
+                    state: WorkspaceWorkerProfileState.resolving,
+                  ),
     };
     final confirmed = catalogConfirmed || _snapshot.catalogConfirmed;
     _publish(

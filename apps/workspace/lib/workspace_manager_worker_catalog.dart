@@ -60,6 +60,7 @@ class IpcWorkspaceWorkerCatalog extends WorkspaceNotifier
         catalogError: error.toString(),
         localRegistryLoaded: _snapshot.localRegistryLoaded,
         localRegistryError: _snapshot.localRegistryError,
+        removingWorkerIds: _snapshot.removingWorkerIds,
       );
       notifyListeners();
     }
@@ -120,6 +121,16 @@ class IpcWorkspaceWorkerCatalog extends WorkspaceNotifier
       'workerTypeId': workerTypeId,
     });
     await refresh();
+  }
+
+  /// Returns true when the Worker is gone, false while it waits for its
+  /// current work to finish before removal.
+  Future<bool> removeWorker(String workerId) async {
+    final result = await _request('workers.removeWorker', payload: {
+      'workerId': workerId,
+    });
+    await refresh();
+    return result is Map && result['state'] == 'removed';
   }
 
   Future<void> setEnabled(String workerId, bool enabled) async {
@@ -216,6 +227,10 @@ class IpcWorkspaceWorkerCatalog extends WorkspaceNotifier
       refreshing: json['refreshing'] == true,
       localRegistryLoaded: json['localRegistryLoaded'] == true,
       localRegistryError: json['localRegistryError']?.toString(),
+      removingWorkerIds: {
+        if (json['removingWorkerIds'] case final List ids)
+          ...ids.whereType<String>(),
+      },
     );
   }
 }

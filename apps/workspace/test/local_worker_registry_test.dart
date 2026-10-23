@@ -251,19 +251,24 @@ void main() {
     }
   });
 
-  test('removal disables a slot without creating a tombstone', () async {
+  test('removal deletes the Worker record and its settings', () async {
     final worker = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('gemini'),
     );
+    await registry.setFullLocalAccess(worker.id, true);
     await registry.remove(worker.id);
 
-    final restored = (await registry.list()).single;
-    expect(restored.activationState, LocalWorkerActivationState.disabled);
-    expect(restored.readinessIssueCode, 'worker_reconfigured');
+    expect(await registry.list(includeRemoved: true), isEmpty);
     final saved = jsonDecode(
       await File('${directory.path}/configured-workers.json').readAsString(),
     ) as Map;
-    expect((saved['workers'] as List).single, isNot(contains('status')));
+    expect(saved['workers'], isEmpty);
+
+    final readded = await registry.create(
+      catalogEntry: logicalWorkerCatalogFixture('gemini'),
+    );
+    expect(readded.fullLocalAccessAuthorized, isFalse);
+    expect(readded.revision, 1);
   });
 
   test('backup uses current schema and excludes provider configuration',

@@ -891,7 +891,7 @@ class EstablishedUserHome extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: isWide ? 2 : 1,
-                    mainAxisExtent: isWide ? 150 : 160,
+                    mainAxisExtent: isWide ? 100 : 106,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                   ),
@@ -1643,10 +1643,10 @@ String _updateDate(Object publishedAt, String fallback) {
   return '${months[date.month - 1]} ${date.day}, ${date.year}';
 }
 
-Widget _aiUpdateIcon(AxAiCapabilityUpdate update) {
+Widget _aiUpdateIcon(BuildContext context, AxAiCapabilityUpdate update) {
   final identity = WorkerPresentation.resolve(
       update.workerProfileId, update.workerDisplayName);
-  final asset = identity.iconAsset;
+  final asset = identity.iconAssetForBrightness(Theme.of(context).brightness);
   if (asset == null) return const Icon(Icons.smart_toy_outlined, size: 18);
   return Image.asset(asset,
       width: 18,
@@ -2093,7 +2093,7 @@ class _AiUpdateRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return _HomeUpdateRow(
       label: update.type.label,
-      leading: _aiUpdateIcon(update),
+      leading: _aiUpdateIcon(context, update),
       worker: update.workerDisplayName,
       date: _updateDate(update.publishedAt, update.dateDisplay),
       title: update.title,

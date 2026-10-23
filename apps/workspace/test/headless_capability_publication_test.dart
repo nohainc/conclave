@@ -119,15 +119,16 @@ Future<void> main(List<String> args) async {
     coordinator = WorkerCatalogCoordinator(
         catalog: client, releaseStore: store, registry: registry);
     addTearDown(coordinator.dispose);
+    // Profiles download only for Workers added to this Workspace.
+    for (final type in profiles.keys) {
+      await registry.create(catalogEntry: logicalWorkerCatalogFixture(type));
+    }
     await coordinator.refresh(force: true);
     for (final type in profiles.keys) {
       expect(coordinator.entryForWorker(type), isNotNull,
           reason: coordinator.snapshot.catalogError);
       expect((await store.currentWorkerProfile(type))?.revision, 1,
           reason: coordinator.snapshot.profiles[type]?.message);
-    }
-    for (final type in profiles.keys) {
-      await registry.create(catalogEntry: logicalWorkerCatalogFixture(type));
     }
     final monitor = WorkerReadinessMonitor(
         registry: registry,

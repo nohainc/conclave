@@ -1,0 +1,365 @@
+{
+  "schemaVersion": 1,
+  "profileDefinitionId": "grok-cli",
+  "releaseVersion": 5,
+  "logicalWorkerTypeId": "grok",
+  "engineFamily": "cli",
+  "engineCompatibility": {
+    "min": "1.0.0",
+    "maxExclusive": "2.0.0"
+  },
+  "providerTool": {
+    "name": "Grok Build CLI",
+    "executableCandidates": [
+      "grok"
+    ],
+    "discovery": {
+      "standardLocations": [
+        "{{home}}/.grok/bin",
+        "{{home}}/.local/bin",
+        "/usr/local/bin"
+      ],
+      "allowPathSearch": true
+    },
+    "versionProbe": {
+      "arguments": [
+        "--version"
+      ],
+      "timeoutMs": 10000,
+      "source": "stdout",
+      "extract": {
+        "kind": "regex_capture",
+        "patternId": "semver"
+      }
+    }
+  },
+  "environment": {
+    "passthrough": [
+      "PATH",
+      "HOME",
+      "USER",
+      "LOGNAME",
+      "SHELL",
+      "__CF_USER_TEXT_ENCODING",
+      "USERPROFILE",
+      "TMP",
+      "TEMP",
+      "TMPDIR",
+      "LANG",
+      "LC_ALL",
+      "SSL_CERT_FILE",
+      "SSL_CERT_DIR",
+      "GROK_HOME",
+      "XAI_API_KEY"
+    ],
+    "set": {
+      "NO_COLOR": "1",
+      "GROK_DISABLE_AUTOUPDATER": "1"
+    }
+  },
+  "probe": {
+    "passive": {
+      "checks": [],
+      "configChecks": []
+    }
+  },
+  "execution": {
+    "arguments": [
+      {
+        "sandboxPolicyMapping": true
+      },
+      "--output-format",
+      "streaming-json",
+      {
+        "modelArguments": true
+      },
+      {
+        "ifPresent": "reasoningEffort",
+        "values": [
+          "--reasoning-effort",
+          "{{reasoningEffort}}"
+        ]
+      },
+      {
+        "sessionResumeArguments": true
+      },
+      {
+        "providerTimeoutArguments": true
+      },
+      "-p",
+      "-"
+    ],
+    "stdin": {
+      "mode": "raw_text",
+      "value": "{{prompt}}"
+    },
+    "output": {
+      "mode": "jsonl"
+    },
+    "events": [
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "text"
+          }
+        ],
+        "actions": [
+          {
+            "type": "append_final_text",
+            "selector": "$.data"
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "tool_call"
+          }
+        ],
+        "actions": [
+          {
+            "type": "clear_final_text"
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "error"
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_provider_error",
+            "selector": "$.message"
+          },
+          {
+            "type": "mark_failure"
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "end"
+          },
+          {
+            "kind": "equals",
+            "selector": "$.stopReason",
+            "value": "end_turn"
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_session",
+            "selector": "$.sessionId"
+          },
+          {
+            "type": "mark_success"
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "end"
+          },
+          {
+            "kind": "not_equals",
+            "selector": "$.stopReason",
+            "value": "end_turn"
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_session",
+            "selector": "$.sessionId"
+          },
+          {
+            "type": "mark_failure"
+          }
+        ]
+      }
+    ]
+  },
+  "model": {
+    "supported": true,
+    "arguments": [
+      "--model",
+      "{{model}}"
+    ],
+    "unknownModelPolicy": "pass_through",
+    "discovery": {
+      "schemaVersion": 1,
+      "arguments": [
+        "models"
+      ],
+      "timeoutMs": 10000,
+      "format": "indented_list",
+      "idPrefix": "",
+      "effortProbe": {
+        "arguments": [
+          "--model",
+          "{{model}}",
+          "--reasoning-effort",
+          "conclave-effort-probe",
+          "--output-format",
+          "json",
+          "-p",
+          "x"
+        ],
+        "timeoutMs": 5000,
+        "format": "use_one_of"
+      }
+    }
+  },
+  "progress": [
+    {
+      "messageKey": "provider_working",
+      "percentage": 10,
+      "when": [
+        {
+          "kind": "equals",
+          "selector": "$.type",
+          "value": "thought"
+        }
+      ]
+    },
+    {
+      "messageKey": "provider_response_received",
+      "percentage": 60,
+      "when": [
+        {
+          "kind": "equals",
+          "selector": "$.type",
+          "value": "text"
+        }
+      ]
+    }
+  ],
+  "activity": {
+    "adapter": "grok-streaming-json",
+    "schemaVersion": 1,
+    "mappings": []
+  },
+  "errors": {
+    "mappings": [
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "cancelled"
+        },
+        "issueCode": "cancelled"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "deadline_exceeded"
+        },
+        "issueCode": "deadline_exceeded"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "provider_tool_unavailable"
+        },
+        "issueCode": "provider_tool_unavailable"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "provider_authentication_required"
+        },
+        "issueCode": "provider_authentication_required"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "model_not_supported"
+        },
+        "issueCode": "model_not_supported"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "quota_exhausted"
+        },
+        "issueCode": "quota_exhausted"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "permission_denied"
+        },
+        "issueCode": "permission_denied"
+      },
+      {
+        "evidence": {
+          "kind": "missing_terminal"
+        },
+        "issueCode": "provider_failure"
+      }
+    ]
+  },
+  "sandbox": {
+    "mappings": {
+      "restricted": [
+        "--sandbox",
+        "workspace",
+        "--permission-mode",
+        "dontAsk"
+      ],
+      "provider_default": [
+        "--sandbox",
+        "read-only",
+        "--permission-mode",
+        "plan"
+      ],
+      "full_access": [
+        "--sandbox",
+        "off",
+        "--always-approve"
+      ]
+    }
+  },
+  "session": {
+    "supported": true,
+    "formatId": "grok-session-v1",
+    "compatibleFormatIds": [
+      "grok-session-v1"
+    ],
+    "extract": "$.sessionId",
+    "resumeArguments": [
+      "--resume",
+      "{{sessionId}}"
+    ],
+    "requireObservedIdMatch": true,
+    "executionPolicyBound": true
+  },
+  "timeout": {
+    "providerArguments": [],
+    "providerReserveMs": 2000
+  },
+  "compatibilityOverrides": [],
+  "usage": {
+    "arguments": [
+      "agent",
+      "stdio"
+    ],
+    "timeoutMs": 20000,
+    "jsonRpc": {
+      "method": "_x.ai/billing",
+      "framing": "acp"
+    }
+  }
+}

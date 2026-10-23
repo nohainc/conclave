@@ -78,33 +78,42 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
     final modelAutoAllowed = worker?.allowsAutoModel ?? true;
     final effortAutoAllowed = worker?.allowsAutoEffort(effective.model) ?? true;
     if (widget.compact) {
-      final label = [
-        if (widget.showWorkerInCompactSummary)
-          worker?.name ??
-              (effective.worker == null
-                  ? 'Select Worker...'
-                  : '${effective.worker} · Unavailable'),
-        if (widget.showModel)
-          effective.model == null
-              ? worker == null
-                  ? 'Select model'
-                  : modelAutoAllowed
-                      ? 'Auto'
-                      : 'Select model'
-              : worker?.supportsModel(effective.model) == true
-                  ? worker?.model(effective.model)?.name ?? effective.model!
-                  : '${effective.model} · Unavailable',
-        if (widget.showEffort && effective.effort == null && !effortAutoAllowed)
-          'Select effort',
-        if (widget.showEffort && effective.effort != null)
-          worker?.effortsForModel(effective.model).contains(effective.effort) ==
-                  true
-              ? executionEffortDisplayName(effective.effort!)
-              : '${executionEffortDisplayName(effective.effort!)} · Unavailable',
-        if (widget.loading || worker?.state == CapabilityState.loading)
-          'Loading…',
-        if (worker?.state == CapabilityState.stale) 'Stale',
-      ].join(' · ');
+      // Model and effort have no meaning until the compact model-only host
+      // resolves a Worker. Keep the saved value intact during catalog refreshes.
+      final label = worker == null && !widget.showWorkerInCompactSummary
+          ? 'Select a Worker'
+          : [
+              if (widget.showWorkerInCompactSummary)
+                worker?.name ??
+                    (effective.worker == null
+                        ? 'Select Worker...'
+                        : '${effective.worker} · Unavailable'),
+              if (widget.showModel)
+                effective.model == null
+                    ? worker == null
+                        ? 'Select model'
+                        : modelAutoAllowed
+                            ? 'Auto'
+                            : 'Select model'
+                    : worker?.supportsModel(effective.model) == true
+                        ? worker?.model(effective.model)?.name ??
+                            effective.model!
+                        : '${effective.model} · Unavailable',
+              if (widget.showEffort &&
+                  effective.effort == null &&
+                  !effortAutoAllowed)
+                'Select effort',
+              if (widget.showEffort && effective.effort != null)
+                worker
+                            ?.effortsForModel(effective.model)
+                            .contains(effective.effort) ==
+                        true
+                    ? executionEffortDisplayName(effective.effort!)
+                    : '${executionEffortDisplayName(effective.effort!)} · Unavailable',
+              if (widget.loading || worker?.state == CapabilityState.loading)
+                'Loading…',
+              if (worker?.state == CapabilityState.stale) 'Stale',
+            ].join(' · ');
       return Builder(
         builder: (anchorContext) => TextButton(
           key: ValueKey('${widget.scope}-open'),
@@ -121,7 +130,27 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
           onPressed: () => _open(anchorContext),
           child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 260),
-              child: Text(label, overflow: TextOverflow.ellipsis)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (widget.showWorker &&
+                    worker != null &&
+                    widget.workerIconBuilder != null) ...[
+                  Semantics(
+                    key: ValueKey('${widget.scope}-selected-worker-icon'),
+                    label: worker.name,
+                    image: true,
+                    child: ExcludeSemantics(
+                      child: SizedBox.square(
+                        dimension: 18,
+                        child: FittedBox(
+                          child: widget.workerIconBuilder!(worker),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
+              ])),
         ),
       );
     }

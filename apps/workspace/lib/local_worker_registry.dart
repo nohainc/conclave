@@ -635,23 +635,14 @@ class LocalWorkerRegistry {
         );
       });
 
+  /// Deletes a Worker record and every local setting it carried. Adding the
+  /// same Worker Type again creates a fresh record with a new ID.
   Future<void> remove(String workerId) => _locked(() async {
         final workers = await _read();
         final index = workers.indexWhere((worker) => worker.id == workerId);
         if (index < 0) return;
         await onWorkerRemoving?.call(workerId);
-        workers[index] = workers[index].copyWith(
-          status: LocalWorkerStatus.disabled,
-          activationState: LocalWorkerActivationState.disabled,
-          readinessState: WorkerReadinessState.testFailed,
-          readinessIssueCode: 'worker_reconfigured',
-          clearToolName: true,
-          clearToolPath: true,
-          clearToolVersion: true,
-          revision: workers[index].revision + 1,
-          updatedAt: clock().toUtc().toIso8601String(),
-        );
-        _validateAll(workers);
+        workers.removeAt(index);
         await _write(workers);
       });
 

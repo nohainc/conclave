@@ -137,8 +137,8 @@ local Worker registry, catalog/profile resolution, Profile/readiness checks,
 Engine supervision, and the small API used by runtime and IPC:
 
 ```text
-listWorkers · enableWorker · disableWorker · testWorker · resolveWorker
-refresh · execute · cancel · recoverOrphanedProcesses · shutdown
+listWorkers · enableWorker · disableWorker · removeWorker · testWorker
+resolveWorker · refresh · execute · cancel · recoverOrphanedProcesses · shutdown
 ```
 
 Worker lifecycle (`absent`, `installing`, `ready`, `degraded`, `failed`,
@@ -149,9 +149,28 @@ required.
 
 ### Worker management and verification
 
+A Workspace starts with no Workers. The Workers list shows only Workers the
+user added; the rest of the Cloud catalog is display metadata offered by
+**Add Worker**, which runs `workers.configureWorker` for the chosen type.
+Profiles are downloaded, verified and probed only for added Workers, so the
+Service does not test catalog entries nobody uses.
+
+`workers.removeWorker` (`workerId`) removes a Worker without keeping its
+settings. The Service disables it first, so it takes no new assignments and
+Cloud stops scheduling it. With nothing running or queued for it, the registry
+record and its runtime Engine state directory are deleted at once (`state:
+removed`). Otherwise the reply is `state: removing`, the Worker ID appears in
+`workerCatalog.removingWorkerIds`, and a Service timer finishes removal when
+its work ends. While removing, enable, disable, test, full-access and re-adding
+that type are rejected with `worker_removing`. Work Root, Space directories,
+provider sessions and Profiles are untouched. A service stop during a pending
+removal leaves the Worker disabled; removing it again completes the removal.
+Re-adding a type creates a fresh record with a new Worker ID. Cloud drops the
+removed Worker from inventory on the next full snapshot.
+
 The manager has separate Workspace and Workers tabs. Workspace contains machine
-settings and execution capacity. Workers uses a scrollable catalog list on the
-left and an independently scrollable detail/action panel on the right. Switching
+settings and execution capacity. Workers uses a scrollable list of added
+Workers on the left and an independently scrollable detail/action panel on the right. Switching
 tabs preserves the selected Worker and in-progress verification. Selection is keyed
 by logical Worker type and survives inventory refreshes. Availability evidence,
 activation, permissions, and model discovery remain separate. The detail panel

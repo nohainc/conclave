@@ -51,15 +51,6 @@ function setup() {
   sqlite.exec(
     readFileSync(
       new URL(
-        "../migrations-v8/0046_worker_catalog_profile_identity.sql",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  );
-  sqlite.exec(
-    readFileSync(
-      new URL(
         "../migrations-v8/0047_remove_worker_profile_signatures.sql",
         import.meta.url,
       ),

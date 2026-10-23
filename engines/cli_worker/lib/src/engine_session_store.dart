@@ -84,6 +84,8 @@ class EngineSessionStore {
     bool effortChangesNativeModel = false,
     bool allowModelReconstruction = false,
     bool allowContextSynchronization = false,
+    String? executionPolicy,
+    bool executionPolicyBound = false,
     void Function(WorkerSession)? onSessionRead,
   }) async {
     final file = _file(
@@ -180,6 +182,16 @@ class EngineSessionStore {
         'Worker Session model attribution is unavailable for this Profile',
       );
     }
+    // Some providers fix the sandbox when a native session is created and
+    // refuse to resume it under another one. For those Profiles a policy
+    // change starts a fresh native session from the canonical bootstrap.
+    if (executionPolicyBound && decoded['executionPolicy'] != executionPolicy) {
+      if (allowModelReconstruction) return null;
+      throw const FormatException(
+        'Profile does not support changing the execution policy within this '
+        'Worker Session',
+      );
+    }
     final storedFormat = decoded['sessionFormatId'] as String;
     if (!compatibleFormatIds.contains(storedFormat)) return null;
     return decoded['sessionId'] as String;
@@ -255,6 +267,7 @@ class EngineSessionStore {
     String? effort,
     int? synchronizedContextRevision,
     int? synchronizedHistorySequence,
+    String? executionPolicy,
   }) async {
     if (!_validSessionId(sessionId) ||
         !_validFormatId(sessionFormatId) ||
@@ -353,6 +366,7 @@ class EngineSessionStore {
         'profileReleaseVersion': profileReleaseVersion,
         'sessionFormatId': sessionFormatId,
         'sessionId': sessionId,
+        if (executionPolicy != null) 'executionPolicy': executionPolicy,
       }),
     );
   }

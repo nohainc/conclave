@@ -741,6 +741,9 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     readiness: readinessMonitor,
     engineSupervisor: cliWorkerEngineSupervisor,
     assignmentHandler: workerHandler,
+    workerStateDirectory: workspacePaths.workerStateDirectory,
+    onRemovalChanged: () => unawaited(
+        workerCatalogCoordinator?.refreshLocalWorkers() ?? Future.value()),
   );
   final engine = WorkspaceRuntime(
     config: effectiveConfig,

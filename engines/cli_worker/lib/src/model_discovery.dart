@@ -86,6 +86,59 @@ List<DiscoveredModel> parseClapPossibleValues(
   return models.values.toList();
 }
 
+/// Reads a human model list printed one model per indented line, optionally
+/// bulleted with `*` or `-` and followed by a parenthesized note, for example
+/// `grok models`:
+///
+/// ```text
+/// Available models:
+///   * grok-4.7 (default)
+///   grok-4.6
+/// ```
+///
+/// Unindented lines (headings, sign-in notes) are ignored. Efforts come from
+/// the Profile exactly as for [parseClapPossibleValues].
+List<DiscoveredModel> parseIndentedModelList(
+  String output,
+  String idPrefix, {
+  List<Map<String, Object?>> catalog = const [],
+  List<String> defaultEfforts = const [],
+  Set<String> excludeIds = const {},
+}) {
+  if (utf8.encode(output).length > 64 * 1024)
+    throw const FormatException('Model catalog exceeds limit');
+  final known = {for (final entry in catalog) entry['id'] as String: entry};
+  final models = <String, DiscoveredModel>{};
+  final line = RegExp(
+    r'^[ \t]+(?:[*-][ \t]+)?(\S+)(?:[ \t]+\([^)]*\))?[ \t]*$',
+  );
+  for (final raw in const LineSplitter().convert(output)) {
+    final match = line.firstMatch(raw);
+    if (match == null) continue;
+    final id = match.group(1)!;
+    if (excludeIds.contains(id)) continue;
+    if (idPrefix.isNotEmpty && !id.startsWith(idPrefix)) continue;
+    if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$').hasMatch(id))
+      throw const FormatException('Invalid model ID');
+    if (models.containsKey(id))
+      throw const FormatException('Duplicate model ID');
+    final entry = known[id];
+    final efforts = entry != null && entry['supportedReasoningEfforts'] is List
+        ? (entry['supportedReasoningEfforts'] as List).cast<String>()
+        : defaultEfforts;
+    models[id] = DiscoveredModel(
+      id: id,
+      name: entry?['name'] as String? ?? readableModelName(id),
+      supportedReasoningEfforts: efforts,
+      defaultReasoningEffort: entry?['defaultReasoningEffort'] as String?,
+    );
+    if (models.length > 128)
+      throw const FormatException('Model catalog exceeds limit');
+  }
+  if (models.isEmpty) throw const FormatException('No models listed');
+  return models.values.toList();
+}
+
 /// Turns a CLI model ID into a display name: `claude-sonnet-5.5` becomes
 /// `Claude Sonnet 5.5` and `gpt-5.3-codex` becomes `GPT-5.3 Codex`.
 String readableModelName(String id) {
@@ -187,7 +240,9 @@ Future<List<DiscoveredModel>> discoverCodexAppServerModels({
 /// [framing] `newline` is the Codex app-server transport (newline JSON with
 /// an `initialize` handshake). `content_length` is LSP-style
 /// `Content-Length` framing with no handshake (for example
-/// `copilot --headless --stdio`).
+/// `copilot --headless --stdio`). `acp` is the Agent Client Protocol: the same
+/// newline JSON, an `initialize` with `protocolVersion: 1`, and an empty
+/// params object on the call (for example `grok agent stdio`).
 Future<Map<String, Object?>> readAppServerResult({
   required String executable,
   required List<String> arguments,
@@ -222,19 +277,28 @@ Future<Map<String, Object?>> readAppServerResult({
   final stderrDrain = process.stderr.drain<void>();
   final deadline = DateTime.now().add(timeout);
   try {
+    final acp = framing == 'acp';
     await _sendAppServerRequest(process.stdin, {
+      if (acp) 'jsonrpc': '2.0',
       'id': 1,
       'method': 'initialize',
-      'params': {
-        'clientInfo': {
-          'name': 'conclave-cli-worker-engine',
-          'version': '1.2.0',
-        },
-        'capabilities': null,
-      },
+      'params': acp
+          ? {'protocolVersion': 1, 'clientCapabilities': <String, Object?>{}}
+          : {
+              'clientInfo': {
+                'name': 'conclave-cli-worker-engine',
+                'version': '1.2.0',
+              },
+              'capabilities': null,
+            },
     });
     await _readAppServerResponse(lines, 1, deadline);
-    await _sendAppServerRequest(process.stdin, {'id': 2, 'method': method});
+    await _sendAppServerRequest(process.stdin, {
+      if (acp) 'jsonrpc': '2.0',
+      'id': 2,
+      'method': method,
+      if (acp) 'params': <String, Object?>{},
+    });
     return await _readAppServerResponse(lines, 2, deadline);
   } finally {
     await lines.cancel();
@@ -251,93 +315,248 @@ Future<Map<String, Object?>> _readContentLengthRpcResult({
   required String method,
   required Duration timeout,
 }) async {
-  const maxMessageBytes = 64 * 1024;
-  final process = await startCliProcess(
-    executable,
-    arguments,
-    workingDirectory: workingDirectory,
+  final client = await ContentLengthRpcClient.start(
+    executable: executable,
+    arguments: arguments,
     environment: environment,
-    includeParentEnvironment: false,
-    runInShell: false,
+    workingDirectory: workingDirectory,
+    timeout: timeout,
   );
-  const cleanup = WorkerProcessCleanup();
-  final stderrDrain = process.stderr.drain<void>();
-  final chunks = StreamIterator(process.stdout);
-  final deadline = DateTime.now().add(timeout);
-  var pending = <int>[];
-  Future<void> fill() async {
-    final remaining = deadline.difference(DateTime.now());
-    if (remaining <= Duration.zero) {
-      throw TimeoutException('JSON-RPC usage request timed out');
+  try {
+    final result = await client.call(method);
+    if (result is! Map) {
+      throw const FormatException('JSON-RPC result is invalid');
     }
-    if (!await chunks.moveNext().timeout(remaining)) {
+    return Map<String, Object?>.from(result);
+  } finally {
+    await client.close();
+  }
+}
+
+/// A stdio JSON-RPC server using LSP-style `Content-Length` framing and no
+/// handshake (for example `copilot --headless --stdio`). One deadline bounds
+/// every call; each frame is capped at 64 KiB.
+class ContentLengthRpcClient {
+  ContentLengthRpcClient._(this._process, this._deadline)
+    : _chunks = StreamIterator(_process.stdout),
+      _stderrDrain = _process.stderr.drain<void>();
+
+  static Future<ContentLengthRpcClient> start({
+    required String executable,
+    required List<String> arguments,
+    required Map<String, String> environment,
+    required String workingDirectory,
+    required Duration timeout,
+  }) async {
+    final process = await startCliProcess(
+      executable,
+      arguments,
+      workingDirectory: workingDirectory,
+      environment: environment,
+      includeParentEnvironment: false,
+      runInShell: false,
+    );
+    return ContentLengthRpcClient._(process, DateTime.now().add(timeout));
+  }
+
+  static const _maxMessageBytes = 64 * 1024;
+  final Process _process;
+  final DateTime _deadline;
+  final StreamIterator<List<int>> _chunks;
+  final Future<void> _stderrDrain;
+  var _pending = <int>[];
+  var _nextId = 1;
+
+  Future<void> _fill() async {
+    final remaining = _deadline.difference(DateTime.now());
+    if (remaining <= Duration.zero) {
+      throw TimeoutException('JSON-RPC request timed out');
+    }
+    if (!await _chunks.moveNext().timeout(remaining)) {
       throw const FormatException('JSON-RPC server closed before responding');
     }
-    pending = [...pending, ...chunks.current];
-    if (pending.length > maxMessageBytes + 1024) {
+    _pending = [..._pending, ..._chunks.current];
+    if (_pending.length > _maxMessageBytes + 1024) {
       throw const FormatException('JSON-RPC response exceeds limit');
     }
   }
 
-  try {
+  /// Calls [method] and returns its raw `result`; a JSON-RPC error becomes a
+  /// [FormatException] carrying the provider's message.
+  Future<Object?> call(
+    String method, [
+    Map<String, Object?> params = const {},
+  ]) async {
+    final id = _nextId++;
     final body = utf8.encode(
       jsonEncode({
         'jsonrpc': '2.0',
-        'id': 1,
+        'id': id,
         'method': method,
-        'params': <String, Object?>{},
+        'params': params,
       }),
     );
-    process.stdin.add(utf8.encode('Content-Length: ${body.length}\r\n\r\n'));
-    process.stdin.add(body);
-    await process.stdin.flush();
-    const separator = [13, 10, 13, 10];
+    _process.stdin.add(utf8.encode('Content-Length: ${body.length}\r\n\r\n'));
+    _process.stdin.add(body);
+    await _process.stdin.flush();
     while (true) {
       var headerEnd = -1;
       while (headerEnd < 0) {
-        for (var i = 0; i + 3 < pending.length; i++) {
-          if (pending[i] == separator[0] &&
-              pending[i + 1] == separator[1] &&
-              pending[i + 2] == separator[2] &&
-              pending[i + 3] == separator[3]) {
+        for (var i = 0; i + 3 < _pending.length; i++) {
+          if (_pending[i] == 13 &&
+              _pending[i + 1] == 10 &&
+              _pending[i + 2] == 13 &&
+              _pending[i + 3] == 10) {
             headerEnd = i;
             break;
           }
         }
-        if (headerEnd < 0) await fill();
+        if (headerEnd < 0) await _fill();
       }
-      final header = ascii.decode(pending.sublist(0, headerEnd));
+      final header = ascii.decode(_pending.sublist(0, headerEnd));
       final match = RegExp(
         r'^content-length:\s*(\d+)\s*$',
         caseSensitive: false,
         multiLine: true,
       ).firstMatch(header);
       final length = match == null ? null : int.tryParse(match.group(1)!);
-      if (length == null || length > maxMessageBytes) {
+      if (length == null || length > _maxMessageBytes) {
         throw const FormatException('JSON-RPC frame header is invalid');
       }
       final start = headerEnd + 4;
-      while (pending.length < start + length) {
-        await fill();
+      while (_pending.length < start + length) {
+        await _fill();
       }
-      final message = pending.sublist(start, start + length);
-      pending = pending.sublist(start + length);
+      final message = _pending.sublist(start, start + length);
+      _pending = _pending.sublist(start + length);
       final decoded = jsonDecode(utf8.decode(message));
-      if (decoded is! Map || decoded['id'] != 1) continue;
-      if (decoded['error'] != null) {
-        throw FormatException('JSON-RPC request failed: ${decoded['error']}');
+      if (decoded is! Map || decoded['id'] != id) continue;
+      final error = decoded['error'];
+      if (error != null) {
+        final text = error is Map && error['message'] is String
+            ? error['message'] as String
+            : '$error';
+        throw FormatException('JSON-RPC request failed: $text');
       }
-      final result = decoded['result'];
-      if (result is! Map) {
-        throw const FormatException('JSON-RPC result is invalid');
-      }
-      return Map<String, Object?>.from(result);
+      return decoded['result'];
     }
-  } finally {
-    await chunks.cancel();
-    await cleanup.terminate(process, grace: const Duration(milliseconds: 500));
-    await stderrDrain.catchError((_) {});
   }
+
+  Future<void> close() async {
+    await _chunks.cancel();
+    await const WorkerProcessCleanup().terminate(
+      _process,
+      grace: const Duration(milliseconds: 500),
+    );
+    await _stderrDrain.catchError((_) {});
+  }
+}
+
+/// Thrown when the provider reports that no account is signed in.
+class ProviderNotAuthenticatedException implements Exception {
+  const ProviderNotAuthenticatedException(this.message);
+  final String message;
+}
+
+/// Lists the models the signed-in GitHub Copilot account may select, through
+/// the CLI's own SDK server (`auth.getStatus`, then `models.list`). Unlike the
+/// CLI's `--model` value list this is account-aware: plans that only allow
+/// automatic selection return no models. Auto is not listed: running Copilot
+/// without `--model` already selects a model automatically, which is what the
+/// client's own provider-default ("Auto") choice does.
+Future<List<DiscoveredModel>> discoverCopilotSdkModels({
+  required String executable,
+  required List<String> arguments,
+  required Map<String, String> environment,
+  required String workingDirectory,
+  required String idPrefix,
+  Set<String> excludeIds = const {},
+  Duration timeout = const Duration(seconds: 10),
+}) async {
+  final client = await ContentLengthRpcClient.start(
+    executable: executable,
+    arguments: arguments,
+    environment: environment,
+    workingDirectory: workingDirectory,
+    timeout: timeout,
+  );
+  try {
+    final status = await client.call('auth.getStatus');
+    if (status is! Map || status['isAuthenticated'] != true) {
+      final message = status is Map && status['statusMessage'] is String
+          ? status['statusMessage'] as String
+          : null;
+      throw ProviderNotAuthenticatedException(
+        'GitHub Copilot is not signed in${message == null ? '' : ' ($message)'}. '
+        'Run `copilot login`, or sign in with `gh auth login`, then refresh.',
+      );
+    }
+    return parseCopilotSdkModels(
+      await client.call('models.list'),
+      idPrefix,
+      excludeIds: excludeIds,
+    );
+  } finally {
+    await client.close();
+  }
+}
+
+/// Maps a Copilot SDK `models.list` result. Models whose policy is
+/// `disabled` are not selectable and are skipped.
+List<DiscoveredModel> parseCopilotSdkModels(
+  Object? response,
+  String idPrefix, {
+  Set<String> excludeIds = const {},
+}) {
+  final list = response is Map ? response['models'] : null;
+  if (list is! List) {
+    throw const FormatException('Copilot model list is invalid');
+  }
+  final models = <DiscoveredModel>[];
+  final ids = <String>{};
+  for (final raw in list) {
+    if (raw is! Map) throw const FormatException('Copilot model is invalid');
+    final id = raw['id'];
+    if (id is! String ||
+        !RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$').hasMatch(id)) {
+      throw const FormatException('Copilot model ID is invalid');
+    }
+    if (excludeIds.contains(id)) continue;
+    if (idPrefix.isNotEmpty && !id.startsWith(idPrefix)) continue;
+    final policy = raw['policy'];
+    if (policy is Map && policy['state'] == 'disabled') continue;
+    if (!ids.add(id)) continue;
+    final efforts = <String>[];
+    final rawEfforts = raw['supportedReasoningEfforts'];
+    if (rawEfforts is List) {
+      for (final effort in rawEfforts) {
+        if (effort is! String ||
+            !RegExp(r'^[a-z][a-z0-9_-]{0,31}$').hasMatch(effort)) {
+          throw const FormatException('Copilot reasoning effort is invalid');
+        }
+        if (!efforts.contains(effort)) efforts.add(effort);
+      }
+    }
+    final defaultEffort = raw['defaultReasoningEffort'];
+    final name = raw['name'];
+    models.add(
+      DiscoveredModel(
+        id: id,
+        name: name is String && name.trim().isNotEmpty
+            ? name.trim()
+            : readableModelName(id),
+        supportedReasoningEfforts: efforts,
+        defaultReasoningEffort:
+            defaultEffort is String && efforts.contains(defaultEffort)
+            ? defaultEffort
+            : null,
+      ),
+    );
+    if (models.length > 128) {
+      throw const FormatException('Model catalog exceeds limit');
+    }
+  }
+  return models;
 }
 
 Future<void> _sendAppServerRequest(IOSink sink, Map<String, Object?> request) {
@@ -362,10 +581,14 @@ Future<Map<String, Object?>> _readAppServerResponse(
     if (utf8.encode(line).length > 64 * 1024) {
       throw const FormatException('Codex app-server response exceeds limit');
     }
-    final decoded = jsonDecode(line);
-    if (decoded is! Map) {
-      throw const FormatException('Codex app-server response is invalid');
+    // Servers may log plain text on stdout; only JSON-RPC objects count.
+    Object? decoded;
+    try {
+      decoded = jsonDecode(line);
+    } on FormatException {
+      continue;
     }
+    if (decoded is! Map) continue;
     final value = Map<String, Object?>.from(decoded);
     if (value['id'] != requestId) continue;
     if (value['error'] != null) {
@@ -556,6 +779,32 @@ List<DiscoveredModel> normalizeCombinedModels(
 }
 
 const _effortRank = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+
+/// Reads the efforts a CLI lists when it rejects an invalid effort for one
+/// model, for example Grok Build's `unknown effort level 'x'; use one of:
+/// xhigh, high, medium, low`. Returns them lowest first; an empty list when
+/// the CLI named no efforts (the model is not offered an effort choice).
+List<String> parseUseOneOfEfforts(String output) {
+  if (utf8.encode(output).length > 64 * 1024) return const [];
+  final match = RegExp(
+    r'use one of:\s*([A-Za-z0-9._:-]+(?:\s*,\s*[A-Za-z0-9._:-]+)*)',
+  ).firstMatch(output);
+  if (match == null) return const [];
+  final efforts = <String>[];
+  for (final raw in match.group(1)!.split(',')) {
+    final effort = raw.trim().toLowerCase();
+    if (!_effortValue.hasMatch(effort) || efforts.contains(effort)) continue;
+    efforts.add(effort);
+    if (efforts.length == 16) break;
+  }
+  int rank(String effort) {
+    final index = _effortRank.indexOf(effort);
+    return index < 0 ? _effortRank.length : index;
+  }
+
+  return efforts..sort((a, b) => rank(a).compareTo(rank(b)));
+}
+
 final _labelEffort = RegExp(r'^(.+?)\s*\(([^()]+)\)$');
 final _effortValue = RegExp(r'^[a-z0-9][a-z0-9._:-]{0,63}$');
 

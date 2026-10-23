@@ -850,7 +850,8 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
       profileDefinitionId: worker.profileDefinitionId,
       providerToolName: worker.providerToolName,
     );
-    final workerIcon = presentation.iconAsset;
+    final workerIcon =
+        presentation.iconAssetForBrightness(Theme.of(context).brightness);
     if (workerIcon != null) {
       return Image.asset(
         workerIcon,

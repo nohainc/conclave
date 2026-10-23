@@ -46,6 +46,11 @@ sizes in Conversation and AI History, including after refresh; these are
 attachment records, not per-file processing receipts. History responses expose
 only display metadata, without file bytes or storage identifiers.
 
+When the saved Worker is absent from the composer inventory (including after all
+Workers are removed), the execution selector shows **Select a Worker** instead
+of unavailable model and effort labels. The picker remains available; inventory
+refreshes do not overwrite saved preferences.
+
 The Work execution popup applies preferences immediately, without Cancel/Done.
 Completing an effort slider gesture accepts the selection and closes the popup.
 Its discrete effort slider sits above the model list; available Worker icons sit
@@ -117,6 +122,18 @@ Profile's `--mode plan` mapping and Work uses its restricted `accept-edits`
 mapping. Release qualification and live provider acceptance remain required;
 see [regression coverage](../acceptance/CHAT_WORKFLOW.md).
 
+### Newly configured Worker scheduling
+
+If a newly configured Worker reports `not enabled for scheduling`, its Cloud
+scheduling row may predate its ready state. Cloud inventory synchronization
+enables ready, locally enabled Workers in an already selected Workflow
+Workspace. After deploying that reconciliation fix, refresh the Workspace's
+Worker readiness/inventory or reconnect it to repair existing rows. On an
+older Cloud deployment, saving an unchanged Workspace selection is a no-op;
+switching Workspaces can reset workflow overrides, so use the reconciliation
+fix to repair scheduling without changing workflow settings. Draining Workers
+remain blocked.
+
 ### Worker usage from Workspaces
 
 Open **Workspaces** and select a Workspace. Click the **Worker usage** icon on a
@@ -125,6 +142,13 @@ ready, enabled Workers on online Workspaces you own; shared Workspace usage
 remains owner-only. The report opens in a local dialog with refresh,
 original-output, and close controls. It does not create a Thread message or Work
 Request. Workers without a usage command show an unavailable report.
+
+Grok billing reports use the same usage table as other Workers.
+`config.creditUsagePercent` is shown as percent used, with the reported period
+end driving the reset countdown (for example, 69% used in the Week window).
+Missing period metadata uses a Credits label; malformed percentages or reset
+values fall back to the original output. Prepaid balances remain available
+in Original because the CLI response does not identify their units.
 
 ### Queued messages in the composer
 
@@ -155,3 +179,10 @@ The Conversation usage panel has no close icon: click outside it or press Escape
 while interacting with the composer to dismiss it. Interactions inside the panel
 and keyboard focus changes alone keep it open. The standalone Workspace dialog
 retains its close button.
+
+A successfully discovered, Profile/CLI-bound model catalog may contain no
+explicit model choices (for example, an account restricted to provider Auto).
+Cloud projects `models.catalogAvailable` to distinguish this from missing or
+invalid discovery. Auto remains usable with a valid empty catalog; explicit
+models/efforts, stale catalogs, and mismatched Profile/CLI metadata remain
+subject to capability validation. No database migration is required.

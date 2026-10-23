@@ -167,6 +167,7 @@ const discoveryLocation = templatedString.refine((path) => {
     ".volta/bin",
     ".bun/bin",
     ".gemini/antigravity-cli/bin",
+    ".grok/bin",
     "AppData/Local/agy/bin",
     "AppData/Local/Programs/nodejs",
   ].includes(relative);
@@ -241,6 +242,8 @@ const argument = z.union([
 const action = z.discriminatedUnion("type", [
   z.object({ type: z.literal("set_session"), selector }).strict(),
   z.object({ type: z.literal("set_final_text"), selector }).strict(),
+  z.object({ type: z.literal("append_final_text"), selector }).strict(),
+  z.object({ type: z.literal("clear_final_text") }).strict(),
   z.object({ type: z.literal("set_terminal_status"), selector }).strict(),
   z.object({ type: z.literal("set_provider_error"), selector }).strict(),
   z
@@ -349,7 +352,12 @@ const activityMapping = z
 const activity = z
   .object({
     adapter: z
-      .enum(["codex-jsonl", "agy-stream-json", "claude-stream-json"])
+      .enum([
+        "codex-jsonl",
+        "agy-stream-json",
+        "claude-stream-json",
+        "grok-streaming-json",
+      ])
       .optional(),
     schemaVersion: z.literal(1).optional(),
     mappings: z
@@ -384,11 +392,16 @@ const usageCommand = z
     // returns the raw result instead of the process output.
     jsonRpc: z
       .object({
-        method: shortString.regex(/^[A-Za-z][A-Za-z0-9/._-]*$/),
+        // A leading `_` marks an Agent Client Protocol extension method
+        // (for example Grok's `_x.ai/billing`).
+        method: shortString.regex(/^[A-Za-z_][A-Za-z0-9/._-]*$/),
         // `newline` (default): Codex app-server newline JSON with an
         // `initialize` handshake. `content_length`: LSP-style framing with
-        // no handshake (for example `copilot --headless --stdio`).
-        framing: z.enum(["newline", "content_length"]).optional(),
+        // no handshake (for example `copilot --headless --stdio`). `acp`:
+        // Agent Client Protocol newline JSON-RPC with its `initialize`
+        // (`protocolVersion: 1`) and an empty params object (for example
+        // `grok agent stdio`).
+        framing: z.enum(["newline", "content_length", "acp"]).optional(),
       })
       .strict()
       .optional(),
@@ -609,6 +622,7 @@ const profileSchema = z
           .array(templatedString)
           .max(TOOL_PROFILE_LIMITS.arguments),
         requireObservedIdMatch: z.boolean(),
+        executionPolicyBound: z.boolean().optional(),
       })
       .strict()
       .superRefine((session, context) => {
@@ -674,7 +688,17 @@ const profileSchema = z
             timeoutMs: z.number().int().min(100).max(10000),
             // clap_possible_values reads the `[possible values: a, b]` list a
             // CLI prints when a value-taking flag is passed without a value.
-            format: z.enum(["tsv", "codex_app_server", "clap_possible_values"]),
+            // copilot_sdk_rpc asks the CLI's SDK server (Content-Length
+            // JSON-RPC) for the signed-in account's models and efforts.
+            // indented_list reads one model per indented line, optionally
+            // bulleted and followed by a "(note)" (`grok models`).
+            format: z.enum([
+              "tsv",
+              "codex_app_server",
+              "clap_possible_values",
+              "copilot_sdk_rpc",
+              "indented_list",
+            ]),
             // Empty means that the provider command is already scoped to
             // models and every returned ID is accepted.
             idPrefix: z
@@ -695,6 +719,24 @@ const profileSchema = z
             // Discovered IDs that are never offered (for example a model
             // whose provider rejects every effort configuration).
             excludeIds: z.array(modelId).max(128).optional(),
+            // Reads each discovered model's efforts from the CLI's own
+            // rejection of an invalid effort ("use one of: a, b"). The
+            // arguments must include {{model}}; no Profile effort list.
+            effortProbe: z
+              .object({
+                arguments: z
+                  .array(templatedString)
+                  .min(1)
+                  .max(32)
+                  .refine(
+                    (args) => args.some((arg) => arg.includes("{{model}}")),
+                    "Effort probe arguments must include {{model}}",
+                  ),
+                timeoutMs: z.number().int().min(100).max(10000),
+                format: z.literal("use_one_of"),
+              })
+              .strict()
+              .optional(),
           })
           .strict()
           .optional(),

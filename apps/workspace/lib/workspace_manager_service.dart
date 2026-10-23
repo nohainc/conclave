@@ -286,7 +286,20 @@ class WorkspaceManagerService {
       'refreshing': catalog.refreshing,
       'localRegistryLoaded': catalog.localRegistryLoaded,
       'localRegistryError': catalog.localRegistryError,
+      'removingWorkerIds':
+          (workspace.workerSubsystem?.removingWorkerIds ?? const <String>{})
+              .toList()
+            ..sort(),
     };
+  }
+
+  /// A Worker waiting for removal takes no new actions.
+  void _rejectRemovingWorker(Object? workerId) {
+    if (workerId is String &&
+        (workspace.workerSubsystem?.isRemoving(workerId) ?? false)) {
+      throw const WorkspaceManagerProtocolException('worker_removing',
+          'This Worker is being removed after its current work finishes.');
+    }
   }
 
   int? _serviceUptimeSeconds(Map<String, Object?> state) {
@@ -520,6 +533,13 @@ class WorkspaceManagerService {
             'The Worker catalog is not available from Workspace Service.',
           );
         }
+        final removing = workerSubsystem?.removingWorkerIds ?? const {};
+        if ((await registry.list()).any((worker) =>
+            worker.workerTypeId == workerTypeId &&
+            removing.contains(worker.id))) {
+          throw const WorkspaceManagerProtocolException('worker_removing',
+              'This Worker is being removed. Add it again after removal finishes.');
+        }
         var descriptor = coordinator.entryForWorker(workerTypeId);
         if (descriptor == null) {
           await coordinator.refresh(force: true);
@@ -544,8 +564,24 @@ class WorkspaceManagerService {
                   workerTypeId: workerTypeId,
                 ));
         return (await registry.find(worker.id))?.toJson();
+      case 'workers.removeWorker':
+        final removeId = payload['workerId'];
+        if (removeId is! String || removeId.isEmpty) {
+          throw const WorkspaceManagerProtocolException(
+              'invalid_request', 'workerId is required.');
+        }
+        if (workerSubsystem == null) {
+          throw const WorkspaceManagerProtocolException(
+              'not_configured', 'Local Worker registry is not available.');
+        }
+        final removed = await workerSubsystem.removeWorker(removeId);
+        return {
+          'workerId': removeId,
+          'state': removed ? 'removed' : 'removing',
+        };
       case 'workers.enableWorker':
       case 'workers.disableWorker':
+        _rejectRemovingWorker(payload['workerId']);
         if (registry == null) {
           throw const WorkspaceManagerProtocolException(
               'not_configured', 'Local Worker registry is not available.');
@@ -578,6 +614,7 @@ class WorkspaceManagerService {
         }
         return worker.toJson();
       case 'workers.setFullLocalAccess':
+        _rejectRemovingWorker(payload['workerId']);
         final registry = workspace.localWorkerRegistry;
         if (registry == null) {
           throw const WorkspaceManagerProtocolException(
@@ -596,6 +633,7 @@ class WorkspaceManagerService {
         return worker.toJson();
       case 'workers.testWorker':
       case 'worker.test':
+        _rejectRemovingWorker(payload['workerId']);
         final workerId = payload['workerId'];
         if (workerId is! String || registry == null) {
           throw const WorkspaceManagerProtocolException(
