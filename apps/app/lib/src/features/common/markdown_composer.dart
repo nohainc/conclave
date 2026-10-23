@@ -4,6 +4,8 @@ import 'package:flutter/rendering.dart';
 import 'package:conclave_design/conclave_design.dart';
 
 import 'conclave_markdown_body.dart';
+import 'dictation/dictation_button.dart';
+import 'dictation/speech_dictation.dart';
 import 'emoji_picker.dart';
 
 enum MarkdownFormat {
@@ -114,6 +116,8 @@ class MarkdownComposer extends StatefulWidget {
       this.showMarkdownControlsInSuffix = true,
       this.showSendInSuffix = true,
       this.showEmojiPicker = true,
+      this.showDictation = true,
+      this.dictation,
       this.twoRowLayout = false,
       this.onHistoryNavigate});
 
@@ -160,6 +164,12 @@ class MarkdownComposer extends StatefulWidget {
 
   /// Shows the smile button that opens the emoji popup.
   final bool showEmojiPicker;
+
+  /// Shows the mic button for browser speech-to-text in chat-style inputs.
+  final bool showDictation;
+
+  /// Overrides the platform speech recognizer (tests).
+  final SpeechDictation? dictation;
 
   /// Chat input as two rows: the text field, then emoji and Markdown popup
   /// controls on the left and send on the right.
@@ -235,6 +245,16 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
         onSelected: _insertEmoji,
       );
 
+  bool get _dictationVisible => widget.chatStyle && widget.showDictation;
+
+  Widget _dictationButton() => DictationButton(
+        controller: widget.controller,
+        dictation: widget.dictation,
+        enabled: widget.enabled && !_preview,
+        color: _controlColor,
+        onTextChanged: _focus.requestFocus,
+      );
+
   bool get _secondaryToolbarVisible =>
       widget.chatStyle &&
       (_showFormatting || _preview || !widget.showMarkdownControlsInSuffix);
@@ -265,6 +285,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
           if (widget.executionControlsBuilder != null)
             Expanded(child: widget.executionControlsBuilder!(_inputKey)),
           if (widget.showEmojiPicker) _emojiButton(),
+          if (_dictationVisible) _dictationButton(),
           if (widget.showMarkdownControls)
             MenuAnchor(
               controller: _markdownMenu,
@@ -495,6 +516,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                   suffixIcon: widget.chatStyle &&
                           !widget.twoRowLayout &&
                           (widget.showEmojiPicker ||
+                              _dictationVisible ||
                               (widget.showMarkdownControls &&
                                   widget.showMarkdownControlsInSuffix) ||
                               (widget.onSend != null &&
@@ -504,6 +526,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (widget.showEmojiPicker) _emojiButton(),
+                            if (_dictationVisible) _dictationButton(),
                             if (widget.showMarkdownControls &&
                                 widget.showMarkdownControlsInSuffix)
                               IconButton(
