@@ -691,7 +691,12 @@ void _validateUsageCommand(Object? value) {
       throw const FormatException('usage.jsonRpc must be an object');
     }
     final rpc = Map<String, Object?>.from(jsonRpc);
-    _expectOnly(rpc, const {'method'}, 'usage.jsonRpc');
+    _expectOnly(rpc, const {'method', 'framing'}, 'usage.jsonRpc');
+    final framing = rpc['framing'];
+    if (framing != null &&
+        !const {'newline', 'content_length'}.contains(framing)) {
+      throw const FormatException('usage.jsonRpc.framing is invalid');
+    }
     final method = rpc['method'];
     if (method is! String ||
         !RegExp(r'^[A-Za-z][A-Za-z0-9/._-]{0,255}$').hasMatch(method)) {

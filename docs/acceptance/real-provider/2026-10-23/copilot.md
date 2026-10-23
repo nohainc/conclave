@@ -90,6 +90,11 @@ Codex initialization handshake. Merely setting its method to
 generic framing/handshake option and matching validators/tests; this
 investigation does not introduce a provider-specific runtime branch.
 
+Profile release 9 uses this call as its `usage` command through the new
+generic `jsonRpc.framing: "content_length"` option. A real call through the
+Engine's reader returned `chat`, `completions` and `premium_interactions`
+snapshots in under a second; this time the `chat` reset date was in the future.
+
 ## Activity events
 
 Profile release 7 adds a declarative `activity` mapping (no provider adapter).

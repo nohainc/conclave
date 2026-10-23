@@ -298,6 +298,7 @@ class CliWorkerEngine {
           environment: _environment(),
           workingDirectory: workingDirectory,
           method: _string(rpc['method']),
+          framing: rpc['framing'] as String? ?? 'newline',
           timeout: Duration(milliseconds: timeoutMs),
         );
         result = CliCommandResult(
@@ -513,6 +514,7 @@ class CliWorkerEngine {
               environment: _environment(),
               workingDirectory: workingDirectory,
               method: _string(rpc['method']),
+              framing: rpc['framing'] as String? ?? 'newline',
               timeout: liveTimeout,
             );
             result = CliCommandResult(

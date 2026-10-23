@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "profileDefinitionId": "copilot-cli",
-  "releaseVersion": 8,
+  "releaseVersion": 9,
   "logicalWorkerTypeId": "copilot",
   "engineFamily": "cli",
   "engineCompatibility": {
@@ -628,5 +628,16 @@
     "providerArguments": [],
     "providerReserveMs": 2000
   },
-  "compatibilityOverrides": []
+  "compatibilityOverrides": [],
+  "usage": {
+    "arguments": [
+      "--headless",
+      "--stdio"
+    ],
+    "timeoutMs": 20000,
+    "jsonRpc": {
+      "method": "account.getQuota",
+      "framing": "content_length"
+    }
+  }
 }

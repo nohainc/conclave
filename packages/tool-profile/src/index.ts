@@ -383,7 +383,13 @@ const usageCommand = z
     // example Codex app-server); the Engine calls this method once and
     // returns the raw result instead of the process output.
     jsonRpc: z
-      .object({ method: shortString.regex(/^[A-Za-z][A-Za-z0-9/._-]*$/) })
+      .object({
+        method: shortString.regex(/^[A-Za-z][A-Za-z0-9/._-]*$/),
+        // `newline` (default): Codex app-server newline JSON with an
+        // `initialize` handshake. `content_length`: LSP-style framing with
+        // no handshake (for example `copilot --headless --stdio`).
+        framing: z.enum(["newline", "content_length"]).optional(),
+      })
       .strict()
       .optional(),
   })

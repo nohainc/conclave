@@ -1007,6 +1007,11 @@ A Profile may declare a top-level `usage` object:
   `initialize`, calls the one parameterless method, and returns the raw result
   as pretty-printed JSON in `output`. The starter ChatGPT Profile uses
   `account/rateLimits/read`. The result is still never interpreted.
+- Optional `jsonRpc.framing` selects the transport: `newline` (default) is the
+  Codex newline-JSON transport with the `initialize` handshake above;
+  `content_length` uses LSP-style `Content-Length: <n>\r\n\r\n<JSON>` framing,
+  sends no handshake, calls the method with empty `params`, skips unrelated
+  messages, and caps each frame at 64 KiB.
 - The generic Engine runs the declared provider executable with these arguments
   on a `usage.request` frame and answers with `usage.result` (`output`,
   `errorOutput`, `exitCode`, `truncated`). Terminal escape sequences are removed
@@ -1031,12 +1036,10 @@ A Profile may declare a top-level `usage` object:
   original text, and `Original` always shows it for a normalized report.
 - A Profile without `usage` yields status `unavailable`. The starter Claude
   Profile declares `-p /usage`; Gemini declares `-p /usage` (agy) and ChatGPT
-  uses the Codex app-server rate-limit call. Copilot declares no `usage`:
-  CLI 1.0.103 answers `-p /usage` as an ordinary prompt instead of running the
-  command, so its status is `unavailable`.
-  Copilot's `--usage-output-file` provides session accounting, while its
-  experimental SDK `account.getQuota` exposes account quota through a
-  Content-Length-framed transport that this `jsonRpc` helper does not support.
+  uses the Codex app-server rate-limit call. Copilot calls `account.getQuota`
+  on `copilot --headless --stdio` with `content_length` framing (CLI 1.0.103
+  answers `-p /usage` as an ordinary prompt, which would spend credits). AX has
+  no Copilot summary format yet, so it shows the raw JSON.
   See the [local Copilot verification](../acceptance/real-provider/2026-10-23/copilot.md)
   for captured statistics, model/effort limits, and the framing distinction.
 - Cloud relays on demand: `POST /api/workspaces/:workspaceId/workers/:workerId/usage`

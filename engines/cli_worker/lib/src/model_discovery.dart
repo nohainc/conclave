@@ -183,14 +183,30 @@ Future<List<DiscoveredModel>> discoverCodexAppServerModels({
 /// Calls one parameterless JSON-RPC [method] on a stdio app-server (for
 /// example Codex `account/rateLimits/read`) and returns the raw result. The
 /// result is never interpreted: providers calculate usage differently.
+///
+/// [framing] `newline` is the Codex app-server transport (newline JSON with
+/// an `initialize` handshake). `content_length` is LSP-style
+/// `Content-Length` framing with no handshake (for example
+/// `copilot --headless --stdio`).
 Future<Map<String, Object?>> readAppServerResult({
   required String executable,
   required List<String> arguments,
   required Map<String, String> environment,
   required String workingDirectory,
   required String method,
+  String framing = 'newline',
   Duration timeout = const Duration(seconds: 15),
 }) async {
+  if (framing == 'content_length') {
+    return _readContentLengthRpcResult(
+      executable: executable,
+      arguments: arguments,
+      environment: environment,
+      workingDirectory: workingDirectory,
+      method: method,
+      timeout: timeout,
+    );
+  }
   final process = await startCliProcess(
     executable,
     arguments,
@@ -222,6 +238,103 @@ Future<Map<String, Object?>> readAppServerResult({
     return await _readAppServerResponse(lines, 2, deadline);
   } finally {
     await lines.cancel();
+    await cleanup.terminate(process, grace: const Duration(milliseconds: 500));
+    await stderrDrain.catchError((_) {});
+  }
+}
+
+Future<Map<String, Object?>> _readContentLengthRpcResult({
+  required String executable,
+  required List<String> arguments,
+  required Map<String, String> environment,
+  required String workingDirectory,
+  required String method,
+  required Duration timeout,
+}) async {
+  const maxMessageBytes = 64 * 1024;
+  final process = await startCliProcess(
+    executable,
+    arguments,
+    workingDirectory: workingDirectory,
+    environment: environment,
+    includeParentEnvironment: false,
+    runInShell: false,
+  );
+  const cleanup = WorkerProcessCleanup();
+  final stderrDrain = process.stderr.drain<void>();
+  final chunks = StreamIterator(process.stdout);
+  final deadline = DateTime.now().add(timeout);
+  var pending = <int>[];
+  Future<void> fill() async {
+    final remaining = deadline.difference(DateTime.now());
+    if (remaining <= Duration.zero) {
+      throw TimeoutException('JSON-RPC usage request timed out');
+    }
+    if (!await chunks.moveNext().timeout(remaining)) {
+      throw const FormatException('JSON-RPC server closed before responding');
+    }
+    pending = [...pending, ...chunks.current];
+    if (pending.length > maxMessageBytes + 1024) {
+      throw const FormatException('JSON-RPC response exceeds limit');
+    }
+  }
+
+  try {
+    final body = utf8.encode(
+      jsonEncode({
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': method,
+        'params': <String, Object?>{},
+      }),
+    );
+    process.stdin.add(utf8.encode('Content-Length: ${body.length}\r\n\r\n'));
+    process.stdin.add(body);
+    await process.stdin.flush();
+    const separator = [13, 10, 13, 10];
+    while (true) {
+      var headerEnd = -1;
+      while (headerEnd < 0) {
+        for (var i = 0; i + 3 < pending.length; i++) {
+          if (pending[i] == separator[0] &&
+              pending[i + 1] == separator[1] &&
+              pending[i + 2] == separator[2] &&
+              pending[i + 3] == separator[3]) {
+            headerEnd = i;
+            break;
+          }
+        }
+        if (headerEnd < 0) await fill();
+      }
+      final header = ascii.decode(pending.sublist(0, headerEnd));
+      final match = RegExp(
+        r'^content-length:\s*(\d+)\s*$',
+        caseSensitive: false,
+        multiLine: true,
+      ).firstMatch(header);
+      final length = match == null ? null : int.tryParse(match.group(1)!);
+      if (length == null || length > maxMessageBytes) {
+        throw const FormatException('JSON-RPC frame header is invalid');
+      }
+      final start = headerEnd + 4;
+      while (pending.length < start + length) {
+        await fill();
+      }
+      final message = pending.sublist(start, start + length);
+      pending = pending.sublist(start + length);
+      final decoded = jsonDecode(utf8.decode(message));
+      if (decoded is! Map || decoded['id'] != 1) continue;
+      if (decoded['error'] != null) {
+        throw FormatException('JSON-RPC request failed: ${decoded['error']}');
+      }
+      final result = decoded['result'];
+      if (result is! Map) {
+        throw const FormatException('JSON-RPC result is invalid');
+      }
+      return Map<String, Object?>.from(result);
+    }
+  } finally {
+    await chunks.cancel();
     await cleanup.terminate(process, grace: const Duration(milliseconds: 500));
     await stderrDrain.catchError((_) {});
   }
