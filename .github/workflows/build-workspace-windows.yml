@@ -1,8 +1,8 @@
-name: Build Windows Workspace preview
+name: Build Windows Workspace installer
 
 on:
   push:
-    branches: ["codex/windows-workspace-preview-*", "codex/windows-runtime"]
+    branches: ["codex/windows-workspace-preview-*", "codex/windows-runtime", "codex/windows-inno-installer"]
   workflow_dispatch:
 
 concurrency:
@@ -66,6 +66,23 @@ jobs:
           } finally {
             if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
           }
+      - name: Install Inno Setup compiler
+        shell: pwsh
+        run: |
+          choco install innosetup --version=6.4.3 --yes --no-progress --allow-downgrade
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build unsigned per-user installer
+        shell: pwsh
+        run: ./scripts/package-workspace-windows.ps1
+      - name: Test install, upgrade and uninstall
+        shell: pwsh
+        run: ./scripts/test-workspace-windows-installer.ps1
+      - name: Retain installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conclave-workspace-windows-x64-installer
+          path: dist/conclave-workspace/installer/*Setup.exe
+          if-no-files-found: error
       - name: Retain preview bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

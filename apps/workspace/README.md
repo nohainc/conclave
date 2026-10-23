@@ -296,3 +296,6 @@ pipe IPC, DPAPI credentials, private local state, and Engine Job Object cleanup.
 The package remains unsigned with manual updates. See the [Windows operations
 and qualification guide](../../docs/operations/WORKSPACE_WINDOWS_PREVIEW.md)
 for build instructions, migration behavior, CLI shim limits and device gates.
+
+Windows per-user installer builds and lifecycle requirements are documented in
+[the Inno Setup installer guide](../../docs/operations/WORKSPACE_WINDOWS_INSTALLER.md).
