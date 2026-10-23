@@ -10,20 +10,13 @@
   },
   "providerTool": {
     "name": "GitHub Copilot CLI",
-    "executableCandidates": [
-      "copilot"
-    ],
+    "executableCandidates": ["copilot"],
     "discovery": {
-      "standardLocations": [
-        "{{home}}/.local/bin",
-        "/usr/local/bin"
-      ],
+      "standardLocations": ["{{home}}/.local/bin", "/usr/local/bin"],
       "allowPathSearch": true
     },
     "versionProbe": {
-      "arguments": [
-        "--version"
-      ],
+      "arguments": ["--version"],
       "timeoutMs": 10000,
       "source": "stdout",
       "extract": {
@@ -79,10 +72,7 @@
       },
       {
         "ifPresent": "reasoningEffort",
-        "values": [
-          "--reasoning-effort",
-          "{{reasoningEffort}}"
-        ]
+        "values": ["--reasoning-effort", "{{reasoningEffort}}"]
       },
       {
         "sessionResumeArguments": true
@@ -182,17 +172,11 @@
   },
   "model": {
     "supported": true,
-    "arguments": [
-      "--model",
-      "{{model}}"
-    ],
+    "arguments": ["--model", "{{model}}"],
     "unknownModelPolicy": "pass_through",
     "discovery": {
       "schemaVersion": 1,
-      "arguments": [
-        "--headless",
-        "--stdio"
-      ],
+      "arguments": ["--headless", "--stdio"],
       "timeoutMs": 10000,
       "format": "copilot_sdk_rpc",
       "idPrefix": ""
@@ -369,29 +353,17 @@
   },
   "sandbox": {
     "mappings": {
-      "restricted": [
-        "--allow-tool",
-        "write",
-        "--deny-tool",
-        "shell"
-      ],
+      "restricted": ["--allow-tool", "write", "--deny-tool", "shell"],
       "provider_default": [],
-      "full_access": [
-        "--allow-all"
-      ]
+      "full_access": ["--allow-all"]
     }
   },
   "session": {
     "supported": true,
     "formatId": "copilot-session-v1",
-    "compatibleFormatIds": [
-      "copilot-session-v1"
-    ],
+    "compatibleFormatIds": ["copilot-session-v1"],
     "extract": "$.sessionId",
-    "resumeArguments": [
-      "--session-id",
-      "{{sessionId}}"
-    ],
+    "resumeArguments": ["--session-id", "{{sessionId}}"],
     "requireObservedIdMatch": true
   },
   "timeout": {
@@ -400,10 +372,7 @@
   },
   "compatibilityOverrides": [],
   "usage": {
-    "arguments": [
-      "--headless",
-      "--stdio"
-    ],
+    "arguments": ["--headless", "--stdio"],
     "timeoutMs": 20000,
     "jsonRpc": {
       "method": "account.getQuota",

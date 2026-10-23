@@ -680,10 +680,7 @@ it("offers each discovered Grok model only the efforts its CLI listed", async ()
     await import("../src/worker-execution-options.js");
   const digest = "d".repeat(64);
   const profile = readFileSync(
-    new URL(
-      "../../profile_lab/assets/profiles/grok.json",
-      import.meta.url,
-    ),
+    new URL("../../profile_lab/assets/profiles/grok.json", import.meta.url),
     "utf8",
   );
   // The signed Grok Profile declares no model or effort list.

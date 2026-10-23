@@ -10,9 +10,7 @@
   },
   "providerTool": {
     "name": "Grok Build CLI",
-    "executableCandidates": [
-      "grok"
-    ],
+    "executableCandidates": ["grok"],
     "discovery": {
       "standardLocations": [
         "{{home}}/.grok/bin",
@@ -22,9 +20,7 @@
       "allowPathSearch": true
     },
     "versionProbe": {
-      "arguments": [
-        "--version"
-      ],
+      "arguments": ["--version"],
       "timeoutMs": 10000,
       "source": "stdout",
       "extract": {
@@ -75,10 +71,7 @@
       },
       {
         "ifPresent": "reasoningEffort",
-        "values": [
-          "--reasoning-effort",
-          "{{reasoningEffort}}"
-        ]
+        "values": ["--reasoning-effort", "{{reasoningEffort}}"]
       },
       {
         "sessionResumeArguments": true
@@ -194,16 +187,11 @@
   },
   "model": {
     "supported": true,
-    "arguments": [
-      "--model",
-      "{{model}}"
-    ],
+    "arguments": ["--model", "{{model}}"],
     "unknownModelPolicy": "pass_through",
     "discovery": {
       "schemaVersion": 1,
-      "arguments": [
-        "models"
-      ],
+      "arguments": ["models"],
       "timeoutMs": 10000,
       "format": "indented_list",
       "idPrefix": "",
@@ -313,36 +301,22 @@
   },
   "sandbox": {
     "mappings": {
-      "restricted": [
-        "--sandbox",
-        "workspace",
-        "--permission-mode",
-        "dontAsk"
-      ],
+      "restricted": ["--sandbox", "workspace", "--permission-mode", "dontAsk"],
       "provider_default": [
         "--sandbox",
         "read-only",
         "--permission-mode",
         "plan"
       ],
-      "full_access": [
-        "--sandbox",
-        "off",
-        "--always-approve"
-      ]
+      "full_access": ["--sandbox", "off", "--always-approve"]
     }
   },
   "session": {
     "supported": true,
     "formatId": "grok-session-v1",
-    "compatibleFormatIds": [
-      "grok-session-v1"
-    ],
+    "compatibleFormatIds": ["grok-session-v1"],
     "extract": "$.sessionId",
-    "resumeArguments": [
-      "--resume",
-      "{{sessionId}}"
-    ],
+    "resumeArguments": ["--resume", "{{sessionId}}"],
     "requireObservedIdMatch": true,
     "executionPolicyBound": true
   },
@@ -352,10 +326,7 @@
   },
   "compatibilityOverrides": [],
   "usage": {
-    "arguments": [
-      "agent",
-      "stdio"
-    ],
+    "arguments": ["agent", "stdio"],
     "timeoutMs": 20000,
     "jsonRpc": {
       "method": "_x.ai/billing",
