@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'windows_native.dart';
 
 import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
 
@@ -239,7 +240,10 @@ final class WindowsRuntime implements PlatformRuntime {
       Platform.environment['USERPROFILE'] ?? Directory.current.path;
   @override
   Future<void> restrictPermissions(String path,
-      {required bool directory}) async {}
+      {required bool directory}) async {
+    WindowsNative.securePath(path);
+  }
+
   @override
   List<StreamSubscription<ProcessSignal>> watchTermination(
           void Function() onTermination) =>
@@ -266,6 +270,7 @@ final class WindowsRuntime implements PlatformRuntime {
       process.kill(ProcessSignal.sigterm);
       return;
     }
+    if (terminateWindowsProcessJob(process.pid)) return;
     try {
       final result =
           await Process.run('taskkill', ['/PID', '${process.pid}', '/T', '/F'])

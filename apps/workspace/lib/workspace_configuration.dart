@@ -96,8 +96,10 @@ class WorkspaceConfigurationResolver {
         ? args[workRootIndex + 1]
         : preferences.workRootPath ??
             Platform.environment['CONCLAVE_WORKSPACE_WORK_ROOT'];
-    final secureStore =
-        credentialStore ?? const PlatformSecureCredentialStore();
+    final secureStore = credentialStore ??
+        PlatformSecureCredentialStore(
+            credentialDirectory:
+                Directory('${dataDirectory.path}/Credentials'));
     final runtimeToken = workspaceRuntimeId == null
         ? null
         : secureStore.readSync(workspaceRuntimeId);

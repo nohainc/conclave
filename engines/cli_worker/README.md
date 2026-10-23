@@ -11,7 +11,7 @@ For local development, launch with absolute paths:
 ~~~sh
 dart run bin/conclave_cli_worker.dart \
   --profile /absolute/path/to/profile.v1.json \
-  --engine-version 1.3.0 \
+  --engine-version 1.3.1 \
   --state-directory /absolute/path/to/worker-state
 ~~~
 

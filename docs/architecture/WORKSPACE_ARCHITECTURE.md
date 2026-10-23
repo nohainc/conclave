@@ -316,17 +316,25 @@ tests should be removed only after an equivalent boundary test exists.
 The shared service and protocol remain platform-independent Dart. macOS host
 registration is behind `WorkspaceServiceManager`. Linux and Windows support is
 decided in [ADR-021](../decisions/ADR-021-workspace-service-linux-windows.md)
-and is being implemented in phases; only the macOS adapter exists today.
+and is implemented in platform adapters. Windows x64 runtime source support
+includes per-user logon tasks, owner-only named pipes, DPAPI and process jobs;
+release qualification remains gated by Windows device evidence. Linux source
+support includes systemd user units, Unix-socket IPC, and a recorded Secret
+Service or `0600` file credential store; see the
+[Linux operations guide](../operations/WORKSPACE_LINUX.md).
 
-- Linux: systemd user unit, or a foreground headless mode for containers;
-  Unix-domain socket IPC; Secret Service, `systemd-creds`, or a `0600` file;
-  XDG state directories.
+- Linux: systemd user unit, or the service as a foreground main process for
+  containers; Unix-domain socket IPC under the `0700` state root; Secret
+  Service or a `0600` file, selected once per state root and recorded
+  (`systemd-creds` is not implemented); `$XDG_STATE_HOME/conclave/workspace`,
+  with an existing legacy `~/.conclave-workspace` root kept in place.
 - Windows: per-user logon task in the interactive session (not a Service
   Control Manager service); named-pipe IPC restricted to the owning user;
   DPAPI secret store; `%LOCALAPPDATA%\Conclave\Workspace`.
 - On every platform the Service, Engine, and provider CLIs run as the same
   user that owns the CLI logins; Conclave never manages provider credentials.
-- Headless hosts are managed through a `conclave-workspace` IPC client.
+- Headless hosts are managed through a `conclave-workspace` IPC client
+  (planned; not implemented yet).
 
 ### Profile-declared model discovery
 
@@ -395,11 +403,18 @@ assignment labels and never the current inventory to relabel an old execution.
 See [execution options](../specifications/WORKER_EXECUTION_OPTIONS_V2.md#phase-8--immutable-execution-resolution-and-history)
 for snapshot fields and rollout order.
 
-### Windows build preview
+### Windows runtime candidate
 
-The Windows Flutter runner and `scripts/build-workspace-windows.ps1` provide
-an unsigned UI preview build through the manual Windows Actions workflow.
-The script reuses the canonical Engine/service build scripts and packages the
-complete Flutter output with the standalone service. This does not enable the
-Windows runtime: ADR-021 service, IPC, credential, path and process-supervision
-gates remain open. See [preview operations](../operations/WORKSPACE_WINDOWS_PREVIEW.md).
+`windows_service_manager.dart` implements the per-installation, per-user
+interactive logon task behind `WorkspaceServiceManager`. Platform Win32 adapters
+own protected paths, CurrentUser DPAPI and named pipes; shared lifecycle/RPC code
+retains ownership and wire contracts. Host Stop requests graceful service exit
+through private runtime metadata, then bounds forced task termination. Disconnect
+Cloud is unchanged and does not stop the service. Stop leaves the logon task
+registered. Engine 1.3.1 and the service own nested kill-on-close Windows jobs;
+the UI never launches provider/Engine processes. Runtime credentials remain local.
+
+The Windows package reuses canonical Engine/service builds. CI qualifies native
+primitives, compiled-service lifecycle and UI startup. Signed releases, logon/reboot
+and real published Profile execution need target-device evidence. See the
+[Windows operations guide](../operations/WORKSPACE_WINDOWS_PREVIEW.md).

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'windows_process_job.dart';
 
 /// Direct-child cleanup primitive. OS-specific descendant supervision is added
 /// by the Worker process supervisor integration.
@@ -10,6 +11,7 @@ class WorkerProcessCleanup {
   /// The caller must verify the PID's executable and ownership before calling.
   Future<void> terminateOrphanedPid(int pid) async {
     if (Platform.isWindows) {
+      if (terminateWindowsProcessJob(pid)) return;
       await Process.run('taskkill', ['/PID', '$pid', '/T', '/F']);
       return;
     }
@@ -27,6 +29,7 @@ class WorkerProcessCleanup {
 
   Future<void> terminateTree(Process process, {required bool force}) async {
     if (Platform.isWindows) {
+      if (force && terminateWindowsProcessJob(process.pid)) return;
       await Process.run('taskkill', [
         '/PID',
         '${process.pid}',

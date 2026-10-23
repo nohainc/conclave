@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
+    show cliWorkerEngineVersion;
 import 'package:conclave_profile_lab/bundled_cli_worker_engine_loader.dart';
 import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
@@ -298,7 +300,7 @@ printf '{"sessionId":"fixture-session","text":"OK"}\n'
         'formatVersion': 1,
         'workerTypeId': validCandidate.logicalWorkerTypeId,
         'candidateDigest': validCandidate.payloadDigest,
-        'engineVersion': '1.3.0',
+        'engineVersion': cliWorkerEngineVersion,
         'providerToolName': validCandidate.providerToolName,
         'providerToolVersion': '1.2.3',
         'testedAt': publicationJson['testedAt'],

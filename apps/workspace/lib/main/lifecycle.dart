@@ -473,7 +473,7 @@ class WorkspaceLifecycleController extends ChangeNotifier {
         throw StateError('Workspace service IPC key is invalid.');
       }
       connection = WorkspaceManagerIpcConnection(
-          socketPath: '${runtimeDirectory.path}/manager.sock', key: key);
+          socketPath: workspaceManagerEndpoint(runtimeDirectory), key: key);
       _manager = connection;
       events = connection.events.listen((event) {
         if (!_closed && identical(_manager, connection)) {

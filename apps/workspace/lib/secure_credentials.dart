@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'credential_backend.dart';
+import 'linux_credentials.dart';
+import 'windows_credentials.dart';
+import 'workspace_paths.dart';
 import 'workspace_registration_models.dart';
 
 /// OS-backed storage for credentials used by the Workspace.
@@ -35,22 +38,54 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
         : 'com.conclaveax.workspace',
     String? platform,
     this.nativeKeychain,
+    this.credentialDirectory,
   }) : _platform = platform;
 
   static final Map<String, String?> _cache = {};
   static final Set<String> _loaded = {};
 
+  /// Per-state-root credential directory for the DPAPI (Windows) and
+  /// user-only file (headless Linux) stores.
+  final Directory? credentialDirectory;
   final String service;
   final String? _platform;
   final NativeSecureCredentialBridge? nativeKeychain;
 
   String get _effectivePlatform => _platform ?? Platform.operatingSystem;
 
+  Directory get _credentialDirectory {
+    final selected = credentialDirectory;
+    if (selected != null) return selected;
+    final root = Platform.environment['CONCLAVE_WORKSPACE_DATA_DIR'] ??
+        WorkspacePaths.defaultStateDirectory().path;
+    return Directory('$root/Credentials');
+  }
+
+  WindowsCredentials get _windows => WindowsCredentials(_credentialDirectory);
+
+  LinuxCredentialStoreSelector get _linuxSelector =>
+      LinuxCredentialStoreSelector(_credentialDirectory.parent);
+
+  /// The Linux file store when it is the recorded/preferred selection.
+  LinuxFileCredentials? _linuxFile({bool forWrite = false}) {
+    if (_effectivePlatform != 'linux') return null;
+    final kind =
+        forWrite ? _linuxSelector.selectForWrite() : _linuxSelector.effective();
+    return kind == LinuxCredentialStoreKind.file
+        ? LinuxFileCredentials(_credentialDirectory)
+        : null;
+  }
+
   String _cacheKey(String key) => '$service\u0000$key';
 
   @override
   String? readSync(String key) {
     if (key.isEmpty) return null;
+    // DPAPI is available synchronously. Read the selected root directly so
+    // separate installations and credential rotations cannot share stale cache.
+    if (_effectivePlatform == 'windows') return _windows.read(service, key);
+    final linuxFile = _linuxFile();
+    if (linuxFile != null) return linuxFile.read(service, key);
     final cacheKey = _cacheKey(key);
     if (_loaded.contains(cacheKey)) return _cache[cacheKey];
     final command = currentCredentialBackend.read(service, key);
@@ -78,6 +113,9 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   @override
   Future<String?> read(String key) async {
     if (key.isEmpty) return null;
+    // DPAPI is available synchronously. Read the selected root directly so
+    // separate installations and credential rotations cannot share stale cache.
+    if (_effectivePlatform == 'windows') return _windows.read(service, key);
     final cacheKey = _cacheKey(key);
     if (_loaded.contains(cacheKey)) return _cache[cacheKey];
     if (_effectivePlatform == 'macos') {
@@ -117,6 +155,19 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
       throw ArgumentError('credential key and value are required');
     }
     final cacheKey = _cacheKey(key);
+    final linuxFile = _linuxFile(forWrite: true);
+    if (linuxFile != null) {
+      linuxFile.write(service, key, value);
+      _cache[cacheKey] = value;
+      _loaded.add(cacheKey);
+      return;
+    }
+    if (_effectivePlatform == 'windows') {
+      _windows.write(service, key, value);
+      _cache[cacheKey] = value;
+      _loaded.add(cacheKey);
+      return;
+    }
     if (_effectivePlatform == 'macos') {
       final keychain = nativeKeychain;
       if (keychain == null) {
@@ -151,6 +202,15 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
     final cacheKey = _cacheKey(key);
     _cache.remove(cacheKey);
     _loaded.remove(cacheKey);
+    if (_effectivePlatform == 'windows') {
+      _windows.delete(service, key);
+      return;
+    }
+    final linuxFile = _linuxFile();
+    if (linuxFile != null) {
+      linuxFile.delete(service, key);
+      return;
+    }
     if (_effectivePlatform == 'macos') {
       final keychain = nativeKeychain;
       if (keychain != null) {

@@ -364,10 +364,10 @@ class WorkspaceRuntime {
     if (await current.exists() && await current.length() >= logFileMaxBytes) {
       await _rotateLogFile(current);
     }
-    final output = current.openWrite(mode: FileMode.append);
+    await current.create();
     await currentPlatformRuntime.restrictPermissions(current.path,
         directory: false);
-    return output;
+    return current.openWrite(mode: FileMode.append);
   }
 
   Future<void> _rotateLogIfNeeded() async {
@@ -380,9 +380,10 @@ class WorkspaceRuntime {
     await _ownedLogOutput?.close();
     _ownedLogOutput = null;
     await _rotateLogFile(current);
-    _ownedLogOutput = current.openWrite(mode: FileMode.append);
+    await current.create();
     await currentPlatformRuntime.restrictPermissions(current.path,
         directory: false);
+    _ownedLogOutput = current.openWrite(mode: FileMode.append);
     _log.attach(_ownedLogOutput!);
   }
 

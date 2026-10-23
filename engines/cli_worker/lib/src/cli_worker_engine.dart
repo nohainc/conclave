@@ -277,7 +277,7 @@ class CliWorkerEngine {
       final context = ProfileVersionProbe.buildContext(
         profile: _profile,
         workingDirectory: workingDirectory,
-        homeDirectory: Platform.environment['HOME'] ?? workingDirectory,
+        homeDirectory: _hostHome ?? workingDirectory,
         workerStateDirectory: options.statePath,
       );
       final profileTimeoutMs = _int(spec['timeoutMs']);
@@ -392,7 +392,7 @@ class CliWorkerEngine {
       final versionContext = ProfileVersionProbe.buildContext(
         profile: _profile,
         workingDirectory: workingDirectory,
-        homeDirectory: Platform.environment['HOME'] ?? workingDirectory,
+        homeDirectory: _hostHome ?? workingDirectory,
         workerStateDirectory: options.statePath,
       );
       final versionEnvironment = Map<String, String>.from(env);
@@ -498,7 +498,7 @@ class CliWorkerEngine {
           final usageContext = ProfileVersionProbe.buildContext(
             profile: _profile,
             workingDirectory: workingDirectory,
-            homeDirectory: Platform.environment['HOME'] ?? workingDirectory,
+            homeDirectory: _hostHome ?? workingDirectory,
             workerStateDirectory: options.statePath,
           );
           final usageArguments = _stringList(
@@ -838,7 +838,7 @@ class CliWorkerEngine {
     final context = ProfileVersionProbe.buildContext(
       profile: _profile,
       workingDirectory: options.statePath,
-      homeDirectory: Platform.environment['HOME'] ?? options.statePath,
+      homeDirectory: _hostHome ?? options.statePath,
       workerStateDirectory: options.statePath,
     );
     final result = await ProfileVersionProbe.run(
@@ -1748,7 +1748,7 @@ class CliWorkerEngine {
   Map<String, String> _context(ExecuteRequest request, String? sessionId) => {
     'prompt': request.prompt,
     'workingDirectory': Directory.current.path,
-    'home': Platform.environment['HOME'] ?? Directory.current.path,
+    'home': _hostHome ?? Directory.current.path,
     'workerStateDirectory': options.statePath,
     'timeoutMs':
         '${(request.timeoutMs - _int(_profile.timeout['providerReserveMs'])).clamp(1, request.timeoutMs)}',
@@ -1956,8 +1956,7 @@ class CliWorkerEngine {
           entry.value.toString(),
           context.isEmpty
               ? {
-                  'home':
-                      Platform.environment['HOME'] ?? Directory.current.path,
+                  'home': _hostHome ?? Directory.current.path,
                   'workingDirectory': Directory.current.path,
                   'workerStateDirectory': options.statePath,
                   'prompt': '',
@@ -2848,3 +2847,7 @@ String _requestIdFromLine(String line) {
   } on Object {}
   return 'invalid-frame';
 }
+
+String? get _hostHome => Platform.isWindows
+    ? Platform.environment['USERPROFILE'] ?? Platform.environment['HOME']
+    : Platform.environment['HOME'];

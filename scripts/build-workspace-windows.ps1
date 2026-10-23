@@ -80,5 +80,5 @@ try {
     $Archive = Join-Path $Root "dist/conclave-workspace/conclave-workspace-windows-x64-$Mode-preview.zip"
     Compress-Archive -Path "$Output/*" -DestinationPath $Archive -Force
     Write-Host "Built unsigned Windows UI preview: $Archive"
-    Write-Warning 'Windows service management, named-pipe IPC, DPAPI and Job Object supervision are not implemented. This is not a working execution host.'
+    Write-Warning 'Unsigned runtime candidate. Real provider execution, logon/reboot and release signing require qualification on the target Windows device.'
 } finally { Pop-Location }
