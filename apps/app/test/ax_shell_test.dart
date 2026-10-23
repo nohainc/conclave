@@ -101,6 +101,10 @@ void main() {
       expect(find.textContaining('Sign in securely'), findsNothing);
       final forgot = find.text('Forgot password?');
       final email = find.widgetWithText(TextField, 'Email');
+      final emailInput = tester.widget<EditableText>(
+        find.descendant(of: email, matching: find.byType(EditableText)),
+      );
+      expect(emailInput.focusNode.hasFocus, isTrue);
       expect(tester.getCenter(forgot).dx, tester.getCenter(email).dx);
       for (final provider in ['github', 'google']) {
         final label = provider == 'github' ? 'GitHub' : 'Google';

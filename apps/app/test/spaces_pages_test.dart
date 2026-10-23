@@ -967,7 +967,7 @@ void main() {
       Color? tabColor(Finder tab) =>
           tester.widget<TextButton>(tab).style!.foregroundColor!.resolve({});
       expect(tabColor(conversationTab), ConclaveColors.textPrimaryLight);
-      expect(tabColor(historyTab), const Color(0xff43444f));
+      expect(tabColor(historyTab), const Color(0xff535460));
       expect(
           find.descendant(
               of: conversationTab,
@@ -994,7 +994,7 @@ void main() {
       expect(tabColor(find.byKey(const ValueKey('ai-history-tab'))),
           ConclaveColors.textPrimaryLight);
       expect(tabColor(find.byKey(const ValueKey('ai-history-conversation'))),
-          const Color(0xff43444f));
+          const Color(0xff535460));
       expect(find.text('Read-only'), findsNothing);
       expect(find.byTooltip('Close AI History'), findsNothing);
       // AI History never accepts input.

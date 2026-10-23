@@ -11,12 +11,21 @@ class _FakeDictation implements SpeechDictation {
   void Function(String transcript)? onTranscript;
   void Function(String? error)? onEnd;
   var stopped = 0;
+  String? startedLanguage;
+
+  @override
+  String get browserLanguage => 'en-US';
+
+  @override
+  String? preferredLanguage;
 
   @override
   void start({
+    required String language,
     required void Function(String transcript) onTranscript,
     required void Function(String? error) onEnd,
   }) {
+    startedLanguage = language;
     this.onTranscript = onTranscript;
     this.onEnd = onEnd;
   }
@@ -75,6 +84,37 @@ void main() {
     });
   }
 
+  testWidgets('language and mic share an outline that turns red when live',
+      (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await pump(tester, controller, _FakeDictation());
+    Color border() => ((tester
+                .widget<Container>(
+                    find.byKey(const ValueKey('composer-dictation-group')))
+                .decoration as BoxDecoration)
+            .border as Border)
+        .top
+        .color;
+    final group = find.byKey(const ValueKey('composer-dictation-group'));
+    expect(
+        find.descendant(
+            of: group,
+            matching:
+                find.byKey(const ValueKey('composer-dictation-language'))),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: group,
+            matching: find.byKey(const ValueKey('composer-dictation'))),
+        findsOneWidget);
+    final idle = border();
+    await tester.tap(find.byTooltip('Dictate'));
+    await tester.pump();
+    expect(border(), isNot(idle));
+    expect(border(), Theme.of(tester.element(group)).colorScheme.error);
+  });
+
   testWidgets('clearing the input (send) ends dictation', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
@@ -104,5 +144,48 @@ void main() {
     dictation.onEnd!('not-allowed');
     await tester.pump();
     expect(find.textContaining('Microphone access is blocked'), findsOneWidget);
+  });
+
+  testWidgets('selected language is used and remembered', (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final dictation = _FakeDictation();
+    await pump(tester, controller, dictation);
+    expect(find.text('EN'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('composer-dictation-language')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('dictation-language-uk-UA')));
+    await tester.pumpAndSettle();
+    expect(dictation.preferredLanguage, 'uk-UA');
+    expect(find.text('UK'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Dictate'));
+    await tester.pump();
+    expect(dictation.startedLanguage, 'uk-UA');
+
+    // A new composer on this device starts from the saved choice.
+    await tester.pumpWidget(const SizedBox());
+    await pump(tester, controller, dictation);
+    expect(find.text('UK'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('composer-dictation-language')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('dictation-language-browser')));
+    await tester.pumpAndSettle();
+    expect(dictation.preferredLanguage, isNull);
+    expect(find.text('EN'), findsOneWidget);
+  });
+
+  testWidgets('two-row layout puts the mic right before send', (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await pump(tester, controller, _FakeDictation(), twoRowLayout: true);
+    final mic = tester.getRect(find.byTooltip('Dictate'));
+    final send =
+        tester.getRect(find.widgetWithIcon(IconButton, Icons.send_rounded));
+    final markdown = tester.getRect(find.byTooltip('Show Markdown controls'));
+    expect(mic.left, greaterThan(markdown.right));
+    expect(send.left - mic.right, lessThan(8));
   });
 }

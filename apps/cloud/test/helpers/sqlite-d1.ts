@@ -97,6 +97,7 @@ export function sqliteD1(
     "0079_ai_history_cutoff.sql",
     "0080_discussion_attachments.sql",
     "0081_user_notes.sql",
+    "0082_user_note_space_title.sql",
   ]) {
     sqlite.exec(
       readFileSync(

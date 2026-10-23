@@ -276,7 +276,8 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
 
   final _markdownMenu = MenuController();
 
-  /// Two-row layout controls: emoji and Markdown popup left, send right.
+  /// Two-row layout controls: emoji and Markdown popup left; mic and send
+  /// right.
   Widget _twoRowControls() => Padding(
         padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
         child: Row(children: [
@@ -285,7 +286,6 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
           if (widget.executionControlsBuilder != null)
             Expanded(child: widget.executionControlsBuilder!(_inputKey)),
           if (widget.showEmojiPicker) _emojiButton(),
-          if (_dictationVisible) _dictationButton(),
           if (widget.showMarkdownControls)
             MenuAnchor(
               controller: _markdownMenu,
@@ -334,6 +334,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
               ),
             ),
           if (widget.executionControlsBuilder == null) const Spacer(),
+          if (_dictationVisible) _dictationButton(),
           if (widget.onSend != null)
             IconButton(
               key: ValueKey('composer-send-${widget.sendTooltip}'),

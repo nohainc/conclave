@@ -7,15 +7,45 @@ import 'speech_dictation_stub.dart'
 abstract interface class SpeechDictation {
   bool get supported;
 
-  /// Starts listening. [onTranscript] receives the whole session transcript
-  /// so far (final and interim words); [onEnd] runs once, with an error code
-  /// when recognition failed.
+  /// BCP 47 tag of the browser's own language, used when nothing is chosen.
+  String get browserLanguage;
+
+  /// Language the user picked on this device, or null for the browser's.
+  String? get preferredLanguage;
+  set preferredLanguage(String? value);
+
+  /// Starts listening in [language]. [onTranscript] receives the whole
+  /// session transcript so far (final and interim words); [onEnd] runs
+  /// once, with an error code when recognition failed.
   void start({
+    required String language,
     required void Function(String transcript) onTranscript,
     required void Function(String? error) onEnd,
   });
 
   void stop();
 }
+
+/// Languages offered in the mic menu, as (BCP 47 tag, native name).
+const dictationLanguages = [
+  ('en-US', 'English (US)'),
+  ('en-GB', 'English (UK)'),
+  ('uk-UA', 'Українська'),
+  ('pl-PL', 'Polski'),
+  ('de-DE', 'Deutsch'),
+  ('fr-FR', 'Français'),
+  ('es-ES', 'Español'),
+  ('it-IT', 'Italiano'),
+  ('pt-BR', 'Português (Brasil)'),
+  ('nl-NL', 'Nederlands'),
+  ('cs-CZ', 'Čeština'),
+  ('tr-TR', 'Türkçe'),
+  ('ru-RU', 'Русский'),
+  ('ja-JP', '日本語'),
+  ('ko-KR', '한국어'),
+  ('zh-CN', '中文 (简体)'),
+  ('hi-IN', 'हिन्दी'),
+  ('ar-SA', 'العربية'),
+];
 
 SpeechDictation createSpeechDictation() => platform.createSpeechDictation();

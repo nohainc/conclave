@@ -20,6 +20,8 @@ class NotesPage extends StatefulWidget {
 class _NotesPageState extends State<NotesPage> {
   List<AxNote>? _notes;
   String? _error;
+  // The note open in the page's editor; null shows the list.
+  AxNote? _selected;
 
   @override
   void initState() {
@@ -50,20 +52,10 @@ class _NotesPageState extends State<NotesPage> {
     }
   }
 
-  Future<void> _open(AxNote note) async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) => _NoteDialog(
-        note: note,
-        source: widget.source,
-        onOpenThread: note.linked && widget.onOpenThread != null
-            ? () {
-                Navigator.of(context).pop();
-                widget.onOpenThread!(note.spaceId!, note.threadId!);
-              }
-            : null,
-      ),
-    );
+  Future<void> _open(AxNote note) async => setState(() => _selected = note);
+
+  Future<void> _close() async {
+    setState(() => _selected = null);
     await _reload();
   }
 
@@ -95,9 +87,14 @@ class _NotesPageState extends State<NotesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final selected = _selected;
+    if (selected != null) return _editor(selected);
     final notes = _notes;
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Column(
+    // The page gets the full height (no outer scroll), so the list scrolls
+    // itself and the editor can fill it.
+    return SingleChildScrollView(
+        child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [
@@ -112,9 +109,6 @@ class _NotesPageState extends State<NotesPage> {
             label: const Text('New note'),
           ),
         ]),
-        const SizedBox(height: 8),
-        const Text('Private notes only you can see. Notes from a Thread stay '
-            'here even if the Thread is deleted.'),
         const SizedBox(height: 20),
         if (_error != null) ...[
           Text(_error!,
@@ -131,93 +125,115 @@ class _NotesPageState extends State<NotesPage> {
             Card(
               key: ValueKey('note-${note.id}'),
               margin: const EdgeInsets.only(bottom: 10),
-              child: ListTile(
+              // Line 1: name left, path right across the full width.
+              // Below: the text preview with Delete beside it.
+              child: InkWell(
                 onTap: () => unawaited(_open(note)),
-                title: Text(note.displayTitle,
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (note.threadId != null)
-                      Text(
-                        note.linked
-                            ? 'Thread: ${note.threadName ?? ''}'
-                            : 'From a Thread you can no longer open: '
-                                '${note.threadName ?? ''}',
-                        style: TextStyle(fontSize: 12, color: muted),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Row(children: [
+                          Expanded(
+                            child: Text(note.displayTitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w600)),
+                          ),
+                          if (note.path case final path?
+                              when path.isNotEmpty) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                note.linked
+                                    ? path
+                                    : '$path (Thread no longer available)',
+                                key: ValueKey('note-path-${note.id}'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.right,
+                                style: TextStyle(fontSize: 12, color: muted),
+                              ),
+                            ),
+                          ],
+                        ]),
                       ),
-                    if (note.body.trim().isNotEmpty)
-                      Text(note.body.trim(),
-                          maxLines: 2, overflow: TextOverflow.ellipsis),
-                  ],
-                ),
-                trailing: IconButton(
-                  key: ValueKey('delete-note-${note.id}'),
-                  tooltip: 'Delete note',
-                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                  onPressed: () => unawaited(_delete(note)),
+                      Row(children: [
+                        Expanded(
+                          child: Text(note.body.trim(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(color: muted)),
+                        ),
+                        IconButton(
+                          key: ValueKey('delete-note-${note.id}'),
+                          tooltip: 'Delete note',
+                          icon: const Icon(Icons.delete_outline_rounded,
+                              size: 18),
+                          onPressed: () => unawaited(_delete(note)),
+                        ),
+                      ]),
+                    ],
+                  ),
                 ),
               ),
             ),
       ],
-    );
+    ));
   }
-}
 
-class _NoteDialog extends StatelessWidget {
-  const _NoteDialog(
-      {required this.note, required this.source, this.onOpenThread});
-
-  final AxNote note;
-  final AxNotesDataSource source;
-  final VoidCallback? onOpenThread;
-
-  @override
-  Widget build(BuildContext context) => Dialog(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720, maxHeight: 640),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 12, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(children: [
-                  if (note.threadId != null)
-                    Expanded(
-                      child: Text(
-                        note.linked
-                            ? 'Thread: ${note.threadName ?? ''}'
-                            : 'From a Thread you can no longer open: '
-                                '${note.threadName ?? ''}',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    )
-                  else
-                    const Spacer(),
-                  if (onOpenThread != null)
-                    TextButton(
-                        onPressed: onOpenThread,
-                        child: const Text('Open Thread')),
-                  IconButton(
-                    tooltip: 'Close',
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => Navigator.of(context).pop(),
+  /// The selected note's editor, shown in place of the list.
+  Widget _editor(AxNote note) {
+    final path = note.spacePath;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(children: [
+          TextButton.icon(
+            key: const ValueKey('notes-back'),
+            onPressed: () => unawaited(_close()),
+            icon: const Icon(Icons.arrow_back_rounded, size: 18),
+            label: const Text('All notes'),
+          ),
+          const SizedBox(width: 12),
+          // Path and Open Thread sit on the right.
+          Expanded(
+            child: path == null || path.isEmpty
+                ? const SizedBox.shrink()
+                : Text(
+                    note.linked ? path : '$path (Thread no longer available)',
+                    key: const ValueKey('notes-editor-path'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                ]),
-                Expanded(
-                  child: NoteEditor(
-                    showTitle: true,
-                    load: () => source.loadNote(note.id),
-                    save: ({required title, required body, revision}) =>
-                        source.updateNote(note.id,
-                            title: title,
-                            body: body,
-                            revision: revision ?? note.revision),
-                  ),
-                ),
-              ],
-            ),
+          ),
+          if (note.linked && widget.onOpenThread != null)
+            TextButton(
+                key: const ValueKey('notes-open-thread'),
+                onPressed: () =>
+                    widget.onOpenThread!(note.spaceId!, note.threadId!),
+                child: const Text('Open Thread')),
+        ]),
+        const SizedBox(height: 8),
+        Expanded(
+          child: NoteEditor(
+            key: ValueKey('notes-editor-${note.id}'),
+            showTitle: true,
+            load: () => widget.source.loadNote(note.id),
+            save: ({required title, required body, revision}) => widget.source
+                .updateNote(note.id,
+                    title: title,
+                    body: body,
+                    revision: revision ?? note.revision),
           ),
         ),
-      );
+      ],
+    );
+  }
 }

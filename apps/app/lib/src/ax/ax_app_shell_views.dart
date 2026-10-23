@@ -515,7 +515,10 @@ extension _AxAppShellViews on _AxAppStateMixin {
                 padding: const EdgeInsets.all(32),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 420),
-                  child: SizedBox(width: double.infinity, child: content),
+                  // Keep form autofocus independent of the shell shortcut focus.
+                  child: FocusScope(
+                    child: SizedBox(width: double.infinity, child: content),
+                  ),
                 ),
               ),
             ),
@@ -739,26 +742,37 @@ extension _AxAppShellViews on _AxAppStateMixin {
                             padding: EdgeInsets.zero,
                             child: _spaceOverviewView(),
                           )
-                        : navigation.kind == AxRouteKind.spaceMembers
-                            ? SingleChildScrollView(
+                        : navigation.kind == AxRouteKind.notes
+                            // My Notes scrolls its own list so a note's
+                            // editor can use the full page height.
+                            ? Padding(
                                 padding: EdgeInsets.fromLTRB(compact ? 18 : 34,
-                                    26, compact ? 18 : 34, 40),
-                                child: _contentWidth(_spaceResourceView(
-                                    SpacePageSection.members)),
+                                    26, compact ? 18 : 34, 20),
+                                child: _contentWidth(_runDetailsView(compact)),
                               )
-                            : SingleChildScrollView(
-                                padding: EdgeInsets.fromLTRB(
-                                  compact ? 18 : 34,
-                                  navigation.kind == AxRouteKind.workspaces
-                                      ? 0
-                                      : 26,
-                                  compact ? 18 : 34,
-                                  40,
-                                ),
-                                child: _contentWidth(showRunDetails
-                                    ? _runDetailsView(compact)
-                                    : _homeView()),
-                              ),
+                            : navigation.kind == AxRouteKind.spaceMembers
+                                ? SingleChildScrollView(
+                                    padding: EdgeInsets.fromLTRB(
+                                        compact ? 18 : 34,
+                                        26,
+                                        compact ? 18 : 34,
+                                        40),
+                                    child: _contentWidth(_spaceResourceView(
+                                        SpacePageSection.members)),
+                                  )
+                                : SingleChildScrollView(
+                                    padding: EdgeInsets.fromLTRB(
+                                      compact ? 18 : 34,
+                                      navigation.kind == AxRouteKind.workspaces
+                                          ? 0
+                                          : 26,
+                                      compact ? 18 : 34,
+                                      40,
+                                    ),
+                                    child: _contentWidth(showRunDetails
+                                        ? _runDetailsView(compact)
+                                        : _homeView()),
+                                  ),
               ),
             ]),
             Positioned(

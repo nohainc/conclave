@@ -18,6 +18,7 @@ class AxThreadViewState {
     this.workDraft = '',
     this.chatSeenId,
     this.workSeenId,
+    this.pane,
   });
 
   final int tabIndex;
@@ -41,6 +42,15 @@ class AxThreadViewState {
   final String? chatSeenId;
   final String? workSeenId;
 
+  /// Last open Thread pane: [conversationPane], [aiHistoryPane] or
+  /// [notesPane]. Local only, like the drafts.
+  final String? pane;
+
+  static const conversationPane = 'conversation';
+  static const aiHistoryPane = 'aiHistory';
+  static const notesPane = 'notes';
+  static const _panes = {conversationPane, aiHistoryPane, notesPane};
+
   Map<String, dynamic> toJson() => {
         'schemaVersion': 1,
         'tabIndex': tabIndex.clamp(0, 1),
@@ -56,6 +66,7 @@ class AxThreadViewState {
         if (workDraft.isNotEmpty) 'workDraft': _bounded(workDraft),
         if (chatSeenId != null) 'chatSeenId': chatSeenId,
         if (workSeenId != null) 'workSeenId': workSeenId,
+        if (pane != null) 'pane': pane,
       };
 
   /// Thread metadata wins over the browser-local copy for the selection
@@ -94,6 +105,7 @@ class AxThreadViewState {
       workDraft: local?.workDraft ?? '',
       chatSeenId: local?.chatSeenId,
       workSeenId: local?.workSeenId,
+      pane: local?.pane,
     );
   }
 
@@ -123,6 +135,7 @@ class AxThreadViewState {
       workDraft: draft('workDraft'),
       chatSeenId: string('chatSeenId'),
       workSeenId: string('workSeenId'),
+      pane: _panes.contains(json['pane']) ? json['pane'] as String : null,
     );
   }
 

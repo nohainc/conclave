@@ -1,8 +1,9 @@
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 
 import 'speech_dictation.dart';
 
-/// Mic toggle that writes browser speech recognition into [controller] at
+/// Mic toggle with a language menu that writes browser speech recognition into [controller] at
 /// the cursor. The user reviews and sends the text; no audio leaves the page
 /// through Conclave. Hidden when the browser has no speech recognition.
 class DictationButton extends StatefulWidget {
@@ -36,6 +37,9 @@ class _DictationButtonState extends State<DictationButton> {
   String _prefix = '';
   String _suffix = '';
   String? _written;
+  late String? _language = _dictation.preferredLanguage;
+
+  String get _activeLanguage => _language ?? _dictation.browserLanguage;
 
   @override
   void initState() {
@@ -89,7 +93,8 @@ class _DictationButtonState extends State<DictationButton> {
     _suffix = text.substring(end);
     _written = null;
     setState(() => _listening = true);
-    _dictation.start(onTranscript: _write, onEnd: _ended);
+    _dictation.start(
+        language: _activeLanguage, onTranscript: _write, onEnd: _ended);
   }
 
   void _write(String transcript) {
@@ -129,18 +134,93 @@ class _DictationButtonState extends State<DictationButton> {
     }
   }
 
+  void _selectLanguage(String? language) {
+    _stop();
+    _dictation.preferredLanguage = language;
+    setState(() => _language = language);
+  }
+
+  String _languageName(String tag) {
+    for (final (code, name) in dictationLanguages) {
+      if (code.toLowerCase() == tag.toLowerCase()) return name;
+    }
+    return tag;
+  }
+
+  Widget _languageMenu() {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final code = _activeLanguage.split('-').first.toUpperCase();
+    Widget item(String? tag, String label) => MenuItemButton(
+          key: ValueKey('dictation-language-${tag ?? 'browser'}'),
+          style: ConclaveMenuStyle.item(dark),
+          leadingIcon: Icon(_language == tag ? Icons.check : null, size: 16),
+          onPressed: () => _selectLanguage(tag),
+          child: Text(label, style: ConclaveMenuStyle.textStyle),
+        );
+    return MenuAnchor(
+      style: ConclaveMenuStyle.surface(dark, composer: true),
+      menuChildren: [
+        item(null,
+            'Browser default (${_languageName(_dictation.browserLanguage)})'),
+        for (final (tag, name) in dictationLanguages) item(tag, name),
+      ],
+      builder: (context, controller, _) => Tooltip(
+        message: 'Dictation language: ${_languageName(_activeLanguage)}',
+        child: TextButton(
+          key: const ValueKey('composer-dictation-language'),
+          style: TextButton.styleFrom(
+            foregroundColor: widget.color,
+            minimumSize: const Size(0, 30),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(6))),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            textStyle:
+                const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+          onPressed: widget.enabled
+              ? () => controller.isOpen ? controller.close() : controller.open()
+              : null,
+          child: Text(code),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!_dictation.supported) return const SizedBox.shrink();
     final label = _listening ? 'Stop dictation' : 'Dictate';
-    return IconButton(
+    final mic = IconButton(
       key: const ValueKey('composer-dictation'),
       tooltip: label,
       isSelected: _listening,
       color: _listening ? Theme.of(context).colorScheme.error : widget.color,
       onPressed: widget.enabled ? (_listening ? _stop : _start) : null,
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints.tightFor(width: 34, height: 30),
+      padding: EdgeInsets.zero,
+      style:
+          IconButton.styleFrom(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
       icon: Icon(_listening ? Icons.stop_circle_outlined : Icons.mic_none,
           size: 18, semanticLabel: label),
+    );
+    // Language and mic share one outlined track, styled like the Chat/Work
+    // workflow selector; the outline turns red while recording.
+    final colors = Theme.of(context).colorScheme;
+    final border = _listening ? colors.error : colors.outlineVariant;
+    return Container(
+      key: const ValueKey('composer-dictation-group'),
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.all(1),
+      decoration: BoxDecoration(
+        border: Border.all(color: border),
+        borderRadius: const BorderRadius.all(Radius.circular(8)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        _languageMenu(),
+        mic,
+      ]),
     );
   }
 }

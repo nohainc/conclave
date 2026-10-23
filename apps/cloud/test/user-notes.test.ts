@@ -15,6 +15,7 @@ type Note = {
   body: string;
   threadId: string | null;
   threadName: string | null;
+  spaceName: string | null;
   linked: boolean;
   revision: number;
 };
@@ -85,9 +86,11 @@ it("keeps a Thread note private to its owner", async () => {
   expect(await threadNote("bob")).toBeNull();
   const created = await threadNote("bob", "PUT", { body: "remember" });
   expect(created).toMatchObject({
+    title: "Thread",
     body: "remember",
     threadId: "T",
     threadName: "Thread",
+    spaceName: "Space",
     linked: true,
     revision: 1,
   });
@@ -125,6 +128,7 @@ it("keeps notes, detached, when the Thread is deleted", async () => {
     body: "keep me",
     threadId: "T",
     threadName: "Thread",
+    spaceName: "Space",
     linked: false,
   });
 });

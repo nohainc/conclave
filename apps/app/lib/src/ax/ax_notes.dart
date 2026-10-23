@@ -1,7 +1,7 @@
 /// A private note. Notes belong to the signed-in user, not to a Space or
 /// Thread: a note linked to a Thread stays when that Thread is deleted or the
 /// user leaves its Space, and is then [linked] == false with the saved
-/// [threadName].
+/// [spaceName] and [threadName].
 class AxNote {
   const AxNote({
     required this.id,
@@ -12,6 +12,7 @@ class AxNote {
     this.threadId,
     this.spaceId,
     this.threadName,
+    this.spaceName,
     this.linked = false,
   });
 
@@ -24,6 +25,7 @@ class AxNote {
         threadId: json['threadId']?.toString(),
         spaceId: json['spaceId']?.toString(),
         threadName: json['threadName']?.toString(),
+        spaceName: json['spaceName']?.toString(),
         linked: json['linked'] == true,
       );
 
@@ -35,6 +37,28 @@ class AxNote {
   final String? threadId;
   final String? spaceId;
   final String? threadName;
+  final String? spaceName;
+
+  /// Where a Thread note comes from: `Thread < Space`, or null for a
+  /// standalone note.
+  String? get path {
+    if (threadId == null) return null;
+    return [threadName, spaceName]
+        .map((name) => name?.trim() ?? '')
+        .where((name) => name.isNotEmpty)
+        .join(' < ');
+  }
+
+  /// The same path from the top down, `Space > Thread`, for the note's own
+  /// page.
+  String? get spacePath {
+    if (threadId == null) return null;
+    return [spaceName, threadName]
+        .map((name) => name?.trim() ?? '')
+        .where((name) => name.isNotEmpty)
+        .join(' > ');
+  }
+
   final bool linked;
 
   /// Title shown in lists: the note title, else its Thread, else the first

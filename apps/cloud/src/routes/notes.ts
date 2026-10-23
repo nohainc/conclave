@@ -7,15 +7,18 @@ const MAX_BODY = 200_000;
 
 /** Notes are private to their owner. A note may link to one Thread; the link
  * is live only while the Thread exists and the owner is still a member of its
- * Space. Otherwise the note stays, detached, with the saved Thread title. */
+ * Space. Otherwise the note stays, detached, with the saved Space and Thread
+ * titles. */
 const NOTE_COLUMNS = `n.id, n.title, n.body, n.thread_id AS threadId,
-  n.space_id AS spaceId, n.linked_title AS linkedTitle, n.revision,
+  n.space_id AS spaceId, n.linked_title AS linkedTitle,
+  n.linked_space_title AS linkedSpaceTitle, n.revision,
   n.created_at AS createdAt, n.updated_at AS updatedAt,
-  t.name AS liveThreadName,
+  t.name AS liveThreadName, s.name AS liveSpaceName,
   CASE WHEN t.id IS NOT NULL AND m.user_id IS NOT NULL THEN 1 ELSE 0 END AS linked`;
 const NOTE_FROM = `user_notes n
   LEFT JOIN threads t ON t.id = n.thread_id
-  LEFT JOIN space_memberships m ON m.space_id = t.space_id AND m.user_id = n.user_id`;
+  LEFT JOIN space_memberships m ON m.space_id = t.space_id AND m.user_id = n.user_id
+  LEFT JOIN spaces s ON s.id = t.space_id`;
 
 function noteView(row: Record<string, unknown>) {
   const linked = row.linked === 1;
@@ -29,6 +32,10 @@ function noteView(row: Record<string, unknown>) {
       row.threadId == null
         ? null
         : String((linked ? row.liveThreadName : row.linkedTitle) ?? ""),
+    spaceName:
+      row.threadId == null
+        ? null
+        : String((linked ? row.liveSpaceName : row.linkedSpaceTitle) ?? ""),
     linked,
     revision: Number(row.revision),
     createdAt: String(row.createdAt),
@@ -77,7 +84,7 @@ async function updateNote(
   userId: string,
   noteId: string,
   input: { title?: string; body?: string; revision?: number },
-  linkedTitle?: string,
+  linked?: { thread: string; space: string },
 ) {
   if (input.revision === undefined)
     throw new HttpError(400, "revision is required");
@@ -85,17 +92,19 @@ async function updateNote(
     `UPDATE user_notes
         SET title = COALESCE(?1, title), body = COALESCE(?2, body),
             linked_title = COALESCE(?3, linked_title),
+            linked_space_title = COALESCE(?8, linked_space_title),
             revision = revision + 1, updated_at = ?4
       WHERE id = ?5 AND user_id = ?6 AND revision = ?7`,
   )
     .bind(
       input.title ?? null,
       input.body ?? null,
-      linkedTitle ?? null,
+      linked?.thread ?? null,
       new Date().toISOString(),
       noteId,
       userId,
       input.revision,
+      linked?.space ?? null,
     )
     .run();
   if (!result.meta.changes) {
@@ -216,6 +225,14 @@ export async function handleThreadNote(
   if (request.method !== "PUT")
     throw new HttpError(405, "Method not allowed");
   const input = await noteInput(request);
+  // Saved names keep the note's Space and Thread path after the Thread is
+  // deleted or the owner loses access.
+  const space = await env.CONCLAVE_DB.prepare(
+    "SELECT name FROM spaces WHERE id = ?1",
+  )
+    .bind(spaceId)
+    .first<{ name: string }>();
+  const linked = { thread: thread.name, space: space?.name ?? "" };
   if (existing)
     return json({
       note: await updateNote(
@@ -223,7 +240,7 @@ export async function handleThreadNote(
         context.userId,
         existing.id,
         input,
-        thread.name,
+        linked,
       ),
     });
   if (input.revision !== undefined)
@@ -231,21 +248,23 @@ export async function handleThreadNote(
   const id = `note-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   // A concurrent first save from another device loses on the unique index.
+  // A new Thread note is titled after its Thread; the owner can rename it.
   const result = await env.CONCLAVE_DB.prepare(
     `INSERT OR IGNORE INTO user_notes
        (id, user_id, title, body, thread_id, space_id, linked_title,
-        created_at, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)`,
+        linked_space_title, created_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?9, ?8, ?8)`,
   )
     .bind(
       id,
       context.userId,
-      input.title ?? "",
+      input.title || thread.name,
       input.body ?? "",
       threadId,
       spaceId,
       thread.name,
       now,
+      linked.space,
     )
     .run();
   if (!result.meta.changes)

@@ -33,8 +33,9 @@ event. No credential is a substitute for another.
    transport contract version `1.0`.
 2. The desktop opens `verificationUrl` in the system browser. The existing
    AX Better Auth login handles email/password, configured social providers,
-   and passkeys where supported. After sign-in, the user explicitly approves
-   the desktop request in the browser. New desktop releases do not ask the
+   and passkeys where supported. When the login form opens, its email
+   (username) field receives keyboard focus automatically. After sign-in, the
+   user explicitly approves the desktop request in the browser. New desktop releases do not ask the
    user to read, remember, or enter a code.
 3. The desktop polls the intent status using the poll token and claims an
    approved intent exactly once using `DesktopAuthIntentClaimRequest`.

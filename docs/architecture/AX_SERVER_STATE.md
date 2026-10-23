@@ -1110,7 +1110,10 @@ link (`thread_id`, `space_id`, `linked_title`) with no foreign keys, so
 deleting a Thread or Space, or leaving it, never deletes a note; only deleting
 the user does. Reads report `linked: true` only while the Thread exists and
 the owner is still a member of its Space; otherwise the note is detached and
-shows the saved Thread title. There is no warning on Thread deletion because
+shows the saved Space and Thread names (`linked_space_title`, migration
+`0082_user_note_space_title.sql`). Reads return `spaceName` and `threadName`,
+and My Notes shows a Thread note's path as `Thread < Space`. A new Thread note
+is titled after its Thread; the owner can rename it. There is no warning on Thread deletion because
 nothing is lost.
 
 - `GET /api/notes`, `POST /api/notes`, and `GET`/`PUT`/`DELETE
@@ -1123,7 +1126,11 @@ nothing is lost.
 
 Notes are never published as collaboration events, never shown to other
 members or Space owners, and never included in Worker context. The app saves
-automatically shortly after typing stops.
+automatically shortly after typing stops. The body is Markdown: the editor
+has an emoji picker, a Markdown formatting menu, browser speech dictation with
+language selection (same as chat composers). A saved note opens rendered and
+read-only; the edit icon or a double click opens the editor, and Done returns
+to the rendered view. An empty note opens in the editor.
 
 ## Phase 9: Persisted sidebar and Thread view state
 

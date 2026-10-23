@@ -1,13 +1,20 @@
 import 'dart:async';
 
+import 'package:conclave_design/conclave_design.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../ax/ax_data.dart';
+import '../common/conclave_markdown_body.dart';
+import '../common/dictation/dictation_button.dart';
+import '../common/dictation/speech_dictation.dart';
+import '../common/emoji_picker.dart';
+import '../common/markdown_composer.dart';
 
 typedef NoteSave = Future<AxNote> Function(
     {required String title, required String body, int? revision});
 
-/// Plain-text editor for one private note. Text saves automatically shortly
+/// Markdown editor for one private note. Text saves automatically shortly
 /// after typing stops and when the editor closes. A save that lost to a newer
 /// version (another device) reloads the latest text instead of overwriting it.
 class NoteEditor extends StatefulWidget {
@@ -19,6 +26,7 @@ class NoteEditor extends StatefulWidget {
     this.hint = 'Write private notes…',
     this.saveDelay = const Duration(milliseconds: 800),
     this.onSaved,
+    this.dictation,
   });
 
   /// Loads the note; null means it does not exist yet (first save creates it).
@@ -28,6 +36,9 @@ class NoteEditor extends StatefulWidget {
   final String hint;
   final Duration saveDelay;
   final ValueChanged<AxNote>? onSaved;
+
+  /// Overrides the platform speech recognizer (tests).
+  final SpeechDictation? dictation;
 
   @override
   State<NoteEditor> createState() => _NoteEditorState();
@@ -43,11 +54,51 @@ class _NoteEditorState extends State<NoteEditor> {
   Timer? _timer;
   Future<void>? _saving;
   bool _dirty = false;
+  // Saved notes open formatted and read-only; empty ones open for writing.
+  bool _editing = false;
+  Duration? _lastPointerDown;
+  bool _loadingText = false;
+  final _focus = FocusNode();
+  final _markdownMenu = MenuController();
+
+  static const _formats = [
+    (MarkdownFormat.bold, 'Bold', Icons.format_bold),
+    (MarkdownFormat.italic, 'Italic', Icons.format_italic),
+    (MarkdownFormat.heading, 'Heading', Icons.title),
+    (MarkdownFormat.inlineCode, 'Inline code', Icons.code),
+    (MarkdownFormat.codeBlock, 'Code block', Icons.data_object),
+    (MarkdownFormat.quote, 'Quote', Icons.format_quote),
+    (MarkdownFormat.link, 'Link', Icons.link),
+    (MarkdownFormat.bulletList, 'Bullet list', Icons.format_list_bulleted),
+    (MarkdownFormat.numberedList, 'Numbered list', Icons.format_list_numbered),
+    (MarkdownFormat.taskList, 'Task list', Icons.checklist),
+  ];
+
+  String _lastBody = '';
 
   @override
   void initState() {
     super.initState();
+    // Emoji, formatting and dictation edit the controller directly, so save
+    // on any text change rather than only on typing.
+    _body.addListener(_bodyChanged);
     unawaited(_load());
+  }
+
+  void _bodyChanged() {
+    if (_body.text == _lastBody) return;
+    _lastBody = _body.text;
+    if (!_loadingText) _changed();
+  }
+
+  void _format(MarkdownFormat format) {
+    formatMarkdown(_body, format);
+    _focus.requestFocus();
+  }
+
+  void _insertEmoji(String emoji) {
+    insertAtCursor(_body, emoji);
+    _focus.requestFocus();
   }
 
   @override
@@ -56,6 +107,7 @@ class _NoteEditorState extends State<NoteEditor> {
     if (_dirty) unawaited(_save());
     _title.dispose();
     _body.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -66,7 +118,11 @@ class _NoteEditorState extends State<NoteEditor> {
       setState(() {
         _note = note;
         _title.text = note?.title ?? '';
+        _loadingText = true;
         _body.text = note?.body ?? '';
+        _loadingText = false;
+        // A reload (conflict) keeps the user in the editor.
+        _editing = _editing || _body.text.trim().isEmpty;
         _loading = false;
         _error = null;
         _dirty = false;
@@ -176,22 +232,25 @@ class _NoteEditorState extends State<NoteEditor> {
               counterText: '',
             ),
           ),
+        _toolbar(),
         Expanded(
-          child: TextField(
-            key: const ValueKey('note-body'),
-            controller: _body,
-            onChanged: (_) => _changed(),
-            maxLines: null,
-            expands: true,
-            maxLength: 200000,
-            textAlignVertical: TextAlignVertical.top,
-            keyboardType: TextInputType.multiline,
-            decoration: InputDecoration(
-              hintText: widget.hint,
-              border: InputBorder.none,
-              counterText: '',
-            ),
-          ),
+          child: !_editing
+              ? _readView()
+              : TextField(
+                  key: const ValueKey('note-body'),
+                  controller: _body,
+                  focusNode: _focus,
+                  maxLines: null,
+                  expands: true,
+                  maxLength: 200000,
+                  textAlignVertical: TextAlignVertical.top,
+                  keyboardType: TextInputType.multiline,
+                  decoration: InputDecoration(
+                    hintText: widget.hint,
+                    border: InputBorder.none,
+                    counterText: '',
+                  ),
+                ),
         ),
         const SizedBox(height: 8),
         Row(children: [
@@ -208,4 +267,117 @@ class _NoteEditorState extends State<NoteEditor> {
       ],
     );
   }
+
+  Widget _toolbar() {
+    final color = Theme.of(context).colorScheme.onSurface;
+    // Edit/Done on the left, a separator, then the editing tools. The tools
+    // are always shown and stay disabled until editing starts.
+    // The tools take an explicit colour, so they need the disabled one too.
+    final toolColor = _editing ? color : Theme.of(context).disabledColor;
+    return Row(children: [
+      _editing
+          ? TextButton(
+              key: const ValueKey('note-done'),
+              style: TextButton.styleFrom(foregroundColor: color),
+              onPressed: _finishEditing,
+              child: const Text('Done'),
+            )
+          : TextButton(
+              key: const ValueKey('note-edit'),
+              style: TextButton.styleFrom(foregroundColor: color),
+              onPressed: _startEditing,
+              child: const Text('Edit'),
+            ),
+      const SizedBox(
+        height: 20,
+        child:
+            VerticalDivider(key: ValueKey('note-toolbar-separator'), width: 16),
+      ),
+      EmojiPickerButton(
+        enabled: _editing,
+        color: toolColor,
+        onSelected: _insertEmoji,
+      ),
+      MenuAnchor(
+        controller: _markdownMenu,
+        style: ConclaveMenuStyle.surface(
+            Theme.of(context).brightness == Brightness.dark,
+            composer: true),
+        menuChildren: [
+          SizedBox(
+            key: const ValueKey('note-markdown-controls'),
+            width: 220,
+            child: Wrap(children: [
+              for (final (format, label, icon) in _formats)
+                IconButton(
+                  tooltip: label,
+                  iconSize: 18,
+                  color: color,
+                  onPressed: !_editing
+                      ? null
+                      : () {
+                          _markdownMenu.close();
+                          _format(format);
+                        },
+                  icon: Icon(icon, semanticLabel: label),
+                ),
+            ]),
+          ),
+        ],
+        builder: (context, controller, _) => IconButton(
+          tooltip: 'Show Markdown controls',
+          icon: Icon(Icons.text_format,
+              size: 18,
+              color: toolColor,
+              semanticLabel: 'Show Markdown controls'),
+          onPressed: !_editing
+              ? null
+              : () =>
+                  controller.isOpen ? controller.close() : controller.open(),
+        ),
+      ),
+      DictationButton(
+        controller: _body,
+        dictation: widget.dictation,
+        enabled: _editing,
+        color: toolColor,
+        onTextChanged: _focus.requestFocus,
+      ),
+    ]);
+  }
+
+  void _startEditing() {
+    if (_editing) return;
+    setState(() => _editing = true);
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => mounted ? _focus.requestFocus() : null);
+  }
+
+  void _finishEditing() {
+    _timer?.cancel();
+    unawaited(_save());
+    setState(() => _editing = false);
+  }
+
+  /// Formatted, read-only note. A double click anywhere edits it; a raw
+  /// pointer listener sees both clicks even though the text is selectable.
+  Widget _readView() => Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (event) {
+          final last = _lastPointerDown;
+          _lastPointerDown = event.timeStamp;
+          if (last != null && event.timeStamp - last < kDoubleTapTimeout) {
+            _lastPointerDown = null;
+            _startEditing();
+          }
+        },
+        child: SizedBox.expand(
+          child: SingleChildScrollView(
+            key: const ValueKey('note-preview'),
+            // Free space between the toolbar and the formatted note.
+            padding: const EdgeInsets.only(top: 16),
+            child: ConclaveMarkdownBody(data: _body.text),
+          ),
+        ),
+      );
 }

@@ -14,6 +14,7 @@ void main() {
       catalogRevision: 'reviewed',
       chatDraft: 'chat draft',
       workDraft: 'work draft',
+      pane: AxThreadViewState.notesPane,
     );
     final restored = AxThreadViewState.decode(state.encode());
     expect(restored?.toJson(), state.toJson());
@@ -42,6 +43,16 @@ void main() {
     expect(await store.load(userId: 'u1', threadId: 't2'), isNull);
     await store.clearUser('u1');
     expect(await store.load(userId: 'u1', threadId: 't1'), isNull);
+  });
+
+  test('unknown saved pane is ignored', () {
+    expect(AxThreadViewState.fromJson({'pane': 'other'}).pane, isNull);
+    expect(
+        AxThreadViewState.withRemote(
+                const AxThreadViewState(pane: AxThreadViewState.aiHistoryPane),
+                {'model': 'cloud'})!
+            .pane,
+        AxThreadViewState.aiHistoryPane);
   });
 
   group('withRemote', () {

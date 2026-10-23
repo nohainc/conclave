@@ -168,6 +168,7 @@ class _ThreadPageState extends State<ThreadPage>
       _notesOpen = open;
       _notesMounted |= open;
     });
+    _scheduleThreadViewStateSave();
   }
 
   bool _chatPositioned = false;
@@ -206,6 +207,7 @@ class _ThreadPageState extends State<ThreadPage>
 
   void _setAiHistoryOpen(bool open) {
     if (open == _aiHistoryOpen) return;
+    _scheduleThreadViewStateSave();
     if (open ? _workPositioned : _chatPositioned) {
       setState(() => _aiHistoryOpen = open);
       final controller = open ? _workHistoryController : _chatHistoryController;
@@ -816,6 +818,11 @@ class _ThreadPageState extends State<ThreadPage>
       workDraft: _requestController.text,
       chatSeenId: _chatSeenId,
       workSeenId: _workSeenId,
+      pane: _notesOpen
+          ? AxThreadViewState.notesPane
+          : _aiHistoryOpen
+              ? AxThreadViewState.aiHistoryPane
+              : AxThreadViewState.conversationPane,
     );
   }
 
@@ -945,6 +952,16 @@ class _ThreadPageState extends State<ThreadPage>
     _updateComposerState(() {});
   }
 
+  /// Reopens the Thread's last pane. Runs before the restored Thread's first
+  /// frame, where both lists still wait to be positioned.
+  void _restorePane(String? pane) {
+    if (pane == null) return;
+    _aiHistoryOpen = pane == AxThreadViewState.aiHistoryPane;
+    _aiHistoryMounted |= _aiHistoryOpen;
+    _notesOpen = _notesMounted =
+        pane == AxThreadViewState.notesPane && _notesSource != null;
+  }
+
   /// Both stores read synchronously, so the saved view is applied before the
   /// Thread's first frame instead of after an extra async round trip.
   void _restoreThreadViewState() {
@@ -991,6 +1008,7 @@ class _ThreadPageState extends State<ThreadPage>
       }
       _chatSeenId = saved.chatSeenId;
       _workSeenId = saved.workSeenId;
+      _restorePane(saved.pane);
       _selectionUpdatedAt = saved.selectionUpdatedAt;
       _pendingThreadViewState = saved;
       final targetIndex = saved.tabIndex.clamp(0, _tabController.length - 1);
@@ -1403,7 +1421,9 @@ class _ThreadPageState extends State<ThreadPage>
       _chatSeenId = _workSeenId = null;
       _openChatPending = _openWorkPending = true;
       _chatPositioned = _workPositioned = false;
-      _aiHistoryMounted = _aiHistoryOpen;
+      // Each Thread reopens its own last pane; one never saved starts on the
+      // default pane rather than inheriting the previous Thread's.
+      _aiHistoryOpen = _aiHistoryMounted = widget.initialAiHistoryOpen;
       _notesOpen = _notesMounted = false;
       // Activity is keyed by assignment, so it is kept: returning to a Thread
       // shows its earlier operations immediately while details reload.
@@ -1642,10 +1662,10 @@ class _ThreadPageState extends State<ThreadPage>
         final notesOpen = !widget.isDraft && _notesOpen && _notesSource != null;
         final historyOpen = !widget.isDraft && _aiHistoryOpen && !notesOpen;
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        // Inactive tab: secondary text moved 6% OKLCH lightness toward the
+        // Inactive tab: secondary text moved 12% OKLCH lightness toward the
         // background in each theme.
         final inactiveTab =
-            isDark ? const Color(0xffb5b6c4) : const Color(0xff43444f);
+            isDark ? const Color(0xffa2a3b1) : const Color(0xff535460);
         Widget header(String title,
                 {required bool history, bool notes = false}) =>
             Column(

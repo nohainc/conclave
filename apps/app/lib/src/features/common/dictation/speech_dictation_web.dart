@@ -8,7 +8,35 @@ import 'speech_dictation.dart';
 SpeechDictation createSpeechDictation() => WebSpeechDictation();
 
 class WebSpeechDictation implements SpeechDictation {
+  static const _preferenceKey = 'conclave-dictation-language-v1';
+
   web.SpeechRecognition? _recognition;
+
+  @override
+  String get browserLanguage {
+    final language = web.window.navigator.language;
+    return language.isEmpty ? 'en-US' : language;
+  }
+
+  @override
+  String? get preferredLanguage {
+    try {
+      return web.window.localStorage.getItem(_preferenceKey);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  set preferredLanguage(String? value) {
+    try {
+      if (value == null) {
+        web.window.localStorage.removeItem(_preferenceKey);
+      } else {
+        web.window.localStorage.setItem(_preferenceKey, value);
+      }
+    } catch (_) {}
+  }
 
   /// Chrome and Safari still expose only the prefixed constructor.
   static JSFunction? get _constructor {
@@ -27,6 +55,7 @@ class WebSpeechDictation implements SpeechDictation {
 
   @override
   void start({
+    required String language,
     required void Function(String transcript) onTranscript,
     required void Function(String? error) onEnd,
   }) {
@@ -41,7 +70,7 @@ class WebSpeechDictation implements SpeechDictation {
     String? error;
     var ended = false;
     recognition
-      ..lang = web.window.navigator.language
+      ..lang = language
       ..continuous = true
       ..interimResults = true
       ..onresult = (web.SpeechRecognitionEvent event) {
