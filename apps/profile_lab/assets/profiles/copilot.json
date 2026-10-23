@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "profileDefinitionId": "copilot-cli",
-  "releaseVersion": 7,
+  "releaseVersion": 8,
   "logicalWorkerTypeId": "copilot",
   "engineFamily": "cli",
   "engineCompatibility": {
@@ -527,9 +527,9 @@
             "value": "assistant.message"
           },
           {
-            "kind": "not_equals",
+            "kind": "exists",
             "selector": "$.data.content",
-            "value": ""
+            "exists": true
           }
         ],
         "type": "message.updated",
