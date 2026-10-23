@@ -83,8 +83,7 @@ void main() {
       expect(store.readSync('account'), 'rotated');
       final other = PlatformSecureCredentialStore(
           service: root.path,
-          credentialDirectory:
-              Directory('${root.path}/other-installation'));
+          credentialDirectory: Directory('${root.path}/other-installation'));
       await other.write('account', 'other-installation');
       expect(store.readSync('account'), 'rotated');
       expect(other.readSync('account'), 'other-installation');
