@@ -9,6 +9,10 @@ function Run-Setup {
     $Process = Start-Process $Installer[0].FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$Target`"") -Wait -PassThru
     if ($Process.ExitCode -ne 0) { throw "Setup failed: $($Process.ExitCode)" }
 }
+$State = Join-Path $env:LOCALAPPDATA 'Conclave/Workspace/installer-preservation-test.txt'
+New-Item -ItemType Directory -Force (Split-Path $State -Parent) | Out-Null
+$Sentinel = [guid]::NewGuid().ToString()
+Set-Content $State $Sentinel
 Run-Setup
 $Engine = 'assets/engines/conclave_cli_worker_engine.exe'
 foreach ($File in @('conclave_workspace.exe', 'conclave-service.exe', $Engine)) {
@@ -32,3 +36,6 @@ try {
 $Uninstall = Start-Process (Join-Path $Target 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
 if ($Uninstall.ExitCode -ne 0) { throw "Uninstall failed: $($Uninstall.ExitCode)" }
 if (Test-Path (Join-Path $Target 'conclave_workspace.exe')) { throw 'Uninstall left the app executable.' }
+
+if ((Get-Content $State -Raw).Trim() -ne $Sentinel) { throw 'Installer changed runtime state.' }
+Remove-Item $State
