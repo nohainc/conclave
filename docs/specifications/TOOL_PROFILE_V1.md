@@ -966,7 +966,16 @@ nativeId before Workspace inventory publication; its public projection follows
 supplies the matching versioned catalog; it cannot widen a Profile without that
 declaration. For discovery-backed Profiles, the runtime catalog is the only
 source of model and effort choices: the Profile must not contain a fallback
-catalog or guessed effort rules. Model Auto remains the provider default;
+catalog or guessed effort rules. The one exception is
+`format: "clap_possible_values"`, which runs a value-taking flag without a value
+(for example `copilot --model`), ignores the expected non-zero exit, and reads
+the `[possible values: a, b, c]` list from stdout and stderr. That list carries
+IDs only, so the Profile supplies efforts: a `model.catalog` entry gives a known
+model's name and `supportedReasoningEfforts` (an empty list means no effort
+choice), every other listed ID gets `model.supportedReasoningEfforts` and a name
+derived from its ID (`gpt-5.3-codex` -> `GPT-5.3 Codex`). Discovered IDs in
+`discovery.excludeIds` are never offered. A catalog entry never adds a model the
+CLI did not list. Model Auto remains the provider default;
 explicit discovered IDs and per-model efforts are checked locally and by Cloud
 with no substitution. The app-server protocol is used only for discovery;
 execution remains generic CLI Worker Engine behavior.
@@ -1022,7 +1031,14 @@ A Profile may declare a top-level `usage` object:
   original text, and `Original` always shows it for a normalized report.
 - A Profile without `usage` yields status `unavailable`. The starter Claude
   Profile declares `-p /usage`; Gemini declares `-p /usage` (agy) and ChatGPT
-  uses the Codex app-server rate-limit call.
+  uses the Codex app-server rate-limit call. Copilot declares no `usage`:
+  CLI 1.0.103 answers `-p /usage` as an ordinary prompt instead of running the
+  command, so its status is `unavailable`.
+  Copilot's `--usage-output-file` provides session accounting, while its
+  experimental SDK `account.getQuota` exposes account quota through a
+  Content-Length-framed transport that this `jsonRpc` helper does not support.
+  See the [local Copilot verification](../acceptance/real-provider/2026-10-23/copilot.md)
+  for captured statistics, model/effort limits, and the framing distinction.
 - Cloud relays on demand: `POST /api/workspaces/:workspaceId/workers/:workerId/usage`
   (Workspace owner only) sends `worker.usage.request`; the Service replies with
   `worker.usage.result`. Results are never stored in Cloud or posted to a Thread.

@@ -666,7 +666,9 @@ const profileSchema = z
             schemaVersion: z.literal(1),
             arguments: z.array(templatedString).min(1).max(32),
             timeoutMs: z.number().int().min(100).max(10000),
-            format: z.enum(["tsv", "codex_app_server"]),
+            // clap_possible_values reads the `[possible values: a, b]` list a
+            // CLI prints when a value-taking flag is passed without a value.
+            format: z.enum(["tsv", "codex_app_server", "clap_possible_values"]),
             // Empty means that the provider command is already scoped to
             // models and every returned ID is accepted.
             idPrefix: z
@@ -684,6 +686,9 @@ const profileSchema = z
               })
               .strict()
               .optional(),
+            // Discovered IDs that are never offered (for example a model
+            // whose provider rejects every effort configuration).
+            excludeIds: z.array(modelId).max(128).optional(),
           })
           .strict()
           .optional(),

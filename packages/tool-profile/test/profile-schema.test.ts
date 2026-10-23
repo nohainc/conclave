@@ -33,7 +33,7 @@ const template = (name: string): Record<string, any> =>
   );
 
 describe("Tool Profile v1 canonical schema", () => {
-  it.each(["chatgpt", "claude", "gemini"])(
+  it.each(["chatgpt", "claude", "gemini", "copilot"])(
     "accepts the %s Profile file for publication without CLI ranges",
     (worker) => {
       const profile = validateToolProfileV1(

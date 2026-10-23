@@ -658,6 +658,13 @@ class CliWorkerEngine {
               timeout:
                   timeout ?? Duration(milliseconds: _int(spec['timeoutMs'])),
             )
+          : format == 'clap_possible_values'
+          ? await _discoverClapModels(
+              executable,
+              env,
+              spec,
+              timeout ?? Duration(milliseconds: _int(spec['timeoutMs'])),
+            )
           : await _discoverTsvModels(
               executable,
               env,
@@ -705,6 +712,33 @@ class CliWorkerEngine {
       throw const FormatException('Model discovery failed');
     }
     return parseDiscoveredModels(result.stdout, _string(spec['idPrefix']));
+  }
+
+  /// The CLI rejects the bare flag, so the exit code is expected to be
+  /// non-zero; the list is read from stdout and stderr.
+  Future<List<DiscoveredModel>> _discoverClapModels(
+    String executable,
+    Map<String, String> env,
+    Map<String, Object?> spec,
+    Duration timeout,
+  ) async {
+    final result = await _commandRunner.run(
+      executable,
+      _stringList(spec['arguments']),
+      environment: env,
+      workingDirectory: options.statePath,
+      timeout: timeout,
+    );
+    return parseClapPossibleValues(
+      '${result.stdout}\n${result.stderr}',
+      _string(spec['idPrefix']),
+      catalog: [
+        for (final entry in _profile.model['catalog'] as List? ?? const [])
+          if (entry is Map) Map<String, Object?>.from(entry),
+      ],
+      defaultEfforts: _stringList(_profile.model['supportedReasoningEfforts']),
+      excludeIds: _stringList(spec['excludeIds']).toSet(),
+    );
   }
 
   DiscoveredModel _restoreModelStatus(
@@ -2567,7 +2601,7 @@ class CliWorkerEngine {
         caseSensitive: false,
       ),
       'provider_authentication_required': RegExp(
-        r'unauthori[sz]ed|authentication required|not authenticated|sign in|login required|credentials? (missing|expired|invalid)',
+        r'unauthori[sz]ed|authentication required|not authenticated|no authentication information|sign in|login required|credentials? (missing|expired|invalid)',
         caseSensitive: false,
       ),
       'model_not_supported': RegExp(

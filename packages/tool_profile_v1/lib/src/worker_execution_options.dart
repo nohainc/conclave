@@ -68,12 +68,19 @@ class ProfileExecutionOptions {
                 'timeoutMs',
                 'format',
                 'idPrefix',
-                'effortVariants'
+                'effortVariants',
+                'excludeIds'
               }.contains(key)) ||
           (selections.isNotEmpty && derivesEffortVariants) ||
           !validEffortVariants(discovery['effortVariants']) ||
           discovery['schemaVersion'] != 1 ||
-          !const {'tsv', 'codex_app_server'}.contains(discovery['format']) ||
+          !const {'tsv', 'codex_app_server', 'clap_possible_values'}
+              .contains(discovery['format']) ||
+          (discovery['excludeIds'] != null &&
+              (discovery['excludeIds'] is! List ||
+                  (discovery['excludeIds'] as List).length > 128 ||
+                  (discovery['excludeIds'] as List).any((id) =>
+                      id is! String || id.isEmpty || id.length > 160))) ||
           discovery['timeoutMs'] is! int ||
           (discovery['timeoutMs'] as int) < 100 ||
           (discovery['timeoutMs'] as int) > 10000 ||

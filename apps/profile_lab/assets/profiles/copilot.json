@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "profileDefinitionId": "copilot-cli",
-  "releaseVersion": 1,
+  "releaseVersion": 7,
   "logicalWorkerTypeId": "copilot",
   "engineFamily": "cli",
   "engineCompatibility": {
@@ -10,13 +10,20 @@
   },
   "providerTool": {
     "name": "GitHub Copilot CLI",
-    "executableCandidates": ["copilot"],
+    "executableCandidates": [
+      "copilot"
+    ],
     "discovery": {
-      "standardLocations": ["{{home}}/.local/bin", "/usr/local/bin"],
+      "standardLocations": [
+        "{{home}}/.local/bin",
+        "/usr/local/bin"
+      ],
       "allowPathSearch": true
     },
     "versionProbe": {
-      "arguments": ["--version"],
+      "arguments": [
+        "--version"
+      ],
       "timeoutMs": 10000,
       "source": "stdout",
       "extract": {
@@ -43,6 +50,7 @@
       "SSL_CERT_DIR",
       "XDG_CONFIG_HOME",
       "COPILOT_HOME",
+      "COPILOT_GITHUB_TOKEN",
       "GH_TOKEN",
       "GITHUB_TOKEN"
     ],
@@ -62,43 +70,474 @@
         "sandboxPolicyMapping": true
       },
       "--no-color",
+      "--output-format",
+      "json",
+      "--stream",
+      "off",
       {
         "modelArguments": true
       },
       {
-        "providerTimeoutArguments": true
+        "ifPresent": "reasoningEffort",
+        "values": [
+          "--reasoning-effort",
+          "{{reasoningEffort}}"
+        ]
       },
-      "-p",
-      "{{prompt}}"
+      {
+        "sessionResumeArguments": true
+      },
+      {
+        "providerTimeoutArguments": true
+      }
     ],
     "stdin": {
       "mode": "raw_text",
-      "value": ""
+      "value": "{{prompt}}"
     },
     "output": {
-      "mode": "plain_text"
+      "mode": "jsonl"
     },
-    "events": []
-  },
-  "model": {
-    "supported": true,
-    "arguments": ["--model", "{{model}}"],
-    "unknownModelPolicy": "profile_allowlist",
-    "allowlist": ["claude-sonnet-4.5", "gpt-5"],
-    "catalog": [
+    "events": [
       {
-        "id": "claude-sonnet-4.5",
-        "name": "Claude Sonnet 4.5",
-        "description": "Copilot default model for coding work"
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "assistant.message"
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_final_text",
+            "selector": "$.data.content"
+          }
+        ]
       },
       {
-        "id": "gpt-5",
-        "name": "GPT-5",
-        "description": "OpenAI model served through Copilot"
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "session.error"
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_provider_error",
+            "selector": "$.data.message"
+          },
+          {
+            "type": "mark_failure"
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "result"
+          },
+          {
+            "kind": "equals",
+            "selector": "$.exitCode",
+            "value": 0
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_session",
+            "selector": "$.sessionId"
+          },
+          {
+            "type": "mark_success"
+          }
+        ]
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "result"
+          },
+          {
+            "kind": "not_equals",
+            "selector": "$.exitCode",
+            "value": 0
+          }
+        ],
+        "actions": [
+          {
+            "type": "set_session",
+            "selector": "$.sessionId"
+          },
+          {
+            "type": "mark_failure"
+          }
+        ]
       }
     ]
   },
-  "progress": [],
+  "model": {
+    "supported": true,
+    "arguments": [
+      "--model",
+      "{{model}}"
+    ],
+    "unknownModelPolicy": "pass_through",
+    "discovery": {
+      "schemaVersion": 1,
+      "arguments": [
+        "--model"
+      ],
+      "timeoutMs": 10000,
+      "format": "clap_possible_values",
+      "idPrefix": "",
+      "excludeIds": [
+        "claude-haiku-4.5"
+      ]
+    },
+    "supportedReasoningEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "catalog": [
+      {
+        "id": "auto",
+        "name": "Auto",
+        "supportedReasoningEfforts": []
+      },
+      {
+        "id": "claude-haiku-5.5",
+        "name": "Claude Haiku 5.5",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "claude-opus-4.8",
+        "name": "Claude Opus 4.8",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "claude-opus-5",
+        "name": "Claude Opus 5",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "claude-opus-5.5",
+        "name": "Claude Opus 5.5",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "claude-sonnet-5",
+        "name": "Claude Sonnet 5",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "claude-sonnet-5.5",
+        "name": "Claude Sonnet 5.5",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "gemini-3.8-flash",
+        "name": "Gemini 3.8 Flash",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "id": "gemini-4-argon",
+        "name": "Gemini 4 Argon",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      },
+      {
+        "id": "gpt-5.3-codex",
+        "name": "GPT-5.3 Codex",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "id": "gpt-5.6-luna",
+        "name": "GPT-5.6 Luna",
+        "supportedReasoningEfforts": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "gpt-5.6-sol",
+        "name": "GPT-5.6 Sol",
+        "supportedReasoningEfforts": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "gpt-5.6-terra",
+        "name": "GPT-5.6 Terra",
+        "supportedReasoningEfforts": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "gpt-6-astra",
+        "name": "GPT-6 Astra",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "gpt-6-luna",
+        "name": "GPT-6 Luna",
+        "supportedReasoningEfforts": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "gpt-6-sol",
+        "name": "GPT-6 Sol",
+        "supportedReasoningEfforts": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "gpt-6.1-sol",
+        "name": "GPT-6.1 Sol",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ]
+      },
+      {
+        "id": "grok-4.6",
+        "name": "Grok 4.6",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "id": "grok-4.7",
+        "name": "Grok 4.7",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ]
+      },
+      {
+        "id": "kimi-k3",
+        "name": "Kimi K3",
+        "supportedReasoningEfforts": [
+          "low",
+          "high",
+          "max"
+        ]
+      },
+      {
+        "id": "mai-code-1.1-flash",
+        "name": "MAI Code 1.1 Flash",
+        "supportedReasoningEfforts": [
+          "low",
+          "medium",
+          "high"
+        ]
+      }
+    ]
+  },
+  "progress": [
+    {
+      "messageKey": "provider_working",
+      "percentage": 10,
+      "when": [
+        {
+          "kind": "equals",
+          "selector": "$.type",
+          "value": "assistant.turn_start"
+        }
+      ]
+    },
+    {
+      "messageKey": "provider_response_received",
+      "percentage": 60,
+      "when": [
+        {
+          "kind": "equals",
+          "selector": "$.type",
+          "value": "assistant.message"
+        }
+      ]
+    }
+  ],
+  "activity": {
+    "schemaVersion": 1,
+    "mappings": [
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "assistant.turn_start"
+          }
+        ],
+        "type": "model.started",
+        "status": "running",
+        "title": "Thinking"
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "tool.execution_start"
+          }
+        ],
+        "type": "tool.started",
+        "status": "running",
+        "title": "Using a tool",
+        "activityIdSelector": "$.data.toolCallId",
+        "detailSelectors": {
+          "toolName": "$.data.toolName"
+        }
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "tool.execution_complete"
+          },
+          {
+            "kind": "equals",
+            "selector": "$.data.success",
+            "value": true
+          }
+        ],
+        "type": "tool.completed",
+        "status": "completed",
+        "title": "Tool finished",
+        "activityIdSelector": "$.data.toolCallId"
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "tool.execution_complete"
+          },
+          {
+            "kind": "equals",
+            "selector": "$.data.success",
+            "value": false
+          }
+        ],
+        "type": "tool.failed",
+        "status": "failed",
+        "title": "Tool failed",
+        "activityIdSelector": "$.data.toolCallId"
+      },
+      {
+        "when": [
+          {
+            "kind": "equals",
+            "selector": "$.type",
+            "value": "assistant.message"
+          },
+          {
+            "kind": "not_equals",
+            "selector": "$.data.content",
+            "value": ""
+          }
+        ],
+        "type": "message.updated",
+        "status": "updated",
+        "title": "Writing the response"
+      }
+    ]
+  },
   "errors": {
     "mappings": [
       {
@@ -132,6 +571,13 @@
       {
         "evidence": {
           "kind": "stderr_pattern",
+          "patternId": "model_not_supported"
+        },
+        "issueCode": "model_not_supported"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
           "patternId": "quota_exhausted"
         },
         "issueCode": "quota_exhausted"
@@ -153,18 +599,30 @@
   },
   "sandbox": {
     "mappings": {
-      "restricted": ["--allow-tool", "write", "--deny-tool", "shell"],
+      "restricted": [
+        "--allow-tool",
+        "write",
+        "--deny-tool",
+        "shell"
+      ],
       "provider_default": [],
-      "full_access": ["--allow-all-tools", "--allow-all-paths"]
+      "full_access": [
+        "--allow-all"
+      ]
     }
   },
   "session": {
-    "supported": false,
+    "supported": true,
     "formatId": "copilot-session-v1",
-    "compatibleFormatIds": ["copilot-session-v1"],
-    "extract": null,
-    "resumeArguments": [],
-    "requireObservedIdMatch": false
+    "compatibleFormatIds": [
+      "copilot-session-v1"
+    ],
+    "extract": "$.sessionId",
+    "resumeArguments": [
+      "--session-id",
+      "{{sessionId}}"
+    ],
+    "requireObservedIdMatch": true
   },
   "timeout": {
     "providerArguments": [],

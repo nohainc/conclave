@@ -44,6 +44,68 @@ List<DiscoveredModel> parseDiscoveredModels(String output, String idPrefix) {
   return models.values.toList();
 }
 
+/// Reads the `[possible values: a, b, c]` list a clap-based CLI prints when a
+/// value-taking flag is given without a value (for example `copilot --model`).
+/// Efforts come from the Profile: a [catalog] entry for a known model, else
+/// [defaultEfforts]. IDs in [excludeIds] are never offered.
+List<DiscoveredModel> parseClapPossibleValues(
+  String output,
+  String idPrefix, {
+  List<Map<String, Object?>> catalog = const [],
+  List<String> defaultEfforts = const [],
+  Set<String> excludeIds = const {},
+}) {
+  if (utf8.encode(output).length > 64 * 1024)
+    throw const FormatException('Model catalog exceeds limit');
+  final match = RegExp(r'\[possible values:\s*([^\]]*)\]').firstMatch(output);
+  if (match == null) throw const FormatException('No possible values listed');
+  final known = {for (final entry in catalog) entry['id'] as String: entry};
+  final models = <String, DiscoveredModel>{};
+  for (final raw in match.group(1)!.split(',')) {
+    final id = raw.trim();
+    if (id.isEmpty || excludeIds.contains(id)) continue;
+    if (idPrefix.isNotEmpty && !id.startsWith(idPrefix)) continue;
+    if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:/-]{0,159}$').hasMatch(id))
+      throw const FormatException('Invalid model ID');
+    if (models.containsKey(id))
+      throw const FormatException('Duplicate model ID');
+    final entry = known[id];
+    final efforts = entry != null && entry['supportedReasoningEfforts'] is List
+        ? (entry['supportedReasoningEfforts'] as List).cast<String>()
+        : defaultEfforts;
+    models[id] = DiscoveredModel(
+      id: id,
+      name: entry?['name'] as String? ?? readableModelName(id),
+      supportedReasoningEfforts: efforts,
+      defaultReasoningEffort: entry?['defaultReasoningEffort'] as String?,
+    );
+    if (models.length > 128)
+      throw const FormatException('Model catalog exceeds limit');
+  }
+  if (models.isEmpty) throw const FormatException('No models listed');
+  return models.values.toList();
+}
+
+/// Turns a CLI model ID into a display name: `claude-sonnet-5.5` becomes
+/// `Claude Sonnet 5.5` and `gpt-5.3-codex` becomes `GPT-5.3 Codex`.
+String readableModelName(String id) {
+  const acronyms = {'gpt': 'GPT', 'mai': 'MAI'};
+  final parts = <String>[];
+  for (final token in id.split('-').where((t) => t.isNotEmpty)) {
+    final lower = token.toLowerCase();
+    if (parts.isNotEmpty &&
+        parts.last == 'GPT' &&
+        RegExp(r'^\d').hasMatch(token)) {
+      parts[parts.length - 1] = 'GPT-$token';
+    } else if (acronyms.containsKey(lower)) {
+      parts.add(acronyms[lower]!);
+    } else {
+      parts.add('${token[0].toUpperCase()}${token.substring(1)}');
+    }
+  }
+  return parts.join(' ');
+}
+
 /// Queries the Codex app-server model catalog over its newline-delimited
 /// JSON-RPC transport. The app-server is intentionally used only for
 /// discovery here; execution remains owned by the generic CLI engine.
