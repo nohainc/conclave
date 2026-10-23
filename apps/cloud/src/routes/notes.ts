@@ -61,13 +61,24 @@ async function noteInput(request: Request) {
   const title = body.title;
   const text = body.body;
   const revision = body.revision;
-  if (title !== undefined && (typeof title !== "string" || title.length > MAX_TITLE))
-    throw new HttpError(400, `title must be text up to ${MAX_TITLE} characters`);
-  if (text !== undefined && (typeof text !== "string" || text.length > MAX_BODY))
+  if (
+    title !== undefined &&
+    (typeof title !== "string" || title.length > MAX_TITLE)
+  )
+    throw new HttpError(
+      400,
+      `title must be text up to ${MAX_TITLE} characters`,
+    );
+  if (
+    text !== undefined &&
+    (typeof text !== "string" || text.length > MAX_BODY)
+  )
     throw new HttpError(400, `body must be text up to ${MAX_BODY} characters`);
   if (
     revision !== undefined &&
-    (typeof revision !== "number" || !Number.isInteger(revision) || revision < 1)
+    (typeof revision !== "number" ||
+      !Number.isInteger(revision) ||
+      revision < 1)
   )
     throw new HttpError(400, "revision must be a positive integer");
   return {
@@ -222,8 +233,7 @@ export async function handleThreadNote(
     return json({
       note: existing ? await readNote(env, context.userId, existing.id) : null,
     });
-  if (request.method !== "PUT")
-    throw new HttpError(405, "Method not allowed");
+  if (request.method !== "PUT") throw new HttpError(405, "Method not allowed");
   const input = await noteInput(request);
   // Saved names keep the note's Space and Thread path after the Thread is
   // deleted or the owner loses access.
@@ -235,13 +245,7 @@ export async function handleThreadNote(
   const linked = { thread: thread.name, space: space?.name ?? "" };
   if (existing)
     return json({
-      note: await updateNote(
-        env,
-        context.userId,
-        existing.id,
-        input,
-        linked,
-      ),
+      note: await updateNote(env, context.userId, existing.id, input, linked),
     });
   if (input.revision !== undefined)
     throw new HttpError(409, "Note changed since it was loaded");
@@ -269,5 +273,8 @@ export async function handleThreadNote(
     .run();
   if (!result.meta.changes)
     throw new HttpError(409, "Note changed since it was loaded");
-  return json({ note: await readNote(env, context.userId, id) }, { status: 201 });
+  return json(
+    { note: await readNote(env, context.userId, id) },
+    { status: 201 },
+  );
 }

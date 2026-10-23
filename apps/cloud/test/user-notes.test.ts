@@ -105,7 +105,11 @@ it("rejects stale saves and outsiders", async () => {
   const created = await threadNote("bob", "PUT", { body: "one" });
   await threadNote("bob", "PUT", { body: "two", revision: 1 });
   await expect(
-    handleThreadNote(as("bob", "PUT", { body: "stale", revision: 1 }), env, "T"),
+    handleThreadNote(
+      as("bob", "PUT", { body: "stale", revision: 1 }),
+      env,
+      "T",
+    ),
   ).rejects.toMatchObject({ status: 409 });
   await expect(
     handleThreadNote(as("eve", "GET"), env, "T"),
@@ -145,7 +149,11 @@ it("creates, edits and deletes standalone notes", async () => {
   const updated = (await (
     await handleNote(as("bob", "PUT", { body: "b", revision: 1 }), env, note.id)
   ).json()) as { note: Note };
-  expect(updated.note).toMatchObject({ title: "Ideas", body: "b", revision: 2 });
+  expect(updated.note).toMatchObject({
+    title: "Ideas",
+    body: "b",
+    revision: 2,
+  });
   await handleNote(as("bob", "DELETE"), env, note.id);
   expect(await list("bob")).toEqual([]);
 });

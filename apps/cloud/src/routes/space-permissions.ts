@@ -20,10 +20,7 @@ export function validateMemberPermissions(
       (key) => typeof (value as Record<string, unknown>)[key] !== "boolean",
     )
   ) {
-    throw new HttpError(
-      400,
-      "All member permissions must be boolean values",
-    );
+    throw new HttpError(400, "All member permissions must be boolean values");
   }
   const permissions = value as SpaceMemberPermissions;
   // Own Workers are a Chat refinement; denying Chat also denies them.

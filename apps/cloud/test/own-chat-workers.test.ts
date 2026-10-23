@@ -106,7 +106,7 @@ it("admits the member's own Worker for Chat through a read-only grant", async ()
   const grant = f.writes.find((write) =>
     write.sql.includes("INSERT INTO workspace_space_grants"),
   );
-  expect(grant?.sql).toContain('\'["repository:read"]\'');
+  expect(grant?.sql).toContain("'[\"repository:read\"]'");
   expect(grant?.values.slice(1, 4)).toEqual(["space", "own-ws", "member"]);
 });
 

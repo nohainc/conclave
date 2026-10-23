@@ -139,7 +139,11 @@ describe("Space member permissions contract v1", () => {
   });
   it("disables own Workers whenever Chat is denied", async () => {
     await rights("member", { ...none, useOwnWorkers: true });
-    const response = await handleListSpaceMembers(req("owner", {}, "GET"), env, "S");
+    const response = await handleListSpaceMembers(
+      req("owner", {}, "GET"),
+      env,
+      "S",
+    );
     const members = (
       (await response.json()) as {
         members: Array<{ userId: string; permissions: typeof all }>;
