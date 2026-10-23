@@ -95,6 +95,12 @@ generic `jsonRpc.framing: "content_length"` option. A real call through the
 Engine's reader returned `chat`, `completions` and `premium_interactions`
 snapshots in under a second; this time the `chat` reset date was in the future.
 
+`copilot --headless --stdio` resolves the GitHub login through `gh` on
+`PATH`. With `PATH=/usr/bin:/bin` (a Finder-launched app) `account.getQuota`
+answers "Not authenticated"; adding only a directory containing `gh` fixes it.
+The Workspace Service launch agent already puts `/opt/homebrew/bin` on `PATH`;
+Profile Lab now adds the same directories when it starts the Engine.
+
 ## Activity events
 
 Profile release 7 adds a declarative `activity` mapping (no provider adapter).

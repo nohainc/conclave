@@ -508,21 +508,33 @@ class CliWorkerEngine {
           final rpc = usageSpec['jsonRpc'];
           final CliCommandResult result;
           if (rpc is Map) {
-            final rpcResult = await readAppServerResult(
-              executable: executable,
-              arguments: usageArguments,
-              environment: _environment(),
-              workingDirectory: workingDirectory,
-              method: _string(rpc['method']),
-              framing: rpc['framing'] as String? ?? 'newline',
-              timeout: liveTimeout,
-            );
-            result = CliCommandResult(
-              exitCode: 0,
-              stdout:
-                  '${const JsonEncoder.withIndent('  ').convert(rpcResult)}\n',
-              stderr: '',
-            );
+            CliCommandResult rpcOutcome;
+            try {
+              final rpcResult = await readAppServerResult(
+                executable: executable,
+                arguments: usageArguments,
+                environment: _environment(),
+                workingDirectory: workingDirectory,
+                method: _string(rpc['method']),
+                framing: rpc['framing'] as String? ?? 'newline',
+                timeout: liveTimeout,
+              );
+              rpcOutcome = CliCommandResult(
+                exitCode: 0,
+                stdout:
+                    '${const JsonEncoder.withIndent('  ').convert(rpcResult)}\n',
+                stderr: '',
+              );
+            } on FormatException catch (error) {
+              // Surface the provider's JSON-RPC error (for example "Not
+              // authenticated") instead of a generic probe failure.
+              rpcOutcome = CliCommandResult(
+                exitCode: 1,
+                stdout: '',
+                stderr: error.message,
+              );
+            }
+            result = rpcOutcome;
           } else {
             result = await _commandRunner.run(
               executable,

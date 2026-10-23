@@ -248,8 +248,12 @@ class ProfileLabTestSandbox {
     required this.sandboxRoot,
     required this.engineExecutable,
     PlatformProcessSupervisor? processSupervisor,
-    this.environmentOverrides = const {},
-  }) : _processSupervisor =
+    Map<String, String> environmentOverrides = const {},
+  })  : environmentOverrides = {
+          'PATH': providerSearchPath(Platform.environment),
+          ...environmentOverrides,
+        },
+        _processSupervisor =
             processSupervisor ?? const StandardProcessSupervisor();
 
   final Directory sandboxRoot;
@@ -901,4 +905,30 @@ class ProfileLabTestSandbox {
       logs: logs,
     );
   }
+}
+
+/// The host PATH plus the directories the Workspace Service launch agent puts
+/// on PATH (`com.conclaveax.workspace.service.plist`). A Finder-launched
+/// Profile Lab only gets `/usr/bin:/bin:/usr/sbin:/sbin`, so provider CLIs
+/// that call helpers such as `gh` for login (Copilot `--headless`) would
+/// otherwise behave differently in Profile Lab than in Workspace.
+String providerSearchPath(Map<String, String> environment) {
+  final separator = Platform.isWindows ? ';' : ':';
+  final entries = (environment['PATH'] ?? '')
+      .split(separator)
+      .where((entry) => entry.isNotEmpty)
+      .toList();
+  if (Platform.isMacOS) {
+    for (final directory in const [
+      '/opt/homebrew/bin',
+      '/usr/local/bin',
+      '/usr/bin',
+      '/bin',
+      '/usr/sbin',
+      '/sbin',
+    ]) {
+      if (!entries.contains(directory)) entries.add(directory);
+    }
+  }
+  return entries.join(separator);
 }
