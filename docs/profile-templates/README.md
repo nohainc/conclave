@@ -7,6 +7,7 @@ file per Worker:
 - `apps/profile_lab/assets/profiles/chatgpt.json` — Codex CLI
 - `apps/profile_lab/assets/profiles/gemini.json` — Antigravity `agy` CLI
 - `apps/profile_lab/assets/profiles/claude.json` — Claude Code CLI
+- `apps/profile_lab/assets/profiles/copilot.json` — GitHub Copilot CLI
 
 Profile Lab finds the repository from the nearest `.git` above its working
 directory or app binary, so run it from a checkout. No rebuild is needed after

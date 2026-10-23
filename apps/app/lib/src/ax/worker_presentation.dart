@@ -43,6 +43,11 @@ class WorkerPresentation {
                 nameLower.contains('anthropic')))) {
       brand = const WorkerPresentation(
           name: 'Claude', iconAsset: 'assets/worker_icons/claude.png');
+    } else if (matches(const ['copilot']) ||
+        ((type.isEmpty || type == 'custom' || type == 'worker') &&
+            nameLower.contains('copilot'))) {
+      brand = const WorkerPresentation(
+          name: 'Copilot', iconAsset: 'assets/worker_icons/copilot.png');
     } else {
       brand = const WorkerPresentation(name: 'Worker');
     }

@@ -23,6 +23,9 @@ String? workerBrandIconAsset({
   if (matches(const ['claude', 'anthropic'])) {
     return 'assets/worker_icons/claude.png';
   }
+  if (matches(const ['copilot'])) {
+    return 'assets/worker_icons/copilot.png';
+  }
   if (matches(const ['gemini', 'google'])) {
     return 'assets/worker_icons/gemini.png';
   }

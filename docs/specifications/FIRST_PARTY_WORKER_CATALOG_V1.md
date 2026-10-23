@@ -41,6 +41,7 @@ The initial official Workers are:
 | --- | --- | --- | --- |
 | `chatgpt` | ChatGPT | CLI Worker Engine + `chatgpt-codex` Profile -> Codex CLI | one stable catalog slot |
 | `gemini` | Gemini | CLI Worker Engine + `gemini-antigravity` Profile -> `agy` | one stable catalog slot |
+| `copilot` | Copilot | CLI Worker Engine + `copilot-cli` Profile -> GitHub Copilot CLI (`copilot`) | one stable catalog slot (testing stage) |
 
 These are the initial entries, not an exhaustive list of Worker Types. New
 approved entries can use an existing Engine family and the supported Profile
@@ -244,6 +245,10 @@ chatgpt
 gemini
   engineFamily: cli
   profileDefinitionId: gemini-antigravity
+
+copilot
+  engineFamily: cli
+  profileDefinitionId: copilot-cli
 ~~~
 
 The Profile release itself is selected by Workspace from trusted compatible
@@ -260,6 +265,7 @@ Conclave does not store/share provider subscription tokens in Cloud.
 Examples:
 - ChatGPT/Codex uses its locally configured Codex authentication.
 - Gemini uses its locally configured Antigravity/Google authentication.
+- Copilot uses its locally configured GitHub Copilot CLI login.
 
 Workspace may show safe readiness guidance returned by Engine/Profile but does
 not reimplement provider login flows.

@@ -15,6 +15,9 @@ void main() {
     expect(WorkerPresentation.resolve('gemini', '').name, 'Gemini');
     expect(WorkerPresentation.resolve('claude', '').iconAsset,
         'assets/worker_icons/claude.png');
+    final copilot = WorkerPresentation.resolve('copilot', '');
+    expect(copilot.name, 'Copilot');
+    expect(copilot.iconAsset, 'assets/worker_icons/copilot.png');
     expect(WorkerPresentation.resolve('custom', 'Claude Code').iconAsset,
         'assets/worker_icons/claude.png');
     expect(

@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "profileDefinitionId": "copilot-cli",
+  "releaseVersion": 1,
+  "logicalWorkerTypeId": "copilot",
+  "engineFamily": "cli",
+  "engineCompatibility": {
+    "min": "1.0.0",
+    "maxExclusive": "2.0.0"
+  },
+  "providerTool": {
+    "name": "GitHub Copilot CLI",
+    "executableCandidates": ["copilot"],
+    "discovery": {
+      "standardLocations": ["{{home}}/.local/bin", "/usr/local/bin"],
+      "allowPathSearch": true
+    },
+    "versionProbe": {
+      "arguments": ["--version"],
+      "timeoutMs": 10000,
+      "source": "stdout",
+      "extract": {
+        "kind": "regex_capture",
+        "patternId": "semver"
+      }
+    }
+  },
+  "environment": {
+    "passthrough": [
+      "PATH",
+      "HOME",
+      "USER",
+      "LOGNAME",
+      "SHELL",
+      "__CF_USER_TEXT_ENCODING",
+      "USERPROFILE",
+      "TMP",
+      "TEMP",
+      "TMPDIR",
+      "LANG",
+      "LC_ALL",
+      "SSL_CERT_FILE",
+      "SSL_CERT_DIR",
+      "XDG_CONFIG_HOME",
+      "COPILOT_HOME",
+      "GH_TOKEN",
+      "GITHUB_TOKEN"
+    ],
+    "set": {
+      "NO_COLOR": "1"
+    }
+  },
+  "probe": {
+    "passive": {
+      "checks": [],
+      "configChecks": []
+    }
+  },
+  "execution": {
+    "arguments": [
+      {
+        "sandboxPolicyMapping": true
+      },
+      "--no-color",
+      {
+        "modelArguments": true
+      },
+      {
+        "providerTimeoutArguments": true
+      },
+      "-p",
+      "{{prompt}}"
+    ],
+    "stdin": {
+      "mode": "raw_text",
+      "value": ""
+    },
+    "output": {
+      "mode": "plain_text"
+    },
+    "events": []
+  },
+  "model": {
+    "supported": true,
+    "arguments": ["--model", "{{model}}"],
+    "unknownModelPolicy": "profile_allowlist",
+    "allowlist": ["claude-sonnet-4.5", "gpt-5"],
+    "catalog": [
+      {
+        "id": "claude-sonnet-4.5",
+        "name": "Claude Sonnet 4.5",
+        "description": "Copilot default model for coding work"
+      },
+      {
+        "id": "gpt-5",
+        "name": "GPT-5",
+        "description": "OpenAI model served through Copilot"
+      }
+    ]
+  },
+  "progress": [],
+  "errors": {
+    "mappings": [
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "cancelled"
+        },
+        "issueCode": "cancelled"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "deadline_exceeded"
+        },
+        "issueCode": "deadline_exceeded"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "provider_tool_unavailable"
+        },
+        "issueCode": "provider_tool_unavailable"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "provider_authentication_required"
+        },
+        "issueCode": "provider_authentication_required"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "quota_exhausted"
+        },
+        "issueCode": "quota_exhausted"
+      },
+      {
+        "evidence": {
+          "kind": "stderr_pattern",
+          "patternId": "permission_denied"
+        },
+        "issueCode": "permission_denied"
+      },
+      {
+        "evidence": {
+          "kind": "missing_terminal"
+        },
+        "issueCode": "provider_failure"
+      }
+    ]
+  },
+  "sandbox": {
+    "mappings": {
+      "restricted": ["--allow-tool", "write", "--deny-tool", "shell"],
+      "provider_default": [],
+      "full_access": ["--allow-all-tools", "--allow-all-paths"]
+    }
+  },
+  "session": {
+    "supported": false,
+    "formatId": "copilot-session-v1",
+    "compatibleFormatIds": ["copilot-session-v1"],
+    "extract": null,
+    "resumeArguments": [],
+    "requireObservedIdMatch": false
+  },
+  "timeout": {
+    "providerArguments": [],
+    "providerReserveMs": 2000
+  },
+  "compatibilityOverrides": []
+}

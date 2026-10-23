@@ -98,6 +98,7 @@ export function sqliteD1(
     "0080_discussion_attachments.sql",
     "0081_user_notes.sql",
     "0082_user_note_space_title.sql",
+    "0083_copilot_worker.sql",
   ]) {
     sqlite.exec(
       readFileSync(

@@ -93,6 +93,12 @@ class _WorkerTabBar extends StatelessWidget {
       'providerToolName': 'claude',
     },
     {
+      'workerTypeId': 'copilot',
+      'displayName': 'Copilot',
+      'profileDefinitionId': 'copilot-cli',
+      'providerToolName': 'copilot',
+    },
+    {
       'workerTypeId': 'gemini',
       'displayName': 'Gemini',
       'profileDefinitionId': 'gemini-antigravity',
@@ -106,7 +112,7 @@ class _WorkerTabBar extends StatelessWidget {
     final selectedTypeId = c.selectedCloudWorker?['workerTypeId'] as String? ??
         c.selectedWorkerState.workerTypeId;
 
-    // Use loaded cloud workers or default to the canonical 3 workers
+    // Use loaded cloud workers or default to the canonical workers
     final workersList = <Map<String, dynamic>>[];
     for (final def in _defaultWorkers) {
       final match = c.cloudWorkers.firstWhere(
@@ -115,7 +121,7 @@ class _WorkerTabBar extends StatelessWidget {
       );
       workersList.add(match);
     }
-    // Also include any other cloud workers not in the canonical 3
+    // Also include any other cloud workers not in the canonical list
     for (final w in c.cloudWorkers) {
       final typeId = w['workerTypeId'] as String?;
       if (typeId != null &&

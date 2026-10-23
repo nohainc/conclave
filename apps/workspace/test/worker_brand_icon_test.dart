@@ -14,6 +14,12 @@ void main() {
         'assets/worker_icons/claude.png');
     expect(workerBrandIconAsset(workerTypeId: 'gemini'),
         'assets/worker_icons/gemini.png');
+    expect(
+        workerBrandIconAsset(
+            workerTypeId: 'copilot',
+            profileDefinitionId: 'copilot-cli',
+            providerToolName: 'copilot'),
+        'assets/worker_icons/copilot.png');
   });
 
   test('unknown Workers have no provider mark', () {
