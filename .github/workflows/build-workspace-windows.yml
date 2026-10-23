@@ -2,14 +2,20 @@ name: Build Windows Workspace installer
 
 on:
   push:
-    branches: ["main", "codex/windows-workspace-preview-*", "codex/windows-runtime", "codex/windows-inno-installer"]
+    branches:
+      [
+        "main",
+        "codex/windows-workspace-preview-*",
+        "codex/windows-runtime",
+        "codex/windows-inno-installer",
+      ]
     paths:
-      - 'apps/workspace/**'
-      - 'packages/conclave_cli_worker_runtime/**'
-      - 'packaging/windows/**'
-      - 'scripts/*workspace*'
-      - '.github/workflows/build-workspace-windows.yml'
-      - '.github/actions/setup-flutter/**'
+      - "apps/workspace/**"
+      - "packages/conclave_cli_worker_runtime/**"
+      - "packaging/windows/**"
+      - "scripts/*workspace*"
+      - ".github/workflows/build-workspace-windows.yml"
+      - ".github/actions/setup-flutter/**"
   workflow_dispatch:
 
 concurrency:
@@ -26,6 +32,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-flutter
+      - name: Install pinned Inno Setup compiler
+        shell: pwsh
+        run: |
+          $setup = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.3.exe'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' -OutFile $setup
+          if ((Get-FileHash $setup -Algorithm SHA256).Hash -ne '9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732') { throw 'Inno Setup checksum mismatch.' }
+          $compilerDir = Join-Path $env:RUNNER_TEMP 'inno-setup'
+          $install = Start-Process $setup -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$compilerDir`"") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Compiler installation failed: $($install.ExitCode)" }
       - name: Build standalone service and generic Engine
         shell: bash
         env:
@@ -73,14 +88,9 @@ jobs:
           } finally {
             if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
           }
-      - name: Install Inno Setup compiler
-        shell: pwsh
-        run: |
-          choco install innosetup --version=6.4.3 --yes --no-progress --allow-downgrade
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build unsigned per-user installer
         shell: pwsh
-        run: ./scripts/package-workspace-windows.ps1
+        run: ./scripts/package-workspace-windows.ps1 -Compiler "$env:RUNNER_TEMP/inno-setup/ISCC.exe"
       - name: Test install, upgrade and uninstall
         shell: pwsh
         run: ./scripts/test-workspace-windows-installer.ps1
