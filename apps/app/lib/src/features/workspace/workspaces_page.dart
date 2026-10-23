@@ -251,6 +251,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             memberAccessSource: widget.memberAccessSource,
             personAccessSource: widget.personAccessSource,
             workers: widget.workspaceWorkers,
+            expandable: true,
           ),
         ],
         if (widget.memberAccessSource != null && !workspace.shared) ...[
@@ -260,6 +261,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             workspaceId: workspace.id,
             workers: widget.workspaceWorkers,
             source: widget.memberAccessSource!,
+            expandable: true,
           ),
         ],
       ],

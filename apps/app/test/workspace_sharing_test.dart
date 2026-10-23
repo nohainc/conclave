@@ -150,6 +150,14 @@ void main() {
     expect(find.byKey(const ValueKey('workspace-member-access-own')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('workspace-shared-badge')), findsNothing);
+    // Both owner sections start collapsed behind expandable headers.
+    expect(find.text('Share workspace'), findsOneWidget);
+    expect(find.text('Member access'), findsOneWidget);
+    expect(find.byKey(const ValueKey('sharing-invite')), findsNothing);
+    await tester.tap(find.text('Share workspace'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('sharing-invite')), findsOneWidget);
+    expect(find.byKey(const ValueKey('sharing-person-guest')), findsOneWidget);
 
     await show(
         {'id': 'lent', 'name': 'Lender Mac', 'role': 'member', 'shared': true});

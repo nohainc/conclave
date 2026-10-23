@@ -20,6 +20,7 @@ class WorkspaceMemberAccessSection extends StatefulWidget {
     this.personSource,
     this.userId,
     this.personName,
+    this.expandable = false,
   }) : assert((personSource == null) == (userId == null));
 
   final String workspaceId;
@@ -32,6 +33,9 @@ class WorkspaceMemberAccessSection extends StatefulWidget {
   final AxWorkspacePersonAccessDataSource? personSource;
   final String? userId;
   final String? personName;
+
+  /// Collapse the section behind an expandable header (the Workspace page).
+  final bool expandable;
 
   @override
   State<WorkspaceMemberAccessSection> createState() =>
@@ -201,54 +205,74 @@ class _WorkspaceMemberAccessSectionState
             worker.workspaceId == widget.workspaceId &&
             worker.status != 'removed')
         .toList(growable: false);
+    final title = _isPerson
+        ? 'Access for ${widget.personName ?? 'this person'}'
+        : 'Member access';
+    final body = <Widget>[
+      Text(
+          _isPerson
+              ? (_custom
+                  ? 'Custom access replaces the Workspace default for this person.'
+                  : 'This person follows the Workspace default until you save custom access.')
+              : 'Choose which Workers, models and efforts invited Space members can use on this Workspace. You are never limited. What they may do (chat, work, commands) is set per Space.',
+          style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 8),
+      if (_loading)
+        const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()))
+      else if (_error != null)
+        Row(children: [
+          const Expanded(child: Text('Member access could not be loaded.')),
+          TextButton(onPressed: _load, child: const Text('Retry')),
+        ])
+      else ...[
+        if (workers.isEmpty)
+          Text('This Workspace has no Workers to share yet.',
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
+        else
+          _buildAccessGrid(context, workers),
+        const SizedBox(height: 8),
+        Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton(
+                key: const ValueKey('member-access-save'),
+                onPressed: _dirty && !_saving ? _save : null,
+                child: const Text('Save access'))),
+        if (_isPerson && _custom)
+          Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                  key: const ValueKey('person-access-reset'),
+                  onPressed: _saving ? null : _reset,
+                  child: const Text('Reset to default'))),
+      ],
+    ];
+    if (widget.expandable) {
+      return Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          key: const ValueKey('member-access-expansion'),
+          leading: const Icon(Icons.tune),
+          title: Text(title,
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700)),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          expandedAlignment: Alignment.centerLeft,
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: body,
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-            _isPerson
-                ? 'Access for ${widget.personName ?? 'this person'}'
-                : 'Member access',
+        Text(title,
             style: theme.textTheme.titleMedium
                 ?.copyWith(fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
-        Text(
-            _isPerson
-                ? (_custom
-                    ? 'Custom access replaces the Workspace default for this person.'
-                    : 'This person follows the Workspace default until you save custom access.')
-                : 'Choose which Workers, models and efforts invited Space members can use on this Workspace. You are never limited. What they may do (chat, work, commands) is set per Space.',
-            style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-        const SizedBox(height: 8),
-        if (_loading)
-          const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()))
-        else if (_error != null)
-          Row(children: [
-            const Expanded(child: Text('Member access could not be loaded.')),
-            TextButton(onPressed: _load, child: const Text('Retry')),
-          ])
-        else ...[
-          if (workers.isEmpty)
-            Text('This Workspace has no Workers to share yet.',
-                style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
-          else
-            _buildAccessGrid(context, workers),
-          const SizedBox(height: 8),
-          Align(
-              alignment: Alignment.centerLeft,
-              child: FilledButton(
-                  key: const ValueKey('member-access-save'),
-                  onPressed: _dirty && !_saving ? _save : null,
-                  child: const Text('Save access'))),
-          if (_isPerson && _custom)
-            Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                    key: const ValueKey('person-access-reset'),
-                    onPressed: _saving ? null : _reset,
-                    child: const Text('Reset to default'))),
-        ],
+        ...body,
       ],
     );
   }

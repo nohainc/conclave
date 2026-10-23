@@ -37,7 +37,11 @@ class WorkspaceSharingSection extends StatefulWidget {
     this.personAccessSource,
     this.workers = const [],
     this.people = const [],
+    this.expandable = false,
   });
+
+  /// Collapse the section behind an expandable header (the Workspace page).
+  final bool expandable;
 
   final String workspaceId;
 
@@ -198,51 +202,74 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = TextStyle(color: theme.colorScheme.onSurfaceVariant);
+    final title = Text('Share workspace',
+        style:
+            theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700));
+    final invite = IconButton(
+        key: const ValueKey('sharing-invite'),
+        tooltip: 'Add people',
+        onPressed: _busy || _loading ? null : _addPeople,
+        icon: const Icon(Icons.add));
+    final body = <Widget>[
+      if (_loading)
+        const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()))
+      else if (_error != null)
+        Row(children: [
+          const Expanded(child: Text('Sharing could not be loaded.')),
+          TextButton(onPressed: _load, child: const Text('Retry')),
+        ])
+      else ...[
+        for (final invitation
+            in _invitations.where((item) => item.status == 'pending'))
+          ListTile(
+              key: ValueKey('sharing-invitation-${invitation.id}'),
+              contentPadding: EdgeInsets.zero,
+              title: Text(invitation.email),
+              subtitle: const Text('Invitation pending'),
+              trailing: TextButton(
+                  key: ValueKey('sharing-revoke-invitation-${invitation.id}'),
+                  onPressed: _busy
+                      ? null
+                      : () => _act(() => widget.source
+                          .revokeWorkspaceInvitation(
+                              widget.workspaceId, invitation.id)),
+                  child: const Text('Cancel invitation'))),
+        if (_people.isEmpty)
+          Text('No one has access yet.', style: muted)
+        else
+          for (final person in _people) _personTile(person, muted),
+      ],
+    ];
+    if (widget.expandable) {
+      return Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        child: ExpansionTile(
+          key: const ValueKey('sharing-expansion'),
+          leading: const Icon(Icons.group_add_outlined),
+          title: title,
+          subtitle: _loading || _error != null
+              ? null
+              : Text('${_people.where((p) => p.active).length} with access',
+                  style: muted),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          expandedAlignment: Alignment.centerLeft,
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: [
+            Align(alignment: Alignment.centerRight, child: invite),
+            ...body,
+          ],
+        ),
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [
-          Expanded(
-              child: Text('Share this Workspace with people',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700))),
-          IconButton(
-              key: const ValueKey('sharing-invite'),
-              tooltip: 'Add people',
-              onPressed: _busy || _loading ? null : _addPeople,
-              icon: const Icon(Icons.add)),
-        ]),
+        Row(children: [Expanded(child: title), invite]),
         const SizedBox(height: 8),
-        if (_loading)
-          const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()))
-        else if (_error != null)
-          Row(children: [
-            const Expanded(child: Text('Sharing could not be loaded.')),
-            TextButton(onPressed: _load, child: const Text('Retry')),
-          ])
-        else ...[
-          for (final invitation
-              in _invitations.where((item) => item.status == 'pending'))
-            ListTile(
-                key: ValueKey('sharing-invitation-${invitation.id}'),
-                contentPadding: EdgeInsets.zero,
-                title: Text(invitation.email),
-                subtitle: const Text('Invitation pending'),
-                trailing: TextButton(
-                    key: ValueKey('sharing-revoke-invitation-${invitation.id}'),
-                    onPressed: _busy
-                        ? null
-                        : () => _act(() => widget.source
-                            .revokeWorkspaceInvitation(
-                                widget.workspaceId, invitation.id)),
-                    child: const Text('Cancel invitation'))),
-          if (_people.isEmpty)
-            Text('No one has access yet.', style: muted)
-          else
-            for (final person in _people) _personTile(person, muted),
-        ],
+        ...body,
       ],
     );
   }
@@ -255,98 +282,114 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
     final mode =
         person.mode == null ? 'Default access' : _modeLabels[person.mode]!;
     final usage = person.usage;
-    return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(
-                child: Text('${person.displayName} · ${person.email}',
-                    style: const TextStyle(fontWeight: FontWeight.w600))),
-            if (person.active)
-              TextButton(
-                  key: ValueKey('sharing-revoke-${person.userId}'),
-                  onPressed: _busy ? null : () => _revokePerson(person),
-                  child: const Text('Revoke access'))
-            else
-              Text('Access revoked', style: muted),
-          ]),
-          Text(
-              '$mode${person.custom ? ' (custom)' : ''} · ${usage.requests} request${usage.requests == 1 ? '' : 's'} · about ${_duration(usage.approxSeconds)}'
-              '${usage.lastUsedAt == null ? '' : ' · last used ${usage.lastUsedAt}'}',
-              style: muted),
-          if (person.active &&
-              widget.memberAccessSource != null &&
-              widget.personAccessSource != null)
-            Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                    key: ValueKey('sharing-edit-${person.userId}'),
-                    onPressed: _busy ? null : () => _editAccess(person),
-                    child: Text(_editingUserId == person.userId
-                        ? 'Done'
-                        : 'Edit access'))),
-          if (person.active &&
-              _editingUserId == person.userId &&
-              widget.memberAccessSource != null)
-            Container(
-                margin: const EdgeInsets.only(top: 4, bottom: 8),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(14)),
-                child: WorkspaceMemberAccessSection(
-                    key: ValueKey('person-access-${person.userId}'),
-                    workspaceId: widget.workspaceId,
-                    workers: widget.workers,
-                    source: widget.memberAccessSource!,
-                    personSource: widget.personAccessSource,
-                    userId: person.userId,
-                    personName: person.displayName)),
-          if (person.active)
-            Row(children: [
-              Text('At once:', style: muted),
-              const SizedBox(width: 8),
-              DropdownButton<int>(
-                  key: ValueKey('sharing-quota-${person.userId}'),
-                  value: person.maxConcurrentRequests.clamp(1, 10),
-                  items: [
-                    for (var n = 1; n <= 10; n++)
-                      DropdownMenuItem(value: n, child: Text('$n'))
-                  ],
-                  onChanged: _busy
-                      ? null
-                      : (value) {
-                          if (value == null) return;
-                          unawaited(_act(() => widget.source.setPersonQuota(
-                              widget.workspaceId, person.userId, value)));
-                        }),
-              const SizedBox(width: 16),
-              Text('Run time per month:', style: muted),
-              const SizedBox(width: 8),
-              DropdownButton<int?>(
-                  key: ValueKey('sharing-runtime-${person.userId}'),
-                  value: _runTimeHours.contains(_hours(person))
-                      ? _hours(person)
-                      : null,
-                  items: [
-                    for (final hours in _runTimeHours)
-                      DropdownMenuItem<int?>(
-                          value: hours,
-                          child: Text(hours == null ? 'No limit' : '$hours h'))
-                  ],
-                  onChanged: _busy
-                      ? null
-                      : (hours) => unawaited(_act(() => widget.source
-                          .setPersonRunTimeLimit(
-                              widget.workspaceId,
-                              person.userId,
-                              hours == null ? null : hours * 3600)))),
-            ]),
-          if (person.active && person.maxRunSecondsPerMonth != null)
-            Text(
-                'Used this month: about ${_duration(person.usage.monthSeconds)} of ${_duration(person.maxRunSecondsPerMonth!)}',
-                style: muted),
-        ]));
+    final theme = Theme.of(context);
+    final initial = person.displayName.trim().isEmpty
+        ? '?'
+        : person.displayName.trim()[0].toUpperCase();
+    return Card(
+        key: ValueKey('sharing-person-${person.userId}'),
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                CircleAvatar(
+                    radius: 16,
+                    backgroundColor: theme.colorScheme.primaryContainer,
+                    foregroundColor: theme.colorScheme.onPrimaryContainer,
+                    child: Text(initial)),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: Text('${person.displayName} · ${person.email}',
+                        style: const TextStyle(fontWeight: FontWeight.w600))),
+                if (person.active)
+                  TextButton(
+                      key: ValueKey('sharing-revoke-${person.userId}'),
+                      onPressed: _busy ? null : () => _revokePerson(person),
+                      child: const Text('Revoke access'))
+                else
+                  Text('Access revoked', style: muted),
+              ]),
+              Text(
+                  '$mode${person.custom ? ' (custom)' : ''} · ${usage.requests} request${usage.requests == 1 ? '' : 's'} · about ${_duration(usage.approxSeconds)}'
+                  '${usage.lastUsedAt == null ? '' : ' · last used ${usage.lastUsedAt}'}',
+                  style: muted),
+              if (person.active &&
+                  widget.memberAccessSource != null &&
+                  widget.personAccessSource != null)
+                Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                        key: ValueKey('sharing-edit-${person.userId}'),
+                        onPressed: _busy ? null : () => _editAccess(person),
+                        child: Text(_editingUserId == person.userId
+                            ? 'Done'
+                            : 'Edit access'))),
+              if (person.active &&
+                  _editingUserId == person.userId &&
+                  widget.memberAccessSource != null)
+                Container(
+                    margin: const EdgeInsets.only(top: 4, bottom: 8),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                        border:
+                            Border.all(color: Theme.of(context).dividerColor),
+                        borderRadius: BorderRadius.circular(14)),
+                    child: WorkspaceMemberAccessSection(
+                        key: ValueKey('person-access-${person.userId}'),
+                        workspaceId: widget.workspaceId,
+                        workers: widget.workers,
+                        source: widget.memberAccessSource!,
+                        personSource: widget.personAccessSource,
+                        userId: person.userId,
+                        personName: person.displayName)),
+              if (person.active)
+                Row(children: [
+                  Text('At once:', style: muted),
+                  const SizedBox(width: 8),
+                  DropdownButton<int>(
+                      key: ValueKey('sharing-quota-${person.userId}'),
+                      value: person.maxConcurrentRequests.clamp(1, 10),
+                      items: [
+                        for (var n = 1; n <= 10; n++)
+                          DropdownMenuItem(value: n, child: Text('$n'))
+                      ],
+                      onChanged: _busy
+                          ? null
+                          : (value) {
+                              if (value == null) return;
+                              unawaited(_act(() => widget.source.setPersonQuota(
+                                  widget.workspaceId, person.userId, value)));
+                            }),
+                  const SizedBox(width: 16),
+                  Text('Run time per month:', style: muted),
+                  const SizedBox(width: 8),
+                  DropdownButton<int?>(
+                      key: ValueKey('sharing-runtime-${person.userId}'),
+                      value: _runTimeHours.contains(_hours(person))
+                          ? _hours(person)
+                          : null,
+                      items: [
+                        for (final hours in _runTimeHours)
+                          DropdownMenuItem<int?>(
+                              value: hours,
+                              child:
+                                  Text(hours == null ? 'No limit' : '$hours h'))
+                      ],
+                      onChanged: _busy
+                          ? null
+                          : (hours) => unawaited(_act(() => widget.source
+                              .setPersonRunTimeLimit(
+                                  widget.workspaceId,
+                                  person.userId,
+                                  hours == null ? null : hours * 3600)))),
+                ]),
+              if (person.active && person.maxRunSecondsPerMonth != null)
+                Text(
+                    'Used this month: about ${_duration(person.usage.monthSeconds)} of ${_duration(person.maxRunSecondsPerMonth!)}',
+                    style: muted),
+            ])));
   }
 }
 
