@@ -36,6 +36,9 @@ class SpaceTree extends StatelessWidget {
     this.onReorderPinnedSpaces,
     this.onReorderPinnedThreads,
     this.compact = false,
+    this.pageLayout = false,
+    this.spaceIdFilter,
+    this.onOpenInvitations,
     this.narrow = false,
   });
 
@@ -65,6 +68,9 @@ class SpaceTree extends StatelessWidget {
   final Future<void> Function(AxSpace space, List<String> orderedIds)?
       onReorderPinnedThreads;
   final bool compact;
+  final bool pageLayout;
+  final String? spaceIdFilter;
+  final VoidCallback? onOpenInvitations;
   final bool narrow;
 
   @override
@@ -94,16 +100,25 @@ class SpaceTree extends StatelessWidget {
   }
 
   Widget _tree(BuildContext context) {
-    final invitations = shellContext.invitations;
+    final invitations =
+        spaceIdFilter == null ? shellContext.invitations : const [];
     // Pinned Spaces lead the list; the rest keep their usual groups.
     final pinnedSpaces = [
       for (final space in shellContext.spaces)
-        if (space.isPinned) space
+        if (space.isPinned &&
+            (spaceIdFilter == null || space.id == spaceIdFilter))
+          space
     ]..sort(compareAxPins);
-    final ownedSpaces =
-        shellContext.ownedSpaces.where((space) => !space.isPinned).toList();
-    final sharedSpaces =
-        shellContext.sharedSpaces.where((space) => !space.isPinned).toList();
+    final ownedSpaces = shellContext.ownedSpaces
+        .where((space) =>
+            !space.isPinned &&
+            (spaceIdFilter == null || space.id == spaceIdFilter))
+        .toList();
+    final sharedSpaces = shellContext.sharedSpaces
+        .where((space) =>
+            !space.isPinned &&
+            (spaceIdFilter == null || space.id == spaceIdFilter))
+        .toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -119,7 +134,8 @@ class SpaceTree extends StatelessWidget {
               ),
             ),
             child: InkWell(
-              onTap: () => onNavigateTo(const AxNavigation.home()),
+              onTap: onOpenInvitations ??
+                  () => onNavigateTo(const AxNavigation.home()),
               borderRadius: BorderRadius.circular(6),
               child: Row(
                 children: [
@@ -222,9 +238,11 @@ class SpaceTree extends StatelessWidget {
         _SidebarHoverRow(
           key: ValueKey('sidebar-space-row-${space.id}'),
           builder: (context, hovered, menuOpenChanged) {
-            final isSpaceActive = isSpaceFocused || hovered;
+            final isSpaceActive = isSpaceFocused ||
+                hovered ||
+                (pageLayout && shellContext.selectedSpace?.id == space.id);
             return Container(
-              height: _sidebarRowHeight,
+              height: pageLayout ? 52 : _sidebarRowHeight,
               decoration: BoxDecoration(
                 color: isSpaceActive
                     ? ConclaveColors.navigationSelectedColor(
@@ -238,6 +256,10 @@ class SpaceTree extends StatelessWidget {
                         space.id.startsWith('local-space-')
                     ? null
                     : () {
+                        if (pageLayout) {
+                          onToggleSpaceExpanded?.call(space.id);
+                          return;
+                        }
                         // Selecting an already-expanded other Space preserves expansion.
                         if (!isExpanded || isSpaceFocused) {
                           onToggleSpaceExpanded?.call(space.id);
@@ -295,7 +317,7 @@ class SpaceTree extends StatelessWidget {
                             color: ConclaveColors.navigationTextMuted(
                                 Theme.of(context).brightness ==
                                     Brightness.dark),
-                            fontSize: 12.5,
+                            fontSize: pageLayout ? 15 : 12.5,
                             fontWeight: FontWeight.w400,
                           ),
                         ),
@@ -308,6 +330,15 @@ class SpaceTree extends StatelessWidget {
                               color: ConclaveColors.navigationTextMuted(
                                   Theme.of(context).brightness ==
                                       Brightness.dark)),
+                        ),
+                      if (pageLayout &&
+                          isSpaceActive &&
+                          onCreateThread != null &&
+                          space.effectivePermissions.manageOwnThreads)
+                        IconButton(
+                          tooltip: 'New Thread',
+                          icon: const Icon(Icons.add_rounded, size: 20),
+                          onPressed: () => onCreateThread!(space),
                         ),
                       isSpaceActive
                           ? _spaceMenu(context, space, menuOpenChanged)
@@ -360,7 +391,7 @@ class SpaceTree extends StatelessWidget {
                           },
                     borderRadius: BorderRadius.circular(6),
                     child: Container(
-                      height: _sidebarRowHeight,
+                      height: pageLayout ? 52 : _sidebarRowHeight,
                       padding: const EdgeInsets.only(left: 8, right: 2),
                       decoration: BoxDecoration(
                         color: isThreadActive
@@ -390,7 +421,7 @@ class SpaceTree extends StatelessWidget {
                                 color: ConclaveColors.navigationTextMuted(
                                     Theme.of(context).brightness ==
                                         Brightness.dark),
-                                fontSize: 11.5,
+                                fontSize: pageLayout ? 15 : 11.5,
                                 fontWeight: FontWeight.w400,
                               ),
                             ),
@@ -465,8 +496,8 @@ class SpaceTree extends StatelessWidget {
         _handleThreadMenuItem(context, space, thread, action);
 
     return SizedBox(
-      width: 28,
-      height: 28,
+      width: pageLayout ? 44 : 28,
+      height: pageLayout ? 44 : 28,
       child: MenuAnchor(
         style: menuStyle,
         onOpen: () => menuOpenChanged(true),
@@ -625,8 +656,8 @@ class SpaceTree extends StatelessWidget {
     }
 
     return SizedBox(
-      width: 28,
-      height: 28,
+      width: pageLayout ? 44 : 28,
+      height: pageLayout ? 44 : 28,
       child: MenuAnchor(
         style: menuStyle,
         onOpen: () => menuOpenChanged(true),
@@ -681,6 +712,13 @@ class SpaceTree extends StatelessWidget {
                   color: iconColor),
               onPressed: () => select(space.isPinned ? 'unpin' : 'pin'),
               child: Text(space.isPinned ? 'Unpin Space' : 'Pin Space'),
+            ),
+          if (pageLayout)
+            MenuItemButton(
+              style: itemStyle(),
+              leadingIcon: const Icon(Icons.settings_outlined, size: 16),
+              onPressed: () => onNavigateTo(AxNavigation.space(space.id)),
+              child: const Text('Open Space'),
             ),
           MenuItemButton(
             style: itemStyle(),

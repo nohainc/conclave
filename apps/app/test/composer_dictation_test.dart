@@ -133,6 +133,72 @@ void main() {
     expect(find.byTooltip('Dictate'), findsOneWidget);
   });
 
+  testWidgets('right rail mic starts on the first tap and keeps Send',
+      (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final dictation = _FakeDictation();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+          body: MarkdownComposer(
+        controller: controller,
+        chatStyle: true,
+        twoRowLayout: true,
+        leadingControls: const SizedBox(width: 32, height: 32),
+        dictation: dictation,
+        sendTooltip: 'Send message',
+        onSend: () {},
+      )),
+    ));
+
+    await tester.tap(find.byKey(const ValueKey('composer-dictation')));
+    await tester.pump();
+    expect(dictation.startedLanguage, 'en-US');
+    expect(find.byIcon(Icons.stop_circle_outlined), findsOneWidget);
+    expect(find.byKey(const ValueKey('composer-send-Send message')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('composer-dictation-language')),
+        findsNothing);
+    dictation.onTranscript!('hello');
+    expect(controller.text, 'hello');
+
+    await tester.tap(find.byKey(const ValueKey('composer-dictation')));
+    await tester.pump();
+    expect(dictation.stopped, 1);
+    expect(find.byIcon(Icons.mic_none), findsOneWidget);
+  });
+
+  testWidgets('right rail language is chosen from a long press on the mic',
+      (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final dictation = _FakeDictation();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+          body: MarkdownComposer(
+        controller: controller,
+        chatStyle: true,
+        twoRowLayout: true,
+        leadingControls: const SizedBox(width: 32, height: 32),
+        dictation: dictation,
+        sendTooltip: 'Send message',
+        onSend: () {},
+      )),
+    ));
+
+    await tester.longPress(find.byKey(const ValueKey('composer-dictation')));
+    await tester.pumpAndSettle();
+    expect(dictation.startedLanguage, isNull);
+    await tester.tap(find.byKey(const ValueKey('dictation-language-uk-UA')));
+    await tester.pumpAndSettle();
+    expect(dictation.preferredLanguage, 'uk-UA');
+    expect(dictation.startedLanguage, isNull);
+
+    await tester.tap(find.byKey(const ValueKey('composer-dictation')));
+    await tester.pump();
+    expect(dictation.startedLanguage, 'uk-UA');
+  });
+
   testWidgets('reports blocked microphone access', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);

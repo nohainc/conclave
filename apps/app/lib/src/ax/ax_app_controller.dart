@@ -739,7 +739,7 @@ extension _AxAppController on _AxAppStateMixin {
             final isEmpty = pendingInvitations.isEmpty && notifications.isEmpty;
             // Keep desktop notifications beside their sidebar entry point.
             return AlertDialog(
-              alignment: isDesktop ? Alignment.topLeft : Alignment.bottomCenter,
+              alignment: isDesktop ? Alignment.topLeft : Alignment.topCenter,
               insetPadding: isDesktop
                   ? EdgeInsets.fromLTRB(sidebarWidth + 8, 16, 16, 16)
                   : EdgeInsets.zero,

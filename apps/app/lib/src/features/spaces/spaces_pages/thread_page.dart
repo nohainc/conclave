@@ -157,6 +157,7 @@ class _ThreadPageState extends State<ThreadPage>
   // The caller's private Thread note; mounted on first open like AI History.
   bool _notesOpen = false;
   bool _notesMounted = false;
+  final _noteEditorController = NoteEditorController();
 
   AxNotesDataSource? get _notesSource => widget.dataSource is AxNotesDataSource
       ? widget.dataSource as AxNotesDataSource
@@ -203,6 +204,30 @@ class _ThreadPageState extends State<ThreadPage>
     if (confirmed != true || !mounted) return;
     await (history ? widget.onClearAiHistory : widget.onClearConversation)
         ?.call();
+  }
+
+  Future<void> _confirmClearNote() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        constraints: ConclaveDialogStyle.small,
+        title: const Text('Clear Note'),
+        content: const Text(
+            'Delete all content from this note? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _noteEditorController.clear();
   }
 
   void _setAiHistoryOpen(bool open) {
@@ -1353,8 +1378,10 @@ class _ThreadPageState extends State<ThreadPage>
     }
     if (oldWidget.thread.id != widget.thread.id ||
         oldWidget.space.id != widget.space.id ||
-        oldWidget.dataSource != widget.dataSource ||
         oldWidget.currentUserId != widget.currentUserId) {
+      // A data source swap alone (e.g. after a refresh re-creates the
+      // session) keeps the same Thread and user, so the restored selection
+      // stays; clearing it here would be saved back over the stored choice.
       _workExecutionSelection = {};
       _lastWorkerSelection = {};
       _reportedIssues.clear();
@@ -1662,10 +1689,27 @@ class _ThreadPageState extends State<ThreadPage>
         final notesOpen = !widget.isDraft && _notesOpen && _notesSource != null;
         final historyOpen = !widget.isDraft && _aiHistoryOpen && !notesOpen;
         final isDark = Theme.of(context).brightness == Brightness.dark;
-        // Inactive tab: secondary text moved 12% OKLCH lightness toward the
-        // background in each theme.
-        final inactiveTab =
-            isDark ? const Color(0xffa2a3b1) : const Color(0xff535460);
+        // Tab strip: the active tab gets an accent underline that sits on the
+        // header divider; inactive tabs stay transparent so nothing shifts.
+        Widget tab(bool active, Widget button) => Semantics(
+              selected: active,
+              container: true,
+              child: Container(
+                height: 46,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: active
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                ),
+                child: button,
+              ),
+            );
         Widget header(String title,
                 {required bool history, bool notes = false}) =>
             Column(
@@ -1678,79 +1722,105 @@ class _ThreadPageState extends State<ThreadPage>
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(children: [
-                          TextButton.icon(
-                            key: ValueKey(history
-                                ? 'ai-history-conversation'
-                                : notes
-                                    ? 'notes-conversation'
-                                    : 'conversation-tab'),
-                            onPressed: () {
-                              _setNotesOpen(false);
-                              _setAiHistoryOpen(false);
-                            },
-                            style: TextButton.styleFrom(
-                              foregroundColor: history || notes
-                                  ? inactiveTab
-                                  : ConclaveColors.textPrimary(isDark),
-                            ),
-                            icon: const Icon(Icons.chat_bubble_outline_rounded,
-                                size: 18),
-                            label: const Text('Conversation'),
-                          ),
+                          tab(
+                              !history && !notes,
+                              TextButton.icon(
+                                key: ValueKey(history
+                                    ? 'ai-history-conversation'
+                                    : notes
+                                        ? 'notes-conversation'
+                                        : 'conversation-tab'),
+                                onPressed: () {
+                                  _setNotesOpen(false);
+                                  _setAiHistoryOpen(false);
+                                },
+                                style: TextButton.styleFrom(
+                                  foregroundColor:
+                                      ConclaveColors.textPrimary(isDark),
+                                  textStyle: TextStyle(
+                                    fontWeight: !history && !notes
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                                icon: const Icon(
+                                    Icons.chat_bubble_outline_rounded,
+                                    size: 18),
+                                label: const Text('Conversation'),
+                              )),
                           if (!widget.isDraft)
-                            TextButton.icon(
-                              key: ValueKey(history
-                                  ? 'ai-history-tab'
-                                  : notes
-                                      ? 'notes-ai-history'
-                                      : 'ai-history-toggle'),
-                              onPressed: () {
-                                _setNotesOpen(false);
-                                _setAiHistoryOpen(true);
-                              },
-                              style: TextButton.styleFrom(
-                                foregroundColor: history
-                                    ? ConclaveColors.textPrimary(isDark)
-                                    : inactiveTab,
-                              ),
-                              icon: const Icon(Icons.history_rounded, size: 18),
-                              label: const Text('AI History'),
-                            ),
+                            tab(
+                                history,
+                                TextButton.icon(
+                                  key: ValueKey(history
+                                      ? 'ai-history-tab'
+                                      : notes
+                                          ? 'notes-ai-history'
+                                          : 'ai-history-toggle'),
+                                  onPressed: () {
+                                    _setNotesOpen(false);
+                                    _setAiHistoryOpen(true);
+                                  },
+                                  style: TextButton.styleFrom(
+                                    foregroundColor:
+                                        ConclaveColors.textPrimary(isDark),
+                                    textStyle: TextStyle(
+                                      fontWeight: history
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.history_rounded,
+                                      size: 18),
+                                  label: const Text('AI History'),
+                                )),
                           if (!widget.isDraft && _notesSource != null)
-                            TextButton.icon(
-                              key: ValueKey(notes
-                                  ? 'notes-tab'
-                                  : history
-                                      ? 'ai-history-notes'
-                                      : 'notes-toggle'),
-                              onPressed: () => _setNotesOpen(true),
-                              style: TextButton.styleFrom(
-                                foregroundColor: notes
-                                    ? ConclaveColors.textPrimary(isDark)
-                                    : inactiveTab,
-                              ),
-                              icon: const Icon(Icons.sticky_note_2_outlined,
-                                  size: 18),
-                              label: const Text('Notes'),
-                            ),
+                            tab(
+                                notes,
+                                TextButton.icon(
+                                  key: ValueKey(notes
+                                      ? 'notes-tab'
+                                      : history
+                                          ? 'ai-history-notes'
+                                          : 'notes-toggle'),
+                                  onPressed: () => _setNotesOpen(true),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor:
+                                        ConclaveColors.textPrimary(isDark),
+                                    textStyle: TextStyle(
+                                      fontWeight: notes
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.sticky_note_2_outlined,
+                                      size: 18),
+                                  label: const Text('Notes'),
+                                )),
                         ]),
                       ),
                     ),
                     if (!widget.isDraft &&
-                        !notes &&
-                        (history
-                                ? widget.onClearAiHistory
-                                : widget.onClearConversation) !=
-                            null)
+                        (notes ||
+                            (history
+                                    ? widget.onClearAiHistory
+                                    : widget.onClearConversation) !=
+                                null))
                       IconButton(
-                        key: ValueKey(history
-                            ? 'clear-ai-history'
-                            : 'clear-conversation-history'),
-                        tooltip: history
-                            ? 'Clear AI History'
-                            : 'Clear Conversation History',
+                        key: ValueKey(notes
+                            ? 'clear-note'
+                            : history
+                                ? 'clear-ai-history'
+                                : 'clear-conversation-history'),
+                        tooltip: notes
+                            ? 'Clear Note'
+                            : history
+                                ? 'Clear AI History'
+                                : 'Clear Conversation History',
                         icon: const Icon(Icons.delete_sweep_outlined, size: 18),
-                        onPressed: () => _confirmClear(history: history),
+                        onPressed: notes
+                            ? _confirmClearNote
+                            : () => _confirmClear(history: history),
                       ),
                   ]),
                 ),
@@ -1822,6 +1892,7 @@ class _ThreadPageState extends State<ThreadPage>
     final threadId = widget.thread.id;
     return NoteEditor(
       key: ValueKey('thread-note-$threadId'),
+      controller: _noteEditorController,
       load: () => source.loadThreadNote(threadId),
       save: ({required title, required body, revision}) =>
           source.saveThreadNote(threadId, body: body, revision: revision),
@@ -2126,16 +2197,11 @@ class _ThreadPageState extends State<ThreadPage>
             ? null
             : () => _updateState(() => _tabController.index = askAi ? 1 : 0),
         padding: EdgeInsets.zero,
-        constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-        style: IconButton.styleFrom(
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-          backgroundColor: Colors.transparent,
-          disabledBackgroundColor: Colors.transparent,
-        ),
+        constraints: composerButtonConstraints,
+        style: composerIconButtonStyle(),
         icon: Icon(icon,
             semanticLabel: tooltip,
-            size: 16,
+            size: composerIconSize,
             color: selected
                 ? selectedForeground
                 : Theme.of(context).colorScheme.onSurfaceVariant),
@@ -2179,7 +2245,10 @@ class _ThreadPageState extends State<ThreadPage>
                   builder: (buttonContext) => IconButton(
                     key: const ValueKey('message-add-attachments'),
                     tooltip: 'Add attachments',
-                    icon: const Icon(Icons.add, size: 16),
+                    icon: const Icon(Icons.add, size: composerIconSize),
+                    padding: EdgeInsets.zero,
+                    constraints: composerButtonConstraints,
+                    style: composerIconButtonStyle(),
                     onPressed: () async {
                       final value = await _showAnchoredMenu<String>(
                         buttonContext: buttonContext,

@@ -1,3 +1,4 @@
+import 'package:conclave_protocol/conclave_protocol.dart';
 import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/gestures.dart';
 import 'package:conclave_app/src/features/common/markdown_composer.dart';
@@ -436,7 +437,8 @@ void main() {
     expect(find.byKey(const ValueKey('emoji-picker-button')), findsNothing);
   });
 
-  testWidgets('32 pixel mode rail stays centered as multiline input grows',
+  testWidgets(
+      '32 pixel mode rail stays anchored to the bottom as multiline input grows',
       (tester) async {
     final controller = TextEditingController(text: 'one line');
     addTearDown(controller.dispose);
@@ -454,7 +456,7 @@ void main() {
         onSend: () {},
       ),
     ))));
-    void expectCentered() {
+    void expectAnchoredBottom() {
       final slot =
           tester.getRect(find.byKey(const ValueKey('composer-leading-rail')));
       final rail = tester.getRect(find.byKey(railKey));
@@ -462,7 +464,7 @@ void main() {
       expect(slot.width, 32);
       expect(slot.left, composer.left + 4);
       expect(rail.center.dx, closeTo(slot.center.dx, 0.01));
-      expect(rail.center.dy, closeTo(composer.center.dy, 0.01));
+      expect(rail.bottom, composer.bottom - 8);
       final strip = tester.getRect(
           find.byKey(const ValueKey('composer-leading-rail-background')));
       expect(strip.left, composer.left);
@@ -480,13 +482,13 @@ void main() {
           ConclaveColors.composerRailLight);
     }
 
-    expectCentered();
+    expectAnchoredBottom();
     final initialHeight = tester.getSize(find.byType(MarkdownComposer)).height;
     await tester.enterText(find.byType(TextField), 'one\ntwo\nthree\nfour');
     await tester.pumpAndSettle();
     expect(tester.getSize(find.byType(MarkdownComposer)).height,
         greaterThan(initialHeight));
-    expectCentered();
+    expectAnchoredBottom();
   });
 
   testWidgets(
@@ -539,6 +541,43 @@ void main() {
     await show(message, 'Send message');
     expect(tester.getSize(find.byType(MarkdownComposer)).height, expanded);
     expect(message.text, 'one\ntwo\nthree\nfour');
+  });
+
+  testWidgets('two-row controls keep one height at desktop (compact) density',
+      (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    Future<double> composerHeight({Widget? leading, Widget? execution}) async {
+      await tester.pumpWidget(MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.macOS),
+          home: Scaffold(
+              body: SizedBox(
+            width: 600,
+            child: MarkdownComposer(
+              controller: controller,
+              chatStyle: true,
+              twoRowLayout: true,
+              showEmojiPicker: false,
+              showMarkdownControls: false,
+              showDictation: false,
+              toolbarLeadingControls: leading,
+              executionControlsBuilder:
+                  execution == null ? null : (_) => execution,
+            ),
+          ))));
+      await tester.pumpAndSettle();
+      return tester.getSize(find.byType(MarkdownComposer)).height;
+    }
+
+    // Message: IconButton (48 -> 40 compact). Ask AI: selector (40 -> 32).
+    final message = await composerHeight(
+        leading: IconButton(onPressed: () {}, icon: const Icon(Icons.add)));
+    final askAi = await composerHeight(
+        execution: ModelEffortSelector(
+            compact: true,
+            catalog: const ExecutionSelectionCatalog([]),
+            value: const ExecutionSelection()));
+    expect(askAi, message);
   });
 
   testWidgets(

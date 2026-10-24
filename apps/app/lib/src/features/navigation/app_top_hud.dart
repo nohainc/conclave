@@ -5,6 +5,7 @@ import '../../brand.dart';
 import '../../navigation/ax_navigation.dart';
 import 'breadcrumb.dart';
 import 'execution_health.dart';
+import 'app_menu.dart';
 import 'ax_shell_context.dart';
 
 /// Canonical Top Application Header Bar (HUD) for Conclave AX.
@@ -20,10 +21,13 @@ class AppTopHud extends StatefulWidget implements PreferredSizeWidget {
     this.onSearchChanged,
     this.onClearSearch,
     this.onToggleTheme,
+    this.onSetThemeMode,
+    this.onOpenArchivedSpaces,
     this.onOpenAbout,
     this.onLogout,
     this.onOpenExternal,
     this.compact = false,
+    this.onCreateSpace,
   });
 
   final AxShellContext shellContext;
@@ -35,10 +39,13 @@ class AppTopHud extends StatefulWidget implements PreferredSizeWidget {
   final ValueChanged<String>? onSearchChanged;
   final VoidCallback? onClearSearch;
   final VoidCallback? onToggleTheme;
+  final ValueChanged<ThemeMode>? onSetThemeMode;
+  final VoidCallback? onOpenArchivedSpaces;
   final VoidCallback? onOpenAbout;
   final VoidCallback? onLogout;
   final ValueChanged<Uri>? onOpenExternal;
   final bool compact;
+  final VoidCallback? onCreateSpace;
 
   @override
   Size get preferredSize => const Size.fromHeight(60);
@@ -119,245 +126,274 @@ class _AppTopHudState extends State<AppTopHud> {
                 isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
             border: Border(bottom: BorderSide(color: borderColor)),
           ),
-          child: Row(
-            children: [
-              // Drawer opener on compact screens
-              if (widget.compact) ...[
-                Builder(
-                  builder: (innerContext) => IconButton(
-                    onPressed: () => Scaffold.of(innerContext).openDrawer(),
-                    icon: Icon(Icons.menu_rounded, color: inkColor),
-                    tooltip: 'Open menu',
-                    splashRadius: 20,
+          child: IconButtonTheme(
+            data: widget.compact
+                ? IconButtonThemeData(
+                    style: IconButton.styleFrom(
+                    minimumSize: const Size(36, 40),
+                    maximumSize: const Size(36, 40),
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ))
+                : IconButtonTheme.of(context),
+            child: Row(
+              children: [
+                if (widget.compact)
+                  IconButton(
+                    tooltip: 'Conclave AX — Spaces',
+                    onPressed: () =>
+                        widget.onNavigateTo(const AxNavigation.spaces()),
+                    icon: ConclaveBrand.logoMark(size: 28),
                   ),
-                ),
-                const SizedBox(width: 4),
-              ],
+                if (widget.compact) const SizedBox(width: 8),
 
-              // Route-Aware Breadcrumbs or Expanded Search Input
-              if (showInlineSearch) ...[
-                Expanded(
-                  child: Container(
-                    height: 34,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: ConclaveColors.navigationRaised(isDark),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: ConclaveColors.navigationBorder(isDark),
+                // Route-Aware Breadcrumbs or Expanded Search Input
+                if (showInlineSearch) ...[
+                  Expanded(
+                    child: Container(
+                      height: 34,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        color: ConclaveColors.navigationRaised(isDark),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: ConclaveColors.navigationBorder(isDark),
+                        ),
                       ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8, right: 6),
-                          child: Icon(
-                            Icons.search_rounded,
-                            size: 16,
-                            color: mutedInk,
-                          ),
-                        ),
-                        Expanded(
-                          child: CallbackShortcuts(
-                            bindings: {
-                              const SingleActivator(LogicalKeyboardKey.escape):
-                                  () {
-                                widget.onClearSearch?.call();
-                                widget.searchController?.clear();
-                                setState(() => _isSearchExpanded = false);
-                                widget.searchFocusNode?.unfocus();
-                              },
-                            },
-                            child: TextField(
-                              controller: widget.searchController,
-                              focusNode: widget.searchFocusNode,
-                              onChanged: widget.onSearchChanged,
-                              autofocus: true,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: inkColor,
-                              ),
-                              cursorColor: ConclaveBrand.accent,
-                              cursorHeight: 14,
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: Colors.transparent,
-                                hoverColor: Colors.transparent,
-                                focusColor: Colors.transparent,
-                                hintText: 'Search...',
-                                hintStyle: TextStyle(
-                                  fontSize: 13,
-                                  color: mutedInk,
-                                ),
-                                isDense: true,
-                                contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 8),
-                                border: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                errorBorder: InputBorder.none,
-                                disabledBorder: InputBorder.none,
-                              ),
-                            ),
-                          ),
-                        ),
-                        InkWell(
-                          onTap: () {
-                            widget.onClearSearch?.call();
-                            widget.searchController?.clear();
-                            setState(() => _isSearchExpanded = false);
-                            widget.searchFocusNode?.unfocus();
-                          },
-                          borderRadius: BorderRadius.circular(10),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8, right: 6),
                             child: Icon(
-                              Icons.close_rounded,
+                              Icons.search_rounded,
                               size: 16,
                               color: mutedInk,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ] else ...[
-                Expanded(
-                  child: AppBreadcrumb(
-                    shellContext: widget.shellContext,
-                    onNavigateTo: widget.onNavigateTo,
-                    inkColor: inkColor,
-                    mutedInk: mutedInk,
-                    compact: widget.compact,
-                  ),
-                ),
-
-                // Search affordance
-                if (isDesktop) ...[
-                  InkWell(
-                    onTap: widget.onOpenCommandPalette,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? ConclaveBrand.darkPaper
-                            : ConclaveBrand.lightPaper,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.search_rounded,
-                            size: 16,
-                            color: mutedInk,
+                          Expanded(
+                            child: CallbackShortcuts(
+                              bindings: {
+                                const SingleActivator(
+                                    LogicalKeyboardKey.escape): () {
+                                  widget.onClearSearch?.call();
+                                  widget.searchController?.clear();
+                                  setState(() => _isSearchExpanded = false);
+                                  widget.searchFocusNode?.unfocus();
+                                },
+                              },
+                              child: TextField(
+                                controller: widget.searchController,
+                                focusNode: widget.searchFocusNode,
+                                onChanged: widget.onSearchChanged,
+                                autofocus: true,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: inkColor,
+                                ),
+                                cursorColor: ConclaveBrand.accent,
+                                cursorHeight: 14,
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: Colors.transparent,
+                                  hoverColor: Colors.transparent,
+                                  focusColor: Colors.transparent,
+                                  hintText: 'Search...',
+                                  hintStyle: TextStyle(
+                                    fontSize: 13,
+                                    color: mutedInk,
+                                  ),
+                                  isDense: true,
+                                  contentPadding:
+                                      const EdgeInsets.symmetric(vertical: 8),
+                                  border: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  errorBorder: InputBorder.none,
+                                  disabledBorder: InputBorder.none,
+                                ),
+                              ),
+                            ),
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Search or jump to...',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: mutedInk,
+                          InkWell(
+                            onTap: () {
+                              widget.onClearSearch?.call();
+                              widget.searchController?.clear();
+                              setState(() => _isSearchExpanded = false);
+                              widget.searchFocusNode?.unfocus();
+                            },
+                            borderRadius: BorderRadius.circular(10),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 6),
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 16,
+                                color: mutedInk,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 14),
                 ] else ...[
-                  IconButton(
-                    icon: Icon(Icons.search_rounded, size: 20, color: mutedInk),
-                    tooltip: 'Search',
-                    onPressed: () {
-                      if (widget.searchController != null ||
-                          widget.searchFocusNode != null) {
-                        setState(() => _isSearchExpanded = true);
-                        widget.searchFocusNode?.requestFocus();
-                      } else {
-                        widget.onOpenCommandPalette();
-                      }
-                    },
-                    splashRadius: 20,
+                  Expanded(
+                    child: AppBreadcrumb(
+                      shellContext: widget.shellContext,
+                      onNavigateTo: widget.onNavigateTo,
+                      inkColor: inkColor,
+                      mutedInk: mutedInk,
+                      compact: widget.compact,
+                    ),
                   ),
-                ],
-              ],
 
-              // Operational Execution Status Popover Trigger (desktop/expanded only)
-              if (!widget.compact) ...[
-                OutlinedButton.icon(
-                  onPressed: () => _openExecutionStatusPopover(context),
-                  icon: Icon(
-                    Icons.circle,
-                    size: 7,
-                    color:
-                        widget.shellContext.executionStatusTone.color(isDark),
-                  ),
-                  label: Text(
-                    widget.shellContext.executionStatusLabel,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: inkColor,
-                    side: BorderSide(color: borderColor),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    minimumSize: Size.zero,
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-
-              // Notifications Bell
-              widget.shellContext.watchNotifications(() => Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      IconButton(
-                        tooltip: 'Notifications',
-                        onPressed: widget.onOpenNotifications,
-                        icon: Icon(Icons.notifications_none_rounded,
-                            size: 21, color: mutedInk),
-                        splashRadius: 20,
-                      ),
-                      if (widget.shellContext.unreadNotificationCount > 0)
-                        Positioned(
-                          right: 6,
-                          top: 6,
-                          child: Semantics(
-                            label:
-                                '${widget.shellContext.unreadNotificationCount} unread notifications',
-                            child: Container(
-                              constraints: const BoxConstraints(
-                                  minWidth: 16, minHeight: 16),
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
-                              decoration: const BoxDecoration(
-                                color: ConclaveBrand.accent,
-                                shape: BoxShape.circle,
+                  // Search affordance
+                  if (isDesktop) ...[
+                    InkWell(
+                      onTap: widget.onOpenCommandPalette,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? ConclaveBrand.darkPaper
+                              : ConclaveBrand.lightPaper,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.search_rounded,
+                              size: 16,
+                              color: mutedInk,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Search or jump to...',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: mutedInk,
                               ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                widget.shellContext.unreadNotificationCount > 9
-                                    ? '9+'
-                                    : '${widget.shellContext.unreadNotificationCount}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                  ] else ...[
+                    IconButton(
+                      icon:
+                          Icon(Icons.search_rounded, size: 20, color: mutedInk),
+                      tooltip: 'Search',
+                      onPressed: () {
+                        if (widget.searchController != null ||
+                            widget.searchFocusNode != null) {
+                          setState(() => _isSearchExpanded = true);
+                          widget.searchFocusNode?.requestFocus();
+                        } else {
+                          widget.onOpenCommandPalette();
+                        }
+                      },
+                      splashRadius: 20,
+                    ),
+                  ],
+                ],
+
+                // Operational Execution Status Popover Trigger (desktop/expanded only)
+                if (!widget.compact) ...[
+                  OutlinedButton.icon(
+                    onPressed: () => _openExecutionStatusPopover(context),
+                    icon: Icon(
+                      Icons.circle,
+                      size: 7,
+                      color:
+                          widget.shellContext.executionStatusTone.color(isDark),
+                    ),
+                    label: Text(
+                      widget.shellContext.executionStatusLabel,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: inkColor,
+                      side: BorderSide(color: borderColor),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      minimumSize: Size.zero,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+
+                if (widget.compact && widget.onCreateSpace != null)
+                  IconButton(
+                    tooltip: 'New Space',
+                    onPressed: widget.onCreateSpace,
+                    icon: Icon(Icons.add_rounded, size: 20, color: mutedInk),
+                  ),
+                // Notifications Bell
+                widget.shellContext.watchNotifications(() => Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        IconButton(
+                          tooltip: 'Notifications',
+                          onPressed: widget.onOpenNotifications,
+                          icon: Icon(Icons.notifications_none_rounded,
+                              size: 20, color: mutedInk),
+                          splashRadius: 20,
+                        ),
+                        if (widget.shellContext.unreadNotificationCount > 0)
+                          Positioned(
+                            right: 6,
+                            top: 6,
+                            child: Semantics(
+                              label:
+                                  '${widget.shellContext.unreadNotificationCount} unread notifications',
+                              child: Container(
+                                constraints: const BoxConstraints(
+                                    minWidth: 16, minHeight: 16),
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                                decoration: const BoxDecoration(
+                                  color: ConclaveBrand.accent,
+                                  shape: BoxShape.circle,
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  widget.shellContext.unreadNotificationCount >
+                                          9
+                                      ? '9+'
+                                      : '${widget.shellContext.unreadNotificationCount}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                    ],
-                  )),
-            ],
+                      ],
+                    )),
+                if (widget.compact)
+                  GlobalAppMenu(
+                    shellContext: widget.shellContext,
+                    buttonConstraints:
+                        const BoxConstraints.tightFor(width: 36, height: 40),
+                    iconSize: 20,
+                    onNavigateTo: widget.onNavigateTo,
+                    onToggleTheme: widget.onToggleTheme,
+                    onSetThemeMode: widget.onSetThemeMode,
+                    onOpenArchivedSpaces: widget.onOpenArchivedSpaces,
+                    onOpenAbout: widget.onOpenAbout ?? () {},
+                    onOpenExternal: widget.onOpenExternal ?? (_) {},
+                    onLogout: widget.onLogout ?? () {},
+                  ),
+              ],
+            ),
           ),
         );
       },

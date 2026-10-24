@@ -1422,8 +1422,7 @@ void main() {
       expect(commandPaletteOpened, isTrue);
     });
 
-    testWidgets(
-        'tablet/compact HUD omits account avatar and renders direct search & notifications',
+    testWidgets('tablet/compact HUD shows account and global actions',
         (tester) async {
       tester.view.physicalSize = const Size(400, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -1457,10 +1456,24 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Account avatar should not be in compact HUD
       expect(find.text('VN'), findsNothing);
+      expect(find.text('Vitalii Noha'), findsOneWidget);
       expect(find.byTooltip('Account menu'), findsNothing);
 
+      final opener = find.byTooltip('Conclave AX — Spaces');
+      final menu = find.byTooltip('Application menu');
+      expect(opener, findsOneWidget);
+      expect(menu, findsOneWidget);
+      expect(tester.getCenter(opener).dx, lessThan(tester.getCenter(menu).dx));
+      expect(tester.getCenter(menu).dx,
+          greaterThan(tester.getCenter(find.byTooltip('Notifications')).dx));
+      expect(tester.getCenter(find.byTooltip('Search')).dx,
+          lessThan(tester.getCenter(find.byTooltip('Notifications')).dx));
+      await tester.tap(menu);
+      await tester.pumpAndSettle();
+      expect(find.text('My Notes'), findsOneWidget);
+      await tester.tapAt(const Offset(390, 600));
+      await tester.pumpAndSettle();
       // Search and Notifications should be present
       expect(find.byTooltip('Search'), findsOneWidget);
       expect(find.byTooltip('Notifications'), findsOneWidget);
@@ -2817,26 +2830,15 @@ void main() {
 
       // Top HUD visible with breadcrumb and hamburger menu, pinned sidebar hidden
       expect(find.byType(AxTopBar), findsOneWidget);
-      expect(find.byTooltip('Open menu'), findsOneWidget);
+      expect(find.byTooltip('Conclave AX — Spaces'), findsOneWidget);
       expect(find.text('Conclave AX'), findsOneWidget); // breadcrumb space
       expect(find.text('Authentication redesign'),
           findsOneWidget); // breadcrumb thread
 
-      // Tap hamburger menu to open drawer with full sidebar
-      await tester.tap(find.byTooltip('Open menu'));
-      await tester.pumpAndSettle();
-      expect(find.byType(Drawer), findsOneWidget);
-      expect(find.byType(AxSidebar), findsOneWidget);
-      expect(
-          find.descendant(
-              of: find.byType(Drawer),
-              matching: find.text('Authentication redesign')),
-          findsOneWidget);
-
-      // Close drawer
-      await tester.tap(find.text('Close menu'));
-      await tester.pumpAndSettle();
-      expect(find.byType(Drawer), findsNothing);
+      expect(find.byTooltip('Open menu'), findsNothing);
+      expect(find.byTooltip('Conclave AX — Spaces'), findsOneWidget);
+      expect(find.byTooltip('Profile & Settings'), findsNothing);
+      expect(find.byTooltip('Application menu'), findsOneWidget);
     });
 
     testWidgets(

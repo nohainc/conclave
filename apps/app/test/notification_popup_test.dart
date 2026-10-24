@@ -117,7 +117,8 @@ void main() {
         expect(find.byType(BottomSheet), findsOneWidget);
         expect(rect.left, 0);
         expect(rect.width, width);
-        expect(rect.bottom, 800);
+        expect(rect.top, 0);
+        expect(tester.getRect(find.text('Inbox')).top, lessThan(80));
       } else {
         expect(find.byType(BottomSheet), findsNothing);
         expect(rect.left, sidebarWidth + 8);

@@ -427,7 +427,7 @@ class _WorkComposer extends StatelessWidget {
   // Below this width (the space left for the controls beside the + and send
   // buttons, not the whole input) the Chat / Work / More rail plus the Worker
   // selector no longer fit on one line, so the rail becomes one list.
-  static const _singleWorkflowListWidth = 400.0;
+  static const _singleWorkflowListWidth = 300.0;
 
   Widget _additionalControls(BuildContext context) => LayoutBuilder(
       builder: (context, constraints) => _workflowControls(
@@ -462,10 +462,10 @@ class _WorkComposer extends StatelessWidget {
         !_primaryWorkflowIds.contains(selectedWorkflow.id);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     // All workflow items use normal text; the active item is marked by the
-    // composer mode rail's background.
+    // page content background (canvas).
     final selectedForeground = colors.onSurface;
     final inactiveForeground = colors.onSurface;
-    final activeBackground = ConclaveColors.composerRail(isDark);
+    final activeBackground = ConclaveColors.canvas(isDark);
     final canSelect = canExecute && !submitting;
     final menuWorkflows = singleList ? workflows : otherWorkflows;
     final menuSelected =
@@ -486,15 +486,20 @@ class _WorkComposer extends StatelessWidget {
           button: true,
           enabled: canSelect && item != null,
           child: Material(
+            animationDuration: Duration.zero,
             color: selected ? activeBackground : controlBg,
             borderRadius: controlBorderRadius,
             child: InkWell(
               borderRadius: controlBorderRadius,
+              hoverColor: Colors.transparent,
+              splashFactory: NoSplash.splashFactory,
               onTap: canSelect && item != null
                   ? () => onWorkflowChanged(item.reference)
                   : null,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              child: Container(
+                alignment: Alignment.center,
+                height: composerButtonSize,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Text(label,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w600,
@@ -574,9 +579,10 @@ class _WorkComposer extends StatelessWidget {
                     if (!buttonContext.mounted || value == null) return;
                     if (value == 'files') onAddFiles();
                   },
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                    child: Icon(Icons.add, size: 16),
+                  child: const SizedBox(
+                    width: composerButtonSize,
+                    height: composerButtonSize,
+                    child: Icon(Icons.add, size: composerIconSize),
                   ),
                 ),
               ),
@@ -609,10 +615,13 @@ class _WorkComposer extends StatelessWidget {
                       button: true,
                       enabled: canSelect && menuWorkflows.isNotEmpty,
                       child: Material(
+                        animationDuration: Duration.zero,
                         color: menuSelected ? activeBackground : controlBg,
                         borderRadius: controlBorderRadius,
                         child: InkWell(
                           borderRadius: controlBorderRadius,
+                          hoverColor: Colors.transparent,
+                          splashFactory: NoSplash.splashFactory,
                           onTap: canSelect && menuWorkflows.isNotEmpty
                               ? () async {
                                   final value = await _showAnchoredMenu<String>(
@@ -630,9 +639,10 @@ class _WorkComposer extends StatelessWidget {
                                   onWorkflowChanged(value);
                                 }
                               : null,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 5),
+                          child: Container(
+                            alignment: Alignment.center,
+                            height: composerButtonSize,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -681,6 +691,25 @@ class _WorkComposer extends StatelessWidget {
                   ? const Icon(Icons.smart_toy_outlined, size: 22)
                   : Image.asset(asset, width: 22, height: 22);
             },
+            modelIconBuilder: (capability, modelId, modelName) {
+              final worker = eligibleWorkers
+                  .where((w) => w.id == capability?.id)
+                  .firstOrNull;
+              final presentation = ModelPresentation.resolve(
+                modelId: modelId,
+                modelDisplayName: modelName,
+                fallbackWorkerTypeId: worker?.workerTypeId,
+                fallbackWorkerDisplayName: capability?.name,
+              );
+              final asset = presentation
+                  .iconAssetForBrightness(Theme.of(context).brightness);
+              return asset == null
+                  ? const Icon(Icons.smart_toy_outlined, size: 22)
+                  : Image.asset(asset, width: 22, height: 22);
+            },
+            compactModelLabelBuilder: (modelId, modelName) {
+              return ModelPresentation.stripIdentity(modelName ?? modelId);
+            },
             helperMessage: eligibleWorkers
                         .where((worker) => worker.id == selectedWorkerId)
                         .firstOrNull
@@ -693,6 +722,8 @@ class _WorkComposer extends StatelessWidget {
                 ? () => _runComposerCommand(_usageCommand)
                 : null,
             compact: true,
+            compactHeight: composerButtonSize,
+            compactIconSize: composerIconSize,
             showWorkerInCompactSummary: false,
             showWorker: true,
             showModel: true,
@@ -1019,7 +1050,9 @@ class AxWorkerUsagePanel extends StatelessWidget {
             key: const ValueKey('worker-usage-panel'),
             margin:
                 attached ? EdgeInsets.zero : const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+            padding: attached
+                ? EdgeInsets.zero
+                : const EdgeInsets.fromLTRB(12, 8, 4, 8),
             decoration: BoxDecoration(
               color: attached ? null : colors.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(8),
@@ -1027,91 +1060,133 @@ class AxWorkerUsagePanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(children: [
-                  const Icon(Icons.speed, size: 16),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      '${controller.workerName ?? 'Worker'} usage',
-                      style: const TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w600),
+                Container(
+                  color: attached
+                      ? ConclaveColors.composerRail(
+                          Theme.of(context).brightness == Brightness.dark)
+                      : null,
+                  padding: attached
+                      ? const EdgeInsets.fromLTRB(12, 2, 4, 0)
+                      : EdgeInsets.zero,
+                  // Attached header: 2px top padding + 32px content row.
+                  constraints:
+                      attached ? const BoxConstraints(minHeight: 34) : null,
+                  child: Row(children: [
+                    const Icon(Icons.speed, size: 16),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '${controller.workerName ?? 'Worker'} usage',
+                        style: const TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
                     ),
-                  ),
-                  if (report?.fetchedAt != null && !controller.loading)
-                    Text(
-                      'as of ${TimeOfDay.fromDateTime(report!.fetchedAt!.toLocal()).format(context)}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  if (parsed != null && !controller.loading)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 10),
-                      child: Semantics(
-                        link: true,
-                        child: InkWell(
-                          key: const ValueKey('worker-usage-toggle-original'),
-                          onTap: controller.toggleOriginal,
-                          mouseCursor: SystemMouseCursors.click,
-                          child: Text(
-                            controller.showOriginal ? 'Summary' : 'Original',
-                            style: Theme.of(context).textTheme.bodySmall,
+                    if (report?.fetchedAt != null && !controller.loading)
+                      Text(
+                        'as of ${TimeOfDay.fromDateTime(report!.fetchedAt!.toLocal()).format(context)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    if (parsed != null && !controller.loading)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 10),
+                        child: Semantics(
+                          link: true,
+                          child: InkWell(
+                            key: const ValueKey('worker-usage-toggle-original'),
+                            onTap: controller.toggleOriginal,
+                            mouseCursor: SystemMouseCursors.click,
+                            child: Text(
+                              controller.showOriginal ? 'Summary' : 'Original',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  IconButton(
-                    tooltip: 'Refresh usage',
-                    icon: const Icon(Icons.refresh, size: 16),
-                    onPressed: controller.loading ? null : onRefresh,
-                  ),
-                  if (!attached)
                     IconButton(
-                      tooltip: 'Close usage',
-                      icon: const Icon(Icons.close, size: 16),
-                      onPressed: controller.dismiss,
+                      tooltip: 'Refresh usage',
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                      constraints:
+                          const BoxConstraints.tightFor(width: 28, height: 28),
+                      icon: const Icon(Icons.refresh, size: 16),
+                      onPressed: controller.loading ? null : onRefresh,
                     ),
-                ]),
-                if (controller.loading)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: LinearProgressIndicator(),
-                  )
-                else if (message != null)
-                  Text(message, style: const TextStyle(fontSize: 12))
-                else if (showTable)
-                  AxLiveTicker(
-                    active: parsed.windows.any((w) => w.resetsAt != null),
-                    builder: (context, now) =>
-                        _UsageTable(usage: parsed, now: now),
-                  )
-                else ...[
-                  if (report != null && report.isOk)
-                    Text(
-                        controller.showOriginal
-                            ? 'Original output'
-                            : 'Could not summarize this report. Original '
-                                'output:',
-                        key: const ValueKey('worker-usage-unparsed'),
-                        style: Theme.of(context).textTheme.bodySmall),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 260),
-                    child: SingleChildScrollView(
-                      child: SelectableText(
-                        text,
-                        key: const ValueKey('worker-usage-text'),
-                        style: TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 12,
-                          color: report != null && !report.isOk
-                              ? colors.error
-                              : null,
-                        ),
+                    if (!attached)
+                      IconButton(
+                        tooltip: 'Close usage',
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        constraints:
+                            const BoxConstraints.tightFor(width: 28, height: 28),
+                        icon: const Icon(Icons.close, size: 16),
+                        onPressed: controller.dismiss,
                       ),
+                  ]),
+                ),
+                Padding(
+                  padding: attached
+                      ? const EdgeInsets.fromLTRB(12, 8, 12, 8)
+                      : EdgeInsets.zero,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (controller.loading)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: LinearProgressIndicator(),
+                        )
+                      else if (message != null)
+                        Text(message, style: const TextStyle(fontSize: 12))
+                      else if (showTable)
+                        AxLiveTicker(
+                          active: parsed.windows.any((w) => w.resetsAt != null),
+                          builder: (context, now) =>
+                              _UsageTable(usage: parsed, now: now),
+                        )
+                      else ...[
+                        if (report != null && report.isOk)
+                          Text(
+                              controller.showOriginal
+                                  ? 'Original output'
+                                  : 'Could not summarize this report. Original '
+                                      'output:',
+                              key: const ValueKey('worker-usage-unparsed'),
+                              style: Theme.of(context).textTheme.bodySmall),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 260),
+                          child: SingleChildScrollView(
+                            child: SelectableText(
+                              text,
+                              key: const ValueKey('worker-usage-text'),
+                              style: TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 12,
+                                color: report != null && !report.isOk
+                                    ? colors.error
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (report?.truncated ?? false)
+                        Text('Output was shortened.',
+                            style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                if (attached)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Divider(
+                      key: const ValueKey('worker-usage-bottom-line'),
+                      height: 1,
+                      thickness: 1,
+                      color: ConclaveColors.composerRail(
+                          Theme.of(context).brightness == Brightness.dark),
                     ),
                   ),
-                ],
-                if (report?.truncated ?? false)
-                  Text('Output was shortened.',
-                      style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
           );
@@ -1120,6 +1195,9 @@ class AxWorkerUsagePanel extends StatelessWidget {
             onTapOutside: (_) => controller.dismiss(),
             child: _ComposerPanelLayer(
               backgroundKey: const ValueKey('worker-usage-layer-background'),
+              horizontalInset: 40,
+              background: ConclaveColors.composerBackground(
+                  Theme.of(context).brightness == Brightness.dark),
               joinsInput: joinsInput,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 240),
@@ -1489,12 +1567,29 @@ class _WorkTimelineCard extends StatelessWidget {
             progress.isExecuting ||
             senderStep?.status == 'running' ||
             response?.isNotEmpty == true);
-    final senderName = isWorkerResponse ? workerName : 'Conclave';
+
+    final frozenModelName = senderTurn?.modelName ?? senderStep?.modelName;
+    final modelDisplayName =
+        frozenModelName ?? _modelDisplayName(selectedModel);
+    final hasModel = (selectedModel != null && selectedModel.isNotEmpty) ||
+        (frozenModelName != null && frozenModelName.isNotEmpty);
+    final modelPresentation = ModelPresentation.resolve(
+      modelId: selectedModel,
+      modelDisplayName: modelDisplayName.isNotEmpty ? modelDisplayName : null,
+      fallbackWorkerTypeId: workerType,
+      fallbackWorkerDisplayName: workerDisplayName,
+    );
+    final modelName = modelPresentation.name;
+    final modelIcon =
+        modelPresentation.iconAssetForBrightness(Theme.of(context).brightness);
+
+    final senderName =
+        isWorkerResponse ? (hasModel ? modelName : workerName) : 'Conclave';
     final workerOwnerName = senderTurn?.workerOwnerName?.trim();
     final workerIcon =
         presentation.iconAssetForBrightness(Theme.of(context).brightness);
-
-    final frozenModelName = senderTurn?.modelName ?? senderStep?.modelName;
+    final effectiveIcon = hasModel ? (modelIcon ?? workerIcon) : workerIcon;
+    final effectiveIconLabel = hasModel ? modelName : workerName;
     String? formattedModelInfo;
     if (selectedModel != null && selectedModel.isNotEmpty) {
       final modelName = frozenModelName ?? _modelDisplayName(selectedModel);
@@ -1565,19 +1660,19 @@ class _WorkTimelineCard extends StatelessWidget {
     final senderIconOpacity = isDark ? 0.72 : 0.85;
 
     final Widget senderAvatar = isWorkerResponse
-        ? (workerIcon != null
+        ? (effectiveIcon != null
             ? Opacity(
                 opacity: senderIconOpacity,
-                child: Image.asset(workerIcon,
+                child: Image.asset(effectiveIcon,
                     width: 22,
                     height: 22,
                     fit: BoxFit.contain,
-                    semanticLabel: '$workerName icon'),
+                    semanticLabel: '$effectiveIconLabel icon'),
               )
             : CircleAvatar(
                 radius: 11,
                 backgroundColor: ConclaveColors.primarySoftColor(isDark),
-                child: Text(workerName.substring(0, 1).toUpperCase(),
+                child: Text(effectiveIconLabel.substring(0, 1).toUpperCase(),
                     style: TextStyle(fontSize: 12, color: metaColor)),
               ))
         : Opacity(
@@ -2775,6 +2870,8 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
     return _ComposerPanelLayer(
       backgroundKey: const ValueKey('request-history-layer-background'),
       joinsInput: widget.joinsInput,
+      horizontalInset: 40,
+      background: ConclaveColors.composerBackground(isDark),
       child: TapRegion(
         onTapOutside: (_) => widget.onClosed(),
         child: Focus(
@@ -2798,41 +2895,59 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
           },
           child: Container(
             key: const ValueKey('request-history-panel'),
-            constraints: const BoxConstraints(maxHeight: 192),
+            constraints: const BoxConstraints(maxHeight: 289),
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
             ),
-            child: widget.prompts.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('No earlier requests in this thread.',
-                        style: TextStyle(fontSize: 12)),
-                  )
-                : ListView.builder(
-                    key: const ValueKey('request-history-list'),
-                    controller: _scroll,
-                    shrinkWrap: true,
-                    itemExtent: 48,
-                    itemCount: widget.prompts.length,
-                    itemBuilder: (context, index) => InkWell(
-                      onTap: () => _select(index),
-                      child: Container(
-                        color: index == _selected
-                            ? ConclaveColors.navigationSelectedColor(isDark)
-                            : null,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          widget.prompts[index].trim(),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Flexible(
+                  child: widget.prompts.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Text('No earlier requests in this thread.',
+                              style: TextStyle(fontSize: 12)),
+                        )
+                      : ListView.builder(
+                          key: const ValueKey('request-history-list'),
+                          controller: _scroll,
+                          shrinkWrap: true,
+                          itemExtent: 48,
+                          itemCount: widget.prompts.length,
+                          itemBuilder: (context, index) => InkWell(
+                            onTap: () => _select(index),
+                            child: Container(
+                              color: index == _selected
+                                  ? ConclaveColors.navigationSelectedColor(
+                                      isDark)
+                                  : null,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                widget.prompts[index].trim(),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Divider(
+                    key: const ValueKey('request-history-bottom-line'),
+                    height: 1,
+                    thickness: 1,
+                    color: ConclaveColors.composerRail(isDark),
                   ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -2891,6 +3006,9 @@ class _QueuedMessagesPanel extends StatelessWidget {
     const iconConstraints = BoxConstraints.tightFor(width: 28, height: 28);
     return _ComposerPanelLayer(
       backgroundKey: const ValueKey('work-queue-layer-background'),
+      // Span the input's central area, between the 40px composer rails.
+      horizontalInset: 40,
+      background: ConclaveColors.composerBackground(isDark),
       child: Container(
         key: const ValueKey('work-queue-panel'),
         constraints: const BoxConstraints(maxHeight: 192),
@@ -2909,7 +3027,7 @@ class _QueuedMessagesPanel extends StatelessWidget {
               ),
             Container(
               key: const ValueKey('work-queue-header'),
-              color: ConclaveColors.primarySoftColor(isDark),
+              color: ConclaveColors.composerRail(isDark),
               padding: const EdgeInsets.fromLTRB(12, 2, 4, 0),
               child: Row(children: [
                 Expanded(
@@ -2997,6 +3115,15 @@ class _QueuedMessagesPanel extends StatelessWidget {
                 },
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Divider(
+                key: const ValueKey('work-queue-bottom-line'),
+                height: 1,
+                thickness: 1,
+                color: ConclaveColors.composerRail(isDark),
+              ),
+            ),
           ],
         ),
       ),
@@ -3011,15 +3138,19 @@ class _ComposerPanelLayer extends StatelessWidget {
     required this.backgroundKey,
     required this.child,
     this.joinsInput = true,
+    this.horizontalInset = 8,
+    this.background,
   });
 
   final Key backgroundKey;
   final Widget child;
   final bool joinsInput;
+  final double horizontalInset;
+  final Color? background;
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: EdgeInsets.symmetric(horizontal: horizontalInset),
         child: Stack(
           clipBehavior: Clip.none,
           children: [
@@ -3028,8 +3159,9 @@ class _ComposerPanelLayer extends StatelessWidget {
               child: DecoratedBox(
                 key: backgroundKey,
                 decoration: BoxDecoration(
-                  color: ConclaveColors.composerRail(
-                      Theme.of(context).brightness == Brightness.dark),
+                  color: background ??
+                      ConclaveColors.composerRail(
+                          Theme.of(context).brightness == Brightness.dark),
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(10),
                   ),

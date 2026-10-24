@@ -36,46 +36,6 @@ extension _AxAppShellViews on _AxAppStateMixin {
                       ConclaveBrand.isDesktop(constraints.maxWidth);
                   final shell = _shellContext;
                   return Scaffold(
-                    drawer: !isDesktop
-                        ? Drawer(
-                            width: 220,
-                            child: AxSidebar(
-                              shellContext: shell,
-                              onNavigateTo: _navigateTo,
-                              onToggleSpaceExpanded: _toggleSpaceExpanded,
-                              onCreateSpace: _createSpace,
-                              onCreateThread: _createThread,
-                              onEditSpace: _editSpace,
-                              onArchiveSpace: _archiveSpace,
-                              onDeleteSpace: (space) => _deleteSpace(space.id),
-                              onRenameThread: _renameThreadFromSidebar,
-                              onSetThreadArchived:
-                                  _setThreadArchivedFromSidebar,
-                              onDeleteThread: _deleteThreadFromSidebar,
-                              onReorderThreads: _reorderThreadsFromSidebar,
-                              onSetSpacePinned: _setSpacePinnedFromSidebar,
-                              onSetThreadPinned: _setThreadPinnedFromSidebar,
-                              onReorderPinnedSpaces:
-                                  _setSpacePinOrderFromSidebar,
-                              onReorderPinnedThreads:
-                                  _setThreadPinOrderFromSidebar,
-                              searchController: _searchQueryController,
-                              searchFocusNode: _searchFocusNode,
-                              onClearSearch: _clearSearch,
-                              onOpenCommandPalette: _openCommandPalette,
-                              onOpenNotifications: _showNotifications,
-                              onToggleTheme: _toggleTheme,
-                              onSetThemeMode: _setThemeMode,
-                              onLogout: () => unawaited(_logout()),
-                              onOpenAbout: () =>
-                                  unawaited(_showAboutConclave()),
-                              onOpenExternal: (uri) =>
-                                  browserNavigation.openExternal(uri),
-                              onOpenArchivedSpaces: _openArchivedSpaces,
-                              compact: true,
-                            ),
-                          )
-                        : null,
                     body: Row(
                       children: [
                         if (isDesktop)
@@ -701,6 +661,41 @@ extension _AxAppShellViews on _AxAppStateMixin {
     );
   }
 
+  bool get _mobileListRoute =>
+      navigation.kind == AxRouteKind.home ||
+      navigation.kind == AxRouteKind.spaces;
+
+  Widget _mobileSpacesList({String? spaceId}) => SingleChildScrollView(
+        key: PageStorageKey(spaceId == null
+            ? 'mobile-spaces-list'
+            : 'mobile-space-threads-$spaceId'),
+        controller: spaceId == null ? _mobileSpacesScroll : null,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        child: SpaceTree(
+          pageLayout: true,
+          spaceIdFilter: spaceId,
+          shellContext: _shellContext,
+          onNavigateTo: _navigateTo,
+          onToggleSpaceExpanded: (spaceId) {
+            _updateState(() => selectedSpaceId = spaceId);
+            _toggleSpaceExpanded(spaceId);
+          },
+          onCreateThread: _createThread,
+          onEditSpace: _editSpace,
+          onArchiveSpace: _archiveSpace,
+          onDeleteSpace: (space) => _deleteSpace(space.id),
+          onRenameThread: _renameThreadFromSidebar,
+          onSetThreadArchived: _setThreadArchivedFromSidebar,
+          onDeleteThread: _deleteThreadFromSidebar,
+          onReorderThreads: _reorderThreadsFromSidebar,
+          onSetSpacePinned: _setSpacePinnedFromSidebar,
+          onSetThreadPinned: _setThreadPinnedFromSidebar,
+          onReorderPinnedSpaces: _setSpacePinOrderFromSidebar,
+          onReorderPinnedThreads: _setThreadPinOrderFromSidebar,
+          onOpenInvitations: _showNotifications,
+        ),
+      );
+
   Widget _contentWidth(Widget child) => Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
@@ -718,61 +713,107 @@ extension _AxAppShellViews on _AxAppStateMixin {
                     listenable: store.topBarChanges,
                     builder: (context, _) => AxTopBar(
                           shellContext: _shellContext,
-                          onNavigateTo: _navigateTo,
+                          onNavigateTo: (next) {
+                            if (compact && next.kind == AxRouteKind.space) {
+                              _updateState(() {
+                                _mobileSpaceFilter = next.spaceId;
+                                selectedSpaceId = next.spaceId;
+                                expandedSpaceIds.add(next.spaceId!);
+                              });
+                              _navigateTo(const AxNavigation.spaces());
+                            } else {
+                              if (compact && next.kind == AxRouteKind.spaces) {
+                                _updateState(() => _mobileSpaceFilter = null);
+                              }
+                              _navigateTo(next);
+                            }
+                          },
                           onOpenCommandPalette: _openCommandPalette,
                           onOpenNotifications: _showNotifications,
                           searchController: _searchQueryController,
                           searchFocusNode: _searchFocusNode,
                           onClearSearch: _clearSearch,
                           onToggleTheme: _toggleTheme,
+                          onSetThemeMode: _setThemeMode,
+                          onOpenArchivedSpaces: _openArchivedSpaces,
                           onOpenAbout: () => unawaited(_showAboutConclave()),
                           onLogout: () => unawaited(_logout()),
                           onOpenExternal: (uri) =>
                               browserNavigation.openExternal(uri),
                           compact: compact,
+                          onCreateSpace: _createSpace,
                         ))),
               Expanded(
-                child: navigation.kind == AxRouteKind.thread
-                    ? Padding(
-                        padding: EdgeInsets.zero,
-                        child: _threadView(),
+                child: IndexedStack(
+                  index: compact && _mobileListRoute ? 0 : 1,
+                  sizing: StackFit.expand,
+                  children: [
+                    if (compact)
+                      IndexedStack(
+                        index: _mobileSpaceFilter == null ? 0 : 1,
+                        sizing: StackFit.expand,
+                        children: [
+                          _mobileSpacesList(),
+                          if (_mobileSpaceFilter != null)
+                            _mobileSpacesList(spaceId: _mobileSpaceFilter)
+                          else
+                            const SizedBox.shrink(),
+                        ],
                       )
-                    : navigation.kind == AxRouteKind.space
-                        ? Padding(
-                            padding: EdgeInsets.zero,
-                            child: _spaceOverviewView(),
-                          )
-                        : navigation.kind == AxRouteKind.notes
-                            // My Notes scrolls its own list so a note's
-                            // editor can use the full page height.
+                    else
+                      const SizedBox.shrink(),
+                    compact && _mobileListRoute
+                        ? const SizedBox.shrink()
+                        : navigation.kind == AxRouteKind.thread
                             ? Padding(
-                                padding: EdgeInsets.fromLTRB(compact ? 18 : 34,
-                                    26, compact ? 18 : 34, 20),
-                                child: _contentWidth(_runDetailsView(compact)),
+                                padding: EdgeInsets.zero,
+                                child: _threadView(),
                               )
-                            : navigation.kind == AxRouteKind.spaceMembers
-                                ? SingleChildScrollView(
-                                    padding: EdgeInsets.fromLTRB(
-                                        compact ? 18 : 34,
-                                        26,
-                                        compact ? 18 : 34,
-                                        40),
-                                    child: _contentWidth(_spaceResourceView(
-                                        SpacePageSection.members)),
+                            : navigation.kind == AxRouteKind.space
+                                ? Padding(
+                                    padding: EdgeInsets.zero,
+                                    child: _spaceOverviewView(),
                                   )
-                                : SingleChildScrollView(
-                                    padding: EdgeInsets.fromLTRB(
-                                      compact ? 18 : 34,
-                                      navigation.kind == AxRouteKind.workspaces
-                                          ? 0
-                                          : 26,
-                                      compact ? 18 : 34,
-                                      40,
-                                    ),
-                                    child: _contentWidth(showRunDetails
-                                        ? _runDetailsView(compact)
-                                        : _homeView()),
-                                  ),
+                                : navigation.kind == AxRouteKind.notes
+                                    // My Notes scrolls its own list so a note's
+                                    // editor can use the full page height.
+                                    ? Padding(
+                                        padding: EdgeInsets.fromLTRB(
+                                            compact ? 18 : 34,
+                                            26,
+                                            compact ? 18 : 34,
+                                            20),
+                                        child: _contentWidth(
+                                            _runDetailsView(compact)),
+                                      )
+                                    : navigation.kind ==
+                                            AxRouteKind.spaceMembers
+                                        ? SingleChildScrollView(
+                                            padding: EdgeInsets.fromLTRB(
+                                                compact ? 18 : 34,
+                                                26,
+                                                compact ? 18 : 34,
+                                                40),
+                                            child: _contentWidth(
+                                                _spaceResourceView(
+                                                    SpacePageSection.members)),
+                                          )
+                                        : SingleChildScrollView(
+                                            padding: EdgeInsets.fromLTRB(
+                                              compact ? 18 : 34,
+                                              navigation.kind ==
+                                                      AxRouteKind.workspaces
+                                                  ? 0
+                                                  : 26,
+                                              compact ? 18 : 34,
+                                              40,
+                                            ),
+                                            child: _contentWidth(showRunDetails
+                                                ? _runDetailsView(compact)
+                                                : _homeView()),
+                                          ),
+                  ],
+                ),
               ),
             ]),
             Positioned(

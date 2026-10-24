@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:conclave_design/conclave_design.dart';
 
+import 'composer_metrics.dart';
+
 /// Emoji grouped for the composer picker.
 const emojiPickerCategories = <(String, IconData, List<String>)>[
   (
@@ -128,8 +130,13 @@ class _EmojiPickerButtonState extends State<EmojiPickerButton> {
         builder: (context, controller, _) => IconButton(
           key: const ValueKey('emoji-picker-button'),
           tooltip: 'Insert emoji',
+          padding: EdgeInsets.zero,
+          constraints: composerButtonConstraints,
+          style: composerIconButtonStyle(),
           icon: Icon(Icons.sentiment_satisfied_alt_outlined,
-              size: 18, color: widget.color, semanticLabel: 'Insert emoji'),
+              size: composerIconSize,
+              color: widget.color,
+              semanticLabel: 'Insert emoji'),
           onPressed: widget.enabled
               ? () => controller.isOpen ? controller.close() : controller.open()
               : null,

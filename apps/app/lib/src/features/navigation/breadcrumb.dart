@@ -28,10 +28,16 @@ class AppBreadcrumb extends StatelessWidget {
 
     final children = switch (nav.kind) {
       AxRouteKind.home => [
-          _breadcrumbText('Home', isCurrent: true),
+          if (compact)
+            _accountLink()
+          else
+            _breadcrumbText('Home', isCurrent: true),
         ],
       AxRouteKind.spaces => [
-          _breadcrumbText('Spaces', isCurrent: true),
+          if (compact)
+            _accountLink()
+          else
+            _breadcrumbText('Spaces', isCurrent: true),
         ],
       AxRouteKind.space => [
           _breadcrumbText(space?.name ?? 'Space', isCurrent: true),
@@ -110,7 +116,8 @@ class AppBreadcrumb extends StatelessWidget {
               _breadcrumbText('Workspaces', isCurrent: true),
             ],
       AxRouteKind.profileSecurity => [
-          _breadcrumbText('Profile & Security', isCurrent: true),
+          _breadcrumbText(compact ? 'Profile' : 'Profile & Security',
+              isCurrent: true),
         ],
       AxRouteKind.search => [
           _breadcrumbText('Search', isCurrent: true),
@@ -129,6 +136,18 @@ class AppBreadcrumb extends StatelessWidget {
     );
   }
 
+  Widget _accountLink() => KeyedSubtree(
+        key: const ValueKey('mobile-account-name'),
+        child: _breadcrumbLink(
+          shellContext.viewerDisplayName?.trim().isNotEmpty == true
+              ? shellContext.viewerDisplayName!
+              : shellContext.viewerEmail ?? 'Account',
+          () => onNavigateTo(const AxNavigation.profileSecurity()),
+          tooltip: 'Account',
+          isCurrent: true,
+        ),
+      );
+
   Widget _breadcrumbText(String text, {required bool isCurrent}) {
     return Text(
       text,
@@ -142,7 +161,8 @@ class AppBreadcrumb extends StatelessWidget {
     );
   }
 
-  Widget _breadcrumbLink(String text, VoidCallback onTap, {String? tooltip}) {
+  Widget _breadcrumbLink(String text, VoidCallback onTap,
+      {String? tooltip, bool isCurrent = false}) {
     final link = InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
@@ -153,9 +173,9 @@ class AppBreadcrumb extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: mutedInk,
+            fontSize: isCurrent ? 14.5 : 14,
+            fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+            color: isCurrent ? inkColor : mutedInk,
           ),
         ),
       ),

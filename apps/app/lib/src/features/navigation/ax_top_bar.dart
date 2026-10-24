@@ -17,9 +17,12 @@ class AxTopBar extends AppTopHud {
     super.onSearchChanged,
     super.onClearSearch,
     super.onToggleTheme,
+    super.onSetThemeMode,
+    super.onOpenArchivedSpaces,
     super.onOpenAbout,
     super.onLogout,
     super.onOpenExternal,
     super.compact = false,
+    super.onCreateSpace,
   });
 }

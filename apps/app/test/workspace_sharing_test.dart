@@ -218,6 +218,30 @@ void main() {
     expect(source.calls, ['runtime:guest:36000']);
   });
 
+  testWidgets('quota selectors work at mobile width including no limit',
+      (tester) async {
+    final source = SharingSource();
+    await tester.binding.setSurfaceSize(const Size(320, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+      child: WorkspaceSharingSection(workspaceId: 'ws', source: source),
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.byType(DropdownButton<int>), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('sharing-quota-guest')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, '3'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('sharing-runtime-guest')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(MenuItemButton, 'No limit'));
+    await tester.pumpAndSettle();
+    expect(source.calls, ['quota:guest:3', 'runtime:guest:null']);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('owner edits one person: Workers and mode, then resets',
       (tester) async {
     final source = SharingSource();
@@ -230,6 +254,12 @@ void main() {
             memberAccessSource: AccessOnlySource(),
             personAccessSource: access,
             workers: [worker('a')]));
+    expect(find.text('Show access'), findsOneWidget);
+    expect(find.text('Edit access'), findsNothing);
+    expect(find.text('Done'), findsNothing);
+    expect(
+        tester.getTopLeft(find.byKey(const ValueKey('sharing-quota-guest'))).dy,
+        lessThan(tester.getTopLeft(find.text('Show access')).dy));
     await tester.tap(find.byKey(const ValueKey('sharing-edit-guest')));
     await tester.pumpAndSettle();
     expect(find.text('Access for Guest'), findsOneWidget);
@@ -262,6 +292,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('person-access-reset')));
     await tester.pumpAndSettle();
     expect(access.resets, 1);
+    await tester.ensureVisible(find.text('Show access'));
+    await tester.tap(find.text('Show access'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DataTable), findsNothing);
+    expect(find.text('Show access'), findsOneWidget);
+    expect(find.text('Done'), findsNothing);
   });
 
   testWidgets('an invited person accepts and the banner clears',

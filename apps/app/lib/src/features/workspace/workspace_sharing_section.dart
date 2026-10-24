@@ -49,7 +49,7 @@ class WorkspaceSharingSection extends StatefulWidget {
   final List<AxPerson> people;
   final AxWorkspaceSharingDataSource source;
 
-  /// Enable "Edit access" for each person: which Workers, models, efforts and
+  /// Enable "Show access" for each person: which Workers, models, efforts and
   /// mode they get. Both sources are needed, plus the Workspace's Workers.
   final AxWorkspaceMemberAccessDataSource? memberAccessSource;
   final AxWorkspacePersonAccessDataSource? personAccessSource;
@@ -166,15 +166,6 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
         .createWorkspaceInvitation(widget.workspaceId, person.email));
   }
 
-  /// Person whose access editor is open inline; at most one at a time.
-  String? _editingUserId;
-
-  Future<void> _editAccess(AxPersonWithAccess person) async {
-    final closing = _editingUserId == person.userId;
-    setState(() => _editingUserId = closing ? null : person.userId);
-    if (closing) await _load();
-  }
-
   Future<void> _revokePerson(AxPersonWithAccess person) async {
     final confirmed = await showDialog<bool>(
         context: context,
@@ -278,6 +269,53 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
       ? null
       : person.maxRunSecondsPerMonth! ~/ 3600;
 
+  Widget _quotaSelector(
+      {required Key key,
+      required int selected,
+      required Map<int, String> choices,
+      required ValueChanged<int> onChanged}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return PopupMenuButton<int>(
+      key: key,
+      enabled: !_busy,
+      color: ConclaveColors.composerBackground(isDark),
+      surfaceTintColor: Colors.transparent,
+      elevation: 12,
+      shadowColor: ConclaveMenuStyle.shadow(isDark),
+      shape: ConclaveMenuStyle.shape(isDark),
+      menuPadding: ConclaveMenuStyle.padding,
+      onSelected: onChanged,
+      itemBuilder: (menuContext) => [
+        for (final choice in choices.entries)
+          ConclaveMenuEntry<int>(
+            value: choice.key,
+            child: MenuItemButton(
+              style: ConclaveMenuStyle.item(isDark),
+              leadingIcon: Icon(
+                  choice.key == selected
+                      ? Icons.check_circle_rounded
+                      : Icons.circle_outlined,
+                  size: 15),
+              onPressed: () => Navigator.pop(menuContext, choice.key),
+              child: Text(choice.value, style: ConclaveMenuStyle.textStyle),
+            ),
+          ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(choices[selected]!,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(width: 4),
+          const Icon(Icons.expand_more, size: 16),
+        ]),
+      ),
+    );
+  }
+
   Widget _personTile(AxPersonWithAccess person, TextStyle muted) {
     final mode =
         person.mode == null ? 'Default access' : _modeLabels[person.mode]!;
@@ -315,76 +353,78 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
                   '$mode${person.custom ? ' (custom)' : ''} · ${usage.requests} request${usage.requests == 1 ? '' : 's'} · about ${_duration(usage.approxSeconds)}'
                   '${usage.lastUsedAt == null ? '' : ' · last used ${usage.lastUsedAt}'}',
                   style: muted),
+              if (person.active)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 8),
+                  child: Wrap(spacing: 16, runSpacing: 8, children: [
+                    Wrap(
+                        spacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text('At once:', style: muted),
+                          _quotaSelector(
+                            key: ValueKey('sharing-quota-${person.userId}'),
+                            selected: person.maxConcurrentRequests.clamp(1, 10),
+                            choices: {for (var n = 1; n <= 10; n++) n: '$n'},
+                            onChanged: (value) => unawaited(_act(() =>
+                                widget.source.setPersonQuota(
+                                    widget.workspaceId, person.userId, value))),
+                          ),
+                        ]),
+                    Wrap(
+                        spacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text('Run time per month:', style: muted),
+                          _quotaSelector(
+                            key: ValueKey('sharing-runtime-${person.userId}'),
+                            selected: _runTimeHours.contains(_hours(person))
+                                ? _hours(person) ?? -1
+                                : -1,
+                            choices: {
+                              for (final hours in _runTimeHours)
+                                hours ?? -1:
+                                    hours == null ? 'No limit' : '$hours h'
+                            },
+                            onChanged: (hours) => unawaited(_act(() =>
+                                widget.source.setPersonRunTimeLimit(
+                                    widget.workspaceId,
+                                    person.userId,
+                                    hours == -1 ? null : hours * 3600))),
+                          ),
+                        ]),
+                  ]),
+                ),
               if (person.active &&
                   widget.memberAccessSource != null &&
                   widget.personAccessSource != null)
-                Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                        key: ValueKey('sharing-edit-${person.userId}'),
-                        onPressed: _busy ? null : () => _editAccess(person),
-                        child: Text(_editingUserId == person.userId
-                            ? 'Done'
-                            : 'Edit access'))),
-              if (person.active &&
-                  _editingUserId == person.userId &&
-                  widget.memberAccessSource != null)
-                Container(
-                    margin: const EdgeInsets.only(top: 4, bottom: 8),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                        border:
-                            Border.all(color: Theme.of(context).dividerColor),
-                        borderRadius: BorderRadius.circular(14)),
-                    child: WorkspaceMemberAccessSection(
-                        key: ValueKey('person-access-${person.userId}'),
-                        workspaceId: widget.workspaceId,
-                        workers: widget.workers,
-                        source: widget.memberAccessSource!,
-                        personSource: widget.personAccessSource,
-                        userId: person.userId,
-                        personName: person.displayName)),
-              if (person.active)
-                Row(children: [
-                  Text('At once:', style: muted),
-                  const SizedBox(width: 8),
-                  DropdownButton<int>(
-                      key: ValueKey('sharing-quota-${person.userId}'),
-                      value: person.maxConcurrentRequests.clamp(1, 10),
-                      items: [
-                        for (var n = 1; n <= 10; n++)
-                          DropdownMenuItem(value: n, child: Text('$n'))
-                      ],
-                      onChanged: _busy
-                          ? null
-                          : (value) {
-                              if (value == null) return;
-                              unawaited(_act(() => widget.source.setPersonQuota(
-                                  widget.workspaceId, person.userId, value)));
-                            }),
-                  const SizedBox(width: 16),
-                  Text('Run time per month:', style: muted),
-                  const SizedBox(width: 8),
-                  DropdownButton<int?>(
-                      key: ValueKey('sharing-runtime-${person.userId}'),
-                      value: _runTimeHours.contains(_hours(person))
-                          ? _hours(person)
-                          : null,
-                      items: [
-                        for (final hours in _runTimeHours)
-                          DropdownMenuItem<int?>(
-                              value: hours,
-                              child:
-                                  Text(hours == null ? 'No limit' : '$hours h'))
-                      ],
-                      onChanged: _busy
-                          ? null
-                          : (hours) => unawaited(_act(() => widget.source
-                              .setPersonRunTimeLimit(
-                                  widget.workspaceId,
-                                  person.userId,
-                                  hours == null ? null : hours * 3600)))),
-                ]),
+                ExpansionTile(
+                  key: ValueKey('sharing-edit-${person.userId}'),
+                  title: const Text('Show access'),
+                  tilePadding: EdgeInsets.zero,
+                  expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+                  maintainState: true,
+                  onExpansionChanged: (expanded) {
+                    if (!expanded) unawaited(_load());
+                  },
+                  children: [
+                    Container(
+                        margin: const EdgeInsets.only(top: 4, bottom: 8),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                            border: Border.all(
+                                color: Theme.of(context).dividerColor),
+                            borderRadius: BorderRadius.circular(14)),
+                        child: WorkspaceMemberAccessSection(
+                            key: ValueKey('person-access-${person.userId}'),
+                            workspaceId: widget.workspaceId,
+                            workers: widget.workers,
+                            source: widget.memberAccessSource!,
+                            personSource: widget.personAccessSource,
+                            userId: person.userId,
+                            personName: person.displayName))
+                  ],
+                ),
               if (person.active && person.maxRunSecondsPerMonth != null)
                 Text(
                     'Used this month: about ${_duration(person.usage.monthSeconds)} of ${_duration(person.maxRunSecondsPerMonth!)}',

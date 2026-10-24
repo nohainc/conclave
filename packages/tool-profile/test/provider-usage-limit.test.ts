@@ -61,11 +61,13 @@ describe("provider usage limits", () => {
     },
   );
 
-  for (const name of ["claude", "chatgpt", "gemini"]) {
+  for (const name of ["claude", "chatgpt", "gemini", "grok"]) {
     it.each([
       "You've hit your session limit · resets 9:10pm (Europe/Bratislava)",
       "You’ve hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro)",
       "You've hit your limit · resets tomorrow",
+      "You've reached your free Grok Build usage limit for now. Get SuperGrok for much higher limits, or try again later…",
+      "API error (status 429 Too Many Requests): subscription:free-usage-exhausted: You've used all the included free usage for model grok-4.7 for now. Usage resets over a rolling 24-hour window.",
       "rate_limit_error",
       "usage_limit_reached",
       "insufficient_quota",

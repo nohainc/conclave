@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
@@ -6,6 +7,7 @@ import 'package:conclave_design/conclave_design.dart';
 import 'conclave_markdown_body.dart';
 import 'dictation/dictation_button.dart';
 import 'dictation/speech_dictation.dart';
+import 'composer_metrics.dart';
 import 'emoji_picker.dart';
 
 enum MarkdownFormat {
@@ -119,6 +121,7 @@ class MarkdownComposer extends StatefulWidget {
       this.showDictation = true,
       this.dictation,
       this.twoRowLayout = false,
+      this.showTrailingRail,
       this.onHistoryNavigate});
 
   final TextEditingController controller;
@@ -175,15 +178,42 @@ class MarkdownComposer extends StatefulWidget {
   /// controls on the left and send on the right.
   final bool twoRowLayout;
 
+  /// Shows the right rail aligned to the right (Send and Microphone controls).
+  /// Defaults to true when [leadingControls] is present.
+  final bool? showTrailingRail;
+
   @override
   State<MarkdownComposer> createState() => _MarkdownComposerState();
 }
 
+/// Height of the second (controls) row in the two-row layout: 32px buttons
+/// with 6px above and below.
+const double _twoRowControlsHeight = 44;
+
 class _MarkdownComposerState extends State<MarkdownComposer> {
   final _focus = FocusNode();
+  // The language selector lives only while the mic or the selector is focused.
+  final _languageMenu = MenuController();
   final _inputKey = GlobalKey();
   bool _preview = false;
   bool _showFormatting = false;
+
+  late final SpeechDictation _dictation =
+      widget.dictation ?? createSpeechDictation();
+  bool _dictationListening = false;
+  // Ends from an earlier session (e.g. a language restart) must not reset a
+  // newer one, so every callback carries the session it belongs to.
+  int _dictationSession = 0;
+  String _dictationPrefix = '';
+  String _dictationSuffix = '';
+  String? _dictationWritten;
+  late String? _dictationLanguage = _dictation.preferredLanguage;
+
+  String get _activeDictationLanguage =>
+      _dictationLanguage ?? _dictation.browserLanguage;
+
+  bool get _hasTrailingRail =>
+      widget.showTrailingRail ?? (widget.leadingControls != null);
 
   @override
   void initState() {
@@ -202,7 +232,9 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller.removeListener(_sourceChanged);
       widget.controller.addListener(_sourceChanged);
+      _stopDictation();
     }
+    if (!widget.enabled) _stopDictation();
   }
 
   void _submit() {
@@ -217,6 +249,11 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
     if (widget.chatStyle && _preview && widget.controller.text.isEmpty) {
       setState(() => _preview = false);
     }
+    if (_dictationListening &&
+        _dictationWritten != null &&
+        widget.controller.text != _dictationWritten) {
+      _stopDictation();
+    }
   }
 
   @override
@@ -224,7 +261,202 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
     widget.controller.removeListener(_sourceChanged);
     _focus.removeListener(_onFocusChange);
     _focus.dispose();
+    if (_dictationListening) _dictation.stop();
     super.dispose();
+  }
+
+  void _stopDictation() {
+    if (!_dictationListening) return;
+    _dictationSession++;
+    _dictation.stop();
+    _dictationListening = false;
+    _dictationWritten = null;
+    if (mounted) setState(() {});
+  }
+
+  void _startDictation() {
+    final value = widget.controller.value;
+    final text = value.text;
+    final selection = value.selection;
+    final start = selection.isValid ? selection.start : text.length;
+    final end = selection.isValid ? selection.end : text.length;
+    final before = text.substring(0, start);
+    _dictationPrefix =
+        before.isEmpty || RegExp(r'\s$').hasMatch(before) ? before : '$before ';
+    _dictationSuffix = text.substring(end);
+    _dictationWritten = null;
+    setState(() {
+      _dictationListening = true;
+      });
+    final session = ++_dictationSession;
+    _dictation.start(
+      language: _activeDictationLanguage,
+      onTranscript: (text) {
+        if (session == _dictationSession) _onDictationTranscript(text);
+      },
+      onEnd: (error) {
+        if (session == _dictationSession) _onDictationEnd(error);
+      },
+    );
+  }
+
+  void _onDictationTranscript(String transcript) {
+    if (!_dictationListening || !mounted || transcript.isEmpty) return;
+    final inserted =
+        _dictationSuffix.isEmpty || RegExp(r'^\s').hasMatch(_dictationSuffix)
+            ? transcript
+            : '$transcript ';
+    final text = '$_dictationPrefix$inserted$_dictationSuffix';
+    _dictationWritten = text;
+    widget.controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(
+          offset: _dictationPrefix.length + transcript.length),
+    );
+    _focus.requestFocus();
+  }
+
+  void _onDictationEnd(String? error) {
+    if (!mounted) return;
+    final wasListening = _dictationListening;
+    setState(() {
+      _dictationListening = false;
+        _dictationWritten = null;
+    });
+    final message = switch (error) {
+      'not-allowed' ||
+      'service-not-allowed' =>
+        'Microphone access is blocked. Allow it in your browser settings.',
+      'audio-capture' => 'No microphone was found.',
+      'network' => 'Speech recognition is unavailable right now.',
+      null || 'no-speech' || 'aborted' => null,
+      _ => 'Dictation stopped.',
+    };
+    if (wasListening && message != null) {
+      ScaffoldMessenger.maybeOf(context)
+          ?.showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  void _selectDictationLanguage(String? language) {
+    final wasListening = _dictationListening;
+    _stopDictation();
+    _dictation.preferredLanguage = language;
+    setState(() => _dictationLanguage = language);
+    // Restart so a switch made while recording takes effect immediately.
+    if (wasListening) _startDictation();
+  }
+
+  /// One tap starts or stops dictation in the remembered language. The
+  /// language menu lives on a long press (or secondary click) of the mic.
+  void _toggleDictation() =>
+      _dictationListening ? _stopDictation() : _startDictation();
+
+  String _dictationLanguageName(String tag) {
+    for (final (code, name) in dictationLanguages) {
+      if (code.toLowerCase() == tag.toLowerCase()) return name;
+    }
+    return tag;
+  }
+
+  /// Anchors the language menu on the mic so the language stays reachable
+  /// without a mandatory extra step before recording.
+  Widget _dictationLanguageMenu(Widget child) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    Widget item(String? tag, String label) => MenuItemButton(
+          key: ValueKey('dictation-language-${tag ?? 'browser'}'),
+          style: ConclaveMenuStyle.item(dark),
+          leadingIcon:
+              Icon(_dictationLanguage == tag ? Icons.check : null, size: 16),
+          onPressed: () => _selectDictationLanguage(tag),
+          child: Text(label, style: ConclaveMenuStyle.textStyle),
+        );
+    return MenuAnchor(
+      controller: _languageMenu,
+      style: ConclaveMenuStyle.surface(dark, composer: true),
+      menuChildren: [
+        item(null,
+            'Browser default (${_dictationLanguageName(_dictation.browserLanguage)})'),
+        for (final (tag, name) in dictationLanguages) item(tag, name),
+      ],
+      child: child,
+    );
+  }
+
+  Widget _rightRailSendButton() => IconButton(
+        key: ValueKey('composer-send-${widget.sendTooltip}'),
+        tooltip: widget.showSendTooltip ? widget.sendTooltip : null,
+        onPressed: widget.enabled && widget.sendEnabled ? widget.onSend : null,
+        padding: EdgeInsets.zero,
+        constraints: composerButtonConstraints,
+        style: IconButton.styleFrom(
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          backgroundColor: Colors.transparent,
+          disabledBackgroundColor: Colors.transparent,
+        ),
+        color: _controlColor,
+        icon: Icon(Icons.send_rounded,
+            size: composerIconSize, semanticLabel: widget.sendTooltip),
+      );
+
+  Widget _rightRailMicButton() {
+    final language = _dictationLanguageName(_activeDictationLanguage);
+    final label = _dictationListening
+        ? 'Stop dictation'
+        : 'Start dictation ($language)';
+    final colors = Theme.of(context).colorScheme;
+    final canUse = widget.enabled && !_preview && _dictation.supported;
+    void openLanguages() {
+      if (canUse) _languageMenu.open();
+    }
+
+    return _dictationLanguageMenu(GestureDetector(
+      // Long press must not clash with the touch tooltip, so it is manual.
+      onLongPress: openLanguages,
+      onSecondaryTap: openLanguages,
+      child: Tooltip(
+        message: '$label. Hold to change language',
+        triggerMode: TooltipTriggerMode.manual,
+        child: IconButton(
+          key: const ValueKey('composer-dictation'),
+          isSelected: _dictationListening,
+          color: _dictationListening ? colors.error : _controlColor,
+          onPressed: canUse ? _toggleDictation : null,
+          padding: EdgeInsets.zero,
+          constraints: composerButtonConstraints,
+          style: IconButton.styleFrom(
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            backgroundColor: Colors.transparent,
+            disabledBackgroundColor: Colors.transparent,
+          ),
+          icon: Icon(
+            _dictationListening ? Icons.stop_circle_outlined : Icons.mic_none,
+            size: composerIconSize,
+            semanticLabel: label,
+          ),
+        ),
+      ),
+    ));
+  }
+
+  Widget _trailingRail() {
+    final topSlot = widget.onSend != null
+        ? _rightRailSendButton()
+        : const SizedBox(width: composerButtonSize, height: composerButtonSize);
+    final bottomSlot = _dictationVisible && _dictation.supported
+        ? _rightRailMicButton()
+        : const SizedBox(width: composerButtonSize, height: composerButtonSize);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        topSlot,
+        const SizedBox(height: 4),
+        bottomSlot,
+      ],
+    );
   }
 
   void _format(MarkdownFormat format) {
@@ -279,73 +511,86 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
   /// Two-row layout controls: emoji and Markdown popup left; mic and send
   /// right.
   Widget _twoRowControls() => Padding(
-        padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
-        child: Row(children: [
-          if (widget.toolbarLeadingControls != null)
-            widget.toolbarLeadingControls!,
-          if (widget.executionControlsBuilder != null)
-            Expanded(child: widget.executionControlsBuilder!(_inputKey)),
-          if (widget.showEmojiPicker) _emojiButton(),
-          if (widget.showMarkdownControls)
-            MenuAnchor(
-              controller: _markdownMenu,
-              style: ConclaveMenuStyle.surface(
-                  Theme.of(context).brightness == Brightness.dark,
-                  composer: true),
-              menuChildren: [
-                SizedBox(
-                  key: const ValueKey('markdown-controls-popup'),
-                  width: 220,
-                  child: Wrap(children: [
-                    for (final (format, label, icon) in _formats)
-                      IconButton(
-                        tooltip: label,
-                        iconSize: 18,
-                        color: _controlColor,
-                        onPressed: widget.enabled && !_preview
-                            ? () {
-                                _markdownMenu.close();
-                                _format(format);
-                              }
-                            : null,
-                        icon: Icon(icon, semanticLabel: label),
-                      ),
-                    TextButton(
-                      style:
-                          TextButton.styleFrom(foregroundColor: _controlColor),
-                      onPressed: () {
-                        _markdownMenu.close();
-                        setState(() => _preview = !_preview);
-                      },
-                      child: Text(_preview ? 'Write' : 'Preview'),
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        // Fixed minimum so the row height does not depend on the controls'
+        // density-scaled tap targets (Message and Ask AI differ there).
+        child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: _twoRowControlsHeight),
+            child: Row(children: [
+              if (widget.toolbarLeadingControls != null)
+                widget.toolbarLeadingControls!,
+              if (widget.executionControlsBuilder != null)
+                Expanded(child: widget.executionControlsBuilder!(_inputKey)),
+              if (widget.showEmojiPicker) _emojiButton(),
+              if (widget.showMarkdownControls)
+                MenuAnchor(
+                  controller: _markdownMenu,
+                  style: ConclaveMenuStyle.surface(
+                      Theme.of(context).brightness == Brightness.dark,
+                      composer: true),
+                  menuChildren: [
+                    SizedBox(
+                      key: const ValueKey('markdown-controls-popup'),
+                      width: 220,
+                      child: Wrap(children: [
+                        for (final (format, label, icon) in _formats)
+                          IconButton(
+                            tooltip: label,
+                            iconSize: 18,
+                            color: _controlColor,
+                            onPressed: widget.enabled && !_preview
+                                ? () {
+                                    _markdownMenu.close();
+                                    _format(format);
+                                  }
+                                : null,
+                            icon: Icon(icon, semanticLabel: label),
+                          ),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                              foregroundColor: _controlColor),
+                          onPressed: () {
+                            _markdownMenu.close();
+                            setState(() => _preview = !_preview);
+                          },
+                          child: Text(_preview ? 'Write' : 'Preview'),
+                        ),
+                      ]),
                     ),
-                  ]),
+                  ],
+                  builder: (context, controller, _) => IconButton(
+                    tooltip: 'Show Markdown controls',
+                    isSelected: _preview,
+                    padding: EdgeInsets.zero,
+                    constraints: composerButtonConstraints,
+                    style: composerIconButtonStyle(),
+                    icon: Icon(Icons.text_format,
+                        size: composerIconSize,
+                        color: _controlColor,
+                        semanticLabel: 'Show Markdown controls'),
+                    onPressed: () => controller.isOpen
+                        ? controller.close()
+                        : controller.open(),
+                  ),
                 ),
-              ],
-              builder: (context, controller, _) => IconButton(
-                tooltip: 'Show Markdown controls',
-                isSelected: _preview,
-                icon: Icon(Icons.text_format,
-                    size: 18,
-                    color: _controlColor,
-                    semanticLabel: 'Show Markdown controls'),
-                onPressed: () =>
-                    controller.isOpen ? controller.close() : controller.open(),
-              ),
-            ),
-          if (widget.executionControlsBuilder == null) const Spacer(),
-          if (_dictationVisible) _dictationButton(),
-          if (widget.onSend != null)
-            IconButton(
-              key: ValueKey('composer-send-${widget.sendTooltip}'),
-              tooltip: widget.showSendTooltip ? widget.sendTooltip : null,
-              onPressed:
-                  widget.enabled && widget.sendEnabled ? widget.onSend : null,
-              color: _controlColor,
-              icon: Icon(Icons.send_rounded,
-                  size: 18, semanticLabel: widget.sendTooltip),
-            ),
-        ]),
+              if (widget.executionControlsBuilder == null) const Spacer(),
+              if (!_hasTrailingRail && _dictationVisible) _dictationButton(),
+              if (!_hasTrailingRail && widget.onSend != null)
+                IconButton(
+                  key: ValueKey('composer-send-${widget.sendTooltip}'),
+                  tooltip: widget.showSendTooltip ? widget.sendTooltip : null,
+                  onPressed: widget.enabled && widget.sendEnabled
+                      ? widget.onSend
+                      : null,
+                  color: _controlColor,
+                  padding: EdgeInsets.zero,
+                  constraints: composerButtonConstraints,
+                  style: composerIconButtonStyle(),
+                  icon: Icon(Icons.send_rounded,
+                      size: composerIconSize,
+                      semanticLabel: widget.sendTooltip),
+                ),
+            ])),
       );
 
   Widget _formattingToolbar() =>
@@ -437,6 +682,10 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
           ),
       ]);
 
+  static bool get _isTouchPlatform =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
   @override
   Widget build(BuildContext context) {
     final inputContent = Column(
@@ -447,7 +696,10 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
           CallbackShortcuts(
             key: _inputKey,
             bindings: {
-              if (widget.onSend != null || widget.onSubmit != null)
+              // Touch keyboards report their return key as Enter; there it must
+              // insert a newline, and the send button sends.
+              if (!_isTouchPlatform &&
+                  (widget.onSend != null || widget.onSubmit != null))
                 const SingleActivator(LogicalKeyboardKey.enter): _submit,
               for (final modifier in [true, false]) ...{
                 SingleActivator(LogicalKeyboardKey.keyB,
@@ -512,7 +764,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                   isDense: widget.chatStyle,
                   hoverColor: Colors.transparent,
                   contentPadding: widget.chatStyle
-                      ? const EdgeInsets.fromLTRB(14, 12, 10, 12)
+                      ? const EdgeInsets.fromLTRB(10, 12, 10, 8)
                       : null,
                   suffixIcon: widget.chatStyle &&
                           !widget.twoRowLayout &&
@@ -654,17 +906,28 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                         Theme.of(context).brightness == Brightness.dark),
                   ),
                 ),
+              if (_hasTrailingRail)
+                Positioned(
+                  key: const ValueKey('composer-trailing-rail-background'),
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 40,
+                  child: ColoredBox(
+                    color: ConclaveColors.composerRail(
+                        Theme.of(context).brightness == Brightness.dark),
+                  ),
+                ),
               Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   if (widget.leadingControls != null)
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
                       child: SizedBox(
                         key: const ValueKey('composer-leading-rail'),
                         width: 32,
-                        child: Center(
-                            heightFactor: 1, child: widget.leadingControls!),
+                        child: widget.leadingControls!,
                       ),
                     ),
                   Expanded(
@@ -806,6 +1069,15 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                         ]),
                     ],
                   )),
+                  if (_hasTrailingRail)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+                      child: SizedBox(
+                        key: const ValueKey('composer-trailing-rail'),
+                        width: 32,
+                        child: _trailingRail(),
+                      ),
+                    ),
                 ],
               ),
             ]),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
-/// Desktop sidebar with an inset resize grip; width belongs to the shell so
+/// Sidebar with an inset resize grip; width belongs to the shell so
 /// collapsing the sidebar or navigating does not reset it.
 class ResizableSidebar extends StatefulWidget {
   const ResizableSidebar({

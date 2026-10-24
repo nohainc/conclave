@@ -649,7 +649,9 @@ class WorkerAssignmentHandler {
       allowance,
       () => giveUp(AssignmentExecutionFailure(
         code: 'timeout',
-        message: executionErrorMessage('timeout'),
+        message: 'Another request in this Space was still running, so this '
+            'one could not start within ${allowance.inMinutes > 0 ? '${allowance.inMinutes} min' : '${allowance.inSeconds} s'}. '
+            'Retry when it finishes.',
         retryable: true,
         localDiagnostic: jsonEncode({
           'schemaVersion': 1,

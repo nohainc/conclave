@@ -130,26 +130,24 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                       _deleteThread(thread);
                     }
                   },
-                  itemBuilder: (context) => [
-                    if (!archived)
-                      PopupMenuItem(
-                        height: 36,
-                        textStyle: ConclaveMenuStyle.popupTextStyle(isDark),
-                        value: 'edit',
-                        child: const Text('Rename'),
+                  itemBuilder: (menuContext) => [
+                    for (final (action, label, icon) in [
+                      if (!archived) ('edit', 'Rename', Icons.edit_outlined),
+                      archived
+                          ? ('restore', 'Restore', Icons.unarchive_outlined)
+                          : ('archive', 'Archive', Icons.archive_outlined),
+                      ('delete', 'Delete', Icons.delete_outline),
+                    ])
+                      ConclaveMenuEntry<String>(
+                        value: action,
+                        child: MenuItemButton(
+                          style: ConclaveMenuStyle.item(isDark),
+                          leadingIcon: Icon(icon, size: 16),
+                          onPressed: () => Navigator.pop(menuContext, action),
+                          child:
+                              Text(label, style: ConclaveMenuStyle.textStyle),
+                        ),
                       ),
-                    PopupMenuItem(
-                      height: 36,
-                      textStyle: ConclaveMenuStyle.popupTextStyle(isDark),
-                      value: archived ? 'restore' : 'archive',
-                      child: Text(archived ? 'Restore' : 'Archive'),
-                    ),
-                    PopupMenuItem(
-                      height: 36,
-                      textStyle: ConclaveMenuStyle.popupTextStyle(isDark),
-                      value: 'delete',
-                      child: const Text('Delete'),
-                    ),
                   ],
                 ),
               ],
@@ -250,7 +248,6 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                             label: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text('Name / email'),
                             if (canInvite)
                               IconButton(
                                 icon: const Icon(Icons.add),

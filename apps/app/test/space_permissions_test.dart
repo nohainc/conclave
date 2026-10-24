@@ -138,6 +138,8 @@ void main() {
     await tester.pumpWidget(page(source));
     await tester.pumpAndSettle();
     expect(find.text('Members'), findsOneWidget);
+    expect(find.text('Name / email'), findsNothing);
+    expect(find.byTooltip('Share Space'), findsOneWidget);
     expect(
         tester.getRect(find.text('Members')).bottom,
         lessThan(tester

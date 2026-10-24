@@ -34,7 +34,7 @@ HOME
 ### 1. For You (Triage Surface vs Notification Center)
 - **Distinct Responsibilities:**
   - **Notification Center:** Answers *"What happened?"* Full chronological timeline of events, reads/unreads, and historic notifications.
-  - Notification Center opens beside the desktop sidebar (following its resized width or collapsed icon rail) and as a full-width bottom sheet on mobile. Close, mark-read, invitation decisions, and record navigation retain their existing behavior.
+  - Notification Center opens beside the desktop sidebar (following its resized width or collapsed icon rail) and as a full-width bottom sheet on mobile, with the Inbox header and content aligned to the top of the available window. Close, mark-read, invitation decisions, and record navigation retain their existing behavior.
   - Notification Center records show a status title once, with optional specific event details and Space/Thread location. Generic status restatements are omitted. Each record has one leading status icon; its color indicates attention and read state, with accessible priority/read labels. Records have no trailing icons or visible priority text.
   - **Home ("For You"):** Answers *"What should I care about?"* A strictly bounded (maximum four latest items) triage surface displaying only items that demand the user's active attention or decision.
 - **Actionable eligibility:** Include pending invitations from the authoritative invitation list, input/approval requests, execution failures, Worker/Workspace problems, and open findings. Exclude completion/informational events even when they have an Open action. Historical invitation notifications cannot keep accepted or declined invitations on Home. Only unread items appear on Home. Opening a card marks its notification read before navigation and removes it from Home; the read record remains in Inbox. Pending invitations and aggregate findings without a server notification use session-local read IDs, cleared on logout.
@@ -760,3 +760,15 @@ With the completion and verification of the V2 Home experience, all obsolete V1 
 - **No Feature Flags / Dead Paths:**
   - Zero legacy fallback flags or conditional dead-code paths remain.
   - Strict compile-time and runtime invariant tests assert the total absence of legacy cards across both established-user and new-user states.
+
+### Compact-screen navigation
+
+On compact screens, Home and `/spaces` show the full-page Spaces/Threads list.
+Spaces expand in place and Threads open as full-screen detail pages. The HUD logo
+returns to the list, preserving position and expansion. New Space is a HUD
+action alongside Search, Notifications, and the application menu. The list HUD shows the account name as a link to the account page instead of
+Spaces; the application menu has no Account item. The HUD has no avatar or
+Back button.
+Row action icons appear only for selected or hovered Spaces and Threads. Desktop
+retains the Home dashboard and sidebar. Pending invitations remain accessible
+from the list and Inbox.

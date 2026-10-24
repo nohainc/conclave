@@ -711,6 +711,38 @@ void main() {
     expect(icon.properties.label, 'Worker');
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+      'compact result uses modelIconBuilder and compactModelLabelBuilder',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ModelEffortSelector(
+                compact: true,
+                showWorkerInCompactSummary: false,
+                workerIconBuilder: (selected) =>
+                    const Icon(Icons.smart_toy_outlined),
+                modelIconBuilder: (selectedWorker, modelId, modelName) => Icon(
+                    Icons.auto_awesome,
+                    key: ValueKey('model-icon-$modelId')),
+                compactModelLabelBuilder: (modelId, modelName) =>
+                    'Short-$modelName',
+                catalog: const ExecutionSelectionCatalog([worker]),
+                value: const ExecutionSelection(
+                    worker: 'worker', model: 'one', effort: 'deep'),
+                onChanged: (_) {}))));
+    expect(find.text('Short-One · Deep'), findsOneWidget);
+    expect(find.textContaining('Worker'), findsNothing);
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey('execution-open')),
+            matching: find.byKey(const ValueKey('model-icon-one'))),
+        findsOneWidget);
+    final icon = tester.widget<Semantics>(
+        find.byKey(const ValueKey('execution-selected-model-icon')));
+    expect(icon.properties.label, 'Short-One');
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('compact combined selections never render Auto', (tester) async {
     const gemini = WorkerSelectionCapability(
       id: 'gemini',

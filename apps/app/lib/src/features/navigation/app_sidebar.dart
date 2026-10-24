@@ -104,138 +104,150 @@ class AppSidebar extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Brand and primary actions share one compact header.
-              Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Semantics(
-                    label: 'Conclave AX — Home',
-                    child: Tooltip(
-                      excludeFromSemantics: true,
-                      message: 'Conclave AX — Home',
-                      child: InkWell(
-                        onTap: () {
-                          onNavigateTo(const AxNavigation.home());
-                          if (compact) {
-                            Scaffold.maybeOf(sidebarContext)?.closeDrawer();
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(ConclaveRadius.sm),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: ConclaveBrand.logoMark(size: 28),
-                        ),
-                      ),
-                    ),
-                  ),
-                  _RailSearchMenuAnchor(
-                    menuStyle: ConclaveMenuStyle.surface(isDark),
-                    searchController: searchController,
-                    searchFocusNode: searchFocusNode,
-                    onSearchChanged: onSearchChanged,
-                    onClearSearch: onClearSearch,
-                    onNavigateTo: onNavigateTo,
-                    isDark: isDark,
-                  ),
-                  Semantics(
-                      label: 'New Space',
-                      child: Tooltip(
-                        excludeFromSemantics: true,
-                        message: 'New Space',
-                        child: IconButton(
-                          onPressed: onCreateSpace,
-                          icon: Icon(
-                            Icons.add_rounded,
-                            size: 18,
-                            color: ConclaveColors.navigationTextMuted(isDark),
-                          ),
-                          splashRadius: 14,
-                          padding: EdgeInsets.zero,
-                          constraints:
-                              const BoxConstraints(minWidth: 32, minHeight: 32),
-                          style: IconButton.styleFrom(
-                            hoverColor: ConclaveColors.navigationHover(isDark),
-                            shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(ConclaveRadius.sm),
-                            ),
-                          ),
-                        ),
-                      )),
-                  shellContext.watchNotifications(() {
-                    final count = shellContext.unreadNotificationCount;
-                    return Semantics(
-                      label: count > 0
-                          ? '$count unread notifications'
-                          : 'Notifications',
-                      child: Tooltip(
-                        excludeFromSemantics: true,
-                        message: 'Notifications',
-                        child: IconButton(
-                          onPressed: onOpenNotifications,
-                          icon: count > 0
-                              ? Badge.count(
-                                  count: count,
-                                  backgroundColor: ConclaveColors.primary,
-                                  textColor: Colors.white,
-                                  child: Icon(
-                                    Icons.notifications_none_rounded,
-                                    size: 18,
-                                    color: ConclaveColors.navigationTextMuted(
-                                        isDark),
-                                  ),
-                                )
-                              : Icon(
-                                  Icons.notifications_none_rounded,
-                                  size: 18,
-                                  color: ConclaveColors.navigationTextMuted(
-                                      isDark),
-                                ),
-                          splashRadius: 14,
-                          padding: EdgeInsets.zero,
-                          constraints:
-                              const BoxConstraints(minWidth: 32, minHeight: 32),
-                          style: IconButton.styleFrom(
-                            hoverColor: ConclaveColors.navigationHover(isDark),
-                            shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(ConclaveRadius.sm),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                  Semantics(
-                    label: compact ? 'Close sidebar' : 'Hide sidebar',
-                    child: Tooltip(
-                      excludeFromSemantics: true,
-                      message: compact ? 'Close sidebar' : 'Hide sidebar',
-                      child: IconButton(
-                        onPressed: () {
-                          if (compact) {
-                            Scaffold.maybeOf(sidebarContext)?.closeDrawer();
-                          } else {
-                            onToggleCollapse?.call();
-                          }
-                        },
-                        icon: Icon(Icons.menu_open_rounded,
-                            size: 20,
-                            color: ConclaveColors.navigationTextMuted(isDark)),
-                        padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
+              IconButtonTheme(
+                data: compact
+                    ? IconButtonThemeData(
                         style: IconButton.styleFrom(
-                          hoverColor: ConclaveColors.navigationHover(isDark),
-                          shape: RoundedRectangleBorder(
-                              borderRadius:
-                                  BorderRadius.circular(ConclaveRadius.sm)),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ))
+                    : IconButtonTheme.of(context),
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Semantics(
+                      label: 'Conclave AX — Home',
+                      child: Tooltip(
+                        excludeFromSemantics: true,
+                        message: 'Conclave AX — Home',
+                        child: InkWell(
+                          onTap: () {
+                            onNavigateTo(const AxNavigation.home());
+                            if (compact) {
+                              Scaffold.maybeOf(sidebarContext)?.closeDrawer();
+                            }
+                          },
+                          borderRadius:
+                              BorderRadius.circular(ConclaveRadius.sm),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: ConclaveBrand.logoMark(size: 28),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    if (!compact)
+                      _RailSearchMenuAnchor(
+                        menuStyle: ConclaveMenuStyle.surface(isDark),
+                        searchController: searchController,
+                        searchFocusNode: searchFocusNode,
+                        onSearchChanged: onSearchChanged,
+                        onClearSearch: onClearSearch,
+                        onNavigateTo: onNavigateTo,
+                        isDark: isDark,
+                      ),
+                    Semantics(
+                        label: 'New Space',
+                        child: Tooltip(
+                          excludeFromSemantics: true,
+                          message: 'New Space',
+                          child: IconButton(
+                            onPressed: onCreateSpace,
+                            icon: Icon(
+                              Icons.add_rounded,
+                              size: 18,
+                              color: ConclaveColors.navigationTextMuted(isDark),
+                            ),
+                            splashRadius: 14,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 32, minHeight: 32),
+                            style: IconButton.styleFrom(
+                              hoverColor:
+                                  ConclaveColors.navigationHover(isDark),
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(ConclaveRadius.sm),
+                              ),
+                            ),
+                          ),
+                        )),
+                    if (!compact)
+                      shellContext.watchNotifications(() {
+                        final count = shellContext.unreadNotificationCount;
+                        return Semantics(
+                          label: count > 0
+                              ? '$count unread notifications'
+                              : 'Notifications',
+                          child: Tooltip(
+                            excludeFromSemantics: true,
+                            message: 'Notifications',
+                            child: IconButton(
+                              onPressed: onOpenNotifications,
+                              icon: count > 0
+                                  ? Badge.count(
+                                      count: count,
+                                      backgroundColor: ConclaveColors.primary,
+                                      textColor: Colors.white,
+                                      child: Icon(
+                                        Icons.notifications_none_rounded,
+                                        size: 18,
+                                        color:
+                                            ConclaveColors.navigationTextMuted(
+                                                isDark),
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.notifications_none_rounded,
+                                      size: 18,
+                                      color: ConclaveColors.navigationTextMuted(
+                                          isDark),
+                                    ),
+                              splashRadius: 14,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 32, minHeight: 32),
+                              style: IconButton.styleFrom(
+                                hoverColor:
+                                    ConclaveColors.navigationHover(isDark),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(ConclaveRadius.sm),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    Semantics(
+                      label: 'Hide sidebar',
+                      child: Tooltip(
+                        excludeFromSemantics: true,
+                        message: 'Hide sidebar',
+                        child: IconButton(
+                          onPressed: compact
+                              ? () => Scaffold.maybeOf(sidebarContext)
+                                  ?.closeDrawer()
+                              : onToggleCollapse,
+                          icon: Icon(Icons.menu_open_rounded,
+                              size: 20,
+                              color:
+                                  ConclaveColors.navigationTextMuted(isDark)),
+                          padding: EdgeInsets.zero,
+                          constraints:
+                              const BoxConstraints(minWidth: 32, minHeight: 32),
+                          style: IconButton.styleFrom(
+                            hoverColor: ConclaveColors.navigationHover(isDark),
+                            shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(ConclaveRadius.sm)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
 
@@ -264,14 +276,6 @@ class AppSidebar extends StatelessWidget {
                   ),
                 ),
               ),
-
-              if (compact)
-                _navItem(
-                  icon: Icons.close_rounded,
-                  label: 'Close menu',
-                  target: null,
-                  context: sidebarContext,
-                ),
 
               const SizedBox(height: 6),
 
@@ -364,18 +368,10 @@ class AppSidebar extends StatelessWidget {
                           ),
                         )),
                   ),
-                  const SizedBox(width: 4),
-                  GlobalAppMenu(
-                    shellContext: shellContext,
-                    onNavigateTo: onNavigateTo,
-                    onToggleTheme: onToggleTheme,
-                    onSetThemeMode: onSetThemeMode,
-                    onOpenAbout: onOpenAbout,
-                    onOpenExternal: onOpenExternal,
-                    onLogout: onLogout,
-                    onOpenArchivedSpaces: onOpenArchivedSpaces,
-                    compact: compact,
-                  ),
+                  if (!compact) ...[
+                    const SizedBox(width: 4),
+                    _applicationMenu(),
+                  ],
                 ],
               ),
             ],
@@ -385,75 +381,17 @@ class AppSidebar extends StatelessWidget {
     );
   }
 
-  Widget _navItem({
-    required IconData icon,
-    required String label,
-    required AxNavigation? target,
-    String? badge,
-    required BuildContext context,
-  }) {
-    final active = shellContext.isNavActive(target);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return InkWell(
-      onTap: () {
-        if (target != null) {
-          onNavigateTo(target);
-          if (compact) {
-            Scaffold.maybeOf(context)?.closeDrawer();
-          }
-        } else if (compact) {
-          Scaffold.maybeOf(context)?.closeDrawer();
-        }
-      },
-      borderRadius: BorderRadius.circular(ConclaveRadius.sm),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-        decoration: BoxDecoration(
-          color: active
-              ? (isDark
-                  ? ConclaveColors.navigationSelectedColor(isDark)
-                  : ConclaveColors.primarySoft)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(ConclaveRadius.sm),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 17,
-              color: ConclaveColors.navigationTextMuted(isDark),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                label,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: ConclaveColors.navigationTextMuted(isDark),
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ),
-            if (badge != null)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                decoration: BoxDecoration(
-                  color: ConclaveColors.primary,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  badge,
-                  style: const TextStyle(color: Colors.white, fontSize: 11),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _applicationMenu() => GlobalAppMenu(
+        shellContext: shellContext,
+        onNavigateTo: onNavigateTo,
+        onToggleTheme: onToggleTheme,
+        onSetThemeMode: onSetThemeMode,
+        onOpenAbout: onOpenAbout,
+        onOpenExternal: onOpenExternal,
+        onLogout: onLogout,
+        onOpenArchivedSpaces: onOpenArchivedSpaces,
+        compact: compact,
+      );
 }
 
 /// Compact Icon Rail when shell is collapsed or on tablet.

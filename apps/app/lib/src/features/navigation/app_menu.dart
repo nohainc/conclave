@@ -19,6 +19,8 @@ class GlobalAppMenu extends StatelessWidget {
     required this.onLogout,
     this.onOpenArchivedSpaces,
     this.compact = false,
+    this.buttonConstraints = const BoxConstraints(minWidth: 28, minHeight: 28),
+    this.iconSize = 18,
   });
 
   final AxShellContext shellContext;
@@ -30,6 +32,8 @@ class GlobalAppMenu extends StatelessWidget {
   final VoidCallback onLogout;
   final VoidCallback? onOpenArchivedSpaces;
   final bool compact;
+  final BoxConstraints buttonConstraints;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
@@ -67,12 +71,11 @@ class GlobalAppMenu extends StatelessWidget {
                     Icons.menu_rounded,
                     color: ConclaveColors.navigationTextMuted(
                         Theme.of(context).brightness == Brightness.dark),
-                    size: 18,
+                    size: iconSize,
                   ),
                   splashRadius: 14,
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: buttonConstraints,
                   onPressed: () {
                     if (controller.isOpen) {
                       controller.close();
@@ -260,8 +263,6 @@ class GlobalAppMenu extends StatelessWidget {
           ),
         ),
         divider(),
-
-        // 3. Session action
         MenuItemButton(
           style: itemStyle(isDestructive: true),
           leadingIcon: Icon(

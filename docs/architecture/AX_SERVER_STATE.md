@@ -864,6 +864,32 @@ Space list and detail responses include the authenticated viewer's membership
 `role`. Sidebar grouping must use that server attribution, including after a
 Space detail refresh, rather than inferring ownership from a missing field.
 
+On compact screens, Home and `/spaces` present a full-width Spaces/Threads
+list instead of a drawer. Space rows expand in place; their menus open Space
+settings, with Open Space immediately before Edit Space. Thread selection opens the full-screen conversation. The HUD logo
+returns to the mounted list with its scroll offset and expanded Spaces preserved.
+Tapping a Space name in the compact HUD opens a list scoped to that Space,
+expanded to show its Threads. The logo restores the full list and its retained
+scroll position. Open Space in the row menu still opens Space settings. The
+list scope is session-local presentation state; routes and deep links are unchanged.
+Pinned ordering, unread/running indicators, membership permissions, invitations,
+and collaboration actions use the same query state and handlers as desktop.
+Page rows have larger touch targets. Action icons appear only on selected or
+hovered Space and Thread rows; New Thread
+appears beside each Space when permitted. Invitations open Inbox.
+
+The mobile HUD starts with the Conclave logo, linking to the Spaces/Threads list.
+An 8px gap separates the logo from the page title. HUD action icons use a
+consistent 20px size, including the application menu. It has no account avatar
+or Back to Spaces icon. On the list page, the account name replaces the Spaces title and links to
+the account page. The name uses the current-title weight and size (bold,
+14.5px); the mobile account page HUD title is Profile. The application menu
+has no Account entry. Its HUD button
+uses the same 36×40px bounds as the other HUD action buttons.
+New Space, Search, Notifications, and the application menu are HUD actions.
+There is no mobile drawer, collapse button, or resize grip. Desktop keeps its
+sidebar, account control, application menu, and collapse/resize behavior.
+
 The expanded desktop sidebar defaults to 200 logical pixels. Its right-edge
 resize grip supports dragging between 200 and 300 pixels. The resize line is visible only while the pointer
 is over the grip, uses the same neutral color in all interaction states, and
@@ -1130,7 +1156,12 @@ automatically shortly after typing stops. The body is Markdown: the editor
 has an emoji picker, a Markdown formatting menu, browser speech dictation with
 language selection (same as chat composers). A saved note opens rendered and
 read-only; the edit icon or a double click opens the editor, and Done returns
-to the rendered view. An empty note opens in the editor.
+to the rendered view. An empty note opens in the editor. Notes emoji and Markdown buttons share the input area’s
+32px button size, 20px icons, and rounded-square styling; Edit/Done uses
+the same height and corner radius. Notes page and editor controls suppress
+hover and long-press tooltips while retaining their accessibility labels. The Thread’s Clear Note action asks for
+confirmation, waits for any initial note load, and saves an empty body using
+the same revision checks as editing. Cancel leaves the note unchanged.
 
 ## Phase 9: Persisted sidebar and Thread view state
 
@@ -1317,10 +1348,24 @@ active Threads; below the Thread name field it shows three collapsed areas:
 **Settings** (when available), **Members**, and **Archived Threads**, in that
 order. Archived Threads come from
 the same Space-scoped query cache as the sidebar. Authorized managers restore an
-archived Thread from its row's actions menu; the collaboration mutation updates
+archived Thread from its row's actions menu. These menus use shared rounded
+menu rows, icons, typography, and hover styling. The collaboration mutation updates
 the shared cache so the Thread returns to the sidebar. Archiving does not delete
 Threads or change their permissions.
+
+The Members name/email column header shows only the + Share Space control
+when the viewer can invite; its tooltip retains the action label.
 
 Settings holds the Space's Workspace choice. Owners change it through the same
 compact list selector used by the Work composer and workflow model pickers;
 other members see the current Workspace read-only.
+
+### Workspace sharing controls
+
+Each shared-person card places its At once and monthly run-time selectors
+directly below usage statistics, before the access table. Both selectors use
+the shared styled popup controls and wrap onto separate lines at narrow widths.
+Show access is an expandable header for the permissions table; it does not
+change to Done. The table retains its existing explicit save/reset actions.
+Collapsing refreshes the person's policy summary. Quota values, monthly limit
+units, and authorization are unchanged.

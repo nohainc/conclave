@@ -252,6 +252,34 @@ void main() {
     expect(run.terminal, isA<WorkerErrorFrame>());
   });
 
+  test(
+    'Grok Profile classifies usage limit error event as quota_exhausted',
+    () async {
+      final run = await _execute(
+        events:
+            '${jsonEncode({'type': 'error', 'message': "You've reached your free Grok Build usage limit for now. Get SuperGrok for much higher limits, or try again later…", 'cwd': '/work'})}\n',
+        exitCode: 1,
+      );
+      expect(run.terminal, isA<WorkerErrorFrame>());
+      final terminal = run.terminal as WorkerErrorFrame;
+      expect(terminal.code, WorkerIssueCode.quotaExhausted);
+      expect(terminal.message, "The provider's usage limit has been reached.");
+    },
+  );
+
+  test(
+    'Grok Profile classifies free-usage-exhausted 429 as quota_exhausted',
+    () async {
+      final run = await _execute(
+        events:
+            '${jsonEncode({'type': 'error', 'message': "API error (status 429 Too Many Requests): subscription:free-usage-exhausted: You've used all the included free usage for model grok-4.7 for now. Usage resets over a rolling 24-hour window.", 'cwd': '/work'})}\n',
+        exitCode: 1,
+      );
+      final terminal = run.terminal as WorkerErrorFrame;
+      expect(terminal.code, WorkerIssueCode.quotaExhausted);
+    },
+  );
+
   test('Grok adapter keeps narration and tool rows apart', () {
     final adapter = ProviderActivityAdapter.fromProfile({
       'providerTool': {'name': 'Grok Build CLI'},

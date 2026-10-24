@@ -129,6 +129,8 @@ void main() {
       throwsA(isA<AssignmentExecutionFailure>()
           .having((error) => error.code, 'code', 'timeout')
           .having((error) => error.retryable, 'retryable', isTrue)
+          .having((error) => error.message, 'message',
+              contains('Another request in this Space was still running'))
           .having((error) => error.localDiagnostic, 'diagnostic',
               contains('space_wait'))),
     );

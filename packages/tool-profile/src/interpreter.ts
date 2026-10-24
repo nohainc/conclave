@@ -818,7 +818,7 @@ const stderrMatchers: Record<string, RegExp> = {
   permission_denied:
     /permission denied|approval denied|permission.{0,60}(configuration|settings)|sandbox.*(denied|blocked)|tool.*(denied|rejected)/i,
   quota_exhausted:
-    /quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota|insufficient[_ -]quota|usage[_ -]limit[_ -](?:reached|exceeded)|(?:usage|session|weekly|daily|monthly|spending|rate) limit.{0,40}(?:reached|exceeded|exhausted)|rate[_ -]limit(?:ed|[_ -]error|[_ -]exceeded)|you(?:['’]ve| have) (?:hit|reached) your (?:(?:session|usage|weekly|daily|monthly|spending) )?limit|credits? balance is too low|resource_exhausted|resource has been exhausted/i,
+    /quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota|insufficient[_ -]quota|usage[_ -]limit[_ -](?:reached|exceeded)|(?:reached|exceeded|exhausted|hit).{0,40}(?:usage|session|weekly|daily|monthly|spending|rate) limit|(?:usage|session|weekly|daily|monthly|spending|rate|free) limit.{0,40}(?:reached|exceeded|exhausted)|rate[_ -]limit(?:ed|[_ -]error|[_ -]exceeded)|you(?:['’]ve| have) (?:hit|reached) (?:all |any |your )?.{0,40}limit|credits? balance is too low|resource_exhausted|resource has been exhausted|free[_ -]usage[_ -]exhausted|you(?:['’]ve| have) used (?:all|up) .{0,40}usage|too many requests/i,
   provider_unavailable:
     /provider unavailable|service unavailable|temporarily unavailable/i,
   provider_failure: /.+/s,

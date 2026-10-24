@@ -146,6 +146,8 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   ThemeMode _themeMode = ThemeMode.system;
   bool _desktopSidebarCollapsed = false;
   double _desktopSidebarWidth = ResizableSidebar.minWidth;
+  final _mobileSpacesScroll = ScrollController();
+  String? _mobileSpaceFilter;
   bool get showRunDetails => switch (navigation.kind) {
         AxRouteKind.home => false,
         _ => true,
@@ -469,6 +471,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
 
   @override
   void dispose() {
+    _mobileSpacesScroll.dispose();
     _readTimer?.cancel();
     _desktopAuthStatusTimer?.cancel();
     store.spaces.removeListener(_restoreSidebarExpansion);

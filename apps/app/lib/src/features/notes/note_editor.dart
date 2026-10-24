@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../ax/ax_data.dart';
 import '../common/conclave_markdown_body.dart';
+import '../common/composer_metrics.dart';
 import '../common/dictation/dictation_button.dart';
 import '../common/dictation/speech_dictation.dart';
 import '../common/emoji_picker.dart';
@@ -13,6 +14,13 @@ import '../common/markdown_composer.dart';
 
 typedef NoteSave = Future<AxNote> Function(
     {required String title, required String body, int? revision});
+
+/// Commands for a mounted [NoteEditor].
+class NoteEditorController {
+  Future<void> Function()? _clear;
+
+  Future<void> clear() => _clear?.call() ?? Future<void>.value();
+}
 
 /// Markdown editor for one private note. Text saves automatically shortly
 /// after typing stops and when the editor closes. A save that lost to a newer
@@ -27,6 +35,7 @@ class NoteEditor extends StatefulWidget {
     this.saveDelay = const Duration(milliseconds: 800),
     this.onSaved,
     this.dictation,
+    this.controller,
   });
 
   /// Loads the note; null means it does not exist yet (first save creates it).
@@ -36,6 +45,7 @@ class NoteEditor extends StatefulWidget {
   final String hint;
   final Duration saveDelay;
   final ValueChanged<AxNote>? onSaved;
+  final NoteEditorController? controller;
 
   /// Overrides the platform speech recognizer (tests).
   final SpeechDictation? dictation;
@@ -49,6 +59,7 @@ class _NoteEditorState extends State<NoteEditor> {
   final _body = TextEditingController();
   AxNote? _note;
   bool _loading = true;
+  late Future<void> _loadPending;
   String? _error;
   String? _status;
   Timer? _timer;
@@ -79,10 +90,20 @@ class _NoteEditorState extends State<NoteEditor> {
   @override
   void initState() {
     super.initState();
+    widget.controller?._clear = _clear;
     // Emoji, formatting and dictation edit the controller directly, so save
     // on any text change rather than only on typing.
     _body.addListener(_bodyChanged);
-    unawaited(_load());
+    _loadPending = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant NoteEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?._clear = null;
+      widget.controller?._clear = _clear;
+    }
   }
 
   void _bodyChanged() {
@@ -103,12 +124,25 @@ class _NoteEditorState extends State<NoteEditor> {
 
   @override
   void dispose() {
+    if (widget.controller?._clear == _clear) widget.controller?._clear = null;
     _timer?.cancel();
     if (_dirty) unawaited(_save());
     _title.dispose();
     _body.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  Future<void> _clear() async {
+    // The header is available before the note finishes loading. Clear the
+    // loaded content rather than treating the initial empty controller as saved.
+    await _loadPending;
+    if (!mounted || _error != null || _body.text.isEmpty) return;
+    _timer?.cancel();
+    if (mounted) setState(() => _editing = true);
+    _body.clear();
+    _timer?.cancel();
+    await _save();
   }
 
   Future<void> _load({String? status}) async {
@@ -196,7 +230,12 @@ class _NoteEditorState extends State<NoteEditor> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TooltipVisibility(
+        visible: false,
+        child: _buildContent(context),
+      );
+
+  Widget _buildContent(BuildContext context) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -208,7 +247,7 @@ class _NoteEditorState extends State<NoteEditor> {
           TextButton(
             onPressed: () {
               setState(() => _loading = true);
-              unawaited(_load());
+              _loadPending = _load();
             },
             child: const Text('Retry'),
           ),
@@ -274,17 +313,28 @@ class _NoteEditorState extends State<NoteEditor> {
     // are always shown and stay disabled until editing starts.
     // The tools take an explicit colour, so they need the disabled one too.
     final toolColor = _editing ? color : Theme.of(context).disabledColor;
+    final editStyle = TextButton.styleFrom(
+      foregroundColor: color,
+      minimumSize: const Size(0, composerButtonSize),
+      fixedSize: const Size.fromHeight(composerButtonSize),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.standard,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(composerButtonRadius),
+      ),
+    );
     return Row(children: [
       _editing
           ? TextButton(
               key: const ValueKey('note-done'),
-              style: TextButton.styleFrom(foregroundColor: color),
+              style: editStyle,
               onPressed: _finishEditing,
               child: const Text('Done'),
             )
           : TextButton(
               key: const ValueKey('note-edit'),
-              style: TextButton.styleFrom(foregroundColor: color),
+              style: editStyle,
               onPressed: _startEditing,
               child: const Text('Edit'),
             ),
@@ -326,8 +376,11 @@ class _NoteEditorState extends State<NoteEditor> {
         ],
         builder: (context, controller, _) => IconButton(
           tooltip: 'Show Markdown controls',
+          padding: EdgeInsets.zero,
+          constraints: composerButtonConstraints,
+          style: composerIconButtonStyle(),
           icon: Icon(Icons.text_format,
-              size: 18,
+              size: composerIconSize,
               color: toolColor,
               semanticLabel: 'Show Markdown controls'),
           onPressed: !_editing

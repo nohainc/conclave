@@ -23,6 +23,8 @@ class ModelEffortSelector extends StatefulWidget {
       this.menuPickers = false,
       this.immediatePopup = false,
       this.workerIconBuilder,
+      this.modelIconBuilder,
+      this.compactModelLabelBuilder,
       this.scope = 'execution',
       this.validationMessage,
       this.helperMessage,
@@ -36,7 +38,9 @@ class ModelEffortSelector extends StatefulWidget {
       this.hiddenValidationMessages = const <String>{},
       this.showSelectionStateText = true,
       this.showModelEffortGuidance = true,
-      this.showWorkerInCompactSummary = true});
+      this.showWorkerInCompactSummary = true,
+      this.compactHeight,
+      this.compactIconSize = 18});
   final ExecutionSelectionCatalog catalog;
   final ExecutionSelection value, inherited;
   final ValueChanged<ExecutionSelection>? onChanged;
@@ -49,6 +53,10 @@ class ModelEffortSelector extends StatefulWidget {
   /// Content-sized Work composer popup with immediately applied selections.
   final bool immediatePopup;
   final Widget Function(WorkerSelectionCapability worker)? workerIconBuilder;
+  final Widget Function(WorkerSelectionCapability? worker, String? modelId,
+      String? modelName)? modelIconBuilder;
+  final String Function(String modelId, String? modelName)?
+      compactModelLabelBuilder;
   final bool allowWorkerChange, allowModelChange, allowEffortChange;
 
   /// Keeps validation available to callers without rendering duplicate inline
@@ -59,6 +67,10 @@ class ModelEffortSelector extends StatefulWidget {
   final bool showSelectionStateText;
   final bool showModelEffortGuidance;
   final bool showWorkerInCompactSummary;
+
+  /// Fixes the compact button height (width stays content-sized) when set.
+  final double? compactHeight;
+  final double compactIconSize;
   final String scope;
   final String? validationMessage, helperMessage;
 
@@ -80,6 +92,15 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
     if (widget.compact) {
       // Model and effort have no meaning until the compact model-only host
       // resolves a Worker. Keep the saved value intact during catalog refreshes.
+      final rawModelName = effective.model != null &&
+              worker?.supportsModel(effective.model) == true
+          ? worker?.model(effective.model)?.name ?? effective.model!
+          : effective.model;
+      final displayModelName =
+          rawModelName != null && widget.compactModelLabelBuilder != null
+              ? widget.compactModelLabelBuilder!(effective.model!, rawModelName)
+              : rawModelName;
+
       final label = worker == null && !widget.showWorkerInCompactSummary
           ? 'Select a Worker'
           : [
@@ -96,9 +117,8 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                             ? 'Auto'
                             : 'Select model'
                     : worker?.supportsModel(effective.model) == true
-                        ? worker?.model(effective.model)?.name ??
-                            effective.model!
-                        : '${effective.model} · Unavailable',
+                        ? displayModelName!
+                        : '${displayModelName ?? effective.model!} · Unavailable',
               if (widget.showEffort &&
                   effective.effort == null &&
                   !effortAutoAllowed)
@@ -114,6 +134,17 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                 'Loading…',
               if (worker?.state == CapabilityState.stale) 'Stale',
             ].join(' · ');
+
+      final modelIconWidget = widget.modelIconBuilder != null
+          ? widget.modelIconBuilder!(
+              worker,
+              effective.model,
+              effective.model != null
+                  ? worker?.model(effective.model)?.name
+                  : null,
+            )
+          : null;
+
       return Builder(
         builder: (anchorContext) => TextButton(
           key: ValueKey('${widget.scope}-open'),
@@ -125,13 +156,41 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                 .textTheme
                 .bodySmall
                 ?.copyWith(fontWeight: FontWeight.w600),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            padding: EdgeInsets.symmetric(
+                horizontal: 8, vertical: widget.compactHeight == null ? 5 : 0),
+            minimumSize: widget.compactHeight == null
+                ? null
+                : Size(0, widget.compactHeight!),
+            maximumSize: widget.compactHeight == null
+                ? null
+                : Size(double.infinity, widget.compactHeight!),
+            tapTargetSize: widget.compactHeight == null
+                ? null
+                : MaterialTapTargetSize.shrinkWrap,
+            // Density would shave 8px off the fixed height on desktop.
+            visualDensity:
+                widget.compactHeight == null ? null : VisualDensity.standard,
           ),
           onPressed: () => _open(anchorContext),
           child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 260),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
-                if (widget.showWorker &&
+                if (modelIconWidget != null) ...[
+                  Semantics(
+                    key: ValueKey('${widget.scope}-selected-model-icon'),
+                    label: displayModelName ?? worker?.name ?? 'Model',
+                    image: true,
+                    child: ExcludeSemantics(
+                      child: SizedBox.square(
+                        dimension: widget.compactIconSize,
+                        child: FittedBox(
+                          child: modelIconWidget,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ] else if (widget.showWorker &&
                     worker != null &&
                     widget.workerIconBuilder != null) ...[
                   Semantics(
@@ -140,7 +199,7 @@ class _ModelEffortSelectorState extends State<ModelEffortSelector> {
                     image: true,
                     child: ExcludeSemantics(
                       child: SizedBox.square(
-                        dimension: 18,
+                        dimension: widget.compactIconSize,
                         child: FittedBox(
                           child: widget.workerIconBuilder!(worker),
                         ),

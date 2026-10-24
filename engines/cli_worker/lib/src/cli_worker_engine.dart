@@ -1703,16 +1703,22 @@ class CliWorkerEngine {
             if (interpreted.reason case final reason?)
               'interpretation: $reason',
           ].join(' | ');
+          final failureMessage = switch (interpreted.issueCode) {
+            WorkerIssueCode.quotaExhausted =>
+              'The provider\'s usage limit has been reached.',
+            _ =>
+              interpreted.emptyResponse
+                  ? (toolSeen
+                        ? 'The provider ran a tool and then stopped without an answer. Please retry.'
+                        : 'The provider returned an empty answer${emptyRetried ? ' repeatedly' : ''}. Please retry.')
+                  : 'Provider CLI execution failed',
+          };
           await _write(
             sink,
             _executionError(
               request,
               code: interpreted.issueCode ?? WorkerIssueCode.providerFailure,
-              message: interpreted.emptyResponse
-                  ? (toolSeen
-                        ? 'The provider ran a tool and then stopped without an answer. Please retry.'
-                        : 'The provider returned an empty answer${emptyRetried ? ' repeatedly' : ''}. Please retry.')
-                  : 'Provider CLI execution failed',
+              message: failureMessage,
               stage: 'provider_execution',
               detail: failureDetail.isEmpty ? null : failureDetail,
               providerStarted: providerStarted,
@@ -2719,7 +2725,7 @@ class CliWorkerEngine {
         caseSensitive: false,
       ),
       'quota_exhausted': RegExp(
-        r"quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota|insufficient[_ -]quota|usage[_ -]limit[_ -](?:reached|exceeded)|(?:usage|session|weekly|daily|monthly|spending|rate) limit.{0,40}(?:reached|exceeded|exhausted)|rate[_ -]limit(?:ed|[_ -]error|[_ -]exceeded)|you(?:['’]ve| have) (?:hit|reached) your (?:(?:session|usage|weekly|daily|monthly|spending) )?limit|credits? balance is too low|resource_exhausted|resource has been exhausted",
+        r"quota.{0,40}(?:exceeded|exhausted)|(?:exceeded|exhausted).{0,40}quota|insufficient[_ -]quota|usage[_ -]limit[_ -](?:reached|exceeded)|(?:reached|exceeded|exhausted|hit).{0,40}(?:usage|session|weekly|daily|monthly|spending|rate) limit|(?:usage|session|weekly|daily|monthly|spending|rate|free) limit.{0,40}(?:reached|exceeded|exhausted)|rate[_ -]limit(?:ed|[_ -]error|[_ -]exceeded)|you(?:['’]ve| have) (?:hit|reached) (?:all |any |your )?.{0,40}limit|credits? balance is too low|resource_exhausted|resource has been exhausted|free[_ -]usage[_ -]exhausted|you(?:['’]ve| have) used (?:all|up) .{0,40}usage|too many requests",
         caseSensitive: false,
       ),
       'provider_unavailable': RegExp(

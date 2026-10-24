@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 import 'package:conclave_design/conclave_design.dart';
@@ -68,6 +69,15 @@ void main() {
       expect(find.text('Active Thread'), findsNothing);
       expect(find.text('Archived Thread'), findsOneWidget);
       expect(find.widgetWithText(TextButton, 'Restore'), findsNothing);
+      await tester.tap(find.byTooltip('Thread actions'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(MenuItemButton, 'Restore'), findsOneWidget);
+      expect(find.widgetWithText(MenuItemButton, 'Delete'), findsOneWidget);
+      expect(find.byIcon(Icons.unarchive_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.delete_outline), findsOneWidget);
+      expect(find.text('Rename'), findsNothing);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await tester.tap(find.byKey(const ValueKey('space-thread-filter')));
       await tester.pumpAndSettle();
@@ -200,11 +210,12 @@ void main() {
       expect(_inAiHistory(find.byIcon(Icons.info_outline)), findsNothing);
       expect(_inAiHistory(find.text('2.0 KB')), findsNothing);
       expect(_inAiHistory(find.text('12 B')), findsNothing);
-      expect(find.text('ChatGPT'), findsWidgets);
+      expect(find.text('Original Model Name'), findsWidgets);
       expect(find.byTooltip('Original Model Name · Medium'), findsWidgets);
       expect(
           find.byWidgetPredicate((widget) =>
-              widget is Image && widget.semanticLabel == 'ChatGPT icon'),
+              widget is Image &&
+              widget.semanticLabel == 'Original Model Name icon'),
           findsWidgets);
       expect(
           tester
@@ -423,7 +434,7 @@ void main() {
         onArchive: _noop,
       ))));
       await tester.pumpAndSettle();
-      expect(_inConversation(find.text('ChatGPT')), findsOneWidget);
+      expect(_inConversation(find.text('model-x')), findsOneWidget);
       expect(_inConversation(find.text("· Alice's Worker")), findsOneWidget);
       expect(_inConversation(find.byTooltip('Worker owned by Alice')),
           findsOneWidget);
@@ -495,9 +506,9 @@ void main() {
         onArchive: _noop,
       ))));
       await tester.pumpAndSettle();
-      expect(_inConversation(find.text('ChatGPT')), findsNWidgets(3));
-      expect(find.textContaining('model-x'), findsNothing);
-      expect(find.textContaining('model-y'), findsNothing);
+      expect(_inConversation(find.text('model-x')), findsOneWidget);
+      expect(_inConversation(find.text('model-y')), findsOneWidget);
+      expect(_inConversation(find.text('ChatGPT')), findsOneWidget);
       expect(
           _inConversation(find.byTooltip('model-x · Medium')), findsOneWidget);
       expect(_inConversation(find.byTooltip('model-y · High')), findsOneWidget);
@@ -939,7 +950,6 @@ void main() {
       expect(tester.getRect(markup).left - tester.getRect(emoji).right,
           inInclusiveRange(0, 8));
       expect(tester.getCenter(markup).dy, tester.getCenter(emoji).dy);
-      expect(tester.getCenter(send).dy, tester.getCenter(emoji).dy);
       expect(tester.getRect(send).left - tester.getRect(markup).right,
           greaterThan(40));
 
@@ -950,7 +960,7 @@ void main() {
       expect(find.byIcon(Icons.attach_file), findsOneWidget);
       await tester.tapAt(const Offset(1, 1));
       await tester.pumpAndSettle();
-      expect(messageSwitch.width, 28);
+      expect(messageSwitch.width, 32);
       await tester.tap(find.byKey(const ValueKey('composer-mode-ai')));
       await tester.pumpAndSettle();
       expect(selected('ai'), isTrue);
@@ -966,8 +976,15 @@ void main() {
       final historyTab = find.byKey(const ValueKey('ai-history-toggle'));
       Color? tabColor(Finder tab) =>
           tester.widget<TextButton>(tab).style!.foregroundColor!.resolve({});
+      FontWeight? tabWeight(Finder tab) => tester
+          .widget<TextButton>(tab)
+          .style!
+          .textStyle!
+          .resolve({})!.fontWeight;
       expect(tabColor(conversationTab), ConclaveColors.textPrimaryLight);
-      expect(tabColor(historyTab), const Color(0xff535460));
+      expect(tabWeight(conversationTab), FontWeight.bold);
+      expect(tabWeight(historyTab), FontWeight.normal);
+      expect(tabColor(historyTab), ConclaveColors.textPrimaryLight);
       expect(
           find.descendant(
               of: conversationTab,
@@ -994,7 +1011,11 @@ void main() {
       expect(tabColor(find.byKey(const ValueKey('ai-history-tab'))),
           ConclaveColors.textPrimaryLight);
       expect(tabColor(find.byKey(const ValueKey('ai-history-conversation'))),
-          const Color(0xff535460));
+          ConclaveColors.textPrimaryLight);
+      expect(tabWeight(find.byKey(const ValueKey('ai-history-tab'))),
+          FontWeight.bold);
+      expect(tabWeight(find.byKey(const ValueKey('ai-history-conversation'))),
+          FontWeight.normal);
       expect(find.text('Read-only'), findsNothing);
       expect(find.byTooltip('Close AI History'), findsNothing);
       // AI History never accepts input.
@@ -1428,11 +1449,7 @@ void main() {
       final queueHeader = tester
           .widget<Container>(find.byKey(const ValueKey('work-queue-header')));
       final isDark = brightness == Brightness.dark;
-      expect(queueHeader.color, ConclaveColors.primarySoftColor(isDark));
-      expect(queueHeader.color, isNot(ConclaveColors.composerRail(isDark)));
-      expect(queueHeader.color, isNot(ConclaveColors.canvas(isDark)));
-      expect(
-          queueHeader.color, isNot(ConclaveColors.composerBackground(isDark)));
+      expect(queueHeader.color, ConclaveColors.composerRail(isDark));
 
       // The queue is an inset back layer of the input, with no gap. Its
       // decorative overlap must not cover the input or hide the queue controls.
@@ -1445,8 +1462,8 @@ void main() {
             .getRect(find.byKey(const ValueKey('work-queue-layer-background')));
         final composer = tester.getRect(find.byType(MarkdownComposer));
         expect(queue.bottom, composer.top);
-        expect(queue.left, composer.left + 8);
-        expect(queue.right, composer.right - 8);
+        expect(queue.left, composer.left + 40);
+        expect(queue.right, composer.right - 40);
         expect(layer.bottom, composer.top + 10);
         expect(find.byTooltip('Pause queue').hitTestable(), findsOneWidget);
         expect(find.byTooltip('Edit').hitTestable(), findsNWidgets(3));
@@ -2318,6 +2335,86 @@ void main() {
         findsOneWidget);
   });
 
+  testWidgets('composer icon buttons are 32px with 20px icons in both modes',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    await tester.binding.setSurfaceSize(const Size(800, 1200));
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          height: 600,
+          child: ThreadPage(
+            space: const AxSpace(
+              id: 'space-1',
+              name: 'Space One',
+              branch: '',
+              lastActivity: 'today',
+              role: 'collaborator',
+            ),
+            thread: const AxThread(
+              id: 'thread-1',
+              spaceId: 'space-1',
+              name: 'Implementation',
+              lead: 'Owner',
+              status: 'active',
+              brief: 'Implement the requested change.',
+              primaryWorkspace: 'Workspace One',
+              queueStatus: 'Idle',
+              canExecuteWork: true,
+            ),
+            dataSource: _WorkFormDataSource(),
+            onBackToSpace: _noop,
+            onArchive: _noop,
+            onRunWork: (work, workflowId, attachments, key) async =>
+                'request-1',
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    void square(String key, {bool icon = true}) {
+      final finder = find.byKey(ValueKey(key));
+      expect(finder, findsOneWidget, reason: key);
+      expect(tester.getSize(finder), const Size(32, 32), reason: key);
+      if (icon) {
+        final glyph = find.descendant(of: finder, matching: find.byType(Icon));
+        expect(tester.widget<Icon>(glyph.first).size, 20, reason: key);
+      }
+    }
+
+    double bottomPanel() {
+      final composer = find.byType(MarkdownComposer);
+      return tester.getBottomLeft(composer).dy -
+          tester.getBottomLeft(find.byType(TextField).first).dy;
+    }
+
+    square('composer-mode-message');
+    square('composer-mode-ai');
+    square('composer-send-Send message');
+    square('message-add-attachments');
+    final messagePanel = bottomPanel();
+    final messageHeight = tester.getSize(find.byType(MarkdownComposer)).height;
+
+    await _askAi(tester);
+    square('composer-mode-message');
+    square('composer-mode-ai');
+    square('composer-send-Send request');
+    square('work-add-attachments');
+    // Toggles share the 32px height; their widths follow their labels.
+    for (final key in ['work-toggle-chat', 'work-toggle-direct']) {
+      expect(tester.getSize(find.byKey(ValueKey(key))).height, 32, reason: key);
+    }
+    expect(
+        tester.getSize(find.byKey(const ValueKey('work-composer-open'))).height,
+        32);
+    expect(bottomPanel(), 44);
+    expect(messagePanel, 44);
+    expect(tester.getSize(find.byType(MarkdownComposer)).height, messageHeight);
+    debugDefaultTargetPlatformOverride = null;
+    await tester.binding.setSurfaceSize(null);
+  });
+
   testWidgets('collaborator can explicitly run Work', (tester) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     String? submittedWork;
@@ -2420,20 +2517,11 @@ void main() {
     await tester.enterText(find.byType(TextField).first, markdownPrompt);
     expect(
         tester
-            .getTopLeft(
-                find.byKey(const ValueKey('composer-send-Send request')))
-            .dy,
-        greaterThanOrEqualTo(
-            tester.getBottomLeft(find.byType(TextField).first).dy));
-    expect(
-        tester
             .getCenter(find.byKey(const ValueKey('composer-send-Send request')))
-            .dy,
-        closeTo(
-            tester
-                .getCenter(find.byKey(const ValueKey('work-toggle-direct')))
-                .dy,
-            1));
+            .dx,
+        greaterThan(tester
+            .getCenter(find.byKey(const ValueKey('work-toggle-direct')))
+            .dx));
     expect(submittedWork, isNull);
     await tester.ensureVisible(
         find.byKey(const ValueKey('composer-send-Send request')));
@@ -2545,8 +2633,8 @@ void main() {
           find.byKey(const ValueKey('request-history-layer-background')));
       final input = tester.getRect(find.byType(MarkdownComposer));
       expect(history.bottom, input.top);
-      expect(history.left, input.left + 8);
-      expect(history.right, input.right - 8);
+      expect(history.left, input.left + 40);
+      expect(history.right, input.right - 40);
       expect(layer.bottom, input.top + 10);
       expect(older.hitTestable(), findsOneWidget);
       expect(newer.hitTestable(), findsOneWidget);
@@ -3389,16 +3477,16 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Delivered work shows the selected Worker before provider startup.
-    expect(_inConversation(find.text('ChatGPT')), findsNWidgets(2));
+    // Delivered work shows the selected model in the message header.
+    expect(_inConversation(find.text('gpt-4o')), findsOneWidget);
+    expect(_inConversation(find.text('ChatGPT')), findsOneWidget);
     expect(find.textContaining('Direct Execution · 5s'), findsOneWidget);
     expect(find.byTooltip('gpt-4o'), findsOneWidget);
 
-    // Worker identity stays visible; its model is available on demand.
-    expect(_inConversation(find.text('Claude 3.7 Sonnet')), findsOneWidget);
+    // Model identity stays visible in the message header.
+    expect(_inConversation(find.text('claude-3-7-sonnet')), findsOneWidget);
     expect(find.textContaining('Direct Execution · 12s'), findsOneWidget);
     expect(find.byTooltip('claude-3-7-sonnet'), findsOneWidget);
-    expect(find.textContaining('claude-3-7-sonnet'), findsNothing);
     // A running response has worker attribution before any result text exists.
     final assetImages = tester
         .widgetList<Image>(find.byType(Image))

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_data.dart';
@@ -112,6 +114,9 @@ Widget threadPage(AxDataSource source,
       onArchive: () {},
     )));
 
+Finder noteButton(String label) => find.byWidgetPredicate(
+    (widget) => widget is IconButton && widget.tooltip == label);
+
 void main() {
   test('My Notes has its own route', () {
     expect(AxNavigation.fromUri(Uri(path: '/notes')).kind, AxRouteKind.notes);
@@ -154,8 +159,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('notes-toggle')));
     await tester.pumpAndSettle();
     expect(find.text('Only you can see these notes.'), findsOneWidget);
-    // Composer and clear actions belong to the other tabs.
+    // Notes has its own clear action; other tabs' actions are hidden.
     expect(find.byKey(const ValueKey('clear-ai-history')), findsNothing);
+    expect(find.byKey(const ValueKey('clear-note')), findsOneWidget);
 
     await tester.enterText(find.byKey(const ValueKey('note-body')), 'first');
     await tester.pump(const Duration(seconds: 1));
@@ -170,11 +176,76 @@ void main() {
     expect(source.notes.values.single.body, 'second');
     expect(source.notes.values.single.revision, 2);
 
+    await tester.tap(find.byKey(const ValueKey('clear-note')));
+    await tester.pumpAndSettle();
+    expect(find.text('Clear Note'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(source.notes.values.single.body, 'second');
+
+    await tester.tap(find.byKey(const ValueKey('clear-note')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
+    await tester.pumpAndSettle();
+    expect(source.notes.values.single.body, isEmpty);
+    expect(source.notes.values.single.revision, 3);
+    expect(find.byKey(const ValueKey('note-body')), findsOneWidget);
+    expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('note-body')))
+            .controller!
+            .text,
+        isEmpty);
+
     await tester.tap(find.byKey(const ValueKey('notes-conversation')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('notes-toggle')), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('Clear waits for a saved note to finish loading', (tester) async {
+    final source = NotesSource();
+    final saved = await source.saveThreadNote('t', body: 'saved note');
+    final pending = Completer<AxNote?>();
+    final controller = NoteEditorController();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: NoteEditor(
+          controller: controller,
+          load: () => pending.future,
+          save: ({required title, required body, revision}) =>
+              source.saveThreadNote('t', body: body, revision: revision),
+        ),
+      ),
+    ));
+    final clearing = controller.clear();
+    pending.complete(saved);
+    await tester.pump();
+    await clearing;
+    await tester.pumpAndSettle();
+    expect(source.notes[saved.id]!.body, isEmpty);
+    expect(source.notes[saved.id]!.revision, 2);
+    expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('note-body')))
+            .controller!
+            .text,
+        isEmpty);
+
+    // Reopening confirms the empty body was persisted.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(threadPage(source));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('notes-toggle')));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('note-body')))
+            .controller!
+            .text,
+        isEmpty);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('Notes toolbar formats Markdown, inserts emoji and previews',
@@ -184,11 +255,29 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('notes-toggle')));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Show Markdown controls'), findsOneWidget);
+    expect(noteButton('Show Markdown controls'), findsOneWidget);
+    for (final tooltip in find
+        .descendant(of: find.byType(NoteEditor), matching: find.byType(Tooltip))
+        .evaluate()) {
+      expect(
+          tester
+              .state<TooltipState>(find.byWidget(tooltip.widget))
+              .ensureTooltipVisible(),
+          isFalse);
+    }
+    // Notes uses the same compact toolbar geometry as the input area.
+    for (final tooltip in ['Insert emoji', 'Show Markdown controls']) {
+      final button = noteButton(tooltip);
+      expect(tester.getSize(button), const Size(32, 32));
+      final icon = tester.widget<Icon>(
+          find.descendant(of: button, matching: find.byType(Icon)));
+      expect(icon.size, 20);
+    }
+    expect(tester.getSize(find.byKey(const ValueKey('note-done'))).height, 32);
 
-    await tester.tap(find.byTooltip('Show Markdown controls'));
+    await tester.tap(noteButton('Show Markdown controls'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Bold'));
+    await tester.tap(noteButton('Bold'));
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpAndSettle();
     // Toolbar edits save like typing does.
@@ -200,22 +289,20 @@ void main() {
         .getCenter(find.byKey(const ValueKey('note-toolbar-separator')))
         .dx;
     expect(done, lessThan(separator));
-    expect(
-        separator,
-        lessThan(
-            tester.getCenter(find.byTooltip('Show Markdown controls')).dx));
+    expect(separator,
+        lessThan(tester.getCenter(noteButton('Show Markdown controls')).dx));
 
     // Done shows the note formatted and read-only; the tools stay visible
     // but disabled until Edit.
-    IconButton markdownButton() => tester.widget<IconButton>(find.ancestor(
-        of: find.byTooltip('Show Markdown controls'),
-        matching: find.byType(IconButton)));
+    IconButton markdownButton() =>
+        tester.widget<IconButton>(noteButton('Show Markdown controls'));
     await tester.tap(find.byKey(const ValueKey('note-done')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('note-preview')), findsOneWidget);
     expect(find.byKey(const ValueKey('note-body')), findsNothing);
-    expect(find.byTooltip('Show Markdown controls'), findsOneWidget);
+    expect(noteButton('Show Markdown controls'), findsOneWidget);
     expect(markdownButton().onPressed, isNull);
+    expect(tester.getSize(find.byKey(const ValueKey('note-edit'))).height, 32);
     // Disabled tools also look disabled.
     final disabled =
         Theme.of(tester.element(find.byType(NoteEditor))).disabledColor;
@@ -286,6 +373,10 @@ void main() {
         MaterialApp(home: Scaffold(body: NotesPage(source: source))));
     await tester.pumpAndSettle();
     expect(find.text('Old Thread'), findsOneWidget);
+    expect(
+        tester.state<TooltipState>(find.byType(Tooltip)).ensureTooltipVisible(),
+        isFalse);
+
     expect(find.text('Old Thread < Old Space (Thread no longer available)'),
         findsOneWidget);
     // Delete sits below the path, beside the preview.

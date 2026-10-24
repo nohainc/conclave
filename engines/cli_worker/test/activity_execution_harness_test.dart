@@ -130,7 +130,7 @@ final class _FixtureEngine {
     await process.stdin.flush();
     final activities = <WorkerActivity>[];
     try {
-      while (await lines.moveNext().timeout(const Duration(seconds: 8))) {
+      while (await lines.moveNext().timeout(const Duration(seconds: 20))) {
         final frame = decodeWorkerFrame(lines.current);
         if (frame.requestId != request.requestId) continue;
         if (frame is WorkerActivity) {

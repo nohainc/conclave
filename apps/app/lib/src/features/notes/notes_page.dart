@@ -86,7 +86,12 @@ class _NotesPageState extends State<NotesPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => TooltipVisibility(
+        visible: false,
+        child: _buildContent(context),
+      );
+
+  Widget _buildContent(BuildContext context) {
     final selected = _selected;
     if (selected != null) return _editor(selected);
     final notes = _notes;
