@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart'
-    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
@@ -682,12 +680,14 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
           ),
       ]);
 
-  static bool get _isTouchPlatform =>
-      defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS;
+  bool _isTouchPlatform(BuildContext context) {
+    final platform = Theme.of(context).platform;
+    return platform == TargetPlatform.android || platform == TargetPlatform.iOS;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isTouch = _isTouchPlatform(context);
     final inputContent = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -698,7 +698,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
             bindings: {
               // Touch keyboards report their return key as Enter; there it must
               // insert a newline, and the send button sends.
-              if (!_isTouchPlatform &&
+              if (!isTouch &&
                   (widget.onSend != null || widget.onSubmit != null))
                 const SingleActivator(LogicalKeyboardKey.enter): _submit,
               for (final modifier in [true, false]) ...{

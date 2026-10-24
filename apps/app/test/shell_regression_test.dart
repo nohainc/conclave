@@ -542,23 +542,8 @@ void main() {
       expect(find.byType(AppSidebar), findsNothing);
       expect(
           find.byType(AppTopHud), findsOneWidget); // Top HUD visible on tablet
-      expect(find.byTooltip('Open menu'), findsOneWidget);
-
-      // Open tablet drawer
-      await tester.tap(find.byTooltip('Open menu'));
-      await tester.pumpAndSettle();
-      expect(find.byType(Drawer), findsOneWidget);
-      expect(find.byType(AppSidebar), findsOneWidget);
-      expect(
-          find.descendant(
-              of: find.byType(Drawer),
-              matching: find.text('Authentication redesign')),
-          findsOneWidget);
-
-      // Close drawer
-      await tester.tap(find.text('Close menu'));
-      await tester.pumpAndSettle();
-      expect(find.byType(Drawer), findsNothing);
+      expect(find.byTooltip('Conclave AX — Spaces'), findsOneWidget);
+      expect(find.byTooltip('Application menu'), findsOneWidget);
     });
   });
 

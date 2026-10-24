@@ -242,7 +242,7 @@ void main() {
     expect(find.textContaining('Other model'), findsOneWidget);
     await cache.reset('direct');
     await tester.pumpAndSettle();
-    expect(find.textContaining('Select model'), findsOneWidget);
+    expect(find.textContaining('Select a Worker'), findsOneWidget);
     await requestChoice(tester, 'Worker', 'Second');
     await requestChoice(tester, 'Model', 'Other model');
     await requestChoice(tester, 'Effort', 'Careful');

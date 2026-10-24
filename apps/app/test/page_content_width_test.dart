@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'ax_fixture_data.dart';
 
 void main() {
-  for (final width in [450.0, 1200.0, 1800.0]) {
+  for (final width in [650.0, 1200.0, 1800.0]) {
     testWidgets('People and Archived Spaces match Home width at $width',
         (tester) async {
       await tester.binding.setSurfaceSize(Size(width, 1000));

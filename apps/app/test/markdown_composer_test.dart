@@ -236,11 +236,12 @@ void main() {
     addTearDown(controller.dispose);
     var sends = 0;
     await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.macOS),
         home: Scaffold(
             body: MarkdownComposer(
-      controller: controller,
-      onSend: () => sends++,
-    ))));
+          controller: controller,
+          onSend: () => sends++,
+        ))));
     await tester.tap(find.byType(TextField));
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     expect(sends, 1);
@@ -272,11 +273,12 @@ void main() {
     addTearDown(controller.dispose);
     var submits = 0;
     await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.macOS),
         home: Scaffold(
             body: MarkdownComposer(
-      controller: controller,
-      onSubmit: () => submits++,
-    ))));
+          controller: controller,
+          onSubmit: () => submits++,
+        ))));
 
     await tester.tap(find.byType(TextField));
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
