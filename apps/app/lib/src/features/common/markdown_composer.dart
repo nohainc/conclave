@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
@@ -287,7 +288,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
     _dictationWritten = null;
     setState(() {
       _dictationListening = true;
-      });
+    });
     final session = ++_dictationSession;
     _dictation.start(
       language: _activeDictationLanguage,
@@ -321,7 +322,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
     final wasListening = _dictationListening;
     setState(() {
       _dictationListening = false;
-        _dictationWritten = null;
+      _dictationWritten = null;
     });
     final message = switch (error) {
       'not-allowed' ||
@@ -402,9 +403,8 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
 
   Widget _rightRailMicButton() {
     final language = _dictationLanguageName(_activeDictationLanguage);
-    final label = _dictationListening
-        ? 'Stop dictation'
-        : 'Start dictation ($language)';
+    final label =
+        _dictationListening ? 'Stop dictation' : 'Start dictation ($language)';
     final colors = Theme.of(context).colorScheme;
     final canUse = widget.enabled && !_preview && _dictation.supported;
     void openLanguages() {

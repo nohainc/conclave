@@ -1116,8 +1116,8 @@ class AxWorkerUsagePanel extends StatelessWidget {
                         tooltip: 'Close usage',
                         padding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
-                        constraints:
-                            const BoxConstraints.tightFor(width: 28, height: 28),
+                        constraints: const BoxConstraints.tightFor(
+                            width: 28, height: 28),
                         icon: const Icon(Icons.close, size: 16),
                         onPressed: controller.dismiss,
                       ),

@@ -573,10 +573,10 @@ void main() {
     final message = await composerHeight(
         leading: IconButton(onPressed: () {}, icon: const Icon(Icons.add)));
     final askAi = await composerHeight(
-        execution: ModelEffortSelector(
+        execution: const ModelEffortSelector(
             compact: true,
-            catalog: const ExecutionSelectionCatalog([]),
-            value: const ExecutionSelection()));
+            catalog: ExecutionSelectionCatalog([]),
+            value: ExecutionSelection()));
     expect(askAi, message);
   });
 

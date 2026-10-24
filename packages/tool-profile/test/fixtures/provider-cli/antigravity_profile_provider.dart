@@ -62,9 +62,9 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
       exitCode = 2;
       return;
     }
-    final context =
-        jsonDecode(transportedPrompt.substring(prefix.length, separator))
-            as Map;
+    final context = jsonDecode(
+      transportedPrompt.substring(prefix.length, separator),
+    ) as Map;
     if (jsonEncode(context['history']) !=
         jsonEncode([
           {'kind': 'user_message', 'text': 'Start model A'},
@@ -86,9 +86,9 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
       exitCode = 2;
       return;
     }
-    final history =
-        (jsonDecode(transportedPrompt.substring(prefix.length, separator))
-            as Map)['history'];
+    final history = (jsonDecode(
+      transportedPrompt.substring(prefix.length, separator),
+    ) as Map)['history'];
     final expected = prompt == 'Bootstrap other worker'
         ? [
             {
@@ -138,9 +138,9 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
       exitCode = 2;
       return;
     }
-    final document =
-        jsonDecode(transportedPrompt.substring(prefix.length, separator))
-            as Map;
+    final document = jsonDecode(
+      transportedPrompt.substring(prefix.length, separator),
+    ) as Map;
     if (document['kind'] != 'StatelessContext' ||
         ((((document['context'] as Map)['workflowState'] as Map)['value']
                 as Map)['workflowId'] !=
@@ -165,9 +165,9 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
       exitCode = 2;
       return;
     }
-    final doc =
-        jsonDecode(transportedPrompt.substring(prefix.length, separator))
-            as Map;
+    final doc = jsonDecode(
+      transportedPrompt.substring(prefix.length, separator),
+    ) as Map;
     if (jsonEncode(doc['history']) !=
         jsonEncode([
           {
