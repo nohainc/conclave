@@ -8,6 +8,8 @@ import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_workspace/workspace.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/assignment_journal.dart';
+import 'package:conclave_workspace/platform_runtime.dart';
+import 'package:conclave_workspace/allowed_folders.dart';
 import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/assignment_startup.dart';
 import 'package:conclave_workspace/worker_executor.dart';
@@ -233,6 +235,12 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       workRoot: workRoot,
       registryDirectory: workspacePaths.spaceDirectoryRegistryDirectory,
     ),
+  );
+  final allowedFolders = AllowedFolderRegistry(
+    registryDirectory: workspacePaths.spaceDirectoryRegistryDirectory,
+    workRoot: workRoot,
+    applicationDataRoot: workspacePaths.applicationDataRoot,
+    homeDirectory: currentPlatformRuntime.homeDirectory,
   );
   late final WorkerAssignmentHandler workerHandler;
   workerHandler = WorkerAssignmentHandler(
@@ -633,6 +641,10 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
                 ) ??
                 const <Map<String, Object?>>[];
           },
+          allowedFolderProvider: () async => [
+            for (final folder in await allowedFolders.list())
+              folder.toCloudSummary(),
+          ],
           workerUsageProvider: (workerId) async {
             final supervisor = cliWorkerEngineSupervisor;
             final worker = await localWorkerRegistry.find(workerId);

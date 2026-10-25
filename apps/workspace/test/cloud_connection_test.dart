@@ -664,6 +664,99 @@ void main() {
     await connection.close();
   });
 
+  test('publishes path-free Allowed Folders with the inventory snapshot',
+      () async {
+    final socket = FakeSocket();
+    var foldersReadable = true;
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      workerInventoryProvider: () async => const [],
+      allowedFolderProvider: () async {
+        if (!foldersReadable) throw StateError('registry unreadable');
+        return const [
+          {
+            'id': 'folder-0123456789abcdef',
+            'displayName': 'api',
+            'status': 'available',
+            'checkedAt': '2026-10-25T12:00:00.000Z',
+          }
+        ];
+      },
+      heartbeat: const Duration(hours: 1),
+    );
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'server-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'workspace.hello.ack',
+      'payload': {
+        'sessionId': 'session-1',
+        'cloudCapabilities': [allowedFoldersCapability],
+      },
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    List<Map<String, dynamic>> inventories() => socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .where((message) => message['type'] == 'worker.inventory')
+        .map((message) => message['payload'] as Map<String, dynamic>)
+        .toList();
+
+    await connection.refreshWorkerInventory();
+    final folders = inventories().last['allowedFolders'] as List;
+    expect(folders.single['id'], 'folder-0123456789abcdef');
+    expect(folders.single.containsKey('path'), isFalse);
+
+    foldersReadable = false;
+    await connection.refreshWorkerInventory();
+    expect(inventories().last.containsKey('allowedFolders'), isFalse,
+        reason: 'An unreadable list keeps Cloud state instead of clearing it.');
+    expect(inventories().last['workers'], isEmpty);
+    await connection.close();
+  });
+
+  test('omits Allowed Folders when Cloud does not announce support', () async {
+    final socket = FakeSocket();
+    var reads = 0;
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      workerInventoryProvider: () async => const [],
+      allowedFolderProvider: () async {
+        reads++;
+        return const [];
+      },
+      heartbeat: const Duration(hours: 1),
+    );
+    await connection.connect();
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'server-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'workspace.hello.ack',
+      'payload': {'sessionId': 'session-1'},
+    }));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    await connection.refreshWorkerInventory();
+    final payload = socket.sent
+        .map((message) => jsonDecode(message as String) as Map<String, dynamic>)
+        .lastWhere((message) =>
+            message['type'] ==
+            'worker.inventory')['payload'] as Map<String, dynamic>;
+    expect(payload.containsKey('allowedFolders'), isFalse);
+    expect(reads, 0);
+    await connection.close();
+  });
+
   test('reports Workspace-owned Worker inventory over runtime protocol',
       () async {
     final socket = FakeSocket();

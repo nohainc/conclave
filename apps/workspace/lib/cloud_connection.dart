@@ -127,6 +127,11 @@ const serviceReadinessCapability = 'workspace.readiness.v1';
 /// `assignment.startup` progress for accepted, not-yet-running assignments.
 const assignmentStartupCapability = 'assignment.startup.v1';
 
+/// Capability Cloud announces in `hello.ack` when its inventory schema accepts
+/// `allowedFolders`. Older Cloud rejects unknown inventory fields, so the
+/// Service omits the list until this is announced.
+const allowedFoldersCapability = 'workspace.allowed_folders.v1';
+
 class WorkspaceConnectionPreflightException implements Exception {
   const WorkspaceConnectionPreflightException(this.message);
 
@@ -175,6 +180,7 @@ class WorkspaceCloudConnection {
     this.localQueueLengthProvider,
     this.deadAssignmentIdsProvider,
     this.workerInventoryProvider,
+    this.allowedFolderProvider,
     this.workerUsageProvider,
     this.onSessionReady,
     this.workspaceUpdateAvailableHandler,
@@ -231,6 +237,10 @@ class WorkspaceCloudConnection {
   final MonotonicCloudClock startPermitClock;
   final Map<String, _ClockProbe> _clockProbes = {};
   final Future<List<Map<String, Object?>>> Function()? workerInventoryProvider;
+
+  /// Path-free summaries of the owner's Allowed Folders, published with each
+  /// inventory snapshot so Cloud can offer them to the owner's Spaces.
+  final Future<List<Map<String, Object?>>> Function()? allowedFolderProvider;
 
   /// Runs a Worker's Profile-defined usage command and returns the raw report
   /// as a `worker.usage.result` payload (without `requestId`). The report is
@@ -390,6 +400,7 @@ class WorkspaceCloudConnection {
   /// Whether this Cloud announced `assignment.startup.v1`. Startup progress is
   /// only sent after the announcement; an older Cloud would reject it.
   bool _cloudAcceptsStartup = false;
+  bool _cloudAcceptsAllowedFolders = false;
 
   /// The Service-level state Cloud should schedule against. `ready` is the
   /// only state that accepts assignments, and it requires the current
@@ -809,7 +820,10 @@ class WorkspaceCloudConnection {
 
   /// Sends the Workspace-owned inventory projection. Secrets, credential
   /// references, and local paths must not be included by the caller.
-  void reportWorkerInventory(List<Map<String, Object?>> workers) {
+  void reportWorkerInventory(
+    List<Map<String, Object?>> workers, {
+    List<Map<String, Object?>>? allowedFolders,
+  }) {
     // Every Worker record carries the same Workspace-wide slot total.
     final slots = workers
         .map((worker) => worker['localConcurrencyLimit'])
@@ -819,6 +833,7 @@ class WorkspaceCloudConnection {
       'fullSnapshot': true,
       if (slots != null) 'parallelSlots': slots,
       'workers': workers,
+      if (allowedFolders != null) 'allowedFolders': allowedFolders,
     });
   }
 
@@ -831,7 +846,17 @@ class WorkspaceCloudConnection {
     }
     if (sessionId == null) return;
     try {
-      reportWorkerInventory(await provider());
+      List<Map<String, Object?>>? folders;
+      try {
+        folders = _cloudAcceptsAllowedFolders
+            ? await allowedFolderProvider?.call()
+            : null;
+      } on Object {
+        // An unreadable folder list must not hide Workers. Omitting the field
+        // keeps Cloud's last known folders instead of clearing them.
+        folders = null;
+      }
+      reportWorkerInventory(await provider(), allowedFolders: folders);
       lastInventorySyncAt = DateTime.now().toUtc();
       _workerInventorySent = true;
       _completeSynchronizationWhenReady();
@@ -1352,6 +1377,7 @@ class WorkspaceCloudConnection {
     _helloAcknowledged = false;
     _cloudAcceptsReadiness = false;
     _cloudAcceptsStartup = false;
+    _cloudAcceptsAllowedFolders = false;
     _readyCallbackSessionId = null;
     late final WorkspaceTransport socket;
     var selectedWebSocket = false;
@@ -1637,6 +1663,8 @@ class WorkspaceCloudConnection {
             cloudCapabilities.contains(serviceReadinessCapability);
         _cloudAcceptsStartup = cloudCapabilities is List &&
             cloudCapabilities.contains(assignmentStartupCapability);
+        _cloudAcceptsAllowedFolders = cloudCapabilities is List &&
+            cloudCapabilities.contains(allowedFoldersCapability);
         connectionStage = WorkspaceConnectionStage.synchronizing;
         sessionId = payload['sessionId'] as String;
         unawaited(_drainActivityEvents());

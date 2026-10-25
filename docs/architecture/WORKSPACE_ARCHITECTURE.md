@@ -280,9 +280,18 @@ Workspace.app shows an Allowed folders card on the Workspace tab. Adding a
 folder uses the native picker and local step-up authentication; removing one
 asks for confirmation and states that files stay on disk.
 
-Status: the service registry, IPC, and Workspace.app card are implemented.
-Cloud publication and Space attachment, AX web selection, and Engine/Profile
-pass-through to provider CLIs are follow-up phases.
+The service publishes the path-free summaries as an optional
+`allowedFolders` array in each full `worker.inventory` snapshot
+(`WorkspaceAllowedFolderSchema`, at most 32 entries). Because Cloud validates
+inventory strictly, the service includes the field only after Cloud announces
+`workspace.allowed_folders.v1` in `hello.ack` `cloudCapabilities`. An
+unreadable local list omits the field so Cloud keeps its last known list.
+Folder changes made over IPC republish the inventory immediately.
+
+Status: the service registry, IPC, Workspace.app card, and publication are
+implemented. Cloud ingestion (announcing the capability and storing the
+list), Space attachment, AX web selection, and Engine/Profile pass-through to
+provider CLIs are follow-up phases.
 
 ## Authentication and security
 

@@ -359,6 +359,33 @@ describe("Workspace Runtime protocol", () => {
     }
   });
 
+  it("accepts only path-free Allowed Folder summaries", () => {
+    const parse = (allowedFolders: unknown) =>
+      parseWorkspaceRuntimeMessage({
+        ...base,
+        type: "worker.inventory",
+        payload: { workers: [], allowedFolders, fullSnapshot: true },
+      });
+    const folder = {
+      id: "folder-0123456789abcdef",
+      displayName: "api",
+      status: "read_only",
+      checkedAt: "2026-10-25T12:00:00.123456Z",
+    };
+    expect(parse([folder]).type).toBe("worker.inventory");
+    expect(parse([]).type).toBe("worker.inventory");
+    for (const invalid of [
+      [{ ...folder, path: "/Users/me/api" }],
+      [{ ...folder, id: "../etc" }],
+      [{ ...folder, status: "writable" }],
+      [{ ...folder, displayName: "" }],
+      [{ ...folder, displayName: "a\nb" }],
+      Array.from({ length: 33 }, () => folder),
+    ]) {
+      expect(() => parse(invalid)).toThrow();
+    }
+  });
+
   it("accepts only bounded safe Worker inventory projections", () => {
     const worker = {
       workerId: "worker-a",

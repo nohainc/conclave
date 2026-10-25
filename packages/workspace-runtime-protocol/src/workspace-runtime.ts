@@ -361,12 +361,43 @@ export const WorkspaceWorkerInventoryEntrySchema = z
   })
   .strict();
 
+/**
+ * Path-free summary of an owner-managed Allowed Folder. The local absolute
+ * path never crosses this boundary; execution maps the ID back locally.
+ */
+export const WorkspaceAllowedFolderSchema = z
+  .object({
+    id: z.string().regex(/^folder-[a-f0-9]{16}$/),
+    displayName: z
+      .string()
+      .min(1)
+      .max(80)
+      .refine(
+        (value) =>
+          [...value].every((char) => {
+            const code = char.charCodeAt(0);
+            return code > 0x1f && code !== 0x7f;
+          }),
+        "displayName must not contain control characters",
+      ),
+    status: z.enum(["available", "read_only", "denied", "missing"]),
+    checkedAt: timestamp,
+  })
+  .strict();
+
+export type WorkspaceAllowedFolder = z.infer<
+  typeof WorkspaceAllowedFolderSchema
+>;
+
 export const WorkerInventoryPayloadSchema = z
   .object({
     workers: z.array(WorkspaceWorkerInventoryEntrySchema).max(500),
     // Workspace-wide parallel execution slots, shared by all Workers. Optional
     // so older Services remain valid; they report it per Worker only.
     parallelSlots: z.number().int().min(1).max(1024).optional(),
+    // The complete Allowed Folders list. Optional so older Services remain
+    // valid; omission keeps Cloud's last known list.
+    allowedFolders: z.array(WorkspaceAllowedFolderSchema).max(32).optional(),
     fullSnapshot: z.boolean(),
   })
   .strict();

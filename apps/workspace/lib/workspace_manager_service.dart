@@ -81,6 +81,9 @@ class WorkspaceManagerService {
     Map<String, Object?> payload,
   ) async {
     final result = await _dispatch(command, payload);
+    if (command.startsWith('folders.') && command != 'folders.list') {
+      _publishAllowedFolders();
+    }
     await _publishSnapshot();
     return result;
   }
@@ -864,6 +867,13 @@ class WorkspaceManagerService {
     } on AllowedFolderViolation catch (error) {
       throw WorkspaceManagerProtocolException(error.code, error.message);
     }
+  }
+
+  /// Republishes the path-free folder list so Cloud stops offering removed
+  /// or inaccessible folders without waiting for the next reconnect.
+  void _publishAllowedFolders() {
+    final connection = workspace.cloudConnection;
+    if (connection != null) unawaited(connection.refreshWorkerInventory());
   }
 
   Future<void> _setDesiredCloudState(
