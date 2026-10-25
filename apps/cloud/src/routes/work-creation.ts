@@ -326,7 +326,7 @@ export async function handleCreateWorkRequest(
       )
         throw new HttpError(
           400,
-          `File ${index + 1} exceeds the 2 MB limit or has an invalid size`,
+          `File ${index + 1} exceeds the 10 MB limit or has an invalid size`,
         );
       const stored = await verifyWorkRequestFile(
         env,

@@ -87,14 +87,18 @@ void main() {
         RetrySource(allowed: true, confirmation: false, contextLimit: true);
     await tester.pumpWidget(page(source));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Retry'));
+    await tester.tap(find.byTooltip('Message actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Retry').last);
     await tester.pumpAndSettle();
     expect(find.text('Clear AI History and retry?'), findsOneWidget);
     expect(source.resets, isEmpty);
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await tester.pumpAndSettle();
     expect(source.resets, isEmpty);
-    await tester.tap(find.byTooltip('Retry'));
+    await tester.tap(find.byTooltip('Message actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Retry').last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Clear and retry'));
     await tester.pumpAndSettle();
@@ -110,7 +114,9 @@ void main() {
     await tester.pumpWidget(page(source));
     await tester.pumpAndSettle();
     expect(find.text('AI provider could not start'), findsOneWidget);
-    await tester.tap(find.byTooltip('Retry'));
+    await tester.tap(find.byTooltip('Message actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Retry').last);
     await tester.pumpAndSettle();
     expect(source.approvals, [false]);
     expect(find.text('Retry anyway?'), findsNothing);
@@ -123,14 +129,18 @@ void main() {
     final source = RetrySource(allowed: true, confirmation: true);
     await tester.pumpWidget(page(source));
     await tester.pumpAndSettle();
-    final retry = find.byTooltip(
+    final retry = find.text(
         'Retry anyway — the previous execution may already have made changes');
+    await tester.tap(find.byTooltip('Message actions').last);
+    await tester.pumpAndSettle();
     await tester.tap(retry);
     await tester.pumpAndSettle();
     expect(source.approvals, isEmpty);
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await tester.pumpAndSettle();
     expect(source.approvals, isEmpty);
+    await tester.tap(find.byTooltip('Message actions').last);
+    await tester.pumpAndSettle();
     await tester.tap(retry);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Retry anyway'));

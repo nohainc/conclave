@@ -646,8 +646,13 @@ extension _AxAppController on _AxAppStateMixin {
         navigation.threadId == notification.threadId &&
         _tabVisible;
     if (isViewingThread) _persistNotificationsRead(ids: [notification.id]);
-    // A hidden tab cannot show the in-app badge, so surface it as an alert.
-    if (!_tabVisible && !notification.read) {
+    // Anything not already on screen is also surfaced as a browser alert, so
+    // it is noticed with the tab in the background and in the foreground.
+    if (shouldShowBrowserAlert(
+        read: notification.read,
+        tabVisible: _tabVisible,
+        viewingRun: isViewingRun,
+        viewingThread: isViewingThread)) {
       browserAlerts.show(
         title: notification.title,
         body: notification.message,

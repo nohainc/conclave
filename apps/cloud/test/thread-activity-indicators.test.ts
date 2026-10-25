@@ -116,13 +116,47 @@ it("flags a Thread while Work is active and unread when it finishes", async () =
        VALUES('w1','T2','alice','stateless','direct',1,'{}','running',?,?)`,
     )
     .run(now, now);
-  expect(await flags("bob")).toEqual({ T1: [false, false], T2: [true, false] });
-  expect(await spaceFlags("bob")).toEqual([true, false]);
+  // Alice's prompt is unread for Bob as soon as it is sent, and running.
+  expect(await flags("bob")).toEqual({ T1: [false, false], T2: [true, true] });
+  expect(await spaceFlags("bob")).toEqual([true, true]);
+  expect(await flags("alice")).toEqual({
+    T1: [false, false],
+    T2: [true, false],
+  });
 
   sqlite
     .prepare("UPDATE work_requests SET status='completed', updated_at=?")
     .run(new Date(Date.now() + 1000).toISOString());
   expect(await flags("bob")).toEqual({ T1: [false, false], T2: [false, true] });
+});
+
+it.each(["queued", "running", "cancelled", "timed_out"])(
+  "marks another member's %s prompt unread until read",
+  async (status) => {
+    const { sqlite, as, env, flags } = fixture();
+    const now = new Date().toISOString();
+    sqlite
+      .prepare(
+        `INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,created_at,updated_at)
+         VALUES('w1','T2','alice','stateless','direct',1,'{}',?,?,?)`,
+      )
+      .run(status, now, now);
+    expect((await flags("bob")).T2![1]).toBe(true);
+    expect((await flags("alice")).T2![1]).toBe(false);
+    await handleMarkThreadRead(as("bob", "POST"), env, "T2");
+    expect((await flags("bob")).T2![1]).toBe(false);
+  },
+);
+
+it("does not mark prompts sent before the member joined", async () => {
+  const { sqlite, flags } = fixture();
+  sqlite
+    .prepare(
+      `INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,created_at,updated_at)
+       VALUES('w1','T2','alice','stateless','direct',1,'{}','cancelled','2019-01-01T00:00:00.000Z','2019-01-01T00:00:00.000Z')`,
+    )
+    .run();
+  expect((await flags("bob")).T2![1]).toBe(false);
 });
 
 it("ignores abandoned Work older than a day", async () => {

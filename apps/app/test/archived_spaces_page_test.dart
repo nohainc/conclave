@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,6 +15,29 @@ class _ArchivedSource extends AxFixtureDataSource {
   _ArchivedSource(this.archived);
 
   final List<AxSpace> archived;
+  final restored = <String>[];
+  final deleted = <String>[];
+  Completer<void>? restoreGate;
+
+  @override
+  Future<AxSpace> updateSpace(
+      {required String spaceId,
+      String? name,
+      String? description,
+      String? instructions,
+      Map<String, dynamic>? settings}) async {
+    restored.add(spaceId);
+    await restoreGate?.future;
+    final space = archived.firstWhere((space) => space.id == spaceId);
+    archived.remove(space);
+    return space.copyWith(archived: false);
+  }
+
+  @override
+  Future<void> deleteSpace({required String spaceId}) async {
+    deleted.add(spaceId);
+    archived.removeWhere((space) => space.id == spaceId);
+  }
 
   @override
   Future<List<AxSpace>> loadSpaces({bool includeArchived = false}) async =>
@@ -91,11 +116,14 @@ void main() {
             .dx,
       ),
     );
-    expect(find.text('Restore'), findsNWidgets(2));
-    expect(find.text('Delete'), findsNWidgets(2));
+    expect(find.text('Restore'), findsNothing);
+    expect(find.text('Delete'), findsNothing);
+    expect(find.byTooltip('Archived Space actions'), findsNWidgets(2));
 
     await tester
-        .tap(find.byKey(const ValueKey('delete-archived-space-archived-1')));
+        .tap(find.byKey(const ValueKey('archived-space-actions-archived-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     expect(find.text('Delete Research?'), findsOneWidget);
     expect(
@@ -105,5 +133,58 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('Delete Research?'), findsNothing);
+    expect(source.deleted, isEmpty);
+    await tester
+        .tap(find.byKey(const ValueKey('archived-space-actions-archived-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(source.deleted, ['archived-1']);
+    expect(find.text('Research'), findsNothing);
+    expect(find.text('Holiday planning'), findsOneWidget);
+  });
+  testWidgets('compact menus restore the selected Space and disable while busy',
+      (tester) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final width in [390.0, 1000.0]) {
+      await tester.binding.setSurfaceSize(Size(width, 800));
+      final source = _ArchivedSource([first, second]);
+      final gate = Completer<void>();
+      source.restoreGate = gate;
+      final engine = AxSyncEngine();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: ArchivedSpacesPage(
+          key: ValueKey(width),
+          archivedSpaces: AxArchivedSpaces(source, engine: engine),
+          mutations: AxCollaborationMutations(source, engine: engine),
+        ))),
+      ));
+      await tester.pumpAndSettle();
+      final card = find.byKey(const ValueKey('archived-space-archived-2'));
+      final trigger =
+          find.byKey(const ValueKey('archived-space-actions-archived-2'));
+      expect(tester.getSize(trigger), const Size(48, 48));
+      expect(tester.getTopRight(trigger).dx,
+          lessThanOrEqualTo(tester.getTopRight(card).dx));
+      await tester.tap(trigger);
+      await tester.pumpAndSettle();
+      expect(find.text('Restore'), findsOneWidget);
+      expect(find.text('Delete'), findsOneWidget);
+      await tester.tap(find.text('Restore'));
+      await tester.pump();
+      expect(source.restored, ['archived-2']);
+      expect(tester.widget<PopupMenuButton<String>>(trigger).enabled, isFalse);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Holiday planning'), findsNothing);
+      expect(find.text('Research'), findsOneWidget);
+      expect(source.deleted, isEmpty);
+      expect(tester.takeException(), isNull);
+    }
   });
 }

@@ -47,6 +47,46 @@ final status = 'ready';
 ''';
 
 void main() {
+  testWidgets(
+      'note previews preserve blank-line spacing without changing messages',
+      (tester) async {
+    Future<double> height(String data, bool preserve) async {
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+        body: ConclaveMarkdownBody(data: data, preserveBlankLines: preserve),
+      )));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      return tester.getSize(find.byType(ConclaveMarkdownBody)).height;
+    }
+
+    final normal = await height('Alpha\n\nBeta', false);
+    expect(await height('Alpha\n\n\n\nBeta', false), normal);
+    final oneBlank = await height('Alpha\n\nBeta', true);
+    final threeBlanks = await height('Alpha\n\n\n\nBeta', true);
+    expect(threeBlanks, greaterThan(oneBlank));
+    expect(await height('\n\nAlpha\n \n\nBeta\n\n', true),
+        greaterThan(threeBlanks));
+  });
+
+  testWidgets(
+      'visible blank lines retain headings, lists and literal code whitespace',
+      (tester) async {
+    const note = '# Heading\n\n- Item\n\n```text\none\n\nthree\n```\n\nTail';
+    await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(
+      body: ConclaveMarkdownBody(data: note, preserveBlankLines: true),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('Heading', findRichText: true), findsOneWidget);
+    expect(find.text('Item', findRichText: true), findsOneWidget);
+    expect(find.text('Tail', findRichText: true), findsOneWidget);
+    expect(
+        tester.widget<ConclaveCodeBlock>(find.byType(ConclaveCodeBlock)).code,
+        contains('one\n\nthree'));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('selection copies the whole response across paragraphs and code',
       (tester) async {
     String? copied;

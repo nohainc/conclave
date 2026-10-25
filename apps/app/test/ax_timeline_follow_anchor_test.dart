@@ -153,6 +153,75 @@ void main() {
       expect(controller.position.extentAfter, greaterThan(1000));
     });
   }
+  testWidgets('ThreadPage holds a long Work answer at its first line',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1300, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final chat = AxDiscussionCache(null);
+    final work = AxWorkHistoryCache(null);
+    AxWorkRequest request(String id, {String? response}) => AxWorkRequest(
+          id: id,
+          requestedByName: 'You',
+          prompt: 'Prompt $id',
+          workflowId: 'direct',
+          workflowVersion: 2,
+          status: response == null ? 'running' : 'completed',
+          createdAt: '2026-10-15T00:0${id.length}:00.000Z',
+          steps: const [],
+          finalText: response,
+        );
+    final earlier = [
+      for (var i = 0; i < 8; i++)
+        request('r$i', response: 'Earlier answer $i\n\n${'Line.\n\n' * 6}')
+    ];
+    chat.engine.update(chat.query('thread'),
+        (_) => AxDiscussionHistory(messages: const [], initialLoaded: true));
+    work.engine.update(
+        work.query('thread'),
+        (_) => AxWorkHistory(
+            requests: [...earlier, request('latest')], initialLoaded: true));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      space: const AxSpace(
+          id: 'space', name: 'Space', branch: '', lastActivity: ''),
+      thread: const AxThread(
+          id: 'thread',
+          spaceId: 'space',
+          name: 'Thread',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      discussionCache: chat,
+      workHistoryCache: work,
+      onBackToSpace: () {},
+      onArchive: () {},
+    ))));
+    await tester.pumpAndSettle();
+    final history = find.byKey(const ValueKey('chat-history-scroll'));
+    final controller = tester.widget<CustomScrollView>(history).controller!;
+    expect(controller.position.extentAfter, lessThan(1));
+
+    final longWork =
+        'Answer opening\n\n${List.filled(80, 'Answer body paragraph.').join('\n\n')}';
+    work.replace('thread', [...earlier, request('latest', response: longWork)]);
+    await tester.pumpAndSettle();
+    // The answer starts at the top of the view instead of its last line.
+    final viewport = tester.getRect(history);
+    final opening = find.descendant(
+        of: history,
+        matching: find.textContaining('Answer opening', findRichText: true));
+    expect(opening, findsOneWidget);
+    expect(tester.getTopLeft(opening).dy,
+        inInclusiveRange(viewport.top - 1, viewport.top + 120));
+    expect(controller.position.extentAfter, greaterThan(500));
+    await tester.pumpWidget(const SizedBox());
+    chat.clear();
+    work.clear();
+  });
+
   testWidgets(
       'ThreadPage follows incoming Chat and Work to the end and respects manual scrolling',
       (tester) async {

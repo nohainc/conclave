@@ -92,9 +92,18 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                space.name,
-                style: Theme.of(context).textTheme.titleMedium,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Text(space.name,
+                          style: Theme.of(context).textTheme.titleMedium),
+                    ),
+                  ),
+                  _actionsMenu(space),
+                ],
               ),
               const SizedBox(height: 10),
               Text(
@@ -106,37 +115,62 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
                 style: TextStyle(
                     color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
-              const SizedBox(height: 14),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    FilledButton.tonal(
-                      key: ValueKey('restore-archived-space-${space.id}'),
-                      onPressed: _busy.contains(space.id)
-                          ? null
-                          : () => _restore(space),
-                      child: Text(
-                          _busy.contains(space.id) ? 'Restoring…' : 'Restore'),
-                    ),
-                    OutlinedButton(
-                      key: ValueKey('delete-archived-space-${space.id}'),
-                      style: OutlinedButton.styleFrom(
-                          foregroundColor: Theme.of(context).colorScheme.error),
-                      onPressed: _busy.contains(space.id)
-                          ? null
-                          : () => _confirmDelete(space),
-                      child: Text(
-                          _busy.contains(space.id) ? 'Deleting…' : 'Delete'),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
       );
+
+  Widget _actionsMenu(AxSpace space) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return PopupMenuButton<String>(
+      key: ValueKey('archived-space-actions-${space.id}'),
+      tooltip: 'Archived Space actions',
+      enabled: !_busy.contains(space.id),
+      padding: EdgeInsets.zero,
+      color: ConclaveMenuStyle.background(isDark),
+      surfaceTintColor: Colors.transparent,
+      shape: ConclaveMenuStyle.shape(isDark),
+      menuPadding: ConclaveMenuStyle.padding,
+      onSelected: (action) {
+        if (action == 'restore') unawaited(_restore(space));
+        if (action == 'delete') unawaited(_confirmDelete(space));
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem<String>(
+          value: 'restore',
+          height: 48,
+          child: Row(children: [
+            Icon(Icons.unarchive_outlined, size: 16),
+            SizedBox(width: 8),
+            Text('Restore', style: ConclaveMenuStyle.textStyle),
+          ]),
+        ),
+        PopupMenuItem<String>(
+          value: 'delete',
+          height: 48,
+          child: Row(children: [
+            Icon(Icons.delete_outline_rounded,
+                size: 16, color: Theme.of(context).colorScheme.error),
+            const SizedBox(width: 8),
+            Text('Delete',
+                style: ConclaveMenuStyle.textStyle
+                    .copyWith(color: Theme.of(context).colorScheme.error)),
+          ]),
+        ),
+      ],
+      child: SizedBox(
+        width: 48,
+        height: 48,
+        child: _busy.contains(space.id)
+            ? const Center(
+                child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2)))
+            : const Icon(Icons.more_vert, size: 16),
+      ),
+    );
+  }
 
   Future<void> _restore(AxSpace space) async {
     setState(() => _busy.add(space.id));

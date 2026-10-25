@@ -132,6 +132,40 @@ const request = (body: unknown, method = "POST") =>
 beforeEach(() => authorize.mockClear());
 
 describe("Thread attachments", () => {
+  it("accepts exactly 10 MiB per file and rejects larger declared uploads", async () => {
+    const f = fixture();
+    try {
+      const size = 10 * 1024 * 1024;
+      const response = await handleUploadWorkRequestFile(
+        new Request("https://test?name=boundary.bin", {
+          method: "POST",
+          headers: { "content-length": String(size) },
+          body: new Uint8Array(size),
+        }),
+        f.env,
+        "thread",
+      );
+      expect(response.status).toBe(201);
+      const { file } = (await response.json()) as {
+        file: { sizeBytes: number };
+      };
+      expect(file.sizeBytes).toBe(size);
+      await expect(
+        handleUploadWorkRequestFile(
+          new Request("https://test", {
+            method: "POST",
+            headers: { "content-length": String(size + 24 * 1024 + 1) },
+            body: "small",
+          }),
+          f.env,
+          "thread",
+        ),
+      ).rejects.toThrow("10 MB");
+    } finally {
+      f.sqlite.close();
+    }
+  });
+
   it("accepts a file-only human message, retains previews through history and edits, and downloads the original", async () => {
     const f = fixture();
     try {
@@ -296,12 +330,12 @@ describe("Thread attachments", () => {
         handleUploadWorkRequestFile(
           new Request("https://test", {
             method: "POST",
-            body: new Uint8Array(2 * 1024 * 1024 + 1),
+            body: new Uint8Array(10 * 1024 * 1024 + 1),
           }),
           f.env,
           "thread",
         ),
-      ).rejects.toThrow("2 MB");
+      ).rejects.toThrow("10 MB");
     } finally {
       f.sqlite.close();
     }

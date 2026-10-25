@@ -3,6 +3,7 @@ import '../common/quiet_notices.dart';
 import '../common/thread_dialogs.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import '../../brand.dart';
 import '../../navigation/ax_navigation.dart';
@@ -237,7 +238,9 @@ class SpaceTree extends StatelessWidget {
       children: [
         _SidebarHoverRow(
           key: ValueKey('sidebar-space-row-${space.id}'),
-          builder: (context, hovered, menuOpenChanged) {
+          actionsLabel: 'Space actions',
+          enabled: !space.id.startsWith('local-space-'),
+          builder: (context, hovered, menuOpenChanged, menuController) {
             final isSpaceActive = isSpaceFocused ||
                 hovered ||
                 (pageLayout && shellContext.selectedSpace?.id == space.id);
@@ -299,7 +302,7 @@ class SpaceTree extends StatelessWidget {
                                   top: -2,
                                   child: SidebarActivityIndicators(
                                     running: anyRunning,
-                                    unread: anyUnread && !anyRunning,
+                                    unread: anyUnread,
                                     gap: 0,
                                   ),
                                 ),
@@ -341,7 +344,8 @@ class SpaceTree extends StatelessWidget {
                           onPressed: () => onCreateThread!(space),
                         ),
                       isSpaceActive
-                          ? _spaceMenu(context, space, menuOpenChanged)
+                          ? _spaceMenu(
+                              context, space, menuOpenChanged, menuController)
                           : const SizedBox(width: _menuSlotWidth),
                     ],
                   ),
@@ -375,7 +379,9 @@ class SpaceTree extends StatelessWidget {
 
               return _SidebarHoverRow(
                 key: ValueKey('sidebar-thread-row-${thread.id}'),
-                builder: (context, hovered, menuOpenChanged) {
+                actionsLabel: 'Thread actions',
+                enabled: !thread.id.startsWith('local-thread-'),
+                builder: (context, hovered, menuOpenChanged, menuController) {
                   final isThreadActive = isThreadSelected || hovered;
                   return InkWell(
                     hoverColor: Colors.transparent,
@@ -447,6 +453,7 @@ class SpaceTree extends StatelessWidget {
                                   space,
                                   thread,
                                   menuOpenChanged,
+                                  menuController,
                                   visibleThreads.map((t) => t.id).toList(),
                                   visibleThreads
                                       .where((t) => t.isPinned)
@@ -466,7 +473,7 @@ class SpaceTree extends StatelessWidget {
   }
 
   Widget _threadMenu(BuildContext context, AxSpace space, AxThread thread,
-      ValueChanged<bool> menuOpenChanged,
+      ValueChanged<bool> menuOpenChanged, MenuController menuController,
       [List<String> visibleOrder = const [],
       List<String> pinnedOrder = const []]) {
     final isPinnedHere = thread.isPinned && pinnedOrder.contains(thread.id);
@@ -499,6 +506,7 @@ class SpaceTree extends StatelessWidget {
       width: pageLayout ? 44 : 28,
       height: pageLayout ? 44 : 28,
       child: MenuAnchor(
+        controller: menuController,
         style: menuStyle,
         onOpen: () => menuOpenChanged(true),
         onClose: () => menuOpenChanged(false),
@@ -613,8 +621,8 @@ class SpaceTree extends StatelessWidget {
     );
   }
 
-  Widget _spaceMenu(
-      BuildContext context, AxSpace space, ValueChanged<bool> menuOpenChanged) {
+  Widget _spaceMenu(BuildContext context, AxSpace space,
+      ValueChanged<bool> menuOpenChanged, MenuController menuController) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final pinnedOrder = ([
       for (final item in shellContext.spaces)
@@ -659,6 +667,7 @@ class SpaceTree extends StatelessWidget {
       width: pageLayout ? 44 : 28,
       height: pageLayout ? 44 : 28,
       child: MenuAnchor(
+        controller: menuController,
         style: menuStyle,
         onOpen: () => menuOpenChanged(true),
         onClose: () => menuOpenChanged(false),
@@ -900,18 +909,38 @@ class SpaceTree extends StatelessWidget {
 /// background, pin, and menu like the active row. A row stays active while
 /// its menu is open, so moving into the menu does not dismiss it.
 class _SidebarHoverRow extends StatefulWidget {
-  const _SidebarHoverRow({super.key, required this.builder});
+  const _SidebarHoverRow({
+    super.key,
+    required this.builder,
+    required this.actionsLabel,
+    this.enabled = true,
+  });
 
-  final Widget Function(BuildContext context, bool hovered,
-      ValueChanged<bool> menuOpenChanged) builder;
+  final String actionsLabel;
+  final bool enabled;
+
+  final Widget Function(
+      BuildContext context,
+      bool hovered,
+      ValueChanged<bool> menuOpenChanged,
+      MenuController menuController) builder;
 
   @override
   State<_SidebarHoverRow> createState() => _SidebarHoverRowState();
 }
 
 class _SidebarHoverRowState extends State<_SidebarHoverRow> {
+  final _menuController = MenuController();
   bool _hovered = false;
   bool _menuOpen = false;
+
+  void _openMenu() {
+    // Mount the hover-only anchor before asking it to open.
+    setState(() => _menuOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _menuController.open();
+    });
+  }
 
   void _menuOpenChanged(bool open) {
     if (!mounted || _menuOpen == open) return;
@@ -922,7 +951,16 @@ class _SidebarHoverRowState extends State<_SidebarHoverRow> {
   Widget build(BuildContext context) => MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
-        child: widget.builder(context, _hovered || _menuOpen, _menuOpenChanged),
+        child: Semantics(
+          customSemanticsActions: widget.enabled
+              ? {CustomSemanticsAction(label: widget.actionsLabel): _openMenu}
+              : null,
+          child: GestureDetector(
+            onLongPress: widget.enabled ? _openMenu : null,
+            child: widget.builder(context, _hovered || _menuOpen,
+                _menuOpenChanged, _menuController),
+          ),
+        ),
       );
 }
 

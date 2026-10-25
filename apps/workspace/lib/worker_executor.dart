@@ -62,8 +62,8 @@ WorkerExecutionPolicy assignmentExecutionPolicy(
       : WorkerExecutionPolicy.restricted;
 }
 
-/// Per-file limit only; Cloud enforces the same 2 MB and sets no total limit.
-const _maxWorkRequestFileBytes = 2 * 1024 * 1024;
+/// Per-file limit only; Cloud enforces the same 10 MB and sets no total limit.
+const _maxWorkRequestFileBytes = 10 * 1024 * 1024;
 const _maxWorkRequestFileEncodedChars =
     ((_maxWorkRequestFileBytes + 2) ~/ 3) * 4;
 

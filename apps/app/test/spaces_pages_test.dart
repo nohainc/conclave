@@ -211,7 +211,8 @@ void main() {
       expect(_inAiHistory(find.text('2.0 KB')), findsNothing);
       expect(_inAiHistory(find.text('12 B')), findsNothing);
       expect(find.text('Original Model Name'), findsWidgets);
-      expect(find.byTooltip('Original Model Name · Medium'), findsWidgets);
+      expect(find.text('· Medium'), findsWidgets);
+      expect(find.byIcon(Icons.info_outline_rounded), findsNothing);
       expect(
           find.byWidgetPredicate((widget) =>
               widget is Image &&
@@ -352,13 +353,14 @@ void main() {
           onArchive: _noop,
         ))));
         await tester.pumpAndSettle();
+        // The step offers no Retry, so the text must not promise one.
         final friendly = code == 'session_resume_failed'
-            ? 'The worker could not continue the previous conversation. Please retry your request.'
+            ? 'The worker could not continue the previous conversation. Send a new message to try again.'
             : code == 'quota_exhausted'
                 ? 'The provider’s usage limit has been reached. Wait for the limit to reset or choose another worker, then retry.'
                 : code == 'context_limit_exceeded'
                     ? 'This conversation exceeds the supported context limit. Clear AI History and retry; the latest answer is kept as context.'
-                    : 'Your request could not be completed. Please retry.';
+                    : 'Your request could not be completed. Send a new message to try again.';
         expect(find.text(friendly), findsOneWidget);
         expect(find.textContaining('C123'), findsNothing);
         for (final hidden in [
@@ -375,6 +377,60 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
+  }
+
+  for (final retryAllowed in [true, false]) {
+    testWidgets(
+        'failure text promises Retry only when it is offered '
+        '(retryAllowed: $retryAllowed)', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(900, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final step = AxWorkRequestStep(
+          kind: 'chat',
+          status: 'failed',
+          workerId: 'worker-a',
+          workerDisplayName: 'ChatGPT',
+          errorCode: 'execution_failed',
+          retryAllowed: retryAllowed);
+      final request = AxWorkRequest(
+          id: 'failed-request',
+          requestedByName: 'User',
+          prompt: 'Continue',
+          workflowId: 'chat',
+          workflowVersion: 1,
+          status: 'failed',
+          createdAt: '2026-10-07T10:00:00Z',
+          steps: [step]);
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: ThreadPage(
+        initialTab: 1,
+        space: const AxSpace(
+            id: 'space-1',
+            name: 'Space',
+            branch: '',
+            lastActivity: '',
+            role: 'owner'),
+        thread: const AxThread(
+            id: 'stream-1',
+            spaceId: 'space-1',
+            name: 'Stream',
+            lead: '',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: '',
+            queueStatus: ''),
+        dataSource: _ContinuityFailureDataSource(request, step),
+        onBackToSpace: _noop,
+        onArchive: _noop,
+      ))));
+      await tester.pumpAndSettle();
+      expect(
+          find.text(retryAllowed
+              ? 'Your request could not be completed. Please retry.'
+              : 'Your request could not be completed. Send a new message to try again.'),
+          findsOneWidget);
+    });
   }
 
   for (final workflow in ['chat', 'direct']) {
@@ -509,15 +565,26 @@ void main() {
       expect(_inConversation(find.text('model-x')), findsOneWidget);
       expect(_inConversation(find.text('model-y')), findsOneWidget);
       expect(_inConversation(find.text('ChatGPT')), findsOneWidget);
-      expect(
-          _inConversation(find.byTooltip('model-x · Medium')), findsOneWidget);
-      expect(_inConversation(find.byTooltip('model-y · High')), findsOneWidget);
-      expect(_inConversation(find.byTooltip('Default model · Default effort')),
-          findsOneWidget);
-      expect(find.text('Default model · Default effort'), findsNothing);
-      await tester.tap(_inConversation(find.byTooltip('model-x · Medium')));
-      await tester.pumpAndSettle();
-      expect(find.text('model-x · Medium'), findsOneWidget);
+      expect(_inConversation(find.text('· Medium')), findsOneWidget);
+      expect(_inConversation(find.text('· High')), findsOneWidget);
+      expect(_inConversation(find.text('· Default effort')), findsOneWidget);
+      expect(_inConversation(find.byIcon(Icons.info_outline_rounded)),
+          findsNothing);
+      for (final width in [390.0, 1200.0]) {
+        await tester.binding.setSurfaceSize(Size(width, 1400));
+        await tester.pumpAndSettle();
+        expect(_inConversation(find.text('· Medium')), findsOneWidget);
+        expect(_inConversation(find.text('· High')), findsOneWidget);
+        final senderIcons = tester.widgetList<Image>(_inConversation(
+            find.byWidgetPredicate((widget) =>
+                widget is Image &&
+                widget.semanticLabel?.endsWith(' icon') == true)));
+        expect(senderIcons, isNotEmpty);
+        for (final icon in senderIcons) {
+          expect(tester.getSize(find.byWidget(icon)), const Size(24, 24));
+        }
+        expect(tester.takeException(), isNull);
+      }
       expect(find.textContaining('Model changed'), findsNothing);
       expect(find.textContaining('Effort changed'), findsNothing);
       expect(find.text('Wrong current worker'), findsNothing);
@@ -1498,8 +1565,75 @@ void main() {
       expect(prompts, ['Second']);
       expect(find.textContaining('Queued · 1'), findsOneWidget);
       expect(tester.takeException(), isNull);
+      // Leaving with messages queued would start the background sender.
+      ThreadPage.resetWorkQueues();
+      await tester.pumpWidget(const SizedBox());
     });
   }
+  testWidgets('queued messages are still sent after leaving the Thread',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final data = _SlowSubmissionDataSource()..ready.complete([]);
+    AxWorkRequest running(String status) => AxWorkRequest(
+          id: 'running-1',
+          requestedByName: 'You',
+          requestedByUserId: 'user-owner',
+          prompt: 'First request',
+          workflowId: 'direct',
+          workflowVersion: 1,
+          status: status,
+          createdAt: '2026-10-06T10:00:00Z',
+          steps: const [],
+          finalText: status == 'completed' ? 'First answer' : null,
+        );
+    data.requests = [running('running')];
+    final prompts = <String>[];
+    Widget page(String threadId) => MaterialApp(
+            home: Scaffold(
+                body: ThreadPage(
+          initialTab: 1,
+          space: const AxSpace(
+              id: 'space-1',
+              name: 'Space',
+              branch: '',
+              lastActivity: '',
+              role: 'owner'),
+          thread: AxThread(
+              id: threadId,
+              spaceId: 'space-1',
+              name: 'Stream',
+              lead: '',
+              status: 'active',
+              brief: '',
+              primaryWorkspace: '',
+              queueStatus: ''),
+          dataSource: data,
+          currentUserId: 'user-owner',
+          onBackToSpace: _noop,
+          onArchive: _noop,
+          onRunWork: (prompt, __, ___, key) async {
+            prompts.add(prompt);
+            return 'saved-${prompts.length}';
+          },
+        )));
+    await tester.pumpWidget(page('thread-1'));
+    await tester.pumpAndSettle();
+    await _askAi(tester);
+    await tester.enterText(find.byType(TextField).first, 'Queued while away');
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Queued · 1'), findsOneWidget);
+
+    // Leave the Thread page entirely, then let the running request finish.
+    await tester.pumpWidget(const SizedBox());
+    data.requests = [running('completed')];
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    expect(prompts, ['Queued while away']);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a failed request pauses the queue until the user resumes it',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1400));
@@ -1713,6 +1847,9 @@ void main() {
     final position = history();
     expect(position.pixels, closeTo(position.maxScrollExtent, 1));
     expect(tester.takeException(), isNull);
+    // Leaving with messages queued would start the background sender.
+    ThreadPage.resetWorkQueues();
+    await tester.pumpWidget(const SizedBox());
   });
   testWidgets('Chat and Work controls stay fixed while history scrolls',
       (tester) async {
@@ -1833,8 +1970,9 @@ void main() {
     expect(top('Use passkeys'), lessThan(top('After AI')));
     expect(find.byKey(const ValueKey('work-history-scroll')), findsNothing);
     // The live request is not a Chat message: no edit or delete.
-    expect(find.byTooltip('Edit'), findsNWidgets(2));
-    expect(find.byTooltip('Delete'), findsNWidgets(2));
+    expect(find.byTooltip('Message actions'), findsWidgets);
+    expect(find.byTooltip('Edit'), findsNothing);
+    expect(find.byTooltip('Delete'), findsNothing);
 
     await _askAi(tester);
     await tester.enterText(find.byType(TextField).last, 'Next request');
@@ -1941,7 +2079,7 @@ void main() {
     // Archived AI entries are history: neither the request nor the answer
     // may be edited.
     expect(find.byTooltip('Edit'), findsNothing);
-    expect(find.byTooltip('Copy'), findsNWidgets(2));
+    expect(find.byTooltip('Message actions'), findsNWidgets(2));
   });
   testWidgets('Chat create edit and copy preserve raw Markdown',
       (tester) async {
@@ -1993,21 +2131,8 @@ void main() {
         widget is Text && widget.data?.startsWith('2026-10-06 ·') == true);
     expect(timestamp, findsOneWidget);
     expect(tester.getTopLeft(timestamp).dx,
-        lessThan(tester.getTopLeft(find.byTooltip('Edit')).dx));
-    expect(tester.getTopLeft(find.byTooltip('Edit')).dx,
-        lessThan(tester.getTopLeft(find.byTooltip('Copy')).dx));
-    for (final tooltip in [
-      'Delete',
-      'Edit',
-      'Copy',
-    ]) {
-      expect(
-          find.descendant(
-              of: find.byTooltip(tooltip),
-              matching: find.byType(AnimatedScale)),
-          findsOneWidget);
-    }
-    await tester.tap(find.byTooltip('Edit'));
+        lessThan(tester.getTopLeft(find.byTooltip('Message actions')).dx));
+    await _chooseMessageAction(tester, 'Edit');
     await tester.pumpAndSettle();
     expect(
         tester.widget<TextField>(find.byType(TextField).first).controller!.text,
@@ -2017,7 +2142,7 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(ds.editedSource, edited);
-    await tester.tap(find.byTooltip('Copy'));
+    await _chooseMessageAction(tester, 'Copy');
     await tester.pump();
     expect(copied, edited);
   });
@@ -2079,19 +2204,18 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     await _openAiHistory(tester);
-    final copies = find.byTooltip('Copy');
-    expect(copies, findsNWidgets(2));
-    expect(
-        find.descendant(of: copies.first, matching: find.byType(AnimatedScale)),
-        findsOneWidget);
-    await tester.ensureVisible(copies.first);
-    await tester.tap(copies.first);
-    await tester.pump();
+    final menus = find.byTooltip('Message actions');
+    expect(menus, findsNWidgets(2));
+    await tester.tap(menus.first);
+    await tester.pumpAndSettle();
+    expect(find.text('Edit'), findsNothing);
+    expect(find.text('Delete'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    await _chooseMessageAction(tester, 'Copy', menu: menus.first);
     expect(copied, prompt);
     expect(find.text('Prompt copied to clipboard'), findsNothing);
-    await tester.ensureVisible(copies.last);
-    await tester.tap(copies.last);
-    await tester.pump();
+    await _chooseMessageAction(tester, 'Copy', menu: menus.last);
     expect(copied, response);
     final timestamps = find.byWidgetPredicate((widget) =>
         widget is Text && widget.data?.startsWith('2026-10-01 ·') == true);
@@ -2151,8 +2275,8 @@ void main() {
     // The failure diagnostic lives in AI History.
     await tester.tap(find.byKey(const ValueKey('ai-history-toggle')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byTooltip('Copy').last);
-    await tester.tap(find.byTooltip('Copy').last);
+    await _chooseMessageAction(tester, 'Copy',
+        menu: find.byTooltip('Message actions').last);
     await tester.pumpAndSettle();
     expect(copied, message);
     final diagnostic = tester.widget<SelectableText>(find.byWidgetPredicate(
@@ -2659,6 +2783,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<TextField>(composer).controller!.text, 'Older prompt');
     expect(list, findsNothing);
+
+    // The + menu works with a draft on both phone and desktop widths.
+    for (final width in [390.0, 1400.0]) {
+      await tester.binding.setSurfaceSize(Size(width, 900));
+      await tester.pumpAndSettle();
+      await tester.enterText(composer, 'Unsent draft');
+      await tester.tap(find.byKey(const ValueKey('work-add-attachments')));
+      await tester.pumpAndSettle();
+      expect(find.text('Add files'), findsOneWidget);
+      await tester.tap(find.text('Request history'));
+      await tester.pumpAndSettle();
+      expect(list, findsOneWidget);
+      expect(
+          tester.widget<TextField>(composer).controller!.text, 'Unsent draft');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(list, findsNothing);
+      expect(
+          tester.widget<TextField>(composer).controller!.text, 'Unsent draft');
+
+      await tester.tap(find.byKey(const ValueKey('work-add-attachments')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Request history'));
+      await tester.pumpAndSettle();
+      await tester.tap(newer);
+      await tester.pumpAndSettle();
+      expect(
+          tester.widget<TextField>(composer).controller!.text, 'Newer prompt');
+      expect(list, findsNothing);
+    }
   });
 
   testWidgets('Work history uses slow fallback and scoped reconnect discovery',
@@ -2796,14 +2950,14 @@ void main() {
     expect(find.text('You'), findsNothing);
 
     // Verify copy message button exists and triggers
-    expect(find.byTooltip('Copy'), findsOneWidget);
-    await tester.tap(find.byTooltip('Copy'));
+    expect(find.byTooltip('Message actions'), findsOneWidget);
+    await _chooseMessageAction(tester, 'Copy');
     await tester.pumpAndSettle();
     expect(find.text('Message copied to clipboard'), findsNothing);
 
     // Verify edit message button allows editing in-place
-    expect(find.byTooltip('Edit'), findsOneWidget);
-    await tester.tap(find.byTooltip('Edit'));
+    expect(find.byTooltip('Message actions'), findsOneWidget);
+    await _chooseMessageAction(tester, 'Edit');
     await tester.pumpAndSettle();
     expect(find.text('Save'), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);
@@ -2820,8 +2974,8 @@ void main() {
         findsOneWidget);
 
     // Verify delete message button shows confirmation and removes message
-    expect(find.byTooltip('Delete'), findsOneWidget);
-    await tester.tap(find.byTooltip('Delete'));
+    expect(find.byTooltip('Message actions'), findsOneWidget);
+    await _chooseMessageAction(tester, 'Delete');
     await tester.pumpAndSettle();
     expect(find.text('Delete message?'), findsOneWidget);
     expect(
@@ -2835,7 +2989,7 @@ void main() {
             'The login failure reproduces on a fresh checkout. (Updated)'),
         findsOneWidget);
 
-    await tester.tap(find.byTooltip('Delete'));
+    await _chooseMessageAction(tester, 'Delete');
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
@@ -2857,11 +3011,22 @@ void main() {
   });
 
   testWidgets('Chat messages show their calendar date', (tester) async {
-    for (final own in [true, false]) {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final config in [
+      (true, TargetPlatform.iOS),
+      (false, TargetPlatform.android),
+      (true, TargetPlatform.macOS),
+      (false, TargetPlatform.windows),
+    ]) {
+      final own = config.$1;
+      final touch = config.$2 == TargetPlatform.iOS ||
+          config.$2 == TargetPlatform.android;
+      await tester.binding.setSurfaceSize(Size(touch ? 390 : 1200, 1200));
       await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(platform: config.$2),
         home: Scaffold(
           body: ThreadPage(
-            key: ValueKey(own),
+            key: ValueKey(config),
             space: const AxSpace(
               id: 'space-1',
               name: 'Space One',
@@ -2897,8 +3062,7 @@ void main() {
       );
       final date = find.byWidgetPredicate((widget) =>
           widget is Text && widget.data?.startsWith('2026-10-05 ·') == true);
-      final copyX = tester.getTopLeft(find.byTooltip('Copy')).dx;
-      final editX = tester.getTopLeft(find.byTooltip('Edit')).dx;
+      final menuX = tester.getTopLeft(find.byTooltip('Message actions')).dx;
       final dateX = tester.getTopLeft(date).dx;
       final bubbleFinder = find
           .ancestor(
@@ -2916,15 +3080,28 @@ void main() {
           own
               ? ConclaveColors.ownMessageBackground(false)
               : Colors.transparent);
-      if (own) {
-        final deleteX = tester.getTopLeft(find.byTooltip('Delete')).dx;
-        expect(dateX, lessThan(deleteX));
-        expect(deleteX, lessThan(editX));
-        expect(editX, lessThan(copyX));
-      } else {
-        expect(copyX, lessThan(editX));
-        expect(editX, lessThan(dateX));
+      expect(dateX, lessThan(menuX));
+      final trigger = find.byTooltip('Message actions');
+      expect(tester.getSize(trigger), Size(touch ? 48 : 28, touch ? 48 : 28));
+      final opacity = find
+          .ancestor(of: trigger, matching: find.byType(AnimatedOpacity))
+          .first;
+      if (!touch) {
+        // Keyboard focus reveals the same actions without needing a mouse.
+        final icon = find.descendant(
+            of: trigger, matching: find.byIcon(Icons.more_vert));
+        Focus.of(tester.element(icon)).requestFocus();
+        await tester.pumpAndSettle();
       }
+      expect(tester.widget<AnimatedOpacity>(opacity).opacity, 1);
+      await tester.tap(trigger);
+      await tester.pumpAndSettle();
+      expect(find.text('Copy'), findsOneWidget);
+      expect(find.text('Edit'), findsOneWidget);
+      expect(find.text('Delete'), own ? findsOneWidget : findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     }
   });
 
@@ -3481,12 +3658,13 @@ void main() {
     expect(_inConversation(find.text('gpt-4o')), findsOneWidget);
     expect(_inConversation(find.text('ChatGPT')), findsOneWidget);
     expect(find.textContaining('Direct Execution · 5s'), findsOneWidget);
-    expect(find.byTooltip('gpt-4o'), findsOneWidget);
+    expect(find.byIcon(Icons.info_outline_rounded), findsNothing);
+    expect(find.text('· Default effort'), findsWidgets);
 
     // Model identity stays visible in the message header.
     expect(_inConversation(find.text('claude-3-7-sonnet')), findsOneWidget);
     expect(find.textContaining('Direct Execution · 12s'), findsOneWidget);
-    expect(find.byTooltip('claude-3-7-sonnet'), findsOneWidget);
+    expect(find.byTooltip('claude-3-7-sonnet'), findsNothing);
     // A running response has worker attribution before any result text exists.
     final assetImages = tester
         .widgetList<Image>(find.byType(Image))
@@ -3550,11 +3728,8 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    final reportTooltip = find
-        .byTooltip('Report issue — sends sanitized technical diagnostics only');
-    expect(reportTooltip, findsOneWidget);
-    await tester.tap(reportTooltip);
-    await tester.pumpAndSettle();
+    await _chooseMessageAction(
+        tester, 'Report issue — sends sanitized technical diagnostics only');
     expect(dataSource.reportCalls, 1);
     expect(find.text('Reported'), findsOneWidget);
     expect(find.textContaining('sanitized technical diagnostics were sent'),
@@ -4359,5 +4534,15 @@ Future<void> _askAi(WidgetTester tester) async {
     await tester.pumpAndSettle();
   }
   await tester.tap(find.byKey(const ValueKey('composer-mode-ai')));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _chooseMessageAction(WidgetTester tester, String label,
+    {Finder? menu}) async {
+  final trigger = menu ?? find.byTooltip('Message actions').last;
+  await tester.ensureVisible(trigger);
+  await tester.tap(trigger);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(label).last);
   await tester.pumpAndSettle();
 }

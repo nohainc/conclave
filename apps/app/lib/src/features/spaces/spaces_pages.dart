@@ -59,6 +59,7 @@ part 'spaces_pages/space_workspace_selector.dart';
 part 'spaces_pages/thread_page.dart';
 part 'spaces_pages/new_thread_page.dart';
 part 'spaces_pages/thread_actions.dart';
+part 'spaces_pages/background_work_queue.dart';
 part 'spaces_pages/work_components.dart';
 part 'spaces_pages/timeline_container.dart';
 

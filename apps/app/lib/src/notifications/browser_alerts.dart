@@ -1,7 +1,7 @@
 import 'browser_alerts_stub.dart'
     if (dart.library.js_interop) 'browser_alerts_web.dart' as platform;
 
-/// Opt-in desktop alerts for a hidden browser tab. Cloud never sees the
+/// Opt-in desktop alerts for notifications the user is not already viewing. Cloud never sees the
 /// choice: the permission is the browser's and the switch is local.
 abstract interface class AxBrowserAlerts {
   bool get supported;
@@ -24,3 +24,13 @@ abstract interface class AxBrowserAlerts {
 }
 
 AxBrowserAlerts createAxBrowserAlerts() => platform.createAxBrowserAlerts();
+
+/// Whether a new notification also raises a browser alert: it must be unread
+/// and not already on screen in a visible tab.
+bool shouldShowBrowserAlert({
+  required bool read,
+  required bool tabVisible,
+  required bool viewingRun,
+  required bool viewingThread,
+}) =>
+    !read && !(tabVisible && (viewingRun || viewingThread));

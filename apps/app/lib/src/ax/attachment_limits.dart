@@ -1,7 +1,7 @@
 /// Per-request attachment limits shared by the Ask AI and Message composers.
 /// Cloud enforces the same bounds; these only give earlier, per-file feedback.
 const maxAttachmentCount = 10;
-const maxAttachmentBytes = 2 * 1024 * 1024;
+const maxAttachmentBytes = 10 * 1024 * 1024;
 
 /// Which of a multi-file selection fit alongside [existing] attachments.
 class AttachmentAdmission {
@@ -35,7 +35,7 @@ AttachmentAdmission admitAttachments({
   final skipped = <String>[];
   for (final (index, file) in candidates.indexed) {
     if (file.sizeBytes > maxAttachmentBytes) {
-      skipped.add('"${file.name}" is over 2 MB');
+      skipped.add('"${file.name}" is over 10 MB');
     } else if (existing + accepted.length >= maxAttachmentCount) {
       skipped.add('"${file.name}" exceeds the $maxAttachmentCount-file limit');
     } else {

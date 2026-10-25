@@ -11,7 +11,7 @@ import type { SecurityEnv } from "./handlers.js";
 const MAX_PREVIEW_IMAGE_CHARS = 32000;
 
 /** Per-file limit for Work Request file inputs; there is no total limit. */
-export const MAX_WORK_REQUEST_FILE_BYTES = 2 * 1024 * 1024;
+export const MAX_WORK_REQUEST_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_WORK_REQUEST_FILES = 10;
 
 const FILE_ID_PATTERN =
@@ -54,7 +54,7 @@ export async function handleUploadWorkRequestFile(
       !Number.isSafeInteger(length) ||
       length > MAX_WORK_REQUEST_FILE_BYTES + 24 * 1024
     )
-      throw new HttpError(413, "File exceeds the 2 MB limit");
+      throw new HttpError(413, "File exceeds the 10 MB limit");
   }
   let body: ArrayBuffer;
   let submittedType: string | null = null;
@@ -81,7 +81,7 @@ export async function handleUploadWorkRequestFile(
     body = await request.arrayBuffer();
   }
   if (body.byteLength > MAX_WORK_REQUEST_FILE_BYTES)
-    throw new HttpError(413, "File exceeds the 2 MB limit");
+    throw new HttpError(413, "File exceeds the 10 MB limit");
   const url = new URL(request.url);
   const name = artifactName(
     url.searchParams.get("name") ?? request.headers.get("x-file-name"),

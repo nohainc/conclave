@@ -56,7 +56,7 @@ void main() {
     );
     await expectLater(
       readWorkRequestFiles([
-        html.File([Uint8List(2 * 1024 * 1024 + 1)], 'large'),
+        html.File([Uint8List(10 * 1024 * 1024 + 1)], 'large'),
       ]),
       throwsFormatException,
     );

@@ -8,8 +8,10 @@ export const activeWorkSql = (thread: string) => `EXISTS (
      AND w.updated_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')
 )`;
 
-/** Unread means another user's Discussion message or a finished Work Request
- * is newer than `readSince`, a SQL expression for the user's read marker. */
+/** Unread means another user's Discussion message or Work Request prompt, or
+ * any finished Work Request, is newer than `readSince`, a SQL expression for
+ * the user's read marker. A prompt from someone else counts the moment it is
+ * sent, whatever its later status (including cancelled and timed out). */
 export const unreadSql = (
   thread: string,
   userParam: string,
@@ -20,6 +22,11 @@ export const unreadSql = (
      WHERE dm.thread_id = ${thread}.id
        AND dm.author_user_id <> ${userParam}
        AND dm.created_at > ${readSince}
+  ) OR EXISTS (
+    SELECT 1 FROM work_requests w
+     WHERE w.thread_id = ${thread}.id
+       AND w.requested_by_user_id <> ${userParam}
+       AND w.created_at > ${readSince}
   ) OR EXISTS (
     SELECT 1 FROM work_requests w
      WHERE w.thread_id = ${thread}.id

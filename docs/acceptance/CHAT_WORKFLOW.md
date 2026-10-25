@@ -41,3 +41,78 @@ retry/prompt behavior; they are not presentation-name lookups. Domain unions
 include Chat once and leave the persisted Work ID unchanged. Generic uses of
 “direct” database access and generated platform documentation are unrelated.
 Current operator guidance and generic new-Work test fixtures use Work.
+
+## Request recall
+
+The Work composer’s + menu includes **Request history**, alongside **Add files**,
+on phone and desktop widths. It opens the existing request picker, also reachable
+with Up/Down in an empty composer. Opening or dismissing the picker preserves the
+draft; selecting a request replaces the composer text without sending it. The
+request-history widget test in `apps/app/test/spaces_pages_test.dart` covers menu
+access, draft preservation, dismissal and touch selection at both widths.
+
+## Navigation row actions
+
+Press and hold a Space or Thread row to open its existing actions menu without
+navigating, changing expansion, or closing the mobile drawer. Releasing the hold
+does not navigate; moving to scroll before the hold threshold cancels activation.
+Ordinary taps retain navigation/expansion behavior, and desktop hover menus remain
+available. Screen readers have named **Space actions** and **Thread actions**
+custom actions. Pending local rows do not expose hold actions.
+`apps/app/test/space_tree_hover_test.dart` covers touch holds, drawer retention,
+scroll cancellation, ordinary taps, accessibility action exposure and hover.
+
+## Response effort attribution
+
+AI sender headers show the recorded effort inline beside the sender/owner labels
+(for example, **Medium** or **High**), with **Default effort** when no override
+was recorded. The former model/effort info icon is removed. Immutable turn
+attribution takes precedence over current step settings, so historical responses
+keep their original effort. The Chat/Work response-details widget tests cover
+these labels at phone and desktop widths.
+
+## Timeline icon sizing and touch selection
+
+Sender marks use a 24 × 24 logical-pixel footprint for human avatars,
+AI model/Worker icons (including initial-avatar fallbacks), and the Conclave
+logo. Footer action glyphs use 16 logical pixels for messages, requests, and
+responses. On touch platforms, the date/menu row stays visible;
+message-body long press remains available for selecting text rather than
+opening a competing actions menu.
+
+## Timeline action menus
+
+A 16 px ⋮ button beside the timestamp opens applicable actions for messages,
+requests, and responses. Message menus retain Copy, Edit, and confirmed Delete
+under the existing eligibility rules; requests and AI responses do not gain
+message editing. Response menus include permitted Retry and diagnostic reporting.
+Failure text asks the user to retry only when the menu offers Retry; failures
+without a permitted Retry (and timed-out or lost requests) ask for a new message.
+Cancel remains directly accessible for queued/running requests. Mobile platforms
+keep the footer visible with a 48 × 48 logical-pixel menu target and 48 px menu
+rows. Desktop footers reveal on hover or keyboard focus and stay revealed while
+the menu is open. Failed-request footers stay visible for recovery actions.
+Message-body long press continues to select text.
+
+AX widget tests cover menu action callbacks, exact Markdown copying, edit/save,
+delete confirmation, retry approval and diagnostic reporting, plus iOS/Android
+touch targets and desktop focus visibility.
+
+## Timeline following
+
+While a reader is at the latest content, Worker progress and new requests keep
+the timeline at its end. When a final answer arrives, the timeline stops at the
+answer's first line and stays there while the answer grows, so long responses
+are read from the top. Scrolling releases the hold; sending a request returns
+to the end.
+
+## Queued Work messages
+
+Messages sent while a request is processing wait in the Thread's queue and are
+sent one at a time as each request finishes. The queue keeps sending after the
+user leaves the Thread: a background sender re-reads the Thread's requests
+every few seconds and sends the next message once nothing is processing. It
+stops when the queue is empty or paused, or when the Thread is opened again
+(the page then dispatches itself). A failed send keeps the message first in
+line and pauses the queue until the user resumes it from the Thread. Queues
+live for the app session; closing or reloading the app discards them.

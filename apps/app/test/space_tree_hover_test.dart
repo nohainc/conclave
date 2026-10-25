@@ -58,6 +58,80 @@ void main() {
     expect(find.textContaining('Archived ('), findsNothing);
   });
 
+  for (final isThread in [false, true]) {
+    testWidgets(
+        'touch hold opens ${isThread ? 'Thread' : 'Space'} actions without navigating',
+        (tester) async {
+      final navigations = <AxNavigation>[];
+      var toggles = 0;
+      final scaffoldKey = GlobalKey<ScaffoldState>();
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          key: scaffoldKey,
+          drawer: Drawer(
+            child: SafeArea(
+              child: SingleChildScrollView(
+                child: SpaceTree(
+                  compact: true,
+                  shellContext: const AxShellContext(
+                    navigation: AxNavigation.home(),
+                    spaces: [_space],
+                    expandedSpaceIds: {'space-a'},
+                    threadsBySpace: {
+                      'space-a': [_thread]
+                    },
+                  ),
+                  onNavigateTo: navigations.add,
+                  onToggleSpaceExpanded: (_) => toggles++,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ));
+      scaffoldKey.currentState!.openDrawer();
+      await tester.pumpAndSettle();
+      final row = find.text(isThread ? 'Thread A' : 'Space A');
+      final action = find.text(isThread ? 'Rename Thread' : 'Edit Space');
+
+      // Moving to scroll before the hold threshold cancels menu activation.
+      final gesture = await tester.startGesture(tester.getCenter(row));
+      await gesture.moveBy(const Offset(0, 80));
+      await tester.pump(const Duration(seconds: 1));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(action, findsNothing);
+      expect(navigations, isEmpty);
+
+      await tester.longPress(row);
+      await tester.pumpAndSettle();
+      expect(action, findsOneWidget);
+      expect(navigations, isEmpty);
+      expect(toggles, 0);
+      expect(scaffoldKey.currentState!.isDrawerOpen, isTrue);
+      final semantics = tester.ensureSemantics();
+      expect(
+          find.byWidgetPredicate((widget) =>
+              widget is Semantics &&
+              (widget.properties.customSemanticsActions?.keys.any((action) =>
+                      action.label ==
+                      (isThread ? 'Thread actions' : 'Space actions')) ??
+                  false)),
+          findsOneWidget);
+      semantics.dispose();
+
+      // Dismiss the popup, then an ordinary tap still navigates and closes.
+      await tester.tap(find.byTooltip(isThread ? 'Thread menu' : 'Space menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(navigations, hasLength(1));
+      expect(scaffoldKey.currentState!.isDrawerOpen, isFalse);
+    });
+  }
+
   testWidgets('hovered Space and Thread rows show their menus', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(

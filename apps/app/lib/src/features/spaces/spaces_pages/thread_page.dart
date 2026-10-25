@@ -6,6 +6,7 @@ class ThreadPage extends StatefulWidget {
   static void resetWorkQueues() {
     _ThreadPageState._queuedWorkByThread.clear();
     _ThreadPageState._workQueuePauses.clear();
+    _BackgroundWorkQueue.reset();
   }
 
   const ThreadPage({
@@ -287,10 +288,27 @@ class _ThreadPageState extends State<ThreadPage>
 
   /// A reader at the latest content keeps following it: a new item scrolls
   /// the timeline to its end. Callers only invoke this while following.
+  /// Progress and new requests follow the end of the timeline. An answer is
+  /// held at its first line instead, so a long response is read from the top;
+  /// the hold lasts until the reader scrolls.
   void _anchorIncoming(AxTimelineFollowAnchor anchor,
       ScrollController controller, List<Object> sequence, Object target) {
-    anchor.reset();
-    _jumpToLatest(controller);
+    final isAnswer = switch (target) {
+      (_, 'response') => true,
+      String id => id.endsWith('-answer'),
+      _ => false,
+    };
+    if (!isAnswer) {
+      anchor.reset();
+      _jumpToLatest(controller);
+      return;
+    }
+    final index = sequence.indexOf(target);
+    anchor.anchorAt(target,
+        fraction: index < 0 || sequence.length < 2
+            ? 1
+            : index / (sequence.length - 1),
+        once: false);
   }
 
   final _lastMaxExtent = <bool, double>{};
@@ -453,7 +471,8 @@ class _ThreadPageState extends State<ThreadPage>
     final state = _chatPresentation;
     final ids = state.messages.map((message) => message.id).toList();
     final previous = _previousChatIds;
-    _chatIncomingAnchor.retainMessages(ids);
+    // Work requests and answers are conversation rows too; keep their keys.
+    _chatIncomingAnchor.retainMessages([...ids, ..._conversationIds()]);
     if (previous != null) {
       // Only appended entries count: older-page prepends and edits retain
       // the reader's position and never become incoming-message anchors.
@@ -599,8 +618,13 @@ class _ThreadPageState extends State<ThreadPage>
 
   void _onWorkActivityChanged() {
     _scheduleFollowLatest(_workHistoryController);
-    if (_followChat && !_openChatPending) _jumpToLatest(_chatHistoryController);
-    if (_followWork && !_openWorkPending) _jumpToLatest(_workHistoryController);
+    // A held answer stays put; only unanswered progress follows the end.
+    if (_followChat && !_openChatPending && !_chatIncomingAnchor.active) {
+      _jumpToLatest(_chatHistoryController);
+    }
+    if (_followWork && !_openWorkPending && !_workIncomingAnchor.active) {
+      _jumpToLatest(_workHistoryController);
+    }
   }
 
   void _onWorkHistoryScroll() {
@@ -1132,6 +1156,7 @@ class _ThreadPageState extends State<ThreadPage>
   @override
   void initState() {
     super.initState();
+    _claimWorkQueue();
     AxRenderDiagnostics.instance.updateContext(
       threadId: widget.thread.id,
       tab: widget.initialTab == 1 ? 'work' : 'chat',
@@ -1356,6 +1381,12 @@ class _ThreadPageState extends State<ThreadPage>
   void didUpdateWidget(ThreadPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     final threadChanged = oldWidget.thread.id != widget.thread.id;
+    if (threadChanged ||
+        oldWidget.currentUserId != widget.currentUserId ||
+        oldWidget.isDraft != widget.isDraft) {
+      _releaseWorkQueue(oldWidget);
+      _claimWorkQueue();
+    }
     if (threadChanged) {
       _invalidateInteractionCallbacks();
       _discussionAttachments = [];
@@ -1577,6 +1608,7 @@ class _ThreadPageState extends State<ThreadPage>
       _effectiveWorkflow.isNotEmpty;
   @override
   void dispose() {
+    _releaseWorkQueue(widget);
     _invalidateInteractionCallbacks();
     AxRenderDiagnostics.instance.updateContext(
       component: 'ThreadPage',

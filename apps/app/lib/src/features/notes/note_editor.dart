@@ -429,7 +429,8 @@ class _NoteEditorState extends State<NoteEditor> {
             key: const ValueKey('note-preview'),
             // Free space between the toolbar and the formatted note.
             padding: const EdgeInsets.only(top: 16),
-            child: ConclaveMarkdownBody(data: _body.text),
+            child: ConclaveMarkdownBody(
+                data: _body.text, preserveBlankLines: true),
           ),
         ),
       );

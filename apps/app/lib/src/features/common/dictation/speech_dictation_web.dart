@@ -75,11 +75,10 @@ class WebSpeechDictation implements SpeechDictation {
       ..interimResults = true
       ..onresult = (web.SpeechRecognitionEvent event) {
         final results = event.results;
-        final buffer = StringBuffer();
-        for (var i = 0; i < results.length; i++) {
-          buffer.write(results.item(i).item(0).transcript);
-        }
-        onTranscript(buffer.toString().trim());
+        onTranscript(mergeSpeechResults([
+          for (var i = 0; i < results.length; i++)
+            results.item(i).item(0).transcript,
+        ]));
       }.toJS
       ..onerror = (web.SpeechRecognitionErrorEvent event) {
         error = event.error;

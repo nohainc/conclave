@@ -47,7 +47,7 @@ Future<List<Map<String, dynamic>>> readWorkRequestFiles(
   if (files.length > maxAttachmentCount ||
       files.any((file) => file.size > maxAttachmentBytes)) {
     throw const FormatException(
-      'Choose up to 10 files, each under 2 MB.',
+      'Choose up to 10 files, each at most 10 MB.',
     );
   }
   final result = <Map<String, dynamic>>[];

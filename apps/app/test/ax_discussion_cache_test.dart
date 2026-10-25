@@ -742,7 +742,9 @@ void main() {
     source.server = [message('1', 'Original Chat')];
     await tester.pumpWidget(page('w'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Edit'));
+    await tester.tap(find.byTooltip('Message actions').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit').last);
     await tester.pumpAndSettle();
     await tester.enterText(
         find.widgetWithText(TextField, 'Original Chat'), 'Optimistic edit');

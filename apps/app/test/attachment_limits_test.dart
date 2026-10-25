@@ -5,7 +5,7 @@ void main() {
   test('admits every file within the count and size limits', () {
     final admission = admitAttachments(existing: 0, candidates: [
       (name: 'a.txt', sizeBytes: 1),
-      (name: 'b.png', sizeBytes: maxAttachmentBytes),
+      (name: 'b.png', sizeBytes: 10 * 1024 * 1024),
     ]);
     expect(admission.accepted, [0, 1]);
     expect(admission.notice, isNull);
@@ -17,7 +17,7 @@ void main() {
       (name: 'ok.txt', sizeBytes: 5),
     ]);
     expect(admission.accepted, [1]);
-    expect(admission.notice, 'Skipped 1 file: "big.mov" is over 2 MB.');
+    expect(admission.notice, 'Skipped 1 file: "big.mov" is over 10 MB.');
   });
 
   test('fills only the remaining slots and summarises long skip lists', () {

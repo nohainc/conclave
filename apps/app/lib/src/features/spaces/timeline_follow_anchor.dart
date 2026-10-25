@@ -71,6 +71,19 @@ class AxTimelineFollowAnchor {
     _nextKey = null;
   }
 
+  /// Scroll offset that puts [render]'s top at the viewport's top. Measured
+  /// from layout, because getOffsetToReveal is off by a viewport for rows in
+  /// the reverse-growing sliver before the timeline's center.
+  static double _offsetToTop(RenderAbstractViewport viewport,
+      RenderObject render, ScrollPosition position) {
+    if (render is RenderBox && viewport is RenderBox) {
+      final top =
+          render.localToGlobal(Offset.zero, ancestor: viewport as RenderBox).dy;
+      return position.pixels + top;
+    }
+    return viewport.getOffsetToReveal(render, 0).offset;
+  }
+
   /// Returns true if another layout is needed to mount a virtualized anchor.
   bool reveal(ScrollController controller) {
     final position = controller.position;
@@ -95,11 +108,11 @@ class AxTimelineFollowAnchor {
       return true;
     }
     final viewport = RenderAbstractViewport.of(render);
-    var start = viewport.getOffsetToReveal(render, 0).offset;
+    var start = _offsetToTop(viewport, render, position);
     final nextContext = _nextKey?.currentContext;
     final nextRender = nextContext is Element ? nextContext.renderObject : null;
     if (nextRender != null && nextRender.attached) {
-      final nextStart = viewport.getOffsetToReveal(nextRender, 0).offset;
+      final nextStart = _offsetToTop(viewport, nextRender, position);
       if (nextStart - start > position.viewportDimension * 0.7) {
         start = nextStart;
       }

@@ -52,13 +52,13 @@ describe("Work Request files", () => {
   });
 
   it("verifies owner, Thread and size, with no total limit", async () => {
-    const { bucket } = bucketWith(new Uint8Array(2 * 1024 * 1024), {
+    const { bucket } = bucketWith(new Uint8Array(10 * 1024 * 1024), {
       threadId: "thread-1",
       userId: "user-1",
       digest: "sha256:x",
     });
     const env = { CONCLAVE_ARTIFACTS: bucket } as never;
-    const size = 2 * 1024 * 1024;
+    const size = 10 * 1024 * 1024;
     await expect(
       verifyWorkRequestFile(env, fileId, "thread-1", "user-1", size),
     ).resolves.toEqual({ digest: "sha256:x" });

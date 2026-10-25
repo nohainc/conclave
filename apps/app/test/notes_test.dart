@@ -6,6 +6,7 @@ import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state_store.dart';
 import 'package:conclave_app/src/features/notes/note_editor.dart';
+import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
 import 'package:conclave_app/src/features/notes/notes_page.dart';
 import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:conclave_app/src/navigation/ax_navigation.dart';
@@ -118,6 +119,34 @@ Finder noteButton(String label) => find.byWidgetPredicate(
     (widget) => widget is IconButton && widget.tooltip == label);
 
 void main() {
+  testWidgets(
+      'saved note preview shows blank lines and retains the authored source',
+      (tester) async {
+    final source = NotesSource();
+    const body = 'First\n\n\nSecond';
+    final saved = await source.saveThreadNote('t', body: body);
+    await tester.pumpWidget(threadPage(source));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('notes-toggle')));
+    await tester.pumpAndSettle();
+    final preview = tester.widget<ConclaveMarkdownBody>(find.descendant(
+        of: find.byKey(const ValueKey('note-preview')),
+        matching: find.byType(ConclaveMarkdownBody)));
+    expect(preview.preserveBlankLines, isTrue);
+    expect(preview.data, body);
+    await tester.tap(find.byKey(const ValueKey('note-edit')));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('note-body')))
+            .controller!
+            .text,
+        body);
+    expect(source.notes[saved.id]!.body, body);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
+  });
+
   test('My Notes has its own route', () {
     expect(AxNavigation.fromUri(Uri(path: '/notes')).kind, AxRouteKind.notes);
     expect(const AxNavigation.notes().toUri().path, '/notes');

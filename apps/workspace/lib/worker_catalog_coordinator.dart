@@ -613,6 +613,9 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
             if (resolution.release != null)
               'staticModelNames':
                   _staticModelNames(resolution.release!.profile),
+            if (resolution.release != null)
+              'supportsFullAccess':
+                  _profileMapsFullAccess(resolution.release!.profile),
             'unpublishedDevelopment': resolution.release?.isPublished == false,
             if (resolution.release != null)
               'releaseVersion': resolution.release!.releaseVersion,
@@ -741,6 +744,15 @@ extension on WorkerCatalogSnapshot {
             ? null
             : localRegistryError ?? this.localRegistryError,
       );
+}
+
+/// Whether the active signed profile maps `full_access` to provider arguments.
+/// Display projection only; the Engine remains authoritative at run time.
+bool _profileMapsFullAccess(Map<String, Object?> profile) {
+  final sandbox = profile['sandbox'];
+  final mappings = sandbox is Map ? sandbox['mappings'] : null;
+  final mapping = mappings is Map ? mappings['full_access'] : null;
+  return mapping is List && mapping.isNotEmpty;
 }
 
 // Safe display projection only; discovery and runtime state remain authoritative.

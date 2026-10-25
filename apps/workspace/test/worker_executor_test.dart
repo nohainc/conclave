@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/worker_executor.dart';
@@ -12,6 +13,53 @@ import 'package:test/test.dart';
 import 'support/assignment_worker_fixture.dart';
 
 void main() {
+  test('materializes a 10 MiB attachment and rejects one byte over', () async {
+    final root = await Directory.systemTemp.createTemp('attachment-limit-');
+    addTearDown(() => root.delete(recursive: true));
+    final handler = WorkerAssignmentHandler(
+      threadDirectoryLifecycle: ThreadDirectoryLifecycle(
+        pathResolver: ThreadPathResolver(root),
+      ),
+      resolveLogicalWorker: (id) => assignmentWorker(id),
+    );
+    WorkspaceAssignmentContext context(int size) => WorkspaceAssignmentContext(
+          workspaceId: 'workspace-1',
+          workspaceRuntimeId: 'runtime-1',
+          workerId: 'worker',
+          runId: 'run',
+          taskId: 'task',
+          attemptId: 'attempt',
+          assignmentId: 'assignment',
+          idempotencyKey: 'key',
+          payload: {
+            'workerId': 'worker',
+            'workerTypeId': 'test-worker',
+            'spaceId': 'space',
+            'threadId': 'thread',
+            'executionClass': 'stateless_read',
+            'workRequestId':
+                'work-request-11111111-2222-3333-4444-555555555555',
+            'input': {
+              'attachments': [
+                {
+                  'kind': 'file',
+                  'sizeBytes': size,
+                  'contentBase64': base64Encode(Uint8List(size))
+                },
+              ]
+            },
+          },
+        );
+    const size = 10 * 1024 * 1024;
+    final scope = await handler.prepareAssignmentScope(context(size));
+    final file = File('${scope.workingDirectory.path}/.conclave/inputs/'
+        'work-request-11111111-2222-3333-4444-555555555555/file-001');
+    expect(await file.length(), size);
+    await expectLater(
+        handler.prepareAssignmentScope(context(size + 1)), throwsStateError);
+    expect(await file.length(), size);
+  });
+
   test(
       'new Thread in an existing Space is not rejected by another Thread fence',
       () async {

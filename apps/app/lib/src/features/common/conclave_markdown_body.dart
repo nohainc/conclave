@@ -50,11 +50,16 @@ class ConclaveMarkdownBody extends StatelessWidget {
     required this.data,
     this.openLink = _launchMarkdownLink,
     this.fitContent = false,
+    this.preserveBlankLines = false,
     this.onSelectionChanged,
   });
 
   final String data;
   final bool fitContent;
+
+  /// Notes opt in to visible blank lines without changing saved Markdown or
+  /// whitespace rendering in conversation messages.
+  final bool preserveBlankLines;
 
   /// Reports the plain text selected inside this message boundary.
   ///
@@ -91,10 +96,14 @@ class ConclaveMarkdownBody extends StatelessWidget {
       data: data,
       fitContent: fitContent,
       extensionSet: md.ExtensionSet.gitHubFlavored,
+      blockSyntaxes: [if (preserveBlankLines) const _BlankLinesSyntax()],
       // One selection region joins paragraphs, lists and code blocks.
       selectable: false,
       softLineBreak: true,
-      builders: {'pre': ConclaveCodeBlockBuilder()},
+      builders: {
+        'pre': ConclaveCodeBlockBuilder(),
+        if (preserveBlankLines) 'note-blank-lines': _BlankLinesBuilder(),
+      },
       syntaxHighlighter: ConclaveSyntaxHighlighter(Theme.of(context)),
       styleSheet: ConclaveMarkdownStyleSheet.fromTheme(Theme.of(context)),
       onTapLink: (_, href, __) => unawaited(_openLink(context, href)),
@@ -116,6 +125,43 @@ class ConclaveMarkdownBody extends StatelessWidget {
     return SelectionArea(
       onSelectionChanged: onSelectionChanged,
       child: _MarkdownSelectionOrder(child: body),
+    );
+  }
+}
+
+/// Let the Markdown parser own code fences, lists and other block structure;
+/// only blank lines it would otherwise discard become visual spacers.
+class _BlankLinesSyntax extends md.BlockSyntax {
+  const _BlankLinesSyntax();
+
+  @override
+  RegExp get pattern => RegExp(r'^[ \t]*$');
+
+  @override
+  md.Node parse(md.BlockParser parser) {
+    var count = 0;
+    while (!parser.isDone && pattern.hasMatch(parser.current.content)) {
+      count++;
+      parser.advance();
+    }
+    parser.encounteredBlankLine = true;
+    return md.Element('note-blank-lines', [])..attributes['count'] = '$count';
+  }
+}
+
+class _BlankLinesBuilder extends MarkdownElementBuilder {
+  @override
+  bool isBlockElement() => true;
+
+  @override
+  Widget visitElementAfterWithContext(BuildContext context, md.Element element,
+      TextStyle? preferredStyle, TextStyle? parentStyle) {
+    final style = ConclaveMarkdownStyleSheet.fromTheme(Theme.of(context)).p;
+    final lineHeight =
+        MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 14) *
+            (style?.height ?? 1.5);
+    return SizedBox(
+      height: lineHeight * int.parse(element.attributes['count']!),
     );
   }
 }

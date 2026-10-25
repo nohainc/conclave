@@ -548,7 +548,7 @@ class _WorkComposer extends StatelessWidget {
           Builder(
             builder: (buttonContext) => Semantics(
               key: const ValueKey('work-add-attachments'),
-              label: 'Add attachments',
+              label: 'Add attachments or recall a request',
               child: Material(
                 color: controlBg,
                 borderRadius: controlBorderRadius,
@@ -574,10 +574,25 @@ class _WorkComposer extends StatelessWidget {
                                 style: ConclaveMenuStyle.textStyle),
                           ),
                         ),
+                        if (onHistoryNavigate != null)
+                          ConclaveMenuEntry<String>(
+                            value: 'history',
+                            child: MenuItemButton(
+                              style: ConclaveMenuStyle.item(
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark),
+                              leadingIcon: const Icon(Icons.history, size: 16),
+                              onPressed: () =>
+                                  Navigator.pop(buttonContext, 'history'),
+                              child: const Text('Request history',
+                                  style: ConclaveMenuStyle.textStyle),
+                            ),
+                          ),
                       ],
                     );
                     if (!buttonContext.mounted || value == null) return;
                     if (value == 'files') onAddFiles();
+                    if (value == 'history') onHistoryNavigate?.call(-1);
                   },
                   child: const SizedBox(
                     width: composerButtonSize,
@@ -1349,8 +1364,21 @@ class _MemoizedWorkMarkdownState extends State<_MemoizedWorkMarkdown> {
   Widget build(BuildContext context) => _body;
 }
 
+/// Rewrites a "Please retry" ending for failures that offer no Retry action,
+/// so the text never points at a control that is not there.
+String _withoutRetryPromise(String message) {
+  for (final ending in [' Please retry your request.', ' Please retry.']) {
+    if (message.endsWith(ending)) {
+      return '${message.substring(0, message.length - ending.length)} '
+          'Send a new message to try again.';
+    }
+  }
+  return message;
+}
+
 /// The user-facing failure for [request]; diagnostics stay in Engine logs.
-String? _workFailureText(AxWorkRequest request) {
+/// [canRetry] says whether the timeline shows a Retry action for it.
+String? _workFailureText(AxWorkRequest request, {required bool canRetry}) {
   // A user cancellation (including Send now from the queue) is not a failure,
   // even when the stopped Worker step recorded an error code.
   if (request.status == 'cancelled') return null;
@@ -1360,13 +1388,14 @@ String? _workFailureText(AxWorkRequest request) {
       ? request.error!
       : failedStep?.errorMessage;
   if (request.status != 'failed' && rawError?.isNotEmpty != true) return null;
-  return _publicFailureMessage(
+  final message = _publicFailureMessage(
     failedStep,
     _executionFailureMessage(
       failedStep?.errorCode,
       validationMessage: failedStep == null ? rawError : null,
     ),
   );
+  return canRetry ? message : _withoutRetryPromise(message);
 }
 
 String? _workResponseText(AxWorkRequest request) =>
@@ -1516,7 +1545,10 @@ class _WorkTimelineCard extends StatelessWidget {
     final executionPhase = requestIsTerminal
         ? request.status
         : (phaseStep?.effectivePhase ?? request.executionPhase);
-    final error = _workFailureText(request);
+    final error = _workFailureText(request,
+        canRetry: request.status == 'failed' &&
+            failedStep?.retryAllowed == true &&
+            onRetryStep != null);
     final isError = error?.isNotEmpty == true;
 
     // Waiting/queued messages belong to Conclave. A running Step is the
@@ -1590,31 +1622,9 @@ class _WorkTimelineCard extends StatelessWidget {
         presentation.iconAssetForBrightness(Theme.of(context).brightness);
     final effectiveIcon = hasModel ? (modelIcon ?? workerIcon) : workerIcon;
     final effectiveIconLabel = hasModel ? modelName : workerName;
-    String? formattedModelInfo;
-    if (selectedModel != null && selectedModel.isNotEmpty) {
-      final modelName = frozenModelName ?? _modelDisplayName(selectedModel);
-      if (selectedReasoningEffort != null &&
-          selectedReasoningEffort.isNotEmpty) {
-        formattedModelInfo =
-            '$modelName · ${executionEffortDisplayName(selectedReasoningEffort)}';
-      } else {
-        formattedModelInfo = modelName;
-      }
-    } else if (selectedReasoningEffort != null &&
-        selectedReasoningEffort.isNotEmpty) {
-      formattedModelInfo =
-          'Default model · ${executionEffortDisplayName(selectedReasoningEffort)}';
-    }
-
-    if (senderTurn != null) {
-      final modelLabel = selectedModel?.isNotEmpty == true
-          ? frozenModelName ?? _modelDisplayName(selectedModel)
-          : 'Default model';
-      final effortLabel = selectedReasoningEffort?.isNotEmpty == true
-          ? executionEffortDisplayName(selectedReasoningEffort)
-          : 'Default effort';
-      formattedModelInfo = '$modelLabel · $effortLabel';
-    }
+    final effortLabel = selectedReasoningEffort?.isNotEmpty == true
+        ? executionEffortDisplayName(selectedReasoningEffort)
+        : 'Default effort';
     // Live elapsed time comes from the Worker flow while the request is
     // unfinished; the server-reported duration replaces it once it is not.
     String metadataAt(DateTime now) {
@@ -1644,15 +1654,17 @@ class _WorkTimelineCard extends StatelessWidget {
         ),
         const SizedBox(width: 8),
       ],
-      _AnimatedMessageAction(
-        tooltip: 'Copy',
-        icon: Icons.copy_rounded,
-        color: metaColor,
-        onTap: () {
-          Clipboard.setData(ClipboardData(text: request.prompt));
-        },
-      ),
-    ].orderedForMessage(isOwnRequest);
+      _TimelineActionsMenu(color: metaColor, actions: [
+        _TimelineAction(
+          tooltip: 'Copy',
+          icon: Icons.copy_rounded,
+          color: metaColor,
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: request.prompt));
+          },
+        ),
+      ]),
+    ];
 
     final hasMetadata = _workflowName.isNotEmpty ||
         progress.showsLiveElapsed ||
@@ -1664,13 +1676,13 @@ class _WorkTimelineCard extends StatelessWidget {
             ? Opacity(
                 opacity: senderIconOpacity,
                 child: Image.asset(effectiveIcon,
-                    width: 22,
-                    height: 22,
+                    width: 24,
+                    height: 24,
                     fit: BoxFit.contain,
                     semanticLabel: '$effectiveIconLabel icon'),
               )
             : CircleAvatar(
-                radius: 11,
+                radius: 12,
                 backgroundColor: ConclaveColors.primarySoftColor(isDark),
                 child: Text(effectiveIconLabel.substring(0, 1).toUpperCase(),
                     style: TextStyle(fontSize: 12, color: metaColor)),
@@ -1679,12 +1691,12 @@ class _WorkTimelineCard extends StatelessWidget {
             opacity: senderIconOpacity,
             child: Image.asset(
               ConclaveBrandAssets.logoPng32,
-              width: 20,
-              height: 20,
+              width: 24,
+              height: 24,
               fit: BoxFit.contain,
               errorBuilder: (ctx, err, stack) => Icon(
                 Icons.auto_awesome,
-                size: 14,
+                size: 24,
                 color: metaColor,
               ),
             ),
@@ -1807,10 +1819,12 @@ class _WorkTimelineCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             senderAvatar,
-                            const SizedBox(width: 6),
                             Text(
                               senderName,
                               style: TextStyle(
@@ -1821,7 +1835,6 @@ class _WorkTimelineCard extends StatelessWidget {
                             ),
                             if (isWorkerResponse &&
                                 workerOwnerName?.isNotEmpty == true) ...[
-                              const SizedBox(width: 4),
                               Tooltip(
                                 message: 'Worker owned by $workerOwnerName',
                                 child: Text(
@@ -1832,32 +1845,24 @@ class _WorkTimelineCard extends StatelessWidget {
                                 ),
                               ),
                             ],
-                            if (isWorkerResponse &&
-                                formattedModelInfo != null) ...[
-                              const SizedBox(width: 6),
-                              Tooltip(
-                                message: formattedModelInfo,
-                                triggerMode: TooltipTriggerMode.tap,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4),
-                                  child: Icon(Icons.info_outline_rounded,
-                                      size: 14, color: metaColor),
-                                ),
+                            if (isWorkerResponse) ...[
+                              Text(
+                                '· $effortLabel',
+                                key: const ValueKey('response-effort-label'),
+                                style:
+                                    TextStyle(fontSize: 12, color: metaColor),
                               ),
                             ],
                             if (hasMetadata) ...[
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: AxLiveTicker(
-                                  active: progress.isTicking &&
-                                      realtimeStatus !=
-                                          AxWorkRealtimeStatus.checking,
-                                  builder: (context, now) => Text(
-                                    metadataAt(now),
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                        fontSize: 12, color: metaColor),
-                                  ),
+                              AxLiveTicker(
+                                active: progress.isTicking &&
+                                    realtimeStatus !=
+                                        AxWorkRealtimeStatus.checking,
+                                builder: (context, now) => Text(
+                                  metadataAt(now),
+                                  overflow: TextOverflow.ellipsis,
+                                  style:
+                                      TextStyle(fontSize: 12, color: metaColor),
                                 ),
                               ),
                             ],
@@ -1898,9 +1903,9 @@ class _WorkTimelineCard extends StatelessWidget {
                                             'failed' =>
                                               'Your request could not be completed.',
                                             'timed_out' =>
-                                              'The worker took too long to respond. Please retry your request.',
+                                              'The worker took too long to respond. Send a new message to try again.',
                                             'lost' =>
-                                              'The connection to the worker was lost. Please retry your request.',
+                                              'The connection to the worker was lost. Send a new message to try again.',
                                             _ => null,
                                           };
                           final isError = error?.isNotEmpty == true;
@@ -1918,12 +1923,46 @@ class _WorkTimelineCard extends StatelessWidget {
                                     padding: const EdgeInsets.all(2),
                                     child: Icon(
                                       icon,
-                                      size: 15,
+                                      size: 16,
                                       color: metaColor,
                                     ),
                                   ),
                                 ),
                               );
+                          final responseActions = <_TimelineAction>[
+                            if (response?.isNotEmpty == true ||
+                                error?.isNotEmpty == true)
+                              _TimelineAction(
+                                  tooltip: 'Copy',
+                                  icon: Icons.copy_outlined,
+                                  onTap: () => Clipboard.setData(ClipboardData(
+                                      text: isError ? error! : response!))),
+                            if (request.status == 'failed' &&
+                                failedStep != null &&
+                                failedStep.retryAllowed &&
+                                onRetryStep != null)
+                              _TimelineAction(
+                                  tooltip: failedStep.errorCode ==
+                                          'space_folder_exists'
+                                      ? 'Use the existing folder and retry'
+                                      : failedStep.retryRequiresConfirmation
+                                          ? 'Retry anyway — the previous execution may already have made changes'
+                                          : 'Retry',
+                                  icon: Icons.refresh_rounded,
+                                  onTap: () =>
+                                      onRetryStep!(request.id, failedStep)),
+                            if (request.status == 'failed' &&
+                                onReportIssue != null &&
+                                reportedIssue == null)
+                              _TimelineAction(
+                                  tooltip: reportingIssue
+                                      ? 'Sending issue report'
+                                      : 'Report issue — sends sanitized technical diagnostics only',
+                                  icon: Icons.flag_outlined,
+                                  onTap: reportingIssue
+                                      ? null
+                                      : () => onReportIssue!(request.id)),
+                          ];
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -1945,8 +1984,8 @@ class _WorkTimelineCard extends StatelessWidget {
                                 const SizedBox(height: 10),
                               ],
                               AnimatedOpacity(
-                                  // Copy is revealed on hover; cancel, retry and
-                                  // report stay visible while they are needed.
+                                  // Terminal footers reveal on hover/focus;
+                                  // active and failed controls remain available.
                                   opacity: showMeta ||
                                           !const {'completed', 'cancelled'}
                                               .contains(request.status)
@@ -1956,18 +1995,6 @@ class _WorkTimelineCard extends StatelessWidget {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      if (response?.isNotEmpty == true ||
-                                          error?.isNotEmpty == true)
-                                        compactAction(
-                                          tooltip: 'Copy',
-                                          icon: Icons.copy_outlined,
-                                          onPressed: () {
-                                            Clipboard.setData(ClipboardData(
-                                              text:
-                                                  isError ? error! : response!,
-                                            ));
-                                          },
-                                        ),
                                       if ((request.status == 'queued' ||
                                               request.status == 'running') &&
                                           onCancelRun != null)
@@ -1977,51 +2004,11 @@ class _WorkTimelineCard extends StatelessWidget {
                                           onPressed: () =>
                                               onCancelRun!(request.id),
                                         ),
-                                      if (request.status == 'failed' &&
-                                          failedStep != null &&
-                                          failedStep.retryAllowed &&
-                                          onRetryStep != null)
-                                        compactAction(
-                                          tooltip: failedStep.errorCode ==
-                                                  'space_folder_exists'
-                                              ? 'Use the existing folder and retry'
-                                              : failedStep
-                                                      .retryRequiresConfirmation
-                                                  ? 'Retry anyway — the previous execution may already have made changes'
-                                                  : 'Retry',
-                                          icon: Icons.refresh_rounded,
-                                          onPressed: () => onRetryStep!(
-                                              request.id, failedStep),
-                                        ),
-                                      if (request.status == 'failed' &&
-                                          onReportIssue != null)
-                                        if (reportedIssue != null)
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(Icons.check_circle_outline,
-                                                  size: 15,
-                                                  color: colors.primary),
-                                              const SizedBox(width: 3),
-                                              Text('Reported',
-                                                  style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: colors.primary)),
-                                            ],
-                                          )
-                                        else
-                                          compactAction(
-                                            tooltip: reportingIssue
-                                                ? 'Sending issue report'
-                                                : 'Report issue — sends sanitized technical diagnostics only',
-                                            icon: reportingIssue
-                                                ? Icons.hourglass_top_rounded
-                                                : Icons.flag_outlined,
-                                            onPressed: reportingIssue
-                                                ? null
-                                                : () =>
-                                                    onReportIssue!(request.id),
-                                          ),
+                                      if (reportedIssue != null)
+                                        Text('Reported',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: colors.primary)),
                                       const SizedBox(width: 8),
                                       if (timeLabel.isNotEmpty)
                                         Tooltip(
@@ -2034,6 +2021,12 @@ class _WorkTimelineCard extends StatelessWidget {
                                             ),
                                           ),
                                         ),
+                                      if (responseActions.isNotEmpty) ...[
+                                        const SizedBox(width: 8),
+                                        _TimelineActionsMenu(
+                                            actions: responseActions,
+                                            color: metaColor),
+                                      ],
                                     ],
                                   )),
                               if (reportedIssue != null) ...[
@@ -2509,37 +2502,38 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
         ),
         const SizedBox(width: 8),
       ],
-      if (isMe &&
-          widget.onDelete != null &&
-          !widget.item.id.startsWith('temp-')) ...[
-        _AnimatedMessageAction(
-          tooltip: 'Delete',
-          icon: Icons.delete_outline_rounded,
+      _TimelineActionsMenu(color: metaColor, actions: [
+        if (isMe &&
+            widget.item.aiKind == null &&
+            widget.onDelete != null &&
+            !widget.item.id.startsWith('temp-')) ...[
+          _TimelineAction(
+            tooltip: 'Delete',
+            icon: Icons.delete_outline_rounded,
+            color: metaColor,
+            onTap: () => _confirmDelete(context),
+          ),
+        ],
+        if (!widget.item.id.startsWith('temp-') &&
+            widget.item.aiKind == null) ...[
+          _TimelineAction(
+            tooltip: 'Edit',
+            icon: Icons.edit_outlined,
+            color: metaColor,
+            onTap: () => setState(() {
+              _editController.text = widget.item.text;
+              _isEditing = true;
+            }),
+          ),
+        ],
+        _TimelineAction(
+          tooltip: 'Copy',
+          icon: Icons.copy_rounded,
           color: metaColor,
-          onTap: () => _confirmDelete(context),
+          onTap: widget.onCopy,
         ),
-        const SizedBox(width: 6),
-      ],
-      if (!widget.item.id.startsWith('temp-') &&
-          widget.item.aiKind == null) ...[
-        _AnimatedMessageAction(
-          tooltip: 'Edit',
-          icon: Icons.edit_outlined,
-          color: metaColor,
-          onTap: () => setState(() {
-            _editController.text = widget.item.text;
-            _isEditing = true;
-          }),
-        ),
-        const SizedBox(width: 6),
-      ],
-      _AnimatedMessageAction(
-        tooltip: 'Copy',
-        icon: Icons.copy_rounded,
-        color: metaColor,
-        onTap: widget.onCopy,
-      ),
-    ].orderedForMessage(isMe);
+      ]),
+    ];
     return _MessageHover(
         builder: (context, showMeta) => LayoutBuilder(
               builder: (context, constraints) {
@@ -2672,6 +2666,12 @@ class _MessageHover extends StatefulWidget {
 
 class _MessageHoverState extends State<_MessageHover> {
   bool _hovered = false;
+  bool _focused = false;
+  bool _menuOpen = false;
+
+  void _menuOpenChanged(bool open) {
+    if (mounted && _menuOpen != open) setState(() => _menuOpen = open);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2681,7 +2681,11 @@ class _MessageHoverState extends State<_MessageHover> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: widget.builder(context, _hovered || touch),
+      child: Focus(
+        onFocusChange: (focused) => setState(() => _focused = focused),
+        child:
+            widget.builder(context, _hovered || _focused || _menuOpen || touch),
+      ),
     );
   }
 }
@@ -2699,67 +2703,72 @@ String _relativeChatTimestamp(DateTime value) {
   return _chatTimestamp(value);
 }
 
-class _AnimatedMessageAction extends StatefulWidget {
-  const _AnimatedMessageAction({
+class _TimelineAction {
+  const _TimelineAction({
     required this.tooltip,
     required this.icon,
-    required this.color,
     required this.onTap,
+    this.color,
   });
 
   final String tooltip;
   final IconData icon;
+  final Color? color;
+  final VoidCallback? onTap;
+}
+
+class _TimelineActionsMenu extends StatelessWidget {
+  const _TimelineActionsMenu({required this.actions, required this.color});
+
+  final List<_TimelineAction> actions;
   final Color color;
-  final VoidCallback onTap;
 
   @override
-  State<_AnimatedMessageAction> createState() => _AnimatedMessageActionState();
-}
-
-class _AnimatedMessageActionState extends State<_AnimatedMessageAction> {
-  Timer? _releaseTimer;
-  bool _pressed = false;
-
-  @override
-  void dispose() {
-    _releaseTimer?.cancel();
-    super.dispose();
-  }
-
-  void _handleTap() {
-    _releaseTimer?.cancel();
-    setState(() => _pressed = true);
-    widget.onTap();
-    _releaseTimer = Timer(const Duration(milliseconds: 160), () {
-      if (mounted) setState(() => _pressed = false);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => Tooltip(
-        message: widget.tooltip,
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(4),
-            onTap: _handleTap,
-            child: Padding(
-              padding: const EdgeInsets.all(2),
-              child: AnimatedScale(
-                scale: _pressed ? 0.78 : 1,
-                duration: const Duration(milliseconds: 120),
-                curve: Curves.easeOutBack,
-                child: Icon(widget.icon, size: 15, color: widget.color),
-              ),
-            ),
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final platform = Theme.of(context).platform;
+    final touch =
+        platform == TargetPlatform.iOS || platform == TargetPlatform.android;
+    void menuOpenChanged(bool open) => context
+        .findAncestorStateOfType<_MessageHoverState>()
+        ?._menuOpenChanged(open);
+    return PopupMenuButton<int>(
+      tooltip: 'Message actions',
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 160, maxWidth: 340),
+      color: ConclaveMenuStyle.background(isDark),
+      surfaceTintColor: Colors.transparent,
+      shape: ConclaveMenuStyle.shape(isDark),
+      menuPadding: ConclaveMenuStyle.padding,
+      onOpened: () => menuOpenChanged(true),
+      onCanceled: () => menuOpenChanged(false),
+      onSelected: (index) {
+        menuOpenChanged(false);
+        actions[index].onTap?.call();
+      },
+      itemBuilder: (context) => [
+        for (var index = 0; index < actions.length; index++)
+          PopupMenuItem<int>(
+            value: index,
+            enabled: actions[index].onTap != null,
+            height: touch ? 48 : 36,
+            child: Row(children: [
+              Icon(actions[index].icon,
+                  size: 16, color: actions[index].color ?? color),
+              const SizedBox(width: 8),
+              Flexible(
+                  child: Text(actions[index].tooltip,
+                      style: ConclaveMenuStyle.textStyle)),
+            ]),
           ),
-        ),
-      );
-}
-
-// Own-message metadata follows reading order toward the right edge.
-extension _MessageFooterOrder on List<Widget> {
-  List<Widget> orderedForMessage(bool own) => own ? this : reversed.toList();
+      ],
+      child: SizedBox(
+        width: touch ? 48 : 28,
+        height: touch ? 48 : 28,
+        child: Icon(Icons.more_vert, size: 16, color: color),
+      ),
+    );
+  }
 }
 
 /// A message bubble with its date/time and actions below, outside the

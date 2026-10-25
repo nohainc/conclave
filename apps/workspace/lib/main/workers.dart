@@ -372,6 +372,21 @@ class _WorkersTabState extends State<_WorkersTab> {
                   style: theme.textTheme.bodySmall),
             const SizedBox(height: 20),
             _buildVerification(view, progress),
+            if (worker != null && worker.fullLocalAccessAuthorized) ...[
+              const SizedBox(height: 8),
+              Text(
+                profile?['supportsFullAccess'] == false
+                    ? 'Full access is authorized, but the active Profile has no full-access mapping. Publish and refresh a Profile release that supports it.'
+                    : profile?['supportsFullAccess'] == true
+                        ? 'Full access authorized; the active Profile maps it to provider arguments.'
+                        : 'Full access authorized; the active Profile could not be checked.',
+                key: Key('worker-full-access-status-${entry.workerTypeId}'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                    color: profile?['supportsFullAccess'] == false
+                        ? theme.colorScheme.error
+                        : null),
+              ),
+            ],
             if (removing) ...[
               const SizedBox(height: 8),
               Text(

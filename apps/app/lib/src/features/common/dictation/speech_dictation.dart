@@ -49,3 +49,26 @@ const dictationLanguages = [
 ];
 
 SpeechDictation createSpeechDictation() => platform.createSpeechDictation();
+
+/// Joins a recognition session's result segments into one transcript.
+///
+/// Desktop browsers report each result as a new segment, but Chrome on
+/// Android repeats the whole utterance so far in every result. A segment
+/// that already contains the transcript replaces it, and a segment the
+/// transcript already ends with is skipped, so text is never duplicated.
+String mergeSpeechResults(Iterable<String> segments) {
+  var merged = '';
+  for (final segment in segments) {
+    final current = merged.trim().toLowerCase();
+    final next = segment.trim().toLowerCase();
+    if (next.isEmpty) continue;
+    if (current.isNotEmpty && next.startsWith(current)) {
+      merged = segment;
+    } else if (current.endsWith(next)) {
+      continue;
+    } else {
+      merged += segment;
+    }
+  }
+  return merged.trim();
+}

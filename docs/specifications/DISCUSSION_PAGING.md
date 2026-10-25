@@ -46,7 +46,7 @@ data sources must implement the lookup. The paging envelope remains version 1.
 ## Human message attachments
 
 Discussion create accepts an additive `attachments` array of uploaded file
-references (`kind: "file"`, `fileId`, `sizeBytes`). Up to ten files of 2 MiB each
+references (`kind: "file"`, `fileId`, `sizeBytes`). Up to ten files of 10 MiB each
 are allowed, including file-only messages with an empty body. Every reference
 must match the uploading user, Thread and size. Server-owned names, media types
 and bounded display previews are loaded from private R2. The existing upload

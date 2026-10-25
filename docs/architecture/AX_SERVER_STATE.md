@@ -1069,15 +1069,15 @@ selected and unselected rows. Sidebar activity dots are 9 logical pixels in diam
 The running marker pulses between 40% and 100% opacity, with each fade lasting
 2.8 seconds. All dots in a sidebar share one animation clock; newly added
 markers join the current opacity and phase. Reduced-motion mode uses a static
-marker at 40% opacity. Collapsed Space folders show aggregated running activity,
-including when unread activity is also present (running takes priority until it
-ends). Collapsed rows observe cached Thread updates without fetching Threads;
+marker at 40% opacity. Collapsed Space folders show aggregated running and
+unread markers together. Collapsed rows observe cached Thread updates without fetching Threads;
 the Space aggregate also preserves activity for Threads outside the cached list.
 
 Space and Thread reads carry two per-user booleans: `hasActiveWork` (a Work
 Request in `queued`, `running` or `waiting` that was updated within the last
-day) and `hasUnread` (another user's Discussion message, or a completed or
-failed Work Request, newer than the user's read marker). Space values
+day) and `hasUnread` (another user's Discussion message or Work Request prompt,
+sent after the user's read marker whatever its later status, or any completed
+or failed Work Request newer than the marker). Space values
 aggregate their Threads. Markers live in `thread_read_states`
 (`0064_thread_read_states.sql`); existing history is backfilled as read, and
 users without a marker fall back to their Space membership date.
@@ -1104,7 +1104,8 @@ when `ids` is omitted. The `work_request.completed` and `.failed` realtime
 events carry `requestedByUserId`. AX merges the feed with live events under
 the shared id `work-request:<id>`, drops the viewer's own successful Work, and
 marks Work on the open Thread read. Opt-in desktop alerts (browser permission
-plus a local switch) show only while the tab is hidden.
+plus a local switch) show for every unread notification except the Thread
+or Run being viewed in a visible tab.
 
 ### Pins
 
@@ -1156,7 +1157,11 @@ automatically shortly after typing stops. The body is Markdown: the editor
 has an emoji picker, a Markdown formatting menu, browser speech dictation with
 language selection (same as chat composers). A saved note opens rendered and
 read-only; the edit icon or a double click opens the editor, and Done returns
-to the rendered view. An empty note opens in the editor. Notes emoji and Markdown buttons share the input area’s
+to the rendered view. Notes previews preserve blank and whitespace-only lines as
+visible spacing, including repeated blank lines, without rewriting the saved
+Markdown. Code-block whitespace remains literal. This rendering option is scoped
+to Notes; conversation Markdown keeps its existing spacing. An empty note opens
+in the editor. Notes emoji and Markdown buttons share the input area’s
 32px button size, 20px icons, and rounded-square styling; Edit/Done uses
 the same height and corner radius. Notes page and editor controls suppress
 hover and long-press tooltips while retaining their accessibility labels. The Thread’s Clear Note action asks for

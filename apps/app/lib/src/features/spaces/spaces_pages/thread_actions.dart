@@ -86,7 +86,8 @@ extension _ThreadActions on _ThreadPageState {
         !_workPresentation.hasData ||
         _workPresentation.isFetching ||
         _workQueue.isEmpty ||
-        _activeWorkRequests.isNotEmpty) {
+        _activeWorkRequests.isNotEmpty ||
+        _BackgroundWorkQueue.isSending(_workQueueKey)) {
       return;
     }
     final threadId = widget.thread.id;
@@ -191,43 +192,54 @@ extension _ThreadActions on _ThreadPageState {
     );
   }
 
-  Future<void> _submitWorkMessage(_QueuedWorkMessage message,
-      {bool fromQueue = false}) async {
-    final submit = widget.onRunWork;
-    final text = message.text;
-    final requestText = text.trim().isEmpty
-        ? 'Please use the attached inputs to complete the request.'
-        : text;
-    final attachments = message.attachments;
-    final executionSelection = message.executionSelection;
-    final workflowId = message.workflow.split(':').first;
-    final workflowVersion =
-        int.tryParse(message.workflow.split(':v').last) ?? 1;
-    final threadId = widget.thread.id;
-    final queueKey = _workQueueKey;
-    final workCache = _workHistoryCache;
-    final workflowName = _currentWorkflows
-            .where((w) => w.id == workflowId)
-            .map((w) => w.name)
-            .firstOrNull ??
-        workflowId;
-    try {
-      await workCache.createRequest(threadId,
-          prompt: requestText,
+  /// Creates a Work request from a message, bound to this Thread and the
+  /// page's current callbacks so it also works after the page is left.
+  /// [page] selects the Thread being left when the widget has already moved on.
+  Future<void> Function(_QueuedWorkMessage message) _workMessageSender(
+      [ThreadPage? page]) {
+    page ??= widget;
+    final submit = page.onRunWork;
+    final submitWithSelection = page.onRunWorkWithSelection;
+    final threadId = page.thread.id;
+    final workCache = page.workHistoryCache ?? _fallbackWorkHistoryCache;
+    final userId = page.currentUserId;
+    final workflows = List.of(_currentWorkflows);
+    return (message) {
+      final text = message.text;
+      final workflowId = message.workflow.split(':').first;
+      return workCache.createRequest(threadId,
+          prompt: text.trim().isEmpty
+              ? 'Please use the attached inputs to complete the request.'
+              : text,
           workflowId: workflowId,
-          workflowVersion: workflowVersion,
-          workflowName: workflowName,
-          requestedByUserId: widget.currentUserId,
-          attachments: attachments,
-          executionSelection: executionSelection,
+          workflowVersion: int.tryParse(message.workflow.split(':v').last) ?? 1,
+          workflowName: workflows
+                  .where((w) => w.id == workflowId)
+                  .map((w) => w.name)
+                  .firstOrNull ??
+              workflowId,
+          requestedByUserId: userId,
+          attachments: message.attachments,
+          executionSelection: message.executionSelection,
           execute: (prompt, workflow, inputs, key) => submit == null
               ? throw StateError('Work submission is unavailable')
               : submit(prompt, workflow, inputs, key),
-          executeWithSelection: widget.onRunWorkWithSelection == null
+          executeWithSelection: submitWithSelection == null
               ? null
               : (prompt, workflow, inputs, key, selection) =>
-                  widget.onRunWorkWithSelection!(
+                  submitWithSelection(
                       prompt, workflow, inputs, key, selection));
+    };
+  }
+
+  Future<void> _submitWorkMessage(_QueuedWorkMessage message,
+      {bool fromQueue = false}) async {
+    final text = message.text;
+    final attachments = message.attachments;
+    final threadId = widget.thread.id;
+    final queueKey = _workQueueKey;
+    try {
+      await _workMessageSender()(message);
     } catch (error) {
       if (fromQueue &&
           error is! AxMutationSuperseded &&
@@ -774,5 +786,23 @@ extension _ThreadActions on _ThreadPageState {
         ),
       );
     }
+  }
+}
+
+extension on _ThreadPageState {
+  static String _queueKeyFor(ThreadPage page) =>
+      '${page.currentUserId ?? ''}|${page.thread.id}';
+
+  /// Hands [page]'s queue to the background sender as the page stops owning it.
+  void _releaseWorkQueue(ThreadPage page) {
+    if (page.isDraft) return;
+    _BackgroundWorkQueue.release(_queueKeyFor(page),
+        threadId: page.thread.id,
+        cache: page.workHistoryCache ?? _fallbackWorkHistoryCache,
+        submit: _workMessageSender(page));
+  }
+
+  void _claimWorkQueue() {
+    if (!widget.isDraft) _BackgroundWorkQueue.claim(_workQueueKey);
   }
 }

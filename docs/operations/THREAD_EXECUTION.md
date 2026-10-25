@@ -29,7 +29,9 @@ Selected file attachments appear above the Work composer with their name and
 size. They are held in browser memory until Send and can be removed before
 submission; the sending state shows an uploading indicator. Selection alone
 does not mean the Worker has processed the file. The web picker accepts up to
-10 files of at most 2 MiB each; native AX file picking is not implemented.
+10 files of at most 10 MiB (10,485,760 bytes) each; native AX file picking is
+not implemented. Deploy the matching Cloud, AX, and Workspace updates together:
+older Workspace versions reject attachments larger than 2 MiB.
 Cloud uploads file bytes to artifact storage, validates user/Thread ownership,
 and snapshots file references on the request. AX keeps authored attachment
 snapshots immutable and retains up to 20 recent upload references in memory,

@@ -694,9 +694,9 @@ authorization tokens. AX downloads through its authenticated API client.
 
 Attachments are inputs to a Work Request, not Workflow definitions. A request
 may include local files and `http`/`https` references. The v1 composer accepts
-up to 10 attachments; each file is limited to 2 MiB and there is no total
+up to 10 attachments; each file is limited to 10 MiB and there is no total
 limit. The file dialog allows multi-selection in both Ask AI and Message
-modes. Each selected file is admitted in order: files over 2 MiB, and files
+modes. Each selected file is admitted in order: files over 10 MiB, and files
 beyond the remaining slots, are skipped individually and reported in one
 notice, while the rest are attached. Links are limited to 2,048 characters and may
 not embed URL credentials. The client uploads each file to
