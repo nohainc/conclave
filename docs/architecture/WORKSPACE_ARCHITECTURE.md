@@ -301,10 +301,22 @@ Workspace selector for eligible owners. Missing or inaccessible folders can
 be detached but not newly attached. The Change Workspace dialog states how
 many folders will be detached and that local files are untouched.
 
-Status: everything above is implemented. Delivering attached folders to
-assignments and translating them through Tool Profiles into provider CLI
-arguments is the remaining phase; until then attachments have no effect on
-execution.
+At dispatch, Cloud adds the attached folder IDs to the assignment input as
+`additionalFolderIds`, repeating the Space-owner equals Workspace-owner check.
+Only IDs travel; payloads naming `additionalDirectories` are rejected. Before
+launch the service maps each ID to its local path and probes it again. A
+folder that is no longer allowed, missing, or denied fails the assignment
+with a message naming the folder, and a Worker whose Profile cannot pass
+folders fails with "This Worker cannot use additional folders yet". Folders
+are never dropped silently. The Engine receives the verified paths in
+`execute.request` `additionalDirectories` and expands the Profile's
+`{"forEachAdditionalDirectory": [...]}` argument slot once per folder (see
+`docs/specifications/TOOL_PROFILE_V1.md`).
+
+Not yet covered: concurrent writes when several Spaces attach the same folder
+are not serialized (the Space-wide lock covers only the Space directory), and
+each Worker's published Profile must add the argument slot before its CLI can
+use folders.
 
 ## Authentication and security
 

@@ -23,6 +23,21 @@ Future<void> main(List<String> arguments) async {
     stdout.writeln('fixture echo: ${arguments[1]}');
     return;
   }
+  // `echo <prompt> --add-dir <path>...` reports the folders it was given.
+  if (arguments.length > 2 &&
+      arguments.first == 'echo' &&
+      arguments.length.isEven) {
+    final directories = <String>[];
+    for (var index = 2; index < arguments.length; index += 2) {
+      if (arguments[index] != '--add-dir') break;
+      directories.add(arguments[index + 1]);
+    }
+    if (directories.length == (arguments.length - 2) ~/ 2) {
+      stdout.writeln(
+          'fixture echo: ${arguments[1]} | dirs: ${directories.join(',')}');
+      return;
+    }
+  }
   if (arguments.length == 1 && arguments.single == 'hang') {
     await Future<void>.delayed(const Duration(seconds: 30));
     return;

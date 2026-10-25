@@ -223,6 +223,39 @@ class AllowedFolderRegistry {
         return renamed;
       });
 
+  /// Maps the folder IDs Cloud attached to an assignment back to local paths,
+  /// checking access again right before launch. Any folder that is no longer
+  /// allowed or accessible fails the execution; folders are never dropped.
+  Future<List<String>> resolveForExecution(List<String> ids) async {
+    if (ids.isEmpty) return const [];
+    if (ids.length > maxFolders || ids.toSet().length != ids.length) {
+      throw const AllowedFolderViolation(
+          'folder_unavailable', 'The attached folder list is invalid.');
+    }
+    final folders = {for (final folder in await list()) folder.id: folder};
+    final paths = <String>[];
+    for (final id in ids) {
+      final folder = folders[id];
+      if (folder == null) {
+        throw const AllowedFolderViolation(
+            'folder_unavailable',
+            'An additional folder attached to this Space is no longer allowed '
+                'on this Workspace.');
+      }
+      final status = await probe(folder.path);
+      if (status == AllowedFolderStatus.missing ||
+          status == AllowedFolderStatus.denied) {
+        throw AllowedFolderViolation(
+            'folder_unavailable',
+            'The additional folder "${folder.displayName}" is '
+                '${status == AllowedFolderStatus.missing ? 'missing' : 'not accessible'} '
+                'on this Workspace.');
+      }
+      paths.add(folder.path);
+    }
+    return paths;
+  }
+
   /// Re-runs the access check for one folder, or all folders when [id] is
   /// null, and persists the results.
   Future<List<AllowedFolder>> recheck({String? id}) => _serial(() async {
@@ -415,4 +448,42 @@ class AllowedFolderRegistry {
     final prefix = parent.endsWith(separator) ? parent : '$parent$separator';
     return _key(child).startsWith(_key(prefix));
   }
+}
+
+/// Whether a Tool Profile can pass additional folders to its CLI. Every
+/// argument vector that may be selected (base and each compatibility
+/// override) must contain the `forEachAdditionalDirectory` slot.
+bool profileSupportsAdditionalDirectories(Map<String, Object?> profile) {
+  bool hasSlot(Object? arguments) =>
+      arguments is List &&
+      arguments.any((part) =>
+          part is Map && part.containsKey('forEachAdditionalDirectory'));
+  final execution = profile['execution'];
+  if (execution is! Map || !hasSlot(execution['arguments'])) return false;
+  final overrides = profile['compatibilityOverrides'];
+  if (overrides is List) {
+    for (final override in overrides) {
+      if (override is Map &&
+          override.containsKey('executionArguments') &&
+          !hasSlot(override['executionArguments'])) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/// Folder IDs Cloud attached to an assignment, or an empty list. Malformed
+/// values fail closed.
+List<String> assignmentAdditionalFolderIds(Map<String, Object?> payload) {
+  final input = payload['input'];
+  final value = input is Map ? input['additionalFolderIds'] : null;
+  if (value == null) return const [];
+  if (value is! List ||
+      value.any((id) =>
+          id is! String || !AllowedFolderRegistry._safeId.hasMatch(id))) {
+    throw const AllowedFolderViolation(
+        'folder_unavailable', 'The attached folder list is invalid.');
+  }
+  return List<String>.unmodifiable(value.cast<String>());
 }

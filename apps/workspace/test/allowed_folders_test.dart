@@ -141,4 +141,80 @@ void main() {
 
     await expectLater(registry().list(), throwsStateError);
   });
+
+  test('resolves attached folder IDs to fresh local paths before launch',
+      () async {
+    final subject = registry();
+    final api = await subject.add((await folder('api')).path);
+    final gone = await subject.add((await folder('gone')).path);
+
+    expect(await subject.resolveForExecution([api.id]), [api.path]);
+    expect(await subject.resolveForExecution(const []), isEmpty);
+
+    await Directory(gone.path).delete();
+    await expectLater(
+        subject.resolveForExecution([api.id, gone.id]),
+        throwsA(isA<AllowedFolderViolation>()
+            .having((error) => error.message, 'message', contains('"gone"'))));
+    await expectLater(subject.resolveForExecution(['folder-ffffffffffffffff']),
+        throwsA(isA<AllowedFolderViolation>()));
+    await expectLater(subject.resolveForExecution([api.id, api.id]),
+        throwsA(isA<AllowedFolderViolation>()));
+  });
+
+  test('reads folder IDs from assignment input and fails closed', () {
+    expect(assignmentAdditionalFolderIds(const {}), isEmpty);
+    expect(
+        assignmentAdditionalFolderIds(const {
+          'input': {
+            'additionalFolderIds': ['folder-0123456789abcdef']
+          }
+        }),
+        ['folder-0123456789abcdef']);
+    for (final invalid in [
+      'folder-0123456789abcdef',
+      ['/Users/me/api'],
+      [42],
+    ]) {
+      expect(
+          () => assignmentAdditionalFolderIds({
+                'input': {'additionalFolderIds': invalid}
+              }),
+          throwsA(isA<AllowedFolderViolation>()));
+    }
+  });
+
+  test('requires the folder slot in every selectable argument vector', () {
+    const slot = {
+      'forEachAdditionalDirectory': ['--add-dir', '{{additionalDirectory}}']
+    };
+    expect(
+        profileSupportsAdditionalDirectories({
+          'execution': {
+            'arguments': ['run', slot]
+          },
+          'compatibilityOverrides': const [],
+        }),
+        isTrue);
+    expect(
+        profileSupportsAdditionalDirectories({
+          'execution': {
+            'arguments': ['run']
+          },
+        }),
+        isFalse);
+    expect(
+        profileSupportsAdditionalDirectories({
+          'execution': {
+            'arguments': ['run', slot]
+          },
+          'compatibilityOverrides': [
+            {
+              'executionArguments': ['old-run']
+            }
+          ],
+        }),
+        isFalse,
+        reason: 'An override without the slot could drop the folders.');
+  });
 }

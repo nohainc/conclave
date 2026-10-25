@@ -100,7 +100,9 @@ void _rejectWorkerControlledPaths(Map<String, Object?> value) {
     'working_directory',
     'cwd',
     'workdir',
-    'workspacePath'
+    'workspacePath',
+    // Only folder IDs may arrive; the Service maps them to local paths.
+    'additionalDirectories',
   };
   void visit(Object? current) {
     if (current is Map) {

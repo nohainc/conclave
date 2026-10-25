@@ -452,6 +452,15 @@ void _validateArgumentStrings(Object? value, String name, {required int max}) {
 bool _validArgument(Object? item) {
   if (item is String) return item.length <= 4096;
   if (item is! Map || item.length > 3) return false;
+  if (item.containsKey('forEachAdditionalDirectory')) {
+    final values = item['forEachAdditionalDirectory'];
+    return item.length == 1 &&
+        values is List &&
+        values.isNotEmpty &&
+        values.length <= 8 &&
+        values.every((v) => v is String && v.length <= 4096) &&
+        values.any((v) => (v as String).contains('{{additionalDirectory}}'));
+  }
   const allowed = {
     'sandboxPolicyMapping',
     'modelArguments',

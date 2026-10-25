@@ -322,6 +322,62 @@ describe("Tool Profile v1 pure interpreter", () => {
     expect(fullAccess).not.toContain("--sandbox");
   });
 
+  it("repeats additional folder arguments once per verified folder", () => {
+    const profile = loadProfile("gemini-antigravity.v1");
+    const slots: NonNullable<Parameters<typeof expandExecutionArguments>[2]> = [
+      { sandboxPolicyMapping: true },
+      { modelArguments: true },
+      { sessionResumeArguments: true },
+      { providerTimeoutArguments: true },
+      { forEachAdditionalDirectory: ["--add-dir", "{{additionalDirectory}}"] },
+    ];
+    const result = expandExecutionArguments(
+      profile,
+      context({
+        additionalDirectories: ["/Users/me/api", "/Users/me/my docs"],
+      }),
+      [...slots],
+    );
+    expect(result.slice(-4)).toEqual([
+      "--add-dir",
+      "/Users/me/api",
+      "--add-dir",
+      "/Users/me/my docs",
+    ]);
+    expect(
+      expandExecutionArguments(profile, context(), [...slots]),
+    ).not.toContain("--add-dir");
+    expect(() =>
+      expandExecutionArguments(
+        profile,
+        context({ additionalDirectories: ["/Users/me/api"] }),
+        [...slots.slice(0, 4)],
+      ),
+    ).toThrow("does not support additional folders");
+  });
+
+  it("rejects {{additionalDirectory}} outside its argument slot", () => {
+    const profile = loadProfile("gemini-antigravity.v1");
+    expect(() =>
+      expandExecutionArguments(profile, context(), [
+        { sandboxPolicyMapping: true },
+        { modelArguments: true },
+        { sessionResumeArguments: true },
+        { providerTimeoutArguments: true },
+        "{{additionalDirectory}}",
+      ]),
+    ).toThrow();
+    expect(() =>
+      expandExecutionArguments(profile, context(), [
+        { sandboxPolicyMapping: true },
+        { modelArguments: true },
+        { sessionResumeArguments: true },
+        { providerTimeoutArguments: true },
+        { forEachAdditionalDirectory: ["--add-dir"] },
+      ]),
+    ).toThrow();
+  });
+
   it("evaluates only the fixed present/absent argument conditions", () => {
     const profile = loadProfile("gemini-antigravity.v1");
     expect(

@@ -13,6 +13,7 @@ abstract final class WorkerProtocolLimits {
   static const maxCapabilities = 64;
   static const maxCapabilityLength = 128;
   static const maxPromptBytes = 512 * 1024;
+  static const maxAdditionalDirectories = 32;
   static const maxOutputBytes = 768 * 1024;
   static const maxModelLength = 128;
   static const maxSessionKeyLength = 256;

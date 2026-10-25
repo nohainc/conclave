@@ -715,9 +715,22 @@ final class ExecuteRequest extends WorkerFrame {
     this.sessionKey,
     this.workerSession,
     this.statelessContext,
+    this.additionalDirectories = const [],
     this.protocolVersion = localWorkerProtocolVersion,
   }) {
     _validateProtocol(protocolVersion);
+    if (additionalDirectories.length >
+            WorkerProtocolLimits.maxAdditionalDirectories ||
+        additionalDirectories.any((path) =>
+            path.isEmpty ||
+            path.length > 4096 ||
+            path.contains('\x00') ||
+            !(path.startsWith('/') ||
+                RegExp(r'^[A-Za-z]:[\\/]').hasMatch(path))) ||
+        additionalDirectories.toSet().length != additionalDirectories.length) {
+      throw const FormatException(
+          'additionalDirectories must be distinct absolute paths');
+    }
     _validateToken(
       requestId,
       'requestId',
@@ -796,6 +809,10 @@ final class ExecuteRequest extends WorkerFrame {
   final WorkerSessionContext? workerSession;
   final ConversationBootstrap? statelessContext;
 
+  /// Workspace-verified absolute folders the provider CLI may use besides the
+  /// working directory. The Profile decides how they become CLI arguments.
+  final List<String> additionalDirectories;
+
   @override
   String get type => 'execute.request';
 
@@ -818,6 +835,8 @@ final class ExecuteRequest extends WorkerFrame {
         if (workerSession != null) 'workerSession': workerSession!.toJson(),
         if (statelessContext != null)
           'statelessContext': statelessContext!.toJson(),
+        if (additionalDirectories.isNotEmpty)
+          'additionalDirectories': additionalDirectories,
       };
 
   factory ExecuteRequest.fromJson(Map<String, Object?> json) {
@@ -836,8 +855,14 @@ final class ExecuteRequest extends WorkerFrame {
       'sessionKey',
       'workerSession',
       'statelessContext',
+      'additionalDirectories',
     });
     _expectType(json, 'execute.request');
+    final directories = json['additionalDirectories'] ?? const <Object?>[];
+    if (directories is! List || directories.any((path) => path is! String)) {
+      throw const FormatException(
+          'additionalDirectories must be a list of strings');
+    }
     final model = json['model'];
     if (model != null && model is! String)
       throw const FormatException('model must be a string or null');
@@ -895,6 +920,7 @@ final class ExecuteRequest extends WorkerFrame {
           ? null
           : WorkerSessionContext.fromJson(
               Map<String, Object?>.from(json['workerSession'] as Map)),
+      additionalDirectories: List<String>.unmodifiable(directories),
     );
   }
 }

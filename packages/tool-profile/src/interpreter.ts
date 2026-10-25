@@ -37,6 +37,8 @@ export interface ProfileExecutionContext {
   sessionModel?: string | null;
   /** Detected provider CLI version used to select one compatibility override. */
   providerVersion?: string;
+  /** Workspace-verified folders the CLI may use besides workingDirectory. */
+  additionalDirectories?: readonly string[];
 }
 
 export interface ProfileExecutionInput {
@@ -478,6 +480,7 @@ function expandTemplate(
   value: string,
   profile: ToolProfileV1,
   context: ProfileExecutionContext,
+  additionalDirectory?: string,
 ): string {
   const timeout = timeoutValues(profile, context);
   const substitutions: Record<string, string | undefined> = {
@@ -495,6 +498,7 @@ function expandTemplate(
     workingDirectory: context.workingDirectory,
     home: context.home,
     workerStateDirectory: context.workerStateDirectory,
+    additionalDirectory,
   };
   return value.replace(/\{\{([^{}]+)\}\}/g, (_whole, name: string) => {
     const replacement = substitutions[name];
@@ -531,13 +535,31 @@ export function expandExecutionArguments(
     : compatibleProfile;
   validateContext(profile, context);
   const sourceArguments = profile.execution.arguments;
+  const directories = context.additionalDirectories ?? [];
+  if (
+    directories.length > 0 &&
+    !sourceArguments.some(
+      (part) =>
+        typeof part === "object" && "forEachAdditionalDirectory" in part,
+    )
+  )
+    throw new ProfileInterpreterError(
+      "Worker Profile does not support additional folders",
+    );
   const output: string[] = [];
   for (const part of sourceArguments) {
     if (typeof part === "string") {
       output.push(expandTemplate(part, profile, context));
       continue;
     }
-    if ("sandboxPolicyMapping" in part) {
+    if ("forEachAdditionalDirectory" in part) {
+      for (const directory of directories)
+        output.push(
+          ...part.forEachAdditionalDirectory.map((value) =>
+            expandTemplate(value, profile, context, directory),
+          ),
+        );
+    } else if ("sandboxPolicyMapping" in part) {
       output.push(
         ...profile.sandbox.mappings[context.executionPolicy].map((value) =>
           expandTemplate(value, profile, context),

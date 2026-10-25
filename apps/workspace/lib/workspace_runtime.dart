@@ -468,6 +468,33 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           ),
         );
       }
+      // Additional folders: IDs from Cloud become local paths only here, after
+      // a fresh access check. A Profile that cannot pass them fails clearly
+      // instead of running without the folders.
+      List<String> additionalDirectories = const [];
+      try {
+        final folderIds = assignmentAdditionalFolderIds(payload);
+        if (folderIds.isNotEmpty) {
+          if (!profileSupportsAdditionalDirectories(release.profile)) {
+            throw const AllowedFolderViolation(
+                'profile_unsupported',
+                'This Worker cannot use additional folders yet. Detach the '
+                    "Space's additional folders or choose another Worker.");
+          }
+          additionalDirectories =
+              await allowedFolders.resolveForExecution(folderIds);
+        }
+      } on AllowedFolderViolation catch (error) {
+        throw AssignmentExecutionFailure(
+          code: 'worker_not_ready',
+          message: error.message,
+          localDiagnostic: _runtimeFailureDiagnostic(
+            'additional_folders',
+            'worker_not_ready',
+            detail: error.code,
+          ),
+        );
+      }
       final profileFile = plan.profileFile;
       // T7: Profile resolved and its execution file located.
       connection?.traceAssignmentStage(context, 'profile_resolved');
@@ -518,6 +545,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             context.payload,
             fullAccessAuthorized: worker.fullLocalAccessAuthorized,
           ),
+          additionalDirectories: additionalDirectories,
           onProgress: onProgress,
           onSlotReserved: onSlotReserved,
           authorizeStart: authorizeStart,

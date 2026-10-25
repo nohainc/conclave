@@ -452,6 +452,7 @@ final class CliWorkerEngineSupervisor {
     String? reasoningEffort,
     String? catalogRevision,
     WorkerExecutionPolicy executionPolicy = WorkerExecutionPolicy.restricted,
+    List<String> additionalDirectories = const [],
     Duration? engineExecutionTimeout,
     String? attemptId,
     String? executionId,
@@ -673,6 +674,7 @@ final class CliWorkerEngineSupervisor {
           reasoningEffort: reasoningEffort,
           catalogRevision: catalogRevision,
           executionPolicy: executionPolicy,
+          additionalDirectories: additionalDirectories,
         ),
 
         _remaining(boundedTimeout, timer),

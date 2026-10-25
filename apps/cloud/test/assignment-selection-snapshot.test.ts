@@ -64,6 +64,9 @@ it.each([null, "low"])(
           async run() {
             return {};
           },
+          async all() {
+            return { results: [] };
+          },
         };
       },
     };

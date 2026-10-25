@@ -331,6 +331,14 @@ async function dispatchWorkspaceWorkerAssignment(
   const assignmentInput = { ...(task.input ?? {}) };
   delete assignmentInput.sessionPolicy;
   delete assignmentInput.sessionKey;
+  delete assignmentInput.additionalFolderIds;
+  const additionalFolderIds = await loadAssignmentAdditionalFolderIds(
+    env.CONCLAVE_DB,
+    target.spaceId,
+    target.workspaceId,
+  );
+  if (additionalFolderIds.length > 0)
+    assignmentInput.additionalFolderIds = additionalFolderIds;
   let bootstrap;
   if (target.conversationId) {
     const requestId = target.workRequestId ?? task.workRequestId;
@@ -1345,4 +1353,33 @@ export async function cancelTaskAssignment(
     intent: { status: "cancelled", reason, source: "manual_cancel" },
   });
   return { cancelled: result.confirmed };
+}
+
+/**
+ * Folder IDs the Space owner attached on this Workspace. Only IDs travel; the
+ * Workspace maps them to local paths and re-checks access before launch. The
+ * owner check is repeated here so a Space that changed hands never sends the
+ * previous owner's folders.
+ */
+export async function loadAssignmentAdditionalFolderIds(
+  db: D1Database,
+  spaceId: string | null | undefined,
+  workspaceId: string,
+): Promise<string[]> {
+  if (!spaceId) return [];
+  const rows = await db
+    .prepare(
+      `SELECT a.folder_id AS folderId
+         FROM space_additional_folders a
+         JOIN workspace_allowed_folders f
+           ON f.workspace_id = a.workspace_id AND f.folder_id = a.folder_id
+         JOIN spaces s ON s.id = a.space_id
+         JOIN execution_workspaces w
+           ON w.id = a.workspace_id AND w.owner_user_id = s.owner_user_id
+        WHERE a.space_id = ?1 AND a.workspace_id = ?2
+        ORDER BY a.folder_id`,
+    )
+    .bind(spaceId, workspaceId)
+    .all<{ folderId: string }>();
+  return (rows.results ?? []).map((row) => row.folderId);
 }

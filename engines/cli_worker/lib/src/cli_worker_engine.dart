@@ -1533,7 +1533,11 @@ class CliWorkerEngine {
             request.timeoutMs - executionClock.elapsedMilliseconds;
         if (remainingMs <= 0)
           throw TimeoutException('Execution deadline reached');
-        final args = _expandArguments(_list(execution['arguments']), context);
+        final args = _expandArguments(
+          _list(execution['arguments']),
+          context,
+          additionalDirectories: request.additionalDirectories,
+        );
         final stdinText = _expandStdin(_map(execution['stdin']), context);
         final eventProgress = <String>{};
         var toolSeen = false;
@@ -1924,9 +1928,21 @@ class CliWorkerEngine {
 
   List<String> _expandArguments(
     List<Object?> source,
-    Map<String, String> context,
-  ) {
+    Map<String, String> context, {
+    List<String> additionalDirectories = const [],
+  }) {
     final output = <String>[];
+    // Folders are never dropped silently: a Profile that cannot pass them to
+    // its CLI fails the execution instead of running without them.
+    if (additionalDirectories.isNotEmpty &&
+        !source.any(
+          (part) =>
+              part is Map && part.containsKey('forEachAdditionalDirectory'),
+        )) {
+      throw const FormatException(
+        'Worker Profile does not support additional folders',
+      );
+    }
     final policy = context['executionPolicy']!;
     for (final part in source) {
       if (part is String) {
@@ -1941,6 +1957,7 @@ class CliWorkerEngine {
                   'modelArguments',
                   'sessionResumeArguments',
                   'providerTimeoutArguments',
+                  'forEachAdditionalDirectory',
                 }.contains(marker.keys.single)) ||
             (marker.length == 2 && keys.containsAll({'ifPresent', 'values'})) ||
             (marker.length == 3 &&
@@ -1948,7 +1965,13 @@ class CliWorkerEngine {
         if (!knownMarker) {
           throw const FormatException('unknown structured argument form');
         }
-        if (marker['sandboxPolicyMapping'] == true) {
+        if (marker.containsKey('forEachAdditionalDirectory')) {
+          final values = _stringList(marker['forEachAdditionalDirectory']);
+          for (final directory in additionalDirectories) {
+            final scoped = {...context, 'additionalDirectory': directory};
+            output.addAll(values.map((v) => _template(v, scoped)));
+          }
+        } else if (marker['sandboxPolicyMapping'] == true) {
           output.addAll(
             _stringList(
               _map(_profile.sandbox['mappings'])[policy],

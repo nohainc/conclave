@@ -392,6 +392,16 @@ supported. These markers insert the corresponding section's fixed argument
 vector at that position. The profile's `sandbox.mappings` define finite vectors
 for `restricted`, `provider_default`, and `full_access`.
 
+An execution argument list may contain at most one
+`{"forEachAdditionalDirectory": ["--add-dir", "{{additionalDirectory}}"]}`
+slot (1–8 values, at least one containing `{{additionalDirectory}}`). The
+Engine repeats the values once per Workspace-verified additional folder from
+`execute.request` `additionalDirectories`, in order, and emits nothing when
+there are none. `{{additionalDirectory}}` is invalid anywhere else. When an
+assignment has additional folders, the base argument list and every
+compatibility override that replaces it must contain the slot; otherwise the
+Workspace fails the assignment instead of running without the folders.
+
 Workspace Local Worker Protocol 4.0 assignments can select only `restricted`
 or `provider_default`; omitted values default to `restricted`. `full_access`
 remains a schema-level profile mapping for products with a separate explicit

@@ -102,6 +102,8 @@ const placeholderNames = [
   "workingDirectory",
   "home",
   "workerStateDirectory",
+  // Only defined inside a forEachAdditionalDirectory argument slot.
+  "additionalDirectory",
 ] as const;
 const templatedString = boundedString.superRefine((value, ctx) => {
   const placeholders = [...value.matchAll(/\{\{([^{}]+)\}\}/g)];
@@ -237,6 +239,21 @@ const argument = z.union([
   z.object({ modelArguments: z.literal(true) }).strict(),
   z.object({ sessionResumeArguments: z.literal(true) }).strict(),
   z.object({ providerTimeoutArguments: z.literal(true) }).strict(),
+  // Repeats these values once per Workspace-verified additional folder, for
+  // example ["--add-dir", "{{additionalDirectory}}"].
+  z
+    .object({
+      forEachAdditionalDirectory: z
+        .array(templatedString)
+        .min(1)
+        .max(8)
+        .refine(
+          (values) =>
+            values.some((value) => value.includes("{{additionalDirectory}}")),
+          "Additional folder arguments must include {{additionalDirectory}}",
+        ),
+    })
+    .strict(),
 ]);
 
 const action = z.discriminatedUnion("type", [
@@ -1096,6 +1113,24 @@ export const toolProfileV1Schema = profileSchema.superRefine((profile, ctx) => {
           message: `Execution arguments require ${occurrences} ${key} slot(s)`,
         });
     }
+    if (count("forEachAdditionalDirectory") > 1)
+      ctx.addIssue({
+        code: "custom",
+        path,
+        message:
+          "Execution arguments allow one forEachAdditionalDirectory slot",
+      });
+    args.forEach((part, index) => {
+      const values =
+        typeof part === "string" ? [part] : "values" in part ? part.values : [];
+      if (values.some((value) => value.includes("{{additionalDirectory}}")))
+        ctx.addIssue({
+          code: "custom",
+          path: [...path, index],
+          message:
+            "{{additionalDirectory}} is only available in forEachAdditionalDirectory",
+        });
+    });
   };
   validateArgumentSlots(profile.execution.arguments, [
     "execution",
