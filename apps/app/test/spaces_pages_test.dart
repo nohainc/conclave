@@ -2298,6 +2298,13 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('composer-send-Send message')));
     await tester.pumpAndSettle();
     expect(ds.createdReplyTo, {'kind': 'message', 'id': 'saved-message'});
+    final quote = find.byKey(const ValueKey('reply-quote-saved-message'));
+    expect(quote, findsOneWidget);
+    await tester.tap(quote);
+    await tester.pumpAndSettle();
+    expect(find.text('Original message unavailable'), findsNothing);
+    expect(find.text('First question'), findsWidgets);
+
     expect(find.byKey(const ValueKey('reply-composer-banner')), findsNothing);
 
     await _chooseMessageAction(tester, 'Reply');
@@ -4174,7 +4181,14 @@ class _MarkdownDiscussionDataSource extends AxFixtureDataSource {
     createdSource = text;
     createdReplyTo = replyTo;
     return AxDiscussionMessage(
-        id: 'saved-message',
+        id: replyTo == null ? 'saved-message' : 'saved-reply',
+        replyTo: replyTo == null
+            ? null
+            : AxReplyReference(
+                kind: replyTo['kind'] as String,
+                id: replyTo['id'] as String,
+                authorName: 'You',
+                excerpt: 'First question'),
         threadId: threadId,
         authorUserId: 'user-owner',
         body: text,

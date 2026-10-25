@@ -1995,13 +1995,68 @@ class _ThreadPageState extends State<ThreadPage>
               opacity: _threadViewReady ? 1 : 0,
               child: NotificationListener<ScrollMetricsNotification>(
                 onNotification: _onTimelineMetricsChanged,
-                child: content,
+                child: _ReplyNavigation(
+                    navigate: _navigateToReply, child: content),
               ),
             ),
           ),
         );
       }),
     );
+  }
+
+  int _replyNavigationGeneration = 0;
+
+  Future<void> _navigateToReply(AxReplyReference reference) async {
+    final generation = ++_replyNavigationGeneration;
+    final threadId = widget.thread.id;
+    bool current() =>
+        mounted &&
+        widget.thread.id == threadId &&
+        generation == _replyNavigationGeneration;
+    final target = reference.kind == 'message'
+        ? reference.id
+        : 'work-${reference.id}-${reference.kind == 'response' ? 'answer' : 'request'}';
+    _followChat = false;
+    _chatIncomingAnchor.reset();
+    _setNotesOpen(false);
+    _setAiHistoryOpen(false);
+    while (current() && !_conversationIds().contains(target)) {
+      final cursor = reference.kind == 'message'
+          ? _chatPresentation.olderCursor
+          : _workPresentation.olderCursor;
+      if (cursor == null) break;
+      if (reference.kind == 'message') {
+        await _loadOlderDiscussion();
+      } else {
+        await _loadOlderWorkHistory();
+      }
+      if (!current()) return;
+      final next = reference.kind == 'message'
+          ? _chatPresentation.olderCursor
+          : _workPresentation.olderCursor;
+      if (next == cursor) break;
+    }
+    if (!current() || !mounted) return;
+    final ids = _conversationIds();
+    final index = ids.indexOf(target);
+    if (index < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Original message unavailable')));
+      return;
+    }
+    // Wait for tab switching and prepended history to finish layout.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!current()) return;
+    _openChatPending = false;
+    _chatIncomingAnchor.anchorAt(target,
+        fraction: ids.length < 2 ? 0 : index / (ids.length - 1));
+    for (var attempt = 0; attempt < 30 && current(); attempt++) {
+      if (!_chatHistoryController.hasClients) return;
+      if (!_chatIncomingAnchor.reveal(_chatHistoryController)) return;
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (current()) _chatIncomingAnchor.reset();
   }
 
   Widget _notes() {

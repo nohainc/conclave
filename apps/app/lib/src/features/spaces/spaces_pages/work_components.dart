@@ -3407,6 +3407,13 @@ class _ReplyComposerBanner extends StatelessWidget {
   }
 }
 
+class _ReplyNavigation extends InheritedWidget {
+  const _ReplyNavigation({required this.navigate, required super.child});
+  final ValueChanged<AxReplyReference> navigate;
+  @override
+  bool updateShouldNotify(_ReplyNavigation oldWidget) => true;
+}
+
 /// The quoted message shown above a reply, as in other messengers.
 class _ReplyQuote extends StatelessWidget {
   const _ReplyQuote({required this.reference});
@@ -3424,28 +3431,34 @@ class _ReplyQuote extends StatelessWidget {
       container: true,
       label:
           'Reply to ${_replyKindLabel(reference.kind)} from ${reference.authorName}: $excerpt',
-      child: Container(
-        key: ValueKey('reply-quote-${reference.id}'),
-        margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.fromLTRB(8, 2, 8, 2),
-        decoration: BoxDecoration(
-          border: Border(
-              left: BorderSide(color: muted.withValues(alpha: 0.6), width: 3)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(reference.authorName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w600, color: muted)),
-            Text(excerpt,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: muted)),
-          ],
+      child: InkWell(
+        onTap: () => context
+            .findAncestorWidgetOfExactType<_ReplyNavigation>()
+            ?.navigate(reference),
+        child: Container(
+          key: ValueKey('reply-quote-${reference.id}'),
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.fromLTRB(8, 2, 8, 2),
+          decoration: BoxDecoration(
+            border: Border(
+                left:
+                    BorderSide(color: muted.withValues(alpha: 0.6), width: 3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(reference.authorName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600, color: muted)),
+              Text(excerpt,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: muted)),
+            ],
+          ),
         ),
       ),
     );
