@@ -400,10 +400,15 @@ class AxDiscussionCache {
   Future<void> send(String id, String text,
       {String? userId,
       String? userName,
-      List<Map<String, dynamic>> attachments = const []}) async {
+      List<Map<String, dynamic>> attachments = const [],
+      AxReplyReference? replyTo}) async {
     final context = _context(id);
     final scope = 'thread:$id:send-discussion';
-    final payload = jsonEncode([text, attachments]);
+    final payload = jsonEncode([
+      text,
+      attachments,
+      if (replyTo != null) replyTo.target,
+    ]);
     final key = _attempts.keyFor(scope, payload);
     final temp = AxDiscussionMessage(
         id: 'temp-${DateTime.now().microsecondsSinceEpoch}-${++_temporaryId}',
@@ -413,7 +418,9 @@ class AxDiscussionCache {
         body: text,
         attachments: attachments,
         createdAt: DateTime.now().toUtc().toIso8601String(),
-        isMe: true);
+        isMe: true,
+        // Shown at once; the server's snapshot replaces it on commit.
+        replyTo: replyTo);
     final fence = engine.fence(query(id).key);
     return engine.mutations
         .run(AxMutationOperation<AxDiscussionMessage, _DiscussionContext>(
@@ -432,7 +439,8 @@ class AxDiscussionCache {
                     threadId: id,
                     text: text,
                     attachments: attachments,
-                    idempotencyKey: key);
+                    idempotencyKey: key,
+                    replyTo: replyTo?.target);
             if (saved.id.isEmpty || saved.threadId != id) {
               throw const AxApiException(
                   'Discussion response identity does not match');

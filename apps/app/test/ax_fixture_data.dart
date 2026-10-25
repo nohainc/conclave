@@ -35,6 +35,7 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
     List<Map<String, dynamic>> attachments = const [],
     Map<String, dynamic> executionSelection = const {},
     String? idempotencyKey,
+    Map<String, dynamic>? replyTo,
   }) =>
       createWorkRequest(
           threadId: threadId,
@@ -254,9 +255,17 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
     List<String> references = const [],
     List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
+    Map<String, dynamic>? replyTo,
   }) async =>
       AxDiscussionMessage(
         id: 'msg-${DateTime.now().microsecondsSinceEpoch}',
+        replyTo: replyTo == null
+            ? null
+            : AxReplyReference(
+                kind: replyTo['kind'] as String,
+                id: replyTo['id'] as String,
+                authorName: 'Fixture',
+                excerpt: 'Quoted fixture text'),
         threadId: threadId,
         authorUserId: 'user-owner',
         authorName: 'Vitalii',

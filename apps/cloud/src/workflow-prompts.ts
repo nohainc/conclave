@@ -14,8 +14,16 @@ export interface WorkPromptAttachment {
   readonly url?: string;
 }
 
+/** The message the user replied to (Reply v1), as quoted context. */
+export interface WorkPromptReply {
+  readonly kind: "message" | "request" | "response";
+  readonly authorName: string;
+  readonly excerpt: string;
+}
+
 export interface WorkStepPromptInputs {
   readonly originalRequest: string;
+  readonly replyTo?: WorkPromptReply;
   readonly workRequestId?: string;
   readonly attachments?: readonly WorkPromptAttachment[];
   readonly spaceInstructions?: string;
@@ -96,6 +104,26 @@ function section(label: string, value: string): string {
   return value ? `${label}:\n${value}` : "";
 }
 
+/** Quotes the message the user replied to, before their request. */
+function replySection(inputs: WorkStepPromptInputs): string {
+  const reply = inputs.replyTo;
+  if (!reply) return "";
+  const source =
+    reply.kind === "response"
+      ? "AI response"
+      : reply.kind === "request"
+        ? "request"
+        : "message";
+  const quote = boundedText(reply.excerpt, 2_000)
+    .split("\n")
+    .map((line) => `> ${line}`)
+    .join("\n");
+  return section(
+    "The user is replying to this earlier message",
+    `${boundedText(reply.authorName, 120)} (${source}):\n${quote}`,
+  );
+}
+
 /** Deterministically renders the internal, versioned Worker prompt for a step. */
 export function renderWorkStepPrompt(
   workflow: Pick<BuiltinWorkflowDefinition, "id" | "version" | "steps">,
@@ -132,6 +160,7 @@ export function renderWorkStepPrompt(
 
   if (workflow.id === "direct") {
     const sections = [
+      replySection(inputs),
       boundedText(inputs.originalRequest, 20_000),
       attachmentReferences(inputs),
       section(
@@ -171,6 +200,7 @@ export function renderWorkStepPrompt(
       `Additional ${stepLabels[step.kind]} instructions`,
       boundedText(inputs.stepInstructions?.[step.kind], MAX_SECTION_CHARS),
     ),
+    replySection(inputs),
     section(
       "Run-specific user request",
       boundedText(inputs.originalRequest, 20_000),
@@ -322,7 +352,23 @@ export function workStepPromptInputs(
       ? (rawStepInstructions as Partial<Record<StepKind, string>>)
       : {};
 
+  const rawReply = input.replyTo as Record<string, unknown> | undefined;
+  const replyTo: WorkPromptReply | undefined =
+    rawReply &&
+    typeof rawReply === "object" &&
+    (rawReply.kind === "message" ||
+      rawReply.kind === "request" ||
+      rawReply.kind === "response") &&
+    typeof rawReply.authorName === "string" &&
+    typeof rawReply.excerpt === "string"
+      ? {
+          kind: rawReply.kind,
+          authorName: rawReply.authorName,
+          excerpt: rawReply.excerpt,
+        }
+      : undefined;
   return {
+    ...(replyTo ? { replyTo } : {}),
     originalRequest: stringValue("originalRequest", "request", "objective"),
     ...(typeof input.workRequestId === "string"
       ? { workRequestId: input.workRequestId }

@@ -1,6 +1,7 @@
 import 'ax_idempotency.dart';
 import 'dart:async';
 import '../ax_data.dart';
+import '../ax_models.dart';
 import 'ax_sync_engine.dart';
 
 class AxWorkHistoryGap {
@@ -373,6 +374,9 @@ class AxWorkHistoryCache {
     String? requestedByName,
     List<Map<String, dynamic>> attachments = const [],
     Map<String, dynamic> executionSelection = const {},
+
+    /// Reply v1: the message this request replies to.
+    AxReplyReference? replyTo,
     required Future<String> Function(
             String, String, List<Map<String, dynamic>>, String)
         execute,
@@ -395,6 +399,7 @@ class AxWorkHistoryCache {
       'attachments': inputs,
       if (executionSelection.isNotEmpty)
         'executionSelection': freezeAxMutationInput(executionSelection),
+      if (replyTo != null) 'replyTo': replyTo.target,
     };
     final key = idempotencyKey ?? _attempts.keyFor(scope, input);
     final retrySubmission = _attempts.wasSubmitted(key);
@@ -407,6 +412,7 @@ class AxWorkHistoryCache {
         requestedByUserId: requestedByUserId,
         prompt: prompt,
         attachments: AxWorkAttachment.fromList(inputs),
+        replyTo: replyTo,
         workflowId: workflowId,
         workflowVersion: workflowVersion,
         workflowName: workflowName,
@@ -456,10 +462,21 @@ class AxWorkHistoryCache {
           context.pendingSubmissions[key] = null;
           String savedId;
           try {
-            savedId = executeWithSelection == null
-                ? await execute(prompt, workflowId, inputs, key)
-                : await executeWithSelection(
-                    prompt, workflowId, inputs, key, executionSelection);
+            // A reply needs the data source's reply field; the positional
+            // callbacks predate replies and keep serving every other send.
+            savedId = replyTo != null && source != null
+                ? await source!.createWorkRequestWithSelection(
+                    threadId: id,
+                    workflowId: workflowId,
+                    prompt: prompt,
+                    attachments: inputs,
+                    executionSelection: executionSelection,
+                    idempotencyKey: key,
+                    replyTo: replyTo.target)
+                : executeWithSelection == null
+                    ? await execute(prompt, workflowId, inputs, key)
+                    : await executeWithSelection(
+                        prompt, workflowId, inputs, key, executionSelection);
           } catch (_) {
             final accepted = context.pendingSubmissions[key];
             if (accepted == null) rethrow;
@@ -492,6 +509,7 @@ class AxWorkHistoryCache {
                       requestedByUserId: local.requestedByUserId,
                       prompt: prompt,
                       attachments: AxWorkAttachment.fromList(inputs),
+                      replyTo: replyTo,
                       workflowId: workflowId,
                       workflowVersion: workflowVersion,
                       workflowName: workflowName,
@@ -526,6 +544,7 @@ class AxWorkHistoryCache {
                         requestedByUserId: local.requestedByUserId,
                         prompt: prompt,
                         attachments: AxWorkAttachment.fromList(inputs),
+                        replyTo: replyTo,
                         workflowId: workflowId,
                         workflowVersion: workflowVersion,
                         workflowName: workflowName,

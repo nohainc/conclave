@@ -57,7 +57,8 @@ class DiscussionSource extends AxFixtureDataSource {
       required String text,
       List<String> references = const [],
       List<Map<String, dynamic>> attachments = const [],
-      String? idempotencyKey}) {
+      String? idempotencyKey,
+      Map<String, dynamic>? replyTo}) {
     final request = Completer<AxDiscussionMessage>();
     sends.add(request);
     sentAttachments.add(attachments);

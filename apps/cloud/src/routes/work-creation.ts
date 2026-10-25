@@ -31,6 +31,7 @@ import {
   workRequestFileName,
 } from "./work-request-files.js";
 import { workRequestInputStatements } from "./work-request-inputs.js";
+import { resolveReplyReference } from "./reply-references.js";
 import { createEventPublisher } from "../event-publisher.js";
 import { tryLogTraceEvent } from "../observability.js";
 import {
@@ -365,6 +366,14 @@ export async function handleCreateWorkRequest(
     }),
   );
   requestInput.attachments = normalizedAttachments;
+  // Reply v1: only a server-built snapshot of a target in this Thread.
+  const replyTo = await resolveReplyReference(
+    env.CONCLAVE_DB,
+    threadId,
+    submittedInput.replyTo ?? body.replyTo,
+  );
+  if (replyTo) requestInput.replyTo = replyTo;
+  else delete requestInput.replyTo;
   const pendingBytes = normalizedAttachments.reduce(
     (total, attachment) =>
       attachment.kind === "file" && !("contentDigest" in attachment)

@@ -514,6 +514,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
     List<Map<String, dynamic>> attachments = const [],
     Map<String, dynamic> executionSelection = const {},
     String? idempotencyKey,
+    Map<String, dynamic>? replyTo,
   }) async {
     final submissionId = idempotencyKey ?? newAxIdempotencyKey();
     AxWorkLatencyTrace.instance.submitted(submissionId);
@@ -530,7 +531,8 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
           'executionSelection': executionSelection,
         'input': {
           'originalRequest': prompt,
-          'attachments': _workRequestManifest(picked)
+          'attachments': _workRequestManifest(picked),
+          if (replyTo != null) 'replyTo': replyTo,
         },
       }),
     );
@@ -952,6 +954,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
     List<String> references = const [],
     List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
+    Map<String, dynamic>? replyTo,
   }) async {
     attachments =
         await _uploadWorkRequestFiles(threadId, attachments, discussion: true);
@@ -965,6 +968,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
         'body': text,
         'attachments': attachments,
         'references': references,
+        if (replyTo != null) 'replyTo': replyTo,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {

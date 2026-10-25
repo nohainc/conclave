@@ -129,8 +129,7 @@ void main() {
     final source = RetrySource(allowed: true, confirmation: true);
     await tester.pumpWidget(page(source));
     await tester.pumpAndSettle();
-    final retry = find.text(
-        'Retry anyway — the previous execution may already have made changes');
+    final retry = find.text('Retry anyway');
     await tester.tap(find.byTooltip('Message actions').last);
     await tester.pumpAndSettle();
     await tester.tap(retry);

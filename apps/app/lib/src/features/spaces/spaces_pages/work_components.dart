@@ -191,7 +191,15 @@ class _WorkComposer extends StatelessWidget {
     this.usageController,
     this.leadingControls,
     this.inputHeight,
+    this.replyTarget,
+    this.onReply,
+    this.onClearReply,
   });
+
+  /// The message being replied to, and the actions that set or clear it.
+  final AxReplyReference? replyTarget;
+  final ValueChanged<AxReplyReference>? onReply;
+  final VoidCallback? onClearReply;
 
   final Widget? leadingControls;
   final ComposerInputHeight? inputHeight;
@@ -398,6 +406,10 @@ class _WorkComposer extends StatelessWidget {
               localWorkProgress.containsKey(request.id) ? null : onRetryStep,
           onCancelRun:
               localWorkProgress.containsKey(request.id) ? null : onCancelRun,
+          onReply: localWorkProgress.containsKey(request.id) ||
+                  request.id.startsWith('local-')
+              ? null
+              : onReply,
         ),
       );
 
@@ -872,13 +884,13 @@ class _WorkComposer extends StatelessWidget {
               ),
             ),
           MarkdownComposer(
-            attachments: attachments.isEmpty
-                ? null
-                : AttachmentCards(
-                    files: attachments,
-                    onRemove:
-                        canExecute && !submitting ? onRemoveAttachment : null,
-                  ),
+            attachments: _composerExtras(
+              reply: replyTarget,
+              onClearReply: canExecute && !submitting ? onClearReply : null,
+              files: attachments,
+              onRemoveFile:
+                  canExecute && !submitting ? onRemoveAttachment : null,
+            ),
             leadingControls: leadingControls,
             inputHeight: inputHeight,
             showControlTooltips: false,
@@ -1435,8 +1447,11 @@ class _WorkTimelineCard extends StatelessWidget {
     required this.issueReportError,
     required this.onRetryStep,
     required this.onCancelRun,
+    this.onReply,
   });
 
+  /// Starts a reply to this request or its answer (Reply v1).
+  final ValueChanged<AxReplyReference>? onReply;
   final GlobalKey? responseAnchorKey;
   final AxWorkRequest request;
   final List<AxWorkActivity> activities;
@@ -1660,6 +1675,21 @@ class _WorkTimelineCard extends StatelessWidget {
         const SizedBox(width: 8),
       ],
       _TimelineActionsMenu(color: metaColor, actions: [
+        if (onReply != null)
+          _TimelineAction(
+            tooltip: 'Reply',
+            icon: Icons.reply_rounded,
+            color: metaColor,
+            onTap: () => onReply!(AxReplyReference(
+              kind: 'request',
+              id: request.id,
+              authorName: effectiveRequesterName,
+              excerpt: replyExcerpt(request.prompt.trim().isEmpty
+                  ? attachmentsLabel(
+                      request.attachments.map((file) => file.toJson()).toList())
+                  : request.prompt),
+            )),
+          ),
         _TimelineAction(
           tooltip: 'Copy',
           icon: Icons.copy_rounded,
@@ -1771,6 +1801,8 @@ class _WorkTimelineCard extends StatelessWidget {
                             ),
                             const SizedBox(height: 6),
                           ],
+                          if (request.replyTo != null)
+                            _ReplyQuote(reference: request.replyTo!),
                           CollapsibleOwnMessage(
                             key: ValueKey(request.id),
                             data: request.prompt,
@@ -1940,6 +1972,18 @@ class _WorkTimelineCard extends StatelessWidget {
                                 ),
                               );
                           final responseActions = <_TimelineAction>[
+                            if (onReply != null &&
+                                request.status == 'completed' &&
+                                response?.isNotEmpty == true)
+                              _TimelineAction(
+                                  tooltip: 'Reply',
+                                  icon: Icons.reply_rounded,
+                                  onTap: () => onReply!(AxReplyReference(
+                                        kind: 'response',
+                                        id: request.id,
+                                        authorName: senderName,
+                                        excerpt: replyExcerpt(response!),
+                                      ))),
                             if (response?.isNotEmpty == true ||
                                 error?.isNotEmpty == true)
                               _TimelineAction(
@@ -1956,7 +2000,7 @@ class _WorkTimelineCard extends StatelessWidget {
                                           'space_folder_exists'
                                       ? 'Use the existing folder and retry'
                                       : failedStep.retryRequiresConfirmation
-                                          ? 'Retry anyway — the previous execution may already have made changes'
+                                          ? 'Retry anyway'
                                           : 'Retry',
                                   icon: Icons.refresh_rounded,
                                   onTap: () =>
@@ -2358,8 +2402,11 @@ class _DiscussionItem {
     this.eventType,
     this.workRequest,
     this.attachments = const [],
+    this.replyTo,
   });
 
+  /// The message this one replies to (Reply v1).
+  final AxReplyReference? replyTo;
   final String id;
   final String author;
   final String? authorId;
@@ -2400,8 +2447,11 @@ class _DiscussionMessageBubble extends StatefulWidget {
     required this.onEdit,
     this.grouped = false,
     this.onDelete,
+    this.onReply,
   });
 
+  /// Replies to this message; null for removed or unsaved messages.
+  final VoidCallback? onReply;
   final _DiscussionItem item;
   final bool grouped;
   final VoidCallback onCopy;
@@ -2546,6 +2596,13 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
           forceMenu: widget.item.aiKind == null,
           color: metaColor,
           actions: [
+            if (widget.onReply != null && !widget.item.id.startsWith('temp-'))
+              _TimelineAction(
+                tooltip: 'Reply',
+                icon: Icons.reply_rounded,
+                color: metaColor,
+                onTap: widget.onReply,
+              ),
             if (widget.item.aiKind == null &&
                 widget.onDelete != null &&
                 !widget.item.id.startsWith('temp-')) ...[
@@ -2642,6 +2699,8 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                               ),
                               const SizedBox(height: 6),
                             ],
+                            if (widget.item.replyTo != null)
+                              _ReplyQuote(reference: widget.item.replyTo!),
                             if (widget.item.attachments.isNotEmpty)
                               AttachmentCards(files: widget.item.attachments),
                             if (_isEditing) ...[
@@ -3039,8 +3098,10 @@ class _QueuedWorkMessage {
     required this.attachments,
     required this.executionSelection,
     required this.workflow,
+    this.replyTo,
   });
 
+  final AxReplyReference? replyTo;
   final String text;
   final List<Map<String, dynamic>> attachments;
   final Map<String, dynamic> executionSelection;
@@ -3253,4 +3314,140 @@ class _ComposerPanelLayer extends StatelessWidget {
           ],
         ),
       );
+}
+
+/// Longest quote shown in the UI; Cloud keeps a longer one for the Worker.
+const _replyPreviewChars = 240;
+
+/// Trims text for the quote shown in a composer or message.
+String replyExcerpt(String text) {
+  final trimmed = text.trim();
+  return trimmed.length > _replyPreviewChars
+      ? '${trimmed.substring(0, _replyPreviewChars - 1)}…'
+      : trimmed;
+}
+
+/// Names the attachments of a message that has no text.
+String attachmentsLabel(List<Map<String, dynamic>> files) {
+  final names = files.map((file) => file['name']?.toString() ?? 'file');
+  return names.isEmpty ? '' : '📎 ${names.join(', ')}';
+}
+
+/// The reply banner and attachment cards shown above a composer's input.
+Widget? _composerExtras({
+  required AxReplyReference? reply,
+  required VoidCallback? onClearReply,
+  required List<Map<String, dynamic>> files,
+  required ValueChanged<int>? onRemoveFile,
+}) {
+  if (reply == null && files.isEmpty) return null;
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (reply != null)
+        _ReplyComposerBanner(reference: reply, onClear: onClearReply),
+      if (files.isNotEmpty)
+        AttachmentCards(files: files, onRemove: onRemoveFile),
+    ],
+  );
+}
+
+String _replyKindLabel(String kind) => switch (kind) {
+      'response' => 'AI response',
+      'request' => 'request',
+      _ => 'message',
+    };
+
+/// "Replying to …" banner above the composer, with a clear button.
+class _ReplyComposerBanner extends StatelessWidget {
+  const _ReplyComposerBanner({required this.reference, required this.onClear});
+
+  final AxReplyReference reference;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final muted = ConclaveColors.textSecondary(isDark);
+    return Semantics(
+      container: true,
+      label: 'Replying to ${reference.authorName}',
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(children: [
+          Icon(Icons.reply_rounded, size: 16, color: muted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                    text: 'Replying to ${reference.authorName}  ',
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                TextSpan(text: reference.excerpt.replaceAll('\n', ' ')),
+              ]),
+              key: const ValueKey('reply-composer-banner'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: muted),
+            ),
+          ),
+          IconButton(
+            key: const ValueKey('reply-clear'),
+            tooltip: 'Cancel reply',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            padding: EdgeInsets.zero,
+            icon: Icon(Icons.close_rounded, size: 16, color: muted),
+            onPressed: onClear,
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// The quoted message shown above a reply, as in other messengers.
+class _ReplyQuote extends StatelessWidget {
+  const _ReplyQuote({required this.reference});
+
+  final AxReplyReference reference;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final muted = ConclaveColors.textSecondary(isDark);
+    final excerpt = reference.excerpt.isEmpty
+        ? 'Original message unavailable'
+        : replyExcerpt(reference.excerpt);
+    return Semantics(
+      container: true,
+      label:
+          'Reply to ${_replyKindLabel(reference.kind)} from ${reference.authorName}: $excerpt',
+      child: Container(
+        key: ValueKey('reply-quote-${reference.id}'),
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.fromLTRB(8, 2, 8, 2),
+        decoration: BoxDecoration(
+          border: Border(
+              left: BorderSide(color: muted.withValues(alpha: 0.6), width: 3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(reference.authorName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w600, color: muted)),
+            Text(excerpt,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: muted)),
+          ],
+        ),
+      ),
+    );
+  }
 }

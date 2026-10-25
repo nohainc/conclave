@@ -448,6 +448,57 @@ class AxDiscussionPage {
   final String? newestCursor;
 }
 
+/// Reply v1: the message, request or AI response a message replies to, as
+/// the server-built snapshot stored with the reply.
+class AxReplyReference {
+  const AxReplyReference({
+    required this.kind,
+    required this.id,
+    required this.authorName,
+    required this.excerpt,
+  });
+
+  /// `message` (Chat entry), `request` (Work prompt) or `response` (AI answer).
+  final String kind;
+  final String id;
+  final String authorName;
+  final String excerpt;
+
+  /// What the client sends: the server builds the snapshot itself.
+  Map<String, dynamic> get target => {'kind': kind, 'id': id};
+
+  Map<String, dynamic> toJson() =>
+      {'kind': kind, 'id': id, 'authorName': authorName, 'excerpt': excerpt};
+
+  static AxReplyReference? fromJson(Object? value) {
+    if (value is! Map) return null;
+    final kind = value['kind'];
+    final id = value['id'];
+    if (!const {'message', 'request', 'response'}.contains(kind) ||
+        id is! String ||
+        id.isEmpty) {
+      return null;
+    }
+    return AxReplyReference(
+      kind: kind as String,
+      id: id,
+      authorName: value['authorName']?.toString() ?? '',
+      excerpt: value['excerpt']?.toString() ?? '',
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is AxReplyReference &&
+      other.kind == kind &&
+      other.id == id &&
+      other.authorName == authorName &&
+      other.excerpt == excerpt;
+
+  @override
+  int get hashCode => Object.hash(kind, id, authorName, excerpt);
+}
+
 class AxDiscussionMessage {
   const AxDiscussionMessage({
     required this.id,
@@ -464,6 +515,7 @@ class AxDiscussionMessage {
     this.eventType,
     this.workRequestId,
     this.workerDisplayName,
+    this.replyTo,
   });
 
   final String id;
@@ -484,6 +536,9 @@ class AxDiscussionMessage {
   final String? workRequestId;
   final String? workerDisplayName;
 
+  /// The message this one replies to (Reply v1).
+  final AxReplyReference? replyTo;
+
   bool get isAiAnswer => kind == 'ai_answer';
   bool get isAiEntry => kind != 'message';
 
@@ -502,7 +557,8 @@ class AxDiscussionMessage {
           kind: kind,
           eventType: eventType,
           workRequestId: workRequestId,
-          workerDisplayName: workerDisplayName);
+          workerDisplayName: workerDisplayName,
+          replyTo: replyTo);
 
   factory AxDiscussionMessage.fromJson(
     Map<String, dynamic> json, {
@@ -566,6 +622,7 @@ class AxDiscussionMessage {
           : 'message',
       workRequestId: json['workRequestId'] as String?,
       workerDisplayName: json['workerDisplayName'] as String?,
+      replyTo: AxReplyReference.fromJson(json['replyTo']),
     );
   }
 }

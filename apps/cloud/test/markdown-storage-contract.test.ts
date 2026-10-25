@@ -199,7 +199,7 @@ it("persists and returns exact Markdown through Chat create, edit and list", asy
   sqlite.exec(`CREATE TABLE users (id TEXT, display_name TEXT);
     CREATE TABLE discussion_messages (id TEXT, thread_id TEXT, attachments_json TEXT NOT NULL DEFAULT '[]',
     author_user_id TEXT, body TEXT, references_json TEXT, edited_at TEXT, created_at TEXT,
-    event_type TEXT, kind TEXT, work_request_id TEXT, worker_display_name TEXT);
+    event_type TEXT, kind TEXT, work_request_id TEXT, worker_display_name TEXT, reply_to_json TEXT);
     CREATE TABLE space_audit_log (id TEXT, space_id TEXT, actor_type TEXT,
       actor_id TEXT, action TEXT, target_type TEXT, target_id TEXT, details_json TEXT, created_at TEXT);`);
   const db = {

@@ -4,6 +4,7 @@ import {
   loadWorkRequestInputs,
   withInputFacts,
 } from "./work-request-inputs.js";
+import { storedReplyReference } from "./reply-references.js";
 import { threadNotice } from "./thread-history-actions.js";
 import { workRequestFileMetadata } from "./work-request-files.js";
 import { loadConversationWorkflowRuns } from "./conversation-workflow-runs.js";
@@ -802,6 +803,7 @@ export async function handleGetWorkRequest(
         row.workflowId,
         row.workflowVersion,
       ),
+      replyTo: storedReplyReference(input.replyTo),
       attachments: workRequestFileMetadata(withInputFacts(input, inputRows)),
       originalRequest: String(
         row.canonicalUserText ?? input.originalRequest ?? input.request ?? "",
@@ -1198,6 +1200,7 @@ export async function handleListWorkRequests(
       turns: turnsByRequest.get(id) ?? [],
       workflowRun: workflowRunsByRequest.get(id) ?? null,
       executionConfig: snapshot.turnExecutionConfig ?? null,
+      replyTo: storedReplyReference(input.replyTo),
       attachments: workRequestFileMetadata(
         withInputFacts(input, inputsByRequest.get(id)),
       ),

@@ -605,11 +605,15 @@ class AxWorkRequest {
     this.error,
     this.activityHistory = const [],
     this.executionPhase,
+    this.replyTo,
   });
 
   final String id;
   final String? conversationId;
   final List<AxWorkAttachment> attachments;
+
+  /// The message this request replies to (Reply v1).
+  final AxReplyReference? replyTo;
   final AxTurnExecutionConfig? executionConfig;
   final List<AxConversationTurn> turns;
   final AxWorkflowRun? workflowRun;
@@ -654,6 +658,7 @@ class AxWorkRequest {
           finalText: finalText,
           error: error,
           activityHistory: activityHistory ?? this.activityHistory,
+          replyTo: replyTo,
           // A terminal status forces the terminal phase so a request that
           // finished can never render as still executing.
           executionPhase: status != null && AxExecutionPhase.isTerminal(status)
@@ -727,6 +732,7 @@ class AxWorkRequest {
       error: json['error']?.toString(),
       activityHistory: activityHistory,
       executionPhase: json['executionPhase']?.toString(),
+      replyTo: AxReplyReference.fromJson(json['replyTo']),
     );
   }
 }
@@ -972,6 +978,9 @@ abstract interface class AxDataSource {
     List<Map<String, dynamic>> attachments = const [],
     Map<String, dynamic> executionSelection = const {},
     String? idempotencyKey,
+
+    /// Reply v1 target `{kind, id}`; ignored by sources without replies.
+    Map<String, dynamic>? replyTo,
   }) async =>
       createWorkRequest(
           threadId: threadId,
@@ -1044,6 +1053,9 @@ abstract interface class AxDataSource {
     List<String> references = const [],
     List<Map<String, dynamic>> attachments = const [],
     String? idempotencyKey,
+
+    /// Reply v1 target `{kind, id}`; the server stores the quote snapshot.
+    Map<String, dynamic>? replyTo,
   }) async =>
       throw UnimplementedError('Discussion messages are not available');
   Future<AxDiscussionMessage> loadDiscussionMessage(

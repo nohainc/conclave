@@ -1,6 +1,16 @@
 part of '../spaces_pages.dart';
 
 extension _ThreadActions on _ThreadPageState {
+  /// Starts a reply to [reference]; the next sent message or request quotes it.
+  void _startReply(AxReplyReference reference) {
+    if (widget.isDraft) return;
+    _updateState(() => _replyTarget = reference);
+  }
+
+  void _clearReply() {
+    if (_replyTarget != null) _updateState(() => _replyTarget = null);
+  }
+
   Future<void> _runWork() async {
     final text = _requestController.text;
     final submit = widget.onRunWork;
@@ -35,10 +45,12 @@ extension _ThreadActions on _ThreadPageState {
       attachments: List<Map<String, dynamic>>.from(_workAttachments),
       executionSelection: Map<String, dynamic>.from(_workExecutionSelection),
       workflow: _effectiveWorkflow,
+      replyTo: _replyTarget,
     );
     _updateState(() {
       _workSubmitError = null;
       _workAttachments = [];
+      _replyTarget = null;
     });
     _requestController.clear();
     // While a request is processing, or earlier messages are still waiting,
@@ -180,11 +192,13 @@ extension _ThreadActions on _ThreadPageState {
           executionSelection:
               Map<String, dynamic>.from(_workExecutionSelection),
           workflow: _effectiveWorkflow,
+          replyTo: _replyTarget,
         );
       } else {
         _workQueue.removeAt(index);
       }
       _workAttachments = List.of(message.attachments);
+      _replyTarget = message.replyTo;
     });
     _requestController.value = TextEditingValue(
       text: message.text,
@@ -221,6 +235,7 @@ extension _ThreadActions on _ThreadPageState {
           requestedByUserId: userId,
           attachments: message.attachments,
           executionSelection: message.executionSelection,
+          replyTo: message.replyTo,
           execute: (prompt, workflow, inputs, key) => submit == null
               ? throw StateError('Work submission is unavailable')
               : submit(prompt, workflow, inputs, key),
@@ -265,6 +280,7 @@ extension _ThreadActions on _ThreadPageState {
         // Authored form data stays in this form; mutation/history state is shared.
         if (_requestController.text.isEmpty) _requestController.text = text;
         if (_workAttachments.isEmpty) _workAttachments = attachments;
+        _replyTarget ??= message.replyTo;
       });
     }
   }
@@ -684,19 +700,25 @@ extension _ThreadActions on _ThreadPageState {
       return;
     }
     final attachments = List<Map<String, dynamic>>.of(_discussionAttachments);
-    _updateState(() => _discussionAttachments = []);
+    final replyTo = _replyTarget;
+    _updateState(() {
+      _discussionAttachments = [];
+      _replyTarget = null;
+    });
     _discussionController.clear();
     final cache = _discussionCache;
     final id = widget.thread.id;
     try {
       await cache.send(id, text,
           attachments: attachments,
+          replyTo: replyTo,
           userId: widget.currentUserId,
           userName: widget.currentUserName);
     } catch (error) {
       if (!mounted || widget.thread.id != id) return;
       _updateState(() =>
           _discussionAttachments = [...attachments, ..._discussionAttachments]);
+      _updateState(() => _replyTarget ??= replyTo);
       if (_discussionController.text.isEmpty) {
         _discussionController.text = text;
       }

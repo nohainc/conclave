@@ -1,4 +1,8 @@
 import {
+  resolveReplyReference,
+  storedReplyReference,
+} from "./reply-references.js";
+import {
   threadNotice,
   destructiveThreadGuard,
   requireDestructiveThreadAccess,
@@ -516,8 +520,12 @@ export async function handleDeleteThread(
 }
 
 function discussionMessageView(row: Record<string, unknown>) {
-  const { attachmentsJson, ...message } = row;
-  return { ...message, attachments: parseJson(attachmentsJson, []) };
+  const { attachmentsJson, replyToJson, ...message } = row;
+  return {
+    ...message,
+    attachments: parseJson(attachmentsJson, []),
+    replyTo: storedReplyReference(replyToJson),
+  };
 }
 
 export async function handleListDiscussionMessages(
@@ -571,7 +579,7 @@ export async function handleListDiscussionMessages(
   const statement = env.CONCLAVE_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
             COALESCE(u.display_name, 'Member') AS authorName,
-            dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
+            dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.reply_to_json AS replyToJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
             dm.event_type AS eventType, dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
@@ -654,6 +662,11 @@ export async function handleCreateDiscussionMessage(
       ? ""
       : requiredString(rawContent, "body");
   const references = discussionReferences(body.references);
+  const replyTo = await resolveReplyReference(
+    env.CONCLAVE_DB,
+    threadId,
+    body.replyTo,
+  );
   const now = new Date().toISOString();
   const id = `discussion-${crypto.randomUUID()}`;
   const userRow = await env.CONCLAVE_DB.prepare(
@@ -666,8 +679,8 @@ export async function handleCreateDiscussionMessage(
   mutations.push(
     env.CONCLAVE_DB.prepare(
       `INSERT INTO discussion_messages
-       (id, thread_id, author_user_id, body, references_json, created_at, attachments_json)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
+       (id, thread_id, author_user_id, body, references_json, created_at, attachments_json, reply_to_json)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
     ).bind(
       id,
       threadId,
@@ -676,6 +689,7 @@ export async function handleCreateDiscussionMessage(
       JSON.stringify(references),
       now,
       JSON.stringify(attachments),
+      replyTo ? JSON.stringify(replyTo) : null,
     ),
   );
   mutations.push(
@@ -701,6 +715,7 @@ export async function handleCreateDiscussionMessage(
       body: content,
       attachments,
       references,
+      replyTo,
       editedAt: null,
       createdAt: now,
       kind: "message",
@@ -728,7 +743,7 @@ export async function handleGetDiscussionMessage(
   const message = await env.CONCLAVE_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
       COALESCE(u.display_name, 'Member') AS authorName,
-      dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
+      dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.reply_to_json AS replyToJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
             dm.event_type AS eventType, dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
@@ -761,7 +776,7 @@ export async function handleEditDiscussionMessage(
   const message = await env.CONCLAVE_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
             COALESCE(u.display_name, 'Member') AS authorName,
-            dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
+            dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.reply_to_json AS replyToJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
             dm.event_type AS eventType, dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
@@ -850,7 +865,7 @@ export async function handleDeleteDiscussionMessage(
   const now = new Date().toISOString();
   const text = `Message removed by ${context.user.displayName || "Member"}${policy.role === "owner" && String(message.authorUserId) !== context.userId ? " · Space owner" : ""}`;
   const mutation = env.CONCLAVE_DB.prepare(
-    "UPDATE discussion_messages SET body = ?1, attachments_json = '[]', references_json = '[]', event_type = 'message.removed', edited_at = ?2 WHERE id = ?3 AND event_type IS NULL",
+    "UPDATE discussion_messages SET body = ?1, attachments_json = '[]', references_json = '[]', reply_to_json = NULL, event_type = 'message.removed', edited_at = ?2 WHERE id = ?3 AND event_type IS NULL",
   ).bind(text, now, messageId);
   await publishCollaborationEvent(
     env,

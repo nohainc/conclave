@@ -108,6 +108,7 @@ class AxReadCacheCodec {
         'eventType': value.eventType,
         'workRequestId': value.workRequestId,
         'workerDisplayName': value.workerDisplayName,
+        if (value.replyTo != null) 'replyTo': value.replyTo!.toJson(),
       };
   Map<String, dynamic> work(AxWorkRequest value) => {
         'conversationId': value.conversationId,
@@ -127,6 +128,7 @@ class AxReadCacheCodec {
         'finalText': value.finalText,
         'error': value.error,
         'steps': value.steps.map(step).toList(),
+        if (value.replyTo != null) 'replyTo': value.replyTo!.toJson(),
       };
   Map<String, dynamic> step(AxWorkRequestStep value) => {
         'kind': value.kind,

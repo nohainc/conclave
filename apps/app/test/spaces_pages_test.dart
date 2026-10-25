@@ -342,7 +342,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      for (final tooltip in ['Cancel request', 'Copy']) {
+      // Reply and Copy share the request's actions menu.
+      for (final tooltip in ['Cancel request', 'Message actions']) {
         final action = find.byTooltip(tooltip);
         expect(action, findsOneWidget);
         expect(tester.getSize(action), Size.square(targetSize));
@@ -2172,7 +2173,8 @@ void main() {
     // Archived AI entries are history: neither the request nor the answer
     // may be edited.
     expect(find.byTooltip('Edit'), findsNothing);
-    expect(find.byTooltip('Copy'), findsNWidgets(2));
+    // Reply and Copy share one actions menu per entry.
+    expect(find.byTooltip('Message actions'), findsNWidgets(2));
   });
   testWidgets('Chat create edit and copy preserve raw Markdown',
       (tester) async {
@@ -2239,6 +2241,53 @@ void main() {
     await tester.pump();
     expect(copied, edited);
   });
+  testWidgets('Reply quotes the chosen message in the next message',
+      (tester) async {
+    final ds = _MarkdownDiscussionDataSource();
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SizedBox(
+                height: 600,
+                child: ThreadPage(
+                  space: const AxSpace(
+                      id: 'space-1',
+                      name: 'Space',
+                      branch: '',
+                      lastActivity: '',
+                      role: 'owner'),
+                  thread: const AxThread(
+                      id: 'stream-1',
+                      spaceId: 'space-1',
+                      name: 'Chat',
+                      lead: '',
+                      status: 'active',
+                      brief: '',
+                      primaryWorkspace: '',
+                      queueStatus: ''),
+                  dataSource: ds,
+                  currentUserId: 'user-owner',
+                  onBackToSpace: _noop,
+                  onArchive: _noop,
+                )))));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'First question');
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send message')));
+    await tester.pumpAndSettle();
+    expect(ds.createdReplyTo, isNull);
+
+    await _chooseMessageAction(tester, 'Reply');
+    expect(find.byKey(const ValueKey('reply-composer-banner')), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'Follow-up');
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send message')));
+    await tester.pumpAndSettle();
+    expect(ds.createdReplyTo, {'kind': 'message', 'id': 'saved-message'});
+    expect(find.byKey(const ValueKey('reply-composer-banner')), findsNothing);
+
+    await _chooseMessageAction(tester, 'Reply');
+    await tester.tap(find.byKey(const ValueKey('reply-clear')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('reply-composer-banner')), findsNothing);
+  });
   testWidgets('Work copies exact Markdown for prompt and fallback response',
       (tester) async {
     String? copied;
@@ -2297,27 +2346,20 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     await _openAiHistory(tester);
-    final copies = find.byTooltip('Copy');
-    expect(copies, findsNWidgets(2));
-    expect(find.byTooltip('Message actions'), findsNothing);
-    final platform = Theme.of(tester.element(copies.first)).platform;
+    final menus = find.byTooltip('Message actions');
+    expect(menus, findsNWidgets(2));
+    final platform = Theme.of(tester.element(menus.first)).platform;
     final side =
         platform == TargetPlatform.iOS || platform == TargetPlatform.android
             ? 48.0
             : 32.0;
-    expect(tester.getSize(copies.first), Size.square(side));
-    expect(find.byType(PopupMenuItem<int>), findsNothing);
+    expect(tester.getSize(menus.first), Size.square(side));
+    await _chooseMessageAction(tester, 'Copy', menu: menus.first);
+    expect(copied, prompt);
     expect(find.text('Edit'), findsNothing);
     expect(find.text('Delete'), findsNothing);
-    await tester.ensureVisible(copies.first);
-    await tester.tap(copies.first);
-    await tester.pumpAndSettle();
-    expect(copied, prompt);
-    expect(find.byType(PopupMenuItem<int>), findsNothing);
     expect(find.text('Prompt copied to clipboard'), findsNothing);
-    await tester.ensureVisible(copies.last);
-    await tester.tap(copies.last);
-    await tester.pumpAndSettle();
+    await _chooseMessageAction(tester, 'Copy', menu: menus.last);
     expect(copied, response);
     final timestamps = find.byWidgetPredicate((widget) =>
         widget is Text && widget.data?.startsWith('2026-10-01 ·') == true);
@@ -4102,6 +4144,7 @@ class _DiscussionDataSource extends AxFixtureDataSource {
 class _MarkdownDiscussionDataSource extends AxFixtureDataSource {
   String? createdSource;
   String? editedSource;
+  Map<String, dynamic>? createdReplyTo;
 
   @override
   Future<AxDiscussionMessage> sendDiscussionMessage(
@@ -4109,8 +4152,10 @@ class _MarkdownDiscussionDataSource extends AxFixtureDataSource {
       required String text,
       List<String> references = const [],
       List<Map<String, dynamic>> attachments = const [],
-      String? idempotencyKey}) async {
+      String? idempotencyKey,
+      Map<String, dynamic>? replyTo}) async {
     createdSource = text;
+    createdReplyTo = replyTo;
     return AxDiscussionMessage(
         id: 'saved-message',
         threadId: threadId,
@@ -4425,7 +4470,8 @@ class _CurrentWorkflowUiDataSource extends _VersionedWorkflowDataSource {
       required String text,
       List<String> references = const [],
       List<Map<String, dynamic>> attachments = const [],
-      String? idempotencyKey}) {
+      String? idempotencyKey,
+      Map<String, dynamic>? replyTo}) {
     discussionWrites++;
     return super.sendDiscussionMessage(
         threadId: threadId, text: text, references: references);

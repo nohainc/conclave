@@ -861,6 +861,10 @@ class _ThreadPageState extends State<ThreadPage>
       widget.draftBusy || _draftSubmitting || _workPresentation.submitting;
   List<Map<String, dynamic>> _workAttachments = [];
   List<Map<String, dynamic>> _discussionAttachments = [];
+
+  /// The message the next Chat message or request replies to (Reply v1).
+  /// One target per Thread, shared by both composers, cleared on send.
+  AxReplyReference? _replyTarget;
   Map<String, dynamic> _workExecutionSelection = {};
 
   /// The last Worker selection, kept while a Workflow that fixes its own
@@ -1471,6 +1475,7 @@ class _ThreadPageState extends State<ThreadPage>
       _invalidateInteractionCallbacks();
       _discussionAttachments = [];
       _workAttachments = [];
+      _replyTarget = null;
     }
     if (oldWidget.thread.id != widget.thread.id &&
         _threadViewStateRestored &&
@@ -2084,6 +2089,7 @@ class _ThreadPageState extends State<ThreadPage>
           editedAt: edited == null ? null : _chatTimestamp(edited),
           editedDate: edited,
           isMe: isMe && !answer,
+          replyTo: message.replyTo,
           aiKind: message.isAiEntry ? message.kind : null);
     }).toList();
     if (!widget.isDraft) _mergeWorkIntoConversation(items);
@@ -2274,6 +2280,20 @@ class _ThreadPageState extends State<ThreadPage>
                                     Clipboard.setData(
                                         ClipboardData(text: message.text));
                                   },
+                                  onReply: message.eventType == null &&
+                                          !widget.isDraft &&
+                                          widget.space.effectivePermissions.chat
+                                      ? () => _startReply(AxReplyReference(
+                                            kind: 'message',
+                                            id: message.id,
+                                            authorName: message.author,
+                                            excerpt: replyExcerpt(
+                                                message.text.trim().isEmpty
+                                                    ? attachmentsLabel(
+                                                        message.attachments)
+                                                    : message.text),
+                                          ))
+                                      : null,
                                   onEdit: (newText) =>
                                       _editDiscussion(message.id, newText),
                                   onDelete: (message.isMe ||
@@ -2388,12 +2408,12 @@ class _ThreadPageState extends State<ThreadPage>
               : _discussionComposer(twoPane: twoPane);
 
   Widget _discussionComposer({bool twoPane = false}) => MarkdownComposer(
-        attachments: _discussionAttachments.isEmpty
-            ? null
-            : AttachmentCards(
-                files: _discussionAttachments,
-                onRemove: (index) =>
-                    _updateState(() => _discussionAttachments.removeAt(index))),
+        attachments: _composerExtras(
+            reply: _replyTarget,
+            onClearReply: _clearReply,
+            files: _discussionAttachments,
+            onRemoveFile: (index) =>
+                _updateState(() => _discussionAttachments.removeAt(index))),
         toolbarLeadingControls: widget.isDraft
             ? null
             : Align(
@@ -2504,6 +2524,9 @@ class _ThreadPageState extends State<ThreadPage>
         submitError: _workSubmitError,
         submitting: _submittingWork,
         attachments: _workAttachments,
+        replyTarget: _replyTarget,
+        onReply: _startReply,
+        onClearReply: _clearReply,
         onAddFiles: _addWorkFiles,
         executionSelection: _workExecutionSelection,
         onExecutionSelectionChanged: (selection) {
