@@ -1115,11 +1115,8 @@ void main() {
       expect(tabWeight(conversationTab), FontWeight.bold);
       expect(tabWeight(historyTab), FontWeight.normal);
       expect(tabColor(historyTab), ConclaveColors.textPrimaryLight);
-      expect(
-          find.descendant(
-              of: conversationTab,
-              matching: find.byIcon(Icons.chat_bubble_outline_rounded)),
-          findsOneWidget);
+      expect(find.descendant(of: conversationTab, matching: find.byType(Icon)),
+          findsNothing);
       expect(tester.getRect(conversationTab).right,
           lessThanOrEqualTo(tester.getRect(historyTab).left));
 
@@ -2073,7 +2070,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(sent, 'Next request');
   });
-  testWidgets('Thread header clears the active Conversation or AI History',
+  testWidgets('Thread header scopes clear and reset actions to each tab',
       (tester) async {
     final cleared = <String>[];
     await tester.pumpWidget(MaterialApp(
@@ -2103,9 +2100,18 @@ void main() {
     await tester.pumpAndSettle();
     final conversation =
         find.byKey(const ValueKey('clear-conversation-history'));
-    final ai = find.byKey(const ValueKey('clear-ai-history'));
+    final reset = find.byKey(const ValueKey('reset-ai-context'));
     expect(conversation, findsOneWidget);
-    expect(ai, findsNothing);
+    expect(reset, findsOneWidget);
+    expect(find.byTooltip('Reset AI context'), findsOneWidget);
+    final clearIcon = tester.widget<Icon>(
+      find.descendant(of: conversation, matching: find.byType(Icon)),
+    );
+    final resetIcon = tester.widget<Icon>(
+      find.descendant(of: reset, matching: find.byType(Icon)),
+    );
+    expect(clearIcon.size, 18);
+    expect(resetIcon.size, clearIcon.size);
     // Cancelling the confirmation clears nothing.
     await tester.tap(conversation);
     await tester.pumpAndSettle();
@@ -2118,14 +2124,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(cleared, ['conversation']);
 
-    await _openAiHistory(tester);
-    await tester.tap(ai);
+    await tester.tap(reset);
     await tester.pumpAndSettle();
     expect(find.textContaining('The visible conversation stays available'),
         findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
     await tester.pumpAndSettle();
     expect(cleared, ['conversation', 'ai']);
+
+    await _openAiHistory(tester);
+    expect(find.byKey(const ValueKey('reset-ai-context')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('clear-conversation-history')), findsNothing);
+    await tester.tap(reset);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('The visible conversation stays available'),
+        findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
+    await tester.pumpAndSettle();
+    expect(cleared, ['conversation', 'ai', 'ai']);
   });
 
   testWidgets('Chat shows archived AI exchanges as read-only Worker answers',
@@ -3241,11 +3258,11 @@ void main() {
               : Colors.transparent);
       expect(dateX, lessThan(menuX));
       final trigger = find.byTooltip('Message actions');
-      expect(tester.getSize(trigger), Size(touch ? 48 : 22, touch ? 48 : 22));
+      expect(tester.getSize(trigger), Size(touch ? 48 : 32, touch ? 48 : 32));
       final popup = find.ancestor(
           of: trigger, matching: find.byType(PopupMenuButton<int>));
       expect(tester.widget<PopupMenuButton<int>>(popup).borderRadius,
-          BorderRadius.circular(touch ? 24 : 11));
+          BorderRadius.circular(touch ? 24 : 16));
       final dots =
           find.descendant(of: trigger, matching: find.byIcon(Icons.more_horiz));
       expect(tester.getCenter(date).dy,

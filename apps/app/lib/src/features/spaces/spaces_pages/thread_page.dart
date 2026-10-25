@@ -1847,7 +1847,7 @@ class _ThreadPageState extends State<ThreadPage>
                         child: Row(children: [
                           tab(
                               !history && !notes,
-                              TextButton.icon(
+                              TextButton(
                                 key: ValueKey(history
                                     ? 'ai-history-conversation'
                                     : notes
@@ -1866,15 +1866,12 @@ class _ThreadPageState extends State<ThreadPage>
                                         : FontWeight.normal,
                                   ),
                                 ),
-                                icon: const Icon(
-                                    Icons.chat_bubble_outline_rounded,
-                                    size: 18),
-                                label: const Text('Conversation'),
+                                child: const Text('Conversation'),
                               )),
                           if (!widget.isDraft && widget.showAiHistory)
                             tab(
                                 history,
-                                TextButton.icon(
+                                TextButton(
                                   key: ValueKey(history
                                       ? 'ai-history-tab'
                                       : notes
@@ -1893,14 +1890,12 @@ class _ThreadPageState extends State<ThreadPage>
                                           : FontWeight.normal,
                                     ),
                                   ),
-                                  icon: const Icon(Icons.history_rounded,
-                                      size: 18),
-                                  label: const Text('AI History'),
+                                  child: const Text('AI History'),
                                 )),
                           if (!widget.isDraft && _notesSource != null)
                             tab(
                                 notes,
-                                TextButton.icon(
+                                TextButton(
                                   key: ValueKey(notes
                                       ? 'notes-tab'
                                       : history
@@ -1916,42 +1911,33 @@ class _ThreadPageState extends State<ThreadPage>
                                           : FontWeight.normal,
                                     ),
                                   ),
-                                  icon: const Icon(Icons.sticky_note_2_outlined,
-                                      size: 18),
-                                  label: const Text('Notes'),
+                                  child: const Text('Notes'),
                                 )),
                         ]),
                       ),
                     ),
                     if (!widget.isDraft &&
-                        !history &&
                         !notes &&
                         widget.onClearAiHistory != null)
                       IconButton(
-                          tooltip: 'Reset AI context',
-                          icon: const Icon(Icons.restart_alt),
-                          onPressed: () => _confirmClear(history: true)),
+                        key: const ValueKey('reset-ai-context'),
+                        tooltip: 'Reset AI context',
+                        icon: const Icon(Icons.restart_alt, size: 18),
+                        onPressed: () => _confirmClear(history: true),
+                      ),
                     if (!widget.isDraft &&
                         (notes ||
-                            (history
-                                    ? widget.onClearAiHistory
-                                    : widget.onClearConversation) !=
-                                null))
+                            (!history && widget.onClearConversation != null)))
                       IconButton(
                         key: ValueKey(notes
                             ? 'clear-note'
-                            : history
-                                ? 'clear-ai-history'
-                                : 'clear-conversation-history'),
-                        tooltip: notes
-                            ? 'Clear Note'
-                            : history
-                                ? 'Reset AI context'
-                                : 'Clear Conversation History',
+                            : 'clear-conversation-history'),
+                        tooltip:
+                            notes ? 'Clear Note' : 'Clear Conversation History',
                         icon: const Icon(Icons.delete_sweep_outlined, size: 18),
                         onPressed: notes
                             ? _confirmClearNote
-                            : () => _confirmClear(history: history),
+                            : () => _confirmClear(history: false),
                       ),
                   ]),
                 ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:conclave_app/src/ax/ax_data.dart';
 import 'package:conclave_app/src/features/files/files_page.dart';
+import 'package:conclave_app/src/features/navigation/app_menu.dart';
+import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
 import 'package:conclave_app/src/navigation/ax_navigation.dart';
 
 class _FakeFiles implements AxUserFilesDataSource {
@@ -46,6 +48,35 @@ void main() {
     expect(route.toUri().path, '/files');
   });
 
+  testWidgets('global application menu places My Files above My Notes',
+      (tester) async {
+    AxNavigation? navigation;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: GlobalAppMenu(
+      shellContext:
+          const AxShellContext(navigation: AxNavigation.space('S'), spaces: []),
+      onNavigateTo: (value) => navigation = value,
+      onOpenAbout: () {},
+      onOpenExternal: (_) {},
+      onLogout: () {},
+    ))));
+    await tester.tap(find.byTooltip('Application menu'));
+    await tester.pumpAndSettle();
+
+    final myFiles = find.byKey(const ValueKey('menu-my-files'));
+    final myNotes = find.byKey(const ValueKey('menu-my-notes'));
+    expect(myFiles, findsOneWidget);
+    expect(myNotes, findsOneWidget);
+    expect(tester.getRect(myFiles).bottom,
+        lessThanOrEqualTo(tester.getRect(myNotes).top));
+
+    await tester.tap(myFiles);
+    await tester.pumpAndSettle();
+    expect(navigation!.kind, AxRouteKind.files);
+    expect(navigation!.toUri().path, '/files');
+  });
+
   test('formats sizes', () {
     expect(formatFileSize(512), '512 B');
     expect(formatFileSize(1536), '1.5 KB');
@@ -71,6 +102,14 @@ void main() {
     expect(
         find.textContaining('Synchronization could not finish'), findsNothing);
     expect(find.textContaining('0 files'), findsOneWidget);
+
+    final usageText = find.byKey(const ValueKey('files-usage'));
+    final syncButton = find.widgetWithText(TextButton, 'Synchronize storage');
+    final progressBar = find.byType(LinearProgressIndicator);
+    expect(tester.getRect(usageText).left,
+        lessThan(tester.getRect(syncButton).left));
+    expect(tester.getRect(syncButton).bottom,
+        lessThanOrEqualTo(tester.getRect(progressBar).top));
   });
 
   testWidgets('lists uploads with usage and deletes a file', (tester) async {

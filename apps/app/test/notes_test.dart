@@ -189,7 +189,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Only you can see these notes.'), findsOneWidget);
     // Notes has its own clear action; other tabs' actions are hidden.
-    expect(find.byKey(const ValueKey('clear-ai-history')), findsNothing);
+    expect(find.byKey(const ValueKey('reset-ai-context')), findsNothing);
+    expect(
+        find.byKey(const ValueKey('clear-conversation-history')), findsNothing);
     expect(find.byKey(const ValueKey('clear-note')), findsOneWidget);
 
     await tester.enterText(find.byKey(const ValueKey('note-body')), 'first');

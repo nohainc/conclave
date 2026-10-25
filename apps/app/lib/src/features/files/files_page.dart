@@ -131,32 +131,46 @@ class _FilesPageState extends State<FilesPage> {
     final usage = _usage;
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
+    final syncButton = TextButton(
+      onPressed: _syncing || _loadingMore ? null : () => unawaited(_sync()),
+      child: Text(_syncing ? 'Synchronizing…' : 'Synchronize storage'),
+    );
     return SingleChildScrollView(
         child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('My Files', style: theme.textTheme.headlineMedium),
-        TextButton.icon(
-          onPressed: _syncing || _loadingMore ? null : () => unawaited(_sync()),
-          icon: const Icon(Icons.sync),
-          label: Text(_syncing ? 'Synchronizing…' : 'Synchronize storage'),
-        ),
-        if (_syncStatus != null) Text(_syncStatus!),
-        const SizedBox(height: 16),
-        if (usage != null) ...[
-          Text(
-            '${formatFileSize(usage.usedBytes)} of '
-            '${formatFileSize(usage.quotaBytes)} used · '
-            '${usage.fileCount} ${usage.fileCount == 1 ? 'file' : 'files'}',
-            key: const ValueKey('files-usage'),
-            style: TextStyle(color: muted),
+        if (usage == null) ...[
+          syncButton,
+          const SizedBox(height: 16),
+        ] else ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  '${formatFileSize(usage.usedBytes)} of '
+                  '${formatFileSize(usage.quotaBytes)} used · '
+                  '${usage.fileCount} ${usage.fileCount == 1 ? 'file' : 'files'}',
+                  key: const ValueKey('files-usage'),
+                  style: TextStyle(color: muted),
+                ),
+              ),
+              syncButton,
+            ],
           ),
           const SizedBox(height: 8),
           LinearProgressIndicator(
             value: usage.fraction,
             color: usage.fraction >= 0.9 ? theme.colorScheme.error : null,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+        ],
+        if (_syncStatus != null) ...[
+          Text(_syncStatus!),
+          const SizedBox(height: 12),
         ],
         if (_error != null) ...[
           Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
