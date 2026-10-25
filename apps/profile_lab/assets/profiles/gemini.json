@@ -251,6 +251,9 @@
       },
       {
         "modelArguments": true
+      },
+      {
+        "forEachAdditionalDirectory": ["--add-dir", "{{additionalDirectory}}"]
       }
     ],
     "events": [

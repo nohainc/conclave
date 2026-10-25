@@ -313,10 +313,18 @@ are never dropped silently. The Engine receives the verified paths in
 `{"forEachAdditionalDirectory": [...]}` argument slot once per folder (see
 `docs/specifications/TOOL_PROFILE_V1.md`).
 
-Not yet covered: concurrent writes when several Spaces attach the same folder
-are not serialized (the Space-wide lock covers only the Space directory), and
-each Worker's published Profile must add the argument slot before its CLI can
-use folders.
+Concurrency follows the Space directory rule: Threads already run in
+parallel inside one Space folder and the user decides what runs together, so
+attached folders are not locked. Several Spaces, or several Threads, may use
+the same folder at the same time; the Space-wide lock still covers only the
+short Space preparation.
+
+All Profile Lab drafts (`apps/profile_lab/assets/profiles/*.json`) place the
+`forEachAdditionalDirectory` slot so each CLI receives a repeatable
+`--add-dir <path>` (Codex, Claude Code, GitHub Copilot CLI, Antigravity, and
+Grok Build). For Codex the slot precedes the `resume` subcommand because
+`codex exec resume` does not accept `--add-dir`. A Worker only uses folders
+after its updated Profile is published through Profile Lab.
 
 ## Authentication and security
 

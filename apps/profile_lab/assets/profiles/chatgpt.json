@@ -331,6 +331,9 @@
           "values": ["-c", "model_reasoning_effort=\"{{reasoningEffort}}\""]
         },
         {
+          "forEachAdditionalDirectory": ["--add-dir", "{{additionalDirectory}}"]
+        },
+        {
           "sessionResumeArguments": true
         },
         {
@@ -446,6 +449,9 @@
       {
         "ifPresent": "reasoningEffort",
         "values": ["-c", "model_reasoning_effort=\"{{reasoningEffort}}\""]
+      },
+      {
+        "forEachAdditionalDirectory": ["--add-dir", "{{additionalDirectory}}"]
       },
       {
         "sessionResumeArguments": true

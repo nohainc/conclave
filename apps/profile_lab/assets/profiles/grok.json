@@ -79,6 +79,9 @@
       {
         "providerTimeoutArguments": true
       },
+      {
+        "forEachAdditionalDirectory": ["--add-dir", "{{additionalDirectory}}"]
+      },
       "-p",
       "-"
     ],

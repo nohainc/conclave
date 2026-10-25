@@ -78,6 +78,9 @@
         "sessionResumeArguments": true
       },
       {
+        "forEachAdditionalDirectory": ["--add-dir", "{{additionalDirectory}}"]
+      },
+      {
         "providerTimeoutArguments": true
       }
     ],
