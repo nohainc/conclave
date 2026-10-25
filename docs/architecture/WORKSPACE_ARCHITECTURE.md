@@ -224,7 +224,8 @@ nothing and no personal name appears in paths. A Space lives at `<owner-folder>/
 duplicate name inside one owner folder gets a ` (2)` suffix. The folder follows
 the Space owner (Cloud sends `spaceOwnerUserId` with each assignment), never the member who runs the Work. Paths already in the registry
 stay authoritative. Folders organize files; they are not an isolation boundary.
-Attaching external folders to a Space is a separate, postponed feature. A Worker receives the
+Folders outside Work Root are reachable only through the owner-managed
+Allowed Folders list (see below). A Worker receives the
 resolved Space directory, never Application Support as its normal working
 directory. Resetting runtime state, clearing logs/cache, deleting a Thread, or
 removing a Workspace must not delete user work. Space directory identity is
@@ -247,6 +248,37 @@ The first admitted assignment establishes the scoped record, while the
 Space-wide lock continues to prevent simultaneous filesystem mutation. Cloud
 lease issuance and validation remain authoritative. No installation, Workspace,
 registry, credential, Work Root, Profile, Engine, or session identity changes.
+
+## Allowed Folders
+
+Browsers cannot browse or verify local folders, and whether a provider CLI can
+write to a path depends on the host account the service runs as. The
+Workspace owner therefore maintains an explicit Allowed Folders list in
+Workspace.app; Spaces can only choose from that list.
+
+- The list is private service state at
+  `<Application Support>/Registry/allowed-folders.json` (schema version 1).
+  Only the authenticated local Manager IPC changes it: `folders.list`,
+  `folders.add`, `folders.rename`, `folders.remove`, `folders.recheck`.
+  Cloud assignment payloads cannot add or change entries.
+- Adding a folder canonicalizes the path (symlinks resolved) and rejects the
+  filesystem root, the home folder or any folder containing it, Work Root and
+  application data (or anything overlapping them), duplicates, and folders
+  overlapping an existing entry. At most 32 folders are allowed.
+- Each add and recheck runs a real access probe (list, then create and delete
+  a temporary file) and records `available`, `read_only`, `denied`, or
+  `missing`. A failing folder is reported, never silently dropped.
+- Removing or renaming an entry never touches the folder or its files.
+- Only `id`, `displayName`, `status`, and `checkedAt` may leave the machine
+  (`AllowedFolder.toCloudSummary`). Absolute paths stay local; execution maps
+  folder IDs back to paths and re-checks access before launch.
+- The feature is owner-only: Cloud must only offer the list for Spaces whose
+  Workspace belongs to the requesting user, and switching a Space to another
+  Workspace detaches its folders (files untouched).
+
+Status: the service registry and IPC are implemented. Workspace.app UI,
+Cloud publication and Space attachment, AX web selection, and Engine/Profile
+pass-through to provider CLIs are follow-up phases.
 
 ## Authentication and security
 

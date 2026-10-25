@@ -102,6 +102,57 @@ void main() {
     expect(cloud['acceptingNewWork'], isFalse);
   });
 
+  test('allowed folders are managed over IPC without touching user files',
+      () async {
+    final root = await Directory('/tmp').createTemp('ws-folders-');
+    addTearDown(() => root.delete(recursive: true));
+    final workRoot = await Directory('${root.path}/work').create();
+    final shared = await Directory('${root.path}/shared').create();
+    File('${shared.path}/notes.md').writeAsStringSync('keep');
+    final manager = WorkspaceManagerService(Workspace(
+      config: WorkspaceConfig(
+          dataDirectory: Directory('${root.path}/state'),
+          workRootPath: workRoot.path),
+    ));
+    try {
+      await manager.start();
+    } on SocketException catch (error) {
+      if (error.osError?.errorCode == 1) {
+        markTestSkipped('Execution sandbox blocks local Unix sockets.');
+        return;
+      }
+      rethrow;
+    }
+    addTearDown(manager.close);
+    final key = (await File('${root.path}/state/runtime/manager-ipc.key')
+            .readAsString())
+        .trim();
+    final client = await WorkspaceManagerIpcClient.connect(
+      socketPath: '${root.path}/state/runtime/manager.sock',
+      key: key,
+    );
+    addTearDown(client.close);
+
+    final added = await client.request('folders.add',
+        payload: {'path': shared.path, 'displayName': 'Shared docs'}) as Map;
+    expect(added['displayName'], 'Shared docs');
+    expect(added['status'], 'available');
+    await expectLater(
+        client.request('folders.add', payload: {'path': workRoot.path}),
+        throwsA(isA<WorkspaceManagerProtocolException>()
+            .having((error) => error.code, 'code', 'protected')));
+
+    final listed = await client.request('folders.list') as Map;
+    expect((listed['folders'] as List).single['id'], added['id']);
+    expect(
+        await client
+            .request('folders.remove', payload: {'folderId': added['id']}),
+        {'removed': true});
+    expect(((await client.request('folders.list') as Map)['folders'] as List),
+        isEmpty);
+    expect(File('${shared.path}/notes.md').readAsStringSync(), 'keep');
+  }, skip: Platform.isWindows ? 'POSIX only' : false);
+
   test('update checks are handled by the service without reconnecting Cloud',
       () async {
     final root = await Directory('/tmp').createTemp('ws-updates-');

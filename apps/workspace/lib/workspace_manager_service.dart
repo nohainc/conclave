@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'allowed_folders.dart';
 import 'assignment_journal.dart';
 import 'cloud_connection.dart';
 import 'diagnostics.dart';
 import 'local_worker_permissions.dart';
+import 'platform_runtime.dart';
 import 'work_root.dart';
 import 'workspace.dart';
 import 'workspace_configuration.dart';
@@ -42,6 +44,7 @@ class WorkspaceManagerService {
   WorkspaceCloudConnection? _observedConnection;
   WorkerCatalogCoordinator? _observedCatalog;
   WorkerReadinessMonitor? _observedReadiness;
+  AllowedFolderRegistry? _allowedFolderRegistry;
 
   Future<void> start() async {
     final paths = WorkspacePaths(workspace.config.dataDirectory);
@@ -776,11 +779,90 @@ class WorkspaceManagerService {
           ),
         );
         return {'path': file.path, 'text': await file.readAsString()};
+      case 'folders.list':
+        return _allowedFolderSnapshot(await _allowedFolders().list());
+      case 'folders.add':
+        {
+          final path = payload['path'];
+          final displayName = payload['displayName'];
+          if (path is! String ||
+              (displayName != null && displayName is! String)) {
+            throw const WorkspaceManagerProtocolException(
+                'invalid_request', 'path is required.');
+          }
+          final folder = await _allowedFolderCall(() =>
+              _allowedFolders().add(path, displayName: displayName as String?));
+          return folder.toJson();
+        }
+      case 'folders.remove':
+        {
+          final id = payload['folderId'];
+          if (id is! String) {
+            throw const WorkspaceManagerProtocolException(
+                'invalid_request', 'folderId is required.');
+          }
+          // Only the allowance is forgotten; the folder stays on disk.
+          return {'removed': await _allowedFolders().remove(id)};
+        }
+      case 'folders.rename':
+        {
+          final id = payload['folderId'];
+          final displayName = payload['displayName'];
+          if (id is! String || displayName is! String) {
+            throw const WorkspaceManagerProtocolException(
+                'invalid_request', 'folderId and displayName are required.');
+          }
+          final folder = await _allowedFolderCall(
+              () => _allowedFolders().rename(id, displayName));
+          if (folder == null) {
+            throw const WorkspaceManagerProtocolException(
+                'folder_not_found', 'Folder is not allowed.');
+          }
+          return folder.toJson();
+        }
+      case 'folders.recheck':
+        {
+          final id = payload['folderId'];
+          if (id != null && id is! String) {
+            throw const WorkspaceManagerProtocolException(
+                'invalid_request', 'folderId must be a string.');
+          }
+          return _allowedFolderSnapshot(
+              await _allowedFolders().recheck(id: id as String?));
+        }
       default:
         throw WorkspaceManagerProtocolException(
           'unsupported_command',
           'Unsupported Workspace Manager command: $command',
         );
+    }
+  }
+
+  /// Owner-managed folders that Spaces on this Workspace may attach. The
+  /// Manager IPC endpoint is restricted to the owner OS account and its
+  /// installation key; Cloud cannot add or change entries.
+  AllowedFolderRegistry _allowedFolders() {
+    final paths = WorkspacePaths(workspace.config.dataDirectory);
+    return _allowedFolderRegistry ??= AllowedFolderRegistry(
+      registryDirectory: paths.spaceDirectoryRegistryDirectory,
+      workRoot: workspace.workRoot ??
+          Directory(
+              workspace.config.workRootPath ?? WorkRootResolver().defaultPath),
+      applicationDataRoot: paths.applicationDataRoot,
+      homeDirectory: currentPlatformRuntime.homeDirectory,
+    );
+  }
+
+  Map<String, Object?> _allowedFolderSnapshot(List<AllowedFolder> folders) => {
+        'folders': [for (final folder in folders) folder.toJson()],
+        'maxFolders': AllowedFolderRegistry.maxFolders,
+      };
+
+  Future<T> _allowedFolderCall<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on AllowedFolderViolation catch (error) {
+      throw WorkspaceManagerProtocolException(error.code, error.message);
     }
   }
 
@@ -839,6 +921,7 @@ class WorkspaceManagerService {
       ).readSync().desiredCloudState;
       await replacement.start(connectCloud: false);
       _workspace = replacement;
+      _allowedFolderRegistry = null;
       _bindWorkspaceEvents(replacement);
       if (desired == DesiredCloudConnectionState.connected) {
         // Completing configuration reload means the local runtime is ready,
