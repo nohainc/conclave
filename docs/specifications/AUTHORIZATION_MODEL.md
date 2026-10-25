@@ -139,7 +139,8 @@ header shows it after the Worker name; responses from the Space Workspace show
 no owner.
 
 Own Thread management permits creation and management of Threads created by
-that member, while the owner can manage every Thread. It does not grant rights
+that member, while the owner can manage every Thread. Destructive cleanup follows
+the narrower shared-history policy below, independently of `manageOwnThreads`. It does not grant rights
 to execute Chat or Work. Composer choices configure the next turn and do not
 change historical execution metadata.
 
@@ -180,3 +181,53 @@ Thread is deleted or they lose access to it. See
 An accepted Space membership automatically establishes symmetric user-ID relationships with co-members. Pending invitations never grant People visibility. Authenticated `GET /api/people` exposes only established peers and supports no global search or caller-supplied owner. Known-Person invitations require both a caller-owned relationship and Space invitation rights; removal from a Space preserves the relationship but removes that Space authorization. See [People v1](PEOPLE_V1.md).
 
 Known-Person Space invitations persist `invitee_user_id`; recipient inbox access and Accept/Reject compare the authenticated user ID, independent of email changes. Email-addressed invitations remain available for new collaborators and bind identity on acceptance. Invitation selection grants no membership or consent. Both People and Space entry points use the same permission-checked invitation endpoint. Migration 0024 adds a unique pending Space/recipient identity constraint without changing accepted memberships.
+
+
+## Shared Thread history and lifecycle
+
+Every member with Thread view access may archive/restore a Thread and reset its
+AI context, including viewers. These actions do not grant Chat, Work, rename,
+or configuration rights. Archived Threads are readable; restore is required
+before new Chat messages or AI requests. In-flight work may finish.
+
+The author or Space owner may remove a human Discussion message. Removal keeps
+its ID, original author, timestamp, and timeline position, replacing its body
+with an attributed removal notice and clearing attachment/reference links.
+`eventType: "message.removed"` identifies this protected placeholder. Members
+cannot edit or individually delete placeholders or other system notices.
+AI request/answer records remain execution evidence rather than editable Chat.
+
+Archive, restore, and AI reset append attributed, timestamped Discussion notices
+(`thread.archived`, `thread.restored`, `ai.context_reset`). Notice text is human
+readable; clients use the optional `eventType` field for protected rendering.
+This is an additive read-model extension; existing message kinds are unchanged.
+
+Clear Conversation and Delete Thread require the Space owner, or the immutable
+Thread creator when no other human has ever sent a message or submitted a
+request. AI answers, reading, membership, and lifecycle notices do not count as
+another person's contribution. A durable `has_other_contributions` flag survives
+message removal and Conversation clearing. Thread reads return the caller's
+`canDestroy` capability; server authorization and an atomic mutation guard are
+still authoritative. Active requests must be cancelled before clear/delete.
+Clear removes Discussion, canonical Conversations, requests, diagnostics and
+Worker continuity, then inserts exactly one `conversation.cleared` notice.
+A later clear removes the previous notice. Thread identity/settings/status and
+work files remain. Delete removes the Thread and its history.
+
+Reset AI context remains available when history capacity is exhausted and while
+requests are active. It requires no model call. It advances the canonical history
+floor, AI history cutoff, session generation, and AI context generation. New
+requests capture the new context generation. Late responses from earlier
+generations stay readable but are excluded from future AI bootstrap context;
+subsequent steps of superseded requests use isolated sessions. Reset does not
+undo work or replenish provider/billing quotas. Context-limit retry also records
+an attributed reset notice and preserves its existing latest-answer retry policy.
+
+Migration `0087_thread_history_permissions.sql` adds notice/contribution/context
+generation fields and insertion triggers. Historical hard-deleted contributions
+cannot be reconstructed, so all preexisting Threads conservatively require the
+Space owner for clear/delete. Newly created Threads use the precise creator
+exception. Apply the migration before deploying the updated Cloud routes; older
+clients may display notices as ordinary messages, while Cloud still protects
+them from edits/deletion. No local Workspace or provider credential migration
+is required. Personal hide/unhide is outside this feature.

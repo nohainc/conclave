@@ -12,6 +12,8 @@ import 'package:conclave_workspace/platform_runtime.dart';
 import 'package:conclave_workspace/allowed_folders.dart';
 import 'package:conclave_workspace/cloud_connection.dart';
 import 'package:conclave_workspace/assignment_startup.dart';
+import 'package:conclave_workspace/input_delivery.dart';
+import 'package:conclave_workspace/work_request_input_staging.dart';
 import 'package:conclave_workspace/worker_executor.dart';
 import 'package:conclave_workspace/worker_launch_plan.dart';
 import 'package:conclave_workspace/self_update.dart';
@@ -242,6 +244,25 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     applicationDataRoot: workspacePaths.applicationDataRoot,
     homeDirectory: currentPlatformRuntime.homeDirectory,
   );
+  final inputStaging = WorkRequestInputStaging(Directory(
+      '${workspacePaths.applicationSupportDirectory.path}${Platform.pathSeparator}staged-inputs'));
+  final inputCloudUri = config.cloudUri;
+  final inputRuntimeId = config.workspaceRuntimeId;
+  final inputToken = config.authToken;
+  final inputDelivery = inputCloudUri == null ||
+          inputRuntimeId == null ||
+          inputRuntimeId.isEmpty ||
+          inputToken == null ||
+          inputToken.isEmpty
+      ? null
+      : InputDeliveryAgent(
+          cloud: HttpInputDeliveryCloud(
+            cloudUri: inputCloudUri,
+            workspaceRuntimeId: inputRuntimeId,
+            authToken: inputToken,
+          ),
+          staging: inputStaging,
+        );
   late final WorkerAssignmentHandler workerHandler;
   workerHandler = WorkerAssignmentHandler(
     resolveLogicalWorker: (workerId) async {
@@ -324,6 +345,8 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     },
     defaultWorkingDirectory: workRoot,
     applicationStateDirectory: workspacePaths.applicationSupportDirectory,
+    inputStaging: inputStaging,
+    fetchInput: inputDelivery?.ensure,
     spaceDirectoryLifecycle: spaceDirectoryLifecycle,
     onActivity: (context, activity) async {
       await connection?.reportWorkerActivity(context, activity);
@@ -673,6 +696,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             for (final folder in await allowedFolders.list())
               folder.toCloudSummary(),
           ],
+          inputAvailableHandler: inputDelivery?.wake,
           workerUsageProvider: (workerId) async {
             final supervisor = cliWorkerEngineSupervisor;
             final worker = await localWorkerRegistry.find(workerId);
@@ -730,6 +754,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             }
           },
           onSessionReady: () async {
+            inputDelivery?.start();
             await workerCatalogCoordinator?.refresh(force: true);
           },
           onKnownSpaces: (spaceIds) async {

@@ -226,7 +226,7 @@ void main() {
             ConclaveColors.navigationBackground(dark));
         expect(anchor.style?.surfaceTintColor?.resolve({}), Colors.transparent);
       }
-      await tester.tap(find.byTooltip('YOUR SPACES'));
+      await tester.tap(find.byTooltip('Spaces and Threads'));
       await tester.pumpAndSettle();
       final spaceColor =
           tester.widget<Text>(find.text('Menu Space')).style?.color;
@@ -1764,7 +1764,7 @@ void main() {
       expect(find.byTooltip('Search...'), findsOneWidget);
       expect(find.byTooltip('Add Space'), findsOneWidget);
       expect(find.byTooltip('Notifications'), findsOneWidget);
-      expect(find.byTooltip('YOUR SPACES'), findsOneWidget);
+      expect(find.byTooltip('Spaces and Threads'), findsOneWidget);
       expect(find.byType(CircleAvatar), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
 
@@ -1799,7 +1799,7 @@ void main() {
       expect(notificationsOpened, isTrue);
 
       // Tapping Spaces & Threads popup menu
-      await tester.tap(find.byTooltip('YOUR SPACES'));
+      await tester.tap(find.byTooltip('Spaces and Threads'));
       await tester.pumpAndSettle();
       expect(find.byType(ConclaveFolderIcon), findsAtLeastNWidgets(1));
       expect(find.text(testSpace.name), findsOneWidget);

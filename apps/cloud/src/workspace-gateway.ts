@@ -4,7 +4,6 @@ import {
   parseEngineLivenessReport,
 } from "./assignment-liveness.js";
 import { signalAssignmentTerminal } from "./assignment-workflow-signal.js";
-import { hydrateWorkRequestFiles } from "./routes/work-request-files.js";
 import {
   parseWorkspaceRuntimeMessage,
   serializeWorkspaceRuntimeMessage,
@@ -237,6 +236,9 @@ export class WorkspaceGateway implements DurableObject {
     }
     if (request.method === "POST" && url.pathname === "/worker-usage") {
       return this.requestWorkerUsage(request);
+    }
+    if (request.method === "POST" && url.pathname === "/inputs-available") {
+      return this.announceInputsAvailable();
     }
     if (request.method === "POST" && url.pathname === "/dispatch-assignment") {
       return this.dispatchAssignment(request);
@@ -1203,6 +1205,9 @@ export class WorkspaceGateway implements DurableObject {
       }
       case "worker.usage.request":
         // Cloud originates usage requests; a Service never sends one.
+        return;
+      case "input.available":
+        // Cloud originates input wake-ups; a Service never sends one.
         return;
       case "assignment.start.ack": {
         // Provider-start evidence implies admission, so it is honoured from
@@ -2629,15 +2634,6 @@ export class WorkspaceGateway implements DurableObject {
       });
     }
     let assignmentMessage: WorkspaceRuntimeMessage;
-    let hydratedPayload: unknown;
-    try {
-      hydratedPayload = await hydrateWorkRequestFiles(this.env, body.payload);
-    } catch {
-      return Response.json(
-        { error: "Attached file content is unavailable" },
-        { status: 409 },
-      );
-    }
     try {
       assignmentMessage = parseWorkspaceRuntimeMessage({
         protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
@@ -2646,7 +2642,7 @@ export class WorkspaceGateway implements DurableObject {
         timestamp: new Date().toISOString(),
         type: "assignment.start",
         ...body,
-        payload: withStartPermitRequirement(hydratedPayload),
+        payload: withStartPermitRequirement(body.payload),
       });
     } catch {
       return Response.json(
@@ -2910,6 +2906,31 @@ export class WorkspaceGateway implements DurableObject {
         { status: 504 },
       );
     }
+  }
+
+  /**
+   * Wakes the Service to list and download uploaded Work Request inputs
+   * (Input Delivery v1). The message carries no identifiers or content, so
+   * it is safe on both transports; a Service that misses it still polls.
+   */
+  private async announceInputsAvailable(): Promise<Response> {
+    if (!(await this.isRuntimeLive()))
+      return Response.json({ delivered: false });
+    try {
+      await this.send({
+        protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
+        protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+        messageId: `message-${crypto.randomUUID()}`,
+        timestamp: new Date().toISOString(),
+        type: "input.available",
+        executionWorkspaceId: this.executionWorkspaceId ?? undefined,
+        workspaceRuntimeId: this.workspaceRuntimeId ?? undefined,
+        payload: {},
+      });
+    } catch {
+      return Response.json({ delivered: false });
+    }
+    return Response.json({ delivered: true });
   }
 
   /**

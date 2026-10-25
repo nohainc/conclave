@@ -105,6 +105,7 @@ class AxReadCacheCodec {
         'editedAt': value.editedAt,
         'createdAt': value.createdAt,
         'kind': value.kind,
+        'eventType': value.eventType,
         'workRequestId': value.workRequestId,
         'workerDisplayName': value.workerDisplayName,
       };

@@ -141,11 +141,13 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
                     ),
                   ),
                 ]),
-                if (settings.inherited)
+                if (settings.inherited) ...[
                   Text(
                       'Following the default Workspace${name == null ? '' : ': $name'}',
                       style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant)),
+                  const SizedBox(height: 12),
+                ],
                 if (_folderSource != null && settings.workspaceId != null)
                   _SpaceAdditionalFolders(
                     // A different Workspace has a different folder list.

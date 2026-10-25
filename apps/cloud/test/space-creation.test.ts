@@ -275,5 +275,21 @@ describe("Space creation", () => {
     expect(updateBody.space.settings.threadOrder).toEqual(["ws-2", "ws-1"]);
     expect(updatedQuery).toContain("UPDATE spaces SET name = ?1");
     expect(updatedBindings[0]).toBe("Updated Name");
+
+    await expect(
+      handleUpdateSpace(
+        new Request("https://conclave.test/api/spaces/space-1", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ settings: { showAiHistory: "yes" } }),
+        }),
+        {
+          CONCLAVE_ENVIRONMENT: "development",
+          CONCLAVE_DB: db,
+          TEST_AUTHENTICATION: auth,
+        } as never,
+        "space-1",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
   });
 });

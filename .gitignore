@@ -20,3 +20,9 @@ apps/workspace/assets/engines/conclave_cli_worker_engine*
 
 # AI session outputs
 Claude outputs/
+
+# Native account manager build cache.
+apps/account_manager/.build/
+
+# Work Request inputs the Workspace copies into a Space folder (user files).
+.conclave/inputs/

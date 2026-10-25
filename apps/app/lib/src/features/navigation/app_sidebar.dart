@@ -591,119 +591,111 @@ class AppIconRail extends StatelessWidget {
           const SizedBox(height: 6),
 
           // Space & Thread Switcher MenuAnchor using matching popup style
-          shellContext.watchSpacesAndThreads(() => Column(children: [
-                for (final group in [
-                  (
-                    label: 'YOUR SPACES',
-                    spaces: shellContext.ownedSpaces,
-                    icon: Icons.folder_outlined
+          shellContext.watchSpacesAndThreads(() {
+            final pins = shellContext.spaces
+                .where((space) => space.isPinned)
+                .toList()
+              ..sort(compareAxPins);
+            final spaces = [
+              ...pins,
+              ...shellContext.ownedSpaces.where((space) => !space.isPinned),
+              ...shellContext.sharedSpaces.where((space) => !space.isPinned),
+            ];
+            if (spaces.isEmpty) return const SizedBox.shrink();
+            return MenuAnchor(
+              style: menuStyle,
+              builder: (context, controller, child) {
+                return _railIconButton(
+                  isDark: isDark,
+                  icon: Icons.folder_outlined,
+                  iconWidget: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(Icons.folder_outlined,
+                          size: 20,
+                          color: ConclaveColors.navigationTextMuted(isDark)),
+                      Positioned(
+                        right: -5,
+                        top: -5,
+                        child: SidebarActivityIndicators(
+                          key: const ValueKey('rail-activity-spaces'),
+                          running: spaces.any(_running),
+                          unread: spaces.any(_unread),
+                          gap: 2,
+                        ),
+                      ),
+                    ],
                   ),
-                  (
-                    label: 'SHARED WITH YOU',
-                    spaces: shellContext.sharedSpaces,
-                    icon: Icons.folder_shared_outlined
-                  ),
-                ])
-                  if (group.spaces.isNotEmpty)
-                    MenuAnchor(
-                      style: menuStyle,
-                      builder: (context, controller, child) {
-                        return _railIconButton(
-                          isDark: isDark,
-                          icon: group.icon,
-                          iconWidget: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Icon(group.icon,
-                                  size: 20,
-                                  color: ConclaveColors.navigationTextMuted(
-                                      isDark)),
-                              Positioned(
-                                right: -5,
-                                top: -5,
-                                child: SidebarActivityIndicators(
-                                  key: ValueKey('rail-activity-${group.label}'),
-                                  running: group.spaces.any(_running),
-                                  unread: group.spaces.any(_unread),
-                                  gap: 2,
-                                ),
-                              ),
-                            ],
-                          ),
-                          tooltip: group.label,
-                          onPressed: () {
-                            if (controller.isOpen) {
-                              controller.close();
-                            } else {
-                              controller.open();
-                            }
-                          },
-                        );
-                      },
-                      menuChildren: [
-                        for (final space in group.spaces) ...[
-                          MenuItemButton(
-                            style: itemStyle(),
-                            trailingIcon: SidebarActivityIndicators(
-                              key: ValueKey('rail-space-activity-${space.id}'),
-                              running: _running(space),
-                              unread: _unread(space),
-                            ),
-                            leadingIcon: ConclaveFolderIcon(
-                              isExpanded: true,
-                              size: 16,
-                              color: ConclaveColors.navigationTextMuted(isDark),
-                            ),
-                            onPressed: () =>
-                                onNavigateTo(AxNavigation.space(space.id)),
-                            child: Text(
-                              space.name,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: shellContext.isNavActive(
-                                        AxNavigation.space(space.id))
-                                    ? FontWeight.bold
-                                    : FontWeight.w600,
-                                color:
-                                    ConclaveColors.navigationTextMuted(isDark),
-                              ),
-                            ),
-                          ),
-                          for (final thread
-                              in (shellContext.spaceThreads?.peek(space.id) ??
-                                  shellContext.threadsBySpace[space.id] ??
-                                  const <AxThread>[]))
-                            MenuItemButton(
-                              style: itemStyle(),
-                              trailingIcon: SidebarActivityIndicators(
-                                key: ValueKey(
-                                    'rail-thread-activity-${thread.id}'),
-                                running: thread.hasActiveWork,
-                                unread: thread.hasUnread,
-                              ),
-                              onPressed: () => onNavigateTo(
-                                  AxNavigation.thread(space.id, thread.id)),
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 24),
-                                child: Text(
-                                  thread.title,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: shellContext.isNavActive(
-                                            AxNavigation.thread(
-                                                space.id, thread.id))
-                                        ? FontWeight.bold
-                                        : FontWeight.normal,
-                                    color: ConclaveColors.navigationTextMuted(
-                                        isDark),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ],
+                  tooltip: 'Spaces and Threads',
+                  onPressed: () {
+                    if (controller.isOpen) {
+                      controller.close();
+                    } else {
+                      controller.open();
+                    }
+                  },
+                );
+              },
+              menuChildren: [
+                for (final space in spaces) ...[
+                  MenuItemButton(
+                    style: itemStyle(),
+                    trailingIcon: SidebarActivityIndicators(
+                      key: ValueKey('rail-space-activity-${space.id}'),
+                      running: _running(space),
+                      unread: _unread(space),
                     ),
-              ])),
+                    leadingIcon: ConclaveFolderIcon(
+                      isExpanded: true,
+                      size: 16,
+                      color: ConclaveColors.navigationTextMuted(isDark),
+                    ),
+                    onPressed: () => onNavigateTo(AxNavigation.space(space.id)),
+                    child: Text(
+                      space.name,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: shellContext
+                                .isNavActive(AxNavigation.space(space.id))
+                            ? FontWeight.bold
+                            : FontWeight.w600,
+                        color: ConclaveColors.navigationTextMuted(isDark),
+                      ),
+                    ),
+                  ),
+                  for (final thread in applyAxThreadPins(
+                          sortAxThreadsByLastUpdate(_threads(space)))
+                      .where((thread) =>
+                          !thread.archived &&
+                          thread.status.toLowerCase() != 'archived'))
+                    MenuItemButton(
+                      style: itemStyle(),
+                      trailingIcon: SidebarActivityIndicators(
+                        key: ValueKey('rail-thread-activity-${thread.id}'),
+                        running: thread.hasActiveWork,
+                        unread: thread.hasUnread,
+                      ),
+                      onPressed: () => onNavigateTo(
+                          AxNavigation.thread(space.id, thread.id)),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 24),
+                        child: Text(
+                          thread.title,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: shellContext.isNavActive(
+                                    AxNavigation.thread(space.id, thread.id))
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: ConclaveColors.navigationTextMuted(isDark),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            );
+          }),
 
           const Spacer(),
 

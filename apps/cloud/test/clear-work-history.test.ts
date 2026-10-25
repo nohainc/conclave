@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { conversationFixture } from "./helpers/conversation.js";
 vi.mock("../src/routes/thread-policy.js", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  authorizeThreadAccess: vi.fn(async () => ({})),
+  authorizeThreadAccess: vi.fn(async () => ({
+    context: { userId: "U", user: { displayName: "User" } },
+    spaceId: "P",
+  })),
 }));
 vi.mock("../src/collaboration-events.js", () => ({
   publishCollaborationEvent: vi.fn(async () => {}),
@@ -97,18 +100,19 @@ it("routes through production handler registration and clears remote history", a
   }
 });
 
-it("rejects active work without deleting remote history", async () => {
+it("resets AI context during active work without deleting remote history", async () => {
   const f = await conversationFixture();
   try {
-    await expect(
-      handleClearWorkHistory(
-        new Request("https://test/api/threads/W/work-history/clear", {
-          method: "POST",
-        }),
-        { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
-        "W",
-      ),
-    ).rejects.toMatchObject({ status: 409 });
+    f.sqlite.exec(
+      "ALTER TABLE threads ADD COLUMN work_session_generation INTEGER NOT NULL DEFAULT 0",
+    );
+    await handleClearWorkHistory(
+      new Request("https://test/api/threads/W/work-history/clear", {
+        method: "POST",
+      }),
+      { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+      "W",
+    );
     expect(
       f.sqlite.prepare("SELECT COUNT(*) AS count FROM work_requests").get()!
         .count,
@@ -203,7 +207,7 @@ it("clears the whole Conversation remotely, including Work history", async () =>
       f.sqlite
         .prepare("SELECT COUNT(*) AS count FROM discussion_messages")
         .get()!.count,
-    ).toBe(0);
+    ).toBe(1);
     for (const table of [
       "work_requests",
       "conversations",
@@ -304,7 +308,7 @@ it("keeps cleared AI exchanges readable but out of later Worker context", async 
       f.sqlite
         .prepare("SELECT COUNT(*) AS count FROM discussion_messages")
         .get()!.count,
-    ).toBe(0);
+    ).toBe(1);
     expect(await f.turns()).toEqual(before);
   } finally {
     f.sqlite.close();

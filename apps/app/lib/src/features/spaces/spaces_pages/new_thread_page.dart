@@ -57,7 +57,28 @@ class _NewThreadPageState extends State<NewThreadPage> {
                   spaceId: widget.space.id)
               : null);
   bool _busy = false;
+  bool _savingAiHistoryVisibility = false;
+  String? _aiHistoryVisibilityError;
   String? _creationError;
+
+  Future<void> _setAiHistoryVisibility(bool visible) async {
+    if (_savingAiHistoryVisibility || widget.space.role != 'owner') return;
+    setState(() {
+      _savingAiHistoryVisibility = true;
+      _aiHistoryVisibilityError = null;
+    });
+    try {
+      final mutations = widget.mutations ??
+          AxCollaborationMutations(widget.dataSource,
+              engine: widget.workHistoryCache.engine);
+      await mutations
+          .editSpace(widget.space, settings: {'showAiHistory': visible});
+    } catch (error) {
+      if (mounted) setState(() => _aiHistoryVisibilityError = error.toString());
+    } finally {
+      if (mounted) setState(() => _savingAiHistoryVisibility = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -148,17 +169,49 @@ class _NewThreadPageState extends State<NewThreadPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (_workflows != null)
+                  if (_workflows != null || widget.space.role == 'owner')
                     _SpaceLandingSection(
                       title: 'Settings',
                       arrowKey: const ValueKey('space-settings-arrow'),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _SpaceWorkspaceSelector(
-                              configurations: _workflows!,
-                              isOwner: widget.space.role == 'owner'),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (_workflows != null)
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: _SpaceWorkspaceSelector(
+                                    configurations: _workflows!,
+                                    isOwner: widget.space.role == 'owner'),
+                              ),
+                            Row(
+                              key: const ValueKey(
+                                  'space-show-ai-history-setting'),
+                              children: [
+                                const Expanded(
+                                    child: Text('Show AI History tab')),
+                                const SizedBox(width: 8),
+                                Transform.scale(
+                                  scale: 0.8,
+                                  child: Switch(
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    value: widget.space.showAiHistory,
+                                    onChanged: widget.space.role == 'owner' &&
+                                            !_savingAiHistoryVisibility
+                                        ? _setAiHistoryVisibility
+                                        : null,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (_aiHistoryVisibilityError != null)
+                              Text(_aiHistoryVisibilityError!,
+                                  style: TextStyle(
+                                      color:
+                                          Theme.of(context).colorScheme.error)),
+                          ],
                         ),
                       ),
                     ),

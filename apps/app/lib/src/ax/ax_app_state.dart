@@ -650,6 +650,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     try {
       // Only AI History is cut off; the Conversation stays as it was.
       await store.workHistory.clearHistory(thread.id);
+      await store.discussion.synchronize(thread.id);
       _discardNotificationsFor(threadId: thread.id);
       if (mounted) _showSnackBar('AI History cleared.');
     } catch (error) {

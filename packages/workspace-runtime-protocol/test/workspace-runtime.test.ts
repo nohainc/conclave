@@ -16,6 +16,23 @@ const base = {
 };
 
 describe("Workspace Runtime protocol", () => {
+  it("carries no file content in the input wake-up", () => {
+    const wake = {
+      ...base,
+      type: "input.available",
+      executionWorkspaceId: "workspace-a",
+      workspaceRuntimeId: "runtime-a",
+      payload: {},
+    };
+    expect(parseWorkspaceRuntimeMessage(wake).type).toBe("input.available");
+    expect(() =>
+      parseWorkspaceRuntimeMessage({
+        ...wake,
+        payload: { contentBase64: "aGVsbG8=" },
+      }),
+    ).toThrow(/payload/);
+  });
+
   it("uses Workspace lifecycle message names", () => {
     expect(
       parseWorkspaceRuntimeMessage({ ...base, type: "workspace.hello" }).type,

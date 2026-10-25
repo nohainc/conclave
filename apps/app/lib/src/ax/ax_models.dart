@@ -51,6 +51,9 @@ extension AxTaskHelpers on AxTask {
 
 extension AxSpaceHelpers on AxSpace {
   String get title => name;
+
+  /// AI History is a Space-level opt-in. Missing settings stay hidden.
+  bool get showAiHistory => settings['showAiHistory'] == true;
 }
 
 enum FindingSeverity { blocker, major, minor, note }
@@ -304,6 +307,7 @@ class AxThread {
     this.workConfig = const {},
     this.metadata = const {},
     this.canConfigureWork = false,
+    this.canDestroy = false,
     this.canExecuteWork = false,
     this.archived = false,
     this.creatorEmail = '',
@@ -334,6 +338,7 @@ class AxThread {
   /// workflow, Worker, model, effort). Never used for execution decisions.
   final Map<String, dynamic> metadata;
   final bool canConfigureWork;
+  final bool canDestroy;
   final bool canExecuteWork;
   final bool archived;
   final String creatorEmail;
@@ -395,6 +400,7 @@ class AxThread {
           createdAt: createdAt,
           updatedAt: updatedAt,
           canConfigureWork: canConfigureWork,
+          canDestroy: canDestroy,
           canExecuteWork: canExecuteWork,
           archived: status == null ? archived : status == 'archived');
 
@@ -416,6 +422,7 @@ class AxThread {
             ? Map<String, dynamic>.from(json['metadata'] as Map)
             : const {},
         canConfigureWork: json['canConfigureWork'] == true,
+        canDestroy: json['canDestroy'] == true,
         canExecuteWork: json['canExecuteWork'] == true,
         archived: json['archived'] == true,
         creatorEmail: _string(json, 'creatorEmail'),
@@ -454,6 +461,7 @@ class AxDiscussionMessage {
     required this.createdAt,
     this.isMe = false,
     this.kind = 'message',
+    this.eventType,
     this.workRequestId,
     this.workerDisplayName,
   });
@@ -472,6 +480,7 @@ class AxDiscussionMessage {
   /// `message` for people's Chat; `ai_request`/`ai_answer` for AI exchanges
   /// archived into the conversation when Work history is cleared.
   final String kind;
+  final String? eventType;
   final String? workRequestId;
   final String? workerDisplayName;
 
@@ -491,6 +500,7 @@ class AxDiscussionMessage {
           createdAt: createdAt,
           isMe: isMe,
           kind: kind,
+          eventType: eventType,
           workRequestId: workRequestId,
           workerDisplayName: workerDisplayName);
 
@@ -550,6 +560,7 @@ class AxDiscussionMessage {
       editedAt: json['editedAt'] as String? ?? json['edited_at'] as String?,
       createdAt: _string(json, 'createdAt', _string(json, 'created_at')),
       isMe: isMe,
+      eventType: json['eventType'] as String?,
       kind: (json['kind'] as String?)?.trim().isNotEmpty == true
           ? json['kind'] as String
           : 'message',

@@ -2,7 +2,10 @@ import { expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 vi.mock("../src/routes/thread-policy.js", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  authorizeThreadAccess: vi.fn(async () => ({})),
+  authorizeThreadAccess: vi.fn(async () => ({
+    context: { userId: "U", user: { displayName: "User" } },
+    spaceId: "P",
+  })),
 }));
 vi.mock("../src/collaboration-events.js", () => ({
   publishCollaborationEvent: vi.fn(async () => {}),

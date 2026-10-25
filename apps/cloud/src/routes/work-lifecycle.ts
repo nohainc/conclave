@@ -1,3 +1,10 @@
+import {
+  inputProgress,
+  loadInputsForRequests,
+  loadWorkRequestInputs,
+  withInputFacts,
+} from "./work-request-inputs.js";
+import { threadNotice } from "./thread-history-actions.js";
 import { workRequestFileMetadata } from "./work-request-files.js";
 import { loadConversationWorkflowRuns } from "./conversation-workflow-runs.js";
 import {
@@ -384,6 +391,23 @@ export async function handleRetryWorkRequest(
           ]
         : []),
       env.CONCLAVE_DB.prepare(
+        `UPDATE work_requests SET ai_context_generation =
+        (SELECT ai_context_generation FROM threads WHERE id = ?1) WHERE id = ?2`,
+      ).bind(String(row.threadId), workRequestId),
+      ...(contextLimitExceeded
+        ? [
+            threadNotice(
+              env,
+              String(row.threadId),
+              context.userId,
+              context.user.displayName || "Member",
+              "ai.context_reset",
+              "reset AI context to retry a request.",
+              now,
+            ),
+          ]
+        : []),
+      env.CONCLAVE_DB.prepare(
         `UPDATE workflow_tasks SET status = 'queued', output_json = NULL,
               error = NULL, started_at = NULL, finished_at = NULL, updated_at = ?1
         WHERE work_request_id = ?2 AND step_kind = ?3 AND status = 'failed'`,
@@ -758,8 +782,11 @@ export async function handleGetWorkRequest(
     env.CONCLAVE_DB,
     workRequestId,
   );
+  const inputRows = await loadWorkRequestInputs(env.CONCLAVE_DB, workRequestId);
+  const inputs = inputProgress(inputRows);
   return json({
     workRequest: {
+      ...(inputs.length > 0 ? { inputs } : {}),
       workflowRun,
       turns,
       executionConfig: snapshot.turnExecutionConfig ?? null,
@@ -775,7 +802,7 @@ export async function handleGetWorkRequest(
         row.workflowId,
         row.workflowVersion,
       ),
-      attachments: workRequestFileMetadata(input),
+      attachments: workRequestFileMetadata(withInputFacts(input, inputRows)),
       originalRequest: String(
         row.canonicalUserText ?? input.originalRequest ?? input.request ?? "",
       ),
@@ -985,6 +1012,7 @@ export async function handleListWorkRequests(
     values.push(task);
     tasksByRequest.set(key, values);
   }
+  const inputsByRequest = await loadInputsForRequests(env.CONCLAVE_DB, ids);
   const workRequests = requests.map((row) => {
     const id = String(row.id);
     const input = parseJson<Record<string, unknown>>(String(row.inputJson), {});
@@ -1170,7 +1198,9 @@ export async function handleListWorkRequests(
       turns: turnsByRequest.get(id) ?? [],
       workflowRun: workflowRunsByRequest.get(id) ?? null,
       executionConfig: snapshot.turnExecutionConfig ?? null,
-      attachments: workRequestFileMetadata(input),
+      attachments: workRequestFileMetadata(
+        withInputFacts(input, inputsByRequest.get(id)),
+      ),
       prompt: String(
         row.canonicalUserText ?? input.originalRequest ?? input.request ?? "",
       ),
@@ -1361,12 +1391,18 @@ export async function handleClearWorkHistory(
   threadId: string,
   context?: ExecutionContext,
 ): Promise<Response> {
-  await authorizeThreadAccess(request, env, threadId, "manage", context);
+  const authorization = await authorizeThreadAccess(
+    request,
+    env,
+    threadId,
+    "view",
+    context,
+  );
 
   const receipt = await MutationIdempotency.from(
     request,
     env.CONCLAVE_DB,
-    (context as { userId?: string } | undefined)?.userId ?? "",
+    authorization.context.userId,
     `thread:${threadId}:clear-work-history`,
     {},
   );
@@ -1393,19 +1429,6 @@ export async function handleClearWorkHistory(
     return replay;
   }
 
-  const active = await env.CONCLAVE_DB.prepare(
-    "SELECT COUNT(*) as count FROM work_requests WHERE thread_id = ?1 AND status IN ('queued', 'running', 'waiting')",
-  )
-    .bind(threadId)
-    .first<{ count: number }>();
-
-  if (active && active.count > 0) {
-    throw new HttpError(
-      409,
-      `Cannot clear history with ${active.count} active Work Request(s). Cancel first.`,
-    );
-  }
-
   // AI History is cut off, not deleted: the Conversation keeps every request
   // and answer as they were. Worker sessions restart, and the context floor
   // keeps cleared exchanges out of any later Worker's context.
@@ -1419,10 +1442,22 @@ export async function handleClearWorkHistory(
     ).bind(threadId),
     env.CONCLAVE_DB.prepare(
       `UPDATE threads SET ai_history_cleared_at = ?1,
-         work_session_generation = work_session_generation + 1, updated_at = ?1
+         work_session_generation = work_session_generation + 1,
+         ai_context_generation = ai_context_generation + 1, updated_at = ?1
        WHERE id = ?2`,
     ).bind(now, threadId),
   ];
+  statements.push(
+    threadNotice(
+      env,
+      threadId,
+      authorization.context.userId,
+      authorization.context.user.displayName || "Member",
+      "ai.context_reset",
+      "reset AI context. Future AI requests will start with fresh context.",
+      now,
+    ),
+  );
   const body = { threadId, cleared: true, aiHistoryClearedAt: now };
   const reply = receipt
     ? await receipt.commit(body, 200, (receiptStatements) =>

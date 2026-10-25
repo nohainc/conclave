@@ -58,6 +58,13 @@ export async function routeWorkerRequest(
         /^\/api\/workspace-runtime\/sessions\/[^/]+\/close$/.test(
           url.pathname,
         ));
+    // Input Delivery v1 reports use the runtime bearer credential, not a
+    // cookie; they are handled by their own routes below.
+    const workspaceRuntimeInputReport =
+      request.method === "POST" &&
+      /^\/api\/workspace-runtime\/inputs\/[^/]+\/(delivered|attempt)$/.test(
+        url.pathname,
+      );
     const desktopAuthPath = url.pathname.startsWith("/api/desktop-auth/");
     const desktopAuthRequiresSameOrigin =
       desktopAuthPath &&
@@ -69,6 +76,7 @@ export async function routeWorkerRequest(
       !desktopWorkspaceRelease &&
       !desktopWorkspaceDisconnect &&
       !workspaceRuntimeTransport &&
+      !workspaceRuntimeInputReport &&
       (!desktopAuthPath || desktopAuthRequiresSameOrigin) &&
       (request.method === "POST" ||
         request.method === "PUT" ||
@@ -433,6 +441,28 @@ export async function routeWorkerRequest(
     }
     if (request.method === "GET" && url.pathname === "/api/workers/catalog") {
       return await handlers.handleListWorkerCatalog!(request, env, ctx);
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/workspace-runtime/inputs"
+    ) {
+      return await handlers.handleListRuntimeInputs!(request, env);
+    }
+    const runtimeInputMatch = url.pathname.match(
+      /^\/api\/workspace-runtime\/inputs\/([^/]+)\/(content|delivered|attempt)$/,
+    );
+    if (runtimeInputMatch?.[1]) {
+      const [, fileId, action] = runtimeInputMatch;
+      if (request.method === "GET" && action === "content")
+        return await handlers.handleDownloadRuntimeInput!(request, env, fileId);
+      if (request.method === "POST" && action === "delivered")
+        return await handlers.handleConfirmRuntimeInput!(request, env, fileId);
+      if (request.method === "POST" && action === "attempt")
+        return await handlers.handleReportRuntimeInputAttempt!(
+          request,
+          env,
+          fileId,
+        );
     }
     if (
       request.method === "GET" &&
@@ -1054,6 +1084,27 @@ export async function routeWorkerRequest(
         workRequestFileMatch[1],
         ctx,
       );
+    }
+    const workRequestInputMatch = url.pathname.match(
+      /^\/api\/work-requests\/([^/]+)\/inputs\/([^/]+)(\/failed)?$/,
+    );
+    if (workRequestInputMatch?.[1] && workRequestInputMatch[2]) {
+      if (request.method === "PUT" && !workRequestInputMatch[3])
+        return await handlers.handleUploadWorkRequestInput!(
+          request,
+          env,
+          workRequestInputMatch[1],
+          workRequestInputMatch[2],
+          ctx,
+        );
+      if (request.method === "POST" && workRequestInputMatch[3])
+        return await handlers.handleFailWorkRequestInputUpload!(
+          request,
+          env,
+          workRequestInputMatch[1],
+          workRequestInputMatch[2],
+          ctx,
+        );
     }
     const validateWorkRequestMatch = url.pathname.match(
       /^\/api\/threads\/([^/]+)\/work-requests\/validate$/,

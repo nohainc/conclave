@@ -26,8 +26,11 @@ import {
   MAX_WORK_REQUEST_FILES,
   MAX_WORK_REQUEST_FILE_BYTES,
   isWorkRequestFileId,
+  userStorageUsage,
   verifyWorkRequestFile,
+  workRequestFileName,
 } from "./work-request-files.js";
+import { workRequestInputStatements } from "./work-request-inputs.js";
 import { createEventPublisher } from "../event-publisher.js";
 import { tryLogTraceEvent } from "../observability.js";
 import {
@@ -149,13 +152,18 @@ export async function handleCreateWorkRequest(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const handlerStartedAt = performance.now();
-  const { context, spaceId } = await authorizeThreadAccess(
+  const { context, spaceId, thread } = await authorizeThreadAccess(
     request,
     env,
     threadId,
     "execute",
     accessContext,
   );
+  if (thread?.status === "archived")
+    throw new HttpError(
+      409,
+      "Restore the Thread before sending messages or requests",
+    );
   const body = (await request.json()) as Record<string, unknown>;
   const executionSelection = parseWorkflowExecutionSelection(
     body.executionSelection,
@@ -278,10 +286,7 @@ export async function handleCreateWorkRequest(
       const value = attachment as Record<string, unknown>;
       const kind =
         value.kind === "url" ? "url" : value.kind === "file" ? "file" : null;
-      const name =
-        typeof value.name === "string"
-          ? value.name.replace(/[\\/\\x00-\\x1f]/g, "_").slice(0, 255)
-          : "Attachment";
+      const name = workRequestFileName(value.name);
       const mediaType =
         typeof value.mediaType === "string" && value.mediaType.length <= 128
           ? value.mediaType
@@ -317,17 +322,29 @@ export async function handleCreateWorkRequest(
           url: url.toString(),
         };
       }
-      if (!isWorkRequestFileId(value.fileId))
-        throw new HttpError(400, `File ${index + 1} is invalid`);
       if (
         typeof value.sizeBytes !== "number" ||
         !Number.isSafeInteger(value.sizeBytes) ||
+        value.sizeBytes < 0 ||
         value.sizeBytes > MAX_WORK_REQUEST_FILE_BYTES
       )
         throw new HttpError(
           400,
           `File ${index + 1} exceeds the 10 MB limit or has an invalid size`,
         );
+      // Input Delivery v1: the file is uploaded after acceptance. Cloud
+      // assigns its identity; the manifest row tracks upload and delivery.
+      if (value.fileId === undefined && value.delivery === "upload") {
+        return {
+          kind,
+          name,
+          mediaType,
+          sizeBytes: value.sizeBytes,
+          fileId: `wrf-${crypto.randomUUID()}`,
+        };
+      }
+      if (!isWorkRequestFileId(value.fileId))
+        throw new HttpError(400, `File ${index + 1} is invalid`);
       const stored = await verifyWorkRequestFile(
         env,
         value.fileId,
@@ -348,6 +365,21 @@ export async function handleCreateWorkRequest(
     }),
   );
   requestInput.attachments = normalizedAttachments;
+  const pendingBytes = normalizedAttachments.reduce(
+    (total, attachment) =>
+      attachment.kind === "file" && !("contentDigest" in attachment)
+        ? total + attachment.sizeBytes
+        : total,
+    0,
+  );
+  if (pendingBytes > 0) {
+    const usage = await userStorageUsage(env, context.userId);
+    if (usage.usedBytes + pendingBytes > usage.quotaBytes)
+      throw new HttpError(
+        413,
+        "Storage quota exceeded. Delete files in My Files to free space",
+      );
+  }
   const attachmentReferences = normalizedAttachments;
   const configuredBindings =
     workConfig.bindings &&
@@ -538,6 +570,11 @@ export async function handleCreateWorkRequest(
       error instanceof Error ? error.message : "Invalid Work Request",
     );
   }
+  const fileInputs = normalizedAttachments.some(
+    (attachment) => attachment.kind === "file",
+  );
+  if (fileInputs && !workRequest.primaryWorkspaceId)
+    throw new HttpError(400, "Files need a Workspace to deliver them to");
   const runId = `run-${crypto.randomUUID()}`;
   const responseBody = {
     workRequest,
@@ -563,6 +600,16 @@ export async function handleCreateWorkRequest(
         JSON.stringify(workRequest.input),
         now,
       ),
+      ...(fileInputs
+        ? workRequestInputStatements(env.CONCLAVE_DB, {
+            workRequestId: workRequest.id,
+            threadId,
+            workspaceId: workRequest.primaryWorkspaceId!,
+            userId: context.userId,
+            attachments: normalizedAttachments,
+            now,
+          })
+        : []),
       // Sidebar ordering is based on these parent timestamps. A newly
       // accepted request is Thread activity even before a Worker responds.
       env.CONCLAVE_DB.prepare(

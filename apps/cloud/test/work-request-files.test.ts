@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  hydrateWorkRequestFiles,
   workRequestFileMetadata,
   isWorkRequestFileId,
   verifyWorkRequestFile,
   workRequestFileKey,
+  workRequestFileName,
 } from "../src/routes/work-request-files.js";
 
 const fileId = "wrf-11111111-2222-3333-4444-555555555555";
@@ -73,40 +73,18 @@ describe("Work Request files", () => {
     ).rejects.toThrow("not found");
   });
 
-  it("adds file bytes to the outgoing assignment payload only", async () => {
-    const { bucket, keys } = bucketWith(new TextEncoder().encode("hello"), {
-      threadId: "thread-1",
-    });
-    const payload = {
-      threadId: "thread-1",
-      input: {
-        attachments: [
-          { kind: "file", name: "a.txt", sizeBytes: 5, fileId },
-          { kind: "url", name: "link", url: "https://example.com/" },
-        ],
-      },
-    };
-    const result = (await hydrateWorkRequestFiles(
-      { CONCLAVE_ARTIFACTS: bucket },
-      payload,
-    )) as typeof payload;
-    expect(keys).toEqual([workRequestFileKey(fileId)]);
-    expect(result.input.attachments[0]).toMatchObject({
-      contentBase64: btoa("hello"),
-    });
-    expect(payload.input.attachments[0]).not.toHaveProperty("contentBase64");
-  });
-
-  it("rejects delivery when a file belongs to another Thread", async () => {
-    const { bucket } = bucketWith(new Uint8Array(5), { threadId: "other" });
-    await expect(
-      hydrateWorkRequestFiles(
-        { CONCLAVE_ARTIFACTS: bucket },
-        {
-          threadId: "thread-1",
-          input: { attachments: [{ kind: "file", sizeBytes: 5, fileId }] },
-        },
+  it("keeps readable file names and strips only separators and controls", () => {
+    expect(
+      workRequestFileName("ChatGPT Image Oct 6, 2026, 05_47_11 PM.png"),
+    ).toBe("ChatGPT Image Oct 6, 2026, 05_47_11 PM.png");
+    expect(
+      workRequestFileName(
+        "61135810_2063761467249879_2135703738118045696_n.jpg",
       ),
-    ).rejects.toThrow("unavailable");
+    ).toBe("61135810_2063761467249879_2135703738118045696_n.jpg");
+    expect(workRequestFileName("../a\\b\u0000c\nd.txt")).toBe(".._a_b_c_d.txt");
+    expect(workRequestFileName("Звіт.pdf")).toBe("Звіт.pdf");
+    expect(workRequestFileName("")).toBe("Attachment");
+    expect(workRequestFileName(42)).toBe("Attachment");
   });
 });

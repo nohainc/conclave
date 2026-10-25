@@ -102,6 +102,8 @@ export function sqliteD1(
     "0083_copilot_worker.sql",
     "0084_grok_worker.sql",
     "0085_workspace_allowed_folders.sql",
+    "0087_thread_history_permissions.sql",
+    "0088_work_request_inputs.sql",
   ]) {
     sqlite.exec(
       readFileSync(

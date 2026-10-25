@@ -29,6 +29,48 @@ function request(path: string, method = "GET"): Request {
 }
 
 describe("Worker API routes", () => {
+  it("routes Input Delivery reports to their handlers, never the runtime transport", async () => {
+    const file = "wrf-11111111-2222-3333-4444-555555555555";
+    const sameOrigin = vi.fn();
+    const handlers = {
+      handleWorkspaceRuntimeTransport: vi.fn(async () => new Response("{}")),
+      handleListRuntimeInputs: vi.fn(async () => new Response("{}")),
+      handleDownloadRuntimeInput: vi.fn(async () => new Response("{}")),
+      handleConfirmRuntimeInput: vi.fn(async () => new Response("{}")),
+      handleReportRuntimeInputAttempt: vi.fn(async () => new Response("{}")),
+    };
+    const env = {} as Env;
+    for (const [path, method, handler] of [
+      ["/api/workspace-runtime/inputs", "GET", "handleListRuntimeInputs"],
+      [
+        `/api/workspace-runtime/inputs/${file}/content`,
+        "GET",
+        "handleDownloadRuntimeInput",
+      ],
+      [
+        `/api/workspace-runtime/inputs/${file}/delivered`,
+        "POST",
+        "handleConfirmRuntimeInput",
+      ],
+      [
+        `/api/workspace-runtime/inputs/${file}/attempt`,
+        "POST",
+        "handleReportRuntimeInputAttempt",
+      ],
+    ] as const) {
+      await routeWorkerRequest(
+        request(`${path}?workspaceRuntimeId=r`, method),
+        env,
+        undefined,
+        handlers,
+        { ...dependencies, requireSameOriginForCookieMutation: sameOrigin },
+      );
+      expect(handlers[handler]).toHaveBeenCalledTimes(1);
+    }
+    expect(handlers.handleWorkspaceRuntimeTransport).not.toHaveBeenCalled();
+    // Bearer-authenticated runtime reports skip the cookie same-origin check.
+    expect(sameOrigin).not.toHaveBeenCalled();
+  });
   it("routes canonical history reads to the Conversation-scoped handler", async () => {
     const handler = vi.fn(async () => new Response("{}"));
     const req = request("/api/threads/W/conversations/C/history");

@@ -373,14 +373,19 @@ class _WorkComposer extends StatelessWidget {
   Widget requestCard(BuildContext context, AxWorkRequest request,
           {GlobalKey? responseAnchorKey}) =>
       ListenableBuilder(
-        listenable: activityStore.listenableForRequest(request),
+        listenable: Listenable.merge([
+          activityStore.listenableForRequest(request),
+          AxInputDelivery.instance,
+        ]),
         builder: (context, _) => _WorkTimelineCard(
           responseAnchorKey: responseAnchorKey,
           request: request,
           activities: activityStore.forRequest(request),
           clockOffset: activityStore.clockOffsetForRequest(request),
           realtimeStatus: realtimeStatus,
-          progressText: localWorkProgress[request.id],
+          // File delivery (Input Delivery v1) precedes the Worker's output.
+          progressText: AxInputDelivery.instance.summary(request.id) ??
+              localWorkProgress[request.id],
           currentUserId: currentUserId,
           currentUserName: currentUserName,
           workflowCatalog: workflowCatalog,
@@ -1912,24 +1917,26 @@ class _WorkTimelineCard extends StatelessWidget {
                                             _ => null,
                                           };
                           final isError = error?.isNotEmpty == true;
+                          final platform = Theme.of(context).platform;
+                          final touch = platform == TargetPlatform.iOS ||
+                              platform == TargetPlatform.android;
+                          final actionSize = touch ? 48.0 : 32.0;
                           Widget compactAction({
                             required String tooltip,
                             required IconData icon,
                             required VoidCallback? onPressed,
                           }) =>
-                              Tooltip(
-                                message: tooltip,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(4),
-                                  onTap: onPressed,
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(2),
-                                    child: Icon(
-                                      icon,
-                                      size: 16,
-                                      color: metaColor,
-                                    ),
+                              SizedBox.square(
+                                dimension: actionSize,
+                                child: IconButton(
+                                  tooltip: tooltip,
+                                  constraints: BoxConstraints.tightFor(
+                                    width: actionSize,
+                                    height: actionSize,
                                   ),
+                                  padding: EdgeInsets.zero,
+                                  icon: Icon(icon, size: 16, color: metaColor),
+                                  onPressed: onPressed,
                                 ),
                               );
                           final responseActions = <_TimelineAction>[
@@ -2348,6 +2355,7 @@ class _DiscussionItem {
     this.editedDate,
     this.isMe = true,
     this.aiKind,
+    this.eventType,
     this.workRequest,
     this.attachments = const [],
   });
@@ -2364,6 +2372,7 @@ class _DiscussionItem {
 
   /// `ai_request` or `ai_answer` for an AI exchange archived from Work history.
   final String? aiKind;
+  final String? eventType;
   bool get isAiAnswer => aiKind == 'ai_answer';
 
   /// Set for a Work Request still in Work history; it renders as the Work
@@ -2465,6 +2474,26 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (widget.item.eventType != null) {
+      final removed = widget.item.eventType == 'message.removed';
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(removed ? Icons.delete_outline : Icons.info_outline,
+              size: 16,
+              color: removed
+                  ? ConclaveColors.errorText(isDark)
+                  : ConclaveColors.textSecondary(isDark)),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Text(
+                  '${removed ? "${widget.item.author} · ${widget.item.sentAt ?? ""}\n" : ""}${widget.item.text}${!removed ? " · ${widget.item.sentAt ?? ""}" : ""}',
+                  style: TextStyle(
+                      color: ConclaveColors.textSecondary(isDark),
+                      fontSize: 13))),
+        ]),
+      );
+    }
     final isMe = widget.item.isMe;
 
     final initials = widget.item.author.isNotEmpty
@@ -2513,37 +2542,40 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
         ),
         const SizedBox(width: 8),
       ],
-      _TimelineActionsMenu(color: metaColor, actions: [
-        if (isMe &&
-            widget.item.aiKind == null &&
-            widget.onDelete != null &&
-            !widget.item.id.startsWith('temp-')) ...[
-          _TimelineAction(
-            tooltip: 'Delete',
-            icon: Icons.delete_outline_rounded,
-            color: metaColor,
-            onTap: () => _confirmDelete(context),
-          ),
-        ],
-        if (!widget.item.id.startsWith('temp-') &&
-            widget.item.aiKind == null) ...[
-          _TimelineAction(
-            tooltip: 'Edit',
-            icon: Icons.edit_outlined,
-            color: metaColor,
-            onTap: () => setState(() {
-              _editController.text = widget.item.text;
-              _isEditing = true;
-            }),
-          ),
-        ],
-        _TimelineAction(
-          tooltip: 'Copy',
-          icon: Icons.copy_rounded,
+      _TimelineActionsMenu(
+          forceMenu: widget.item.aiKind == null,
           color: metaColor,
-          onTap: widget.onCopy,
-        ),
-      ]),
+          actions: [
+            if (widget.item.aiKind == null &&
+                widget.onDelete != null &&
+                !widget.item.id.startsWith('temp-')) ...[
+              _TimelineAction(
+                tooltip: 'Delete',
+                icon: Icons.delete_outline_rounded,
+                color: metaColor,
+                onTap: () => _confirmDelete(context),
+              ),
+            ],
+            if (isMe &&
+                !widget.item.id.startsWith('temp-') &&
+                widget.item.aiKind == null) ...[
+              _TimelineAction(
+                tooltip: 'Edit',
+                icon: Icons.edit_outlined,
+                color: metaColor,
+                onTap: () => setState(() {
+                  _editController.text = widget.item.text;
+                  _isEditing = true;
+                }),
+              ),
+            ],
+            _TimelineAction(
+              tooltip: 'Copy',
+              icon: Icons.copy_rounded,
+              color: metaColor,
+              onTap: widget.onCopy,
+            ),
+          ]),
     ];
     return _MessageHover(
         builder: (context, showMeta) => LayoutBuilder(
@@ -2729,7 +2761,10 @@ class _TimelineAction {
 }
 
 class _TimelineActionsMenu extends StatelessWidget {
-  const _TimelineActionsMenu({required this.actions, required this.color});
+  const _TimelineActionsMenu(
+      {required this.actions, required this.color, this.forceMenu = false});
+
+  final bool forceMenu;
 
   final List<_TimelineAction> actions;
   final Color color;
@@ -2743,8 +2778,8 @@ class _TimelineActionsMenu extends StatelessWidget {
     void menuOpenChanged(bool open) => context
         .findAncestorStateOfType<_MessageHoverState>()
         ?._menuOpenChanged(open);
-    final buttonSize = touch ? 48.0 : 22.0;
-    if (actions.length == 1) {
+    final buttonSize = touch ? 48.0 : 32.0;
+    if (actions.length == 1 && !forceMenu) {
       final action = actions.single;
       return SizedBox.square(
         dimension: buttonSize,
@@ -2818,14 +2853,16 @@ Widget _withMessageMeta({
           own ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
         bubble,
-        // Own bubbles are right-aligned, so the meta line ends at the
-        // bubble's edge just as other messages' meta starts at theirs.
+        // Inset own-message metadata from the scrollbar.
         AnimatedOpacity(
           opacity: visible ? 1 : 0,
           duration: const Duration(milliseconds: 120),
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: meta,
+          child: Padding(
+            padding: EdgeInsets.only(right: own ? 8 : 0),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: meta,
+            ),
           ),
         ),
       ],

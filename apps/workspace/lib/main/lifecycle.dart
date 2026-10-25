@@ -505,12 +505,19 @@ class WorkspaceLifecycleController extends ChangeNotifier {
         if (identical(_manager, connection)) _manager = null;
         if (identical(_managerEvents, events)) _managerEvents = null;
         _managerConnected = false;
+        // A missing endpoint is normal while the service is stopped or
+        // starting. Retain the error for explicit startup timeout diagnostics.
+        final endpointMissing =
+            (error is FileSystemException && error.osError?.errorCode == 2) ||
+                (error is SocketException && error.osError?.errorCode == 2);
         _serviceInfo = _serviceInfo.copyWith(
-          ipc: WorkspaceServiceIpcStatus.failed,
+          ipc: endpointMissing
+              ? WorkspaceServiceIpcStatus.unavailable
+              : WorkspaceServiceIpcStatus.failed,
         );
         _lastIpcError = error;
         if (_serviceDiagnostics.isEmpty) {
-          _startupError = error;
+          if (!endpointMissing) _startupError = error;
         } else {
           _serviceDiagnostics = {
             ..._serviceDiagnostics,

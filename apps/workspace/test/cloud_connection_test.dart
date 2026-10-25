@@ -1451,6 +1451,33 @@ void main() {
     await connection.close();
   });
 
+  test('an input wake-up triggers the input delivery handler', () async {
+    final socket = FakeSocket();
+    var wakes = 0;
+    final connection = WorkspaceCloudConnection(
+      uri: Uri.parse(
+          'wss://cloud.test/api/workspace-gateway/connect?workspaceRuntimeId=workspace-1'),
+      workspaceRuntimeId: 'workspace-1',
+      workspaceId: 'workspace-1',
+      factory: (_) async => socket,
+      inputAvailableHandler: () => wakes++,
+    );
+    await connection.connect();
+    await completeHandshake(connection, socket);
+    socket.controller.add(jsonEncode({
+      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocolVersion': workspaceRuntimeProtocolVersion,
+      'messageId': 'cloud-input-1',
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
+      'type': 'input.available',
+      'workspaceRuntimeId': 'workspace-1',
+      'executionWorkspaceId': 'workspace-1',
+      'payload': <String, Object?>{},
+    }));
+    await waitFor(() => wakes == 1);
+    await connection.close();
+  });
+
   test('ignores a probe that has no usable probe ID', () async {
     final socket = FakeSocket();
     final connection = WorkspaceCloudConnection(

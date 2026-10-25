@@ -503,87 +503,33 @@ class AxDiscussionCache {
   }
 
   Future<void> delete(String id, String messageId) async {
-    final context = _context(id);
-    context.pending.remove(messageId);
-    final original = _history(id)
-        .messages
-        .where((message) => message.id == messageId)
-        .firstOrNull;
-    final deleteToken = ++_temporaryId;
-    context.pendingDeletes[messageId] = deleteToken;
-    final fence = engine.fence(query(id).key);
-    return engine.mutations
-        .run(AxMutationOperation<void, _DiscussionContext>(
-          key: AxQueryKey(['mutation', 'discussion-delete', messageId]),
-          rejectSuperseded: false,
-          optimisticUpdate: () {
-            context.pending.remove(messageId);
-            engine.update(query(id), (state) {
-              final current = state.data ?? AxDiscussionHistory();
-              final updatedMessages =
-                  current.messages.where((m) => m.id != messageId).toList();
-              return AxDiscussionHistory(
-                messages: updatedMessages,
-                initialLoaded: current.initialLoaded,
-                olderCursor: current.olderCursor,
-                newestCursor: current.newestCursor,
-                deletedMessageIds: {...current.deletedMessageIds, messageId},
-              );
-            });
-            _emit(context);
-            return context;
-          },
-          isCurrent: (context) => identical(_contexts[id], context) && fence(),
-          execute: (_) async {
-            if (source != null && !messageId.startsWith('temp-')) {
-              try {
-                await source!.deleteDiscussionMessage(messageId: messageId);
-              } on AxApiException catch (error) {
-                // DELETE is idempotent for an already-removed message.
-                if (error.statusCode != 404) rethrow;
-              }
-            }
-          },
-          commit: (_, context) {
-            context.pending.remove(messageId);
-            context.pendingDeletes.remove(messageId);
-            engine.update(query(id), (state) {
-              final current = state.data ?? AxDiscussionHistory();
-              final updatedMessages =
-                  current.messages.where((m) => m.id != messageId).toList();
-              return AxDiscussionHistory(
-                messages: updatedMessages,
-                initialLoaded: current.initialLoaded,
-                olderCursor: current.olderCursor,
-                newestCursor: current.newestCursor,
-                deletedMessageIds: {...current.deletedMessageIds, messageId},
-              );
-            });
-            _emit(context);
-          },
-          rollback: (_, __, context) {
-            if (context.pendingDeletes[messageId] == deleteToken) {
-              context.pendingDeletes.remove(messageId);
-              engine.update(query(id), (state) {
-                final current = state.data ?? AxDiscussionHistory();
-                final deleted = {...current.deletedMessageIds}
-                  ..remove(messageId);
-                return AxDiscussionHistory(
-                    messages: original == null
-                        ? current.messages
-                        : _merge(current.messages, [original],
-                            deletedMessageIds: deleted),
-                    initialLoaded: current.initialLoaded,
-                    olderCursor: current.olderCursor,
-                    newestCursor: current.newestCursor,
-                    deletedMessageIds: deleted);
-              });
-            }
-            _emit(context);
-          },
-          invalidate: (_, __) async {},
-        ))
-        .then<void>((_) {});
+    if (source == null) {
+      final original =
+          _history(id).messages.where((m) => m.id == messageId).firstOrNull;
+      if (original != null) {
+        _patch(
+            id,
+            AxDiscussionMessage(
+                id: original.id,
+                threadId: id,
+                authorUserId: original.authorUserId,
+                authorName: original.authorName,
+                body: 'Message removed',
+                createdAt: original.createdAt,
+                isMe: original.isMe,
+                eventType: 'message.removed',
+                editedAt: DateTime.now().toUtc().toIso8601String()));
+      }
+      return;
+    }
+    try {
+      await source!.deleteDiscussionMessage(messageId: messageId);
+    } on AxApiException catch (error) {
+      if (error.statusCode != 404) rethrow;
+      await reconcileSignal(id, 'discussion.deleted', messageId);
+      return;
+    }
+    await reconcileSignal(id, 'discussion.updated', messageId);
   }
 
   /// Clears the Thread's Chat remotely first; a failure preserves the visible
@@ -592,6 +538,7 @@ class AxDiscussionCache {
   Future<void> clearHistory(String id) async {
     await source?.clearThreadChatHistory(threadId: id);
     resetHistory(id);
+    await synchronize(id);
   }
 
   /// Apply a confirmed remote clear: tombstone every known message so a stale
@@ -601,7 +548,11 @@ class AxDiscussionCache {
     final context = _context(id);
     final deletedIds = {
       ...history.deletedMessageIds,
-      ...history.messages.map((m) => m.id),
+      // A delayed self-clear event may arrive after its replacement notice
+      // has already been fetched. Drop the view, but let that notice reload.
+      ...history.messages
+          .where((m) => m.eventType != 'conversation.cleared')
+          .map((m) => m.id),
     };
 
     engine.update(

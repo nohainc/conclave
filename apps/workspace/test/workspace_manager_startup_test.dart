@@ -87,7 +87,10 @@ void main() {
   test('missing key can appear later and the next attempt attaches', () async {
     await lifecycle.launch();
     expect(lifecycle.running, isFalse);
-    expect(lifecycle.startupError, isA<FileSystemException>());
+    expect(lifecycle.startupError, isNull);
+    expect(lifecycle.uiSnapshot.issue, isNull);
+    expect(lifecycle.serviceInfo.ipc, WorkspaceServiceIpcStatus.unavailable);
+    expect(host.starts, 0);
     final service = server();
     await service.start();
     try {
@@ -107,7 +110,10 @@ void main() {
     await File('${runtime.path}/manager-ipc.key').writeAsString('0' * 64);
     await lifecycle.launch();
     expect(lifecycle.running, isFalse);
-    expect(lifecycle.startupError, isA<SocketException>());
+    expect(lifecycle.startupError, isNull);
+    expect(lifecycle.uiSnapshot.issue, isNull);
+    expect(lifecycle.serviceInfo.ipc, WorkspaceServiceIpcStatus.unavailable);
+    expect(host.starts, 0);
     final service = server();
     await service.start();
     try {
@@ -165,9 +171,15 @@ void main() {
     Future<void>? starting;
     host.onRegistration = () => starting =
         Future<void>.delayed(const Duration(milliseconds: 20), service.start);
+    final issues = <String>[];
+    lifecycle.addListener(() {
+      final issue = lifecycle.uiSnapshot.issue;
+      if (issue != null) issues.add(issue);
+    });
     try {
       await lifecycle.ensureBackgroundService();
       expect(lifecycle.running, isTrue);
+      expect(issues, isEmpty);
       expect(host.registrations, 1);
       expect(host.starts, 1);
     } finally {

@@ -182,6 +182,7 @@ class WorkspaceCloudConnection {
     this.workerInventoryProvider,
     this.allowedFolderProvider,
     this.workerUsageProvider,
+    this.inputAvailableHandler,
     this.onSessionReady,
     this.workspaceUpdateAvailableHandler,
     this.onKnownSpaces,
@@ -247,6 +248,10 @@ class WorkspaceCloudConnection {
   /// forwarded verbatim; the Service never interprets it.
   final Future<Map<String, Object?>> Function(String workerId)?
       workerUsageProvider;
+
+  /// Called on `input.available`: uploaded Work Request inputs can be
+  /// listed and downloaded (Input Delivery v1). The message has no content.
+  final void Function()? inputAvailableHandler;
   final Future<void> Function()? onSessionReady;
   final WorkspaceUpdateAvailableHandler? workspaceUpdateAvailableHandler;
 
@@ -1778,6 +1783,8 @@ class WorkspaceCloudConnection {
       _handleDeliveryProbe(decoded);
     } else if (decoded['type'] == 'worker.usage.request') {
       unawaited(_handleWorkerUsageRequest(decoded));
+    } else if (decoded['type'] == 'input.available') {
+      inputAvailableHandler?.call();
     }
   }
 

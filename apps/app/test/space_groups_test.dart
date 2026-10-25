@@ -62,14 +62,14 @@ void main() {
         onOpenAbout: () {},
         onOpenExternal: (_) {},
       ))));
-      expect(find.byTooltip('YOUR SPACES'),
-          spaces.contains(own) ? findsOneWidget : findsNothing);
-      expect(find.byTooltip('SHARED WITH YOU'),
-          spaces.contains(shared) ? findsOneWidget : findsNothing);
+      expect(find.byTooltip('Spaces and Threads'),
+          spaces.isNotEmpty ? findsOneWidget : findsNothing);
+      expect(find.byTooltip('PINNED SPACES'), findsNothing);
       if (spaces.contains(shared)) {
-        await tester.tap(find.byTooltip('SHARED WITH YOU'));
+        await tester.tap(find.byTooltip('Spaces and Threads'));
         await tester.pumpAndSettle();
-        expect(find.text(own.name), findsNothing);
+        expect(find.text(own.name),
+            spaces.contains(own) ? findsOneWidget : findsNothing);
         await tester.tap(find.text(shared.name));
         await tester.pumpAndSettle();
         expect(selected?.spaceId, shared.id);

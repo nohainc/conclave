@@ -27,17 +27,24 @@ the collapsed sidebar’s Space/Thread switcher and search popup. Composer
 attachment, workflow, and execution popups match the input background in each theme.
 Selected file attachments appear above the Work composer with their name and
 size. They are held in browser memory until Send and can be removed before
-submission; the sending state shows an uploading indicator. Selection alone
+submission. Selection alone
 does not mean the Worker has processed the file. The web picker accepts up to
 10 files of at most 10 MiB (10,485,760 bytes) each; native AX file picking is
 not implemented. Deploy the matching Cloud, AX, and Workspace updates together:
-older Workspace versions reject attachments larger than 2 MiB.
-Cloud uploads file bytes to artifact storage, validates user/Thread ownership,
-and snapshots file references on the request. AX keeps authored attachment
-snapshots immutable and retains up to 20 recent upload references in memory,
-scoped to the Thread and file input, so explicit retries reuse the same file IDs.
-Changing the authentication session clears these references. At dispatch, Workspace receives
-file contents and writes `.conclave/inputs/<workRequestId>/file-NNN` below the
+a Workspace without Input Delivery v1 never downloads inputs, so requests
+with files fail after the 10-minute delivery limit.
+On Send, the request is accepted at once and the composer unlocks; the files
+then upload in the background while the Workspace downloads each one, and the
+request card shows per-file progress ("Delivering files to the Workspace
+(1/3 ready)…"). The Worker starts only when every file is on the Workspace; a
+file that cannot be uploaded or delivered after three whole-file attempts
+fails the request with its reason. See
+[Input Delivery v1](../specifications/INPUT_DELIVERY_V1.md).
+Cloud stores file bytes in artifact storage bound to the user and Thread and
+records file references on the request; an explicit resend of the same
+submission replays the same request and file IDs. Changing the authentication
+session clears in-progress delivery status in AX. At dispatch, Workspace receives
+its delivered copy of each file and writes `.conclave/inputs/<workRequestId>/file-NNN` below the
 execution directory before starting the generic CLI Worker Engine. Chat,
 Research and Implement prompts include these local paths; Plan receives
 attachment metadata. File delivery is provider-independent: reading each file

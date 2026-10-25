@@ -147,3 +147,17 @@ it("continues the fresh Chat session after clearing AI History", () => {
     }),
   ).toBe(fresh);
 });
+
+it("isolates superseded active requests from both original and fresh sessions", () => {
+  const params = {
+    workBindingId: "chat" as const,
+    threadId: "T",
+    workRequestId: "R",
+    stepKind: "chat",
+  };
+  const isolated = workStepSessionKey({ ...params, workSessionGeneration: -1 });
+  expect(isolated).not.toBe(workStepSessionKey(params));
+  expect(isolated).not.toBe(
+    workStepSessionKey({ ...params, workSessionGeneration: 1 }),
+  );
+});

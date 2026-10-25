@@ -574,16 +574,17 @@ class SpaceTree extends StatelessWidget {
                     fontSize: 12.5, fontWeight: FontWeight.w500),
               ),
             ),
-          MenuItemButton(
-            style: itemStyle(),
-            leadingIcon:
-                Icon(Icons.edit_outlined, size: 16, color: menuIconColor),
-            onPressed: () => select('rename'),
-            child: const Text(
-              'Rename Thread',
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+          if (space.role == 'owner' || thread.canConfigureWork)
+            MenuItemButton(
+              style: itemStyle(),
+              leadingIcon:
+                  Icon(Icons.edit_outlined, size: 16, color: menuIconColor),
+              onPressed: () => select('rename'),
+              child: const Text(
+                'Rename Thread',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+              ),
             ),
-          ),
           MenuItemButton(
             style: itemStyle(),
             leadingIcon: Icon(
@@ -599,23 +600,24 @@ class SpaceTree extends StatelessWidget {
             ),
           ),
           divider(),
-          MenuItemButton(
-            style: itemStyle(isDestructive: true),
-            leadingIcon: Icon(
-              Icons.delete_rounded,
-              size: 16,
-              color: ConclaveColors.errorText(isDark),
-            ),
-            onPressed: () => select('delete'),
-            child: Text(
-              'Delete Thread',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w500,
+          if (space.role == 'owner' || thread.canDestroy)
+            MenuItemButton(
+              style: itemStyle(isDestructive: true),
+              leadingIcon: Icon(
+                Icons.delete_rounded,
+                size: 16,
                 color: ConclaveColors.errorText(isDark),
               ),
+              onPressed: () => select('delete'),
+              child: Text(
+                'Delete Thread',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  color: ConclaveColors.errorText(isDark),
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );

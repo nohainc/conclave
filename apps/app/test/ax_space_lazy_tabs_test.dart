@@ -116,13 +116,7 @@ void main() {
       await tester
           .pumpWidget(page(source, AxSpaceTabQueries(source), role: role));
       await tester.pumpAndSettle();
-      expect(
-          find.byTooltip('Thread actions'),
-          role == 'owner'
-              ? findsNWidgets(2)
-              : role == 'collaborator'
-                  ? findsOneWidget
-                  : findsNothing);
+      expect(find.byTooltip('Thread actions'), findsNWidgets(2));
     });
   }
 

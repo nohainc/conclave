@@ -11,6 +11,14 @@ import 'ax_fixture_snapshot.dart';
 
 class SelectiveSource extends AxFixtureDataSource {
   List<AxWorker> workers = [];
+
+  @override
+  Future<List<AxSpace>> loadSpaces({bool includeArchived = false}) async => [
+        for (final space
+            in await super.loadSpaces(includeArchived: includeArchived))
+          space.copyWith(settings: {...space.settings, 'showAiHistory': true}),
+      ];
+
   @override
   Future<List<AxWorker>> loadWorkspaceWorkerInventory() async => workers;
 }

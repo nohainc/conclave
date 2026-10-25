@@ -60,7 +60,9 @@ export async function loadConversationBootstrap(
     FROM conversation_history_entries h WHERE conversation_id = ?1 AND sequence <= ?2
       AND sequence > ?4
       AND (h.work_request_id IS NULL OR EXISTS (SELECT 1 FROM conversation_work_requests cr
-        WHERE cr.conversation_id = h.conversation_id AND cr.work_request_id = h.work_request_id AND cr.conversation_revision <= ?3))`,
+        WHERE cr.conversation_id = h.conversation_id AND cr.work_request_id = h.work_request_id AND cr.conversation_revision <= ?3 AND EXISTS
+          (SELECT 1 FROM work_requests wr JOIN threads t ON t.id = wr.thread_id
+           WHERE wr.id = cr.work_request_id AND wr.ai_context_generation = t.ai_context_generation)))`,
     )
     .bind(conversationId, throughSequence, contextRevision, floorSequence)
     .first<{ count: number; bytes: number }>();
@@ -76,7 +78,9 @@ export async function loadConversationBootstrap(
     COALESCE((SELECT cr.conversation_revision FROM conversation_work_requests cr WHERE cr.work_request_id = h.work_request_id AND cr.conversation_id = h.conversation_id),0) AS contextRevision
     FROM conversation_history_entries h
     WHERE conversation_id = ?1 AND sequence <= ?2 AND sequence > ?4 AND (h.work_request_id IS NULL OR EXISTS
-      (SELECT 1 FROM conversation_work_requests cr WHERE cr.conversation_id = h.conversation_id AND cr.work_request_id = h.work_request_id AND cr.conversation_revision <= ?3))
+      (SELECT 1 FROM conversation_work_requests cr WHERE cr.conversation_id = h.conversation_id AND cr.work_request_id = h.work_request_id AND cr.conversation_revision <= ?3 AND EXISTS
+          (SELECT 1 FROM work_requests wr JOIN threads t ON t.id = wr.thread_id
+           WHERE wr.id = cr.work_request_id AND wr.ai_context_generation = t.ai_context_generation)))
     ORDER BY sequence LIMIT 1001`,
     )
     .bind(conversationId, throughSequence, contextRevision, floorSequence)

@@ -69,6 +69,12 @@ diagnostics) cross authenticated versioned IPC. Host operations cannot be
 implemented through IPC because they must start or stop a process that may not
 exist.
 
+Opening the management app passively attaches to local IPC without starting the
+service. A missing IPC key or socket means the service is unavailable and is not
+shown as an access error. Explicit startup still waits for authenticated IPC
+readiness and reports timeout diagnostics if the endpoint never becomes ready;
+authentication and other IPC failures remain visible.
+
 The service persists enough assignment and process information to reconcile a
 restart without blindly rerunning uncertain work. Cloud session history is
 audited in D1, while live transport state, queues, cursors, and acknowledgments

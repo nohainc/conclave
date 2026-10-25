@@ -293,6 +293,68 @@ void main() {
     expect(find.textContaining('could not be completed'), findsNothing);
   });
 
+  for (final (platform, targetSize) in [
+    (TargetPlatform.macOS, 32.0),
+    (TargetPlatform.android, 48.0),
+  ]) {
+    testWidgets(
+        'in-progress request actions use $targetSize px targets on $platform',
+        (tester) async {
+      await tester.binding.setSurfaceSize(const Size(900, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      const request = AxWorkRequest(
+        id: 'request-in-progress',
+        requestedByName: 'You',
+        prompt: 'Continue the implementation',
+        workflowId: 'direct',
+        workflowVersion: 1,
+        status: 'running',
+        createdAt: '2026-10-07T10:00:00Z',
+        steps: [],
+      );
+      await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(platform: platform),
+        home: Scaffold(
+          body: ThreadPage(
+            initialTab: 1,
+            space: const AxSpace(
+              id: 'space-1',
+              name: 'Space',
+              branch: '',
+              lastActivity: '',
+              role: 'owner',
+            ),
+            thread: const AxThread(
+              id: 'thread-1',
+              spaceId: 'space-1',
+              name: 'Thread',
+              lead: '',
+              status: 'active',
+              brief: '',
+              primaryWorkspace: '',
+              queueStatus: '',
+            ),
+            dataSource: _WorkHistoryDataSource([request]),
+            onBackToSpace: _noop,
+            onArchive: _noop,
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      for (final tooltip in ['Cancel request', 'Copy']) {
+        final action = find.byTooltip(tooltip);
+        expect(action, findsOneWidget);
+        expect(tester.getSize(action), Size.square(targetSize));
+        final icon = tester.widget<Icon>(
+          find.descendant(of: action, matching: find.byType(Icon)),
+        );
+        expect(icon.size, 16);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final workflow in ['chat', 'direct']) {
     for (final code in [
       'session_resume_failed',
@@ -1108,6 +1170,36 @@ void main() {
       expect(chat, findsOneWidget);
       expect(tester.takeException(), isNull);
     }
+  });
+
+  testWidgets('Space opt-in hides AI History even when saved open',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      space: const AxSpace(
+          id: 'space-1', name: 'Space', branch: '', lastActivity: ''),
+      thread: const AxThread(
+          id: 'thread-1',
+          spaceId: 'space-1',
+          name: 'Thread',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      showAiHistory: false,
+      initialAiHistoryOpen: true,
+      dataSource: _PinnedHistoryDataSource(),
+      onBackToSpace: _noop,
+      onArchive: _noop,
+    ))));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('ai-history-toggle')), findsNothing);
+    expect(find.byKey(const ValueKey('thread-AI History-pane')), findsNothing);
+    expect(
+        find.byKey(const ValueKey('thread-Conversation-pane')), findsOneWidget);
   });
   testWidgets('edited chat messages show the modified marker and time',
       (tester) async {
@@ -2028,7 +2120,8 @@ void main() {
     await _openAiHistory(tester);
     await tester.tap(ai);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Completed AI answers stay'), findsOneWidget);
+    expect(find.textContaining('The visible conversation stays available'),
+        findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Clear'));
     await tester.pumpAndSettle();
     expect(cleared, ['conversation', 'ai']);
@@ -2211,7 +2304,7 @@ void main() {
     final side =
         platform == TargetPlatform.iOS || platform == TargetPlatform.android
             ? 48.0
-            : 22.0;
+            : 32.0;
     expect(tester.getSize(copies.first), Size.square(side));
     expect(find.byType(PopupMenuItem<int>), findsNothing);
     expect(find.text('Edit'), findsNothing);
@@ -2957,6 +3050,21 @@ void main() {
     expect(find.text('The login failure reproduces on a fresh checkout.'),
         findsOneWidget);
     expect(find.text('You'), findsNothing);
+    final ownMessageBubble = find.ancestor(
+      of: find.text('The login failure reproduces on a fresh checkout.'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is Container &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration! as BoxDecoration).color ==
+                ConclaveColors.ownMessageBackground(false),
+      ),
+    );
+    expect(ownMessageBubble, findsOneWidget);
+    final bubbleRight = tester.getTopRight(ownMessageBubble).dx;
+    final actionsRight =
+        tester.getTopRight(find.byTooltip('Message actions')).dx;
+    expect(bubbleRight - actionsRight, closeTo(8, 0.1));
 
     // Verify copy message button exists and triggers
     expect(find.byTooltip('Message actions'), findsOneWidget);
@@ -3116,7 +3224,7 @@ void main() {
       await tester.tap(trigger);
       await tester.pumpAndSettle();
       expect(find.text('Copy'), findsOneWidget);
-      expect(find.text('Edit'), findsOneWidget);
+      expect(find.text('Edit'), own ? findsOneWidget : findsNothing);
       expect(find.text('Delete'), own ? findsOneWidget : findsNothing);
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
@@ -3491,6 +3599,65 @@ void main() {
 
     await tester.binding.setSurfaceSize(null);
   });
+
+  for (final width in [320.0, 390.0, 1200.0]) {
+    testWidgets('Members table keeps controls reachable at width $width',
+        (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final source = _MembersTabTestDataSource(
+        members: const [
+          AxSpaceMember(
+            userId: 'mobile-member',
+            email: 'member.with.a.long.address@example.com',
+            displayName: 'Member with a long display name',
+            role: 'collaborator',
+            createdAt: '2026-01-01',
+          ),
+        ],
+        invitations: const [],
+      );
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: SpacePage(
+              section: SpacePageSection.members,
+              space: const AxSpace(
+                  id: 'p-1', name: 'Test Space', branch: '', lastActivity: ''),
+              dataSource: source,
+              onOpenThread: (_) {},
+              onArchive: () {},
+              onDelete: () {},
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final table = find.byType(DataTable);
+      final viewport = find.byKey(const ValueKey('space-members-scroll'));
+      final scrollable =
+          find.descendant(of: viewport, matching: find.byType(Scrollable));
+      final position = tester.state<ScrollableState>(scrollable).position;
+      expect(tester.getSize(table).width,
+          greaterThanOrEqualTo(tester.getSize(viewport).width));
+      if (width < 600) {
+        expect(position.maxScrollExtent, greaterThan(0));
+        await tester.drag(viewport, const Offset(-1200, 0));
+        await tester.pumpAndSettle();
+        expect(position.pixels, greaterThan(0));
+      } else {
+        expect(position.maxScrollExtent, 0);
+      }
+      final remove = find.byTooltip('Remove from Space');
+      expect(remove.hitTestable(), findsOneWidget);
+      await tester.tap(remove);
+      await tester.pumpAndSettle();
+      expect(find.text('Remove "Member with a long display name"?'),
+          findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets(
       'Owner Members tab distinguishes Members and Pending invitations with Resend and Revoke controls',

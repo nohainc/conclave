@@ -9,6 +9,7 @@ vi.mock("../src/collaboration-events.js", () => ({
     for (const mutation of options.mutations ?? []) await mutation.run();
   },
 }));
+import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it, vi } from "vitest";
 
@@ -51,6 +52,15 @@ it.each(
   "$definition.name v$definition.version history preserves names and Markdown (snapshot name: $snapshotName)",
   async ({ definition, snapshotName }) => {
     const sqlite = new DatabaseSync(":memory:");
+    sqlite.exec(
+      readFileSync(
+        new URL(
+          "../migrations-v8/0088_work_request_inputs.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     sqlite.exec(`
     CREATE TABLE conversation_turns(workflow_step_run_id TEXT, workflow_run_id TEXT, id TEXT, conversation_id TEXT, user_message_id TEXT, work_request_id TEXT, assignment_id TEXT, task_id TEXT, step_kind TEXT, workflow_id TEXT, workflow_version TEXT, worker_id TEXT, worker_type_id TEXT, worker_display_name TEXT, profile_id TEXT, profile_version TEXT, model_id TEXT, effort TEXT, worker_session_id TEXT, base_context_revision TEXT, status TEXT, started_at TEXT, completed_at TEXT, result_text TEXT, created_at TEXT);
     CREATE TABLE conversation_workflow_runs(id TEXT, conversation_id TEXT, user_message_id TEXT, work_request_id TEXT, workflow_id TEXT, workflow_version INTEGER, created_at TEXT, started_at TEXT, completed_at TEXT);
@@ -189,7 +199,7 @@ it("persists and returns exact Markdown through Chat create, edit and list", asy
   sqlite.exec(`CREATE TABLE users (id TEXT, display_name TEXT);
     CREATE TABLE discussion_messages (id TEXT, thread_id TEXT, attachments_json TEXT NOT NULL DEFAULT '[]',
     author_user_id TEXT, body TEXT, references_json TEXT, edited_at TEXT, created_at TEXT,
-    kind TEXT, work_request_id TEXT, worker_display_name TEXT);
+    event_type TEXT, kind TEXT, work_request_id TEXT, worker_display_name TEXT);
     CREATE TABLE space_audit_log (id TEXT, space_id TEXT, actor_type TEXT,
       actor_id TEXT, action TEXT, target_type TEXT, target_id TEXT, details_json TEXT, created_at TEXT);`);
   const db = {

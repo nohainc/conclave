@@ -4,7 +4,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:conclave_workspace/cloud_connection.dart';
+import 'package:conclave_workspace/work_request_input_staging.dart';
 import 'package:conclave_workspace/worker_executor.dart';
+import 'package:crypto/crypto.dart';
 import 'package:conclave_workspace/space_directory.dart';
 import 'package:conclave_workspace/thread_directory.dart';
 import 'package:conclave_workspace/thread_path.dart';
@@ -14,13 +16,25 @@ import 'package:test/test.dart';
 import 'support/assignment_worker_fixture.dart';
 
 void main() {
-  test('materializes a 10 MiB attachment and rejects one byte over', () async {
+  test('materializes a 10 MiB input and rejects one byte over', () async {
     final root = await Directory.systemTemp.createTemp('attachment-limit-');
     addTearDown(() => root.delete(recursive: true));
+    final staging = WorkRequestInputStaging(Directory('${root.path}/staged'));
+    const fileId = 'wrf-11111111-2222-3333-4444-555555555555';
+    const size = 10 * 1024 * 1024;
+    final bytes = Uint8List(size);
+    final digest = 'sha256:${sha256.convert(bytes)}';
+    await staging.stageStream(
+        fileId: fileId,
+        sizeBytes: size,
+        contentDigest: digest,
+        content: Stream.value(bytes));
+    final work = Directory('${root.path}/work')..createSync();
     final handler = WorkerAssignmentHandler(
       threadDirectoryLifecycle: ThreadDirectoryLifecycle(
-        pathResolver: ThreadPathResolver(root),
+        pathResolver: ThreadPathResolver(work),
       ),
+      inputStaging: staging,
       resolveLogicalWorker: (id) => assignmentWorker(id),
     );
     WorkspaceAssignmentContext context(int size) => WorkspaceAssignmentContext(
@@ -44,14 +58,14 @@ void main() {
               'attachments': [
                 {
                   'kind': 'file',
+                  'fileId': fileId,
                   'sizeBytes': size,
-                  'contentBase64': base64Encode(Uint8List(size))
+                  'contentDigest': digest,
                 },
               ]
             },
           },
         );
-    const size = 10 * 1024 * 1024;
     final scope = await handler.prepareAssignmentScope(context(size));
     final file = File('${scope.workingDirectory.path}/.conclave/inputs/'
         'work-request-11111111-2222-3333-4444-555555555555/file-001');

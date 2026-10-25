@@ -14,7 +14,7 @@ it("reads threads and configuration with distinct update timestamps", async () =
       CREATE TABLE spaces (id TEXT, owner_user_id TEXT, settings_json TEXT);
       CREATE TABLE users (id TEXT, email TEXT, display_name TEXT);
       CREATE TABLE threads (id TEXT, space_id TEXT, name TEXT, status TEXT,
-        access_policy_json TEXT, metadata_json TEXT NOT NULL DEFAULT '{}', lead_user_id TEXT, created_at TEXT, updated_at TEXT);
+        has_other_contributions INTEGER DEFAULT 0, access_policy_json TEXT, metadata_json TEXT NOT NULL DEFAULT '{}', lead_user_id TEXT, created_at TEXT, updated_at TEXT);
       CREATE TABLE thread_work_configs (thread_id TEXT, config_json TEXT, updated_at TEXT);
       CREATE TABLE discussion_messages (thread_id TEXT, author_user_id TEXT, body TEXT, created_at TEXT, kind TEXT NOT NULL DEFAULT 'message', worker_display_name TEXT);
       CREATE TABLE work_requests (thread_id TEXT, requested_by_user_id TEXT, status TEXT, created_at TEXT, updated_at TEXT);
@@ -25,7 +25,7 @@ it("reads threads and configuration with distinct update timestamps", async () =
       CREATE TABLE space_memberships (id TEXT, space_id TEXT, user_id TEXT, role TEXT, created_at TEXT, updated_at TEXT);
       INSERT INTO spaces VALUES ('space-test', 'user-owner', '{}');
       INSERT INTO users VALUES ('user-owner', 'owner@conclave.test', 'Owner');
-      INSERT INTO threads VALUES ('stream-test', 'space-test', 'Test stream', 'active', '{}', '{}', 'user-owner', 'created', 'stream-updated');
+      INSERT INTO threads VALUES ('stream-test', 'space-test', 'Test stream', 'active', 0, '{}', '{}', 'user-owner', 'created', 'stream-updated');
       INSERT INTO thread_work_configs VALUES ('stream-test', '{"defaultWorkflowId":"full_cycle","bindings":{}}', 'config-updated');
       INSERT INTO space_memberships VALUES ('membership', 'space-test', 'user-owner', 'owner', 'created', 'updated');
     `);

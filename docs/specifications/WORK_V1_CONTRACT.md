@@ -87,13 +87,17 @@ saved Thread selection remains in effect until changed. Selection affects the
 next request, never an accepted or running request; history retains each request's
 accepted workflow. Controls are guarded during request submission.
 
-The Thread header places icon-labelled **Conversation** and **AI History** actions
-next to each other. Each pane highlights its active label in white and the other
-in grey; selecting Conversation closes AI History. Switching panes positions the
-destination timeline before revealing it, so intermediate scroll offsets are
-not painted.
+When AI History is exposed, the Thread header places icon-labelled
+**Conversation** and **AI History** actions next to each other. Each pane
+highlights its active label in white and the other in grey; selecting
+Conversation closes AI History. Switching panes positions the destination
+timeline before revealing it, so intermediate scroll offsets are not painted.
 
-**AI History** (header action) opens the former Work timeline read-only: full
+**AI History** is hidden by default. A Space owner can expose it for every
+Thread in that Space with the **Show AI History tab** switch in Space Settings.
+The absent or false setting keeps it hidden; hiding it does not delete Work
+history or session context. When exposed, the **AI History** header action opens
+the former Work timeline read-only: full
 execution status, activity, Worker identity, model details, retry, cancel,
 and issue reporting, with no composer. At available widths of 1000 pixels or
 more it appears beside the Conversation with a vertical divider inset
@@ -747,7 +751,18 @@ metadata, and Test/Verify use their defined handoff inputs.
 Thread-local execution materializes file bytes under
 `.conclave/inputs/<work-request-id>/file-NNN`; paths are derived from
 server-generated request identity and attachment order, never accepted from
-the client. The same materialized files are immutable across retries. This
+the client. The same materialized files are immutable across retries.
+
+### File delivery
+
+File inputs follow [Input Delivery v1](INPUT_DELIVERY_V1.md): the request is
+accepted with a file manifest, AX uploads the files afterwards in parallel,
+the target Workspace Service downloads each file over authenticated HTTPS as
+soon as it is uploaded, and the Workflow dispatches the first step only after
+every file is verified on the Workspace. `assignment.start` carries file
+references (`fileId`, `contentDigest`), never file content.
+
+This
 does not add media-specific Workflows or imply that every provider understands
 every file format. The current ChatGPT and Gemini releases declare `text` and
 `local_file`; until a release explicitly declares more, image, audio, and video

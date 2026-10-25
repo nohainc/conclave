@@ -110,6 +110,12 @@ export {
   handleClearWorkHistory,
   handleUploadWorkRequestFile,
   handleDownloadThreadFile,
+  handleUploadWorkRequestInput,
+  handleFailWorkRequestInputUpload,
+  handleListRuntimeInputs,
+  handleDownloadRuntimeInput,
+  handleConfirmRuntimeInput,
+  handleReportRuntimeInputAttempt,
 } from "./work.js";
 export {
   handleListWorkerCatalog,

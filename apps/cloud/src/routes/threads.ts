@@ -1,3 +1,8 @@
+import {
+  threadNotice,
+  destructiveThreadGuard,
+  requireDestructiveThreadAccess,
+} from "./thread-history-actions.js";
 import { normalizeDiscussionAttachments } from "./work-request-files.js";
 import {
   loadSpacePermissions,
@@ -49,7 +54,7 @@ export async function handleListSpaceThreads(
   );
   const rows = await env.CONCLAVE_DB.prepare(
     `SELECT threads.id, threads.space_id AS spaceId,
-            threads.name, threads.status,
+            threads.name, threads.status, threads.has_other_contributions AS hasOtherContributions,
             threads.access_policy_json AS accessPolicyJson,
             usage.config_json AS workConfigJson,
             threads.metadata_json AS metadataJson,
@@ -147,6 +152,9 @@ export async function handleListSpaceThreads(
     };
     return {
       ...threadMetadata(row, context.userId),
+      canDestroy:
+        policy.role === "owner" ||
+        (leadUserId === context.userId && row.hasOtherContributions === 0),
       canConfigureWork: canManageThread(
         context.userId,
         effectiveMembership,
@@ -222,6 +230,7 @@ export async function handleCreateThread(
   const response = {
     thread: {
       canConfigureWork: true,
+      canDestroy: true,
       canExecuteWork: true,
       ...threadMetadata(
         {
@@ -257,17 +266,32 @@ export async function handleUpdateThread(
   threadId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const { context, thread } = await authorizeThreadAccess(
-    request,
-    env,
-    threadId,
-    "manage",
-    accessContext,
-  );
   const body = (await request.json().catch(() => ({}))) as Record<
     string,
     unknown
   >;
+  const statusOnly =
+    Object.keys(body).length === 1 &&
+    ["archived", "active"].includes(String(body.status));
+  const { context, thread } = await authorizeThreadAccess(
+    request,
+    env,
+    threadId,
+    statusOnly ? "view" : "manage",
+    accessContext,
+  );
+  if (
+    statusOnly &&
+    body.status === "active" &&
+    !["archived", "active"].includes(thread.status)
+  )
+    await authorizeThreadAccess(
+      request,
+      env,
+      threadId,
+      "manage",
+      accessContext,
+    );
   const name =
     body.name === undefined ? thread.name : requiredString(body.name, "name");
   const status =
@@ -329,6 +353,24 @@ export async function handleUpdateThread(
       JSON.stringify(metadataPatch ?? {}),
     ),
   );
+  if (
+    status !== thread.status &&
+    (status === "archived" || thread.status === "archived")
+  ) {
+    mutations.push(
+      threadNotice(
+        env,
+        threadId,
+        context.userId,
+        context.user.displayName || "Member",
+        status === "archived" ? "thread.archived" : "thread.restored",
+        status === "archived"
+          ? "archived this thread."
+          : "restored this thread.",
+        now,
+      ),
+    );
+  }
   if (workConfig !== undefined) {
     mutations.push(
       env.CONCLAVE_DB.prepare(
@@ -411,7 +453,21 @@ export async function handleUpdateThread(
         },
         context.userId,
       ),
-      canConfigureWork: true,
+      canDestroy:
+        policy.role === "owner" ||
+        (thread.lead.userId === context.userId &&
+          (
+            await env.CONCLAVE_DB.prepare(
+              "SELECT has_other_contributions AS contributed FROM threads WHERE id = ?1",
+            )
+              .bind(threadId)
+              .first<{ contributed: number }>()
+          )?.contributed === 0),
+      canConfigureWork: canManageThread(
+        context.userId,
+        member ? { ...member, permissions: policy.rights } : null,
+        updatedThread,
+      ),
       canExecuteWork: canExecuteThread(
         context.userId,
         member ? { ...member, permissions: policy.rights } : null,
@@ -428,19 +484,33 @@ export async function handleDeleteThread(
   threadId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const { spaceId } = await authorizeThreadAccess(
+  const { context, spaceId } = await authorizeThreadAccess(
     request,
     env,
     threadId,
-    "manage",
+    "view",
     accessContext,
   );
+  await requireDestructiveThreadAccess(env, threadId, context.userId);
+  const active = await env.CONCLAVE_DB.prepare(
+    "SELECT COUNT(*) AS count FROM work_requests WHERE thread_id = ?1 AND status IN ('queued', 'running', 'waiting')",
+  )
+    .bind(threadId)
+    .first<{ count: number }>();
+  if (active && active.count > 0)
+    throw new HttpError(
+      409,
+      "Cancel active requests before deleting this Thread",
+    );
   const mutation = env.CONCLAVE_DB.prepare(
     "DELETE FROM threads WHERE id = ?1",
   ).bind(threadId);
   await publishCollaborationEvent(env, "thread.deleted", spaceId, threadId, {
     threadId,
-    mutations: [mutation],
+    mutations: [
+      destructiveThreadGuard(env, threadId, context.userId),
+      mutation,
+    ],
   });
   return json({ ok: true, threadId });
 }
@@ -502,7 +572,7 @@ export async function handleListDiscussionMessages(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
             COALESCE(u.display_name, 'Member') AS authorName,
             dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
-            dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
+            dm.event_type AS eventType, dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
      WHERE dm.thread_id = ?1
@@ -550,13 +620,18 @@ export async function handleCreateDiscussionMessage(
   threadId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const { context, spaceId } = await authorizeThreadAccess(
+  const { context, spaceId, thread } = await authorizeThreadAccess(
     request,
     env,
     threadId,
     "discuss",
     accessContext,
   );
+  if (thread?.status === "archived")
+    throw new HttpError(
+      409,
+      "Restore the Thread before sending messages or requests",
+    );
   const body = (await request.json()) as Record<string, unknown>;
   const receipt = await MutationIdempotency.from(
     request,
@@ -654,7 +729,7 @@ export async function handleGetDiscussionMessage(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
       COALESCE(u.display_name, 'Member') AS authorName,
       dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
-            dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
+            dm.event_type AS eventType, dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
      WHERE dm.id = ?1`,
@@ -687,7 +762,7 @@ export async function handleEditDiscussionMessage(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
             COALESCE(u.display_name, 'Member') AS authorName,
             dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
-            dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
+            dm.event_type AS eventType, dm.kind, dm.work_request_id AS workRequestId, dm.worker_display_name AS workerDisplayName
      FROM discussion_messages dm
      LEFT JOIN users u ON u.id = dm.author_user_id
      WHERE dm.id = ?1`,
@@ -704,7 +779,7 @@ export async function handleEditDiscussionMessage(
   );
   if (String(message.authorUserId) !== context.userId)
     throw new HttpError(403, "Only the message author may edit it");
-  if ((message.kind ?? "message") !== "message")
+  if (message.eventType || (message.kind ?? "message") !== "message")
     throw new HttpError(409, "Archived AI entries cannot be edited");
   const body = (await request.json()) as Record<string, unknown>;
   const rawContent = body.body ?? body.content;
@@ -744,7 +819,7 @@ export async function handleDeleteDiscussionMessage(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const message = await env.CONCLAVE_DB.prepare(
-    `SELECT id, thread_id AS threadId, author_user_id AS authorUserId
+    `SELECT id, thread_id AS threadId, author_user_id AS authorUserId, event_type AS eventType, kind
      FROM discussion_messages
      WHERE id = ?1`,
   )
@@ -755,17 +830,31 @@ export async function handleDeleteDiscussionMessage(
     request,
     env,
     String(message.threadId),
-    "discuss",
+    "view",
     accessContext,
   );
-  if (String(message.authorUserId) !== context.userId)
-    throw new HttpError(403, "Only the message author may delete it");
+  const policy = await loadSpacePermissions(env, context.userId, spaceId);
+  if (
+    String(message.authorUserId) !== context.userId &&
+    policy.role !== "owner"
+  )
+    throw new HttpError(
+      403,
+      "Only the message author or Space owner may delete it",
+    );
+  if (message.eventType || (message.kind ?? "message") !== "message")
+    throw new HttpError(
+      409,
+      "System notices and archived AI entries cannot be deleted",
+    );
+  const now = new Date().toISOString();
+  const text = `Message removed by ${context.user.displayName || "Member"}${policy.role === "owner" && String(message.authorUserId) !== context.userId ? " · Space owner" : ""}`;
   const mutation = env.CONCLAVE_DB.prepare(
-    "DELETE FROM discussion_messages WHERE id = ?1",
-  ).bind(messageId);
+    "UPDATE discussion_messages SET body = ?1, attachments_json = '[]', references_json = '[]', event_type = 'message.removed', edited_at = ?2 WHERE id = ?3 AND event_type IS NULL",
+  ).bind(text, now, messageId);
   await publishCollaborationEvent(
     env,
-    "discussion.deleted",
+    "discussion.updated",
     spaceId,
     messageId,
     { threadId: String(message.threadId), mutations: [mutation] },
@@ -780,13 +869,14 @@ export async function handleClearChatHistory(
   threadId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const { spaceId } = await authorizeThreadAccess(
+  const { context, spaceId } = await authorizeThreadAccess(
     request,
     env,
     threadId,
-    "manage",
+    "view",
     accessContext,
   );
+  await requireDestructiveThreadAccess(env, threadId, context.userId);
   const active = await env.CONCLAVE_DB.prepare(
     "SELECT COUNT(*) AS count FROM work_requests WHERE thread_id = ?1 AND status IN ('queued', 'running', 'waiting')",
   )
@@ -802,7 +892,9 @@ export async function handleClearChatHistory(
   // Clearing the Conversation is the real deletion: Chat messages, every Work
   // Request with its answers and diagnostics, and Worker session continuity.
   // Deleting the owning Conversations lets canonical history cascade legally.
+  const now = new Date().toISOString();
   const mutations = [
+    destructiveThreadGuard(env, threadId, context.userId),
     db
       .prepare("DELETE FROM discussion_messages WHERE thread_id = ?1")
       .bind(threadId),
@@ -814,7 +906,16 @@ export async function handleClearChatHistory(
            work_session_generation = work_session_generation + 1, updated_at = ?1
          WHERE id = ?2`,
       )
-      .bind(new Date().toISOString(), threadId),
+      .bind(now, threadId),
+    threadNotice(
+      env,
+      threadId,
+      context.userId,
+      context.user.displayName || "Member",
+      "conversation.cleared",
+      "cleared the conversation.",
+      now,
+    ),
   ];
   // The mutations and the event are committed together by the publisher, so a
   // successful clear is always announced to other sessions.

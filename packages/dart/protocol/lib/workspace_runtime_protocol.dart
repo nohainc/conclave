@@ -34,6 +34,7 @@ const workspaceRuntimeMessageTypes = <String>{
   'diagnostic.probe.ack',
   'worker.usage.request',
   'worker.usage.result',
+  'input.available',
 };
 
 class WorkspaceRuntimeMessage {

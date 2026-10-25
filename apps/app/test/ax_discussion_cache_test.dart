@@ -312,6 +312,23 @@ void main() {
     expect(cache.peek('w').messages.single.body, 'one');
   });
 
+  test('a delayed clear signal does not suppress the replacement notice',
+      () async {
+    source.server = [
+      const AxDiscussionMessage(
+          id: 'notice',
+          threadId: 'w',
+          authorUserId: 'me',
+          body: 'Alex cleared the conversation.',
+          eventType: 'conversation.cleared',
+          createdAt: '2026-10-25T12:00:00Z')
+    ];
+    await cache.synchronize('w');
+    cache.resetHistory('w');
+    await cache.synchronize('w');
+    expect(cache.peek('w').messages.single.eventType, 'conversation.cleared');
+  });
+
   test('deleting an already missing message is idempotent on 404', () async {
     source.server = [message('one', 'one')];
     await cache.synchronize('w');

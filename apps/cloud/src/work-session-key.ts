@@ -18,7 +18,7 @@ export function workStepSessionKey(params: {
   const threadScoped =
     params.workBindingId === "direct" || params.workBindingId === "chat";
   const base = threadScoped
-    ? `thread:${params.threadId}:conversation${params.workSessionGeneration && params.workSessionGeneration > 0 ? `:gen-${params.workSessionGeneration}` : ""}`
+    ? `thread:${params.threadId}:conversation${params.workSessionGeneration ? `:gen-${params.workSessionGeneration}` : ""}`
     : `work-request:${params.workRequestId}:${params.stepKind}`;
   // A fresh retry of the Thread's own Work conversation bumps the Thread's
   // session generation instead (see handleRetryWorkRequest), so later requests

@@ -840,6 +840,24 @@ describe("Workspace runtime Gateway", () => {
       expect(response.status).toBe(503);
     });
 
+    it("wakes the Service with a content-free input notice", async () => {
+      const { gateway, poll } = await connectedHttpGateway(
+        "workspace-input-wake",
+        "runtime-secret-input-wake",
+      );
+      const response = await gateway.fetch(
+        new Request("https://gateway.internal/inputs-available", {
+          method: "POST",
+        }),
+      );
+      expect(await response.json()).toEqual({ delivered: true });
+      const notices = (await poll()).events.filter(
+        (event) => event.message.type === "input.available",
+      );
+      expect(notices).toHaveLength(1);
+      expect(notices[0]!.message.payload).toEqual({});
+    });
+
     it("queues a probe on the live transport and reports its acknowledgement", async () => {
       const token = "runtime-secret-probe-ack";
       const { gateway, session, poll } = await connectedHttpGateway(

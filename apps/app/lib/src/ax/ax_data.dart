@@ -11,7 +11,9 @@ export 'ax_workspace_member_access.dart';
 import 'worker_usage.dart';
 export 'worker_usage.dart';
 export 'worker_usage_parser.dart';
+import 'dart:async';
 import 'dart:convert';
+import 'ax_input_delivery.dart';
 import 'sync/ax_idempotency.dart';
 
 import 'package:http/http.dart' as http;
@@ -24,6 +26,7 @@ import 'ax_work_models.dart';
 import 'ax_work_latency_trace.dart';
 
 export 'ax_work_models.dart';
+export 'ax_input_delivery.dart';
 
 part 'ax_data/catalog_api.dart';
 part 'ax_data/thread_api.dart';
@@ -66,6 +69,7 @@ abstract class _AxApiClientCore
     if (value != _sessionToken) {
       clearConditionalReads();
       _uploadedWorkFiles.clear();
+      AxInputDelivery.instance.clear();
     }
     _sessionToken = value;
   }

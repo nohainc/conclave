@@ -80,6 +80,7 @@ export const COLLABORATION_REALTIME_EVENT_TYPES = [
 export const DURABLE_REALTIME_EVENT_TYPES = [
   "work_request.created",
   "work_request.started",
+  "work_request.input_updated",
   "work_request.completed",
   "work_request.failed",
   "work_request.cancelled",

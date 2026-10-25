@@ -107,7 +107,7 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
               style: const TextStyle(fontSize: 12))
           : null,
       onTap: archived || pending ? null : () => widget.onOpenThread(thread.id),
-      trailing: (isOwner || (canManage && thread.canConfigureWork)) && !pending
+      trailing: !pending
           ? Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -132,11 +132,13 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                   },
                   itemBuilder: (menuContext) => [
                     for (final (action, label, icon) in [
-                      if (!archived) ('edit', 'Rename', Icons.edit_outlined),
+                      if (!archived && (isOwner || thread.canConfigureWork))
+                        ('edit', 'Rename', Icons.edit_outlined),
                       archived
                           ? ('restore', 'Restore', Icons.unarchive_outlined)
                           : ('archive', 'Archive', Icons.archive_outlined),
-                      ('delete', 'Delete', Icons.delete_outline),
+                      if (isOwner || thread.canDestroy)
+                        ('delete', 'Delete', Icons.delete_outline),
                     ])
                       ConclaveMenuEntry<String>(
                         value: action,
@@ -235,9 +237,10 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
             if (members.isNotEmpty || canInvite) ...[
               LayoutBuilder(
                 builder: (context, constraints) => SingleChildScrollView(
+                  key: const ValueKey('space-members-scroll'),
                   scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: constraints.maxWidth,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
                     child: DataTable(
                       horizontalMargin: 0,
                       columnSpacing: 20,

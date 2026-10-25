@@ -10,6 +10,7 @@ import 'assignment_startup.dart';
 import 'runtime_capabilities.dart';
 import 'space_directory.dart';
 import 'thread_directory.dart';
+import 'work_request_input_staging.dart';
 import 'worker_launch_plan.dart';
 
 /// Translate assignment policy without consulting names or providers.
@@ -63,13 +64,23 @@ WorkerExecutionPolicy assignmentExecutionPolicy(
 }
 
 /// Per-file limit only; Cloud enforces the same 10 MB and sets no total limit.
-const _maxWorkRequestFileBytes = 10 * 1024 * 1024;
-const _maxWorkRequestFileEncodedChars =
-    ((_maxWorkRequestFileBytes + 2) ~/ 3) * 4;
+const _maxWorkRequestFileBytes = maxWorkRequestInputBytes;
 
+/// Re-downloads an input the local store no longer has.
+typedef WorkRequestInputFetcher = Future<void> Function({
+  required String fileId,
+  required int sizeBytes,
+  required String contentDigest,
+});
+
+/// Writes each file input to `.conclave/inputs/<work-request-id>/file-NNN`
+/// from the Input Delivery store. Cloud dispatches only after every input is
+/// delivered; [fetch] covers a copy removed since (retention, later retry).
 Future<void> _materializeWorkRequestInputs({
   required Directory threadDirectory,
   required Map<String, Object?> payload,
+  WorkRequestInputStaging? staging,
+  WorkRequestInputFetcher? fetch,
 }) async {
   final rawRequestId = payload['workRequestId'];
   final inputValue = payload['input'];
@@ -103,16 +114,33 @@ Future<void> _materializeWorkRequestInputs({
   for (var index = 0; index < attachments.length; index++) {
     final value = attachments[index];
     if (value is! Map || value['kind'] != 'file') continue;
-    final encoded = value['contentBase64'];
-    if (encoded is! String ||
-        encoded.length > _maxWorkRequestFileEncodedChars) {
+    final fileId = value['fileId'];
+    final sizeBytes = value['sizeBytes'];
+    final digest = value['contentDigest'];
+    if (staging == null ||
+        !isWorkRequestInputId(fileId) ||
+        sizeBytes is! int ||
+        sizeBytes > _maxWorkRequestFileBytes ||
+        digest is! String) {
       throw StateError('invalid Work Request file input');
     }
     late final List<int> bytes;
     try {
-      bytes = base64.decode(encoded);
-    } on FormatException {
-      throw StateError('invalid Work Request file input');
+      if (fetch != null && !await staging.contains(fileId as String)) {
+        await fetch(
+            fileId: fileId, sizeBytes: sizeBytes, contentDigest: digest);
+      }
+      bytes = await staging.read(
+          fileId: fileId as String,
+          sizeBytes: sizeBytes,
+          contentDigest: digest);
+    } on WorkRequestInputStagingException catch (error) {
+      throw AssignmentExecutionFailure(
+          code: 'execution_failed', message: error.message);
+    } on IOException {
+      throw const AssignmentExecutionFailure(
+          code: 'execution_failed',
+          message: 'A file for this request could not be downloaded.');
     }
     if (bytes.length > _maxWorkRequestFileBytes ||
         value['sizeBytes'] != bytes.length) {
@@ -232,6 +260,8 @@ class WorkerAssignmentHandler {
     this.executeWithActivity,
     this.defaultWorkingDirectory,
     this.applicationStateDirectory,
+    this.inputStaging,
+    this.fetchInput,
     this.spaceDirectoryLifecycle,
     SpaceMutationCoordinator? spaceMutationCoordinator,
     this.threadDirectoryLifecycle,
@@ -264,6 +294,10 @@ class WorkerAssignmentHandler {
   final ToolProfileActivityAssignmentExecutor? executeWithActivity;
   final Directory? defaultWorkingDirectory;
   final Directory? applicationStateDirectory;
+
+  /// Input Delivery v1 store and its re-download fallback.
+  final WorkRequestInputStaging? inputStaging;
+  final WorkRequestInputFetcher? fetchInput;
   final SpaceDirectoryLifecycle? spaceDirectoryLifecycle;
   final SpaceMutationCoordinator? spaceMutationCoordinator;
   final ThreadDirectoryLifecycle? threadDirectoryLifecycle;
@@ -372,6 +406,8 @@ class WorkerAssignmentHandler {
       await _materializeWorkRequestInputs(
         threadDirectory: directory,
         payload: context.payload,
+        staging: inputStaging,
+        fetch: fetchInput,
       );
     }
     return WorkerAssignmentScope(worker: worker, workingDirectory: directory);

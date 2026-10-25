@@ -328,21 +328,29 @@ void main() {
   });
   for (final withSelection in [false, true]) {
     test(
-        'immutable file upload and response-loss retry (selection: $withSelection)',
+        'file manifest, response-loss retry and post-acceptance upload (selection: $withSelection)',
         () async {
-      var uploads = 0;
+      final uploads = <http.Request>[];
       final submissions = <http.Request>[];
       final api = AxApiClient(
         baseUrl: 'https://conclave.test/api',
         client: MockClient((request) async {
-          if (request.url.path.endsWith('/work-request-files')) {
-            uploads++;
-            expect(request.bodyBytes, utf8.encode('hello'));
+          if (request.method == 'PUT') {
+            uploads.add(request);
+            return http.Response(
+                jsonEncode({'fileId': 'wrf-1', 'state': 'uploaded'}), 200);
+          }
+          if (request.method == 'GET') {
             return http.Response(
                 jsonEncode({
-                  'file': {'fileId': 'uploaded-file'}
+                  'workRequest': {
+                    'status': 'queued',
+                    'inputs': [
+                      {'fileId': 'wrf-1', 'state': 'delivered'}
+                    ]
+                  }
                 }),
-                201);
+                200);
           }
           submissions.add(request);
           if (submissions.length == 1) {
@@ -350,11 +358,19 @@ void main() {
           }
           return http.Response(
               jsonEncode({
-                'workRequest': {'id': 'saved-request'}
+                'workRequest': {
+                  'id': 'saved-request',
+                  'input': {
+                    'attachments': [
+                      {'kind': 'file', 'fileId': 'wrf-1', 'name': 'note.txt'}
+                    ]
+                  }
+                }
               }),
               201);
         }),
       );
+      addTearDown(AxInputDelivery.instance.clear);
       final attachments = List<Map<String, dynamic>>.unmodifiable([
         freezeAxMutationInput({
           'kind': 'file',
@@ -379,19 +395,28 @@ void main() {
               attachments: attachments,
               idempotencyKey: 'retry-operation-0001');
       await expectLater(send(), throwsA(isA<http.ClientException>()));
+      // Nothing is uploaded for a request that was not confirmed.
+      expect(uploads, isEmpty);
       expect(await send(), 'saved-request');
-      expect(uploads, 1);
       expect(submissions[1].body, submissions[0].body);
       expect(submissions[1].headers['Idempotency-Key'], 'retry-operation-0001');
       final submitted =
           (jsonDecode(submissions.last.body)['input']['attachments'] as List)
               .single as Map;
-      expect(submitted['fileId'], 'uploaded-file');
-      expect(submitted.containsKey('contentBase64'), isFalse);
+      expect(submitted, {
+        'kind': 'file',
+        'name': 'note.txt',
+        'mediaType': 'text/plain',
+        'sizeBytes': 5,
+        'delivery': 'upload',
+      });
       expect(attachments.single.containsKey('fileId'), isFalse);
-      api.sessionToken = 'different-session';
-      expect(await send(), 'saved-request');
-      expect(uploads, 2);
+      for (var i = 0; i < 50 && uploads.isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(uploads.single.url.path,
+          '/api/work-requests/saved-request/inputs/wrf-1');
+      expect(uploads.single.bodyBytes, utf8.encode('hello'));
     });
   }
 

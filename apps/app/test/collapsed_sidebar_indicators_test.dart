@@ -48,6 +48,94 @@ Widget rail(AxShellContext context,
     );
 
 void main() {
+  testWidgets('collapsed switcher orders active Thread pins before activity',
+      (tester) async {
+    AxNavigation? destination;
+    AxThread item(String id, {int? pin, bool archived = false}) =>
+        AxThread.fromJson({
+          'id': id,
+          'spaceId': 'owned',
+          'name': id,
+          'status': archived ? 'archived' : 'active',
+          'archived': archived,
+          'pinnedAt': pin == null ? null : '2026-10-01T00:00:00Z',
+          'pinPosition': pin ?? 0,
+          'updatedAt':
+              id == 'Recent' ? '2026-10-25T00:00:00Z' : '2026-10-01T00:00:00Z',
+        });
+    await tester.pumpWidget(rail(
+        AxShellContext(navigation: const AxNavigation.home(), spaces: const [
+          owned
+        ], threadsBySpace: {
+          'owned': [
+            item('Older'),
+            item('Second pin', pin: 1),
+            item('Recent'),
+            item('First pin', pin: 0),
+            item('Archived pin', pin: -1, archived: true),
+          ]
+        }),
+        navigate: (value) => destination = value));
+    await tester.tap(find.byTooltip('Spaces and Threads'));
+    await tester.pumpAndSettle();
+    final titles = ['First pin', 'Second pin', 'Recent', 'Older'];
+    for (var i = 1; i < titles.length; i++) {
+      expect(tester.getTopLeft(find.text(titles[i])).dy,
+          greaterThan(tester.getTopLeft(find.text(titles[i - 1])).dy));
+    }
+    expect(find.text('Archived pin'), findsNothing);
+    await tester.tap(find.text('First pin'));
+    await tester.pumpAndSettle();
+    expect(destination?.threadId, 'First pin');
+    expect(destination?.spaceId, 'owned');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('collapsed Space pins share one ordered group and update live',
+      (tester) async {
+    AxSpace item(String id, String role, {int? pin}) => AxSpace.fromJson({
+          'id': id,
+          'name': id,
+          'role': role,
+          'pinnedAt': pin == null ? null : '2026-10-01T00:00:00Z',
+          'pinPosition': pin ?? 0,
+        });
+    final spaces = ValueNotifier<List<AxSpace>>([
+      item('Owned pin', 'owner', pin: 1),
+      item('Shared pin', 'collaborator', pin: 0),
+      owned,
+      shared,
+    ]);
+    addTearDown(spaces.dispose);
+    AxNavigation? destination;
+    await tester.pumpWidget(rail(
+        AxShellContext(
+            navigation: const AxNavigation.home(),
+            spaces: const [],
+            spaceListenable: spaces),
+        navigate: (value) => destination = value));
+    expect(find.byTooltip('Spaces and Threads'), findsOneWidget);
+    expect(find.byIcon(Icons.push_pin_outlined), findsNothing);
+    await tester.tap(find.byTooltip('Spaces and Threads'));
+    await tester.pumpAndSettle();
+    final order = ['Shared pin', 'Owned pin', 'My Space', 'Shared Space'];
+    for (var i = 1; i < order.length; i++) {
+      expect(tester.getTopLeft(find.text(order[i])).dy,
+          greaterThan(tester.getTopLeft(find.text(order[i - 1])).dy));
+    }
+    await tester.tap(find.text('Shared pin'));
+    await tester.pumpAndSettle();
+    expect(destination?.spaceId, 'Shared pin');
+    spaces.value = [item('Owned pin', 'owner'), owned, shared];
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Spaces and Threads'), findsOneWidget);
+    await tester.tap(find.byTooltip('Spaces and Threads'));
+    await tester.pumpAndSettle();
+    expect(find.text('Owned pin'), findsOneWidget);
+    expect(find.text('Shared pin'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('logo and avatar keep their size when the sidebar collapses',
       (tester) async {
     const context = AxShellContext(
@@ -98,7 +186,7 @@ void main() {
   });
 
   testWidgets(
-      'collapsed groups roll up cached Thread activity and Space unread',
+      'collapsed selector rolls up cached Thread activity and Space unread',
       (tester) async {
     final spaces = ValueNotifier<List<AxSpace>>([owned, shared]);
     addTearDown(spaces.dispose);
@@ -111,10 +199,9 @@ void main() {
         });
     await tester.pumpWidget(rail(context));
     await tester.pump();
-    expect(marker('rail-activity-YOUR SPACES', 'running'), findsOneWidget);
-    expect(marker('rail-activity-YOUR SPACES', 'unread'), findsNothing);
-    expect(marker('rail-activity-SHARED WITH YOU', 'unread'), findsOneWidget);
-    final running = marker('rail-activity-YOUR SPACES', 'running');
+    expect(marker('rail-activity-spaces', 'running'), findsOneWidget);
+    expect(marker('rail-activity-spaces', 'unread'), findsNothing);
+    final running = marker('rail-activity-spaces', 'running');
     expect(tester.getSize(running), const Size(9, 9));
     final fade =
         find.ancestor(of: running, matching: find.byType(FadeTransition)).first;
@@ -133,7 +220,7 @@ void main() {
       })
     ];
     await tester.pump();
-    expect(marker('rail-activity-SHARED WITH YOU', 'unread'), findsNothing);
+    expect(marker('rail-activity-spaces', 'unread'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -150,13 +237,13 @@ void main() {
         }),
         navigate: (value) => destination = value));
     await tester.pump();
-    await tester.tap(find.byTooltip('YOUR SPACES'));
+    await tester.tap(find.byTooltip('Spaces and Threads'));
     await tester.pump(const Duration(milliseconds: 200));
     expect(marker('rail-space-activity-owned', 'running'), findsOneWidget);
     expect(marker('rail-thread-activity-thread', 'running'), findsOneWidget);
     final groupFade = tester.widget<FadeTransition>(find
         .ancestor(
-            of: marker('rail-activity-YOUR SPACES', 'running'),
+            of: marker('rail-activity-spaces', 'running'),
             matching: find.byType(FadeTransition))
         .first);
     final threadFade = tester.widget<FadeTransition>(find
@@ -191,12 +278,12 @@ void main() {
             spaceListenable: spaces),
         reduceMotion: true));
     await tester.pump();
-    final running = marker('rail-activity-YOUR SPACES', 'running');
+    final running = marker('rail-activity-spaces', 'running');
     expect(running, findsOneWidget);
-    expect(marker('rail-activity-YOUR SPACES', 'unread'), findsNothing);
+    expect(marker('rail-activity-spaces', 'unread'), findsNothing);
     expect(
         find.descendant(
-            of: find.byKey(const ValueKey('rail-activity-YOUR SPACES')),
+            of: find.byKey(const ValueKey('rail-activity-spaces')),
             matching: find.byType(FadeTransition)),
         findsNothing);
     expect(

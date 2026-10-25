@@ -20,6 +20,13 @@ import {
   workStepPromptInputs,
 } from "./workflow-prompts.js";
 import { ASSIGNMENT_TERMINAL_EVENT_TYPE } from "./assignment-workflow-signal.js";
+import {
+  INPUT_DELIVERY_IDLE_TIMEOUT_MS,
+  WORK_INPUTS_EVENT_TYPE,
+  loadWorkRequestInputs,
+  withInputFacts,
+  type WorkRequestInputRow,
+} from "./routes/work-request-inputs.js";
 import { createEventPublisher } from "./event-publisher.js";
 import { tryLogTraceEvent } from "./observability.js";
 import {
@@ -175,6 +182,46 @@ class AssignmentNotRetryableError extends Error {
     super(message);
     this.name = "AssignmentNotRetryableError";
   }
+}
+
+/**
+ * What the Input Delivery gate does with the current input rows: continue,
+ * fail, stop for cancellation, or keep waiting. Pure, for testing.
+ */
+export function inputGateDecision(
+  rows: readonly Pick<
+    WorkRequestInputRow,
+    "name" | "state" | "errorMessage" | "updatedAt"
+  >[],
+  cancelRequested: boolean,
+  now: number,
+):
+  | { outcome: "none" | "delivered" | "waiting" }
+  | { outcome: "failed" | "cancelled"; message: string } {
+  if (rows.length === 0) return { outcome: "none" };
+  const failed = rows.find((row) => row.state === "failed");
+  if (failed)
+    return {
+      outcome: "failed",
+      message:
+        failed.errorMessage ??
+        `${failed.name} was not delivered to the Workspace`,
+    };
+  if (rows.every((row) => row.state === "delivered"))
+    return { outcome: "delivered" };
+  if (cancelRequested) return { outcome: "cancelled", message: "Cancelled" };
+  const lastProgress = Math.max(
+    ...rows.map((row) => Date.parse(row.updatedAt) || 0),
+  );
+  if (now - lastProgress >= INPUT_DELIVERY_IDLE_TIMEOUT_MS)
+    return {
+      outcome: "failed",
+      message: `Files were not delivered to the Workspace in time: ${rows
+        .filter((row) => row.state !== "delivered")
+        .map((row) => row.name)
+        .join(", ")}`,
+    };
+  return { outcome: "waiting" };
 }
 
 export interface ConclaveWorkflowParams {
@@ -523,6 +570,49 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       .run();
   }
 
+  /**
+   * Waits until every file input of the request is `delivered`, one fails,
+   * the request is cancelled, or no input changes for
+   * [INPUT_DELIVERY_IDLE_TIMEOUT_MS]. D1 is the authority; events from the
+   * input routes only shorten the bounded waits.
+   */
+  private async awaitWorkRequestInputs(
+    params: ConclaveWorkflowParams,
+    step: WorkflowStep,
+  ): Promise<
+    | { outcome: "none" | "delivered" }
+    | { outcome: "failed" | "cancelled"; message: string }
+  > {
+    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    if (!db || !params.workRequestId || params.retryStepKind)
+      return { outcome: "none" };
+    for (let round = 0; ; round += 1) {
+      const rows = await loadWorkRequestInputs(db, params.workRequestId);
+      const request = await db
+        .prepare(
+          "SELECT cancel_requested_at AS cancelRequestedAt FROM work_requests WHERE id = ?1",
+        )
+        .bind(params.workRequestId)
+        .first<{ cancelRequestedAt: string | null }>();
+      const decision = inputGateDecision(
+        rows,
+        !!request?.cancelRequestedAt,
+        Date.now(),
+      );
+      if (decision.outcome === "none" || decision.outcome === "delivered")
+        return { outcome: decision.outcome };
+      if ("message" in decision) return decision;
+      try {
+        await step.waitForEvent(`work-inputs-${round}`, {
+          type: WORK_INPUTS_EVENT_TYPE,
+          timeout: "30 seconds",
+        });
+      } catch {
+        // A timeout is the re-read path.
+      }
+    }
+  }
+
   private async runVersioned(
     params: ConclaveWorkflowParams,
     step: WorkflowStep,
@@ -530,7 +620,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     const definition = params.builtinWorkflow!;
     validateBuiltinWorkflowDefinition(definition);
     const workRequestId = params.workRequestId ?? `run-${params.runId}`;
-    const promptInput = await this.loadWorkRequestPromptInput(params);
+    let promptInput = await this.loadWorkRequestPromptInput(params);
     let tasks = [...planWorkflowTasks(definition, workRequestId)];
     const stepResults: Partial<Record<StepKind, StepResult>> = {};
     const db = (this.env as ExecutionEnv).CONCLAVE_DB;
@@ -611,6 +701,48 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       stage: "workflow",
       status: "active",
     };
+
+    // Input Delivery v1: no step is dispatched until every file input is on
+    // the target Workspace. The assignment flow below is unchanged.
+    const inputs = await this.awaitWorkRequestInputs(params, step);
+    if (inputs.outcome === "failed" || inputs.outcome === "cancelled") {
+      const status = inputs.outcome === "cancelled" ? "cancelled" : "failed";
+      const first = tasks.find((task) => task.status === "queued");
+      for (const task of tasks.filter((task) => task.status === "queued")) {
+        await this.persistWorkflowTaskState(
+          task,
+          undefined,
+          task === first ? inputs.message : undefined,
+          status,
+        );
+      }
+      await this.persistTerminalRun(params.runId, status);
+      await this.finishWorkRequest(params, status);
+      if (status === "failed") {
+        if (first)
+          await this.publishWorkEvent(params, "step.failed", {
+            stepKind: first.step.kind,
+            status: "failed",
+          });
+        await this.publishWorkEvent(params, "work_request.failed", {
+          status: "failed",
+        });
+      }
+      return {
+        ...started,
+        stage: status,
+        status,
+        workflowStepId: first?.step.kind,
+        failureReason: inputs.message,
+      };
+    }
+    // Dispatch carries each file's verified digest so the Service can check
+    // its delivered copy; the stored request input never changes.
+    if (inputs.outcome === "delivered" && db && params.workRequestId)
+      promptInput = withInputFacts(
+        promptInput,
+        await loadWorkRequestInputs(db, params.workRequestId),
+      );
 
     while (true) {
       const ready = readyWorkflowTasks(tasks);
@@ -827,7 +959,8 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
                       ws.space_id AS spaceId,
                       s.name AS spaceName,
                       s.owner_user_id AS spaceOwnerUserId,
-                      ws.work_session_generation AS workSessionGeneration
+                      CASE WHEN wr.ai_context_generation = ws.ai_context_generation THEN ws.work_session_generation
+                        ELSE -1 - wr.ai_context_generation END AS workSessionGeneration
                  FROM work_requests wr JOIN threads ws ON ws.id = wr.thread_id
                  JOIN spaces s ON s.id = ws.space_id
                 WHERE wr.id = ?1`,

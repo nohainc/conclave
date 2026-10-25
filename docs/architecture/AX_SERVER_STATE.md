@@ -1115,7 +1115,11 @@ Pins are per user. `user_pins` (`0068_user_pins.sql`) holds
 `PUT` and `DELETE /api/pins/:kind/:id` are idempotent, require Space
 membership, and publish a recipient-scoped `space.updated` or `thread.updated`
 so the user's other sessions refresh. Space and Thread list reads return
-`pinnedAt` (null when not pinned). The sidebar lists pinned Spaces first, without a group label,
+`pinnedAt` (null when not pinned). The collapsed sidebar uses one Space/Thread
+selection panel for all Spaces. Pins affect ordering only: pinned Spaces lead
+in manual order, followed by unpinned owned and shared Spaces. Both sidebar
+forms show active Threads with pins first, followed by activity order.
+The expanded sidebar lists pinned Spaces first, without a group label,
 above the usual groups, and pinned Threads first within their Space,
 newest pin first, ahead of the shared `threadOrder`. Archived Threads ignore
 pins. Pins have a per-user manual order (`position`, migration

@@ -219,50 +219,92 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
     return cutoff;
   }
 
-  /// Uploads picked file bytes to Cloud storage and returns file references.
-  /// An in-memory cache reuses uploads for retries of the same picked file,
-  /// retaining a stable file reference and idempotent request body.
+  /// Sends one picked file (raw bytes, or multipart with its JPEG preview).
+  /// Shared by Work inputs and discussion uploads.
+  Future<http.Response> _sendFileUpload(
+      String method, Uri url, Map<String, dynamic> attachment) async {
+    final encoded = attachment['contentBase64'];
+    if (encoded is! String) {
+      throw const AxApiException('Attached file content is missing');
+    }
+    final preview = attachment['previewImage'];
+    final mediaType =
+        attachment['mediaType']?.toString() ?? 'application/octet-stream';
+    if (preview is String) {
+      final request = http.MultipartRequest(method, url)
+        ..headers.addAll(_headers())
+        ..fields['mediaType'] = mediaType
+        ..fields['previewImage'] = preview
+        ..files.add(http.MultipartFile.fromBytes('file', base64Decode(encoded),
+            filename: attachment['name']?.toString() ?? 'Attachment'));
+      return http.Response.fromStream(await client.send(request));
+    }
+    final request = http.Request(method, url)
+      ..headers.addAll(_headers(contentType: mediaType))
+      ..bodyBytes = base64Decode(encoded);
+    return http.Response.fromStream(await client.send(request));
+  }
+
+  /// Runs [send] until it succeeds, restarting the whole file each time.
+  /// Client errors other than timeouts and throttling are final.
+  Future<http.Response> _uploadWithRetries(
+      Future<http.Response> Function() send,
+      {int attempts = 3}) async {
+    for (var attempt = 1;; attempt++) {
+      http.Response? response;
+      Object? failure;
+      try {
+        response = await send();
+      } on AxApiException {
+        rethrow;
+      } on Object catch (error) {
+        failure = error;
+      }
+      if (response != null) {
+        final code = response.statusCode;
+        final retryable = code >= 500 || code == 408 || code == 429;
+        if ((code >= 200 && code < 300) || !retryable || attempt >= attempts) {
+          return response;
+        }
+      } else if (attempt >= attempts) {
+        throw AxApiException('File upload failed: $failure');
+      }
+      await Future<void>.delayed(Duration(milliseconds: 500 * attempt));
+    }
+  }
+
+  static String _uploadFailure(http.Response response) {
+    dynamic body;
+    try {
+      body = jsonDecode(response.body);
+    } on FormatException {
+      body = null;
+    }
+    final detail =
+        body is Map && body['error'] is String ? ': ${body['error']}' : '';
+    return 'File upload failed (${response.statusCode})$detail';
+  }
+
+  /// Uploads picked discussion files to Cloud storage, in parallel, and
+  /// returns file references. An in-memory cache reuses uploads for retries
+  /// of the same picked file, retaining a stable file reference and
+  /// idempotent request body.
   Future<List<Map<String, dynamic>>> _uploadWorkRequestFiles(
       String threadId, List<Map<String, dynamic>> attachments,
       {bool discussion = false}) async {
-    final references = <Map<String, dynamic>>[];
-    for (final attachment in attachments) {
-      if (attachment['kind'] != 'file') {
-        references.add(attachment);
-        continue;
-      }
+    return Future.wait(attachments.map((attachment) async {
+      if (attachment['kind'] != 'file') return attachment;
       final uploadKey = jsonEncode([threadId, attachment]);
       var fileId = attachment['fileId'] is String
           ? attachment['fileId'] as String
           : _uploadedWorkFiles[uploadKey];
       if (fileId == null) {
-        final encoded = attachment['contentBase64'];
-        if (encoded is! String) {
-          throw const AxApiException('Attached file content is missing');
-        }
         final name = Uri.encodeQueryComponent(
             attachment['name']?.toString() ?? 'Attachment');
-        final preview = attachment['previewImage'];
         final url = Uri.parse(
             '$baseUrl/threads/$threadId/work-request-files?name=$name${discussion ? "&purpose=discussion" : ""}');
-        final http.Response response;
-        if (preview is String) {
-          final request = http.MultipartRequest('POST', url)
-            ..headers.addAll(_headers())
-            ..fields['mediaType'] = attachment['mediaType']?.toString() ??
-                'application/octet-stream'
-            ..fields['previewImage'] = preview
-            ..files.add(http.MultipartFile.fromBytes(
-                'file', base64Decode(encoded),
-                filename: attachment['name']?.toString() ?? 'Attachment'));
-          response = await http.Response.fromStream(await client.send(request));
-        } else {
-          response = await client.post(url,
-              headers: _headers(
-                  contentType: attachment['mediaType']?.toString() ??
-                      'application/octet-stream'),
-              body: base64Decode(encoded));
-        }
+        final response = await _uploadWithRetries(
+            () => _sendFileUpload('POST', url, attachment));
         dynamic body;
         try {
           body = jsonDecode(response.body);
@@ -274,13 +316,8 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
             response.statusCode >= 300 ||
             file is! Map ||
             file['fileId'] is! String) {
-          final detail = body is Map && body['error'] is String
-              ? ': ${body['error']}'
-              : '';
-          throw AxApiException(
-            'File upload failed (${response.statusCode})$detail',
-            statusCode: response.statusCode,
-          );
+          throw AxApiException(_uploadFailure(response),
+              statusCode: response.statusCode);
         }
         fileId = file['fileId'] as String;
         // Bound the in-memory cache; it is never persisted and clears on auth change.
@@ -289,15 +326,110 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
         }
         _uploadedWorkFiles[uploadKey] = fileId;
       }
-      references.add({
+      return <String, dynamic>{
         'kind': 'file',
         'name': attachment['name'],
         'mediaType': attachment['mediaType'],
         'sizeBytes': attachment['sizeBytes'],
         'fileId': fileId,
-      });
+      };
+    }));
+  }
+
+  /// Input Delivery v1 manifest entries: picked files are uploaded after the
+  /// request is accepted, so only their metadata is submitted.
+  static List<Map<String, dynamic>> _workRequestManifest(
+          List<Map<String, dynamic>> attachments) =>
+      [
+        for (final attachment in attachments)
+          if (attachment['kind'] == 'file' &&
+              attachment['fileId'] == null &&
+              attachment['contentBase64'] is String)
+            {
+              'kind': 'file',
+              'name': attachment['name'],
+              'mediaType': attachment['mediaType'],
+              'sizeBytes': attachment['sizeBytes'],
+              'delivery': 'upload',
+            }
+          else
+            attachment,
+      ];
+
+  /// Starts uploading the accepted request's files in the background and
+  /// follows their delivery to the Workspace.
+  void _startInputDelivery(
+      Object? workRequest, List<Map<String, dynamic>> attachments) {
+    if (workRequest is! Map) return;
+    final id = workRequest['id'];
+    final input = workRequest['input'];
+    final accepted = input is Map ? input['attachments'] : null;
+    if (id is! String || accepted is! List) return;
+    final uploads = <AxPendingInputUpload>[];
+    final local = <String, Map<String, dynamic>>{};
+    for (var index = 0;
+        index < attachments.length && index < accepted.length;
+        index++) {
+      final picked = attachments[index];
+      final saved = accepted[index];
+      if (picked['kind'] != 'file' ||
+          picked['contentBase64'] is! String ||
+          picked['fileId'] != null ||
+          saved is! Map ||
+          saved['fileId'] is! String) {
+        continue;
+      }
+      final fileId = saved['fileId'] as String;
+      local[fileId] = picked;
+      uploads.add(AxPendingInputUpload(
+          fileId: fileId, name: picked['name']?.toString() ?? 'Attachment'));
     }
-    return references;
+    if (uploads.isEmpty) return;
+    unawaited(AxInputDelivery.instance.start(
+      workRequestId: id,
+      files: uploads,
+      upload: (fileId) async {
+        final response = await _uploadWithRetries(
+            () => _sendFileUpload(
+                'PUT',
+                Uri.parse('$baseUrl/work-requests/$id/inputs/$fileId'),
+                local[fileId]!),
+            attempts: 1);
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw AxApiException(_uploadFailure(response),
+              statusCode: response.statusCode);
+        }
+      },
+      reportUploadFailure: (fileId, message) async {
+        await client.post(
+          Uri.parse('$baseUrl/work-requests/$id/inputs/$fileId/failed'),
+          headers: _headers(contentType: 'application/json'),
+          body: jsonEncode({'message': message}),
+        );
+      },
+      loadDelivery: () async {
+        final body = await _getJson(Uri.parse('$baseUrl/work-requests/$id'));
+        final request = body['workRequest'];
+        if (request is! Map) return null;
+        final status = request['status'];
+        final inputs = request['inputs'];
+        if (inputs is! List) return null;
+        final states = [
+          for (final item in inputs)
+            if (item is Map && item['fileId'] is String)
+              AxDeliveredInputState(
+                fileId: item['fileId'] as String,
+                state: item['state']?.toString() ?? '',
+                deliveryAttempts: item['deliveryAttempts'] is int
+                    ? item['deliveryAttempts'] as int
+                    : 0,
+                errorMessage: item['errorMessage'] as String?,
+              )
+        ];
+        // A request that ended stops tracking after this update.
+        return status == 'cancelled' ? null : states;
+      },
+    ));
   }
 
   @override
@@ -310,7 +442,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
   }) async {
     final submissionId = idempotencyKey ?? newAxIdempotencyKey();
     AxWorkLatencyTrace.instance.submitted(submissionId);
-    attachments = await _uploadWorkRequestFiles(threadId, attachments);
+    final picked = attachments;
     final response = await client.post(
       Uri.parse('$baseUrl/threads/$threadId/work-requests'),
       headers: {
@@ -319,7 +451,10 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
       },
       body: jsonEncode({
         'workflowId': workflowId,
-        'input': {'originalRequest': prompt, 'attachments': attachments},
+        'input': {
+          'originalRequest': prompt,
+          'attachments': _workRequestManifest(picked)
+        },
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -367,6 +502,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
       throw const AxApiException('Work request response is malformed');
     }
     AxWorkLatencyTrace.instance.accepted(submissionId, request['id'] as String);
+    _startInputDelivery(request, picked);
     return request['id'] as String;
   }
 
@@ -381,7 +517,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
   }) async {
     final submissionId = idempotencyKey ?? newAxIdempotencyKey();
     AxWorkLatencyTrace.instance.submitted(submissionId);
-    attachments = await _uploadWorkRequestFiles(threadId, attachments);
+    final picked = attachments;
     final response = await client.post(
       Uri.parse('$baseUrl/threads/$threadId/work-requests'),
       headers: {
@@ -392,7 +528,10 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
         'workflowId': workflowId,
         if (executionSelection.isNotEmpty)
           'executionSelection': executionSelection,
-        'input': {'originalRequest': prompt, 'attachments': attachments},
+        'input': {
+          'originalRequest': prompt,
+          'attachments': _workRequestManifest(picked)
+        },
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -417,6 +556,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
       throw const AxApiException('Work request response is malformed');
     }
     AxWorkLatencyTrace.instance.accepted(submissionId, request['id'] as String);
+    _startInputDelivery(request, picked);
     return request['id'] as String;
   }
 

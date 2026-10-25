@@ -14,3 +14,11 @@ export {
   handleUploadWorkRequestFile,
   handleDownloadThreadFile,
 } from "./work-request-files.js";
+export {
+  handleUploadWorkRequestInput,
+  handleFailWorkRequestInputUpload,
+  handleListRuntimeInputs,
+  handleDownloadRuntimeInput,
+  handleConfirmRuntimeInput,
+  handleReportRuntimeInputAttempt,
+} from "./work-request-inputs.js";

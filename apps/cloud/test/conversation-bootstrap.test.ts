@@ -382,3 +382,50 @@ it("leaves exchanges before an AI History clear out of later context", async () 
     f.sqlite.close();
   }
 });
+
+it("excludes late pre-reset replies from fresh context while retaining visible history", async () => {
+  const f = await conversationFixture();
+  try {
+    f.assign("A");
+    f.start("A");
+    f.sqlite.exec(`UPDATE conversations SET context_floor_sequence =
+      (SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = conversations.id);
+      UPDATE threads SET ai_context_generation = ai_context_generation + 1 WHERE id='W';`);
+    await recordAssignmentResult(f.db as unknown as D1Database, "A", {
+      assignmentId: "A",
+      status: "completed",
+      output: { text: "Late old answer" },
+      artifactIds: [],
+      completedAt: "2026-10-07T10:02:00Z",
+    });
+    f.sqlite
+      .exec(`INSERT INTO work_requests(id,thread_id,requested_by_user_id,mode,workflow_id,workflow_version,workflow_snapshot_json,status,input_json,created_at,updated_at)
+      VALUES('R2','W','U','stateless','chat',1,'{}','running','{"originalRequest":"Fresh request"}','now','now')`);
+    await f.db.batch(
+      conversationSubmissionStatements(
+        f.db as unknown as D1Database,
+        threadConversationId("W"),
+        "W",
+        CONVERSATION_WORKFLOWS.chat!,
+        "R2",
+        "now",
+      ),
+    );
+    const result = await loadConversationBootstrap(
+      f.db as unknown as D1Database,
+      threadConversationId("W"),
+      "R2",
+      1,
+    );
+    expect(result.text).not.toContain("Late old answer");
+    expect(
+      f.sqlite
+        .prepare(
+          "SELECT text FROM conversation_history_entries WHERE text = 'Late old answer'",
+        )
+        .get(),
+    ).toBeTruthy();
+  } finally {
+    f.sqlite.close();
+  }
+});

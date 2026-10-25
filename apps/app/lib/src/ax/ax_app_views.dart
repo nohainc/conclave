@@ -230,14 +230,24 @@ extension _AxAppViews on _AxAppStateMixin {
           key: ValueKey(thread.id),
           space: space,
           thread: thread,
+          showAiHistory: space.showAiHistory,
           dataSource: widget.dataSource,
           realtimeEvents: realtimeClient.events,
           currentUserId: store.auth.viewer?.id,
           currentUserName: store.auth.viewer?.displayName,
           viewerEmail: store.auth.viewer?.email,
           onBackToSpace: () => _navigateTo(AxNavigation.space(space.id)),
-          onClearConversation: () => _clearChatHistory(thread),
+          onClearConversation: thread.canDestroy || space.role == 'owner'
+              ? () => _clearChatHistory(thread)
+              : null,
           onClearAiHistory: () => _clearWorkHistory(thread),
+          onRestore: () async {
+            try {
+              await store.collaboration.editThread(thread, status: 'active');
+            } catch (error) {
+              if (mounted) _showSnackBar(error.toString());
+            }
+          },
           onViewStateChanged: (viewState) async {
             await store.collaboration.editThread(thread, viewState: viewState);
           },

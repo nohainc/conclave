@@ -171,6 +171,11 @@ export async function handleCreateSpace(
       400,
       "Configure enabled workflows on the Workflows page",
     );
+  if (
+    settings.showAiHistory !== undefined &&
+    typeof settings.showAiHistory !== "boolean"
+  )
+    throw new HttpError(400, "showAiHistory must be a boolean");
   const now = new Date().toISOString();
   const id = `space-${crypto.randomUUID()}`;
 
@@ -365,6 +370,11 @@ export async function handleUpdateSpace(
     typeof incomingSettings.sidebarExpanded !== "boolean"
   )
     throw new HttpError(400, "sidebarExpanded must be a boolean");
+  if (
+    incomingSettings.showAiHistory !== undefined &&
+    typeof incomingSettings.showAiHistory !== "boolean"
+  )
+    throw new HttpError(400, "showAiHistory must be a boolean");
   const settings = {
     ...spaceSettings(existing.settingsJson),
     ...(typeof body.settings === "object" && body.settings !== null

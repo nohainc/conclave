@@ -49,6 +49,22 @@ class FolderSource extends WorkflowSource
   }
 }
 
+class SpaceSettingsSource extends WorkflowSource {
+  Map<String, dynamic>? savedSettings;
+
+  @override
+  Future<AxSpace> updateSpace({
+    required String spaceId,
+    String? name,
+    String? description,
+    String? instructions,
+    Map<String, dynamic>? settings,
+  }) async {
+    savedSettings = settings;
+    return ownerSpace.copyWith(settings: settings);
+  }
+}
+
 const ownerSpace =
     AxSpace(id: 'S', name: 'Space', branch: '', lastActivity: 'now');
 const memberSpace = AxSpace(
@@ -80,6 +96,30 @@ Future<void> pumpSpace(
 }
 
 void main() {
+  testWidgets('AI History is hidden by default and owners can expose it',
+      (tester) async {
+    final source = SpaceSettingsSource();
+    await pumpSpace(tester, source, ownerSpace);
+    final setting = find.byKey(const ValueKey('space-show-ai-history-setting'));
+    final toggle = find.descendant(of: setting, matching: find.byType(Switch));
+    expect(tester.widget<Switch>(toggle).value, isFalse);
+    expect(find.text('Show execution history in this Space\'s Threads.'),
+        findsNothing);
+    expect(tester.getSize(setting).height, lessThanOrEqualTo(48));
+    expect(tester.getSize(setting).width, 840);
+    expect(tester.getRect(setting).right - tester.getRect(toggle).right,
+        lessThanOrEqualTo(8));
+    final defaultMessage =
+        find.textContaining('Following the default Workspace:');
+    expect(tester.getRect(setting).top - tester.getRect(defaultMessage).bottom,
+        greaterThanOrEqualTo(12));
+
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(source.savedSettings, {'showAiHistory': true});
+  });
+
   testWidgets('owner follows the default Workspace until choosing one',
       (tester) async {
     final source = WorkflowSource();

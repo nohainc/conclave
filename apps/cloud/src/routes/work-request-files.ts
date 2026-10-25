@@ -37,6 +37,19 @@ export async function userStorageUsage(
 const FILE_ID_PATTERN =
   /^wrf-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
+/**
+ * A display name for a submitted file: path separators and control
+ * characters become `_`; everything else (spaces, punctuation, Unicode) is
+ * kept. Bytes are always stored under the generated file id, never this name.
+ */
+export function workRequestFileName(value: unknown): string {
+  return typeof value === "string"
+    ? // eslint-disable-next-line no-control-regex -- Strip control characters.
+      value.replace(/[\\/\u0000-\u001f\u007f]/g, "_").slice(0, 255) ||
+        "Attachment"
+    : "Attachment";
+}
+
 export function isWorkRequestFileId(value: unknown): value is string {
   return typeof value === "string" && FILE_ID_PATTERN.test(value);
 }
@@ -65,8 +78,47 @@ export async function handleUploadWorkRequestFile(
       : "execute",
     accessContext,
   );
-  const bucket = env.CONCLAVE_ARTIFACTS;
-  if (!bucket) throw new HttpError(503, "File storage is not configured");
+  const upload = await readWorkRequestFileUpload(request);
+  const url = new URL(request.url);
+  const name = artifactName(
+    url.searchParams.get("name") ?? request.headers.get("x-file-name"),
+  );
+  const fileId = `wrf-${crypto.randomUUID()}`;
+  const { digest, mediaType, body } = {
+    ...upload,
+    ...(await storeWorkRequestFile(env, {
+      fileId,
+      threadId,
+      spaceId: spaceId ?? null,
+      userId: context.userId,
+      name,
+      upload,
+    })),
+  };
+  return json(
+    {
+      file: {
+        fileId,
+        name,
+        mediaType,
+        sizeBytes: body.byteLength,
+        contentDigest: digest,
+      },
+    },
+    { status: 201 },
+  );
+}
+
+export interface WorkRequestFileUpload {
+  readonly body: ArrayBuffer;
+  readonly mediaType: string;
+  readonly previewImage?: string;
+}
+
+/** Reads one bounded upload body (raw bytes or multipart with a preview). */
+export async function readWorkRequestFileUpload(
+  request: Request,
+): Promise<WorkRequestFileUpload> {
   const declared = request.headers.get("content-length");
   if (declared !== null) {
     const length = Number(declared);
@@ -102,72 +154,84 @@ export async function handleUploadWorkRequestFile(
   }
   if (body.byteLength > MAX_WORK_REQUEST_FILE_BYTES)
     throw new HttpError(413, "File exceeds the 10 MB limit");
-  // Best effort under concurrency: parallel uploads may each pass this check
-  // and overshoot the quota by at most one batch.
-  const usage = await userStorageUsage(env, context.userId);
-  if (usage.usedBytes + body.byteLength > usage.quotaBytes)
-    throw new HttpError(
-      413,
-      "Storage quota exceeded. Delete files in My Files to free space",
-    );
-  const url = new URL(request.url);
-  const name = artifactName(
-    url.searchParams.get("name") ?? request.headers.get("x-file-name"),
-  );
   const mediaType =
     (submittedType ?? request.headers.get("content-type"))
       ?.split(";", 1)[0]
       ?.trim()
       .slice(0, 128) || "application/octet-stream";
-  const previewText = fileTextPreview(name, mediaType, body);
+  return { body, mediaType, ...(previewImage ? { previewImage } : {}) };
+}
+
+/**
+ * Writes uploaded bytes to R2 under [fileId], bound to the uploading user and
+ * Thread, and records them for My Files and the storage quota. Rewriting the
+ * same [fileId] (a restarted upload) replaces the object and its accounting.
+ */
+export async function storeWorkRequestFile(
+  env: SecurityEnv,
+  input: {
+    fileId: string;
+    threadId: string;
+    spaceId: string | null;
+    userId: string;
+    name: string;
+    upload: WorkRequestFileUpload;
+    workRequestId?: string;
+  },
+): Promise<{ digest: string; previewText?: string; previewImage?: string }> {
+  const bucket = env.CONCLAVE_ARTIFACTS;
+  if (!bucket) throw new HttpError(503, "File storage is not configured");
+  const { body, mediaType, previewImage } = input.upload;
+  // Best effort under concurrency: parallel uploads may each pass this check
+  // and overshoot the quota by at most one batch.
+  const usage = await userStorageUsage(env, input.userId);
+  if (usage.usedBytes + body.byteLength > usage.quotaBytes)
+    throw new HttpError(
+      413,
+      "Storage quota exceeded. Delete files in My Files to free space",
+    );
+  const previewText = fileTextPreview(input.name, mediaType, body);
   const digest = await computePackageDigest(body);
-  const fileId = `wrf-${crypto.randomUUID()}`;
-  await bucket.put(workRequestFileKey(fileId), body, {
+  await bucket.put(workRequestFileKey(input.fileId), body, {
     httpMetadata: { contentType: mediaType },
     customMetadata: {
-      threadId,
-      userId: context.userId,
-      name,
+      threadId: input.threadId,
+      userId: input.userId,
+      name: input.name,
       digest,
+      ...(input.workRequestId ? { workRequestId: input.workRequestId } : {}),
       ...(previewText || previewImage ? { hasPreview: "1" } : {}),
     },
   });
   if (previewText || previewImage)
     await bucket.put(
-      `${workRequestFileKey(fileId)}/preview`,
+      `${workRequestFileKey(input.fileId)}/preview`,
       JSON.stringify({ previewText, previewImage }),
       {
         httpMetadata: { contentType: "application/json" },
       },
     );
   await env.CONCLAVE_DB.prepare(
-    `INSERT INTO user_files
+    `INSERT OR REPLACE INTO user_files
       (id, user_id, thread_id, space_id, name, media_type, size_bytes, created_at)
       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
   )
     .bind(
-      fileId,
-      context.userId,
-      threadId,
-      spaceId ?? null,
-      name,
+      input.fileId,
+      input.userId,
+      input.threadId,
+      input.spaceId,
+      input.name,
       mediaType,
       body.byteLength,
       new Date().toISOString(),
     )
     .run();
-  return json(
-    {
-      file: {
-        fileId,
-        name,
-        mediaType,
-        sizeBytes: body.byteLength,
-        contentDigest: digest,
-      },
-    },
-    { status: 201 },
-  );
+  return {
+    digest,
+    ...(previewText ? { previewText } : {}),
+    ...(previewImage ? { previewImage } : {}),
+  };
 }
 
 /** Confirms an uploaded file belongs to this user and Thread and matches the claim. */
@@ -201,50 +265,6 @@ export async function verifyWorkRequestFile(
     ...display,
     digest: meta.digest ?? "",
   };
-}
-
-type AttachmentRecord = Record<string, unknown>;
-
-/**
- * Adds file bytes from R2 to an outgoing `assignment.start` payload. The
- * bytes are never written back to D1; the Workspace materializes them at
- * `.conclave/inputs/<work-request-id>/file-NNN` for the AI CLI.
- */
-export async function hydrateWorkRequestFiles(
-  env: { readonly CONCLAVE_ARTIFACTS?: R2Bucket },
-  payload: unknown,
-): Promise<unknown> {
-  const input = (payload as { input?: { attachments?: unknown } } | null)
-    ?.input;
-  if (!input || !Array.isArray(input.attachments)) return payload;
-  const threadId = (payload as { threadId?: unknown }).threadId;
-  const attachments: AttachmentRecord[] = [];
-  for (const attachment of input.attachments as AttachmentRecord[]) {
-    if (
-      !attachment ||
-      attachment.kind !== "file" ||
-      !isWorkRequestFileId(attachment.fileId)
-    ) {
-      attachments.push(attachment);
-      continue;
-    }
-    const object = await env.CONCLAVE_ARTIFACTS?.get(
-      workRequestFileKey(attachment.fileId),
-    );
-    if (
-      !object ||
-      object.size !== attachment.sizeBytes ||
-      (typeof threadId === "string" &&
-        object.customMetadata?.threadId !== threadId)
-    )
-      throw new HttpError(409, "Attached file content is unavailable");
-    const bytes = new Uint8Array(await object.arrayBuffer());
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += 0x8000)
-      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    attachments.push({ ...attachment, contentBase64: btoa(binary) });
-  }
-  return { ...(payload as object), input: { ...input, attachments } };
 }
 
 /** Metadata and bounded display previews for authenticated Work history. */

@@ -25,12 +25,14 @@ class ThreadPage extends StatefulWidget {
     required this.onBackToSpace,
     required this.onArchive,
     this.onRename,
+    this.onRestore,
     this.onViewStateChanged,
     this.onRunWork,
     this.onRunWorkWithSelection,
     this.realtimeEvents,
     this.initialTab = 0,
     this.initialAiHistoryOpen = false,
+    this.showAiHistory = true,
     this.onClearConversation,
     this.onClearAiHistory,
     this.isDraft = false,
@@ -52,6 +54,7 @@ class ThreadPage extends StatefulWidget {
   final String? viewerEmail;
   final VoidCallback onBackToSpace;
   final VoidCallback onArchive;
+  final Future<void> Function()? onRestore;
   final Future<void> Function(String name)? onRename;
 
   /// Persists the Thread's active tab and workflow/Worker/model/effort
@@ -72,11 +75,14 @@ class ThreadPage extends StatefulWidget {
   /// Opens the read-only AI History panel when the page is created.
   final bool initialAiHistoryOpen;
 
+  /// Whether this host exposes AI History. The product host supplies the
+  /// Space-level opt-in; the default keeps isolated component uses compatible.
+  final bool showAiHistory;
+
   /// Deletes the Thread's Chat messages, including archived AI answers.
   final Future<void> Function()? onClearConversation;
 
-  /// Deletes AI History and resets Worker session context; completed answers
-  /// are archived into the Conversation.
+  /// Resets AI context while preserving the visible conversation.
   final Future<void> Function()? onClearAiHistory;
 
   /// Draft views load Space configuration but never read or persist Thread data.
@@ -160,7 +166,8 @@ class _ThreadPageState extends State<ThreadPage>
 
   /// Read-only AI History (the former Work timeline) beside or, on narrow
   /// layouts, instead of the conversation.
-  late bool _aiHistoryOpen = widget.initialAiHistoryOpen;
+  late bool _aiHistoryOpen =
+      widget.showAiHistory && widget.initialAiHistoryOpen;
   // AI History stays mounted once opened so switching keeps both lists and
   // their scroll positions; a positioned pane is revealed without hiding.
   late bool _aiHistoryMounted = _aiHistoryOpen;
@@ -191,14 +198,13 @@ class _ThreadPageState extends State<ThreadPage>
       builder: (dialogContext) => AlertDialog(
         constraints: ConclaveDialogStyle.small,
         title:
-            Text(history ? 'Clear AI History' : 'Clear Conversation History'),
+            Text(history ? 'Reset AI context' : 'Clear Conversation History'),
         content: Text(history
-            ? 'Delete all AI requests, activity and diagnostics, and reset the '
-                'Workers\' session context? Completed AI answers stay in the '
-                'Conversation. This action cannot be undone.'
-            : 'Delete all Conversation messages and AI History, including '
-                'saved AI answers, activity and diagnostics, and reset the '
-                'Workers\' session context? This action cannot be undone.'),
+            ? 'Start fresh AI context for everyone? The visible conversation stays available. '
+                'Files and completed work remain unchanged.'
+            : 'Delete all human and AI messages for everyone and reset AI context? '
+                'Only a notice of this action will remain. Files and completed work remain. '
+                'This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
@@ -241,6 +247,7 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   void _setAiHistoryOpen(bool open) {
+    if (open && !widget.showAiHistory) return;
     if (open == _aiHistoryOpen) return;
     _scheduleThreadViewStateSave();
     if (open ? _workPositioned : _chatPositioned) {
@@ -1073,7 +1080,8 @@ class _ThreadPageState extends State<ThreadPage>
   /// frame, where both lists still wait to be positioned.
   void _restorePane(String? pane) {
     if (pane == null) return;
-    _aiHistoryOpen = pane == AxThreadViewState.aiHistoryPane;
+    _aiHistoryOpen =
+        widget.showAiHistory && pane == AxThreadViewState.aiHistoryPane;
     _aiHistoryMounted |= _aiHistoryOpen;
     _notesOpen = _notesMounted =
         pane == AxThreadViewState.notesPane && _notesSource != null;
@@ -1448,6 +1456,10 @@ class _ThreadPageState extends State<ThreadPage>
   @override
   void didUpdateWidget(ThreadPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.showAiHistory && !widget.showAiHistory) {
+      _aiHistoryOpen = false;
+      _aiHistoryMounted = false;
+    }
     final threadChanged = oldWidget.thread.id != widget.thread.id;
     if (threadChanged ||
         oldWidget.currentUserId != widget.currentUserId ||
@@ -1549,7 +1561,8 @@ class _ThreadPageState extends State<ThreadPage>
       _chatPositioned = _workPositioned = false;
       // Each Thread reopens its own last pane; one never saved starts on the
       // default pane rather than inheriting the previous Thread's.
-      _aiHistoryOpen = _aiHistoryMounted = widget.initialAiHistoryOpen;
+      _aiHistoryOpen = _aiHistoryMounted =
+          widget.showAiHistory && widget.initialAiHistoryOpen;
       _notesOpen = _notesMounted = false;
       // Activity is keyed by assignment, so it is kept: returning to a Thread
       // shows its earlier operations immediately while details reload.
@@ -1658,7 +1671,10 @@ class _ThreadPageState extends State<ThreadPage>
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
           unawaited(_refreshWorkTimeline()
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-        } else if (type == 'thread.work_cleared') {
+        } else if (type == 'thread.updated' || type == 'thread.work_cleared') {
+          unawaited(_discussionCache
+              .synchronize(widget.thread.id)
+              .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
           // AI History moved its cutoff; Work itself is kept, so refreshing
           // brings the new cutoff without discarding the Conversation.
           unawaited(_refreshWorkTimeline()
@@ -1669,6 +1685,8 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   bool get _canExecute =>
+      !widget.thread.archived &&
+      widget.thread.status != 'archived' &&
       (widget.isDraft
           ? widget.space.effectivePermissions.work &&
               widget.space.effectivePermissions.manageOwnThreads
@@ -1848,7 +1866,7 @@ class _ThreadPageState extends State<ThreadPage>
                                     size: 18),
                                 label: const Text('Conversation'),
                               )),
-                          if (!widget.isDraft)
+                          if (!widget.isDraft && widget.showAiHistory)
                             tab(
                                 history,
                                 TextButton.icon(
@@ -1901,6 +1919,14 @@ class _ThreadPageState extends State<ThreadPage>
                       ),
                     ),
                     if (!widget.isDraft &&
+                        !history &&
+                        !notes &&
+                        widget.onClearAiHistory != null)
+                      IconButton(
+                          tooltip: 'Reset AI context',
+                          icon: const Icon(Icons.restart_alt),
+                          onPressed: () => _confirmClear(history: true)),
+                    if (!widget.isDraft &&
                         (notes ||
                             (history
                                     ? widget.onClearAiHistory
@@ -1915,7 +1941,7 @@ class _ThreadPageState extends State<ThreadPage>
                         tooltip: notes
                             ? 'Clear Note'
                             : history
-                                ? 'Clear AI History'
+                                ? 'Reset AI context'
                                 : 'Clear Conversation History',
                         icon: const Icon(Icons.delete_sweep_outlined, size: 18),
                         onPressed: notes
@@ -2053,6 +2079,7 @@ class _ThreadPageState extends State<ThreadPage>
           date: date,
           text: message.body,
           attachments: message.attachments,
+          eventType: message.eventType,
           sentAt: date == null ? null : _chatTimestamp(date),
           editedAt: edited == null ? null : _chatTimestamp(edited),
           editedDate: edited,
@@ -2236,10 +2263,8 @@ class _ThreadPageState extends State<ThreadPage>
                           previousDate:
                               index == 0 ? null : messages[index - 1].date,
                           child: message.workRequest != null
-                              ? _workComposer().requestCard(
-                                  context, message.workRequest!,
-                                  responseAnchorKey: _chatIncomingAnchor.keyFor(
-                                      'work-${message.workRequest!.id}-answer'))
+                              ? _conversationWorkCard(
+                                  context, message.workRequest!)
                               : _DiscussionMessageBubble(
                                   item: message,
                                   grouped: _continuesDiscussionGroup(
@@ -2251,7 +2276,11 @@ class _ThreadPageState extends State<ThreadPage>
                                   },
                                   onEdit: (newText) =>
                                       _editDiscussion(message.id, newText),
-                                  onDelete: () => _deleteDiscussion(message.id),
+                                  onDelete: (message.isMe ||
+                                              widget.space.role == 'owner') &&
+                                          message.eventType == null
+                                      ? () => _deleteDiscussion(message.id)
+                                      : null,
                                 ),
                         ),
                       ),
@@ -2262,6 +2291,23 @@ class _ThreadPageState extends State<ThreadPage>
         _conversationComposer(twoPane: twoPane),
       ],
     );
+  }
+
+  Widget _conversationWorkCard(BuildContext context, AxWorkRequest request) {
+    final cutoff = DateTime.tryParse(
+        _workHistoryCache.aiHistoryClearedAt(widget.thread.id) ?? '');
+    final created = DateTime.tryParse(request.createdAt);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (cutoff != null && created != null && !created.isAfter(cutoff))
+        Text('Requested before AI context reset',
+            style: TextStyle(
+                fontSize: 12,
+                color: ConclaveColors.textSecondary(
+                    Theme.of(context).brightness == Brightness.dark))),
+      _workComposer().requestCard(context, request,
+          responseAnchorKey:
+              _chatIncomingAnchor.keyFor('work-${request.id}-answer')),
+    ]);
   }
 
   /// One conversation: Work Requests still in Work history appear between
@@ -2326,11 +2372,20 @@ class _ThreadPageState extends State<ThreadPage>
     );
   }
 
-  Widget _conversationComposer({bool twoPane = false}) => _askAiMode
-      ? ValueListenableBuilder<ThreadComposerPresentationSnapshot>(
-          valueListenable: _presentation.composer,
-          builder: (context, _, __) => _workComposer().controls(context))
-      : _discussionComposer(twoPane: twoPane);
+  Widget _conversationComposer({bool twoPane = false}) =>
+      widget.thread.archived || widget.thread.status == 'archived'
+          ? Center(
+              child: TextButton.icon(
+              onPressed: widget.onRestore,
+              icon: const Icon(Icons.unarchive_outlined),
+              label: const Text('Restore thread'),
+            ))
+          : _askAiMode
+              ? ValueListenableBuilder<ThreadComposerPresentationSnapshot>(
+                  valueListenable: _presentation.composer,
+                  builder: (context, _, __) =>
+                      _workComposer().controls(context))
+              : _discussionComposer(twoPane: twoPane);
 
   Widget _discussionComposer({bool twoPane = false}) => MarkdownComposer(
         attachments: _discussionAttachments.isEmpty

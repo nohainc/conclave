@@ -44,6 +44,7 @@ export const WORKSPACE_RUNTIME_MESSAGE_TYPES = [
   "diagnostic.probe.ack",
   "worker.usage.request",
   "worker.usage.result",
+  "input.available",
 ] as const;
 
 export type WorkspaceRuntimeMessageType =
@@ -51,6 +52,7 @@ export type WorkspaceRuntimeMessageType =
 
 /** Maximum characters of raw provider usage output carried in one message. */
 export const WORKER_USAGE_OUTPUT_MAX_CHARS = 64 * 1024;
+
 
 const nonEmptyString = z.string().trim().min(1);
 const timestamp = z.string().datetime();
@@ -675,6 +677,20 @@ export const workspaceRuntimeEnvelopeSchema = z
               })
               .strict();
       const payload = schema.safeParse(message.payload);
+      if (!payload.success) {
+        for (const issue of payload.error.issues) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["payload", ...issue.path],
+            message: issue.message,
+          });
+        }
+      }
+    }
+    if (message.type === "input.available") {
+      // A wake-up only: the Service lists and downloads inputs over HTTPS
+      // (Input Delivery v1), so the message never carries file content.
+      const payload = z.object({}).strict().safeParse(message.payload);
       if (!payload.success) {
         for (const issue of payload.error.issues) {
           ctx.addIssue({
