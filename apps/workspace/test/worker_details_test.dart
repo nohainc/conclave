@@ -168,8 +168,8 @@ void main() {
       find.text('Check for updates'),
       find.text('Test'),
       find.text('Disable'),
-      find.text('Enable full access'),
     ];
+    expect(find.textContaining('full access'), findsNothing);
     Finder button(Finder label) => find.ancestor(
         of: label,
         matching:

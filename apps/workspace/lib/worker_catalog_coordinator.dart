@@ -59,7 +59,6 @@ abstract interface class WorkspaceWorkerCatalogClient {
     String workerTypeId, {
     bool waitForActiveRefresh = false,
   });
-  Future<void> setFullLocalAccess(String workerId, bool enabled);
 }
 
 /// Owns the Workspace catalog -> Profile -> readiness synchronization pipeline.
@@ -185,16 +184,6 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
       ),
       _generation,
     );
-  }
-
-  @override
-  Future<void> setFullLocalAccess(String workerId, bool enabled) async {
-    final currentRegistry = registry;
-    if (currentRegistry == null) {
-      throw StateError('Local Worker registry is not available.');
-    }
-    await currentRegistry.setFullLocalAccess(workerId, enabled);
-    await refreshLocalWorkers();
   }
 
   List<WorkerCatalogWorkerState> _buildWorkerStates({

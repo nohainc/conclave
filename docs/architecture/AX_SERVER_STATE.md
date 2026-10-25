@@ -1146,6 +1146,9 @@ nothing is lost.
 
 - `GET /api/notes`, `POST /api/notes`, and `GET`/`PUT`/`DELETE
   /api/notes/:id` serve the caller's own notes (My Notes, `/notes`).
+- `GET /api/files` and `DELETE /api/files/:fileId` serve the caller's own
+  uploads and storage quota (My Files, `/files`); see
+  `docs/specifications/WORK_V1_CONTRACT.md`.
 - `GET`/`PUT /api/threads/:id/note` serve the caller's single note for a
   Thread (the Thread's Notes tab) and require Thread view access. `GET`
   returns `note: null` until the first `PUT` creates it.
@@ -1376,3 +1379,7 @@ Show access is an expandable header for the permissions table; it does not
 change to Done. The table retains its existing explicit save/reset actions.
 Collapsing refreshes the person's policy summary. Quota values, monthly limit
 units, and authorization are unchanged.
+
+My Files exposes `POST /api/files/sync` as an explicit user mutation. The client
+follows bounded reconciliation continuations, then reloads its file list and
+usage. Progress and retry state remain local to the page.

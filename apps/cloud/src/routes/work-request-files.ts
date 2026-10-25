@@ -10,9 +10,29 @@ import type { SecurityEnv } from "./handlers.js";
 /** Base64 JPEG thumbnail budget; AX enforces the same value. */
 const MAX_PREVIEW_IMAGE_CHARS = 32000;
 
-/** Per-file limit for Work Request file inputs; there is no total limit. */
+/** Per-file and per-request limits; `USER_STORAGE_QUOTA_BYTES` caps the total. */
 export const MAX_WORK_REQUEST_FILE_BYTES = 10 * 1024 * 1024;
 export const MAX_WORK_REQUEST_FILES = 10;
+/** Total bytes one user may keep in uploaded files (see `user_files`). */
+export const USER_STORAGE_QUOTA_BYTES = 1024 * 1024 * 1024;
+
+/** Bytes and count of the user's uploaded files that still exist. */
+export async function userStorageUsage(
+  env: SecurityEnv,
+  userId: string,
+): Promise<{ usedBytes: number; fileCount: number; quotaBytes: number }> {
+  const row = await env.CONCLAVE_DB.prepare(
+    `SELECT COALESCE(SUM(size_bytes), 0) AS usedBytes, COUNT(*) AS fileCount
+      FROM user_files WHERE user_id = ?1`,
+  )
+    .bind(userId)
+    .first<{ usedBytes: number; fileCount: number }>();
+  return {
+    usedBytes: Number(row?.usedBytes ?? 0),
+    fileCount: Number(row?.fileCount ?? 0),
+    quotaBytes: USER_STORAGE_QUOTA_BYTES,
+  };
+}
 
 const FILE_ID_PATTERN =
   /^wrf-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -36,7 +56,7 @@ export async function handleUploadWorkRequestFile(
   threadId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const { context } = await authorizeThreadAccess(
+  const { context, spaceId } = await authorizeThreadAccess(
     request,
     env,
     threadId,
@@ -82,6 +102,14 @@ export async function handleUploadWorkRequestFile(
   }
   if (body.byteLength > MAX_WORK_REQUEST_FILE_BYTES)
     throw new HttpError(413, "File exceeds the 10 MB limit");
+  // Best effort under concurrency: parallel uploads may each pass this check
+  // and overshoot the quota by at most one batch.
+  const usage = await userStorageUsage(env, context.userId);
+  if (usage.usedBytes + body.byteLength > usage.quotaBytes)
+    throw new HttpError(
+      413,
+      "Storage quota exceeded. Delete files in My Files to free space",
+    );
   const url = new URL(request.url);
   const name = artifactName(
     url.searchParams.get("name") ?? request.headers.get("x-file-name"),
@@ -112,6 +140,22 @@ export async function handleUploadWorkRequestFile(
         httpMetadata: { contentType: "application/json" },
       },
     );
+  await env.CONCLAVE_DB.prepare(
+    `INSERT INTO user_files
+      (id, user_id, thread_id, space_id, name, media_type, size_bytes, created_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+  )
+    .bind(
+      fileId,
+      context.userId,
+      threadId,
+      spaceId ?? null,
+      name,
+      mediaType,
+      body.byteLength,
+      new Date().toISOString(),
+    )
+    .run();
   return json(
     {
       file: {

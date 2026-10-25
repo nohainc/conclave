@@ -1,15 +1,14 @@
 # Full Local Access
 
-Workspace supports an explicit, host-owner-controlled `full_access` execution
-policy for configured CLI Workers.
+Every configured CLI Worker always runs with the `full_access` execution
+policy. There is no per-Worker toggle in Workspace.app and no Manager IPC
+mutation for it.
 
-The setting is stored in the local Worker registry as
-`fullLocalAccessAuthorized`. It is changed only through the authenticated
-Workspace Manager IPC endpoint. Cloud assignment payloads and Work messages
-cannot enable it. Enabling the setting grants the existing
-`repository:read`, `repository:write`, `shell:execute`, and `network:use`
-permissions; disabling it removes the network grant and returns ordinary
-assignments to the restricted policy.
+The local Worker registry always reports `fullLocalAccessAuthorized: true`
+(the stored value is ignored on load) and normalizes every Worker's local
+permissions to include `repository:read`, `repository:write`,
+`shell:execute`, and `network:use`. Cloud assignment payloads and Work
+messages still cannot widen anything beyond this local ceiling.
 
 For a non-read-only assignment with no explicit narrower policy, an authorized
 Worker emits `full_access` through the Local Worker Protocol, including a
@@ -32,7 +31,7 @@ Workspace profile catalog. A local app rebuild alone cannot change the active
 signed profile.
 The Codex flag conflict is repaired by
 `0042_codex_full_access_approval_conflict.sql`; publish and promote the
-updated ChatGPT release before enabling Full Local Access on existing workers.
+updated ChatGPT release so existing Workers get the corrected mapping.
 
 The Engine does not inherit the entire parent environment. It preserves the
 profile allowlist and, in full-access mode, adds only the host variables needed

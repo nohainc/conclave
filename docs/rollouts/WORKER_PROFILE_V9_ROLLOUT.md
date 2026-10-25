@@ -15,7 +15,7 @@ Profile Lab and Workspace boundaries.
   active execution's pinned snapshot.
 - Workspace uses the verified cache while offline and after a simulated
   service restart. An Engine-incompatible update leaves the safe current
-  Profile active. Full Local Access authorization remains local and survives a
+  Profile active. Full Local Access is always on for every Worker and survives a
   Profile update.
 - Revocation blocks the active snapshot without allowing last-known-good to
   bypass the policy. A newly signed restoration revision can replace the

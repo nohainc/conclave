@@ -282,6 +282,8 @@ class AxShellContext {
         return navigation.kind == AxRouteKind.people;
       case AxRouteKind.notes:
         return navigation.kind == AxRouteKind.notes;
+      case AxRouteKind.files:
+        return navigation.kind == AxRouteKind.files;
       case AxRouteKind.archivedSpaces:
         return navigation.kind == AxRouteKind.archivedSpaces;
       case AxRouteKind.workspaces:

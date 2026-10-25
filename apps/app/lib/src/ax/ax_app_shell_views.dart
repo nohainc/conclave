@@ -774,9 +774,11 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                     padding: EdgeInsets.zero,
                                     child: _spaceOverviewView(),
                                   )
-                                : navigation.kind == AxRouteKind.notes
+                                : navigation.kind == AxRouteKind.notes ||
+                                        navigation.kind == AxRouteKind.files
                                     // My Notes scrolls its own list so a note's
-                                    // editor can use the full page height.
+                                    // editor can use the full page height;
+                                    // My Files scrolls its own list too.
                                     ? Padding(
                                         padding: EdgeInsets.fromLTRB(
                                             compact ? 18 : 34,

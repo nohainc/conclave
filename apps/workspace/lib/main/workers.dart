@@ -9,8 +9,6 @@ class _WorkersTab extends StatefulWidget {
     this.onConfigureWorker,
     this.onSetWorkerEnabled,
     this.onRemoveWorker,
-    this.onSetFullLocalAccess,
-    this.requireStepUp,
     super.key,
   });
 
@@ -21,9 +19,6 @@ class _WorkersTab extends StatefulWidget {
   final Future<void> Function(String workerId, bool enabled)?
       onSetWorkerEnabled;
   final Future<bool> Function(String workerId)? onRemoveWorker;
-  final Future<void> Function(String workerId, bool enabled)?
-      onSetFullLocalAccess;
-  final Future<bool> Function(String reason)? requireStepUp;
   final Future<void> Function(
       {LocalWorkerProbeMode mode, String? workerTypeId})? onReadinessCheck;
 
@@ -80,21 +75,6 @@ class _WorkersTabState extends State<_WorkersTab> {
     bool enabled,
   ) async {
     await widget.onSetWorkerEnabled?.call(worker.id, enabled);
-    await widget.catalogCoordinator?.refreshLocalWorkers();
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _setFullLocalAccess(
-    LocalWorker worker,
-    bool enabled,
-  ) async {
-    if (enabled && widget.requireStepUp != null) {
-      final authenticated = await widget.requireStepUp!(
-        'Authorize Full Local Access for this Worker',
-      );
-      if (!authenticated) return;
-    }
-    await widget.onSetFullLocalAccess?.call(worker.id, enabled);
     await widget.catalogCoordinator?.refreshLocalWorkers();
     if (mounted) setState(() {});
   }
@@ -372,19 +352,13 @@ class _WorkersTabState extends State<_WorkersTab> {
                   style: theme.textTheme.bodySmall),
             const SizedBox(height: 20),
             _buildVerification(view, progress),
-            if (worker != null && worker.fullLocalAccessAuthorized) ...[
+            if (worker != null && profile?['supportsFullAccess'] == false) ...[
               const SizedBox(height: 8),
               Text(
-                profile?['supportsFullAccess'] == false
-                    ? 'Full access is authorized, but the active Profile has no full-access mapping. Publish and refresh a Profile release that supports it.'
-                    : profile?['supportsFullAccess'] == true
-                        ? 'Full access authorized; the active Profile maps it to provider arguments.'
-                        : 'Full access authorized; the active Profile could not be checked.',
+                'Workers always run with full access, but the active Profile has no full-access mapping. Publish and refresh a Profile release that supports it.',
                 key: Key('worker-full-access-status-${entry.workerTypeId}'),
-                style: theme.textTheme.bodySmall?.copyWith(
-                    color: profile?['supportsFullAccess'] == false
-                        ? theme.colorScheme.error
-                        : null),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.error),
               ),
             ],
             if (removing) ...[
@@ -462,19 +436,6 @@ class _WorkersTabState extends State<_WorkersTab> {
                             entry, () => _setActivationState(worker, disabled))
                         : null,
                     child: Text(disabled ? 'Enable' : 'Disable'),
-                  ),
-                  OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12)),
-                    onPressed: canAct && widget.onSetFullLocalAccess != null
-                        ? () => _runCatalogAction(
-                            entry,
-                            () => _setFullLocalAccess(
-                                worker, !worker.fullLocalAccessAuthorized))
-                        : null,
-                    child: Text(worker.fullLocalAccessAuthorized
-                        ? 'Disable full access'
-                        : 'Enable full access'),
                   ),
                   OutlinedButton.icon(
                     key: Key('worker-remove-${entry.workerTypeId}'),

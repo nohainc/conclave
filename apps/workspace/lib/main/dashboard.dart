@@ -36,7 +36,6 @@ class WorkspaceDashboard extends StatefulWidget {
     this.onConfigureWorker,
     this.onSetWorkerEnabled,
     this.onRemoveWorker,
-    this.onSetFullLocalAccess,
     this.signedIn = false,
     super.key,
   });
@@ -77,8 +76,6 @@ class WorkspaceDashboard extends StatefulWidget {
   final Future<void> Function(String workerId, bool enabled)?
       onSetWorkerEnabled;
   final Future<bool> Function(String workerId)? onRemoveWorker;
-  final Future<void> Function(String workerId, bool enabled)?
-      onSetFullLocalAccess;
   final bool signedIn;
 
   @override
@@ -288,38 +285,35 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
             child: IndexedStack(
               index: showWorkers ? _selectedTab : 0,
               children: [
-                SingleChildScrollView(
-                  key: const PageStorageKey('workspace-settings-scroll'),
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 820),
-                      child: _WorkspaceTab(
-                        snapshot: snapshot,
-                        signedIn: effectiveSignedIn,
-                        credentialStore: widget.credentialStore,
-                        onStartService: widget.onStartService,
-                        onRegisterService: widget.onRegisterService,
-                        onUnregisterService: widget.onUnregisterService,
-                        onRestartService: widget.onRestartService,
-                        onRegister: widget.onRegister,
-                        onRecoverCredential: widget.onRecoverCredential,
-                        onChangeWorkspaceName: widget.onChangeWorkspaceName,
-                        onRetry: widget.onRetry,
-                        onConnectCloud: widget.onConnectCloud,
-                        onDisconnectCloud: widget.onDisconnectCloud,
-                        onChangeWorkRoot: widget.onChangeWorkRoot,
-                        preventSleep: widget.preventSleep,
-                        onChangePreventSleep: widget.onChangePreventSleep,
-                        onLoadSlots: widget.onLoadWorkerSlots,
-                        onResetSlots: widget.onResetWorkerSlots,
-                        onSetParallelSlots: widget.onSetParallelSlots,
-                        onFolderCommand: widget.onFolderCommand,
-                        requireStepUp: widget.requireStepUp,
-                        onStopService: widget.onStopService,
-                        onRelease: widget.onRelease,
-                        onReset: widget.onReset,
-                      ),
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 820),
+                    child: _WorkspaceTab(
+                      snapshot: snapshot,
+                      signedIn: effectiveSignedIn,
+                      credentialStore: widget.credentialStore,
+                      onStartService: widget.onStartService,
+                      onRegisterService: widget.onRegisterService,
+                      onUnregisterService: widget.onUnregisterService,
+                      onRestartService: widget.onRestartService,
+                      onRegister: widget.onRegister,
+                      onRecoverCredential: widget.onRecoverCredential,
+                      onChangeWorkspaceName: widget.onChangeWorkspaceName,
+                      onRetry: widget.onRetry,
+                      onConnectCloud: widget.onConnectCloud,
+                      onDisconnectCloud: widget.onDisconnectCloud,
+                      onChangeWorkRoot: widget.onChangeWorkRoot,
+                      preventSleep: widget.preventSleep,
+                      onChangePreventSleep: widget.onChangePreventSleep,
+                      onLoadSlots: widget.onLoadWorkerSlots,
+                      onResetSlots: widget.onResetWorkerSlots,
+                      onSetParallelSlots: widget.onSetParallelSlots,
+                      onFolderCommand: widget.onFolderCommand,
+                      requireStepUp: widget.requireStepUp,
+                      onStopService: widget.onStopService,
+                      onRelease: widget.onRelease,
+                      onReset: widget.onReset,
                     ),
                   ),
                 ),
@@ -334,8 +328,6 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                     onConfigureWorker: widget.onConfigureWorker,
                     onSetWorkerEnabled: widget.onSetWorkerEnabled,
                     onRemoveWorker: widget.onRemoveWorker,
-                    onSetFullLocalAccess: widget.onSetFullLocalAccess,
-                    requireStepUp: widget.requireStepUp,
                   )
                 else
                   const SizedBox.shrink(),
@@ -554,282 +546,301 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
     final showReleaseAction = cloudRegistered && widget.onRelease != null;
     final showResetAction = widget.onReset != null;
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(
-                    child: TextField(
-                  controller: _nameController,
-                  enabled: canEditWorkspaceName &&
-                      widget.onChangeWorkspaceName != null,
-                  readOnly: !canEditWorkspaceName ||
-                      widget.onChangeWorkspaceName == null,
-                  maxLength: 200,
-                  onChanged: widget.onChangeWorkspaceName,
-                  decoration: const InputDecoration(
-                    labelText: 'Workspace name',
-                    border: OutlineInputBorder(),
-                    counterText: '',
-                  ),
-                )),
-                const SizedBox(width: 12),
-                Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _workRootController,
-                      enabled: canEditWorkRoot,
-                      readOnly: true,
-                      decoration: InputDecoration(
-                        labelText: 'Work Root',
-                        hintText: 'Not configured',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: TextButton.icon(
-                            onPressed: canEditWorkRoot &&
-                                    widget.onChangeWorkRoot != null
-                                ? _browseWorkRoot
-                                : null,
-                            icon: const Icon(Icons.folder_open, size: 16),
-                            label: const Text('Browse'),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          key: const PageStorageKey('workspace-settings-scroll'),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: IntrinsicHeight(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                              child: TextField(
+                            controller: _nameController,
+                            enabled: canEditWorkspaceName &&
+                                widget.onChangeWorkspaceName != null,
+                            readOnly: !canEditWorkspaceName ||
+                                widget.onChangeWorkspaceName == null,
+                            maxLength: 200,
+                            onChanged: widget.onChangeWorkspaceName,
+                            decoration: const InputDecoration(
+                              labelText: 'Workspace name',
+                              border: OutlineInputBorder(),
+                              counterText: '',
+                            ),
+                          )),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: _workRootController,
+                                enabled: canEditWorkRoot,
+                                readOnly: true,
+                                decoration: InputDecoration(
+                                  labelText: 'Work Root',
+                                  hintText: 'Not configured',
+                                  border: const OutlineInputBorder(),
+                                  suffixIcon: Padding(
+                                    padding: const EdgeInsets.only(right: 6),
+                                    child: TextButton.icon(
+                                      onPressed: canEditWorkRoot &&
+                                              widget.onChangeWorkRoot != null
+                                          ? _browseWorkRoot
+                                          : null,
+                                      icon: const Icon(Icons.folder_open,
+                                          size: 16),
+                                      label: const Text('Browse'),
+                                    ),
+                                  ),
+                                ),
+                              )),
+                        ]),
+                    const SizedBox(height: 8),
+                    ListTile(
+                      key: const Key('prevent-sleep-setting'),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      title: const Text('Prevent sleep'),
+                      subtitle: Text(
+                        'Keep this computer awake while the service runs.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                      onTap: widget.onChangePreventSleep == null
+                          ? null
+                          : () => widget
+                              .onChangePreventSleep!(!widget.preventSleep),
+                      trailing: SizedBox(
+                        width: 42,
+                        height: 32,
+                        child: Transform.scale(
+                          scale: .75,
+                          child: Switch(
+                            value: widget.preventSleep,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            onChanged: widget.onChangePreventSleep?.call,
                           ),
                         ),
                       ),
-                    )),
-              ]),
-              const SizedBox(height: 8),
-              ListTile(
-                key: const Key('prevent-sleep-setting'),
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                title: const Text('Prevent sleep'),
-                subtitle: Text(
-                  'Keep this computer awake while the service runs.',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-                onTap: widget.onChangePreventSleep == null
-                    ? null
-                    : () => widget.onChangePreventSleep!(!widget.preventSleep),
-                trailing: SizedBox(
-                  width: 42,
-                  height: 32,
-                  child: Transform.scale(
-                    scale: .75,
-                    child: Switch(
-                      value: widget.preventSleep,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      onChanged: widget.onChangePreventSleep?.call,
                     ),
-                  ),
-                ),
-              ),
-              WorkerSlotsCard(
-                serviceAvailable: serviceProcessRunning &&
-                    ipcReady &&
-                    widget.onLoadSlots != null,
-                load: widget.onLoadSlots,
-                reset: widget.onResetSlots,
-                setSlots: widget.onSetParallelSlots,
-              ),
-              if (widget.onFolderCommand != null)
-                AllowedFoldersCard(
-                  serviceAvailable: serviceProcessRunning &&
-                      ipcReady &&
-                      widget.onFolderCommand != null,
-                  command: widget.onFolderCommand,
-                  requireStepUp: widget.requireStepUp,
-                  chooseDirectory: () =>
-                      WorkspaceLifecycleController.chooseDirectory(
-                          prompt: 'Select a folder to allow'),
-                ),
-              const SizedBox(height: 16),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
+                    WorkerSlotsCard(
+                      serviceAvailable: serviceProcessRunning &&
+                          ipcReady &&
+                          widget.onLoadSlots != null,
+                      load: widget.onLoadSlots,
+                      reset: widget.onResetSlots,
+                      setSlots: widget.onSetParallelSlots,
+                    ),
+                    if (widget.onFolderCommand != null)
+                      AllowedFoldersCard(
+                        serviceAvailable: serviceProcessRunning &&
+                            ipcReady &&
+                            widget.onFolderCommand != null,
+                        command: widget.onFolderCommand,
+                        requireStepUp: widget.requireStepUp,
+                        chooseDirectory: () =>
+                            WorkspaceLifecycleController.chooseDirectory(
+                                prompt: 'Select a folder to allow'),
+                      ),
+                    if (showStartupError) ...[
+                      const SizedBox(height: 16),
+                      _WorkspaceRecoveryPanel(
+                        issue: widget.snapshot.issue,
+                        retryLabel: !serviceProcessRunning
+                            ? 'Retry service startup'
+                            : 'Retry Cloud connection',
+                        onRetry: widget.onRetry,
+                      ),
+                    ],
+                    const Spacer(),
+                    const SizedBox(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (!serviceLaunchSupported)
-                          Text(
-                            'Background Service unavailable. Rebuild this app with an Apple signing identity for macOS background service execution.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          )
-                        else if (!serviceRegistered)
-                          FilledButton.icon(
-                            onPressed: _serviceActionPending ||
-                                    widget.onRegisterService == null
-                                ? null
-                                : () => _runServiceAction(
-                                      widget.onRegisterService!,
-                                    ),
-                            icon: const Icon(Icons.app_registration, size: 16),
-                            label: const Text('Register workspace'),
-                          )
-                        else if (serviceProcessRunning)
-                          FilledButton.icon(
-                            onPressed: _serviceActionPending ||
-                                    widget.onStopService == null
-                                ? null
-                                : () =>
-                                    _runServiceAction(widget.onStopService!),
-                            icon: _serviceActionPending
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.stop, size: 16),
-                            label: Text(_serviceActionPending
-                                ? 'Stopping…'
-                                : 'Stop Service'),
-                          )
-                        else
-                          FilledButton.icon(
-                            onPressed: _serviceActionPending ||
-                                    widget.onStartService == null
-                                ? null
-                                : () =>
-                                    _runServiceAction(widget.onStartService!),
-                            icon: _serviceActionPending
-                                ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.play_arrow, size: 16),
-                            label: Text(_serviceActionPending
-                                ? 'Starting…'
-                                : 'Start Service'),
-                          ),
-                        if (serviceProcessRunning)
-                          OutlinedButton.icon(
-                            onPressed: _serviceActionPending ||
-                                    widget.onRestartService == null
-                                ? null
-                                : () => _runServiceAction(
-                                      widget.onRestartService!,
-                                    ),
-                            icon: const Icon(Icons.restart_alt, size: 16),
-                            label: const Text('Restart'),
-                          ),
-                        if (serviceRegistered && !serviceProcessRunning)
-                          OutlinedButton.icon(
-                            onPressed: _serviceActionPending ||
-                                    widget.onUnregisterService == null
-                                ? null
-                                : () => _runServiceAction(
-                                      widget.onUnregisterService!,
-                                    ),
-                            icon: const Icon(Icons.remove_circle_outline,
-                                size: 16),
-                            label: const Text('Unregister workspace'),
-                          ),
-                        if (!cloudRegistered)
-                          FilledButton.icon(
-                            onPressed: isConnecting || !effectiveSignedIn
-                                ? null
-                                : widget.onRegister == null &&
-                                        widget.onRecoverCredential == null
-                                    ? null
-                                    : () {
-                                        final name =
-                                            _nameController.text.trim();
-                                        if (widget.onRegister != null) {
-                                          unawaited(widget.onRegister!(name));
-                                        } else {
-                                          unawaited(widget
-                                              .onRecoverCredential!(name));
-                                        }
-                                      },
-                            icon: const Icon(Icons.cloud_upload_outlined,
-                                size: 16),
-                            label: const Text('Register'),
-                          )
-                        else if (serviceProcessRunning && ipcReady)
-                          widget.snapshot.cloudConnected
-                              ? OutlinedButton.icon(
-                                  onPressed: widget.onDisconnectCloud == null
-                                      ? null
-                                      : () => _runServiceAction(
-                                          widget.onDisconnectCloud!),
-                                  icon: const Icon(Icons.cloud_off_outlined,
-                                      size: 16),
-                                  label: const Text('Disconnect'),
+                        Expanded(
+                          child: Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: [
+                              if (!serviceLaunchSupported)
+                                Text(
+                                  'Background Service unavailable. Rebuild this app with an Apple signing identity for macOS background service execution.',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
                                 )
-                              : FilledButton.icon(
-                                  onPressed: widget.onConnectCloud == null
+                              else if (!serviceRegistered)
+                                FilledButton.icon(
+                                  onPressed: _serviceActionPending ||
+                                          widget.onRegisterService == null
                                       ? null
                                       : () => _runServiceAction(
-                                          widget.onConnectCloud!),
-                                  icon: const Icon(Icons.cloud_queue, size: 16),
-                                  label: const Text('Connect'),
+                                            widget.onRegisterService!,
+                                          ),
+                                  icon: const Icon(Icons.app_registration,
+                                      size: 16),
+                                  label: const Text('Register workspace'),
+                                )
+                              else if (serviceProcessRunning)
+                                FilledButton.icon(
+                                  onPressed: _serviceActionPending ||
+                                          widget.onStopService == null
+                                      ? null
+                                      : () => _runServiceAction(
+                                          widget.onStopService!),
+                                  icon: _serviceActionPending
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.stop, size: 16),
+                                  label: Text(_serviceActionPending
+                                      ? 'Stopping…'
+                                      : 'Stop Service'),
+                                )
+                              else
+                                FilledButton.icon(
+                                  onPressed: _serviceActionPending ||
+                                          widget.onStartService == null
+                                      ? null
+                                      : () => _runServiceAction(
+                                          widget.onStartService!),
+                                  icon: _serviceActionPending
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.play_arrow, size: 16),
+                                  label: Text(_serviceActionPending
+                                      ? 'Starting…'
+                                      : 'Start Service'),
                                 ),
-                      ],
-                    ),
-                  ),
-                  if (showReleaseAction || showResetAction) ...[
-                    const SizedBox(width: 12),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      alignment: WrapAlignment.end,
-                      children: [
-                        if (showReleaseAction)
-                          OutlinedButton.icon(
-                            onPressed: () => unawaited(widget.onRelease!()),
-                            icon: const Icon(Icons.person_remove_outlined,
-                                size: 16),
-                            label: const Text('Release'),
+                              if (serviceProcessRunning)
+                                OutlinedButton.icon(
+                                  onPressed: _serviceActionPending ||
+                                          widget.onRestartService == null
+                                      ? null
+                                      : () => _runServiceAction(
+                                            widget.onRestartService!,
+                                          ),
+                                  icon: const Icon(Icons.restart_alt, size: 16),
+                                  label: const Text('Restart'),
+                                ),
+                              if (serviceRegistered && !serviceProcessRunning)
+                                OutlinedButton.icon(
+                                  onPressed: _serviceActionPending ||
+                                          widget.onUnregisterService == null
+                                      ? null
+                                      : () => _runServiceAction(
+                                            widget.onUnregisterService!,
+                                          ),
+                                  icon: const Icon(Icons.remove_circle_outline,
+                                      size: 16),
+                                  label: const Text('Unregister workspace'),
+                                ),
+                              if (!cloudRegistered)
+                                FilledButton.icon(
+                                  onPressed: isConnecting || !effectiveSignedIn
+                                      ? null
+                                      : widget.onRegister == null &&
+                                              widget.onRecoverCredential == null
+                                          ? null
+                                          : () {
+                                              final name =
+                                                  _nameController.text.trim();
+                                              if (widget.onRegister != null) {
+                                                unawaited(
+                                                    widget.onRegister!(name));
+                                              } else {
+                                                unawaited(
+                                                    widget.onRecoverCredential!(
+                                                        name));
+                                              }
+                                            },
+                                  icon: const Icon(Icons.cloud_upload_outlined,
+                                      size: 16),
+                                  label: const Text('Register'),
+                                )
+                              else if (serviceProcessRunning && ipcReady)
+                                widget.snapshot.cloudConnected
+                                    ? OutlinedButton.icon(
+                                        onPressed:
+                                            widget.onDisconnectCloud == null
+                                                ? null
+                                                : () => _runServiceAction(
+                                                    widget.onDisconnectCloud!),
+                                        icon: const Icon(
+                                            Icons.cloud_off_outlined,
+                                            size: 16),
+                                        label: const Text('Disconnect'),
+                                      )
+                                    : FilledButton.icon(
+                                        onPressed: widget.onConnectCloud == null
+                                            ? null
+                                            : () => _runServiceAction(
+                                                widget.onConnectCloud!),
+                                        icon: const Icon(Icons.cloud_queue,
+                                            size: 16),
+                                        label: const Text('Connect'),
+                                      ),
+                            ],
                           ),
-                        if (showResetAction)
-                          OutlinedButton.icon(
-                            onPressed: widget.onReset,
-                            icon: Icon(Icons.delete_forever_outlined,
-                                size: 16, color: theme.colorScheme.error),
-                            label: Text('Reset',
-                                style:
-                                    TextStyle(color: theme.colorScheme.error)),
-                            style: OutlinedButton.styleFrom(
-                              side: BorderSide(
-                                color: theme.colorScheme.error
-                                    .withValues(alpha: 0.5),
-                              ),
-                            ),
+                        ),
+                        if (showReleaseAction || showResetAction) ...[
+                          const SizedBox(width: 12),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            alignment: WrapAlignment.end,
+                            children: [
+                              if (showReleaseAction)
+                                OutlinedButton.icon(
+                                  onPressed: () =>
+                                      unawaited(widget.onRelease!()),
+                                  icon: const Icon(Icons.person_remove_outlined,
+                                      size: 16),
+                                  label: const Text('Release'),
+                                ),
+                              if (showResetAction)
+                                OutlinedButton.icon(
+                                  onPressed: widget.onReset,
+                                  icon: Icon(Icons.delete_forever_outlined,
+                                      size: 16, color: theme.colorScheme.error),
+                                  label: Text('Reset',
+                                      style: TextStyle(
+                                          color: theme.colorScheme.error)),
+                                  style: OutlinedButton.styleFrom(
+                                    side: BorderSide(
+                                      color: theme.colorScheme.error
+                                          .withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
+                        ],
                       ],
                     ),
                   ],
-                ],
+                ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (showStartupError) ...[
-            _WorkspaceRecoveryPanel(
-              issue: widget.snapshot.issue,
-              retryLabel: !serviceProcessRunning
-                  ? 'Retry service startup'
-                  : 'Retry Cloud connection',
-              onRetry: widget.onRetry,
             ),
-            const SizedBox(height: 16),
-          ],
-        ],
-      ),
+          ),
+        );
+      },
     );
   }
 }

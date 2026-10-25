@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:conclave_workspace/local_worker_registry.dart';
+import 'package:conclave_workspace/local_worker_permissions.dart';
 import 'package:conclave_workspace/tool_profile_catalog.dart';
 
 import 'support/logical_worker_catalog_fixture.dart';
@@ -58,8 +59,13 @@ void main() {
     expect(record['productWorkerTypeId'], 'chatgpt');
     expect(record['activationState'], 'enabled');
     expect(record['localConcurrencyLimit'], 2);
-    expect(record['localPermissions'], ['repository:read']);
-    expect(record['fullLocalAccessAuthorized'], isFalse);
+    expect(record['localPermissions'], [
+      'network:use',
+      'repository:read',
+      'repository:write',
+      'shell:execute',
+    ]);
+    expect(record['fullLocalAccessAuthorized'], isTrue);
     expect(record['readinessState'], 'ready');
     expect(record['providerToolName'], 'Codex CLI');
     expect(record['providerToolVersion'], '1.2.3');
@@ -79,27 +85,18 @@ void main() {
         '/Users/test/.local/bin/codex');
   });
 
-  test('full local access is owner-controlled and grants network permission',
+  test('every Worker always has full local access and all permissions',
       () async {
     final worker = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
       localPermissions: const ['repository:read', 'shell:execute'],
     );
 
-    final enabled = await registry.setFullLocalAccess(worker.id, true);
-    expect(enabled.fullLocalAccessAuthorized, isTrue);
-    expect(
-        enabled.localPermissions,
-        containsAll([
-          'repository:read',
-          'repository:write',
-          'shell:execute',
-          'network:use'
-        ]));
-
-    final disabled = await registry.setFullLocalAccess(worker.id, false);
-    expect(disabled.fullLocalAccessAuthorized, isFalse);
-    expect(disabled.localPermissions, isNot(contains('network:use')));
+    expect(worker.fullLocalAccessAuthorized, isTrue);
+    expect(worker.localPermissions, containsAll(executionPermissionIds));
+    final reloaded = (await registry.find(worker.id))!;
+    expect(reloaded.fullLocalAccessAuthorized, isTrue);
+    expect(reloaded.localPermissions, containsAll(executionPermissionIds));
   });
 
   test(
@@ -255,7 +252,6 @@ void main() {
     final worker = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('gemini'),
     );
-    await registry.setFullLocalAccess(worker.id, true);
     await registry.remove(worker.id);
 
     expect(await registry.list(includeRemoved: true), isEmpty);
@@ -267,7 +263,6 @@ void main() {
     final readded = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('gemini'),
     );
-    expect(readded.fullLocalAccessAuthorized, isFalse);
     expect(readded.revision, 1);
   });
 

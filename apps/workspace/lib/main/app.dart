@@ -839,7 +839,6 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
           lifecycle.workerCatalog.configureWorker(worker.workerTypeId),
       onSetWorkerEnabled: lifecycle.workerCatalog.setEnabled,
       onRemoveWorker: lifecycle.workerCatalog.removeWorker,
-      onSetFullLocalAccess: lifecycle.workerCatalog.setFullLocalAccess,
       workerRevision: _workerRevision,
       credentialStore: lifecycle.credentialStore,
       workerCatalogCoordinator: lifecycle.workerCatalog,
@@ -866,7 +865,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       ),
       home: Scaffold(
         body: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 750, minHeight: 420),
+          constraints: const BoxConstraints(minWidth: 750, minHeight: 700),
           child: lifecycle.hidden
               ? const Center(
                   child: Text('Workspace is running in the background.'))

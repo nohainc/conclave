@@ -942,6 +942,10 @@ void main() {
     expect(find.text('Error message copied'), findsOneWidget);
     await tester.tap(find.text('Retry service startup'));
     expect(retried, isTrue);
+    // Dismiss the confirmation snackbar so it does not obscure bottom buttons
+    ScaffoldMessenger.of(tester.element(find.text('Start Service')))
+        .clearSnackBars();
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Start Service'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Start Service'));
@@ -1789,7 +1793,6 @@ void main() {
         'Check for updates',
         'Test',
         'Enable',
-        'Enable full access'
       ])
         tester
             .getTopLeft(find.ancestor(
@@ -1798,7 +1801,7 @@ void main() {
                     (widget) => widget is ButtonStyleButton)))
             .dy
     };
-    expect(actionTops, hasLength(4));
+    expect(actionTops, hasLength(3));
     expect(_workerDetail('installed-version', '1.2.3'), findsOneWidget);
     expect(find.textContaining('Test failed (execution_test_failed)'),
         findsOneWidget);

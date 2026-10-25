@@ -707,6 +707,36 @@ Thread, and size; D1 stores metadata/URL references, bounded display previews an
 Cloud reads the bytes from R2 when it sends `assignment.start`, so they are
 transient on the wire and never persisted in D1.
 
+Each upload also records a `user_files` row (migration `0086_user_files.sql`:
+owner, Thread, Space, name, media type, size). The sum of a user's rows is
+capped at 1 GiB (`USER_STORAGE_QUOTA_BYTES`); an upload that would exceed it
+gets 413 before anything is written. The check is not reserved, so parallel
+uploads can overshoot by at most one batch. `GET /api/files` lists the
+caller's files newest first (100 per page, `?before=<createdAt>` for more) with
+`usage { usedBytes, fileCount, quotaBytes }`, the Thread/Space names while the
+caller can still open the Thread, and `inUse` when a discussion message or
+Work Request cites the file. `DELETE /api/files/{fileId}` is owner-only: it
+removes the R2 object and its preview and frees the quota. History that cited
+the file keeps its name and size, and downloads return 404. The daily cron
+deletes uploads older than a day that nothing cites, at most 100 per run. The
+AX app shows all of this in My Files (`/files`). Its **Synchronize storage**
+action calls authenticated `POST /api/files/sync`. The optional `phase`
+(`storage` by default, then `records`) and `cursor` query parameters continue
+bounded batches; responses contain `next { phase, cursor? }` or `null` and current
+`usage`. AX follows continuations and reloads the list on completion. Failures
+allow a retry; completed batches remain applied and are safe to repeat.
+
+Synchronization scans only the `work-request-inputs/` prefix, recovering uploads
+whose R2 metadata identifies the caller and original Thread, excluding previews.
+It refreshes names, media types and sizes, and removes the caller's accounting
+rows only after a successful R2 head confirms absence. It never deletes R2 bytes,
+changes another user's records, or rewrites historical attachment references.
+Older objects without ownership/Thread metadata cannot be recovered. Recovered
+bytes count toward quota even if usage exceeds the limit. The scan traverses
+the shared prefix in bounded pages, so duration grows with total stored uploads.
+Concurrent uploads/deletions may require another synchronization; this is not
+an atomic snapshot. Existing orphan cleanup still applies to recovered uploads.
+
 Attachments are validated as bounded request inputs and are materialized inside
 the authorized Space work directory. Worker/Profile capability metadata is not
 used to admit or reject them; workflow policy and the Space grant's execution

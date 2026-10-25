@@ -93,6 +93,7 @@ class AppBreadcrumb extends StatelessWidget {
         ],
       AxRouteKind.people => [_breadcrumbText('People', isCurrent: true)],
       AxRouteKind.notes => [_breadcrumbText('My Notes', isCurrent: true)],
+      AxRouteKind.files => [_breadcrumbText('My Files', isCurrent: true)],
       AxRouteKind.archivedSpaces => [
           _breadcrumbText('Archived Spaces', isCurrent: true)
         ],

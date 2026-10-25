@@ -109,6 +109,17 @@ class GlobalAppMenu extends StatelessWidget {
             child: const Text('My Notes',
                 style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500))),
         MenuItemButton(
+            key: const ValueKey('menu-my-files'),
+            style: itemStyle(),
+            leadingIcon:
+                Icon(Icons.folder_outlined, size: 16, color: menuIconColor),
+            onPressed: () {
+              onNavigateTo(const AxNavigation.files());
+              if (compact) Scaffold.maybeOf(context)?.closeDrawer();
+            },
+            child: const Text('My Files',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500))),
+        MenuItemButton(
           style: itemStyle(),
           leadingIcon: Icon(
             Icons.grid_view_rounded,

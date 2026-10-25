@@ -136,7 +136,6 @@ void main() {
       expect(coordinator.snapshot.profiles['gemini']!.state,
           WorkspaceWorkerProfileState.unavailable);
       expect(chatgptWorker.workerTypeId, 'chatgpt');
-      await coordinator.setFullLocalAccess(chatgptWorker.id, true);
       expect((await registry.find(chatgptWorker.id))!.fullLocalAccessAuthorized,
           isTrue);
 

@@ -846,6 +846,19 @@ export async function routeWorkerRequest(
       );
     }
 
+    if (url.pathname === "/api/files" && request.method === "GET")
+      return await handlers.handleListUserFiles!(request, env, ctx);
+    if (url.pathname === "/api/files/sync" && request.method === "POST")
+      return await handlers.handleSyncUserFiles!(request, env, ctx);
+    const userFileMatch = url.pathname.match(/^\/api\/files\/([^/]+)$/);
+    if (userFileMatch?.[1] && request.method === "DELETE")
+      return await handlers.handleDeleteUserFile!(
+        request,
+        env,
+        decodeURIComponent(userFileMatch[1]),
+        ctx,
+      );
+
     if (url.pathname === "/api/notes") {
       if (request.method === "GET")
         return await handlers.handleListNotes!(request, env, ctx);

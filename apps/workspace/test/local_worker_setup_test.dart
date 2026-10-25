@@ -111,6 +111,7 @@ void main() {
 
   test('default local permission list uses canonical permission IDs', () {
     expect(defaultLocalWorkerPermissions, [
+      'network:use',
       'repository:read',
       'repository:write',
       'shell:execute',

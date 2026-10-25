@@ -141,15 +141,6 @@ class IpcWorkspaceWorkerCatalog extends WorkspaceNotifier
     await refresh();
   }
 
-  @override
-  Future<void> setFullLocalAccess(String workerId, bool enabled) async {
-    await _request('workers.setFullLocalAccess', payload: {
-      'workerId': workerId,
-      'enabled': enabled,
-    });
-    await refresh();
-  }
-
   static WorkerCatalogSnapshot _decodeSnapshot(Map<String, Object?> json) {
     List<WorkerDescriptor> descriptorsFrom(Object? value) {
       if (value is! List) return const [];

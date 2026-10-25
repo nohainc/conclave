@@ -13,6 +13,14 @@ extension _AxAppRunDetails on _AxAppStateMixin {
           onOpenThread: (spaceId, threadId) =>
               _navigateTo(AxNavigation.thread(spaceId, threadId)),
         );
+      case AxRouteKind.files:
+        final source = widget.dataSource;
+        if (source is! AxUserFilesDataSource) break;
+        return FilesPage(
+          source: source as AxUserFilesDataSource,
+          onOpenThread: (spaceId, threadId) =>
+              _navigateTo(AxNavigation.thread(spaceId, threadId)),
+        );
       case AxRouteKind.archivedSpaces:
         return ArchivedSpacesPage(
           archivedSpaces: store.archivedSpaces,

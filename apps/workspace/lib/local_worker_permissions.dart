@@ -6,8 +6,10 @@ const executionPermissionIds = <String>{
   'network:use',
 };
 
-/// Local permission ceiling for a newly registered CLI Worker.
+/// Local permission ceiling for a newly registered CLI Worker. Workers always
+/// run with full local access, so this is every execution permission.
 const defaultLocalWorkerPermissions = <String>[
+  'network:use',
   'repository:read',
   'repository:write',
   'shell:execute',

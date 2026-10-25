@@ -7,6 +7,7 @@ enum AxRouteKind {
   run,
   people,
   notes,
+  files,
   archivedSpaces,
   workspaces,
   profileSecurity,
@@ -53,6 +54,8 @@ class AxNavigation {
   const AxNavigation.people() : this._(kind: AxRouteKind.people);
 
   const AxNavigation.notes() : this._(kind: AxRouteKind.notes);
+
+  const AxNavigation.files() : this._(kind: AxRouteKind.files);
 
   const AxNavigation.archivedSpaces()
       : this._(kind: AxRouteKind.archivedSpaces);
@@ -126,6 +129,7 @@ class AxNavigation {
     if (parts case ['spaces'] || ['spaces']) return const AxNavigation.spaces();
     if (parts case ['people']) return const AxNavigation.people();
     if (parts case ['notes']) return const AxNavigation.notes();
+    if (parts case ['files']) return const AxNavigation.files();
     if (parts case ['archived-spaces']) {
       return const AxNavigation.archivedSpaces();
     }
@@ -182,6 +186,7 @@ class AxNavigation {
           : Uri(path: '/spaces/$spaceId/runs/$runId'),
       AxRouteKind.people => Uri(path: '/people'),
       AxRouteKind.notes => Uri(path: '/notes'),
+      AxRouteKind.files => Uri(path: '/files'),
       AxRouteKind.archivedSpaces => Uri(path: '/archived-spaces'),
       AxRouteKind.workspaces => workspaceId != null
           ? Uri(path: '/workspaces/$workspaceId')

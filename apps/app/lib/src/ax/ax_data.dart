@@ -2,6 +2,8 @@ import 'ax_people.dart';
 export 'ax_people.dart';
 import 'ax_notes.dart';
 export 'ax_notes.dart';
+import 'ax_files.dart';
+export 'ax_files.dart';
 import 'ax_workflow_configuration.dart';
 export 'ax_workflow_configuration.dart';
 import 'ax_workspace_member_access.dart';
@@ -30,6 +32,7 @@ part 'ax_data/workspace_api.dart';
 part 'ax_data/space_api.dart';
 part 'ax_data/read_model_api.dart';
 part 'ax_data/notes_api.dart';
+part 'ax_data/files_api.dart';
 
 class AxApiException implements Exception {
   const AxApiException(this.message, {this.statusCode});
@@ -183,7 +186,8 @@ class AxApiClient extends _AxApiClientCore
         _WorkspaceApi,
         _SpaceApi,
         _ReadModelApi,
-        _NotesApi
+        _NotesApi,
+        _FilesApi
     implements
         AxWorkflowConfigurationDataSource,
         AxSpaceWorkflowConfigurationDataSource,
@@ -198,6 +202,7 @@ class AxApiClient extends _AxApiClientCore
         AxThreadReadDataSource,
         AxNotificationDataSource,
         AxPinDataSource,
-        AxNotesDataSource {
+        AxNotesDataSource,
+        AxUserFilesDataSource {
   AxApiClient({super.baseUrl, super.client});
 }

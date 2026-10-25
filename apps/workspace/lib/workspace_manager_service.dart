@@ -619,24 +619,6 @@ class WorkspaceManagerService {
               'worker_not_found', 'Worker does not exist.');
         }
         return worker.toJson();
-      case 'workers.setFullLocalAccess':
-        _rejectRemovingWorker(payload['workerId']);
-        final registry = workspace.localWorkerRegistry;
-        if (registry == null) {
-          throw const WorkspaceManagerProtocolException(
-              'not_configured', 'Local Worker registry is not available.');
-        }
-        final workerId = payload['workerId'];
-        final enabled = payload['enabled'];
-        if (workerId is! String || enabled is! bool) {
-          throw const WorkspaceManagerProtocolException(
-              'invalid_request', 'workerId and enabled are required.');
-        }
-        // The Manager IPC endpoint is restricted to the owner OS account and
-        // its installation key. Cloud assignment payloads never reach this
-        // mutation.
-        final worker = await registry.setFullLocalAccess(workerId, enabled);
-        return worker.toJson();
       case 'workers.testWorker':
       case 'worker.test':
         _rejectRemovingWorker(payload['workerId']);
