@@ -1,4 +1,7 @@
-import { WorkspaceWorkerInventoryEntrySchema } from "@conclave/workspace-runtime-protocol";
+import {
+  WorkspaceAllowedFolderSchema,
+  WorkspaceWorkerInventoryEntrySchema,
+} from "@conclave/workspace-runtime-protocol";
 import type { WorkspaceGatewayEnv } from "./contracts.js";
 
 /** Persists the Workspace-owned logical Worker snapshot and prunes omissions. */
@@ -40,6 +43,12 @@ export async function recordWorkspaceWorkerInventory(
       .bind(workspaceId, parallelSlots, now)
       .run();
   }
+  await recordWorkspaceAllowedFolders(
+    env,
+    workspaceId,
+    (payload as Record<string, unknown>).allowedFolders,
+    now,
+  );
   for (const raw of reports) {
     if (!raw || typeof raw !== "object") continue;
     const item = raw as Record<string, unknown>;
@@ -269,4 +278,71 @@ export async function recordWorkspaceWorkerInventory(
   )
     .bind(workspaceId, now)
     .run();
+}
+
+/**
+ * Replaces the Workspace's Allowed Folders with the reported list. An omitted
+ * or malformed list keeps the stored one. Removed folders are detached from
+ * every Space; local files are never affected.
+ */
+export async function recordWorkspaceAllowedFolders(
+  env: WorkspaceGatewayEnv,
+  workspaceId: string,
+  reported: unknown,
+  now: string,
+): Promise<void> {
+  if (!Array.isArray(reported) || reported.length > 32) return;
+  const folders = [];
+  for (const entry of reported) {
+    const parsed = WorkspaceAllowedFolderSchema.safeParse(entry);
+    if (!parsed.success) return;
+    folders.push(parsed.data);
+  }
+  if (new Set(folders.map((folder) => folder.id)).size !== folders.length)
+    return;
+  const db = env.CONCLAVE_DB;
+  const existing = await db
+    .prepare(
+      "SELECT folder_id FROM workspace_allowed_folders WHERE workspace_id = ?1",
+    )
+    .bind(workspaceId)
+    .all<{ folder_id: string }>();
+  const keep = new Set(folders.map((folder) => folder.id));
+  for (const row of existing.results ?? []) {
+    if (keep.has(row.folder_id)) continue;
+    await db
+      .prepare(
+        "DELETE FROM space_additional_folders WHERE workspace_id = ?1 AND folder_id = ?2",
+      )
+      .bind(workspaceId, row.folder_id)
+      .run();
+    await db
+      .prepare(
+        "DELETE FROM workspace_allowed_folders WHERE workspace_id = ?1 AND folder_id = ?2",
+      )
+      .bind(workspaceId, row.folder_id)
+      .run();
+  }
+  for (const folder of folders) {
+    await db
+      .prepare(
+        `INSERT INTO workspace_allowed_folders
+            (workspace_id, folder_id, display_name, status, checked_at, updated_at)
+          VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+          ON CONFLICT(workspace_id, folder_id) DO UPDATE SET
+            display_name = excluded.display_name,
+            status = excluded.status,
+            checked_at = excluded.checked_at,
+            updated_at = excluded.updated_at`,
+      )
+      .bind(
+        workspaceId,
+        folder.id,
+        folder.displayName,
+        folder.status,
+        folder.checkedAt,
+        now,
+      )
+      .run();
+  }
 }

@@ -77,6 +77,12 @@ export type ServiceConnectionState = (typeof SERVICE_CONNECTION_STATES)[number];
 export const SERVICE_READINESS_CAPABILITY = "workspace.readiness.v1";
 
 /**
+ * Capability Cloud announces in `hello.ack` when `worker.inventory` may carry
+ * `allowedFolders`. Older Cloud rejects the field, so Services wait for it.
+ */
+export const ALLOWED_FOLDERS_CAPABILITY = "workspace.allowed_folders.v1";
+
+/**
  * Readiness published by the Service. `syncGeneration` increases every time
  * the Service completes a (re)synchronization with Cloud, so Cloud can ignore
  * a late readiness report from before the latest sync.

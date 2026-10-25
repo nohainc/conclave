@@ -1,6 +1,7 @@
 import { handleListPeople } from "./people.js";
 import { handleGetAvatar, handleUploadAvatar } from "./profile.js";
 import { handleWorkflowWorkspace } from "./workflow-workspace.js";
+import { handleSpaceAdditionalFolders } from "./space-additional-folders.js";
 import { handleWorkflowConfigurations } from "./workflow-configurations.js";
 import { handleWorkflowDefault } from "./workflow-default.js";
 import { handleWorkspaceMemberAccess } from "./workspace-member-access.js";
@@ -359,6 +360,16 @@ export async function routeWorkerRequest(
         request,
         env,
         workspaceSettingsMatch[2],
+        ctx,
+      );
+    const spaceAdditionalFoldersMatch = url.pathname.match(
+      /^\/api\/spaces\/([^/]+)\/additional-folders$/,
+    );
+    if (spaceAdditionalFoldersMatch)
+      return await handleSpaceAdditionalFolders(
+        request,
+        env,
+        decodeURIComponent(spaceAdditionalFoldersMatch[1]!),
         ctx,
       );
     const spaceWorkflowDefaultMatch = url.pathname.match(

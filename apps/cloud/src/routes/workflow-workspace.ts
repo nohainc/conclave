@@ -337,6 +337,15 @@ export async function handleWorkflowWorkspace(
         )
         .bind(spaceId),
     );
+    // Additional folders belong to one Workspace; switching detaches them.
+    // Local files are untouched.
+    statements.push(
+      db
+        .prepare(
+          "DELETE FROM space_additional_folders WHERE space_id = ?1 AND workspace_id IS NOT ?2",
+        )
+        .bind(spaceId, selected),
+    );
     statements.push(
       db
         .prepare("DELETE FROM space_workflow_defaults WHERE space_id = ?1")
@@ -373,6 +382,13 @@ export async function handleWorkflowWorkspace(
           "DELETE FROM space_workflow_defaults WHERE space_id IN (SELECT s.id FROM spaces s WHERE s.owner_user_id=?1 AND NOT EXISTS (SELECT 1 FROM space_workflow_settings ws WHERE ws.space_id=s.id))",
         )
         .bind(ownerUserId),
+    );
+    statements.push(
+      db
+        .prepare(
+          "DELETE FROM space_additional_folders WHERE workspace_id IS NOT ?2 AND space_id IN (SELECT s.id FROM spaces s WHERE s.owner_user_id=?1 AND NOT EXISTS (SELECT 1 FROM space_workflow_settings ws WHERE ws.space_id=s.id))",
+        )
+        .bind(ownerUserId, selected),
     );
   }
   const affectedSpaces = spaceId

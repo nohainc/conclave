@@ -10,6 +10,7 @@ import {
   serializeWorkspaceRuntimeMessage,
   WORKSPACE_RUNTIME_PROTOCOL_NAME,
   WORKSPACE_RUNTIME_PROTOCOL_VERSION,
+  ALLOWED_FOLDERS_CAPABILITY,
   ASSIGNMENT_STARTUP_CAPABILITY,
   SERVICE_READINESS_CAPABILITY,
   assignmentStartupPayload,
@@ -1010,6 +1011,7 @@ export class WorkspaceGateway implements DurableObject {
             cloudCapabilities: [
               SERVICE_READINESS_CAPABILITY,
               ASSIGNMENT_STARTUP_CAPABILITY,
+              ALLOWED_FOLDERS_CAPABILITY,
             ],
           },
         });
