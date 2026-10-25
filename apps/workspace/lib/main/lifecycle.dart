@@ -690,8 +690,9 @@ class WorkspaceLifecycleController extends ChangeNotifier {
 
   static Future<void> openPath(String path) => _desktopShell.openPath(path);
 
-  static Future<String?> chooseDirectory({String? initialPath}) =>
-      _desktopShell.chooseDirectory(initialPath: initialPath);
+  static Future<String?> chooseDirectory(
+          {String? initialPath, String? prompt}) =>
+      _desktopShell.chooseDirectory(initialPath: initialPath, prompt: prompt);
 
   static Future<String?> requestWorkRootAccess({String? initialPath}) =>
       _desktopShell.requestWorkRootAccess(initialPath: initialPath);

@@ -29,6 +29,7 @@ class WorkspaceDashboard extends StatefulWidget {
     this.onLoadWorkerSlots,
     this.onResetWorkerSlots,
     this.onSetParallelSlots,
+    this.onFolderCommand,
     this.workerRevision = 0,
     this.credentialStore = const PlatformSecureCredentialStore(),
     this.workerCatalogCoordinator,
@@ -57,6 +58,7 @@ class WorkspaceDashboard extends StatefulWidget {
   final VoidCallback? onReset;
   final VoidCallback? onAccountAction;
   final Future<bool> Function(String reason)? requireStepUp;
+  final AllowedFolderCommand? onFolderCommand;
   final VoidCallback? onQuit;
   final Future<void> Function()? onRetry;
   final Future<void> Function()? onCheckForUpdates;
@@ -312,6 +314,8 @@ class _WorkspaceDashboardState extends State<WorkspaceDashboard> {
                         onLoadSlots: widget.onLoadWorkerSlots,
                         onResetSlots: widget.onResetWorkerSlots,
                         onSetParallelSlots: widget.onSetParallelSlots,
+                        onFolderCommand: widget.onFolderCommand,
+                        requireStepUp: widget.requireStepUp,
                         onStopService: widget.onStopService,
                         onRelease: widget.onRelease,
                         onReset: widget.onReset,
@@ -365,6 +369,8 @@ class _WorkspaceTab extends StatefulWidget {
     this.onLoadSlots,
     this.onResetSlots,
     this.onSetParallelSlots,
+    this.onFolderCommand,
+    this.requireStepUp,
     this.onStopService,
     this.onRelease,
     this.onReset,
@@ -387,6 +393,8 @@ class _WorkspaceTab extends StatefulWidget {
   final Future<Map<String, Object?>> Function()? onLoadSlots;
   final Future<Map<String, Object?>> Function()? onResetSlots;
   final Future<Map<String, Object?>> Function(int slots)? onSetParallelSlots;
+  final AllowedFolderCommand? onFolderCommand;
+  final Future<bool> Function(String reason)? requireStepUp;
   final bool preventSleep;
   final Future<void> Function(bool value)? onChangePreventSleep;
   final Future<void> Function()? onStopService;
@@ -631,6 +639,17 @@ class _WorkspaceTabState extends State<_WorkspaceTab> {
                 reset: widget.onResetSlots,
                 setSlots: widget.onSetParallelSlots,
               ),
+              if (widget.onFolderCommand != null)
+                AllowedFoldersCard(
+                  serviceAvailable: serviceProcessRunning &&
+                      ipcReady &&
+                      widget.onFolderCommand != null,
+                  command: widget.onFolderCommand,
+                  requireStepUp: widget.requireStepUp,
+                  chooseDirectory: () =>
+                      WorkspaceLifecycleController.chooseDirectory(
+                          prompt: 'Select a folder to allow'),
+                ),
               const SizedBox(height: 16),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

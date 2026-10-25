@@ -276,7 +276,11 @@ Workspace.app; Spaces can only choose from that list.
   Workspace belongs to the requesting user, and switching a Space to another
   Workspace detaches its folders (files untouched).
 
-Status: the service registry and IPC are implemented. Workspace.app UI,
+Workspace.app shows an Allowed folders card on the Workspace tab. Adding a
+folder uses the native picker and local step-up authentication; removing one
+asks for confirmation and states that files stay on disk.
+
+Status: the service registry, IPC, and Workspace.app card are implemented.
 Cloud publication and Space attachment, AX web selection, and Engine/Profile
 pass-through to provider CLIs are follow-up phases.
 

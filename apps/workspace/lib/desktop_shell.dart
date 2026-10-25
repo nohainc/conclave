@@ -67,10 +67,11 @@ class DesktopShell {
     );
   }
 
-  Future<String?> chooseDirectory({String? initialPath}) async {
+  Future<String?> chooseDirectory({String? initialPath, String? prompt}) async {
     final native = await _invokePathMethod('chooseDirectory', initialPath);
     if (native != null) return native;
-    final command = directoryPickerCommand(_os, initialPath: initialPath);
+    final command = directoryPickerCommand(_os,
+        initialPath: initialPath, prompt: prompt ?? _workRootPrompt);
     if (command == null) return null;
     try {
       final result = await _runProcess(command.$1, command.$2);
@@ -136,6 +137,7 @@ class DesktopShell {
   static (String, List<String>)? directoryPickerCommand(
     String os, {
     String? initialPath,
+    String prompt = _workRootPrompt,
   }) {
     switch (os) {
       case 'macos':
@@ -148,14 +150,14 @@ class DesktopShell {
           'osascript',
           [
             '-e',
-            'POSIX path of (choose folder with prompt "$_workRootPrompt"'
+            'POSIX path of (choose folder with prompt "${appleScriptEscape(prompt)}"'
                 '$location)',
           ],
         );
       case 'linux':
         return (
           'zenity',
-          ['--file-selection', '--directory', '--title=$_workRootPrompt'],
+          ['--file-selection', '--directory', '--title=$prompt'],
         );
       case 'windows':
         return (
@@ -166,7 +168,7 @@ class DesktopShell {
             '''
 Add-Type -AssemblyName System.Windows.Forms
 \$f = New-Object System.Windows.Forms.FolderBrowserDialog
-\$f.Description = "$_workRootPrompt"
+\$f.Description = "${prompt.replaceAll('"', "'")}"
 if (\$f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { \$f.SelectedPath }
 ''',
           ],

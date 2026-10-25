@@ -43,3 +43,4 @@ part 'main/management.dart';
 part 'main/shell.dart';
 part 'main/dashboard.dart';
 part 'main/workers.dart';
+part 'main/folders.dart';
