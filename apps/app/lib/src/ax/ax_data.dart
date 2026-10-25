@@ -190,6 +190,7 @@ class AxApiClient extends _AxApiClientCore
         AxWorkerUsageDataSource,
         AxWorkflowDefaultDataSource,
         AxWorkflowWorkspaceDataSource,
+        AxSpaceAdditionalFolderDataSource,
         AxWorkspaceMemberAccessDataSource,
         AxWorkspacePersonAccessDataSource,
         AxWorkspaceSharingDataSource,

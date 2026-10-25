@@ -5,7 +5,49 @@ import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
 import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
 import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state_store.dart';
+import 'package:conclave_app/src/ax/ax_data.dart';
 import 'workflows_page_test.dart' show WorkflowSource;
+
+class FolderSource extends WorkflowSource
+    implements AxSpaceAdditionalFolderDataSource {
+  FolderSource({this.eligible = true});
+  final bool eligible;
+  final attached = <String>{};
+  final saves = <List<String>>[];
+
+  AxSpaceAdditionalFolders _state() => AxSpaceAdditionalFolders(
+        eligible: eligible,
+        workspaceId: 'ws',
+        folders: eligible
+            ? [
+                for (final (id, name, status) in [
+                  ('folder-00000000000000a1', 'api', 'available'),
+                  ('folder-00000000000000b2', 'Gone', 'missing'),
+                ])
+                  AxAdditionalFolder(
+                      id: id,
+                      displayName: name,
+                      status: status,
+                      attached: attached.contains(id)),
+              ]
+            : const [],
+      );
+
+  @override
+  Future<AxSpaceAdditionalFolders> loadSpaceAdditionalFolders(
+          String spaceId) async =>
+      _state();
+
+  @override
+  Future<AxSpaceAdditionalFolders> saveSpaceAdditionalFolders(
+      String spaceId, List<String> folderIds) async {
+    saves.add(folderIds);
+    attached
+      ..clear()
+      ..addAll(folderIds);
+    return _state();
+  }
+}
 
 const ownerSpace =
     AxSpace(id: 'S', name: 'Space', branch: '', lastActivity: 'now');
@@ -132,5 +174,50 @@ void main() {
     await pumpSpace(tester, source, memberSpace);
     expect(find.byKey(const ValueKey('space-workspace')), findsNothing);
     expect(find.text('Workspace: Second Workspace'), findsOneWidget);
+  });
+
+  testWidgets('owner attaches Workspace folders and is warned before detaching',
+      (tester) async {
+    final source = FolderSource();
+    await pumpSpace(tester, source, ownerSpace);
+    final button = find.byKey(const ValueKey('space-additional-folders'));
+    expect(button, findsOneWidget);
+
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    final missing = tester.widget<CheckboxListTile>(
+        find.byKey(const ValueKey('space-folder-folder-00000000000000b2')));
+    expect(missing.onChanged, isNull,
+        reason: 'A missing folder cannot be newly attached.');
+    await tester.tap(
+        find.byKey(const ValueKey('space-folder-folder-00000000000000a1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('save-space-folders')));
+    await tester.pumpAndSettle();
+    expect(source.saves.single, ['folder-00000000000000a1']);
+    expect(find.text('Additional folders · api'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('space-workspace')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Second Workspace').last);
+    await tester.pumpAndSettle();
+    expect(
+        find.textContaining('Its additional folder is detached; files on '
+            'your computer are not changed.'),
+        findsOneWidget);
+  });
+
+  testWidgets('folders stay hidden when the owner does not own the Workspace',
+      (tester) async {
+    await pumpSpace(tester, FolderSource(eligible: false), ownerSpace);
+    expect(find.byKey(const ValueKey('space-workspace')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('space-additional-folders')), findsNothing);
+  });
+
+  testWidgets('members never load additional folders', (tester) async {
+    await pumpSpace(tester, FolderSource(), memberSpace);
+    expect(
+        find.byKey(const ValueKey('space-additional-folders')), findsNothing);
   });
 }

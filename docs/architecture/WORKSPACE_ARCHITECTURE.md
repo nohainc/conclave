@@ -288,10 +288,23 @@ inventory strictly, the service includes the field only after Cloud announces
 unreadable local list omits the field so Cloud keeps its last known list.
 Folder changes made over IPC republish the inventory immediately.
 
-Status: the service registry, IPC, Workspace.app card, and publication are
-implemented. Cloud ingestion (announcing the capability and storing the
-list), Space attachment, AX web selection, and Engine/Profile pass-through to
-provider CLIs are follow-up phases.
+Cloud announces `workspace.allowed_folders.v1`, stores the list in
+`workspace_allowed_folders` (migration 0085), and records Space attachments
+in `space_additional_folders`. `GET/PUT /api/spaces/:spaceId/additional-folders`
+serves only the owner of both the Space and its effective Workspace; other
+callers get `eligible: false` and no folders. A folder dropped from the
+published list, or a Space switching Workspace, detaches the folder in Cloud
+only. Omitted or malformed lists keep the stored folders.
+
+The AX web app shows an "Additional folders" picker under the Space's
+Workspace selector for eligible owners. Missing or inaccessible folders can
+be detached but not newly attached. The Change Workspace dialog states how
+many folders will be detached and that local files are untouched.
+
+Status: everything above is implemented. Delivering attached folders to
+assignments and translating them through Tool Profiles into provider CLI
+arguments is the remaining phase; until then attachments have no effect on
+execution.
 
 ## Authentication and security
 

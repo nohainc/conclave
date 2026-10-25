@@ -17,6 +17,27 @@ class _SpaceWorkspaceSelector extends StatefulWidget {
 class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
   static const _followDefault = '';
   bool _busy = false;
+  int _folderRevision = 0;
+
+  AxSpaceAdditionalFolderDataSource? get _folderSource {
+    final Object source = widget.configurations.source;
+    if (!widget.isOwner || widget.configurations.spaceId == null) return null;
+    return source is AxSpaceAdditionalFolderDataSource ? source : null;
+  }
+
+  /// Number of folders that a Workspace change would detach. Best effort: a
+  /// failed read only drops the extra sentence from the warning.
+  Future<int> _attachedFolderCount() async {
+    final source = _folderSource;
+    if (source == null) return 0;
+    try {
+      final folders = await source
+          .loadSpaceAdditionalFolders(widget.configurations.spaceId!);
+      return folders.eligible ? folders.attached.length : 0;
+    } on Object {
+      return 0;
+    }
+  }
 
   @override
   void initState() {
@@ -125,6 +146,14 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
                       'Following the default Workspace${name == null ? '' : ': $name'}',
                       style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant)),
+                if (_folderSource != null && settings.workspaceId != null)
+                  _SpaceAdditionalFolders(
+                    // A different Workspace has a different folder list.
+                    key: ValueKey(
+                        'space-folders-${settings.workspaceId}-$_folderRevision'),
+                    source: _folderSource!,
+                    spaceId: widget.configurations.spaceId!,
+                  ),
               ]);
         },
       );
@@ -142,17 +171,22 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
                       .workspaceQuery))
               .workspaceId
           : id;
-      if (!mounted) return;
       final sameWorkspace = targetWorkspace == settings.workspaceId;
+      final attachedFolders = sameWorkspace ? 0 : await _attachedFolderCount();
+      if (!mounted) return;
+      final folderNotice = attachedFolders == 0
+          ? ''
+          : ' ${attachedFolders == 1 ? 'Its additional folder is' : 'Its $attachedFolders additional folders are'} detached; files on your computer are not changed.';
       final confirmed = sameWorkspace ||
           (await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
                           constraints: ConclaveDialogStyle.small,
                           title: const Text('Change Workspace?'),
-                          content: Text(inherit
-                              ? 'This Space will follow your default Workspace. Its own workflow overrides are reset, and existing runs keep their recorded settings.'
-                              : 'Threads in this Space will use the Workers and workflows of the selected Workspace. This Space’s workflow overrides are reset, the Workspace is authorized to run Work here, and existing runs keep their recorded settings.'),
+                          content: Text((inherit
+                                  ? 'This Space will follow your default Workspace. Its own workflow overrides are reset, and existing runs keep their recorded settings.'
+                                  : 'Threads in this Space will use the Workers and workflows of the selected Workspace. This Space’s workflow overrides are reset, the Workspace is authorized to run Work here, and existing runs keep their recorded settings.') +
+                              folderNotice),
                           actions: [
                             TextButton(
                                 onPressed: () => Navigator.pop(context, false),
@@ -166,6 +200,7 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
       if (confirmed != true || !mounted) return;
       await widget.configurations
           .selectWorkspace(inherit ? null : id, inherit: inherit);
+      if (mounted) setState(() => _folderRevision++);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -176,5 +211,142 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
         setState(() => _busy = false);
       }
     }
+  }
+}
+
+/// Owner-only list of folders from the Space's Workspace that this Space may
+/// use. Folders are added in the Workspace app; this only attaches them.
+class _SpaceAdditionalFolders extends StatefulWidget {
+  const _SpaceAdditionalFolders(
+      {required this.source, required this.spaceId, super.key});
+  final AxSpaceAdditionalFolderDataSource source;
+  final String spaceId;
+
+  @override
+  State<_SpaceAdditionalFolders> createState() =>
+      _SpaceAdditionalFoldersState();
+}
+
+class _SpaceAdditionalFoldersState extends State<_SpaceAdditionalFolders> {
+  AxSpaceAdditionalFolders? _folders;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    try {
+      final folders =
+          await widget.source.loadSpaceAdditionalFolders(widget.spaceId);
+      if (mounted) setState(() => _folders = folders);
+    } on Object {
+      // The folder link is optional; Space settings stay usable without it.
+    }
+  }
+
+  static String _status(String status) => switch (status) {
+        'available' => 'Read & write',
+        'read_only' => 'Read only',
+        'denied' => 'No access on the Workspace',
+        _ => 'Missing on the Workspace',
+      };
+
+  Future<void> _edit(AxSpaceAdditionalFolders current) async {
+    final selected = {for (final folder in current.attached) folder.id};
+    final result = await showDialog<Set<String>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          constraints: ConclaveDialogStyle.small,
+          title: const Text('Additional folders'),
+          content: SizedBox(
+            width: 420,
+            child: current.folders.isEmpty
+                ? const Text(
+                    'No folders are allowed on this Workspace yet. Add them '
+                    'in the Conclave Workspace app under Allowed folders.')
+                : ListView(
+                    shrinkWrap: true,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 8),
+                        child:
+                            Text('Workers in this Space may use the selected '
+                                'folders in addition to the Space folder.'),
+                      ),
+                      for (final folder in current.folders)
+                        CheckboxListTile(
+                          key: ValueKey('space-folder-${folder.id}'),
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          value: selected.contains(folder.id),
+                          // An inaccessible folder can be removed but not
+                          // newly attached.
+                          onChanged: folder.accessible ||
+                                  selected.contains(folder.id)
+                              ? (value) => setDialogState(() => value == true
+                                  ? selected.add(folder.id)
+                                  : selected.remove(folder.id))
+                              : null,
+                          title: Text(folder.displayName),
+                          subtitle: Text(_status(folder.status)),
+                        ),
+                    ],
+                  ),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel')),
+            if (current.folders.isNotEmpty)
+              FilledButton(
+                  key: const ValueKey('save-space-folders'),
+                  onPressed: () => Navigator.pop(context, selected),
+                  child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    try {
+      final saved =
+          await widget.source.saveSpaceAdditionalFolders(widget.spaceId, [
+        for (final folder in current.folders)
+          if (result.contains(folder.id)) folder.id
+      ]);
+      if (mounted) setState(() => _folders = saved);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showNotice(SnackBar(content: Text(error.toString())));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final folders = _folders;
+    if (folders == null || !folders.eligible) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final attached = folders.attached.toList();
+    final unavailable = attached.where((folder) => !folder.accessible).length;
+    return TextButton.icon(
+      key: const ValueKey('space-additional-folders'),
+      style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          visualDensity: VisualDensity.compact),
+      onPressed: () => _edit(folders),
+      icon: Icon(Icons.folder_outlined,
+          size: 15, color: unavailable > 0 ? theme.colorScheme.error : null),
+      label: Text(
+        attached.isEmpty
+            ? 'Additional folders'
+            : 'Additional folders · ${attached.map((f) => f.displayName).join(', ')}',
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.bodySmall,
+      ),
+    );
   }
 }

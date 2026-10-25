@@ -99,6 +99,28 @@ mixin _CatalogApi on _AxApiClientCore {
         Map<String, dynamic>.from(jsonDecode(response.body) as Map));
   }
 
+  String _additionalFoldersUrl(String spaceId) =>
+      '$baseUrl/spaces/${Uri.encodeComponent(spaceId)}/additional-folders';
+
+  Future<AxSpaceAdditionalFolders> loadSpaceAdditionalFolders(
+          String spaceId) async =>
+      AxSpaceAdditionalFolders.fromJson(
+          await _getJson(Uri.parse(_additionalFoldersUrl(spaceId))));
+
+  Future<AxSpaceAdditionalFolders> saveSpaceAdditionalFolders(
+      String spaceId, List<String> folderIds) async {
+    final response = await client.put(Uri.parse(_additionalFoldersUrl(spaceId)),
+        headers: _headers(contentType: 'application/json'),
+        body: jsonEncode({'folderIds': folderIds}));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException(
+          'Folder update failed (${response.statusCode}): ${response.body}',
+          statusCode: response.statusCode);
+    }
+    return AxSpaceAdditionalFolders.fromJson(
+        Map<String, dynamic>.from(jsonDecode(response.body) as Map));
+  }
+
   String _memberAccessUrl(String workspaceId) =>
       '$baseUrl/workspaces/${Uri.encodeComponent(workspaceId)}/member-access';
 
