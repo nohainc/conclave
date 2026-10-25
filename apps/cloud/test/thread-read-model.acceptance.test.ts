@@ -17,7 +17,7 @@ it("reads threads and configuration with distinct update timestamps", async () =
         access_policy_json TEXT, metadata_json TEXT NOT NULL DEFAULT '{}', lead_user_id TEXT, created_at TEXT, updated_at TEXT);
       CREATE TABLE thread_work_configs (thread_id TEXT, config_json TEXT, updated_at TEXT);
       CREATE TABLE discussion_messages (thread_id TEXT, author_user_id TEXT, body TEXT, created_at TEXT, kind TEXT NOT NULL DEFAULT 'message', worker_display_name TEXT);
-      CREATE TABLE work_requests (thread_id TEXT, status TEXT, updated_at TEXT);
+      CREATE TABLE work_requests (thread_id TEXT, requested_by_user_id TEXT, status TEXT, created_at TEXT, updated_at TEXT);
       CREATE TABLE thread_read_states (thread_id TEXT, user_id TEXT, read_at TEXT);
       CREATE TABLE user_pins (user_id TEXT, kind TEXT, target_id TEXT, pinned_at TEXT, position INTEGER);
       CREATE TABLE conversations (id TEXT, thread_id TEXT);

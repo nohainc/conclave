@@ -57,10 +57,21 @@ function fixture() {
     } catch (error) {
       return {
         status: (error as { status: number }).status,
-        body: null as any,
+        body: null as unknown as {
+          eligible: boolean;
+          workspaceId: string;
+          folders: Array<{ id: string; name: string; attached: boolean }>;
+        },
       };
     }
-    return { status: response.status, body: (await response.json()) as any };
+    return {
+      status: response.status,
+      body: (await response.json()) as {
+        eligible: boolean;
+        workspaceId: string;
+        folders: Array<{ id: string; name: string; attached: boolean }>;
+      },
+    };
   };
   return { sqlite, env, call };
 }
@@ -76,7 +87,7 @@ it("lets the Space and Workspace owner attach published folders only", async () 
     );
     const listed = await call("U", "S");
     expect(listed.body).toMatchObject({ eligible: true, workspaceId: "A" });
-    expect(listed.body.folders.map((f: any) => [f.id, f.attached])).toEqual([
+    expect(listed.body.folders.map((f) => [f.id, f.attached])).toEqual([
       [API, false],
       [DOCS, false],
     ]);
@@ -84,9 +95,7 @@ it("lets the Space and Workspace owner attach published folders only", async () 
 
     const saved = await call("U", "S", { folderIds: [DOCS] });
     expect(saved.status).toBe(200);
-    expect(saved.body.folders.find((f: any) => f.id === DOCS).attached).toBe(
-      true,
-    );
+    expect(saved.body.folders.find((f) => f.id === DOCS)!.attached).toBe(true);
 
     expect(
       (await call("U", "S", { folderIds: ["folder-ffffffffffffffff"] })).status,
@@ -148,7 +157,7 @@ it("detaches folders when the folder is removed or the Space changes Workspace",
 
     await recordWorkspaceAllowedFolders(env, "A", [folder(API, "api")], "now");
     expect(
-      (await call("U", "S")).body.folders.map((f: any) => [f.id, f.attached]),
+      (await call("U", "S")).body.folders.map((f) => [f.id, f.attached]),
     ).toEqual([[API, true]]);
 
     const switched = await handleWorkflowWorkspace(

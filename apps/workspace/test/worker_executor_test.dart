@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -76,6 +77,7 @@ void main() {
     var executions = 0;
     var activeExecutions = 0;
     var maxActiveExecutions = 0;
+    final executionGate = Completer<void>();
     final directories = <String>{};
     WorkerAssignmentHandler handler() => WorkerAssignmentHandler(
           applicationStateDirectory: state,
@@ -94,7 +96,18 @@ void main() {
             if (activeExecutions > maxActiveExecutions) {
               maxActiveExecutions = activeExecutions;
             }
-            await Future<void>.delayed(const Duration(milliseconds: 10));
+            if (activeExecutions == 2 && !executionGate.isCompleted) {
+              executionGate.complete();
+            }
+            if (context.assignmentId.contains('thread-a-25') ||
+                context.assignmentId.contains('thread-b-3')) {
+              await executionGate.future.timeout(
+                const Duration(seconds: 2),
+                onTimeout: () {},
+              );
+            } else {
+              await Future<void>.delayed(const Duration(milliseconds: 10));
+            }
             activeExecutions--;
             return WorkerResult(
               requestId: 'result-${context.assignmentId}',

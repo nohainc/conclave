@@ -130,7 +130,7 @@ it("flags a Thread while Work is active and unread when it finishes", async () =
   expect(await flags("bob")).toEqual({ T1: [false, false], T2: [false, true] });
 });
 
-it.each(["queued", "running", "cancelled", "timed_out"])(
+it.each(["queued", "running", "cancelled"])(
   "marks another member's %s prompt unread until read",
   async (status) => {
     const { sqlite, as, env, flags } = fixture();

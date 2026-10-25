@@ -27,6 +27,7 @@ export const unreadSql = (
      WHERE w.thread_id = ${thread}.id
        AND w.requested_by_user_id <> ${userParam}
        AND w.created_at > ${readSince}
+       AND w.created_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')
   ) OR EXISTS (
     SELECT 1 FROM work_requests w
      WHERE w.thread_id = ${thread}.id
