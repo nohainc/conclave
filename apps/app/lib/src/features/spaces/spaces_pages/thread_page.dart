@@ -865,6 +865,14 @@ class _ThreadPageState extends State<ThreadPage>
   /// The message the next Chat message or request replies to (Reply v1).
   /// One target per Thread, shared by both composers, cleared on send.
   AxReplyReference? _replyTarget;
+
+  /// Keeps the timeline transparent during reply navigation until the target
+  /// position is measured and settled, preventing jerky visible intermediate scroll.
+  bool _navigatingToReply = false;
+
+  /// Target message or work card currently highlighted with a pulse tint.
+  String? _replyHighlightId;
+  Timer? _replyHighlightTimer;
   Map<String, dynamic> _workExecutionSelection = {};
 
   /// The last Worker selection, kept while a Workflow that fixes its own
@@ -1476,6 +1484,9 @@ class _ThreadPageState extends State<ThreadPage>
       _discussionAttachments = [];
       _workAttachments = [];
       _replyTarget = null;
+      _navigatingToReply = false;
+      _replyHighlightTimer?.cancel();
+      _replyHighlightId = null;
     }
     if (oldWidget.thread.id != widget.thread.id &&
         _threadViewStateRestored &&
@@ -1727,6 +1738,7 @@ class _ThreadPageState extends State<ThreadPage>
     _workHistoryController.removeListener(_onWorkHistoryScroll);
     _chatHistoryController.removeListener(_onChatHistoryScroll);
     _tabController.removeListener(_onThreadTabChanged);
+    _replyHighlightTimer?.cancel();
     _requestController.dispose();
     _workHistoryController.dispose();
     _chatHistoryController.dispose();
@@ -2021,42 +2033,58 @@ class _ThreadPageState extends State<ThreadPage>
     _chatIncomingAnchor.reset();
     _setNotesOpen(false);
     _setAiHistoryOpen(false);
-    while (current() && !_conversationIds().contains(target)) {
-      final cursor = reference.kind == 'message'
-          ? _chatPresentation.olderCursor
-          : _workPresentation.olderCursor;
-      if (cursor == null) break;
-      if (reference.kind == 'message') {
-        await _loadOlderDiscussion();
-      } else {
-        await _loadOlderWorkHistory();
+    _updateState(() => _navigatingToReply = true);
+    try {
+      while (current() && !_conversationIds().contains(target)) {
+        final cursor = reference.kind == 'message'
+            ? _chatPresentation.olderCursor
+            : _workPresentation.olderCursor;
+        if (cursor == null) break;
+        if (reference.kind == 'message') {
+          await _loadOlderDiscussion();
+        } else {
+          await _loadOlderWorkHistory();
+        }
+        if (!current()) return;
+        final next = reference.kind == 'message'
+            ? _chatPresentation.olderCursor
+            : _workPresentation.olderCursor;
+        if (next == cursor) break;
       }
-      if (!current()) return;
-      final next = reference.kind == 'message'
-          ? _chatPresentation.olderCursor
-          : _workPresentation.olderCursor;
-      if (next == cursor) break;
-    }
-    if (!current() || !mounted) return;
-    final ids = _conversationIds();
-    final index = ids.indexOf(target);
-    if (index < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Original message unavailable')));
-      return;
-    }
-    // Wait for tab switching and prepended history to finish layout.
-    await WidgetsBinding.instance.endOfFrame;
-    if (!current()) return;
-    _openChatPending = false;
-    _chatIncomingAnchor.anchorAt(target,
-        fraction: ids.length < 2 ? 0 : index / (ids.length - 1));
-    for (var attempt = 0; attempt < 30 && current(); attempt++) {
-      if (!_chatHistoryController.hasClients) return;
-      if (!_chatIncomingAnchor.reveal(_chatHistoryController)) return;
+      if (!current() || !mounted) return;
+      final ids = _conversationIds();
+      final index = ids.indexOf(target);
+      if (index < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Original message unavailable')));
+        return;
+      }
+      // Wait for tab switching and prepended history to finish layout.
       await WidgetsBinding.instance.endOfFrame;
+      if (!current()) return;
+      _openChatPending = false;
+      _chatIncomingAnchor.anchorAt(target,
+          fraction: ids.length < 2 ? 0 : index / (ids.length - 1));
+      for (var attempt = 0; attempt < 30 && current(); attempt++) {
+        if (!_chatHistoryController.hasClients) return;
+        if (!_chatIncomingAnchor.reveal(_chatHistoryController)) return;
+        await WidgetsBinding.instance.endOfFrame;
+      }
+      if (current()) {
+        _chatIncomingAnchor.reset();
+        _replyHighlightTimer?.cancel();
+        _replyHighlightId = target;
+        _replyHighlightTimer = Timer(const Duration(milliseconds: 1200), () {
+          if (mounted && _replyHighlightId == target) {
+            _updateState(() => _replyHighlightId = null);
+          }
+        });
+      }
+    } finally {
+      if (current() && _navigatingToReply) {
+        _updateState(() => _navigatingToReply = false);
+      }
     }
-    if (current()) _chatIncomingAnchor.reset();
   }
 
   Widget _notes() {
@@ -2195,117 +2223,118 @@ class _ThreadPageState extends State<ThreadPage>
                   _chatIncomingAnchor.reset();
                   _followChat = true;
                 },
-                child: AxTimelineContainer(
-                  scrollKey: const ValueKey('chat-history-scroll'),
-                  controller: _chatHistoryController,
-                  headerSlivers: [
-                    if (state.olderCursor != null)
-                      SliverToBoxAdapter(
-                        child: TextButton(
-                          onPressed:
-                              state.loadingOlder ? null : _loadOlderDiscussion,
-                          child: Text(state.loadingOlder
-                              ? 'Loading older messages…'
-                              : 'Load older messages'),
-                        ),
-                      ),
-                    if (state.error != null)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 8),
-                          child: Text.rich(
-                            TextSpan(
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
-                                fontSize: 13,
-                              ),
-                              children: [
+                child: Opacity(
+                    opacity: _navigatingToReply ? 0 : 1,
+                    child: AxTimelineContainer(
+                      scrollKey: const ValueKey('chat-history-scroll'),
+                      controller: _chatHistoryController,
+                      headerSlivers: [
+                        if (state.olderCursor != null)
+                          SliverToBoxAdapter(
+                            child: TextButton(
+                              onPressed: state.loadingOlder
+                                  ? null
+                                  : _loadOlderDiscussion,
+                              child: Text(state.loadingOlder
+                                  ? 'Loading older messages…'
+                                  : 'Load older messages'),
+                            ),
+                          ),
+                        if (state.error != null)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              child: Text.rich(
                                 TextSpan(
-                                    text:
-                                        'Chat could not synchronize: ${state.error}  '),
-                                WidgetSpan(
-                                  alignment: PlaceholderAlignment.middle,
-                                  child: Semantics(
-                                    link: true,
-                                    child: InkWell(
-                                      onTap: () => _discussionCache
-                                          .synchronize(widget.thread.id)
-                                          .then<void>((_) {},
-                                              onError:
-                                                  (Object _, StackTrace __) {}),
-                                      child: Text(
-                                        'Retry Chat sync',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .error,
-                                          decoration: TextDecoration.underline,
-                                          decorationColor: Theme.of(context)
-                                              .colorScheme
-                                              .error,
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                    fontSize: 13,
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                        text:
+                                            'Chat could not synchronize: ${state.error}  '),
+                                    WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: Semantics(
+                                        link: true,
+                                        child: InkWell(
+                                          onTap: () => _discussionCache
+                                              .synchronize(widget.thread.id)
+                                              .then<void>((_) {},
+                                                  onError: (Object _,
+                                                      StackTrace __) {}),
+                                          child: Text(
+                                            'Retry Chat sync',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .error,
+                                              decoration:
+                                                  TextDecoration.underline,
+                                              decorationColor: Theme.of(context)
+                                                  .colorScheme
+                                                  .error,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                ),
-                                const TextSpan(text: ' '),
-                                WidgetSpan(
-                                  alignment: PlaceholderAlignment.middle,
-                                  child: IconButton(
-                                    tooltip: 'Copy Chat error',
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(
-                                        minWidth: 24, minHeight: 24),
-                                    visualDensity: VisualDensity.compact,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                    icon: const Icon(Icons.copy_rounded,
-                                        size: 14),
-                                    onPressed: () => Clipboard.setData(
-                                      ClipboardData(
-                                          text:
-                                              'Chat could not synchronize: ${state.error}'),
+                                    const TextSpan(text: ' '),
+                                    WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: IconButton(
+                                        tooltip: 'Copy Chat error',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(
+                                            minWidth: 24, minHeight: 24),
+                                        visualDensity: VisualDensity.compact,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                        icon: const Icon(Icons.copy_rounded,
+                                            size: 14),
+                                        onPressed: () => Clipboard.setData(
+                                          ClipboardData(
+                                              text:
+                                                  'Chat could not synchronize: ${state.error}'),
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
+                        if (!state.hasData && state.isFetching)
+                          const SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.all(24),
+                              child: Text('Loading Chat…'),
+                            ),
+                          ),
+                      ],
+                      itemCount: messages.length,
+                      itemId: (index) => messages[index].id,
+                      empty: empty,
+                      separatorBuilder: (_, index) => SizedBox(
+                        height: _continuesDiscussionGroup(messages, index + 1,
+                                breakAt: _firstUnreadChatId)
+                            ? 2
+                            : 6,
                       ),
-                    if (!state.hasData && state.isFetching)
-                      const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.all(24),
-                          child: Text('Loading Chat…'),
-                        ),
-                      ),
-                  ],
-                  itemCount: messages.length,
-                  itemId: (index) => messages[index].id,
-                  empty: empty,
-                  separatorBuilder: (_, index) => SizedBox(
-                    height: _continuesDiscussionGroup(messages, index + 1,
-                            breakAt: _firstUnreadChatId)
-                        ? 2
-                        : 6,
-                  ),
-                  findChildIndexCallback: (key) {
-                    if (key is! ValueKey<String>) return null;
-                    final index = messages
-                        .indexWhere((message) => message.id == key.value);
-                    return index < 0 ? null : index;
-                  },
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    return KeyedSubtree(
-                      key: ValueKey(message.id),
-                      child: KeyedSubtree(
-                        key: _chatIncomingAnchor.keyFor(message.id),
-                        child: MessageDayBoundary(
+                      findChildIndexCallback: (key) {
+                        if (key is! ValueKey<String>) return null;
+                        final index = messages
+                            .indexWhere((message) => message.id == key.value);
+                        return index < 0 ? null : index;
+                      },
+                      itemBuilder: (context, index) {
+                        final message = messages[index];
+                        final isHighlighted = _replyHighlightId == message.id;
+                        final rowContent = MessageDayBoundary(
                           date: message.date,
                           previousDate:
                               index == 0 ? null : messages[index - 1].date,
@@ -2343,11 +2372,30 @@ class _ThreadPageState extends State<ThreadPage>
                                       ? () => _deleteDiscussion(message.id)
                                       : null,
                                 ),
-                        ),
-                      ),
-                    );
-                  },
-                ))),
+                        );
+                        final isDark =
+                            Theme.of(context).brightness == Brightness.dark;
+                        final highlightDecoration = BoxDecoration(
+                          color: isHighlighted
+                              ? ConclaveColors.primarySoftColor(isDark)
+                                  .withValues(alpha: isDark ? 0.35 : 0.45)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(12),
+                        );
+                        return KeyedSubtree(
+                          key: ValueKey(message.id),
+                          child: KeyedSubtree(
+                            key: _chatIncomingAnchor.keyFor(message.id),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOut,
+                              decoration: highlightDecoration,
+                              child: rowContent,
+                            ),
+                          ),
+                        );
+                      },
+                    )))),
         const SizedBox(height: 16),
         _conversationComposer(twoPane: twoPane),
       ],

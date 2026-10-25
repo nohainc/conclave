@@ -42,7 +42,8 @@ the user refers to.
   banner above the input shows "Replying to <author>" with a cancel button.
 - The target is cleared on send and restored if the send fails; switching
   Threads clears it. Unsaved (`temp-`/`local-`) items cannot be replied to.
-- Clicking a posted quote opens Conversation and scrolls to its original message,
-  request or response. Older history is loaded as needed using existing authorized
-  paging APIs. Missing originals show “Original message unavailable”.
+- Clicking a posted quote opens Conversation and jumps seamlessly to its original message,
+  request or response without exposing intermediate scroll jumps. Once positioned, the target
+  message pulses with a temporary accent wash highlight. Older history is loaded as needed using
+  existing authorized paging APIs. Missing originals show “Original message unavailable”.
 - Replying inside draft Threads is unavailable (they have no messages).
