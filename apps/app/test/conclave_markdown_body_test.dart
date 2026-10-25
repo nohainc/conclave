@@ -70,6 +70,27 @@ void main() {
   });
 
   testWidgets(
+      'Notes preserve empty headings produced by multiline heading formatting',
+      (tester) async {
+    Future<double> height(String data) async {
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+        body: ConclaveMarkdownBody(data: data, preserveBlankLines: true),
+      )));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      return tester.getSize(find.byType(ConclaveMarkdownBody)).height;
+    }
+
+    final plainHeading = await height('## Heading');
+    final withBlankLines = await height('\n\n## Heading\n\n\n');
+    expect(withBlankLines, greaterThan(plainHeading));
+    expect(await height('## \n## \n## Heading\n## \n## '),
+        closeTo(withBlankLines, 0.01));
+    expect(find.text('Heading', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets(
       'visible blank lines retain headings, lists and literal code whitespace',
       (tester) async {
     const note = '# Heading\n\n- Item\n\n```text\none\n\nthree\n```\n\nTail';

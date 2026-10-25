@@ -38,7 +38,7 @@ class AxThreadViewState {
   final String workDraft;
 
   /// Last Chat message / Work item the reader had fully seen. Local only;
-  /// opening a tab scrolls to the item before the first one after it.
+  /// opening a tab scrolls to the first item after it.
   final String? chatSeenId;
   final String? workSeenId;
 

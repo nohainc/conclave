@@ -135,10 +135,19 @@ class _ThreadPageState extends State<ThreadPage>
   bool _followWork = true;
   bool _followChat = true;
   // Opening a tab positions it once the Thread view state and history exist:
-  // bottom when nothing is new, otherwise the last-seen item at the top.
+  // bottom when nothing is new, otherwise the first unread item at the top.
   bool _openChatPending = true;
   bool _openWorkPending = true;
   String? _chatSeenId;
+
+  /// First Chat message the reader had not seen when the Thread opened. It
+  /// always shows its sender line, even inside a same-author group.
+  String? _firstUnreadChatId;
+
+  /// True from opening a Thread until its first settled (non-fetching) Chat
+  /// update, so messages delivered by the open-time revalidation count as
+  /// unread rather than as live arrivals.
+  bool _chatOpenSettling = true;
   String? _workSeenId;
   bool _chatFollowScheduled = false;
   bool _workFollowScheduled = false;
@@ -261,6 +270,8 @@ class _ThreadPageState extends State<ThreadPage>
     _workIncomingAnchor.reset(clearKeys: true);
     _previousChatIds = null;
     _previousWorkReplies = null;
+    _firstUnreadChatId = null;
+    _chatOpenSettling = true;
     _chatFollowScheduled = false;
     _workFollowScheduled = false;
     _openChatPending = _openWorkPending = true;
@@ -268,10 +279,24 @@ class _ThreadPageState extends State<ThreadPage>
     _lastMaxExtent.clear();
   }
 
-  List<(String, Object)> _chatSequence() => [
-        for (final message in _chatPresentation.messages)
-          (message.id, message.id),
-      ];
+  /// The Conversation reads as Chat messages plus Work requests and answers,
+  /// so an AI answer arriving in another Thread counts as unread there. An
+  /// answer slot joins only once it has content, so seeing a pending request
+  /// does not also mark its later answer as seen.
+  List<(String, Object)> _chatSequence() {
+    final answered = {
+      for (final request in _workPresentation.requests)
+        if (_workResponseText(request) != null || request.status == 'failed')
+          'work-${request.id}-answer',
+    };
+    return [
+      for (final id in _conversationIds())
+        if (!id.startsWith('work-') ||
+            !id.endsWith('-answer') ||
+            answered.contains(id))
+          (id, id),
+    ];
+  }
 
   /// Work reads as request/response items so a response arriving later in an
   /// already-seen request counts as new.
@@ -358,6 +383,15 @@ class _ThreadPageState extends State<ThreadPage>
     final seen = isWork ? _workSeenId : _chatSeenId;
     final seenIndex =
         seen == null ? -1 : items.indexWhere((item) => item.$1 == seen);
+    // A last-seen Work item is only found once Work history has loaded; the
+    // Work update schedules this step again.
+    if (!isWork &&
+        seenIndex < 0 &&
+        seen != null &&
+        seen.startsWith('work-') &&
+        !_workPresentation.hasData) {
+      return false;
+    }
     final anchor = isWork ? _workIncomingAnchor : _chatIncomingAnchor;
     if (isWork) {
       _openWorkPending = false;
@@ -370,9 +404,11 @@ class _ThreadPageState extends State<ThreadPage>
       anchor.reset();
       return false;
     }
-    anchor.anchorAt(items[seenIndex].$2,
-        next: items[seenIndex + 1].$2,
-        fraction: (seenIndex + 1) / items.length);
+    if (!isWork) _firstUnreadChatId = items[seenIndex + 1].$1;
+    // Hold the first unread item at the top, sender line included, until the
+    // reader scrolls; rows settling height later must not follow to the end.
+    anchor.anchorAt(items[seenIndex + 1].$2,
+        fraction: (seenIndex + 1) / (items.length - 1), once: false);
     // The anchored row needs its GlobalKey attached by a rebuild first.
     setState(() {});
     return true;
@@ -399,12 +435,18 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   /// Scrolls to the end once the new row is laid out; a second pass covers
-  /// rows whose height settles a frame later.
+  /// rows whose height settles a frame later. A jump queued before an anchor
+  /// took hold (such as the first unread message on open) is dropped.
   void _jumpToLatest(ScrollController controller, {int pass = 0}) {
     final generation = _interactionGeneration;
+    final anchor = controller == _workHistoryController
+        ? _workIncomingAnchor
+        : _chatIncomingAnchor;
+    final anchored = anchor.active;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           generation != _interactionGeneration ||
+          (!anchored && anchor.active) ||
           !controller.hasClients ||
           !controller.position.hasContentDimensions) {
         return;
@@ -486,14 +528,40 @@ class _ThreadPageState extends State<ThreadPage>
             _followChat = true;
             _chatIncomingAnchor.reset();
             _jumpToLatest(_chatHistoryController);
-          } else if (_followChat) {
-            _anchorIncoming(_chatIncomingAnchor, _chatHistoryController,
-                List<Object>.of(_conversationIds()), id);
+          } else if (_chatOpenSettling && _firstUnreadChatId == null) {
+            // Delivered by the revalidation of a freshly opened Thread: the
+            // reader starts at the first unread message, as when it was
+            // already cached.
+            final conversation = List<Object>.of(_conversationIds());
+            final at = conversation.indexOf(id);
+            if (at > 0) {
+              _firstUnreadChatId = id;
+              _chatIncomingAnchor.anchorAt(id,
+                  fraction: at / (conversation.length - 1), once: false);
+              setState(() {});
+            } else if (_followChat) {
+              _anchorIncoming(_chatIncomingAnchor, _chatHistoryController,
+                  conversation, id);
+            }
+          } else if (_followChat && !_chatIncomingAnchor.active) {
+            // Another participant's message is read from its sender line, so
+            // a long message or a burst of several starts at the first one.
+            // Later arrivals keep that hold until the reader scrolls.
+            final conversation = List<Object>.of(_conversationIds());
+            final at = conversation.indexOf(id);
+            _firstUnreadChatId = id;
+            _chatIncomingAnchor.anchorAt(id,
+                fraction: at < 0 || conversation.length < 2
+                    ? 1
+                    : at / (conversation.length - 1),
+                once: false);
+            setState(() {});
           }
           break;
         }
       }
     }
+    if (state.hasData && !state.isFetching) _chatOpenSettling = false;
     if (state.hasData) _previousChatIds = ids;
     _scheduleFollowLatest(_chatHistoryController);
   }
@@ -2146,8 +2214,10 @@ class _ThreadPageState extends State<ThreadPage>
                   itemId: (index) => messages[index].id,
                   empty: empty,
                   separatorBuilder: (_, index) => SizedBox(
-                    height:
-                        _continuesDiscussionGroup(messages, index + 1) ? 4 : 12,
+                    height: _continuesDiscussionGroup(messages, index + 1,
+                            breakAt: _firstUnreadChatId)
+                        ? 2
+                        : 6,
                   ),
                   findChildIndexCallback: (key) {
                     if (key is! ValueKey<String>) return null;
@@ -2173,7 +2243,8 @@ class _ThreadPageState extends State<ThreadPage>
                               : _DiscussionMessageBubble(
                                   item: message,
                                   grouped: _continuesDiscussionGroup(
-                                      messages, index),
+                                      messages, index,
+                                      breakAt: _firstUnreadChatId),
                                   onCopy: () {
                                     Clipboard.setData(
                                         ClipboardData(text: message.text));

@@ -134,8 +134,10 @@ class ConclaveMarkdownBody extends StatelessWidget {
 class _BlankLinesSyntax extends md.BlockSyntax {
   const _BlankLinesSyntax();
 
+  // Formatting a multiline selection as headings prefixes its empty lines too.
+  // Preserve those empty ATX headings just like blank lines, only in Notes.
   @override
-  RegExp get pattern => RegExp(r'^[ \t]*$');
+  RegExp get pattern => RegExp(r'^(?:[ \t]*| {0,3}#{1,6}(?:[ \t]+#*[ \t]*)?)$');
 
   @override
   md.Node parse(md.BlockParser parser) {

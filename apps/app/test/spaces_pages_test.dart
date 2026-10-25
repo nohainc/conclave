@@ -2079,7 +2079,7 @@ void main() {
     // Archived AI entries are history: neither the request nor the answer
     // may be edited.
     expect(find.byTooltip('Edit'), findsNothing);
-    expect(find.byTooltip('Message actions'), findsNWidgets(2));
+    expect(find.byTooltip('Copy'), findsNWidgets(2));
   });
   testWidgets('Chat create edit and copy preserve raw Markdown',
       (tester) async {
@@ -2204,18 +2204,27 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     await _openAiHistory(tester);
-    final menus = find.byTooltip('Message actions');
-    expect(menus, findsNWidgets(2));
-    await tester.tap(menus.first);
-    await tester.pumpAndSettle();
+    final copies = find.byTooltip('Copy');
+    expect(copies, findsNWidgets(2));
+    expect(find.byTooltip('Message actions'), findsNothing);
+    final platform = Theme.of(tester.element(copies.first)).platform;
+    final side =
+        platform == TargetPlatform.iOS || platform == TargetPlatform.android
+            ? 48.0
+            : 22.0;
+    expect(tester.getSize(copies.first), Size.square(side));
+    expect(find.byType(PopupMenuItem<int>), findsNothing);
     expect(find.text('Edit'), findsNothing);
     expect(find.text('Delete'), findsNothing);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.ensureVisible(copies.first);
+    await tester.tap(copies.first);
     await tester.pumpAndSettle();
-    await _chooseMessageAction(tester, 'Copy', menu: menus.first);
     expect(copied, prompt);
+    expect(find.byType(PopupMenuItem<int>), findsNothing);
     expect(find.text('Prompt copied to clipboard'), findsNothing);
-    await _chooseMessageAction(tester, 'Copy', menu: menus.last);
+    await tester.ensureVisible(copies.last);
+    await tester.tap(copies.last);
+    await tester.pumpAndSettle();
     expect(copied, response);
     final timestamps = find.byWidgetPredicate((widget) =>
         widget is Text && widget.data?.startsWith('2026-10-01 ·') == true);
@@ -2275,8 +2284,8 @@ void main() {
     // The failure diagnostic lives in AI History.
     await tester.tap(find.byKey(const ValueKey('ai-history-toggle')));
     await tester.pumpAndSettle();
-    await _chooseMessageAction(tester, 'Copy',
-        menu: find.byTooltip('Message actions').last);
+    await tester.ensureVisible(find.byTooltip('Copy').last);
+    await tester.tap(find.byTooltip('Copy').last);
     await tester.pumpAndSettle();
     expect(copied, message);
     final diagnostic = tester.widget<SelectableText>(find.byWidgetPredicate(
@@ -3071,8 +3080,8 @@ void main() {
           .first;
       final bubble = tester.widget<Container>(bubbleFinder);
       // Date/time and actions sit below the bubble, not inside its background.
-      expect(tester.getTopLeft(date).dy,
-          greaterThanOrEqualTo(tester.getBottomLeft(bubbleFinder).dy));
+      expect(tester.getTopLeft(find.byTooltip('Message actions')).dy,
+          tester.getBottomLeft(bubbleFinder).dy);
       final decoration = bubble.decoration as BoxDecoration;
       expect(decoration.border, isNull);
       expect(
@@ -3082,14 +3091,24 @@ void main() {
               : Colors.transparent);
       expect(dateX, lessThan(menuX));
       final trigger = find.byTooltip('Message actions');
-      expect(tester.getSize(trigger), Size(touch ? 48 : 28, touch ? 48 : 28));
+      expect(tester.getSize(trigger), Size(touch ? 48 : 22, touch ? 48 : 22));
+      final popup = find.ancestor(
+          of: trigger, matching: find.byType(PopupMenuButton<int>));
+      expect(tester.widget<PopupMenuButton<int>>(popup).borderRadius,
+          BorderRadius.circular(touch ? 24 : 11));
+      final dots =
+          find.descendant(of: trigger, matching: find.byIcon(Icons.more_horiz));
+      expect(tester.getCenter(date).dy,
+          closeTo(tester.getCenter(trigger).dy, 0.01));
+      expect(tester.getCenter(dots).dy,
+          closeTo(tester.getCenter(trigger).dy, 0.01));
       final opacity = find
           .ancestor(of: trigger, matching: find.byType(AnimatedOpacity))
           .first;
       if (!touch) {
         // Keyboard focus reveals the same actions without needing a mouse.
         final icon = find.descendant(
-            of: trigger, matching: find.byIcon(Icons.more_vert));
+            of: trigger, matching: find.byIcon(Icons.more_horiz));
         Focus.of(tester.element(icon)).requestFocus();
         await tester.pumpAndSettle();
       }
@@ -3728,16 +3747,12 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    await _chooseMessageAction(
-        tester, 'Report issue — sends sanitized technical diagnostics only');
+    await _chooseMessageAction(tester, 'Report issue');
     expect(dataSource.reportCalls, 1);
     expect(find.text('Reported'), findsOneWidget);
     expect(find.textContaining('sanitized technical diagnostics were sent'),
         findsOneWidget);
-    expect(
-        find.byTooltip(
-            'Report issue — sends sanitized technical diagnostics only'),
-        findsNothing);
+    expect(find.byTooltip('Report issue'), findsNothing);
     expect(find.byTooltip('Retry request'), findsNothing);
   });
 }

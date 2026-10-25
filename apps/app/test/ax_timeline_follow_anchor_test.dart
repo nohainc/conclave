@@ -2,6 +2,8 @@ import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/ax/ax_work_models.dart';
 import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
 import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
+import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state.dart';
+import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state_store_base.dart';
 import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
 import 'package:conclave_app/src/features/spaces/timeline_follow_anchor.dart';
 import 'package:flutter/material.dart';
@@ -223,7 +225,7 @@ void main() {
   });
 
   testWidgets(
-      'ThreadPage follows incoming Chat and Work to the end and respects manual scrolling',
+      'ThreadPage reveals incoming Chat from its sender line and respects manual scrolling',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1300, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -277,26 +279,25 @@ void main() {
     await tester.pumpAndSettle();
     final longChat =
         'Chat opening\n\n${List.filled(80, 'Chat body paragraph.').join('\n\n')}';
-    final longWork =
-        'Work opening\n\n${List.filled(80, 'Work body paragraph.').join('\n\n')}';
     chat.engine.update(
         chat.query('thread'),
         (_) => AxDiscussionHistory(
             messages: [...old, message('incoming', longChat)],
             initialLoaded: true));
-    work.replace('thread', [request(response: longWork)]);
     await tester.pumpAndSettle();
-    // A reader at the latest content follows both arrivals to the end.
+    // A reader at the latest content sees a long arrival from its sender
+    // line rather than its last paragraph.
     {
       final history = find.byKey(const ValueKey('chat-history-scroll'));
       final controller = tester.widget<CustomScrollView>(history).controller!;
-      expect(controller.position.extentAfter, lessThan(1));
-      expect(
-          find.descendant(
-              of: history,
-              matching: find.textContaining('Chat body paragraph.',
-                  findRichText: true)),
-          findsWidgets);
+      expect(controller.position.extentAfter, greaterThan(100));
+      final opening = find.descendant(
+          of: history,
+          matching: find.textContaining('Chat opening', findRichText: true));
+      expect(opening, findsOneWidget);
+      final top = tester.getTopLeft(history).dy;
+      expect(tester.getTopLeft(opening).dy, greaterThan(top));
+      expect(tester.getTopLeft(opening).dy, lessThan(top + 120));
     }
     final history = find.byKey(const ValueKey('chat-history-scroll'));
     await tester.drag(history, const Offset(0, 150));
@@ -312,6 +313,261 @@ void main() {
             ], initialLoaded: true));
     await tester.pumpAndSettle();
     expect(controller.offset, closeTo(readingOffset, 1));
+    await tester.pumpWidget(const SizedBox());
+    chat.clear();
+    work.clear();
+  });
+
+  testWidgets(
+      'opening a Thread with unread messages starts at the first unread sender line',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1300, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final chat = AxDiscussionCache(null);
+    final work = AxWorkHistoryCache(null);
+    final store = MemoryAxThreadViewStateStore();
+    AxDiscussionMessage message(int minute, String id, String body) =>
+        AxDiscussionMessage(
+          id: id,
+          threadId: 'thread',
+          authorUserId: 'other',
+          authorName: 'Dana',
+          body: body,
+          createdAt: '2026-10-15T00:${'$minute'.padLeft(2, '0')}:00.000Z',
+        );
+    final paragraphs = List.filled(80, 'Unread body paragraph.').join('\n\n');
+    chat.engine.update(
+        chat.query('thread'),
+        (_) => AxDiscussionHistory(messages: [
+              for (var i = 0; i < 15; i++) message(i, 'old-$i', 'Earlier $i'),
+              message(20, 'unread-1', 'Unread opening\n\n$paragraphs'),
+              message(21, 'unread-2', 'Second unread'),
+            ], initialLoaded: true));
+    work.engine.update(work.query('thread'),
+        (_) => AxWorkHistory(requests: const [], initialLoaded: true));
+    await store.save(
+        userId: 'me',
+        threadId: 'thread',
+        state: const AxThreadViewState(chatSeenId: 'old-14'));
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      space: const AxSpace(
+          id: 'space', name: 'Space', branch: '', lastActivity: ''),
+      thread: const AxThread(
+          id: 'thread',
+          spaceId: 'space',
+          name: 'Thread',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      currentUserId: 'me',
+      threadViewStateStore: store,
+      discussionCache: chat,
+      workHistoryCache: work,
+      onBackToSpace: () {},
+      onArchive: () {},
+    ))));
+    await tester.pumpAndSettle();
+    final history = find.byKey(const ValueKey('chat-history-scroll'));
+    final controller = tester.widget<CustomScrollView>(history).controller!;
+    expect(controller.position.extentAfter, greaterThan(100));
+    final opening = find.descendant(
+        of: history,
+        matching: find.textContaining('Unread opening', findRichText: true));
+    expect(opening, findsOneWidget);
+    final top = tester.getTopLeft(history).dy;
+    expect(tester.getTopLeft(opening).dy, greaterThan(top));
+    expect(tester.getTopLeft(opening).dy, lessThan(top + 120));
+    await tester.pumpWidget(const SizedBox());
+    chat.clear();
+    work.clear();
+  });
+
+  for (final lateArrival in [false, true]) {
+    testWidgets(
+        'switching to a Thread with unread messages starts at the first unread '
+        '(late arrival: $lateArrival)', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1300, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final chat = AxDiscussionCache(null);
+      final work = AxWorkHistoryCache(null);
+      final store = MemoryAxThreadViewStateStore();
+      AxDiscussionMessage message(
+              String thread, int minute, String id, String body) =>
+          AxDiscussionMessage(
+            id: id,
+            threadId: thread,
+            authorUserId: 'other',
+            authorName: 'Dana',
+            body: body,
+            createdAt: '2026-10-15T00:${'$minute'.padLeft(2, '0')}:00.000Z',
+          );
+      final paragraphs = List.filled(80, 'Unread body paragraph.').join('\n\n');
+      final oldB = [
+        for (var i = 0; i < 15; i++) message('b', i, 'b-old-$i', 'Earlier $i')
+      ];
+      final unreadB = [
+        ...oldB,
+        message('b', 20, 'b-unread-1', 'Unread opening\n\n$paragraphs'),
+        message('b', 21, 'b-unread-2', 'Second unread'),
+      ];
+      for (final thread in ['a', 'b']) {
+        work.engine.update(work.query(thread),
+            (_) => AxWorkHistory(requests: const [], initialLoaded: true));
+      }
+      chat.engine.update(
+          chat.query('a'),
+          (_) => AxDiscussionHistory(messages: [
+                for (var i = 0; i < 15; i++) message('a', i, 'a-$i', 'A $i')
+              ], initialLoaded: true));
+      chat.engine.update(
+          chat.query('b'),
+          (_) => AxDiscussionHistory(
+              messages: lateArrival ? oldB : unreadB, initialLoaded: true));
+      await store.save(
+          userId: 'me',
+          threadId: 'b',
+          state: const AxThreadViewState(chatSeenId: 'b-old-14'));
+      Widget page(String id) => MaterialApp(
+              home: Scaffold(
+                  body: ThreadPage(
+            space: const AxSpace(
+                id: 'space', name: 'Space', branch: '', lastActivity: ''),
+            thread: AxThread(
+                id: id,
+                spaceId: 'space',
+                name: 'Thread $id',
+                lead: '',
+                status: 'active',
+                brief: '',
+                primaryWorkspace: '',
+                queueStatus: ''),
+            currentUserId: 'me',
+            threadViewStateStore: store,
+            discussionCache: chat,
+            workHistoryCache: work,
+            onBackToSpace: () {},
+            onArchive: () {},
+          )));
+      await tester.pumpWidget(page('a'));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(page('b'));
+      await tester.pumpAndSettle();
+      if (lateArrival) {
+        chat.engine.update(chat.query('b'),
+            (_) => AxDiscussionHistory(messages: unreadB, initialLoaded: true));
+        await tester.pumpAndSettle();
+      }
+      final history = find.byKey(const ValueKey('chat-history-scroll'));
+      final controller = tester.widget<CustomScrollView>(history).controller!;
+      expect(controller.position.extentAfter, greaterThan(100));
+      final opening = find.descendant(
+          of: history,
+          matching: find.textContaining('Unread opening', findRichText: true));
+      expect(opening, findsOneWidget);
+      final top = tester.getTopLeft(history).dy;
+      expect(tester.getTopLeft(opening).dy, greaterThan(top));
+      expect(tester.getTopLeft(opening).dy, lessThan(top + 120));
+      await tester.pumpWidget(const SizedBox());
+      chat.clear();
+      work.clear();
+    });
+  }
+
+  testWidgets('switching to a Thread with an unread AI answer starts at it',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1300, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final chat = AxDiscussionCache(null);
+    final work = AxWorkHistoryCache(null);
+    final store = MemoryAxThreadViewStateStore();
+    AxDiscussionMessage message(
+            String thread, int minute, String id, String body) =>
+        AxDiscussionMessage(
+          id: id,
+          threadId: thread,
+          authorUserId: 'other',
+          authorName: 'Dana',
+          body: body,
+          createdAt: '2026-10-15T00:${'$minute'.padLeft(2, '0')}:00.000Z',
+        );
+    final paragraphs = List.filled(80, 'Answer body paragraph.').join('\n\n');
+    work.engine.update(work.query('a'),
+        (_) => AxWorkHistory(requests: const [], initialLoaded: true));
+    work.engine.update(
+        work.query('b'),
+        (_) => AxWorkHistory(requests: [
+              AxWorkRequest(
+                id: 'ask',
+                requestedByName: 'Dana',
+                prompt: 'Short question',
+                workflowId: 'direct',
+                workflowVersion: 2,
+                status: 'completed',
+                createdAt: '2026-10-15T00:20:00.000Z',
+                steps: const [],
+                finalText: 'Answer opening\n\n$paragraphs',
+              ),
+            ], initialLoaded: true));
+    chat.engine.update(
+        chat.query('a'),
+        (_) => AxDiscussionHistory(messages: [
+              for (var i = 0; i < 15; i++) message('a', i, 'a-$i', 'A $i')
+            ], initialLoaded: true));
+    chat.engine.update(
+        chat.query('b'),
+        (_) => AxDiscussionHistory(messages: [
+              for (var i = 0; i < 15; i++)
+                message('b', i, 'b-old-$i', 'Earlier $i')
+            ], initialLoaded: true));
+    await store.save(
+        userId: 'me',
+        threadId: 'b',
+        state: const AxThreadViewState(chatSeenId: 'b-old-14'));
+    Widget page(String id) => MaterialApp(
+            home: Scaffold(
+                body: ThreadPage(
+          space: const AxSpace(
+              id: 'space', name: 'Space', branch: '', lastActivity: ''),
+          thread: AxThread(
+              id: id,
+              spaceId: 'space',
+              name: 'Thread $id',
+              lead: '',
+              status: 'active',
+              brief: '',
+              primaryWorkspace: '',
+              queueStatus: ''),
+          currentUserId: 'me',
+          threadViewStateStore: store,
+          discussionCache: chat,
+          workHistoryCache: work,
+          onBackToSpace: () {},
+          onArchive: () {},
+        )));
+    await tester.pumpWidget(page('a'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(page('b'));
+    await tester.pumpAndSettle();
+    final history = find.byKey(const ValueKey('chat-history-scroll'));
+    final controller = tester.widget<CustomScrollView>(history).controller!;
+    expect(controller.position.extentAfter, greaterThan(100));
+    final opening = find.descendant(
+        of: history,
+        matching: find.textContaining('Answer opening', findRichText: true));
+    expect(opening, findsOneWidget);
+    // The unread request leads, so its prompt sits at the top and its
+    // answer opens just below it.
+    final question = find.descendant(
+        of: history,
+        matching: find.textContaining('Short question', findRichText: true));
+    final top = tester.getTopLeft(history).dy;
+    expect(tester.getTopLeft(question).dy, greaterThan(top));
+    expect(tester.getTopLeft(question).dy, lessThan(top + 120));
+    expect(tester.getTopLeft(opening).dy, lessThan(top + 400));
     await tester.pumpWidget(const SizedBox());
     chat.clear();
     work.clear();

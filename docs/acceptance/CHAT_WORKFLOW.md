@@ -82,7 +82,7 @@ opening a competing actions menu.
 
 ## Timeline action menus
 
-A 16 px ⋮ button beside the timestamp opens applicable actions for messages,
+A 16 px ⋯ button beside the timestamp opens applicable actions for messages,
 requests, and responses. Message menus retain Copy, Edit, and confirmed Delete
 under the existing eligibility rules; requests and AI responses do not gain
 message editing. Response menus include permitted Retry and diagnostic reporting.
@@ -100,11 +100,20 @@ touch targets and desktop focus visibility.
 
 ## Timeline following
 
+Opening a Thread that has unread messages (for example from its sidebar unread
+dot) starts at the first unread message with its sender line at the top, and
+holds there while rows settle and history loads, until the reader scrolls.
+Unread items include Work requests and AI answers shown in the Conversation,
+not only Chat messages; an answer counts once it has content.
+
 While a reader is at the latest content, Worker progress and new requests keep
 the timeline at its end. When a final answer arrives, the timeline stops at the
 answer's first line and stays there while the answer grows, so long responses
-are read from the top. Scrolling releases the hold; sending a request returns
-to the end.
+are read from the top. Messages from other participants stop the timeline at
+the first unread message's sender line; when several arrive, later ones do not
+move the view past it, and the first unread message always shows its sender
+line even inside a same-author group. Scrolling releases the hold; sending a
+request or message returns to the end.
 
 ## Queued Work messages
 
@@ -116,3 +125,13 @@ stops when the queue is empty or paused, or when the Thread is opened again
 (the page then dispatches itself). A failed send keeps the message first in
 line and pauses the queue until the user resumes it from the Thread. Queues
 live for the app session; closing or reloading the app discards them.
+
+Timeline footers sit directly against the message bubble or response content,
+without an extra vertical spacer. Timestamp text and horizontal menu dots are
+vertically centered within the footer button height, retaining the full touch
+target.
+
+Timeline footer controls use circular hover/pressed effects. When exactly one
+action is available, its labeled icon runs it directly (for example, Copy)
+instead of opening a one-item menu. Multiple actions retain the horizontal ⋯
+menu. The centered alignment and 48 px mobile targets are retained.

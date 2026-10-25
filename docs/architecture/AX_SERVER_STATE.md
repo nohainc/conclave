@@ -1061,16 +1061,17 @@ The collapsed icon rail aggregates running and unread states separately on the
 Your Spaces and Shared With You icons, using Space summaries and cached Thread
 flags. Its switcher menu also shows markers beside each Space and Thread.
 Expanded and collapsed sidebars share the same 9-pixel markers, synchronized
-40%–100% running pulse, static unread state, and reduced-motion behavior. The
+25%–100% running pulse, static unread state, and reduced-motion behavior. The
 rail observes the existing Space/Thread stores without loading extra histories.
 
 Sidebar Space folder icons use the same color as their text labels in both
 selected and unselected rows. Sidebar activity dots are 9 logical pixels in diameter.
-The running marker pulses between 40% and 100% opacity, with each fade lasting
-2.8 seconds. All dots in a sidebar share one animation clock; newly added
+The running marker pulses between 25% and 100% opacity, with each fade lasting
+2 seconds. All dots in a sidebar share one animation clock; newly added
 markers join the current opacity and phase. Reduced-motion mode uses a static
-marker at 40% opacity. Collapsed Space folders show aggregated running and
-unread markers together. Collapsed rows observe cached Thread updates without fetching Threads;
+marker at 40% opacity. Unread markers use solid brand violet (`#5E20F8`); running markers use
+pulsing light brand violet (`#966EFA`, brand violet mixed with 35% white). A running marker takes priority over an unread marker
+when both states apply, including on collapsed Space folders. Collapsed rows observe cached Thread updates without fetching Threads;
 the Space aggregate also preserves activity for Threads outside the cached list.
 
 Space and Thread reads carry two per-user booleans: `hasActiveWork` (a Work
@@ -1158,7 +1159,8 @@ has an emoji picker, a Markdown formatting menu, browser speech dictation with
 language selection (same as chat composers). A saved note opens rendered and
 read-only; the edit icon or a double click opens the editor, and Done returns
 to the rendered view. Notes previews preserve blank and whitespace-only lines as
-visible spacing, including repeated blank lines, without rewriting the saved
+visible spacing, including repeated blank lines and empty headings created by
+multiline heading formatting, without rewriting the saved
 Markdown. Code-block whitespace remains literal. This rendering option is scoped
 to Notes; conversation Markdown keeps its existing spacing. An empty note opens
 in the editor. Notes emoji and Markdown buttons share the input area’s

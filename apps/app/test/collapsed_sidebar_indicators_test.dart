@@ -118,9 +118,9 @@ void main() {
     expect(tester.getSize(running), const Size(9, 9));
     final fade =
         find.ancestor(of: running, matching: find.byType(FadeTransition)).first;
-    expect(
-        tester.widget<FadeTransition>(fade).opacity.value, closeTo(0.4, 0.001));
-    await tester.pump(const Duration(milliseconds: 2800));
+    expect(tester.widget<FadeTransition>(fade).opacity.value,
+        closeTo(0.25, 0.001));
+    await tester.pump(const Duration(milliseconds: 2000));
     expect(
         tester.widget<FadeTransition>(fade).opacity.value, closeTo(1, 0.001));
     spaces.value = [
@@ -193,7 +193,7 @@ void main() {
     await tester.pump();
     final running = marker('rail-activity-YOUR SPACES', 'running');
     expect(running, findsOneWidget);
-    expect(marker('rail-activity-YOUR SPACES', 'unread'), findsOneWidget);
+    expect(marker('rail-activity-YOUR SPACES', 'unread'), findsNothing);
     expect(
         find.descendant(
             of: find.byKey(const ValueKey('rail-activity-YOUR SPACES')),

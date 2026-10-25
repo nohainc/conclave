@@ -105,16 +105,16 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
                   _actionsMenu(space),
                 ],
               ),
-              const SizedBox(height: 10),
-              Text(
-                space.description.trim().isEmpty
-                    ? 'No description'
-                    : space.description,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
+              if (space.description.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  space.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ],
             ],
           ),
         ),
@@ -127,6 +127,7 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
       tooltip: 'Archived Space actions',
       enabled: !_busy.contains(space.id),
       padding: EdgeInsets.zero,
+      borderRadius: BorderRadius.circular(24),
       color: ConclaveMenuStyle.background(isDark),
       surfaceTintColor: Colors.transparent,
       shape: ConclaveMenuStyle.shape(isDark),
@@ -158,9 +159,15 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
           ]),
         ),
       ],
-      child: SizedBox(
+      child: Ink(
         width: 48,
         height: 48,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          border:
+              Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        ),
         child: _busy.contains(space.id)
             ? const Center(
                 child: SizedBox(

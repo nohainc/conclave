@@ -150,7 +150,10 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     for (final width in [390.0, 1000.0]) {
       await tester.binding.setSurfaceSize(Size(width, 800));
-      final source = _ArchivedSource([first, second]);
+      final source = _ArchivedSource([
+        first,
+        second.copyWith(description: width == 390 ? '' : '   '),
+      ]);
       final gate = Completer<void>();
       source.restoreGate = gate;
       final engine = AxSyncEngine();
@@ -168,6 +171,12 @@ void main() {
       final trigger =
           find.byKey(const ValueKey('archived-space-actions-archived-2'));
       expect(tester.getSize(trigger), const Size(48, 48));
+      expect(find.text('No description'), findsNothing);
+      expect(
+          tester.getSize(card).height,
+          lessThan(tester
+              .getSize(find.byKey(const ValueKey('archived-space-archived-1')))
+              .height));
       expect(tester.getTopRight(trigger).dx,
           lessThanOrEqualTo(tester.getTopRight(card).dx));
       await tester.tap(trigger);

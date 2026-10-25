@@ -1004,7 +1004,7 @@ class SidebarPulse extends StatefulWidget {
 class _SidebarPulseState extends State<SidebarPulse>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _opacity = Tween<double>(begin: 0.4, end: 1)
+  late final Animation<double> _opacity = Tween<double>(begin: 0.25, end: 1)
       .chain(CurveTween(curve: Curves.easeInOut))
       .animate(_controller);
 
@@ -1016,7 +1016,7 @@ class _SidebarPulseState extends State<SidebarPulse>
     // Create the ticker while this State is active, including reduced motion.
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2800),
+      duration: const Duration(milliseconds: 2000),
     );
   }
 
@@ -1097,7 +1097,8 @@ class _ActivityIndicatorsState extends State<SidebarActivityIndicators> {
     super.dispose();
   }
 
-  Widget _dot(Key key, String label, Widget Function(Widget dot) wrap) {
+  Widget _dot(
+      Key key, String label, Color color, Widget Function(Widget dot) wrap) {
     return Padding(
       padding: EdgeInsets.only(left: widget.gap),
       child: Semantics(
@@ -1111,8 +1112,8 @@ class _ActivityIndicatorsState extends State<SidebarActivityIndicators> {
                 key: key,
                 width: 9,
                 height: 9,
-                decoration: const BoxDecoration(
-                  color: ConclaveBrand.accent,
+                decoration: BoxDecoration(
+                  color: color,
                   shape: BoxShape.circle,
                 ),
               )),
@@ -1125,6 +1126,8 @@ class _ActivityIndicatorsState extends State<SidebarActivityIndicators> {
   Widget build(BuildContext context) {
     if (!widget.running && !widget.unread) return const SizedBox.shrink();
     final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    // Only one marker at a time: running (pulsing light brand violet) outranks
+    // unread (solid brand violet), so the two states stay distinguishable.
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1132,16 +1135,17 @@ class _ActivityIndicatorsState extends State<SidebarActivityIndicators> {
           _dot(
             const ValueKey('sidebar-running-indicator'),
             'Running',
+            const Color(0xff966efa), // Brand violet mixed with 35% white.
             (dot) => reduceMotion
                 ? Opacity(opacity: 0.4, child: dot)
                 : FadeTransition(
                     opacity: _owner!._opacity,
                     child: dot,
                   ),
-          ),
-        if (widget.unread)
+          )
+        else if (widget.unread)
           _dot(const ValueKey('sidebar-unread-indicator'), 'Unread messages',
-              (dot) => dot),
+              ConclaveBrand.accent, (dot) => dot),
       ],
     );
   }

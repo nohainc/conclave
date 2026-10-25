@@ -1,21 +1,6 @@
 name: Build Windows Workspace installer
 
 on:
-  push:
-    branches:
-      [
-        "main",
-        "codex/windows-workspace-preview-*",
-        "codex/windows-runtime",
-        "codex/windows-inno-installer",
-      ]
-    paths:
-      - "apps/workspace/**"
-      - "packages/conclave_cli_worker_runtime/**"
-      - "packaging/windows/**"
-      - "scripts/*workspace*"
-      - ".github/workflows/build-workspace-windows.yml"
-      - ".github/actions/setup-flutter/**"
   workflow_dispatch:
 
 concurrency:

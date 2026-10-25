@@ -2,6 +2,7 @@ import 'package:conclave_app/src/ax/ax_models.dart';
 import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
 import 'package:conclave_app/src/features/navigation/space_tree.dart';
 import 'package:conclave_app/src/navigation/ax_navigation.dart';
+import 'package:conclave_design/conclave_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,7 +43,34 @@ Future<double> _runningIndicatorRight(
 }
 
 void main() {
-  testWidgets('running indicator pulses between 40 and 100 percent opacity',
+  testWidgets(
+      'unread is brand violet and running takes priority in light violet',
+      (tester) async {
+    Future<void> render({required bool running}) async {
+      await tester.pumpWidget(MaterialApp(
+        home: SidebarPulse(
+          child: SidebarActivityIndicators(running: running, unread: true),
+        ),
+      ));
+    }
+
+    Color? color(String key) =>
+        (tester.widget<Container>(find.byKey(ValueKey(key))).decoration
+                as BoxDecoration)
+            .color;
+
+    await render(running: false);
+    expect(color('sidebar-unread-indicator'), ConclaveBrand.accent);
+    expect(
+        find.byKey(const ValueKey('sidebar-running-indicator')), findsNothing);
+
+    await render(running: true);
+    expect(color('sidebar-running-indicator'), const Color(0xff966efa));
+    expect(
+        find.byKey(const ValueKey('sidebar-unread-indicator')), findsNothing);
+  });
+
+  testWidgets('running indicator pulses between 25 and 100 percent opacity',
       (tester) async {
     await _runningIndicatorRight(tester, const AxNavigation.home());
     expect(
@@ -53,11 +81,11 @@ void main() {
       matching: find.byType(FadeTransition),
     );
     double opacity() => tester.widget<FadeTransition>(fade.first).opacity.value;
-    expect(opacity(), closeTo(0.4, 0.001));
-    await tester.pump(const Duration(milliseconds: 2800));
+    expect(opacity(), closeTo(0.25, 0.001));
+    await tester.pump(const Duration(milliseconds: 2000));
     expect(opacity(), closeTo(1, 0.001));
-    await tester.pump(const Duration(milliseconds: 2800));
-    expect(opacity(), closeTo(0.4, 0.001));
+    await tester.pump(const Duration(milliseconds: 2000));
+    expect(opacity(), closeTo(0.25, 0.001));
   });
 
   testWidgets('new running dots and collapsed folders share the existing pulse',
@@ -121,7 +149,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1400));
     final original = animations().single;
     final opacity = original.value;
-    expect(opacity, greaterThan(0.4));
+    expect(opacity, greaterThan(0.25));
     await render(addSecond: true);
     expect(animations(), hasLength(2));
     for (final animation in animations()) {

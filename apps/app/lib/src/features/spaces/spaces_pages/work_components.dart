@@ -340,7 +340,7 @@ class _WorkComposer extends StatelessWidget {
       itemCount: workTimeline.length,
       itemId: (index) => workTimeline[index].id,
       empty: empty,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, __) => const SizedBox(height: 6),
       findChildIndexCallback: (key) {
         if (key is! ValueKey<String>) return null;
         final index = workTimeline.indexWhere((r) => r.id == key.value);
@@ -1727,8 +1727,8 @@ class _WorkTimelineCard extends StatelessWidget {
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      padding: EdgeInsets.fromLTRB(
-                          isOwnRequest ? 14 : 0, 10, 14, 10),
+                      padding:
+                          EdgeInsets.fromLTRB(isOwnRequest ? 14 : 0, 8, 14, 8),
                       child: Column(
                         crossAxisAlignment: isOwnRequest
                             ? CrossAxisAlignment.end
@@ -1799,7 +1799,7 @@ class _WorkTimelineCard extends StatelessWidget {
             },
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         // AI Execution & response bubble
         _MessageHover(
           builder: (context, showMeta) => LayoutBuilder(
@@ -1815,11 +1815,14 @@ class _WorkTimelineCard extends StatelessWidget {
                       color: Colors.transparent,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    padding: const EdgeInsets.fromLTRB(0, 14, 14, 14),
+                    padding: const EdgeInsets.fromLTRB(0, 6, 14, 6),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Wrap(
+                          // The answer anchor sits on the sender line so a
+                          // held answer is revealed with its sender visible.
+                          key: responseAnchorKey,
                           spacing: 6,
                           runSpacing: 4,
                           crossAxisAlignment: WrapCrossAlignment.center,
@@ -1885,7 +1888,7 @@ class _WorkTimelineCard extends StatelessWidget {
                             accentColor: colors.primary,
                           ),
                         ],
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 6),
                         Builder(builder: (context) {
                           // The body shows the Worker's live status while the
                           // request is unfinished and the real outcome at the end.
@@ -1957,7 +1960,7 @@ class _WorkTimelineCard extends StatelessWidget {
                               _TimelineAction(
                                   tooltip: reportingIssue
                                       ? 'Sending issue report'
-                                      : 'Report issue — sends sanitized technical diagnostics only',
+                                      : 'Report issue',
                                   icon: Icons.flag_outlined,
                                   onTap: reportingIssue
                                       ? null
@@ -1967,21 +1970,18 @@ class _WorkTimelineCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               if (message != null) ...[
-                                KeyedSubtree(
-                                  key: responseAnchorKey,
-                                  child: isError
-                                      ? SelectableText(
-                                          message,
-                                          style: ConclaveMessageTypography
-                                                  .fromTheme(Theme.of(context))
-                                              .copyWith(color: colors.error),
-                                        )
-                                      : _MemoizedWorkMarkdown(
-                                          key: ValueKey((request.id, message)),
-                                          data: message,
-                                        ),
-                                ),
-                                const SizedBox(height: 10),
+                                isError
+                                    ? SelectableText(
+                                        message,
+                                        style:
+                                            ConclaveMessageTypography.fromTheme(
+                                                    Theme.of(context))
+                                                .copyWith(color: colors.error),
+                                      )
+                                    : _MemoizedWorkMarkdown(
+                                        key: ValueKey((request.id, message)),
+                                        data: message,
+                                      ),
                               ],
                               AnimatedOpacity(
                                   // Terminal footers reveal on hover/focus;
@@ -1993,6 +1993,8 @@ class _WorkTimelineCard extends StatelessWidget {
                                       : 0,
                                   duration: const Duration(milliseconds: 120),
                                   child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       if ((request.status == 'queued' ||
@@ -2009,7 +2011,14 @@ class _WorkTimelineCard extends StatelessWidget {
                                             style: TextStyle(
                                                 fontSize: 12,
                                                 color: colors.primary)),
-                                      const SizedBox(width: 8),
+                                      // Separates leading controls only, so
+                                      // the time aligns with the answer text.
+                                      if (reportedIssue != null ||
+                                          ((request.status == 'queued' ||
+                                                  request.status ==
+                                                      'running') &&
+                                              onCancelRun != null))
+                                        const SizedBox(width: 8),
                                       if (timeLabel.isNotEmpty)
                                         Tooltip(
                                           message: _chatTimestamp(timestamp!),
@@ -2311,9 +2320,11 @@ class _AxLiveTickerState extends State<AxLiveTicker> {
   Widget build(BuildContext context) => widget.builder(context, _now);
 }
 
-bool _continuesDiscussionGroup(List<_DiscussionItem> items, int index) {
+bool _continuesDiscussionGroup(List<_DiscussionItem> items, int index,
+    {String? breakAt}) {
   if (index <= 0) return false;
   final item = items[index];
+  if (item.id == breakAt) return false;
   final previous = items[index - 1];
   return continuesMessageGroup(
     authorId: item.authorId,
@@ -2555,7 +2566,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        padding: EdgeInsets.fromLTRB(isMe ? 14 : 0, 10, 14, 10),
+                        padding: EdgeInsets.fromLTRB(isMe ? 14 : 0, 8, 14, 8),
                         child: Column(
                           crossAxisAlignment: isMe
                               ? CrossAxisAlignment.end
@@ -2732,8 +2743,26 @@ class _TimelineActionsMenu extends StatelessWidget {
     void menuOpenChanged(bool open) => context
         .findAncestorStateOfType<_MessageHoverState>()
         ?._menuOpenChanged(open);
+    final buttonSize = touch ? 48.0 : 22.0;
+    if (actions.length == 1) {
+      final action = actions.single;
+      return SizedBox.square(
+        dimension: buttonSize,
+        child: IconButton(
+          tooltip: action.tooltip,
+          constraints:
+              BoxConstraints.tightFor(width: buttonSize, height: buttonSize),
+          padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(shape: const CircleBorder()),
+          icon: Icon(action.icon, size: 16, color: action.color ?? color),
+          onPressed: action.onTap,
+        ),
+      );
+    }
     return PopupMenuButton<int>(
       tooltip: 'Message actions',
+      borderRadius: BorderRadius.circular(buttonSize / 2),
+      splashRadius: buttonSize / 2,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 160, maxWidth: 340),
       color: ConclaveMenuStyle.background(isDark),
@@ -2763,9 +2792,12 @@ class _TimelineActionsMenu extends StatelessWidget {
           ),
       ],
       child: SizedBox(
-        width: touch ? 48 : 28,
-        height: touch ? 48 : 28,
-        child: Icon(Icons.more_vert, size: 16, color: color),
+        width: buttonSize,
+        height: buttonSize,
+        child: Align(
+          alignment: Alignment.center,
+          child: Icon(Icons.more_horiz, size: 16, color: color),
+        ),
       ),
     );
   }
@@ -2786,15 +2818,14 @@ Widget _withMessageMeta({
           own ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
         bubble,
-        Padding(
-          padding: EdgeInsets.only(top: own ? 4 : 0, right: own ? 14 : 0),
-          child: AnimatedOpacity(
-            opacity: visible ? 1 : 0,
-            duration: const Duration(milliseconds: 120),
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: meta,
-            ),
+        // Own bubbles are right-aligned, so the meta line ends at the
+        // bubble's edge just as other messages' meta starts at theirs.
+        AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 120),
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: meta,
           ),
         ),
       ],

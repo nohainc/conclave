@@ -436,7 +436,7 @@ Archive Management Scope
 ```
 
 ### 1. Architectural Rules
-- **Compact Archived Space Cards:** The Archived Spaces page places a visible ⋮ menu at the top-right of each card instead of a bottom button row. Restore and Delete remain available through that menu; deletion requires confirmation. Menu targets and items are 48 logical pixels high for touch access. While a mutation is pending, its card menu is disabled and displays progress. The responsive one/two-column layout remains unchanged.
+- **Compact Archived Space Cards:** The Archived Spaces page places a visible circular ⋮ menu button at the top-right of each card instead of a bottom button row. Restore and Delete remain available through that menu; deletion requires confirmation. Menu targets and items are 48 logical pixels high for touch access. While a mutation is pending, its card menu is disabled and displays progress. Empty or whitespace-only descriptions are omitted along with their spacing, allowing cards to shrink to their content. The responsive one/two-column layout remains unchanged.
 - **No Archive Buttons on Home:** The legacy `"Archived Spaces"` button previously located beneath the title is permanently removed from Home.
 - **Dedicated Navigation Placement:** Archive discovery and space restoration live cleanly inside the global application menu (`AppMenu`) and sidebar (`AppSidebar`), or inside the Space management surface (`SpacePage`), preserving Home purely for active attention, active execution, active threads, and relevant updates.
 
