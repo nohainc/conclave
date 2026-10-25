@@ -40,6 +40,16 @@ const _gemini =
     'Gemini Models\tFive Hour Limit Remaining\t100%\t2026-10-17T13:34:56Z\n'
     'Gemini 4 Argon\tGemini 4 Argon Weekly Limit\t75%\t2026-10-24T08:34:56Z\n';
 
+const _geminiAtLimit = 'Gemini Models\tWeekly Limit Remaining\t64%\t'
+    '2026-10-31T09:24:46Z\n'
+    'Gemini Models\tFive Hour Limit Remaining\t95%\t'
+    '2026-10-26T02:10:23Z\n'
+    'Claude and GPT models\tWeekly Limit Remaining\t0%\t'
+    '2026-10-31T09:07:12Z\n'
+    'Claude and GPT models\tFive Hour Limit Remaining\tdisabled\t\n'
+    'Gemini 4 Argon\tGemini 4 Argon Weekly Limit\t93%\t'
+    '2026-11-01T11:40:14Z\n';
+
 /// GitHub Copilot `account.getQuota` on a Free plan (CLI 1.0.103).
 const _copilot = '''
 {
@@ -202,6 +212,15 @@ void main() {
     expect(usage.windows.map((w) => w.usedPercent), [0, 0, 25]);
     expect(usage.windows[2].group, 'Gemini 4 Argon');
     expect(usage.windows[1].resetsAt, DateTime.utc(2026, 10, 17, 13, 34, 56));
+  });
+
+  test('Gemini parses exhausted and disabled quota rows', () {
+    final usage = parseWorkerUsage(_geminiAtLimit)!;
+    expect(usage.windows.map((w) => w.usedPercent), [36, 5, 100, 7]);
+    expect(usage.windows[2].group, 'Claude and GPT models');
+    expect(usage.notes, [
+      'Claude and GPT models: Five Hour Limit Remaining disabled',
+    ]);
   });
 
   test('countdowns use hours for sessions and days for weeks', () {

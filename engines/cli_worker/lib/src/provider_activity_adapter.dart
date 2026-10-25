@@ -43,6 +43,7 @@ class ProviderActivityAdapter {
           'agy-stream-json',
           'claude-stream-json',
           'grok-streaming-json',
+          'copilot-jsonl',
         }.contains(declared)) {
       return ProviderActivityAdapter._(declared);
     }
@@ -57,6 +58,9 @@ class ProviderActivityAdapter {
     }
     if (normalizedName.contains('claude')) {
       return ProviderActivityAdapter._('claude-stream-json');
+    }
+    if (normalizedName.contains('copilot')) {
+      return ProviderActivityAdapter._('copilot-jsonl');
     }
     return null;
   }
@@ -94,6 +98,10 @@ class ProviderActivityAdapter {
       ),
       'claude-stream-json' => _normalizeClaude(event),
       'grok-streaming-json' => _normalizeGrok(event),
+      'copilot-jsonl' => _normalizeCopilot(
+        event,
+        declarativeMatched: declarativeMatched,
+      ),
       _ => _diagnostic('unsupported_adapter'),
     };
   }
@@ -477,6 +485,111 @@ class ProviderActivityAdapter {
     ];
   }
 
+  List<ProviderActivityObservation> _normalizeCopilot(
+    Map event, {
+      required bool declarativeMatched,
+    }) {
+    final type = event['type'];
+    if (type is! String) return _diagnostic('missing_event_type');
+    switch (type) {
+      case 'assistant.turn_start':
+        return declarativeMatched
+            ? const []
+            : const <ProviderActivityObservation>[
+                ProviderActivityObservation(
+                  type: 'model.started',
+                  status: 'running',
+                  title: 'Thinking',
+                ),
+              ];
+      case 'assistant.message':
+        final data = event['data'];
+        if (data is! Map) return const [];
+        final content = data['content'];
+        if (content is! String && content is! List && content is! Map) {
+          return const [];
+        }
+        final narration = _narrationExcerpt(
+          content is String
+              ? content
+              : content is Map
+              ? content['text']
+              : _copilotMessageText(content),
+        );
+        if (narration == null) return const [];
+        if (declarativeMatched) return const [];
+        final id = _safeText(data['messageId']);
+        return <ProviderActivityObservation>[
+          _narrationObservation(
+            narration,
+            activityId: id == null ? null : 'copilot-msg-$id',
+          ),
+        ];
+      case 'tool.execution_start':
+        final data = event['data'];
+        if (data is! Map) return const [];
+        final name = _safeText(data['toolName']) ?? 'tool';
+        final id = _safeText(data['toolCallId']);
+        if (declarativeMatched && id != null) return const [];
+        final summary = _copilotToolSummary(data['arguments']);
+        if (id != null) {
+          _copilotToolTitles[id] = _copilotToolTitle(name);
+          if (summary != null) _copilotToolSummaries[id] = summary;
+        }
+        return <ProviderActivityObservation>[
+          ProviderActivityObservation(
+            type: 'tool.started',
+            status: 'running',
+            title: _copilotToolTitle(name),
+            activityId:
+                id ??
+                _activityId(
+                  null,
+                  family: 'copilot-tool',
+                  toolKind: name,
+                  terminal: false,
+                ),
+            details: {
+              ..._toolDetails(name),
+              if (summary != null) 'summary': summary,
+              if (id == null) 'identifierSource': 'generated',
+            },
+          ),
+        ];
+      case 'tool.execution_complete':
+        final data = event['data'];
+        if (data is! Map) return const [];
+        final id = _safeText(data['toolCallId']);
+        if (id == null) return const [];
+        if (declarativeMatched) return const [];
+        final failed = data['success'] == false;
+        final runningTitle = _copilotToolTitles.remove(id);
+        final summary = _copilotToolSummaries.remove(id);
+        return <ProviderActivityObservation>[
+          ProviderActivityObservation(
+            type: failed ? 'tool.failed' : 'tool.completed',
+            status: failed ? 'failed' : 'completed',
+            title: _copilotFinishedTitle(runningTitle, failed: failed),
+            activityId: id,
+            details: {if (summary != null) 'summary': summary},
+          ),
+        ];
+      case 'session.error':
+        return const <ProviderActivityObservation>[
+          ProviderActivityObservation(
+            type: 'model.status',
+            status: 'failed',
+            title: 'Provider reported an error',
+            details: {'diagnostic': 'provider_error'},
+          ),
+        ];
+      case 'assistant.message_delta' || 'session.tools_updated' || 'assistant.turn_end':
+        return const [];
+      default:
+        return const [];
+    }
+  }
+
   /// Claude Code `--output-format stream-json` carries tool calls inside the
   /// `content` array of whole `assistant` and `user` messages, which the
   /// bounded selector grammar cannot index. The adapter reads block types,
@@ -714,6 +827,7 @@ class ProviderActivityAdapter {
     return switch (kind) {
       'agy-stream-json' => agyToolPresentation(event, mappedType),
       'codex-jsonl' => _codexToolPresentation(event, mappedType),
+      'copilot-jsonl' => _copilotToolPresentation(event, mappedType),
       _ => null,
     };
   }
@@ -788,6 +902,23 @@ class ProviderActivityAdapter {
       case 'mcp_tool_call':
         summary = _shortSummary(item['tool']);
     }
+    return (title: title, summary: summary);
+  }
+
+  ({String title, String? summary})? _copilotToolPresentation(
+    Map event,
+    String mappedType,
+  ) {
+    final data = event['data'];
+    if (data is! Map) return null;
+    final name = _safeText(data['toolName']) ?? 'tool';
+    final runningTitle = _copilotToolTitle(name);
+    final title = switch (mappedType) {
+      'tool.started' => runningTitle,
+      'tool.failed' => _copilotFinishedTitle(runningTitle, failed: true),
+      _ => _copilotFinishedTitle(runningTitle, failed: false),
+    };
+    final summary = _copilotToolSummary(data['arguments']);
     return (title: title, summary: summary);
   }
 
@@ -1134,6 +1265,11 @@ class ProviderActivityAdapter {
   /// Short descriptions of running Claude tools, for the completion row.
   final Map<String, String> _claudeToolSummaries = <String, String>{};
 
+  /// Titles and summaries for Copilot tools so the completion row can say what
+  /// completed instead of a generic "Tool finished".
+  final Map<String, String> _copilotToolTitles = <String, String>{};
+  final Map<String, String> _copilotToolSummaries = <String, String>{};
+
   /// A file name, search term or the start of a command from a `tool_use`
   /// input. Only these well-known keys are read; the result is masked.
   String? _claudeToolSummary(Object? input) {
@@ -1147,6 +1283,66 @@ class ProviderActivityAdapter {
       if (value != null) return value;
     }
     return _shortSummary(input['description']);
+  }
+
+  String _copilotToolTitle(String name) => switch (name.toLowerCase()) {
+    'bash' || 'shell' || 'command' || 'run' => 'Running a command',
+    'view' || 'read' || 'ls' || 'glob' || 'grep' => 'Reading files',
+    'create' || 'write' || 'edit' || 'apply_patch' || 'patch' =>
+      'Editing files',
+    'search' || 'web_search' || 'fetch' || 'lookup' => 'Searching the web',
+    _ => 'Running a tool',
+  };
+
+  String _copilotFinishedTitle(String? runningTitle, {required bool failed}) {
+    final done = switch (runningTitle) {
+      'Running a command' => 'Ran a command',
+      'Reading files' => 'Read files',
+      'Editing files' => 'Edited files',
+      'Searching the web' => 'Searched the web',
+      null => 'Tool finished',
+      _ => 'Tool finished',
+    };
+    if (!failed) return done;
+    return switch (runningTitle) {
+      'Running a command' => 'Command failed',
+      'Reading files' => 'Reading files failed',
+      'Editing files' => 'Editing files failed',
+      'Searching the web' => 'Web search failed',
+      null => 'Tool failed',
+      _ => 'Tool failed',
+    };
+  }
+
+  String? _copilotToolSummary(Object? raw) {
+    if (raw is! Map) return null;
+    for (final key in const ['command', 'pattern', 'query', 'url']) {
+      final value = _shortSummary(raw[key]);
+      if (value != null) return value;
+    }
+    for (final key in const ['path', 'file_path', 'file', 'target']) {
+      final value = _shortSummary(raw[key], path: true);
+      if (value != null) return value;
+    }
+    return _shortSummary(raw['description']);
+  }
+
+  String? _copilotMessageText(Object? value) {
+    if (value is List) {
+      final parts = <String>[];
+      for (final entry in value) {
+        if (entry is Map && entry['text'] is String) {
+          final text = entry['text'] as String;
+          if (text.trim().isNotEmpty) parts.add(text);
+        }
+      }
+      return parts.isEmpty ? null : parts.join();
+    }
+    if (value is Map && value['text'] is String) {
+      final text = value['text'] as String;
+      return text.trim().isEmpty ? null : text;
+    }
+    return null;
   }
 
   String _claudeFinishedTitle(String? runningTitle, {required bool failed}) {

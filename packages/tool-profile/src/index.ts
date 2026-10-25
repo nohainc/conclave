@@ -374,6 +374,7 @@ const activity = z
         "agy-stream-json",
         "claude-stream-json",
         "grok-streaming-json",
+        "copilot-jsonl",
       ])
       .optional(),
     schemaVersion: z.literal(1).optional(),

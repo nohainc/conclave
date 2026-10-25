@@ -740,6 +740,7 @@ void _validateActivityMappings(Object? value) {
         'agy-stream-json',
         'claude-stream-json',
         'grok-streaming-json',
+        'copilot-jsonl',
       }.contains(value['adapter'])) {
     throw const FormatException('activity adapter is invalid');
   }

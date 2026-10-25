@@ -1096,7 +1096,9 @@ A Profile may declare a top-level `usage` object:
   text travels unchanged. AX alone may normalize it for display
   (`worker_usage_parser.dart`): the format is detected from the text (Claude
   `Current session/week` lines, Codex `rateLimits` JSON, Copilot
-  `quotaSnapshots` JSON, Gemini tab-separated rows) and shown as per-window used percent and a live reset countdown.
+  `quotaSnapshots` JSON, Gemini tab-separated rows) and shown as per-window
+  used percent and a live reset countdown. Gemini rows marked `disabled` are
+  retained as notes; exhausted rows with `0%` remaining display as `100% used`.
   Session/5-hour windows use `Resets in 1 hr 29 min`; weekly windows use
   `Resets in 2 d 2 hr 30 min`, as does any reset two or more days away.
   Copilot shows chat and completion allowances as used/entitled requests;

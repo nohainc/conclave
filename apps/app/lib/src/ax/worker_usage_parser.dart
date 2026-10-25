@@ -228,10 +228,16 @@ String _count(num value) =>
 
 AxParsedUsage? _parseGemini(String text) {
   final windows = <AxUsageWindow>[];
+  final notes = <String>[];
   for (final line in const LineSplitter().convert(text)) {
     if (line.trim().isEmpty) continue;
     final cells = line.split('\t').map((cell) => cell.trim()).toList();
     if (cells.length != 4) return null;
+    if (cells[2].toLowerCase() == 'disabled') {
+      if (cells[3].isNotEmpty) return null;
+      notes.add('${cells[0]}: ${cells[1]} disabled');
+      continue;
+    }
     final percent = RegExp(r'^(\d+(?:\.\d+)?)%$').firstMatch(cells[2]);
     final resets = DateTime.tryParse(cells[3]);
     if (percent == null || resets == null) return null;
@@ -250,8 +256,8 @@ AxParsedUsage? _parseGemini(String text) {
       resetsAt: resets.toUtc(),
     ));
   }
-  if (windows.isEmpty) return null;
-  return AxParsedUsage(windows: windows);
+  if (windows.isEmpty && notes.isEmpty) return null;
+  return AxParsedUsage(windows: windows, notes: notes);
 }
 
 bool _timeZonesInitialized = false;

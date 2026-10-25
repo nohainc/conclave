@@ -659,6 +659,34 @@ void main() {
     expect(finished.single.details['summary'], 'git status');
   });
 
+  test('Copilot tool rows get a title and summary', () {
+    final adapter = ProviderActivityAdapter.fromProfile({
+      'providerTool': {'name': 'GitHub Copilot CLI'},
+      'activity': {'adapter': 'copilot-jsonl', 'mappings': <Object?>[]},
+    })!;
+    final start = adapter.normalizeEvent({
+      'type': 'tool.execution_start',
+      'data': {
+        'toolCallId': 'call_1',
+        'toolName': 'bash',
+        'arguments': {'command': 'curl -H "token=abcdef123456" x'},
+      },
+    }, declarativeMatched: false);
+    expect(start.single.title, 'Running a command');
+    expect(start.single.details['summary'], contains('[redacted]'));
+    expect(start.single.details['summary'], isNot(contains('abcdef123456')));
+    final done = adapter.toolPresentation({
+      'type': 'tool.execution_complete',
+      'data': {
+        'toolCallId': 'call_1',
+        'toolName': 'bash',
+        'arguments': {'command': 'curl -H "token=abcdef123456" x'},
+      },
+    }, 'tool.completed')!;
+    expect(done.title, 'Ran a command');
+    expect(done.summary, contains('[redacted]'));
+  });
+
   test('Codex tool rows get a title and summary', () {
     final adapter = ProviderActivityAdapter.fromProfile({
       'providerTool': {'name': 'codex'},
