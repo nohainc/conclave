@@ -229,8 +229,10 @@ describe("CI acceptance orchestration", () => {
       node: "echo '{}'",
       security:
         'echo "1) ABC Apple Development: vitalii@nohainc.com (7X62W6499P)"',
-      codesign: 'if [ "$1" = "-dv" ] || [ "$1" = "-d" ]; then exit 1; fi; exit 0',
-      ditto: 'if [ "$1" = "-c" ]; then for last; do :; done; touch "$last"; else mkdir -p "$2" && cp -R "$1/." "$2"; fi',
+      codesign:
+        'if [ "$1" = "-dv" ] || [ "$1" = "-d" ]; then exit 1; fi; exit 0',
+      ditto:
+        'if [ "$1" = "-c" ]; then for last; do :; done; touch "$last"; else mkdir -p "$2" && cp -R "$1/." "$2"; fi',
       dart: `echo "dart $1 $2" >> "$CI_TEST_LOG"\nwhile [ "$1" != "-o" ] && [ "$#" -gt 0 ]; do shift; done; if [ "$1" = "-o" ]; then shift; mkdir -p "$(dirname "$1")"; touch "$1"; chmod 755 "$1"; fi`,
     };
     for (const [command, script] of Object.entries(mocks)) {
@@ -263,8 +265,18 @@ describe("CI acceptance orchestration", () => {
       const prepared = run(["--prepared"]);
       expect(prepared.status, prepared.stderr.toString()).toBe(0);
       expect(readFileSync(log, "utf8")).toBe("dart compile exe\n");
-      const bundle = join(root, "dist", "conclave-workspace", "macos", "conclave-workspace");
-      for (const file of ["conclave-workspace", "workspace", "assets/engines/conclave-agent"]) {
+      const bundle = join(
+        root,
+        "dist",
+        "conclave-workspace",
+        "macos",
+        "conclave-workspace",
+      );
+      for (const file of [
+        "conclave-workspace",
+        "workspace",
+        "assets/engines/conclave-agent",
+      ]) {
         expect(readFileSync(join(bundle, file)) !== undefined).toBe(true);
       }
       writeFileSync(log, "");
