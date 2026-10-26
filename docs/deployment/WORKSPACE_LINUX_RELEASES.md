@@ -30,6 +30,7 @@ remains the sole source of Engine builds. Headless packages set the build-time
 with APT. Never promote candidates containing CI fixture trust anchors.
 
 Cross-compiling proves compilation, not Linux behavior. Test on the target OS.
+Current retained evidence is in [Linux package acceptance](../acceptance/WORKSPACE_LINUX_PACKAGES.md).
 The `Release Linux Workspace` workflow builds on Ubuntu 22.04 for amd64 and
 arm64, analyzes Workspace, tests registration/IPC/Linux adapters, signs a disposable
 test repository, and performs real APT installation, upgrade, service IPC,

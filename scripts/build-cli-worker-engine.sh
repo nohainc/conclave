@@ -36,7 +36,7 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 if [[ "$CROSS_BUILD" == 0 ]]; then mkdir -p "$ROOT/apps/profile_lab/assets/engines"; fi
-if [[ "$(uname -s)" =~ ^(MINGW|MSYS|CYGWIN) ]]; then
+if [[ "$CROSS_BUILD" == 0 && "$(uname -s)" =~ ^(MINGW|MSYS|CYGWIN) ]]; then
   OUTPUT="$OUTPUT_DIR/conclave_cli_worker_engine.exe"
   PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/conclave_cli_worker_engine.exe"
 else

@@ -48,6 +48,7 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
   assignments cancel ID
   folders                   Allowed folders
   metrics | logs
+  updates                   Show which updater manages this installation
 ''';
 
   Future<int> run(List<String> args) async {
@@ -146,6 +147,8 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
         return ('execution.cancelAssignment', {'assignmentId': id});
       case ('folders', null):
         return ('folders.list', {});
+      case ('updates', null):
+        return ('updates.status', {});
       case ('metrics', null):
         return ('diagnostics.getMetrics', {});
       case ('logs', null):

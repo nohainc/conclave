@@ -65,8 +65,19 @@ python3 - "$TEST_ROOT/version.json" "$VERSION" <<'PYVERSION'
 import json, sys
 assert json.load(open(sys.argv[1]))['version'] == sys.argv[2]
 PYVERSION
+conclave-workspace --data-dir "$STATE" --json updates > "$TEST_ROOT/updates.json"
+python3 - "$TEST_ROOT/updates.json" <<'PYUPDATES'
+import json, sys
+assert json.load(open(sys.argv[1])) == {'phase': 'managed', 'packageManager': 'apt'}
+PYUPDATES
 conclave-workspace --data-dir "$STATE" status
 conclave-workspace --data-dir "$STATE" workers
+python3 - <<'PYENGINE'
+import subprocess
+result = subprocess.run(['/usr/lib/conclave-workspace/assets/engines/conclave_cli_worker_engine'], capture_output=True, text=True, timeout=10)
+assert result.returncode == 64, result
+assert 'Engine options are incomplete or invalid' in result.stderr
+PYENGINE
 kill "$service_pid"
 wait "$service_pid"
 service_pid=''

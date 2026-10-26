@@ -21,6 +21,7 @@ void main() {
     expect((await run(['login'])).$4, ['auth.start {}']);
     expect((await run(['login', 'status'])).$4, ['auth.status {}']);
     expect((await run(['login', 'cancel'])).$4, ['auth.cancel {}']);
+    expect((await run(['updates'])).$4, ['updates.status {}']);
     expect((await run(['status'])).$4, ['service.getStatus {}']);
     expect((await run(['workers', 'test', 'w1'])).$4,
         ['workers.testWorker {workerId: w1}']);

@@ -161,4 +161,6 @@ can use these commands without systemd; its supervisor owns process lifecycle.
 ## Not yet qualified
 
 Reboot/linger start, Secret Service on specific desktops, real provider
-assignments, Wayland vs X11 sessions, and arm64 builds need device evidence.
+assignments, Wayland vs X11 sessions, and ARM64 desktop UI startup need
+device evidence. Headless amd64/arm64 package lifecycle checks are documented
+in [Linux package acceptance](../acceptance/WORKSPACE_LINUX_PACKAGES.md).
