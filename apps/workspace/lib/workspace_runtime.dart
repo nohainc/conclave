@@ -634,7 +634,9 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
   WorkspaceUpdateController? updateController;
   String? updateAvailable;
   var lastUpdateCheck = DateTime.fromMillisecondsSinceEpoch(0);
-  if (config.cloudUri != null) {
+  const packageManager =
+      String.fromEnvironment('CONCLAVE_WORKSPACE_PACKAGE_MANAGER');
+  if (config.cloudUri != null && packageManager != 'apt') {
     updateController = WorkspaceUpdateController(
       cloudUri: config.cloudUri!,
       currentVersion: conclaveWorkspaceAppVersion,
@@ -842,11 +844,16 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       };
     },
     updateStatusProvider: () async =>
-        updateController?.status.toJson() ?? const {'phase': 'unconfigured'},
+        updateController?.status.toJson() ??
+        (packageManager == 'apt'
+            ? const {'phase': 'managed', 'packageManager': 'apt'}
+            : const {'phase': 'unconfigured'}),
     updateHandler: (request) async {
       final controller = updateController;
       if (controller == null) {
-        throw StateError('Workspace updates are not configured');
+        throw StateError(packageManager == 'apt'
+            ? 'Update this installation using apt, then restart the user service.'
+            : 'Workspace updates are not configured');
       }
       final action = request['action'] as String? ?? 'status';
       if (action == 'check') {

@@ -1,0 +1,110 @@
+name: Release Linux Workspace
+
+on:
+  push:
+    branches: [codex/linux-apt-release]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Immutable package version (blank uses pubspec)
+        type: string
+      publish:
+        description: Sign and publish the APT repository (main and passing CI required)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-workspace-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          version="${REQUESTED_VERSION:-$(awk '/^version:/ {print $2; exit}' apps/workspace/pubspec.yaml)}"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+~.-][A-Za-z0-9.+~-]+)?$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Require CI before public release
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/require-ci-success.sh
+
+  build:
+    needs: preflight
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    env:
+      CONCLAVE_WORKSPACE_VERSION: ${{ needs.preflight.outputs.version }}
+      # Public releases may never fall back to a fixture trust anchor.
+      CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || (!inputs.publish && '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}') || '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-flutter
+      - name: Install package tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev gnupg
+      - name: Validate CLI, registration and Linux adapters
+        working-directory: apps/workspace
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter analyze
+          flutter test test/workspace_cli_test.dart test/workspace_headless_auth_test.dart test/workspace_manager_service_test.dart test/linux_runtime_test.dart
+      - name: Validate signed repository metadata
+        run: python3 scripts/release/test-apt-repository.py
+      - name: Build and package
+        run: |
+          bash scripts/build-workspace-linux-headless.sh '${{ matrix.arch }}'
+          bash scripts/package-workspace-linux.sh '${{ matrix.arch }}'
+      - name: Test actual APT install and upgrade
+        run: bash scripts/test-workspace-linux-package.sh '${{ matrix.arch }}'
+      - name: Retain tested candidates
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-workspace-${{ matrix.arch }}
+          path: |
+            dist/conclave-workspace/deb/conclave-workspace_${{ needs.preflight.outputs.version }}_*.deb
+            dist/conclave-workspace/conclave-workspace-headless-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+  publish:
+    if: inputs.publish
+    needs: [preflight, build]
+    runs-on: ubuntu-24.04
+    environment: workspace-linux-release
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download tested packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --pattern 'linux-workspace-*' --dir candidates
+      - name: Sign and publish the static APT repository
+        env:
+          CONCLAVE_APT_PRIVATE_KEY: ${{ secrets.CONCLAVE_APT_PRIVATE_KEY }}
+          CONCLAVE_APT_SIGNING_FINGERPRINT: ${{ vars.CONCLAVE_APT_SIGNING_FINGERPRINT }}
+          CONCLAVE_APT_REPOSITORY: ${{ vars.CONCLAVE_APT_REPOSITORY }}
+          GH_TOKEN: ${{ secrets.CONCLAVE_APT_PUBLISH_TOKEN }}
+        run: bash scripts/release/publish-apt-repository.sh candidates

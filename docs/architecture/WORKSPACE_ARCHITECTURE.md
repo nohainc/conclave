@@ -444,7 +444,8 @@ Service or `0600` file credential store; see the
 - On every platform the Service, Engine, and provider CLIs run as the same
   user that owns the CLI logins; Conclave never manages provider credentials.
 - Headless hosts are managed through a `conclave-workspace` IPC client
-  (planned; not implemented yet).
+  over authenticated local IPC. Browser approval and registration remain
+  service-owned; Linux host commands use the existing systemd adapter.
 
 ### Profile-declared model discovery
 

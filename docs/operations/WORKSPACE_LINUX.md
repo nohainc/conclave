@@ -2,8 +2,81 @@
 
 Linux x64/arm64 source support includes the Flutter management UI, the
 standalone Dart Workspace Service, and the separately supervised generic CLI
-Worker Engine (ADR-021). The bundle is an unsigned candidate with manual
-updates; distro packages (deb/rpm/Flatpak) and release signing are later phases.
+Worker Engine (ADR-021). Desktop tarballs remain unsigned candidates. The headless service, management
+CLI and Engine can also be shipped together as a Debian package through a
+signed APT repository. See [Linux release operations](../deployment/WORKSPACE_LINUX_RELEASES.md)
+for publication setup and qualification requirements.
+
+## Install the headless Debian package
+
+The public APT endpoint must be provisioned before these commands work. Use the
+HTTPS repository URL and independently verify the signing-key fingerprint from
+the publisher; do not substitute the private source repository URL.
+
+```bash
+APT_URL=https://YOUR-PACKAGE-HOST/REPOSITORY
+curl --fail --location "$APT_URL/conclave-archive-keyring.gpg" -o /tmp/conclave-archive-keyring.gpg
+gpg --show-keys --with-fingerprint /tmp/conclave-archive-keyring.gpg
+sudo install -D -m 644 /tmp/conclave-archive-keyring.gpg /etc/apt/keyrings/conclave-archive-keyring.gpg
+printf 'Types: deb\nURIs: %s\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/conclave-archive-keyring.gpg\n' "$APT_URL" | sudo tee /etc/apt/sources.list.d/conclave.sources
+sudo apt update
+sudo apt install conclave-workspace
+```
+
+Run all following commands as the normal user who owns the provider CLI logins,
+without `sudo`. The package does not install provider CLIs or manage their logins.
+It installs binaries under `/usr/lib/conclave-workspace`, and symlinks under
+`/usr/bin`; GTK and a desktop session are not needed.
+
+```bash
+conclave-workspace service install
+conclave-workspace service start
+conclave-workspace login
+# Open the returned verificationUrl on another computer and approve sign-in.
+conclave-workspace login status
+# After phase is complete:
+conclave-workspace connect
+conclave-workspace workers check
+conclave-workspace status
+loginctl enable-linger "$USER"
+```
+
+`login` starts a service-owned approval operation and returns immediately. Poll
+`login status` for `pending`, `complete`, `failed` or `cancelled`; use
+`login cancel` to cancel before registration commits. No comparison code is
+printed because the existing Cloud approval contract uses a verification URL.
+The service retains the intent poll token, human session and runtime credential;
+none is returned to the CLI. Sign-in refuses a different owner or ambiguous/stale
+registration; existing installations needing recovery must use the desktop
+recovery flow. A fresh registration does not connect Cloud until `connect`.
+
+The service uses the default Linux Work Root (`~/Documents/Conclave`) unless
+configured otherwise. For a custom Work Root, use the foreground service with
+`--work-root /absolute/path` under your own supervisor, or configure the persisted
+Work Root through the desktop manager before using the systemd unit.
+Pass `--data-dir DIR` on **every** CLI command when using a custom state root.
+`service install` registers/enables the systemd user unit but does not start it.
+`service stop` preserves its registration; `service uninstall` removes the user
+unit and preserves all user files.
+
+Update after active assignments finish:
+
+```bash
+conclave-workspace service stop
+sudo apt update
+sudo apt install --only-upgrade conclave-workspace
+conclave-workspace service start
+conclave-workspace health
+```
+
+APT updates the complete service/CLI/Engine unit. Package installation, upgrade,
+removal and purge have no maintainer scripts that start a root service or alter
+user state. A running daemon is not automatically restarted: stop/start it as
+shown so it uses the matching new Engine. This package disables the separate
+application self-updater; APT owns updates. Automatic upgrades require explicitly
+configuring the host's unattended-upgrades origin and an appropriate maintenance
+window. Removing the package leaves user service registration and state in place;
+run `service uninstall` first if you want to remove its systemd unit too.
 
 ## Build
 
@@ -50,8 +123,21 @@ restarts and SIGTERM performs a graceful stop:
 ```
 
 Persist the state root, Work Root, and the provider CLI credential directories
-(`~/.claude`, `~/.codex`, `~/.gemini`) on volumes. A dedicated
-`conclave-workspace` management CLI (ADR-021 §2.6) is not implemented yet.
+(`~/.claude`, `~/.codex`, `~/.gemini`) on volumes.
+
+Manage a running service with `conclave-workspace` (ADR-021 §2.6). It speaks
+the local authenticated IPC only; pass `--data-dir` if the service did:
+
+```bash
+./conclave-workspace status          # also: health, version, metrics, logs
+./conclave-workspace connect         # disconnect, pause, resume
+./conclave-workspace workers         # workers check|test|enable|disable
+./conclave-workspace slots           # assignments, assignments cancel ID, folders
+```
+
+Add `--json` for raw output. Use `login`, `login status` and `login cancel`
+for initial Cloud registration through browser approval. A foreground process
+can use these commands without systemd; its supervisor owns process lifecycle.
 
 ## Platform behavior
 
@@ -75,4 +161,6 @@ Persist the state root, Work Root, and the provider CLI credential directories
 ## Not yet qualified
 
 Reboot/linger start, Secret Service on specific desktops, real provider
-assignments, Wayland vs X11 sessions, and arm64 builds need device evidence.
+assignments, Wayland vs X11 sessions, and ARM64 desktop UI startup need
+device evidence. Headless amd64/arm64 package lifecycle checks are documented
+in [Linux package acceptance](../acceptance/WORKSPACE_LINUX_PACKAGES.md).
