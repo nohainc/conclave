@@ -104,11 +104,21 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
       } else if (call.$1 == 'connection.disconnect') {
         await _updateConnectionSetting(dataDir, false);
       }
-      if (call.$1 == 'service.getStatus' && !json && result is Map<String, Object?>) {
-        _printStatusSummary(result);
-      } else {
-        _print(result, json);
+      if (!json && result is Map<String, Object?>) {
+        if (call.$1 == 'service.getStatus') {
+          _printStatusSummary(result);
+          return 0;
+        }
+        if (call.$1 == 'connection.connect' ||
+            call.$1 == 'connection.reconnect' ||
+            call.$1 == 'connection.disconnect' ||
+            call.$1 == 'connection.pause' ||
+            call.$1 == 'connection.resume') {
+          _printConnectionSummary(call.$1, result);
+          return 0;
+        }
       }
+      _print(result, json);
       return 0;
     } on WorkspaceManagerProtocolException catch (error) {
       err.writeln('conclave-workspace: ${error.message} (${error.code})');
@@ -541,6 +551,26 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     out.writeln('Work Root:     $workRoot');
     out.writeln('Workers:       $workers configured');
     out.writeln('Active Work:   $activeCount running');
+  }
+
+  void _printConnectionSummary(String command, Map<String, Object?> snapshot) {
+    final cloud = snapshot['cloud'] as Map<String, Object?>? ?? const {};
+    final connected = cloud['connected'] == true;
+    final state = cloud['lifecycleState'] ?? cloud['state'] ?? 'offline';
+    final accepting = cloud['acceptingNewWork'] == true;
+
+    switch (command) {
+      case 'connection.connect' || 'connection.reconnect':
+        out.writeln(connected ? 'Cloud:         Connected ($state)' : 'Cloud:         Connecting ($state)...');
+      case 'connection.disconnect':
+        out.writeln('Cloud:         Disconnected');
+      case 'connection.pause':
+        out.writeln('Cloud:         Paused (not accepting new work)');
+      case 'connection.resume':
+        out.writeln(accepting ? 'Cloud:         Resumed (accepting work)' : 'Cloud:         Resumed');
+      default:
+        out.writeln('Cloud:         $state');
+    }
   }
 
   void _print(Object? result, bool json) {
