@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'workspace_configuration.dart';
 import 'linux_service_manager.dart';
+import 'macos_service_manager.dart';
+import 'windows_service_manager.dart';
 import 'workspace_background_service.dart';
 import 'workspace_manager_ipc.dart';
 import 'workspace_settings.dart';
@@ -35,7 +37,7 @@ class WorkspaceCli {
 Usage: conclave-workspace [--data-dir DIR] [--json] <command>
 
   service install|uninstall|start|stop|restart|status
-                            Manage this user's Linux systemd service
+                            Manage host background service (macOS/Linux/Windows)
   config init|show|validate|path
                             Manage the restart-applied workspace.nano file
   login [status|cancel]     Browser approval and Cloud registration
@@ -345,18 +347,16 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
       err.write(usage);
       return 64;
     }
-    if (_hostManager == null && !Platform.isLinux) {
-      err.writeln(
-        'Service commands require Linux with a systemd user session.',
-      );
-      return 69;
-    }
     final root = WorkspaceConfigurationResolver.resolveDataDirectory([
       if (dataDir != null) ...['--data-dir', dataDir],
     ]);
     final manager =
         _hostManager?.call(root) ??
-        LinuxWorkspaceServiceManager(dataDirectory: root);
+        (Platform.isMacOS
+            ? MacOsWorkspaceServiceManager(dataDirectory: root)
+            : Platform.isWindows
+                ? WindowsWorkspaceServiceManager(dataDirectory: root)
+                : LinuxWorkspaceServiceManager(dataDirectory: root));
     try {
       if (action == 'stop' || action == 'restart' || action == 'uninstall') {
         final info = await manager.getInfo();

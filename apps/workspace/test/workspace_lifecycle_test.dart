@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:conclave_workspace/workspace_lifecycle.dart';
 import 'package:conclave_workspace/workspace_lifecycle_store.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('every lifecycle dimension can be constructed independently', () {

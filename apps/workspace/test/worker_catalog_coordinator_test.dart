@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:crypto/crypto.dart';
 
 import 'package:conclave_workspace/tool_profile_catalog.dart';

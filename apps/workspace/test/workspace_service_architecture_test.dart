@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:conclave_workspace/workspace.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';

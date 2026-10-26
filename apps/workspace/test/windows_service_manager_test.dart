@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:conclave_workspace/windows_native.dart';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:conclave_workspace/windows_service_manager.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/workspace_lifecycle.dart';

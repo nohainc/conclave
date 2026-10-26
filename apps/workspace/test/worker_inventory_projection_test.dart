@@ -8,7 +8,7 @@ import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
     show canonicalJson;
 import 'package:conclave_workspace/worker_inventory_projection.dart';
 import 'package:crypto/crypto.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 import 'support/worker_profile_fixture.dart';
 

@@ -1,7 +1,7 @@
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_workspace/worker_executor.dart';
 import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('Cloud permissions choose the generic provider policy', () {

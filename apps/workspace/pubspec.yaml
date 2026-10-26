@@ -1,19 +1,14 @@
 name: conclave_workspace
-description: Conclave AX Workspace desktop application and runtime.
+description: Conclave AX Workspace headless service and CLI.
 publish_to: none
 version: 1.0.4
 
 environment:
-  sdk: ">=3.12.0 <4.0.0"
-  flutter: ">=3.24.0"
+  sdk: ">=3.5.0 <4.0.0"
 
 dependencies:
-  flutter:
-    sdk: flutter
   crypto: ^3.0.0
   archive: ^4.3.0
-  conclave_design:
-    path: ../../packages/conclave_design
   conclave_protocol:
     path: ../../packages/dart/protocol
   conclave_worker_protocol:
@@ -26,34 +21,6 @@ dependencies:
   nanomarkup: ^1.0.0
 
 dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^5.0.0
+  lints: ^5.0.0
   fake_async: ^1.3.1
   test: ^1.25.0
-  conclave_profile_lab:
-    path: ../profile_lab
-  conclave_app:
-    path: ../app
-
-flutter:
-  uses-material-design: true
-  assets:
-    - assets/branding/
-    - assets/engines/
-    - assets/worker_icons/
-  fonts:
-    - family: Inter
-      fonts:
-        - asset: assets/fonts/Inter-Regular.ttf
-        - asset: assets/fonts/Inter-Medium.ttf
-          weight: 500
-        - asset: assets/fonts/Inter-SemiBold.ttf
-          weight: 600
-        - asset: assets/fonts/Inter-Bold.ttf
-          weight: 700
-    - family: JetBrains Mono
-      fonts:
-        - asset: assets/fonts/JetBrainsMono-Regular.ttf
-        - asset: assets/fonts/JetBrainsMono-Medium.ttf
-          weight: 500

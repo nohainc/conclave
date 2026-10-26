@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:conclave_workspace/windows_credentials.dart';
 import 'package:conclave_workspace/workspace_paths.dart';
 import 'package:conclave_workspace/platform_runtime.dart';
@@ -161,11 +162,31 @@ void main() {
   }, skip: !Platform.isWindows, timeout: const Timeout(Duration(seconds: 40)));
 }
 
-class _WindowsPathRuntime extends Fake implements PlatformRuntime {
+class _WindowsPathRuntime implements PlatformRuntime {
   @override
   String get homeDirectory => '${Directory.systemTemp.path}/conclave-path-test';
   @override
   String get operatingSystem => 'windows';
   @override
   bool get isWindows => true;
+
+  @override
+  Future<void> restrictPermissions(String path, {required bool directory}) async {}
+
+  @override
+  Future<Process> startIsolatedProcess(
+    String executable,
+    List<String> arguments, {
+    String? workingDirectory,
+    Map<String, String>? environment,
+    bool includeParentEnvironment = true,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> terminateProcessTree(Process process, {required bool force}) async {}
+
+  @override
+  List<StreamSubscription<ProcessSignal>> watchTermination(
+    void Function() onTermination,
+  ) => [];
 }

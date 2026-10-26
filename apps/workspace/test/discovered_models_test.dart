@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
 import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
 import 'package:conclave_workspace/local_worker_registry.dart';

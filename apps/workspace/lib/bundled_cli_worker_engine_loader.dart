@@ -15,8 +15,8 @@ Future<File?> loadBundledCliWorkerEngine({
 }) async {
   final runtime = platform ?? currentPlatformRuntime;
   final engineName = Platform.isWindows
-      ? 'assets/engines/conclave_cli_worker_engine.exe'
-      : 'assets/engines/conclave_cli_worker_engine';
+      ? 'assets/engines/conclave-agent.exe'
+      : 'assets/engines/conclave-agent';
   try {
     final bytes = await (assetLoader ?? _loadDefaultEngineAsset)(engineName);
     if (bytes == null) return null;
@@ -79,11 +79,9 @@ Directory? _defaultBundleDirectory() {
     ),
   ];
   for (final directory in candidates) {
-    if (File(
-      '${directory.path}${Platform.pathSeparator}assets'
-      '${Platform.pathSeparator}engines${Platform.pathSeparator}'
-      'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
-    ).existsSync()) {
+    final exeSuffix = Platform.isWindows ? '.exe' : '';
+    if (File('${directory.path}/assets/engines/conclave-agent$exeSuffix').existsSync() ||
+        File('${directory.path}/assets/engines/conclave_cli_worker_engine$exeSuffix').existsSync()) {
       return directory;
     }
   }

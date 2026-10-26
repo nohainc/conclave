@@ -1,38 +1,16 @@
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 String _source(String path) => File(path).readAsStringSync();
 
 void main() {
-  test('Workspace UI remains a management client', () {
-    final uiParts = [
-      _source('lib/main/app.dart'),
-      _source('lib/main/management.dart'),
-      _source('lib/main/shell.dart'),
-      _source('lib/main/dashboard.dart'),
-      _source('lib/main/workers.dart'),
-    ].join('\n');
+  test('Workspace CLI remains an IPC management client', () {
+    final cli = _source('lib/workspace_cli.dart');
 
-    expect(uiParts, isNot(contains('WorkspaceCloudConnection(')));
-    expect(uiParts, isNot(contains('CliWorkerEngineSupervisor(')));
-    expect(uiParts, isNot(contains('Process.start(')));
-  });
-
-  test('Workspace UI does not import the Cloud runtime or run processes', () {
-    final uiLibrary = [
-      _source('lib/main.dart'),
-      _source('lib/main/lifecycle.dart'),
-      _source('lib/main/app.dart'),
-      _source('lib/main/management.dart'),
-      _source('lib/main/shell.dart'),
-      _source('lib/main/dashboard.dart'),
-      _source('lib/main/workers.dart'),
-    ].join('\n');
-
-    expect(uiLibrary, isNot(contains("import 'cloud_connection.dart'")));
-    expect(uiLibrary, isNot(contains('Process.run(')));
-    expect(uiLibrary, isNot(contains('Process.start(')));
+    expect(cli, isNot(contains('WorkspaceCloudConnection(')));
+    expect(cli, isNot(contains('CliWorkerEngineSupervisor(')));
+    expect(cli, isNot(contains('buildWorkspaceRuntime(')));
   });
 
   test('the service owns Cloud and Worker subsystem composition', () {

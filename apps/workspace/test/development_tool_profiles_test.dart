@@ -7,7 +7,7 @@ import 'package:conclave_workspace/worker_profile_store.dart';
 import 'package:conclave_workspace/tool_profile_resolver.dart';
 import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
 import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
 import 'support/repository_root.dart';

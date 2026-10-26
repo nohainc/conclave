@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:conclave_workspace/sleep_inhibitor.dart';
 import 'package:conclave_workspace/workspace_lifecycle_store.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('preventSleep defaults on and toggles the inhibitor', () async {

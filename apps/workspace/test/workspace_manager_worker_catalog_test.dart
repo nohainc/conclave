@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:conclave_workspace/workspace_manager_worker_catalog.dart';
 import 'package:conclave_workspace/worker_check_progress.dart';
 import 'package:conclave_workspace/workspace_manager_ipc.dart';

@@ -37,16 +37,19 @@ fi
 mkdir -p "$OUTPUT_DIR"
 if [[ "$CROSS_BUILD" == 0 ]]; then mkdir -p "$ROOT/apps/profile_lab/assets/engines"; fi
 if [[ "$CROSS_BUILD" == 0 && "$(uname -s)" =~ ^(MINGW|MSYS|CYGWIN) ]]; then
-  OUTPUT="$OUTPUT_DIR/conclave_cli_worker_engine.exe"
-  PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/conclave_cli_worker_engine.exe"
+  OUTPUT="$OUTPUT_DIR/conclave-agent.exe"
+  PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/conclave-agent.exe"
 else
-  OUTPUT="$OUTPUT_DIR/conclave_cli_worker_engine"
-  PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/conclave_cli_worker_engine"
+  OUTPUT="$OUTPUT_DIR/conclave-agent"
+  PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/conclave-agent"
 fi
 (cd "$ENGINE_DIR" && "$DART_BIN" compile exe ${TARGET_FLAGS[@]+"${TARGET_FLAGS[@]}"} \
   "-DENGINE_VERSION=$VERSION" \
   bin/conclave_cli_worker.dart \
   -o "$OUTPUT")
+cp "$OUTPUT" "$OUTPUT_DIR/conclave_cli_worker_engine${OUTPUT##*conclave-agent}" 2>/dev/null || true
+cp "$OUTPUT" "$PROFILE_LAB_OUTPUT" 2>/dev/null || true
+cp "$OUTPUT" "$ROOT/apps/profile_lab/assets/engines/conclave_cli_worker_engine${OUTPUT##*conclave-agent}" 2>/dev/null || true
 if [[ "$CROSS_BUILD" == 1 ]]; then
   chmod 755 "$OUTPUT"
   echo "Built generic CLI Worker Engine $VERSION: $OUTPUT"

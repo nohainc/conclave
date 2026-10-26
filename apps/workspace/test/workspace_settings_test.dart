@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:conclave_workspace/workspace.dart';
 import 'package:conclave_workspace/workspace_settings.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 void main() {
   late Directory root;
