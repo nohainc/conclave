@@ -107,6 +107,9 @@ export function startStatefulLeaseStatements(
   ];
 }
 
+/** How often a deferred lease release re-checks whether the Worker stopped. */
+const PENDING_RECHECK_MS = 30_000;
+
 export function leaseIsCurrent(
   lease: Pick<CoordinatorLeaseRow, "status" | "expiresAt" | "fencingToken">,
   fencingToken: number,
@@ -285,6 +288,80 @@ export class ThreadExecutionCoordinator implements DurableObject {
         : body.status === "cancelled"
           ? "cancelled"
           : "completed";
+    const pendingKey = `pending:${lease.workRequestId}`;
+    if (status !== "completed" && (await this.workerMayBeRunning(lease.workRequestId))) {
+      // The Thread is not free while its Worker may still be running: the
+      // next request would only wait for it in the Workspace. Keep the lease
+      // and finish once the Worker has stopped (or when the Workflow reports
+      // completion, or when the lease expires).
+      await this.state.storage.put(pendingKey, {
+        leaseId: lease.id,
+        fencingToken: lease.fencingToken,
+        status,
+      });
+      await this.scheduleAlarm(Date.now() + PENDING_RECHECK_MS);
+      return json(
+        { workRequestId: lease.workRequestId, status: "pending_worker_stop" },
+        { status: 202 },
+      );
+    }
+    await this.state.storage.delete(pendingKey);
+    await this.release(lease, status);
+    await this.reconcile();
+    return json({ workRequestId: lease.workRequestId, status });
+  }
+
+  /** True while any assignment of the request has not reached a terminal state. */
+  private async workerMayBeRunning(workRequestId: string): Promise<boolean> {
+    const row = await this.env.CONCLAVE_DB.prepare(
+      `SELECT COUNT(*) AS count FROM worker_assignments wa
+         JOIN workflow_tasks wt ON wt.id = wa.task_id
+        WHERE wt.work_request_id = ?1
+          AND wa.status NOT IN ('completed', 'failed', 'cancelled', 'timed_out', 'lost')`,
+    )
+      .bind(workRequestId)
+      .first<{ count: number }>();
+    return Number(row?.count ?? 0) > 0;
+  }
+
+  private async scheduleAlarm(at: number): Promise<void> {
+    const current = await this.state.storage.getAlarm();
+    if (current === null || current > at) await this.state.storage.setAlarm(at);
+  }
+
+  /** Finishes deferred completions whose Worker has stopped meanwhile. */
+  private async settlePending(): Promise<boolean> {
+    const pending = await this.state.storage.list<{
+      leaseId: string;
+      fencingToken: number;
+      status: "failed" | "cancelled";
+    }>({ prefix: "pending:" });
+    let stillWaiting = false;
+    for (const [key, value] of pending) {
+      const workRequestId = key.slice("pending:".length);
+      const lease = await this.currentLease(
+        value.leaseId,
+        workRequestId,
+        value.fencingToken,
+      );
+      if (!lease || !leaseIsCurrent(lease, value.fencingToken)) {
+        await this.state.storage.delete(key);
+        continue;
+      }
+      if (await this.workerMayBeRunning(workRequestId)) {
+        stillWaiting = true;
+        continue;
+      }
+      await this.state.storage.delete(key);
+      await this.release(lease, value.status);
+    }
+    return stillWaiting;
+  }
+
+  private async release(
+    lease: { id: string; workRequestId: string },
+    status: "completed" | "failed" | "cancelled",
+  ): Promise<void> {
     const now = new Date().toISOString();
     await this.env.CONCLAVE_DB.batch([
       this.env.CONCLAVE_DB.prepare(
@@ -297,12 +374,11 @@ export class ThreadExecutionCoordinator implements DurableObject {
         "UPDATE runs SET status = ?1, updated_at = ?2 WHERE work_request_id = ?3 AND status = 'running'",
       ).bind(status, now, lease.workRequestId),
     ]);
-    await this.reconcile();
-    return json({ workRequestId: lease.workRequestId, status });
   }
 
   private async reconcile(fromAlarm = false): Promise<Response> {
     const threadId = await this.threadId();
+    const stillWaiting = await this.settlePending();
     const now = new Date().toISOString();
     await this.env.CONCLAVE_DB.prepare(
       `UPDATE thread_runtime_leases SET status = 'expired', released_at = ?1
@@ -332,6 +408,7 @@ export class ThreadExecutionCoordinator implements DurableObject {
         .first<{ expiresAt: string | null }>();
       if (nextExpiry?.expiresAt)
         await this.state.storage.setAlarm(Date.parse(nextExpiry.expiresAt));
+      if (stillWaiting) await this.scheduleAlarm(Date.now() + PENDING_RECHECK_MS);
     }
     return this.status();
   }

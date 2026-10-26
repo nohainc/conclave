@@ -391,7 +391,25 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     }
   }
 
+  /**
+   * Finalizes the Work Request and gives up its Thread lease. Runs as a
+   * durable step so a Workflow restart cannot apply one outcome and then
+   * replay into another. The coordinator keeps the lease while the Worker may
+   * still be running, and a completion that arrives after the lease is gone
+   * still marks the request completed.
+   */
   private async finishWorkRequest(
+    params: ConclaveWorkflowParams,
+    status: "completed" | "failed" | "cancelled",
+    workflowStep: WorkflowStep,
+  ): Promise<void> {
+    await workflowStep.do(`workflow:finish:${status}`, stepConfig, async () => {
+      await this.finishWorkRequestNow(params, status);
+      return true;
+    });
+  }
+
+  private async finishWorkRequestNow(
     params: ConclaveWorkflowParams,
     status: "completed" | "failed" | "cancelled",
   ): Promise<void> {
@@ -424,7 +442,25 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       )
       .bind(params.workRequestId, params.threadId)
       .first<{ id: string; fencingToken: number }>();
-    if (!lease) return;
+    if (!lease) {
+      // The lease is already gone (an earlier failure path released it, or it
+      // expired). A Workflow that still finished every step completed the
+      // request; do not leave a finished result marked failed.
+      if (status === "completed") {
+        const now = new Date().toISOString();
+        await db.batch([
+          db
+            .prepare(
+              `UPDATE work_requests SET status = 'completed', updated_at = ?1
+                WHERE id = ?2 AND status = 'failed'
+                  AND NOT EXISTS (SELECT 1 FROM workflow_tasks
+                                   WHERE work_request_id = ?2 AND status != 'completed')`,
+            )
+            .bind(now, params.workRequestId),
+        ]);
+      }
+      return;
+    }
     const stub = namespace.getByName(params.threadId);
     await stub.fetch("https://thread-coordinator/complete", {
       method: "POST",
@@ -717,7 +753,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         );
       }
       await this.persistTerminalRun(params.runId, status);
-      await this.finishWorkRequest(params, status);
+      await this.finishWorkRequest(params, status, step);
       if (status === "failed") {
         if (first)
           await this.publishWorkEvent(params, "step.failed", {
@@ -753,7 +789,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
         );
         const status = failed?.status === "cancelled" ? "cancelled" : "failed";
         await this.persistTerminalRun(params.runId, status);
-        await this.finishWorkRequest(params, status);
+        await this.finishWorkRequest(params, status, step);
         if (status === "failed") {
           await this.publishWorkEvent(params, "work_request.failed", {
             status: "failed",
@@ -823,7 +859,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
             (candidate) => candidate.id === result.task.id,
           )!;
           await this.persistTerminalRun(params.runId, resultStatus);
-          await this.finishWorkRequest(params, resultStatus);
+          await this.finishWorkRequest(params, resultStatus, step);
           if (resultStatus === "failed") {
             await this.publishWorkEvent(params, "work_request.failed", {
               status: "failed",
@@ -851,7 +887,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       }
     }
     await this.persistTerminalRun(params.runId, "completed");
-    await this.finishWorkRequest(params, "completed");
+    await this.finishWorkRequest(params, "completed", step);
     await this.publishWorkEvent(params, "work_request.completed", {
       status: "completed",
     });
