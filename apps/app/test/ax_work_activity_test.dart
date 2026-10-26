@@ -239,16 +239,34 @@ void main() {
           'activitySequence': 1,
           'activityType': 'tool.started',
           'activityStatus': 'running',
-          'title': 'Reading repository',
+          'activityId': 'call-view',
+          'toolName': 'view',
+          'details': {'toolName': 'view'},
+          'title': 'Using a tool',
           'timestamp': '2026-10-12T18:00:01Z',
+        },
+        {
+          'eventId': 'history-2',
+          'assignmentId': 'assignment-1',
+          'attemptId': 'attempt-1',
+          'executionId': 'execution-1',
+          'workerId': 'worker-1',
+          'activitySequence': 2,
+          'activityType': 'tool.completed',
+          'activityStatus': 'completed',
+          'activityId': 'call-view',
+          'title': 'Tool finished',
+          'timestamp': '2026-10-12T18:00:02Z',
         },
       ],
     });
 
     final activities = store.forRequest(request);
     expect(activities, hasLength(1));
-    expect(activities.single.eventId, 'history-1');
-    expect(activities.single.title, 'Reading repository');
+    expect(activities.single.eventId, 'history-2');
+    expect(activities.single.title, 'Tool finished');
+    expect(activities.single.toolName, 'view');
+    expect(activities.single.details, {'toolName': 'view'});
   });
 
   testWidgets('ticks the current time once a second only while active',

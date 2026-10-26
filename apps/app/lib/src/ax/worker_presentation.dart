@@ -8,7 +8,13 @@ class WorkerPresentation {
   final String? iconAsset;
 
   /// Selects the bundled mark for the current surface theme.
-  String? iconAssetForBrightness(Brightness brightness) {
+  String? iconAssetForBrightness(Brightness brightness) =>
+      assetForBrightness(iconAsset, brightness);
+
+  static String? assetForBrightness(
+    String? iconAsset,
+    Brightness brightness,
+  ) {
     for (final worker in ['copilot', 'grok']) {
       if (iconAsset == 'assets/worker_icons/$worker.png') {
         final theme = brightness == Brightness.dark ? 'dark' : 'light';

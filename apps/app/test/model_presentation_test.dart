@@ -97,6 +97,10 @@ void main() {
       );
       expect(p.name, 'Copilot');
       expect(p.iconAsset, 'assets/worker_icons/copilot.png');
+      expect(p.iconAssetForBrightness(Brightness.light),
+          'assets/worker_icons/copilot-light.png');
+      expect(p.iconAssetForBrightness(Brightness.dark),
+          'assets/worker_icons/copilot-dark.png');
     });
   });
 

@@ -8,16 +8,28 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'ax_fixture_data.dart';
 
-Map<String, dynamic> activity(String thread, int sequence) => {
+Map<String, dynamic> activity(
+  String thread,
+  int sequence, {
+  String? title,
+  String? toolName,
+  String type = 'tool.completed',
+  String status = 'completed',
+  String? activityId,
+}) =>
+    {
       'eventId': '$thread-event-$sequence',
       'assignmentId': '$thread-assignment',
       'attemptId': '$thread-attempt',
       'executionId': '$thread-execution',
       'workerId': 'worker',
+      'activityId': activityId ?? 'call-$thread-$sequence',
       'activitySequence': sequence,
-      'activityType': 'tool.completed',
-      'activityStatus': 'completed',
-      'title': '$thread operation $sequence',
+      'activityType': type,
+      'activityStatus': status,
+      'title': title ?? '$thread operation $sequence',
+      if (toolName != null) 'toolName': toolName,
+      if (toolName != null) 'details': {'toolName': toolName},
       'timestamp': '2026-10-17T10:00:0${sequence}Z',
     };
 
@@ -146,38 +158,66 @@ void main() {
         of: find.byKey(const ValueKey('chat-history-scroll')),
         matching: finder);
 
-    void completeOperation(String id, int sequence) {
-      final row = activity(id, sequence);
-      data.histories[id]!.add(row);
-      events.add({
-        'type': 'assignment.activity',
-        'threadId': id,
-        'assignmentId': row['assignmentId'],
-        'attemptId': row['attemptId'],
-        'eventId': row['eventId'],
-        'sequence': sequence,
-        'timestamp': row['timestamp'],
-        'payload': row,
-      });
+    void completeOperation(
+      String id,
+      int sequence, {
+      String? title,
+      String? toolName,
+    }) {
+      final rows = [
+        if (toolName != null)
+          activity(
+            id,
+            sequence * 2 - 1,
+            title: 'Using a tool',
+            toolName: toolName,
+            type: 'tool.started',
+            status: 'running',
+            activityId: 'call-$id-$sequence',
+          ),
+        activity(
+          id,
+          sequence * 2,
+          title: title ?? '$id operation $sequence',
+          activityId: 'call-$id-$sequence',
+        ),
+      ];
+      data.histories[id]!.addAll(rows);
+      for (final row in rows) {
+        events.add({
+          'type': 'assignment.activity',
+          'threadId': id,
+          'assignmentId': row['assignmentId'],
+          'attemptId': row['attemptId'],
+          'eventId': row['eventId'],
+          'sequence': row['activitySequence'],
+          'timestamp': row['timestamp'],
+          'payload': row,
+        });
+      }
     }
 
     await open('a');
-    completeOperation('a', 1);
+    completeOperation('a', 1, title: 'Tool finished', toolName: 'view');
     await tester.pump();
-    expect(inConversation(find.text('a operation 1')), findsOneWidget);
+    expect(inConversation(find.text('Tool finished · view')), findsOneWidget);
     await open('b');
-    expect(inConversation(find.text('a operation 1')), findsNothing);
+    expect(inConversation(find.text('Tool finished · view')), findsNothing);
     completeOperation('b', 1);
     completeOperation('a', 2); // Arrives while the other Thread is visible.
     await tester.pump();
     expect(inConversation(find.text('b operation 1')), findsOneWidget);
     await open('a');
-    expect(inConversation(find.text('a operation 1')), findsOneWidget);
+    expect(inConversation(find.text('Tool finished · view')), findsOneWidget);
     expect(inConversation(find.text('a operation 2')), findsOneWidget);
     expect(inConversation(find.text('b operation 1')), findsNothing);
     await open('b', replacePage: true); // Also cover disposed/recreated pages.
     expect(inConversation(find.text('b operation 1')), findsOneWidget);
     expect(inConversation(find.text('a operation 1')), findsNothing);
+    await open('a', replacePage: true);
+    expect(inConversation(find.text('Tool finished · view')), findsOneWidget);
+    expect(inConversation(find.text('Using a tool · view')), findsNothing);
+    expect(inConversation(find.text('a operation 2')), findsOneWidget);
     expect(data.details, containsAll(['a', 'b']));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

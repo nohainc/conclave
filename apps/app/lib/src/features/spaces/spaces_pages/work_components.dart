@@ -2128,12 +2128,15 @@ class _WorkTimelineCard extends StatelessWidget {
 /// Rebuilds [builder] once a second while [active], handing it the current
 /// time. Used for live elapsed time and stale-progress hints that must keep
 /// moving between Worker events.
-/// "Ran a command · git status": the row title plus the short `summary` the
-/// Worker attached (a file name, a search term, the start of a command).
+/// "Ran a command · git status": prefer the safe short summary; when a
+/// provider only supplies a tool name, keep that context visible as a fallback.
 String _activityLabel(AxWorkActivity activity) {
   final summary = activity.details['summary'];
-  if (summary is! String || summary.trim().isEmpty) return activity.title;
-  return '${activity.title} · ${summary.trim()}';
+  final description = summary is String && summary.trim().isNotEmpty
+      ? summary.trim()
+      : activity.toolName?.trim();
+  if (description == null || description.isEmpty) return activity.title;
+  return '${activity.title} · $description';
 }
 
 class _WorkActivityTrail extends StatelessWidget {

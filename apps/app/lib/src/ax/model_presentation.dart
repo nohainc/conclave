@@ -39,14 +39,9 @@ class ModelPresentation {
 
   final ModelFamily family;
 
-  /// Selects the bundled mark for the current surface theme (handles Grok dark/light variants).
-  String? iconAssetForBrightness(Brightness brightness) {
-    if (iconAsset == 'assets/worker_icons/grok.png') {
-      final theme = brightness == Brightness.dark ? 'dark' : 'light';
-      return 'assets/worker_icons/grok-$theme.png';
-    }
-    return iconAsset;
-  }
+  /// Selects the bundled mark for the current surface theme.
+  String? iconAssetForBrightness(Brightness brightness) =>
+      WorkerPresentation.assetForBrightness(iconAsset, brightness);
 
   static final RegExp _identityPrefix = RegExp(
     r'^(chatgpt|openai|anthropic|gpt|claude|gemini|grok)[\s\-_:]*',

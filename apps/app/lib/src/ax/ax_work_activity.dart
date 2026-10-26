@@ -406,11 +406,24 @@ class AxWorkActivityStore extends ChangeNotifier {
         for (final activity in activities) activity.eventId: activity,
       };
       final ordered = merged.values.toList()..sort(_compare);
+      final projected = <AxWorkActivity>[];
+      for (final activity in ordered) {
+        final matchingIndex = _matchingIndex(projected, activity);
+        if (matchingIndex < 0) {
+          projected.add(activity);
+          continue;
+        }
+        final current = projected[matchingIndex];
+        if (_compare(current, activity) <= 0) {
+          projected[matchingIndex] = current.merge(activity);
+        }
+      }
+      projected.sort(_compare);
       final latestAttempt =
-          _latestAttempts[assignmentId] ?? ordered.lastOrNull?.attemptId;
+          _latestAttempts[assignmentId] ?? projected.lastOrNull?.attemptId;
       final currentAttempt = latestAttempt == null
-          ? ordered
-          : ordered.where((activity) => activity.attemptId == latestAttempt);
+          ? projected
+          : projected.where((activity) => activity.attemptId == latestAttempt);
       if (!requestIsTerminal) {
         result.addAll(currentAttempt);
         continue;
