@@ -2,13 +2,13 @@ Origin: Conclave
 Label: Conclave Workspace
 Suite: stable
 Codename: stable
-Date: Mon, 26 Oct 2026 17:32:39 GMT
+Date: Mon, 26 Oct 2026 23:00:16 GMT
 Architectures: amd64 arm64
 Components: main
 Acquire-By-Hash: yes
 Description: Conclave Workspace packages
 SHA256:
- 569dc2979a53ccb1ebff08e4eddc38f0601d7ea28c49ee399eddd2f667bbc65d 1382 main/binary-amd64/Packages
- ebc4067211071ee10475333081c9469d7bd854e0f1014a4c47aaddedfbe7ddec 539 main/binary-amd64/Packages.gz
- d814fa7ce5e7eaa68c540a4e0b933f2d6cda7195c33fd941db72d538d13a4f36 1382 main/binary-arm64/Packages
- 63a47129091a76c658467ca0370be071e94ad23edc76e5872719d8b4d178ea81 539 main/binary-arm64/Packages.gz
+ 6cd445ea7b016eefdc9008e97d50f5d3189c39b6d2f3e827a6a6aeb05f115eee 2073 main/binary-amd64/Packages
+ e13a257131faf5e103beb9bcbca985c28fd5a661bc6f6f2f76d0211f50a94a3c 606 main/binary-amd64/Packages.gz
+ 85e8cf1d6039ee017d260b1824b345c3e44ad240292d975dcfb8dd35944193ce 2073 main/binary-arm64/Packages
+ b722752d8b7d46250b478ecbd098927ec0ced6319fbfbc2ad9dc49267b2f74ed 604 main/binary-arm64/Packages.gz
