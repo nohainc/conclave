@@ -80,8 +80,10 @@ Directory? _defaultBundleDirectory() {
   ];
   for (final directory in candidates) {
     final exeSuffix = Platform.isWindows ? '.exe' : '';
-    if (File('${directory.path}/assets/engines/conclave-agent$exeSuffix').existsSync() ||
-        File('${directory.path}/assets/engines/conclave_cli_worker_engine$exeSuffix').existsSync()) {
+    if (File('${directory.path}/assets/engines/conclave-agent$exeSuffix')
+            .existsSync() ||
+        File('${directory.path}/assets/engines/conclave_cli_worker_engine$exeSuffix')
+            .existsSync()) {
       return directory;
     }
   }

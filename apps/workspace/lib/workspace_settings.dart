@@ -54,25 +54,30 @@ final class WorkspaceSettings {
       connectOnStart: connectOnStart ?? this.connectOnStart,
       workspaceName: workspaceName ?? this.workspaceName,
       parallelSlots: parallelSlots ?? this.parallelSlots,
-      workRoot: workRoot ?? (folders != null && folders.containsKey('work') ? folders['work']! : this.workRoot),
+      workRoot: workRoot ??
+          (folders != null && folders.containsKey('work')
+              ? folders['work']!
+              : this.workRoot),
       folders: Map.unmodifiable(updatedFolders),
     );
   }
 
   Map<String, Object> toNanoValue() => <String, Object>{
-    'version': schemaVersion.toString(),
-    'service': <String, Object>{'enabled': serviceEnabled.toString()},
-    'cloud': <String, Object>{
-      'url': cloudUrl,
-      'connect_on_start': connectOnStart.toString(),
-    },
-    'workspace': <String, Object>{
-      'name': workspaceName,
-      'work_root': workRoot,
-    },
-    'execution': <String, Object>{'parallel_slots': parallelSlots.toString()},
-    if (folders.isNotEmpty) 'folders': <String, Object>{...folders},
-  };
+        'version': schemaVersion.toString(),
+        'service': <String, Object>{'enabled': serviceEnabled.toString()},
+        'cloud': <String, Object>{
+          'url': cloudUrl,
+          'connect_on_start': connectOnStart.toString(),
+        },
+        'workspace': <String, Object>{
+          'name': workspaceName,
+          'work_root': workRoot,
+        },
+        'execution': <String, Object>{
+          'parallel_slots': parallelSlots.toString()
+        },
+        if (folders.isNotEmpty) 'folders': <String, Object>{...folders},
+      };
 
   factory WorkspaceSettings.fromNanoValue(
     Object value, {
@@ -83,14 +88,17 @@ final class WorkspaceSettings {
       throw const FormatException('Workspace configuration must be a mapping');
     }
     final root = Map<String, Object>.from(value);
-    _onlyKeys(root, const {
-      'version',
-      'service',
-      'cloud',
-      'workspace',
-      'execution',
-      'folders',
-    }, 'configuration');
+    _onlyKeys(
+        root,
+        const {
+          'version',
+          'service',
+          'cloud',
+          'workspace',
+          'execution',
+          'folders',
+        },
+        'configuration');
     if (_requiredString(root, 'version', 'configuration') !=
         schemaVersion.toString()) {
       throw const FormatException(
@@ -134,7 +142,8 @@ final class WorkspaceSettings {
     String? workRoot = workspace['work_root'] as String?;
     if (workRoot != null) {
       if (!_isAbsolutePath(workRoot)) {
-        throw const FormatException('workspace.work_root must be an absolute path');
+        throw const FormatException(
+            'workspace.work_root must be an absolute path');
       }
     }
 
@@ -144,7 +153,8 @@ final class WorkspaceSettings {
       for (final entry in folderValues.entries) {
         final path = entry.value;
         if (path is! String || !_isAbsolutePath(path)) {
-          throw FormatException('folders.${entry.key} must be an absolute path');
+          throw FormatException(
+              'folders.${entry.key} must be an absolute path');
         }
         folders[entry.key] = path;
       }
@@ -233,7 +243,7 @@ final class WorkspaceSettings {
 /// Atomic reader/writer for `<state>/workspace.nano`.
 final class WorkspaceSettingsStore {
   WorkspaceSettingsStore(this.dataDirectory, {PlatformRuntime? platform})
-    : platform = platform ?? currentPlatformRuntime;
+      : platform = platform ?? currentPlatformRuntime;
 
   final Directory dataDirectory;
   final PlatformRuntime platform;

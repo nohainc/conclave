@@ -31,9 +31,12 @@ void main() {
       'execution.cancelAssignment {assignmentId: a1}',
     ]);
     expect((await run(['folders', 'list'])).$4, ['folders.list {}']);
-    expect((await run(['folders', 'add', '/path/to/project', '--name', 'MyProj'])).$4, [
-      'folders.add {path: /path/to/project, displayName: MyProj}',
-    ]);
+    expect(
+        (await run(['folders', 'add', '/path/to/project', '--name', 'MyProj']))
+            .$4,
+        [
+          'folders.add {path: /path/to/project, displayName: MyProj}',
+        ]);
     expect((await run(['folders', 'remove', 'folder-123'])).$4, [
       'folders.remove {folderId: folder-123}',
     ]);
@@ -41,9 +44,9 @@ void main() {
 
   test(
     'password login sends credentials only over IPC, never prints them',
-      () async {
-    final out = StringBuffer(), err = StringBuffer();
-    final code = await WorkspaceCli(
+    () async {
+      final out = StringBuffer(), err = StringBuffer();
+      final code = await WorkspaceCli(
         out: out,
         err: err,
         readCredentials: () =>
@@ -60,25 +63,25 @@ void main() {
           return {'phase': 'complete'};
         },
       ).run(['login', '--password']);
-    expect(code, 0);
-    expect('$out$err', isNot(contains('private-password')));
-    expect('$out$err', isNot(contains('user@example.test')));
+      expect(code, 0);
+      expect('$out$err', isNot(contains('private-password')));
+      expect('$out$err', isNot(contains('user@example.test')));
     },
   );
 
   test(
     'service install uses the Linux host adapter and never calls Cloud',
-      () async {
-    final root = await Directory.systemTemp.createTemp('cli-host-');
-    addTearDown(() => root.delete(recursive: true));
+    () async {
+      final root = await Directory.systemTemp.createTemp('cli-host-');
+      addTearDown(() => root.delete(recursive: true));
       final executable = File('${root.path}/workspace')
-      ..writeAsStringSync('fixture');
-    final systemctl = <List<String>>[];
-    final code = await WorkspaceCli(
-      out: StringBuffer(),
-      err: StringBuffer(),
-      request: (_, __) async => fail('install must not call IPC'),
-      hostManager: (state) => LinuxWorkspaceServiceManager(
+        ..writeAsStringSync('fixture');
+      final systemctl = <List<String>>[];
+      final code = await WorkspaceCli(
+        out: StringBuffer(),
+        err: StringBuffer(),
+        request: (_, __) async => fail('install must not call IPC'),
+        hostManager: (state) => LinuxWorkspaceServiceManager(
           dataDirectory: state,
           executable: executable,
           unitDirectory: Directory('${root.path}/units'),
@@ -92,11 +95,11 @@ void main() {
             );
           },
         ),
-    ).run(['--data-dir', '${root.path}/state', 'service', 'install']);
-    expect(code, 0);
-    expect(systemctl[0], ['daemon-reload']);
-    expect(systemctl[1].first, 'enable');
-    expect(Directory('${root.path}/units').listSync(), hasLength(1));
+      ).run(['--data-dir', '${root.path}/state', 'service', 'install']);
+      expect(code, 0);
+      expect(systemctl[0], ['daemon-reload']);
+      expect(systemctl[1].first, 'enable');
+      expect(Directory('${root.path}/units').listSync(), hasLength(1));
     },
   );
 
@@ -110,14 +113,14 @@ void main() {
     var connected = false;
     final out = StringBuffer(), err = StringBuffer();
     final code = await WorkspaceCli(
-        out: out,
-        err: err,
-        readCredentials: () =>
-            (email: 'user@example.test', password: 'private-password'),
-        hostManager: (state) => LinuxWorkspaceServiceManager(
-            dataDirectory: state,
-            executable: executable,
-            unitDirectory: Directory('${root.path}/units'),
+      out: out,
+      err: err,
+      readCredentials: () =>
+          (email: 'user@example.test', password: 'private-password'),
+      hostManager: (state) => LinuxWorkspaceServiceManager(
+        dataDirectory: state,
+        executable: executable,
+        unitDirectory: Directory('${root.path}/units'),
         systemctl: (args) async => ProcessResult(
           0,
           0,
@@ -125,40 +128,40 @@ void main() {
           '',
         ),
       ),
-        request: (command, payload) async {
-          commands.add(command);
-          switch (command) {
-            case 'service.getHealth':
-              return {'healthy': true};
-            case 'service.getStatus':
-              return {
-                'workspace': {
+      request: (command, payload) async {
+        commands.add(command);
+        switch (command) {
+          case 'service.getHealth':
+            return {'healthy': true};
+          case 'service.getStatus':
+            return {
+              'workspace': {
                 'workspaceId': registered ? 'existing-workspace' : null,
-                },
-                'cloud': {'synchronized': connected},
+              },
+              'cloud': {'synchronized': connected},
               'workers': <Object>[],
-              };
-            case 'auth.start':
-              registered = true;
-              return {'phase': 'pending'};
-            case 'auth.status':
-              return {'phase': 'complete'};
-            case 'connection.connect':
-              connected = true;
-              return {};
-            default:
-              fail('Setup must not touch Workers: $command');
-          }
+            };
+          case 'auth.start':
+            registered = true;
+            return {'phase': 'pending'};
+          case 'auth.status':
+            return {'phase': 'complete'};
+          case 'connection.connect':
+            connected = true;
+            return {};
+          default:
+            fail('Setup must not touch Workers: $command');
+        }
       },
     ).run(['--data-dir', '${root.path}/state', 'setup']);
     expect(code, 0);
     expect(
-        commands,
-        containsAllInOrder([
-          'service.getHealth',
-          'auth.start',
-          'auth.status',
-          'connection.connect',
+      commands,
+      containsAllInOrder([
+        'service.getHealth',
+        'auth.start',
+        'auth.status',
+        'connection.connect',
         'service.getStatus',
       ]),
     );
@@ -212,13 +215,13 @@ void main() {
       expect(path.$2.trim(), endsWith('workspace.nano'));
     });
 
-    test('config validate rejects an invalid file with exit code 65',
-        () async {
+    test('config validate rejects an invalid file with exit code 65', () async {
       await WorkspaceSettingsStore(root).ensureDefaults();
       final file = WorkspaceSettingsStore(root).file;
       file.writeAsStringSync(
-        file.readAsStringSync().replaceFirst(RegExp(r'parallel_slots \d+'),
-            'parallel_slots 99'),
+        file
+            .readAsStringSync()
+            .replaceFirst(RegExp(r'parallel_slots \d+'), 'parallel_slots 99'),
       );
       expect((await config(['validate'])).$1, 65);
     });

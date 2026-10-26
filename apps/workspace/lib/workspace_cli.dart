@@ -10,8 +10,8 @@ import 'workspace_background_service.dart';
 import 'workspace_manager_ipc.dart';
 import 'workspace_settings.dart';
 
-typedef WorkspaceCliRequest =
-    Future<Object?> Function(String command, Map<String, Object?> payload);
+typedef WorkspaceCliRequest = Future<Object?> Function(
+    String command, Map<String, Object?> payload);
 
 /// Management CLI for a running Workspace service. It only speaks the local
 /// authenticated IPC protocol: it never starts Engines, provider CLIs, or
@@ -340,7 +340,8 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     final runtime = Directory('${root.path}/runtime');
     final key = (await File(
       '${runtime.path}/manager-ipc.key',
-    ).readAsString()).trim();
+    ).readAsString())
+        .trim();
     final client = await WorkspaceManagerIpcClient.connect(
       socketPath: workspaceManagerEndpoint(runtime),
       key: key,
@@ -371,8 +372,7 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     final root = WorkspaceConfigurationResolver.resolveDataDirectory([
       if (dataDir != null) ...['--data-dir', dataDir],
     ]);
-    final manager =
-        _hostManager?.call(root) ??
+    final manager = _hostManager?.call(root) ??
         (Platform.isMacOS
             ? MacOsWorkspaceServiceManager(dataDirectory: root)
             : Platform.isWindows
@@ -404,7 +404,8 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
           'pid': info.pid,
         }, true);
       } else {
-        final registered = info.registration == ServiceInstallationState.registered;
+        final registered =
+            info.registration == ServiceInstallationState.registered;
         final running = info.process == ServiceRuntimeState.running;
         final registrationText = registered ? 'Installed' : 'Not installed';
         final processText = running ? 'Running (pid: ${info.pid})' : 'Stopped';
@@ -503,7 +504,8 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     final action = args[0];
     if (action == 'remove' && args.length == 2) {
       try {
-        final result = await _send(dataDir, 'folders.remove', {'folderId': args[1]});
+        final result =
+            await _send(dataDir, 'folders.remove', {'folderId': args[1]});
         _print(result, json);
         return 0;
       } on WorkspaceManagerProtocolException catch (error) {
@@ -536,22 +538,27 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
   }
 
   void _printStatusSummary(Map<String, Object?> snapshot) {
-    final workspace = snapshot['workspace'] as Map<String, Object?>? ?? const {};
+    final workspace =
+        snapshot['workspace'] as Map<String, Object?>? ?? const {};
     final cloud = snapshot['cloud'] as Map<String, Object?>? ?? const {};
     final service = snapshot['service'] as Map<String, Object?>? ?? const {};
-    final assignments = snapshot['assignments'] as Map<String, Object?>? ?? const {};
+    final assignments =
+        snapshot['assignments'] as Map<String, Object?>? ?? const {};
     final workers = (snapshot['workers'] as List?)?.length ?? 0;
 
     final name = workspace['name'] ?? 'Workspace';
     final cloudState = cloud['state'] ?? 'offline';
     final connected = cloud['connected'] == true;
-    final cloudUrl = cloud['transport'] != null ? '${cloud['transport']} (${cloud['lifecycleState']})' : '${cloud['lifecycleState'] ?? cloudState}';
+    final cloudUrl = cloud['transport'] != null
+        ? '${cloud['transport']} (${cloud['lifecycleState']})'
+        : '${cloud['lifecycleState'] ?? cloudState}';
     final workRoot = workspace['workRoot'] ?? 'Not configured';
     final activeCount = assignments['activeCount'] ?? 0;
     final healthy = service['serviceHealthy'] == true;
 
     out.writeln('Workspace:     $name (${healthy ? 'healthy' : 'unhealthy'})');
-    out.writeln('Cloud:         ${connected ? 'Connected' : 'Disconnected'} ($cloudUrl)');
+    out.writeln(
+        'Cloud:         ${connected ? 'Connected' : 'Disconnected'} ($cloudUrl)');
     out.writeln('Work Root:     $workRoot');
     out.writeln('Workers:       $workers configured');
     out.writeln('Active Work:   $activeCount running');
@@ -565,13 +572,17 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
 
     switch (command) {
       case 'connection.connect' || 'connection.reconnect':
-        out.writeln(connected ? 'Cloud:         Connected ($state)' : 'Cloud:         Connecting ($state)...');
+        out.writeln(connected
+            ? 'Cloud:         Connected ($state)'
+            : 'Cloud:         Connecting ($state)...');
       case 'connection.disconnect':
         out.writeln('Cloud:         Disconnected');
       case 'connection.pause':
         out.writeln('Cloud:         Paused (not accepting new work)');
       case 'connection.resume':
-        out.writeln(accepting ? 'Cloud:         Resumed (accepting work)' : 'Cloud:         Resumed');
+        out.writeln(accepting
+            ? 'Cloud:         Resumed (accepting work)'
+            : 'Cloud:         Resumed');
       default:
         out.writeln('Cloud:         $state');
     }

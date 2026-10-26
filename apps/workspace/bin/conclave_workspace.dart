@@ -16,9 +16,8 @@ Future<void> main(List<String> args) async {
   if (invokedAs == 'workspace' ||
       (args.isNotEmpty &&
           (args.first == 'run' || args.contains('--background-service')))) {
-    final serviceArgs = args.isNotEmpty && args.first == 'run'
-        ? args.sublist(1)
-        : args;
+    final serviceArgs =
+        args.isNotEmpty && args.first == 'run' ? args.sublist(1) : args;
     await service.main(serviceArgs);
     return;
   }

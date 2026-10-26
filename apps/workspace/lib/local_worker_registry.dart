@@ -64,12 +64,12 @@ class LocalWorker {
     this.modelCatalog,
     this.lastLiveTestProfileDigest,
     this.lastLiveTestToolVersion,
-  }) : localPermissions = ({
-         ...localPermissions,
-         ...executionPermissionIds,
-       }.toList()..sort()),
-       activationState =
-           activationState ??
+  })  : localPermissions = ({
+          ...localPermissions,
+          ...executionPermissionIds,
+        }.toList()
+          ..sort()),
+        activationState = activationState ??
             (status == LocalWorkerStatus.disabled ||
                     status == LocalWorkerStatus.removed
                 ? LocalWorkerActivationState.disabled
@@ -156,15 +156,16 @@ class LocalWorker {
     bool clearLastLiveTestDetails = false,
     bool clearReadinessIssueCode = false,
     bool clearLastLiveTestIssueCode = false,
-  }) => LocalWorker(
+  }) =>
+      LocalWorker(
         id: id,
         workspaceId: workspaceId,
         workerTypeId: workerTypeId ?? this.workerTypeId,
         localPermissions: localPermissions ?? this.localPermissions,
-    localConcurrencyLimit: localConcurrencyLimit ?? this.localConcurrencyLimit,
+        localConcurrencyLimit:
+            localConcurrencyLimit ?? this.localConcurrencyLimit,
         status: status ?? this.status,
-    activationState:
-        activationState ??
+        activationState: activationState ??
             (status == null
                 ? this.activationState
                 : status == LocalWorkerStatus.disabled ||
@@ -186,7 +187,8 @@ class LocalWorker {
             : lastLiveTestIssueCode ?? this.lastLiveTestIssueCode,
         toolVersion: clearToolVersion ? null : toolVersion ?? this.toolVersion,
         toolName: clearToolName ? null : toolName ?? this.toolName,
-    modelCatalog: clearModelCatalog ? null : modelCatalog ?? this.modelCatalog,
+        modelCatalog:
+            clearModelCatalog ? null : modelCatalog ?? this.modelCatalog,
         lastLiveTestProfileDigest:
             lastLiveTestProfileDigest ?? this.lastLiveTestProfileDigest,
         lastLiveTestToolVersion:
@@ -469,8 +471,8 @@ class LocalWorkerRegistry {
   Future<void> _tail = Future<void>.value();
 
   File get file => File(
-    '${dataDirectory.path}${Platform.pathSeparator}configured-workers.json',
-  );
+        '${dataDirectory.path}${Platform.pathSeparator}configured-workers.json',
+      );
 
   Future<T> _locked<T>(Future<T> Function() action) async {
     final previous = _tail;
@@ -485,23 +487,23 @@ class LocalWorkerRegistry {
   }
 
   Future<List<LocalWorker>> list({bool includeRemoved = false}) => _locked(
-    () async => (await _read())
-        .where(
-          (worker) =>
-              includeRemoved || worker.status != LocalWorkerStatus.removed,
-        )
-        .toList(),
-  );
+        () async => (await _read())
+            .where(
+              (worker) =>
+                  includeRemoved || worker.status != LocalWorkerStatus.removed,
+            )
+            .toList(),
+      );
 
   /// The Workspace-wide parallel slot total (shared by all Workers).
   Future<int> parallelSlots() => _locked(
-    () async =>
-      (await _read())
-          .where((worker) => worker.status != LocalWorkerStatus.removed)
-          .map((worker) => worker.localConcurrencyLimit)
-          .firstOrNull ??
-        configuredParallelSlots,
-  );
+        () async =>
+            (await _read())
+                .where((worker) => worker.status != LocalWorkerStatus.removed)
+                .map((worker) => worker.localConcurrencyLimit)
+                .firstOrNull ??
+            configuredParallelSlots,
+      );
 
   /// Sets the Workspace-wide parallel slot total on every Worker record and
   /// advances each revision so Cloud accepts the new inventory.
@@ -526,9 +528,9 @@ class LocalWorkerRegistry {
         changed = true;
         next.add(
           worker.copyWith(
-          localConcurrencyLimit: slots,
-          revision: worker.revision + 1,
-          updatedAt: now,
+            localConcurrencyLimit: slots,
+            revision: worker.revision + 1,
+            updatedAt: now,
           ),
         );
       }
@@ -550,24 +552,25 @@ class LocalWorkerRegistry {
     int? localConcurrencyLimit,
     LocalWorkerStatus status = LocalWorkerStatus.needsAttention,
     WorkerReadinessState? readinessState,
-  }) => _locked(() async {
+  }) =>
+      _locked(() async {
         final workers = await _read();
         final normalizedTypeId = catalogEntry.workerTypeId;
         if (catalogEntry.engineFamily != 'cli' ||
-        !RegExp(
-          r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$',
-        ).hasMatch(normalizedTypeId)) {
+            !RegExp(
+              r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$',
+            ).hasMatch(normalizedTypeId)) {
           throw ArgumentError('Worker slot is not in the approved catalog');
         }
-    final existingSlot = workers.indexWhere(
-      (worker) => worker.workerTypeId == normalizedTypeId,
-    );
+        final existingSlot = workers.indexWhere(
+          (worker) => worker.workerTypeId == normalizedTypeId,
+        );
         final now = clock().toUtc().toIso8601String();
         if (existingSlot >= 0 &&
             workers[existingSlot].status != LocalWorkerStatus.removed) {
           throw ArgumentError(
-        'This Worker Type is already configured in this Workspace',
-      );
+            'This Worker Type is already configured in this Workspace',
+          );
         }
         final previous = existingSlot < 0 ? null : workers[existingSlot];
         final worker = LocalWorker(
@@ -575,13 +578,12 @@ class LocalWorkerRegistry {
           workspaceId: workspaceId,
           workerTypeId: normalizedTypeId,
           localPermissions: List.unmodifiable(localPermissions),
-      localConcurrencyLimit:
-          localConcurrencyLimit ??
+          localConcurrencyLimit: localConcurrencyLimit ??
               workers
                   .where((worker) => worker.status != LocalWorkerStatus.removed)
                   .map((worker) => worker.localConcurrencyLimit)
                   .firstOrNull ??
-          configuredParallelSlots,
+              configuredParallelSlots,
           status: status,
           readinessState: readinessState,
           revision: (previous?.revision ?? 0) + 1,
@@ -606,7 +608,8 @@ class LocalWorkerRegistry {
   Future<LocalWorker> update(
     String workerId,
     LocalWorker Function(LocalWorker current) change,
-  ) => _locked(() async {
+  ) =>
+      _locked(() async {
         final workers = await _read();
         final index = workers.indexWhere((worker) => worker.id == workerId);
         if (index < 0) throw StateError('Worker does not exist');
@@ -622,7 +625,8 @@ class LocalWorkerRegistry {
         if (updated.id != current.id ||
             updated.workspaceId != workspaceId ||
             updated.createdAt != current.createdAt) {
-      throw StateError('Worker identity and ownership fields are immutable');
+          throw StateError(
+              'Worker identity and ownership fields are immutable');
         }
         _validateWorker(updated);
         _validateTypeUnique(workers, updated, excludingId: workerId);
@@ -777,7 +781,7 @@ class LocalWorkerRegistry {
   }) {
     if (workers.any(
       (worker) =>
-        worker.id != excludingId &&
+          worker.id != excludingId &&
           worker.workerTypeId == candidate.workerTypeId,
     )) {
       throw ArgumentError(

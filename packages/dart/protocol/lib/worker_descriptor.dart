@@ -58,7 +58,8 @@ class WorkerDescriptor {
     final currentRevision = json['currentRevision'];
     final currentDigest = json['currentDigest'];
     final currentUpdatedAt = json['currentUpdatedAt'];
-    final normalizedReleaseStage = releaseStage ??
+    final normalizedReleaseStage =
+        releaseStage ??
         (lifecycleState == 'active' || lifecycleState == 'retired'
             ? 'stable'
             : null);
@@ -110,16 +111,16 @@ class WorkerDescriptor {
   }
 
   Map<String, Object?> toJson() => {
-        'workerTypeId': workerTypeId,
-        'displayName': displayName,
-        'description': description,
-        'engineFamily': engineFamily,
-        'profileDefinitionId': profileDefinitionId,
-        'providerToolName': providerToolName,
-        'releaseStage': releaseStage,
-        'visibilityState': visibilityState,
-        'sortOrder': sortOrder,
-      };
+    'workerTypeId': workerTypeId,
+    'displayName': displayName,
+    'description': description,
+    'engineFamily': engineFamily,
+    'profileDefinitionId': profileDefinitionId,
+    'providerToolName': providerToolName,
+    'releaseStage': releaseStage,
+    'visibilityState': visibilityState,
+    'sortOrder': sortOrder,
+  };
 }
 
 final _identifier = RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$');

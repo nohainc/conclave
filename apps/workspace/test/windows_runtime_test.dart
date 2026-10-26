@@ -171,7 +171,8 @@ class _WindowsPathRuntime implements PlatformRuntime {
   bool get isWindows => true;
 
   @override
-  Future<void> restrictPermissions(String path, {required bool directory}) async {}
+  Future<void> restrictPermissions(String path,
+      {required bool directory}) async {}
 
   @override
   Future<Process> startIsolatedProcess(
@@ -180,13 +181,16 @@ class _WindowsPathRuntime implements PlatformRuntime {
     String? workingDirectory,
     Map<String, String>? environment,
     bool includeParentEnvironment = true,
-  }) => throw UnimplementedError();
+  }) =>
+      throw UnimplementedError();
 
   @override
-  Future<void> terminateProcessTree(Process process, {required bool force}) async {}
+  Future<void> terminateProcessTree(Process process,
+      {required bool force}) async {}
 
   @override
   List<StreamSubscription<ProcessSignal>> watchTermination(
     void Function() onTermination,
-  ) => [];
+  ) =>
+      [];
 }

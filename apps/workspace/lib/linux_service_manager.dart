@@ -14,12 +14,10 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
     File? executable,
     Directory? unitDirectory,
     SystemctlRunner? systemctl,
-  }) : dataDirectory =
-           dataDirectory ??
+  })  : dataDirectory = dataDirectory ??
             WorkspaceConfigurationResolver.resolveDataDirectory(const []),
-       executable =
-           executable ??
-           File('${File(Platform.resolvedExecutable).parent.path}/workspace'),
+        executable = executable ??
+            File('${File(Platform.resolvedExecutable).parent.path}/workspace'),
         unitDirectory = unitDirectory ?? defaultUnitDirectory(),
         _systemctl = systemctl ?? _runSystemctl;
 
@@ -37,9 +35,9 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
   }
 
   static Future<ProcessResult> _runSystemctl(List<String> args) => Process.run(
-    'systemctl',
-    ['--user', ...args],
-  ).timeout(const Duration(seconds: 30));
+        'systemctl',
+        ['--user', ...args],
+      ).timeout(const Duration(seconds: 30));
 
   Future<String> _unitName() async {
     await dataDirectory.create(recursive: true);
@@ -82,8 +80,7 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
     return path.replaceAll(r'\', r'\\').replaceAll('%', '%%');
   }
 
-  String unitContents() =>
-      '''
+  String unitContents() => '''
 [Unit]
 Description=Conclave Workspace Service
 After=network-online.target
@@ -123,7 +120,7 @@ WantedBy=default.target
     final lines = await unit.readAsLines();
     if (!lines.contains(expected)) {
       throw StateError(
-          'Registered service ${unit.path} points to a different service; '
+        'Registered service ${unit.path} points to a different service; '
         'preserve state and unregister it explicitly first.',
       );
     }
@@ -155,8 +152,7 @@ WantedBy=default.target
       supported: result.exitCode == 0,
       helperPresent: executable.existsSync(),
       plistPresent: unit.existsSync(),
-      enginePresent:
-          File(
+      enginePresent: File(
             '${executable.parent.path}/assets/engines/conclave-agent',
           ).existsSync() ||
           File(
@@ -165,9 +161,8 @@ WantedBy=default.target
       registration: unit.existsSync() && values['UnitFileState'] == 'enabled'
           ? ServiceInstallationState.registered
           : ServiceInstallationState.notRegistered,
-      process: running
-          ? ServiceRuntimeState.running
-          : ServiceRuntimeState.stopped,
+      process:
+          running ? ServiceRuntimeState.running : ServiceRuntimeState.stopped,
       pid: pid == null || pid == 0 ? null : pid,
       launchdState: values['SubState'] ?? active ?? 'unknown',
       lastExitCode: int.tryParse(values['ExecMainStatus'] ?? ''),

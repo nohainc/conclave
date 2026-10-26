@@ -16,16 +16,16 @@ void main() {
   });
 
   WorkspaceSettings settings({int slots = 6}) => WorkspaceSettings(
-    serviceEnabled: true,
-    cloudUrl: 'https://app.conclaveax.com',
-    connectOnStart: true,
-    workspaceName: 'GMKtec',
-    parallelSlots: slots,
-    workRoot: '${root.path}/work',
-    folders: {
-      'models': '${root.path}/models',
-    },
-  );
+        serviceEnabled: true,
+        cloudUrl: 'https://app.conclaveax.com',
+        connectOnStart: true,
+        workspaceName: 'GMKtec',
+        parallelSlots: slots,
+        workRoot: '${root.path}/work',
+        folders: {
+          'models': '${root.path}/models',
+        },
+      );
 
   test('round-trips strict Nano Markup configuration atomically', () async {
     final store = WorkspaceSettingsStore(Directory('${root.path}/state'));

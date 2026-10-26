@@ -9,14 +9,12 @@ import 'windows_native.dart';
 /// service; this adapter never starts an Engine or contacts Cloud.
 class WindowsWorkspaceServiceManager implements WorkspaceServiceManager {
   WindowsWorkspaceServiceManager({Directory? dataDirectory, File? executable})
-    : dataDirectory =
-          dataDirectory ??
+      : dataDirectory = dataDirectory ??
             WorkspaceConfigurationResolver.resolveDataDirectory(const []),
-      executable =
-          executable ??
+        executable = executable ??
             File(
-            '${File(Platform.resolvedExecutable).parent.path}/workspace.exe',
-          );
+              '${File(Platform.resolvedExecutable).parent.path}/workspace.exe',
+            );
   final Directory dataDirectory;
   final File executable;
   Future<String> _identity() async {
@@ -67,10 +65,10 @@ $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name } else { $null }
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-EncodedCommand', base64Encode(bytes)],
       environment: {
-      'CONCLAVE_WORKSPACE_TASK_ID': id,
-      'CONCLAVE_WORKSPACE_TASK_OPERATION': operation,
-      'CONCLAVE_WORKSPACE_TASK_EXECUTABLE': executable.absolute.path,
-      'CONCLAVE_WORKSPACE_TASK_DATA': dataDirectory.absolute.path,
+        'CONCLAVE_WORKSPACE_TASK_ID': id,
+        'CONCLAVE_WORKSPACE_TASK_OPERATION': operation,
+        'CONCLAVE_WORKSPACE_TASK_EXECUTABLE': executable.absolute.path,
+        'CONCLAVE_WORKSPACE_TASK_DATA': dataDirectory.absolute.path,
       },
     ).timeout(const Duration(seconds: 30));
     if (result.exitCode != 0) {
@@ -88,8 +86,7 @@ $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name } else { $null }
       supported: true,
       helperPresent: executable.existsSync(),
       plistPresent: true,
-      enginePresent:
-          File(
+      enginePresent: File(
             '${executable.parent.path}/assets/engines/conclave-agent.exe',
           ).existsSync() ||
           File(

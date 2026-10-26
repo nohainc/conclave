@@ -23,16 +23,20 @@ void main() {
     expect(event.streamKey, '["space","same"]');
     expect(RealtimeEvent.parse(event.encode()).payload['entityId'], 'm');
     expect(
-        () => RealtimeEvent.parse({...event.toJson(), 'workspaceId': 'same'}),
-        throwsA(isA<ProtocolException>()));
+      () => RealtimeEvent.parse({...event.toJson(), 'workspaceId': 'same'}),
+      throwsA(isA<ProtocolException>()),
+    );
     expect(
-        () => RealtimeEvent.parse({
-              ...event.toJson(),
-              'payload': {'entityId': 'm', 'threadId': 'W', 'text': 'history'}
-            }),
-        throwsA(isA<ProtocolException>()));
-    expect(() => RealtimeEvent.parse({...event.toJson(), 'version': '1.0'}),
-        throwsA(isA<ProtocolException>()));
+      () => RealtimeEvent.parse({
+        ...event.toJson(),
+        'payload': {'entityId': 'm', 'threadId': 'W', 'text': 'history'},
+      }),
+      throwsA(isA<ProtocolException>()),
+    );
+    expect(
+      () => RealtimeEvent.parse({...event.toJson(), 'version': '1.0'}),
+      throwsA(isA<ProtocolException>()),
+    );
   });
   test('legacy execution events infer an independent stream key', () {
     final event = RealtimeEvent.parse({
@@ -42,7 +46,7 @@ void main() {
       'timestamp': '2026-10-06T00:00:00.000Z',
       'workspaceId': 'same',
       'sequence': 1,
-      'payload': {'workRequestId': 'R', 'threadId': 'W', 'stepKind': 'test'}
+      'payload': {'workRequestId': 'R', 'threadId': 'W', 'stepKind': 'test'},
     });
     expect(event.streamKey, '["execution_workspace","same"]');
   });
@@ -54,41 +58,40 @@ void main() {
       'timestamp': '2026-09-23T10:00:00.000Z',
       'workspaceId': 'workspace-1',
       'sequence': 7,
-      'payload': <String, Object?>{
-        'entityId': 'run-1',
-        'status': 'completed',
-      },
+      'payload': <String, Object?>{'entityId': 'run-1', 'status': 'completed'},
     });
     expect(RealtimeEvent.parse(event.encode()).type, equals('run.completed'));
     expect(durableRealtimeEventTypes, contains('run.completed'));
     expect(ephemeralRealtimeEventTypes, contains('stream.delta'));
   });
 
-  test('accepts replayable Worker Activity and classifies status as ephemeral',
-      () {
-    final event = {
-      'eventId': 'activity-1',
-      'type': 'assignment.activity',
-      'version': '1.0',
-      'timestamp': '2026-09-23T10:00:00.000Z',
-      'workspaceId': 'workspace-1',
-      'workspaceRuntimeId': 'runtime-1',
-      'assignmentId': 'assignment-1',
-      'attemptId': 'attempt-1',
-      'sequence': 7,
-      'payload': <String, Object?>{
-        'entityId': 'assignment-1',
-        'workerId': 'chatgpt',
-        'sourceEventId': 'source-1',
-        'executionId': 'execution-1',
-        'activitySequence': 1,
-        'activityType': 'tool.started',
-        'activityStatus': 'running',
-        'title': 'Running tool',
-      },
-    };
-    final parsed = RealtimeEvent.parse(event);
-    expect(isReplayableRealtimeEvent(parsed.toJson()), isTrue);
-    expect(ephemeralRealtimeEventTypes, contains('assignment.activity'));
-  });
+  test(
+    'accepts replayable Worker Activity and classifies status as ephemeral',
+    () {
+      final event = {
+        'eventId': 'activity-1',
+        'type': 'assignment.activity',
+        'version': '1.0',
+        'timestamp': '2026-09-23T10:00:00.000Z',
+        'workspaceId': 'workspace-1',
+        'workspaceRuntimeId': 'runtime-1',
+        'assignmentId': 'assignment-1',
+        'attemptId': 'attempt-1',
+        'sequence': 7,
+        'payload': <String, Object?>{
+          'entityId': 'assignment-1',
+          'workerId': 'chatgpt',
+          'sourceEventId': 'source-1',
+          'executionId': 'execution-1',
+          'activitySequence': 1,
+          'activityType': 'tool.started',
+          'activityStatus': 'running',
+          'title': 'Running tool',
+        },
+      };
+      final parsed = RealtimeEvent.parse(event);
+      expect(isReplayableRealtimeEvent(parsed.toJson()), isTrue);
+      expect(ephemeralRealtimeEventTypes, contains('assignment.activity'));
+    },
+  );
 }

@@ -27,10 +27,10 @@ class WorkspaceManagerService {
   static const _workerReadinessCommandTimeout = Duration(seconds: 40);
 
   WorkspaceManagerService(WorkspaceRuntime workspace, {this.reloadRuntime})
-    : _workspace = workspace,
-      _desiredCloudState = workspace.config.connectOnStart
-          ? DesiredCloudConnectionState.connected
-          : DesiredCloudConnectionState.disconnected;
+      : _workspace = workspace,
+        _desiredCloudState = workspace.config.connectOnStart
+            ? DesiredCloudConnectionState.connected
+            : DesiredCloudConnectionState.disconnected;
 
   WorkspaceRuntime _workspace;
   DesiredCloudConnectionState _desiredCloudState;
@@ -93,8 +93,7 @@ class WorkspaceManagerService {
 
   Future<Map<String, Object?>> snapshot() async {
     final connection = workspace.cloudConnection;
-    final workers =
-        await (workspace.workerSubsystem?.listWorkers() ??
+    final workers = await (workspace.workerSubsystem?.listWorkers() ??
         workspace.localWorkerRegistry?.list() ??
         Future.value(const <LocalWorker>[]));
     final registration = WorkspaceRegistrationStore(
@@ -115,8 +114,7 @@ class WorkspaceManagerService {
     final activeIds = connection?.activeAssignmentIds ?? const <String>[];
     final processRunning = workspace.isRunning;
     final connectionStage = connection?.connectionStage;
-    final authenticated =
-        connectionStage == WorkspaceConnectionStage.ready ||
+    final authenticated = connectionStage == WorkspaceConnectionStage.ready ||
         connectionStage == WorkspaceConnectionStage.synchronizing ||
         connectionStage == WorkspaceConnectionStage.switchingToWebSocket;
     final synchronized = connection?.lastInventorySyncAt != null;
@@ -135,30 +133,28 @@ class WorkspaceManagerService {
     );
     final journalRecords =
         await connection?.assignmentJournal?.reconcile() ?? const {};
-    final recoveryRequired =
-        journalRecords.values
+    final recoveryRequired = journalRecords.values
         .where((record) => record.status == AssignmentStatus.interrupted)
-            .map(
-              (record) => {
-              'assignmentId': record.assignmentId,
-              'state': record.result?['recoveryState'] ?? 'outcome_unknown',
-              'workerId': record.workerId,
-              'updatedAt': record.updatedAt.toIso8601String(),
-              },
-            )
+        .map(
+          (record) => {
+            'assignmentId': record.assignmentId,
+            'state': record.result?['recoveryState'] ?? 'outcome_unknown',
+            'workerId': record.workerId,
+            'updatedAt': record.updatedAt.toIso8601String(),
+          },
+        )
         .toList()
-          ..sort(
-            (left, right) => (left['assignmentId']! as String).compareTo(
-              right['assignmentId']! as String,
-            ),
-          );
+      ..sort(
+        (left, right) => (left['assignmentId']! as String).compareTo(
+          right['assignmentId']! as String,
+        ),
+      );
     return {
       'service': {
         // A service snapshot only exists after the process has been launched;
         // host registration remains authoritative in WorkspaceServiceInfo.
         'registered': processRunning,
-        'processState':
-            state['processState'] ??
+        'processState': state['processState'] ??
             (workspace.isRunning ? 'ready' : 'stopped'),
         'startedAt': state['startedAt'],
         'version': conclaveWorkspaceAppVersion,
@@ -171,8 +167,7 @@ class WorkspaceManagerService {
       },
       'cloud': {
         'state': WorkspaceServiceState.cloudStateFor(
-          configured:
-              workspace.config.cloudUri != null &&
+          configured: workspace.config.cloudUri != null &&
               workspace.config.workspaceId != null,
           authenticated: workspace.config.authToken?.isNotEmpty == true,
           stage: connection?.connectionStage,
@@ -184,21 +179,19 @@ class WorkspaceManagerService {
         'authenticated': authenticated,
         'synchronized': synchronized,
         'transport': connection?.activeTransportMode,
-        'acceptingNewWork':
-            connection?.isConnected == true &&
+        'acceptingNewWork': connection?.isConnected == true &&
             connection?.acceptingNewWork == true,
         'lastError': connection?.lastConnectionError,
         'reconnectCount': connection?.reconnectCount ?? 0,
-        'lastInventorySyncAt': connection?.lastInventorySyncAt
-            ?.toIso8601String(),
+        'lastInventorySyncAt':
+            connection?.lastInventorySyncAt?.toIso8601String(),
       },
       'workspace': {
         'workspaceId': workspace.config.workspaceId,
         'workspaceRuntimeId': workspace.config.workspaceRuntimeId,
         'name': registration?.name,
         'cloudUrl': registration?.cloudUrl,
-        'workRoot':
-            workspace.workRoot?.path ??
+        'workRoot': workspace.workRoot?.path ??
             workspace.config.workRootPath ??
             WorkRootResolver().defaultPath,
       },
@@ -227,8 +220,7 @@ class WorkspaceManagerService {
         CloudConnectionState.connecting,
       WorkspaceConnectionStage.reconnecting =>
         CloudConnectionState.reconnecting,
-      _ =>
-        connection?.lastConnectionError == null
+      _ => connection?.lastConnectionError == null
           ? CloudConnectionState.disconnected
           : CloudConnectionState.failed,
     };
@@ -236,8 +228,7 @@ class WorkspaceManagerService {
 
   Future<Map<String, Object?>> _slotSnapshot() async {
     final subsystem = workspace.workerSubsystem;
-    final slots =
-        subsystem?.slotSnapshot() ??
+    final slots = subsystem?.slotSnapshot() ??
         const <String, Object?>{'workers': <Object?>[], 'busySessions': 0};
     final names = <String, String>{};
     final workers =
@@ -264,18 +255,15 @@ class WorkspaceManagerService {
   }
 
   Map<String, Object?> _workerCatalogSnapshot() {
-    final checks =
-        workspace.workerReadinessMonitor?.checks ??
+    final checks = workspace.workerReadinessMonitor?.checks ??
         const <String, WorkerCheckProgress>{};
     final checkJson = checks.map((key, value) => MapEntry(key, value.toJson()));
-    final catalog =
-        (workspace.workerSubsystem?.catalog ??
+    final catalog = (workspace.workerSubsystem?.catalog ??
             workspace.workerCatalogCoordinator)
         ?.snapshot;
     if (catalog == null) {
       return {
-        'descriptors':
-            workspace.toolProfileCatalog?.workers
+        'descriptors': workspace.toolProfileCatalog?.workers
                 .map((descriptor) => descriptor.toJson())
                 .toList() ??
             const [],
@@ -287,22 +275,21 @@ class WorkspaceManagerService {
     }
     return {
       'checks': checkJson,
-      'descriptors': catalog.descriptors
-          .map((descriptor) => descriptor.toJson())
-          .toList(),
+      'descriptors':
+          catalog.descriptors.map((descriptor) => descriptor.toJson()).toList(),
       'views': catalog.workers
           .map(
             (view) => {
-                if (view.descriptor != null)
-                  'descriptor': view.descriptor!.toJson(),
-                'catalogRetired': view.catalogRetired,
-                if (view.localWorker != null)
-                  'localWorker': view.localWorker!.toJson(),
-                'localState': view.localState.name,
-                'profileState': view.profileState.name,
-                'profileMessage': view.profileAvailability.message,
-                'profileDetails': view.profileAvailability.details,
-                'providerToolState': view.providerToolState.name,
+              if (view.descriptor != null)
+                'descriptor': view.descriptor!.toJson(),
+              'catalogRetired': view.catalogRetired,
+              if (view.localWorker != null)
+                'localWorker': view.localWorker!.toJson(),
+              'localState': view.localState.name,
+              'profileState': view.profileState.name,
+              'profileMessage': view.profileAvailability.message,
+              'profileDetails': view.profileAvailability.details,
+              'providerToolState': view.providerToolState.name,
             },
           )
           .toList(),
@@ -388,12 +375,10 @@ class WorkspaceManagerService {
         }
         final before = _nested(previous, 'assignments', 'activeIds');
         final after = _nested(current, 'assignments', 'activeIds');
-        final beforeIds = before is List
-            ? before.cast<String>().toSet()
-            : <String>{};
-        final afterIds = after is List
-            ? after.cast<String>().toSet()
-            : <String>{};
+        final beforeIds =
+            before is List ? before.cast<String>().toSet() : <String>{};
+        final afterIds =
+            after is List ? after.cast<String>().toSet() : <String>{};
         for (final id in afterIds.difference(beforeIds)) {
           _events.add({'name': 'assignment.started', 'assignmentId': id});
         }
@@ -444,7 +429,7 @@ class WorkspaceManagerService {
           );
         }
         return _headlessAuth!.start(
-            email: payload['email'] as String?,
+          email: payload['email'] as String?,
           password: payload['password'] as String?,
         );
       case 'auth.status':
@@ -534,8 +519,7 @@ class WorkspaceManagerService {
         if (registry == null && workerSubsystem == null) return const [];
         final workerId = payload['workerId'];
         if (workerId is String) {
-          final worker =
-              await (workerSubsystem?.resolveWorker(workerId) ??
+          final worker = await (workerSubsystem?.resolveWorker(workerId) ??
               registry?.find(workerId));
           if (worker == null) {
             throw const WorkspaceManagerProtocolException(
@@ -610,7 +594,7 @@ class WorkspaceManagerService {
         final removing = workerSubsystem?.removingWorkerIds ?? const {};
         if ((await registry.list()).any(
           (worker) =>
-            worker.workerTypeId == workerTypeId &&
+              worker.workerTypeId == workerTypeId &&
               removing.contains(worker.id),
         )) {
           throw const WorkspaceManagerProtocolException(
@@ -639,9 +623,9 @@ class WorkspaceManagerService {
           waitForActiveRefresh: true,
         );
         await _runWorkerReadiness(
-            () => workspace.workerReadinessMonitor?.checkNow(
-                  mode: LocalWorkerProbeMode.passive,
-                  workerTypeId: workerTypeId,
+          () => workspace.workerReadinessMonitor?.checkNow(
+            mode: LocalWorkerProbeMode.passive,
+            workerTypeId: workerTypeId,
           ),
         );
         return (await registry.find(worker.id))?.toJson();
@@ -714,8 +698,7 @@ class WorkspaceManagerService {
             'workerId is required.',
           );
         }
-        final worker =
-            await (workerSubsystem?.resolveWorker(workerId) ??
+        final worker = await (workerSubsystem?.resolveWorker(workerId) ??
             registry.find(workerId));
         if (worker == null) {
           throw const WorkspaceManagerProtocolException(
@@ -747,13 +730,13 @@ class WorkspaceManagerService {
             : LocalWorkerProbeMode.passive;
         await _runWorkerReadiness(
           () =>
-            workerSubsystem?.refreshReadiness(
-              mode: mode,
-              workerTypeId: workerTypeId as String?,
-            ) ??
-            workspace.workerReadinessMonitor?.checkNow(
-              mode: mode,
-              workerTypeId: workerTypeId as String?,
+              workerSubsystem?.refreshReadiness(
+                mode: mode,
+                workerTypeId: workerTypeId as String?,
+              ) ??
+              workspace.workerReadinessMonitor?.checkNow(
+                mode: mode,
+                workerTypeId: workerTypeId as String?,
               ),
         );
         return snapshot();
@@ -768,8 +751,8 @@ class WorkspaceManagerService {
         final passed = workerSubsystem != null
             ? await workerSubsystem.rollbackProfile(workerTypeId)
             : await workspace.workerReadinessMonitor?.rollbackToolProfile(
-                    workerTypeId,
-                  ) ??
+                  workerTypeId,
+                ) ??
                 false;
         return {'passed': passed, 'snapshot': await snapshot()};
       case 'execution.getSlots':
@@ -812,8 +795,7 @@ class WorkspaceManagerService {
       case 'configuration.get':
         return {
           'workspace': await snapshot().then((value) => value['workspace']),
-          'workRoot':
-              workspace.workRoot?.path ??
+          'workRoot': workspace.workRoot?.path ??
               workspace.config.workRootPath ??
               WorkRootResolver().defaultPath,
           'settingsFile': workspace.config.settingsFile?.path,
@@ -931,8 +913,7 @@ class WorkspaceManagerService {
     final paths = WorkspacePaths(workspace.config.dataDirectory);
     return _allowedFolderRegistry ??= AllowedFolderRegistry(
       registryDirectory: paths.spaceDirectoryRegistryDirectory,
-      workRoot:
-          workspace.workRoot ??
+      workRoot: workspace.workRoot ??
           Directory(
             workspace.config.workRootPath ?? WorkRootResolver().defaultPath,
           ),

@@ -31,8 +31,8 @@ export 'space_directory.dart';
 export 'workspace_worker_subsystem.dart';
 
 typedef WorkspaceStatusProvider = Future<Map<String, Object?>> Function();
-typedef WorkspaceUpdateHandler =
-    Future<Map<String, Object?>> Function(Map<String, Object?> request);
+typedef WorkspaceUpdateHandler = Future<Map<String, Object?>> Function(
+    Map<String, Object?> request);
 
 class WorkspaceConfig {
   const WorkspaceConfig({
@@ -140,13 +140,12 @@ class WorkspaceLogger {
     if (value is Map) {
       return <String, Object?>{
         for (final entry in value.entries.take(80))
-          entry.key.toString():
-              RegExp(
-                r'(secret|token|password|api[_-]?key|authorization|cookie|raw[_-]?credential|private[_-]?key)',
-                caseSensitive: false,
-              ).hasMatch(entry.key.toString())
-                  ? '[redacted]'
-                  : _sanitize(entry.value, depth: depth + 1),
+          entry.key.toString(): RegExp(
+            r'(secret|token|password|api[_-]?key|authorization|cookie|raw[_-]?credential|private[_-]?key)',
+            caseSensitive: false,
+          ).hasMatch(entry.key.toString())
+              ? '[redacted]'
+              : _sanitize(entry.value, depth: depth + 1),
       };
     }
     return '[${value.runtimeType}]';
@@ -175,22 +174,21 @@ class WorkspaceRuntime {
   })  : _configuredLogOutput = logOutput,
         credentialStore =
             credentialStore ?? const PlatformSecureCredentialStore(),
-       localWorkerRegistry =
-           localWorkerRegistry ??
+        localWorkerRegistry = localWorkerRegistry ??
             (config.workspaceId == null
                 ? null
                 : LocalWorkerRegistry(
                     dataDirectory: config.dataDirectory,
                     workspaceId: config.workspaceId!,
                   )),
-       _log = WorkspaceLogger(
-         logOutput ?? stdout,
-            redact: redactLog ?? WorkspaceLogger._identity,
-            context: {
-              'serviceVersion': conclaveWorkspaceAppVersion,
-              if (config.workspaceId != null) 'workspaceId': config.workspaceId,
-         },
-       ) {
+        _log = WorkspaceLogger(
+          logOutput ?? stdout,
+          redact: redactLog ?? WorkspaceLogger._identity,
+          context: {
+            'serviceVersion': conclaveWorkspaceAppVersion,
+            if (config.workspaceId != null) 'workspaceId': config.workspaceId,
+          },
+        ) {
     if (logFileMaxBytes <= 0) {
       throw ArgumentError.value(
         logFileMaxBytes,
@@ -293,7 +291,8 @@ class WorkspaceRuntime {
       await workerReadinessMonitor?.dispose();
       workerCatalogCoordinator?.dispose();
       toolProfileCatalog?.close();
-      final subscriptions = List<StreamSubscription<void>>.from(_signalSubscriptions);
+      final subscriptions =
+          List<StreamSubscription<void>>.from(_signalSubscriptions);
       _signalSubscriptions.clear();
       for (final subscription in subscriptions) {
         await subscription.cancel();
@@ -338,7 +337,8 @@ class WorkspaceRuntime {
     await workerReadinessMonitor?.dispose();
     workerCatalogCoordinator?.dispose();
     toolProfileCatalog?.close();
-    final subscriptions = List<StreamSubscription<void>>.from(_signalSubscriptions);
+    final subscriptions =
+        List<StreamSubscription<void>>.from(_signalSubscriptions);
     _signalSubscriptions.clear();
     for (final subscription in subscriptions) {
       await subscription.cancel();
@@ -366,23 +366,23 @@ class WorkspaceRuntime {
     final connection = cloudConnection;
     final nextWrite = _stateWriteQueue.then(
       (_) => writeWorkspaceServiceState(
-          config.dataDirectory,
-          WorkspaceServiceState(
-            processState: processState,
-            cloudState: WorkspaceServiceState.cloudStateFor(
-              configured: config.cloudUri != null && config.workspaceId != null,
-              authenticated: config.authToken?.isNotEmpty == true,
-              stage: connection?.connectionStage,
-            ),
-            installationId: config.installationId,
-            updatedAt: DateTime.now().toUtc(),
-            startedAt: _startedAt,
-            executionState: (connection?.activeAssignmentCount ?? 0) > 0
-                ? WorkspaceServiceExecutionState.executing
-                : WorkspaceServiceExecutionState.idle,
-            activeAssignments: connection?.activeAssignmentCount ?? 0,
-            failure: failure,
+        config.dataDirectory,
+        WorkspaceServiceState(
+          processState: processState,
+          cloudState: WorkspaceServiceState.cloudStateFor(
+            configured: config.cloudUri != null && config.workspaceId != null,
+            authenticated: config.authToken?.isNotEmpty == true,
+            stage: connection?.connectionStage,
           ),
+          installationId: config.installationId,
+          updatedAt: DateTime.now().toUtc(),
+          startedAt: _startedAt,
+          executionState: (connection?.activeAssignmentCount ?? 0) > 0
+              ? WorkspaceServiceExecutionState.executing
+              : WorkspaceServiceExecutionState.idle,
+          activeAssignments: connection?.activeAssignmentCount ?? 0,
+          failure: failure,
+        ),
       ),
     );
     _stateWriteQueue = nextWrite.catchError((Object _) {});

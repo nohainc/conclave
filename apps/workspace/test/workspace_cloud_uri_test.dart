@@ -88,8 +88,7 @@ void main() {
       await server.close(force: true);
     });
 
-    final uri =
-        configFor('ws://${server.address.address}:${server.port}');
+    final uri = configFor('ws://${server.address.address}:${server.port}');
     final socket = await WebSocket.connect(uri.toString());
     expect(await socket.first, 'ready');
   });

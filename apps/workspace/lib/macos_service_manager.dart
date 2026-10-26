@@ -240,7 +240,8 @@ class MacOsWorkspaceServiceManager implements WorkspaceServiceManager {
       helperPresent: executable.existsSync(),
       plistPresent: true,
       enginePresent: enginePresent,
-      process: running ? ServiceRuntimeState.running : ServiceRuntimeState.stopped,
+      process:
+          running ? ServiceRuntimeState.running : ServiceRuntimeState.stopped,
       pid: pid,
       launchdState: running ? 'running' : 'stopped',
     );

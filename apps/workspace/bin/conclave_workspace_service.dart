@@ -50,8 +50,8 @@ Future<void> main(List<String> args) async {
     if (runtime.isRunning && config.connectOnStart) {
       unawaited(
         runtime.cloudConnection?.connect().catchError((Object error) {
-            stderr.writeln('Workspace Cloud connection unavailable: $error');
-          }) ??
+              stderr.writeln('Workspace Cloud connection unavailable: $error');
+            }) ??
             Future<void>.value(),
       );
     }

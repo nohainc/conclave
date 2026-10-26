@@ -58,12 +58,10 @@ class WorkspaceConfigurationResolver {
     final path = index >= 0 && index + 1 < args.length
         ? args[index + 1]
         : Platform.environment['CONCLAVE_WORKSPACE_DATA_DIR'];
-    final dataDirectory = path == null
-        ? WorkspacePaths.defaultStateDirectory()
-        : Directory(path);
+    final dataDirectory =
+        path == null ? WorkspacePaths.defaultStateDirectory() : Directory(path);
     final settingsStore = WorkspaceSettingsStore(dataDirectory);
-    final settings =
-        settingsStore.readSync() ??
+    final settings = settingsStore.readSync() ??
         WorkspaceSettings.defaults(dataDirectory: dataDirectory);
     final savedRegistration = WorkspaceRegistrationStore(
       dataDirectory,
@@ -72,7 +70,7 @@ class WorkspaceConfigurationResolver {
     // Local builds are pinned to the local Cloud API; packaged builds take
     // all non-secret behavior from workspace.nano.
     final cloudUrl = conclaveWorkspaceIsLocalBuild
-            ? conclaveLocalCloudUrl
+        ? conclaveLocalCloudUrl
         : settings.cloudUrl;
     final workspaceRuntimeId =
         workspaceRuntimeIndex >= 0 && workspaceRuntimeIndex + 1 < args.length
@@ -93,8 +91,7 @@ class WorkspaceConfigurationResolver {
             ? registration.workspaceId
             : Platform.environment['CONCLAVE_WORKSPACE_ID']);
     final workRootPath = settings.workRootPath;
-    final secureStore =
-        credentialStore ??
+    final secureStore = credentialStore ??
         PlatformSecureCredentialStore(
           credentialDirectory: Directory('${dataDirectory.path}/Credentials'),
         );
@@ -137,14 +134,14 @@ class WorkspaceConfigurationResolver {
   }
 
   static String cloudHttpOrigin(Uri gateway) => Uri(
-          scheme: switch (gateway.scheme) {
-            'wss' || 'https' => 'https',
-            'ws' || 'http' => 'http',
-            _ => throw ArgumentError('Unsupported Cloud transport'),
-          },
-          host: gateway.host,
-    port: gateway.hasPort ? gateway.port : null,
-  ).toString();
+        scheme: switch (gateway.scheme) {
+          'wss' || 'https' => 'https',
+          'ws' || 'http' => 'http',
+          _ => throw ArgumentError('Unsupported Cloud transport'),
+        },
+        host: gateway.host,
+        port: gateway.hasPort ? gateway.port : null,
+      ).toString();
 
   static Uri? workspaceGatewayUri(String value, {String? workspaceRuntimeId}) {
     final uri = Uri.tryParse(value);
@@ -250,8 +247,8 @@ class WorkspaceRegistrationStore {
   final PlatformRuntime? platform;
 
   File get file => File(
-    '${dataDirectory.path}${Platform.pathSeparator}workspace-registration.json',
-  );
+        '${dataDirectory.path}${Platform.pathSeparator}workspace-registration.json',
+      );
 
   WorkspaceRegistration? readSync() {
     if (!file.existsSync()) return null;

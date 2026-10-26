@@ -36,7 +36,7 @@ void main() {
       final legacy = Directory('${root.path}/.conclave-workspace');
       final target = Directory('${root.path}/state/conclave/workspace');
       expect(
-          WorkspacePaths.resolveLinuxStateDirectory(
+        WorkspacePaths.resolveLinuxStateDirectory(
           legacy: legacy,
           target: target,
         ).path,
@@ -44,7 +44,7 @@ void main() {
       );
       legacy.createSync();
       expect(
-          WorkspacePaths.resolveLinuxStateDirectory(
+        WorkspacePaths.resolveLinuxStateDirectory(
           legacy: legacy,
           target: target,
         ).path,
@@ -57,39 +57,39 @@ void main() {
   group('credential store', () {
     test(
       'selection requires a real Secret Service as well as a session bus',
-        () {
-      final state = Directory('${root.path}/state');
-      expect(
+      () {
+        final state = Directory('${root.path}/state');
+        expect(
           LinuxCredentialStoreSelector(
             state,
             environment: const {},
           ).preferred(),
           LinuxCredentialStoreKind.file,
         );
-      expect(
+        expect(
           LinuxCredentialStoreSelector(
             state,
-              secretServiceAvailable: () => true,
-              environment: const {
+            secretServiceAvailable: () => true,
+            environment: const {
               'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus',
             },
           ).preferred(),
           LinuxCredentialStoreKind.secretService,
         );
-      expect(
+        expect(
           LinuxCredentialStoreSelector(
             state,
-              secretServiceAvailable: () => false,
+            secretServiceAvailable: () => false,
             environment: const {'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/bus'},
           ).preferred(),
           LinuxCredentialStoreKind.file,
         );
-      expect(
+        expect(
           LinuxCredentialStoreSelector(
             state,
             environment: const {
-            'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus',
-            'CONCLAVE_WORKSPACE_SECRET_STORE': 'file',
+              'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus',
+              'CONCLAVE_WORKSPACE_SECRET_STORE': 'file',
             },
           ).preferred(),
           LinuxCredentialStoreKind.file,
@@ -216,7 +216,7 @@ void main() {
       final contents = unit.readAsStringSync();
       expect(contents, contains('ExecStart=${manager.execStart()}'));
       expect(
-          contents,
+        contents,
         contains('WorkingDirectory=${manager.executable.parent.absolute.path}'),
       );
       expect(contents, isNot(contains('WorkingDirectory="')));
