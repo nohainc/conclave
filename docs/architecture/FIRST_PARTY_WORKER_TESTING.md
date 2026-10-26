@@ -11,7 +11,7 @@ relevant suites with:
 ~~~sh
 cd engines/cli_worker && dart test
 cd packages/tool-profile && pnpm test
-cd apps/workspace && flutter test
+cd apps/workspace && dart test
 ~~~
 
 These tests do not require provider accounts or use provider allowance.

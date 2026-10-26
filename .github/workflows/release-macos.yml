@@ -97,12 +97,13 @@ jobs:
         run: |
           set -euo pipefail
           ARCHIVE="dist/conclave-workspace/macos/Conclave-Workspace-$WORKSPACE_VERSION-macos.zip"
-          mkdir -p "$RUNNER_TEMP/workspace-app-check"
-          ditto -x -k "$ARCHIVE" "$RUNNER_TEMP/workspace-app-check"
-          APP="$RUNNER_TEMP/workspace-app-check/Conclave Workspace.app"
-          test -d "$APP"
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          spctl --assess --type execute --verbose "$APP"
+          mkdir -p "$RUNNER_TEMP/workspace-bundle-check"
+          ditto -x -k "$ARCHIVE" "$RUNNER_TEMP/workspace-bundle-check"
+          BUNDLE="$RUNNER_TEMP/workspace-bundle-check/conclave-workspace"
+          bash scripts/verify-workspace-service-bundle.sh "$BUNDLE"
+          # Bare executables are not assessable by spctl; require a Developer ID signature.
+          codesign -dv --verbose=4 "$BUNDLE/conclave-workspace" 2>&1 | grep -q "Authority=Developer ID Application"
+          codesign -dv --verbose=4 "$BUNDLE/assets/engines/conclave-agent" 2>&1 | grep -q "Authority=Developer ID Application"
 
       - name: Sign, publish, download, and verify immutable metadata
         env:

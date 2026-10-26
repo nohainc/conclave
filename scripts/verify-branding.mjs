@@ -196,8 +196,8 @@ export function verifyRequiredGeneratedIcons(rootDir) {
     }
   }
 
-  // macOS AppIcon sets
-  for (const macosApp of ["apps/workspace", "apps/profile_lab"]) {
+  // macOS AppIcon sets (Workspace is a headless service/CLI and has no app icon)
+  for (const macosApp of ["apps/profile_lab"]) {
     const iconSetDir = join(
       rootDir,
       macosApp,

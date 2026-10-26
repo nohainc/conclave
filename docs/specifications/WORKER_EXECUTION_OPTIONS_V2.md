@@ -251,11 +251,11 @@ not overwrite a newer version or clear stale discovery state merely because one
 execution finished. Native mappings, variant bookkeeping, arguments, paths and
 credentials remain outside the inventory/public contract.
 
-Human GUI sign-out only revokes the desktop human session; it does not stop the
-authorized Service or revoke its runtime credential. Window attachment and human
+Management sign-out (or an expired human session) only revokes the human session; it does not stop the
+authorized Service or revoke its runtime credential. Client attachment and human
 session state are absent from capability refresh scheduling. Explicit Disconnect
 Cloud continues to stop publication while leaving local background discovery
-running. Stop Service cancels discovery scheduling.
+running. `service stop` cancels discovery scheduling.
 
 ### Phase 4 verification and compatibility
 

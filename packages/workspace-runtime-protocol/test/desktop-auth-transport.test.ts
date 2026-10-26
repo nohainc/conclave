@@ -27,32 +27,35 @@ describe("desktop auth and runtime transport contracts", () => {
       "connected",
       "disconnecting",
     ] as const;
-    const locks = ["unlocked", "locked"] as const;
     const desired = ["connected", "disconnected"] as const;
     const states = auth.flatMap((humanAuth) =>
       participation.flatMap((state) =>
-        locks.flatMap((managementLock) =>
-          desired.map((desiredRuntime) =>
-            WorkspaceLifecycleStateSchema.parse({
-              humanAuth,
-              participation: state,
-              managementLock,
-              desiredRuntime,
-            }),
-          ),
+        desired.map((desiredRuntime) =>
+          WorkspaceLifecycleStateSchema.parse({
+            humanAuth,
+            participation: state,
+            desiredRuntime,
+          }),
         ),
       ),
     );
 
-    expect(states).toHaveLength(3 * 4 * 2 * 2);
+    expect(states).toHaveLength(3 * 4 * 2);
     expect(
       WorkspaceLifecycleStateSchema.parse({
         humanAuth: "reauth_required",
         participation: "connected",
-        managementLock: "locked",
         desiredRuntime: "connected",
       }).participation,
     ).toBe("connected");
+    expect(
+      WorkspaceLifecycleStateSchema.safeParse({
+        humanAuth: "signed_in",
+        participation: "connected",
+        managementLock: "locked",
+        desiredRuntime: "connected",
+      }).success,
+    ).toBe(false);
     expect(RuntimeTransportProjectionSchema.parse("http_long_poll")).toBe(
       "http_long_poll",
     );
@@ -62,9 +65,6 @@ describe("desktop auth and runtime transport contracts", () => {
     expect(
       WorkspaceLifecyclePreferencesSchema.parse({
         desiredRuntime: "connected",
-        launchAtLogin: true,
-        managementLockPreference: "locked",
-        autoLockTimeoutSeconds: 600,
         ownerUserId: "user-1",
         ownerDisplayName: "Ada",
       }).ownerUserId,
@@ -72,8 +72,6 @@ describe("desktop auth and runtime transport contracts", () => {
     expect(
       WorkspaceLifecyclePreferencesSchema.safeParse({
         desiredRuntime: "connected",
-        launchAtLogin: true,
-        managementLockPreference: "unlocked",
         desktopHumanSessionCredential: "h".repeat(32),
       }).success,
     ).toBe(false);

@@ -1,7 +1,7 @@
 # Full Local Access
 
 Every configured CLI Worker always runs with the `full_access` execution
-policy. There is no per-Worker toggle in Workspace.app and no Manager IPC
+policy. There is no per-Worker toggle in the Workspace CLI and no Manager IPC
 mutation for it.
 
 The local Worker registry always reports `fullLocalAccessAuthorized: true`
@@ -65,7 +65,7 @@ Run it only on the designated Workspace machine:
 ```text
 CONCLAVE_TEST_FULL_LOCAL_ACCESS=1 \
 CONCLAVE_TEST_FULL_LOCAL_ACCESS_EVIDENCE_DIR=/tmp/conclave-phase7-evidence \
-flutter test test/full_local_access_host_acceptance_test.dart
+dart test test/full_local_access_host_acceptance_test.dart
 ```
 
 The repository and general HTTPS targets can be overridden with
@@ -84,7 +84,7 @@ the development sandbox's network result is not evidence about that host.
 The generic provider path remains covered by the opt-in real Profile acceptance
 test (`tool_profile_real_acceptance_test.dart`), while
 `scripts/check-workspace-service.sh` verifies that the headless Workspace
-Service can start without the desktop window. Closing the Workspace UI and
+Service can start headlessly. Closing the terminal and
 reconnecting after a macOS restart require a device-level service test because
 they depend on launchd, signing, and the host's login/session state.
 
@@ -96,7 +96,7 @@ one provider profile, for example:
 CONCLAVE_TEST_REAL_PROFILE_CHATGPT=1 \
 CONCLAVE_TEST_REAL_PROFILE_FULL_LOCAL_ACCESS=1 \
 CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/tmp/conclave-profile-evidence \
-flutter test test/tool_profile_real_acceptance_test.dart
+dart test test/tool_profile_real_acceptance_test.dart
 ```
 
 Use `CONCLAVE_TEST_REAL_PROFILE_GEMINI=1` instead for the Gemini profile. Live

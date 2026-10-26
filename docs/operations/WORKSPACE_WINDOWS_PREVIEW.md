@@ -1,14 +1,21 @@
 # Workspace Windows runtime candidate
 
-Windows x64 source support includes the Flutter management UI, standalone Dart
-Workspace Service, and separately supervised generic CLI Worker Engine. The
-package is an unsigned qualification candidate, with manual updates; Windows
-installer packaging and release signing remain separate ADR-021 phases.
+Windows x64 source support includes the standalone Dart Workspace Service, the
+`conclave-workspace` management CLI, and the separately supervised generic CLI
+Worker Engine. The package is an unsigned qualification candidate, with manual
+updates; Windows installer packaging and release signing remain separate ADR-021
+phases.
+
+> **Status:** the Flutter management UI was removed. `build-workspace-windows.ps1`,
+> `package-workspace-windows.ps1` and the Windows workflows still assume the old
+> `conclave_workspace.exe` GUI bundle and are pending rework to the headless
+> layout (`conclave-workspace.exe`, `workspace.exe`, `assets/engines/conclave-agent.exe`).
+> The runtime behavior below (scheduled task, named pipes, DPAPI, Job Objects)
+> is unchanged.
 
 ## Build and run
 
-Install Flutter, Node.js, Git for Windows Bash, and Visual Studio with Desktop
-development with C++ and the Windows SDK. Run `flutter doctor -v`. Supply
+Install the Dart SDK, Node.js and Git for Windows Bash. Supply
 `CONCLAVE_RELEASE_TRUST_KEYS_JSON` with your public application-release trust
 roots, then run from PowerShell at the repository root:
 
@@ -19,8 +26,8 @@ roots, then run from PowerShell at the repository root:
 The script uses the canonical Engine/service build scripts and creates
 `dist/conclave-workspace/conclave-workspace-windows-x64-release-preview.zip`.
 Extract the entire ZIP to a stable per-user installation directory. The target
-machine needs the Microsoft Visual C++ x64 redistributable. Open
-`conclave_workspace.exe` and use the existing service/Cloud management workflow.
+machine needs the Microsoft Visual C++ x64 redistributable. Run
+`conclave-workspace.exe service install` and `setup` (or `login`, then `connect`).
 Moving an installation changes its scheduled task executable path; stop and
 unregister the old task before registering the new path. Existing data is kept.
 For manual updates, stop the service, replace the complete application directory,

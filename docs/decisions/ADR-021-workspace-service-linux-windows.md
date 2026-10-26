@@ -97,7 +97,7 @@ Work Root remains user-chosen (default `~/Documents/Conclave` or
 
 ### 2.6 Headless management
 
-Hosts without the Flutter UI are managed through a small
+Hosts are managed through a small
 `conclave-workspace` command-line client that speaks the same authenticated
 IPC protocol (status, connect/disconnect Cloud, start/stop, Worker list and
 verification, logs). It does not spawn Engines or provider CLIs and does not
@@ -130,7 +130,8 @@ platform, implemented with an exclusive OS file lock in the state root
    Linux x64/arm64 artifacts, container/Fly template.
 3. Windows: logon-task adapter, named-pipe IPC, DPAPI store, artifacts.
    Installer packaging and code signing are a later, separate phase.
-4. Optional Flutter Workspace UI on Linux/Windows.
+4. ~~Optional Flutter Workspace UI on Linux/Windows.~~ Superseded: the Flutter
+   Workspace UI was removed on every platform; the CLI is the management client.
 5. Tool Profile CLI path/argument verification on Linux/Windows.
 
 ## 4. Consequences
@@ -138,7 +139,7 @@ platform, implemented with an exclusive OS file lock in the state root
 - Existing macOS installations are unchanged: installation ID, Cloud Workspace
   and runtime IDs, secure credential, Work Root, registry, Profiles, Engines,
   and sessions are preserved. New platforms are fresh installs; no migration.
-- `Stop Service` keeps registration and `Disconnect Cloud` keeps the process
+- `service stop` keeps registration and `disconnect` keeps the process
   running on every platform.
 - A Workspace on a headless host only works for CLIs that were logged in on
   that host as the service user.

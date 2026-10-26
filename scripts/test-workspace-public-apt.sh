@@ -53,7 +53,8 @@ root = pathlib.Path(sys.argv[1])
 assert json.loads((root / 'health.json').read_text())['healthy'] is True
 assert json.loads((root / 'version.json').read_text())['version'] == sys.argv[2]
 assert json.loads((root / 'updates.json').read_text()) == {'phase': 'managed', 'packageManager': 'apt'}
-engine = subprocess.run(['/usr/lib/conclave-workspace/assets/engines/conclave_cli_worker_engine'], capture_output=True, text=True, timeout=10)
+engine_path = next(p for p in ('/usr/lib/conclave-workspace/assets/engines/conclave-agent', '/usr/lib/conclave-workspace/assets/engines/conclave_cli_worker_engine') if pathlib.Path(p).exists())
+engine = subprocess.run([engine_path], capture_output=True, text=True, timeout=10)
 assert engine.returncode == 64 and 'Engine options are incomplete or invalid' in engine.stderr
 PY
 kill "$service_pid"

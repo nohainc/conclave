@@ -67,9 +67,9 @@ jobs:
       - name: Validate CLI, registration and Linux adapters
         working-directory: apps/workspace
         run: |
-          flutter pub get --enforce-lockfile
-          flutter analyze
-          flutter test test/workspace_cli_test.dart test/workspace_headless_auth_test.dart test/workspace_manager_service_test.dart test/linux_runtime_test.dart
+          dart pub get --enforce-lockfile
+          dart analyze
+          dart test test/workspace_cli_test.dart test/workspace_headless_auth_test.dart test/workspace_manager_service_test.dart test/linux_runtime_test.dart
       - name: Validate signed repository metadata
         run: python3 scripts/release/test-apt-repository.py
       - name: Build and package
@@ -79,7 +79,7 @@ jobs:
       - name: Test actual APT install and upgrade
         run: bash scripts/test-workspace-linux-package.sh '${{ matrix.arch }}'
       - name: Test headless setup without a keyring or Workers
-        run: bash scripts/test-workspace-headless-candidate.sh 'dist/conclave-workspace/linux-${{ matrix.arch }}/service'
+        run: bash scripts/test-workspace-headless-candidate.sh 'dist/conclave-workspace/linux-${{ matrix.arch }}'
       - name: Retain tested candidates
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

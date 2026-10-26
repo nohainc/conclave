@@ -108,12 +108,27 @@ class MacOsWorkspaceServiceManager implements WorkspaceServiceManager {
   @override
   Future<WorkspaceServiceInfo> unregister() async {
     final label = await _serviceLabel();
+    final uid = await _currentUid();
+    // Stop the running process first so launchd releases the job
+    try {
+      await _launchctl(['stop', label]);
+    } catch (_) {}
+    try {
+      await _launchctl(['kill', 'SIGTERM', 'gui/$uid/$label']);
+    } catch (_) {}
+    try {
+      await _launchctl(['bootout', 'gui/$uid/$label']);
+    } catch (_) {}
     final plist = _plistFile(label);
     if (plist.existsSync()) {
       try {
         await _launchctl(['unload', '-w', plist.path]);
       } catch (_) {}
-      await plist.delete();
+      if (plist.existsSync()) {
+        try {
+          await plist.delete();
+        } catch (_) {}
+      }
     }
     return getInfo();
   }
@@ -158,11 +173,19 @@ class MacOsWorkspaceServiceManager implements WorkspaceServiceManager {
     final label = await _serviceLabel();
     final uid = await _currentUid();
     try {
-      await _launchctl(['kill', 'SIGTERM', 'gui/$uid/$label']);
+      await _launchctl(['stop', label]);
     } catch (_) {
       try {
-        await _launchctl(['stop', label]);
+        await _launchctl(['kill', 'SIGTERM', 'gui/$uid/$label']);
       } catch (_) {}
+    }
+    // Give launchd a moment to register process termination
+    for (var i = 0; i < 20; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      final current = await getInfo();
+      if (current.process == ServiceRuntimeState.stopped) {
+        return current;
+      }
     }
     return getInfo();
   }

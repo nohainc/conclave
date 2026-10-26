@@ -175,9 +175,10 @@ Each boundary has its own identity, authorization, transport, versioning, and wi
 
 See [Protocol Boundaries](docs/architecture/PROTOCOL_BOUNDARIES.md) and the [Tool Profile v1 specification](docs/specifications/TOOL_PROFILE_V1.md).
 
-Workspace uses a persistent Dart service while retaining the separate CLI
-Worker Engine process. Flutter Workspace is an IPC management client and does
-not compose or start an in-process runtime. The canonical ownership, lifecycle,
+Workspace is a persistent, headless Dart service (the unified
+`conclave-workspace` binary) that retains the separate CLI Worker Engine
+process. The `conclave-workspace` CLI is an IPC management client and does
+not compose or start an in-process runtime; there is no Workspace GUI. The canonical ownership, lifecycle,
 filesystem, security, build, and validation contract is
 [Workspace architecture](docs/architecture/WORKSPACE_ARCHITECTURE.md).
 The earlier service and cleanup phase files remain historical implementation
@@ -187,7 +188,7 @@ records; they are not competing architecture specifications.
 
 Cloud owns human identity, Space roles, Workspace ownership, Space-to-Workspace grants, Thread authorization, step-up authentication, and Profile administration. Workspace validates current Profile schema, identity, digest, and compatibility, then supervises Engine and provider CLI processes. Workspace application-release keys remain in protected release infrastructure; provider credentials remain with the locally installed provider CLI.
 
-See [Release Trust and Rotation](docs/security/RELEASE_TRUST_AND_ROTATION.md), [Workspace release operations](docs/deployment/WORKSPACE_RELEASES.md), and [Workspace desktop lifecycle validation](docs/operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md).
+See [Release Trust and Rotation](docs/security/RELEASE_TRUST_AND_ROTATION.md), [Workspace release operations](docs/deployment/WORKSPACE_RELEASES.md), and the historical [Workspace desktop lifecycle validation](docs/operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md).
 
 ## Current implementation status
 
@@ -298,23 +299,21 @@ People is a private, automatic directory of established collaborators, separate 
 
 The user owns a private People directory of known collaborators and participates in Spaces through Members, Invitations, and Permissions. First collaboration follows email invitation → acceptance → People relationship; future collaboration follows People selection → Space invitation → acceptance. Both invitation entry points share one permission-aware subsystem, with known recipients persisted by user ID.
 
-Workspace manager lifecycle: the two-tab Flutter app exposes **Start Service**
-and **Stop Service** through macOS host management, while runtime commands and
-Worker tests use authenticated local IPC. The `workspace` service process owns
-Cloud WebSocket/HTTP fallback; `conclave-agent` is its separate generic CLI
+Workspace lifecycle: `conclave-workspace service install|start|stop|restart|status`
+manages the per-user background service through the host manager (systemd user
+unit, macOS LaunchAgent, Windows scheduled task), while runtime commands and
+Worker tests use authenticated local IPC. The service process (`workspace`)
+owns Cloud WebSocket/HTTP fallback; `conclave-agent` is its separate generic CLI
 Worker Engine. Service process health and Cloud connectivity are distinct.
-Stopping drains work before unregistering; closing the UI preserves execution.
-The UI may cache Worker display snapshots locally, but configuration and
+Stopping drains work before exiting; closing a terminal or the CLI preserves
+execution. Clients may cache Worker display snapshots, but configuration and
 execution state remain service-owned.
 
-Machine-local Work Root settings can be edited by the manager while the service
-is stopped. The existing lifecycle file is read at service startup; neither
-Cloud nor live IPC is required to save it. The service's installation lock also
-protects stopped-state configuration writes. Running-service Work Root changes
-are rejected, and manual changes do not move user files. Service IPC readiness
-is independent of Cloud handshake completion. Native Start refreshes an enabled
-but stopped macOS registration after bundle changes without stopping a running
-job or resetting installation identity.
+Non-secret configuration (Cloud origin, connect-on-start, name, parallel slots,
+Work Root and named folders) lives in `<state>/workspace.nano`, which the
+service reads once at startup; changes apply on restart and manual changes do
+not move user files. The installation lock protects configuration writes, and
+service IPC readiness is independent of Cloud handshake completion.
 
 Profile-declared CLI model discovery and its Service/Cloud inventory boundary are
 documented in [Gemini/AGY Profile](docs/architecture/GEMINI_AGY_PROFILE.md). The

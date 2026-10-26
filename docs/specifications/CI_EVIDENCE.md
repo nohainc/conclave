@@ -22,8 +22,8 @@ independent.
 | `typescript` | Cloud generated types, TypeScript build, unit/integration tests and explicit fixture acceptance |
 | `dart-core` | Five Dart protocol/runtime/Profile/Engine packages plus Flutter design package: format, analysis and tests |
 | `app-flutter` | AX format, analysis, tests and release web build |
-| `workspace-check` | Workspace format, analysis and tests on Linux, with a freshly compiled fixture Engine |
-| `workspace-macos-build` | Native Workspace build; no repeated analysis/tests |
+| `workspace-check` | Workspace (pure Dart) format, `dart analyze`, `dart test` and the compiled-service one-shot check on Linux, with a freshly compiled fixture Engine |
+| `workspace-macos-build` | Native macOS bundle build (`dart compile exe` + signing); no repeated analysis/tests |
 | `profile-lab-macos` | Profile Lab format, analysis, tests, fixture Engine acceptance and native build |
 | `site-astro` | Site check, tests, build and all existing release guards |
 

@@ -1,274 +1,184 @@
 # Conclave Workspace
 
-Development launchers now exercise current Cloud Profiles by default. Start
-`bash scripts/run-workspace-development.sh` for localhost, or set
-`CONCLAVE_DEVELOPMENT_CLOUD_URL=https://app.conclaveax.com` for the provisioned
-hosted development deployment. Publish the Profile from Profile Lab before
-using it in Workspace. Desktop signing does not change this flow.
-The unsigned Draft shortcut remains an explicit, non-release, loopback-only opt-in
-through `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`; it does not test Cloud rollout.
-
-If Profile Lab can list a Worker but Workspace reports that its Profile is
-unavailable, check the Workspace diagnostic report for the schema, digest,
-identity, Engine-compatibility, or Cloud-connectivity error. Do not bypass
-local Profile validation or delete the cached Profile directories.
-
-Conclave Workspace is the machine-side execution and security runtime.
+Conclave Workspace is the machine-side execution and security runtime. It is a
+headless Dart service plus a management CLI; there is no desktop GUI.
 
 It maintains the Cloud connection, owns application-managed runtime state,
 resolves the user-owned local Work Root, and creates/resolves one stable
-working directory per Space shared by its Threads, manages logical Workers and local provider
-credentials, resolves current Tool Profiles, launches the generic CLI Worker
-Engine, enforces local permissions, supervises execution, and reports safe
-readiness/status back to Conclave Cloud.
+working directory per Space shared by its Threads, manages logical Workers and
+local provider credentials, resolves current Tool Profiles, launches the generic
+CLI Worker Engine, enforces local permissions, supervises execution, and reports
+safe readiness/status back to Conclave Cloud.
 
-The desktop window opens at 750 × 700 pixels (minimum 750 × 700). Workspace
-settings put the name and Work Root on one row, with compact sleep and parallel
-capacity controls below. The centered tab selector stays above the settings; management buttons and
-expanded recovery content remain reachable by scrolling in shorter windows.
-
-Workspace name is editable while the service is stopped and either Cloud
-registration has not happened or the local service is explicitly unregistered. Work Root can be
-changed while the service is stopped; starting the service disables it. Parallel
-executions stays visible while stopped, with unavailable controls disabled and
-any last loaded usage retained. Worker check details omit CLI-version,
-model-list and sign-in rows from the UI only; the Engine still runs these checks
-and their evidence remains in service state.
-
-Its GUI is intentionally minimal and local-first:
-- account sign-in and explicit service start/stop;
-- Workers;
-- provider authentication;
-- local permissions;
-- service health and Cloud connection status;
-- diagnostics/logs;
-- updates;
-- pause/quit.
-
-Spaces, Threads, Discuss, Work orchestration, Space membership and
-remote scheduling policy belong in Conclave AX.
-
-The authoritative ownership and lifecycle contract is the
+Spaces, Threads, Discuss, Work orchestration, Space membership and remote
+scheduling policy belong in Conclave AX. The authoritative ownership and
+lifecycle contract is the
 [Workspace architecture](../../docs/architecture/WORKSPACE_ARCHITECTURE.md).
+
+## Executables
+
+| Name | Role |
+| --- | --- |
+| `conclave-workspace` | Unified binary (`bin/conclave_workspace.dart`): the management CLI, and the service when run as `conclave-workspace run` |
+| `workspace` | Alias of the same binary. When invoked under this name it runs the service, which is what systemd, containers and `--once` smoke tests use |
+| `conclave-agent` | The separately supervised generic CLI Worker Engine, bundled under `assets/engines/` |
+
+`bin/conclave_workspace_service.dart` is the service entry point used by the
+unified binary and by source-mode development; `bin/conclave_workspace_cli.dart`
+is the CLI-only entry point. The runtime is composed in
+`lib/workspace_runtime.dart`.
+
+Users install only Conclave Workspace. Workspace manages the bundled generic
+Engine and current Tool Profiles; provider CLI software is installed separately
+by its provider.
+
+## Configuration: `workspace.nano`
+
+Non-secret behavior is defined in the strict, versioned Nano Markup file
+`<state>/workspace.nano`: Cloud origin and connect-on-start intent, display
+name, parallel execution slots, and a map of named absolute folders. The service
+reads it once at process start; there is no live reload or settings IPC command.
+
+~~~text
+conclave-workspace config init|show|validate|path
+~~~
+
+Edit the file while the service is stopped (or edit and then run
+`conclave-workspace service restart`). Credentials, identities, Cloud
+registration, Worker registry, Profiles and sessions live in dedicated stores,
+never in `workspace.nano`. `connect`, `disconnect`, `setup` and sign-in update
+the relevant keys for you.
+
+## Account and service lifecycle
+
+The CLI drives the whole lifecycle; it speaks only the authenticated local IPC
+protocol and never starts Engines or provider CLIs itself.
+
+~~~text
+conclave-workspace service install|start|stop|restart|status|uninstall
+conclave-workspace setup                 # headless: install, start, sign in, connect
+conclave-workspace login                 # browser approval and Cloud registration
+conclave-workspace login --password      # existing Cloud email/password sign-in
+conclave-workspace connect | disconnect  # Cloud connection intent
+conclave-workspace pause | resume        # stop or resume accepting new work
+conclave-workspace status | health | version | logs | metrics
+conclave-workspace workers [check|test|enable|disable]
+conclave-workspace slots | assignments [cancel ID] | folders [add|remove]
+~~~
+
+`service install` registers the per-user background service with the host
+manager: a systemd user unit on Linux, a LaunchAgent in `~/Library/LaunchAgents`
+on macOS (`macos_service_manager.dart`), and a scheduled task on Windows.
+`service stop` asks the service to drain active assignments before it exits and
+leaves the registration and the persisted Cloud intent intact. Closing a
+terminal never stops the service. A running service can be Cloud-offline
+without being stopped; it connects over WebSocket with HTTP fallback and
+bounded reconnect backoff.
+
+Stopping the service preserves installation ownership and local Worker/provider
+credentials. See [ADR-014](../../docs/decisions/ADR-014-workspace-desktop-lifecycle.md)
+for the lifecycle dimensions and [ADR-021](../../docs/decisions/ADR-021-workspace-service-linux-windows.md)
+for the headless architecture.
+
+## Storage
 
 The Workspace is an execution environment, not a directory. Its private
 Application Data Root is resolved automatically under the Conclave application
-family root (`~/Library/Application Support/Conclave/Workspace/` on macOS).
-The user Work Root is separate and defaults to `~/Documents/Conclave`; Space
-Work Directories live beneath it.
-Space directory names are human-readable, while a private registry and marker
-bind each directory to its immutable Space ID. Thread directories are not
-created during normal execution; Thread sessions and runtime metadata remain
-under Application Data Root.
+family root (`~/Library/Application Support/Conclave/` on macOS, XDG state on
+Linux, `%LOCALAPPDATA%\Conclave` on Windows). The user Work Root is separate and
+defaults to `~/Documents/Conclave`; Space Work Directories live beneath it and
+are configured through `folders.work` in `workspace.nano`. Space directory names
+are human-readable, while a private registry and marker bind each directory to
+its immutable Space ID. Thread directories are not created during normal
+execution; Thread sessions and runtime metadata remain under the Application
+Data Root. A changed Work Root applies to future Space directory resolution and
+never moves existing user files.
 
-Users install only Conclave Workspace. Workspace manages the bundled generic
-Engine and current Tool Profiles; provider CLI software is installed
-separately by its provider.
-
-Workspace update metadata is signed by an independent Ed25519 application
-release key and binds the archive digest, version, channel, supported platform,
-minimum supported version, and release notes. macOS Developer ID signing and
-notarization complement this verification; they do not replace it. Publish
-macOS builds through `.github/workflows/release-macos.yml`. The
-workflow requires a successful repository CI run for the selected `main`
-revision before it builds or publishes, then checks the downloaded release
-metadata signature and archive digest.
-
-The Workspace release workflow uses the Workspace signing key and public trust
-roots. The generic Engine is bundled with Workspace; provider-specific Worker
-package signing and publishing workflows have been retired.
-
-## Headless Workspace service
-
-The Workspace runtime has a standalone Dart service entry point at
-`bin/conclave_workspace_service.dart`. It uses the existing Cloud and local
-Worker protocols and does not import Flutter APIs. Build it with
-`bash scripts/build-workspace-service.sh`; the resulting executable and its
-generic CLI Worker Engine are placed under `dist/conclave-workspace/service/`.
-The build injects `CONCLAVE_RELEASE_TRUST_KEYS_JSON` into the service as well
-as the Flutter app so the service can verify Workspace application releases.
-The service can be run without starting the Flutter application and maintains
-separate process, Cloud-connection, and execution state in
-`workspace-state.json`.
-
-The service exposes a versioned, authenticated local IPC protocol for status,
-connection, Worker, assignment, log, and diagnostics commands.
-Service restart and shutdown remain host-manager operations. The Flutter
-management shell connects through this protocol and does not create or control
-an in-process execution runtime. See the canonical architecture document for
-the command surface, ownership map, and validation gates.
-
-Headless execution is the primary product architecture. Non-secret behavior is
-defined in the strict, versioned Nano Markup file `<state>/workspace.nano`:
-Cloud origin/startup intent, display name, parallel execution slots, and a map
-of named absolute folders. The service reads it once at startup. Use
-`conclave-workspace config init|show|validate|path`, edit the file while stopped,
-and restart the service to apply it. Credentials and identity are stored
-elsewhere. The Flutter app is an optional management client for the same service
-and configuration, not another runtime owner.
-
-For development, first run `scripts/build-workspace-service.sh`, then
-`scripts/run-workspace-service.sh` starts the compiled `workspace`
-against the existing local configuration without building the Flutter app.
-Use `scripts/run-workspace-service.sh --source` only when debugging Dart source
-directly; that mode intentionally appears as a Dart VM process.
-Compiled service and Engine processes set their macOS diagnostic names at
-startup, so Activity Monitor shows `workspace` and `conclave-agent`
-instead of the Dart runtime prefix. This changes only the local display name;
-IPC, Workspace credentials, and Cloud authentication are unchanged.
-`scripts/check-workspace-service.sh` compiles it and runs a one-shot lifecycle
-in temporary directories; the Workspace CI validation invokes the same check.
-The per-installation lock rejects a second service process that attempts to
-own the same Workspace installation.
-
-## Desktop development and macOS build
-
-Conclave Workspace is the native desktop product. The headless service composes
-the runtime in `lib/workspace_runtime.dart`; the Flutter GUI manages it over
-local IPC.
-
-The current macOS release target requires macOS 12 or newer.
-
-The package embeds the standalone service helper, its generic Engine, and an
-`SMAppService` LaunchAgent manifest. Background registration requires macOS 13
-or newer. Persistent execution through the managed service requires macOS 13
-or newer; earlier macOS versions can open the management UI but cannot start
-the service. See the canonical architecture document for the bundle contract,
-status semantics, and signed-device validation requirements.
-
-Build a local macOS Workspace app from repository root:
-
-~~~text
-bash scripts/build-workspace-macos.sh
-~~~
-
-The local build bundles the generic CLI Worker Engine. With no arguments the
-script creates a signed release using the configured local Apple Development
-identity. Use `--sign` or `CONCLAVE_MACOS_SIGN_IDENTITY` to select another
-certificate. The build signs the embedded Flutter frameworks, service helper,
-and Worker Engine with the same identity, preserves the helper entitlements,
-and verifies all three before packaging. macOS rejects ad-hoc signed helpers
-launched through SMAppService before the service can create its IPC socket;
-restore the signing certificate and private key if that check fails.
-`--debug` without an identity is available for UI inspection only; Start Service
-reports the signing requirement immediately. Install a valid signing certificate
-and its private key in Keychain before building a service-enabled app.
-
-Optional environment:
-- `CONCLAVE_MACOS_SIGN_IDENTITY` — optional signing identity override;
-- `CONCLAVE_MACOS_NOTARY_PROFILE` — `notarytool` keychain profile;
-- `CONCLAVE_WORKSPACE_VERSION` — override build version.
-- `CONCLAVE_RELEASE_TRUST_KEYS_JSON` — explicit public Ed25519 roots for
-  Workspace application-release verification. It is not used to admit Worker
-  Profiles.
-
-The output ZIP is written under `dist/conclave-workspace/macos`.
-
-## Account and Workspace lifecycle
-
-The desktop path uses browser-based Better Auth sign-in, followed by
-**Start Service**. Starting registers or recovers the existing installation,
-enables the embedded per-user LaunchAgent, and waits for authenticated local
-IPC. The service independently connects to Cloud using WebSocket with HTTP
-fallback and bounded reconnect backoff. A running service can therefore be
-Cloud-offline without being stopped.
-
-**Stop Service** asks the service to stop accepting work and drain active
-assignments before terminating the process. If work does not finish within the
-bounded grace period, stopping is refused and admission resumes. Stopping
-does not unregister the LaunchAgent or change the persisted Cloud connection
-intent. Closing or quitting Workspace.app only closes the management client
-and leaves the service running.
-
-The Workspace page contains **Workspace** and **Workers** sections. Worker
-configuration and live tests execute in the service through authenticated IPC;
-the UI awaits results. A local display cache retains the last known Worker list
-while the service is stopped, with configuration and tests disabled. Name and
-Work Root are editable only while the service is stopped. The Workers section
-has a catalog refresh control in its heading, while actionable service and
-Cloud errors remain visible in context.
-
-Packaged runtime process names are `workspace` and `conclave-agent`.
-The latter is the separately isolated generic CLI Worker Engine, materialized
-under the existing Workspace Engine registry. LaunchAgent identity remains
-`com.conclaveax.workspace.service`; assets retain their shared Engine names.
-An independently installed legacy `conclave_agent_engine` daemon is outside
-this bundle and is not silently stopped or removed by the manager.
-
-Workspace error and warning messages include a copy action where they are
-shown, including transient notifications and Worker setup details. Copying a
-message copies its displayed text; it does not extend the message's existing
-display timeout.
-
-Stopping the service preserves installation ownership and local Worker/provider
-credentials. Release ownership is a separate advanced action for a stopped
-Workspace and permits a different account to connect. Reset local Workspace
-has separate published data-removal semantics; see [ADR-014](../../docs/decisions/ADR-014-workspace-desktop-lifecycle.md).
+The per-installation lock rejects a second service process that attempts to own
+the same Workspace installation.
 
 ## Cloud connection
 
-Sign in to Conclave Workspace with browser-assisted desktop authentication.
-Workspace verifies installation ownership, registers or recovers through
-`POST /api/workspace-runtime/register`, and then connects to the Workspace
-Gateway using its runtime credential. Disconnect and ownership release use the
-desktop human session.
-
-The service journals assignment outcomes and classifies interrupted work on
-startup before accepting new work. See the canonical architecture document for
-recovery states, process cleanup, logging, and current Cloud reconciliation
-limits.
+Sign in with `conclave-workspace login` (browser-assisted) or
+`login --password`. Workspace verifies installation ownership, registers or
+recovers through `POST /api/workspace-runtime/register`, and then connects to the
+Workspace Gateway using its runtime credential. The service journals assignment
+outcomes and classifies interrupted work on startup before accepting new work.
+See the canonical architecture document for recovery states, process cleanup,
+logging and Cloud reconciliation limits.
 
 ## First-party Worker v1 contract
 
-The supported product-facing Worker slots are **ChatGPT**, powered by Codex
-CLI (`codex`), and **Gemini**, powered by Antigravity CLI (`agy`). Each
-Workspace has one local Worker slot for each logical Worker Type. The
-corresponding CLI owns sign-in, credential storage, and billing
-mode; Conclave checks whether the CLI can execute and does not request or store
-provider credentials. See [ADR-015](../../docs/decisions/ADR-015-first-party-worker-v1-contract.md).
+The supported product-facing Worker slots are **ChatGPT**, powered by Codex CLI
+(`codex`), and **Gemini**, powered by Antigravity CLI (`agy`). Each Workspace has
+one local Worker slot for each logical Worker Type. The corresponding CLI owns
+sign-in, credential storage, and billing mode; Conclave checks whether the CLI
+can execute and does not request or store provider credentials. See
+[ADR-015](../../docs/decisions/ADR-015-first-party-worker-v1-contract.md).
 
-The native ChatGPT and Gemini Worker source packages remain pending the real
-Engine/Profile acceptance gate, but their build/install/release tooling is
-retired. Normal Workspace execution uses the generic Engine and current Worker
-Profiles. Worker readiness remains a local execution fact; Cloud receives only
-safe inventory.
+Normal Workspace execution uses the generic Engine and current Worker Profiles.
+If Profile Lab can list a Worker but Workspace reports its Profile as
+unavailable, check `conclave-workspace logs` and the diagnostics report for the
+schema, digest, identity, Engine-compatibility or Cloud-connectivity error. Do
+not bypass local Profile validation or delete the cached Profile directories.
+Worker readiness remains a local execution fact; Cloud receives only safe
+inventory.
 
-## Work Root configuration before startup
+## Build and run
 
-Work Root is a machine-local setting in `workspace-lifecycle.json` under
-Application Data. Workspace.app validates and saves it while the service is
-stopped, without IPC or Cloud access; service startup reads the same file.
-The installation's advisory lock protects against edits while an independent
-service process is running even if its IPC socket is unavailable. A changed
-root applies to future Space directory resolution and never moves existing
-user files. The running-service API rejects Work Root changes.
+Requirements: the Dart SDK (no Flutter SDK), Node.js for the release-trust
+helper, and macOS, Linux or Windows for the matching package.
 
-Before starting or restarting the background service, Workspace.app performs a
-write-access preflight against the configured Work Root. If macOS has not yet
-granted the application access to that folder, the app opens the native folder
-permission flow while the UI is available. The service is started only after
-the preflight succeeds, so the first Worker request does not need to trigger
-the initial folder-access prompt from a headless process.
+| Task | Command |
+| --- | --- |
+| Compile the unified binary and Engine (host OS) | `bash scripts/build-workspace-service.sh` → `dist/conclave-workspace/` |
+| Run the compiled service | `scripts/run-workspace-service.sh` (`--source` runs from Dart source) |
+| Run from source against local Cloud | `pnpm workspace:run:local` |
+| One-shot compile + start + stop check | `bash scripts/check-workspace-service.sh` |
+| Analyze and test | `bash scripts/check-flutter-app.sh workspace` (`dart analyze`, `dart test`) |
+| macOS bundle (signed, zipped) | `pnpm workspace:build:macos[:local|:prod|:all]`, then `pnpm workspace:package:macos` for a `.pkg` |
+| Linux headless bundle and `.deb` | `scripts/build-workspace-linux-headless.sh <x64\|arm64>` then `scripts/package-workspace-linux.sh <arch>` |
 
-Start Service first attempts IPC attachment. If macOS has an enabled but stopped
-job (including an old helper path after an update), the native bridge refreshes
-its `SMAppService` registration. It does not unregister a running job. Local
-IPC and configuration reload become ready before Cloud's initial handshake;
-Cloud failure is shown as connectivity state, not local startup failure.
+`CONCLAVE_RELEASE_TRUST_KEYS_JSON` supplies the explicit public Ed25519 roots
+used to verify Workspace application releases; it is not used to admit Worker
+Profiles. Optional macOS environment: `CONCLAVE_MACOS_SIGN_IDENTITY`,
+`CONCLAVE_MACOS_NOTARY_PROFILE`, `CONCLAVE_WORKSPACE_VERSION`.
 
-## Service startup diagnostics
+Compiled service and Engine processes set their diagnostic names at startup, so
+process tools show `workspace` and `conclave-agent` rather than the Dart runtime.
+This changes only the local display name.
 
-Failed initial IPC attempts are disposed (subscription and client), so retries
-read the current capability key and socket instead of retaining a failed
-client. Concurrent startup calls share one in-flight attempt; an established
-client keeps event-driven reconnect behavior. A registration timeout reports
-that IPC attachment failed, not that the process necessarily failed to start.
-The error and Advanced Diagnostics include registration, launchd state, key/
-socket presence, last IPC error, and the last service exit code when available.
-The native bridge exposes selected operational fields only, never the launchd
-environment or the local capability key. IPC remains independent of Cloud
-connectivity. Login/reboot, TCC and signed-device acceptance remain separate
-release checks.
+### macOS
+
+`build-workspace-macos.sh` produces `dist/conclave-workspace/macos/conclave-workspace/`
+(`conclave-workspace`, the `workspace` symlink and `assets/engines/conclave-agent`)
+signed with the hardened-runtime entitlements in
+`packaging/macos/workspace-helper.entitlements`, plus
+`Conclave-Workspace-<version>-macos.zip`. There is no `.app` and no `SMAppService`;
+`--install` copies the bundle to `~/.local/lib` and links the commands into
+`~/.local/bin`, and `conclave-workspace service install` writes the LaunchAgent.
+An Apple identity is optional for local use (ad-hoc signatures are used when none
+is available). Update metadata is signed by an independent Ed25519 application
+release key and binds the archive digest, version, channel, supported platform,
+minimum supported version and release notes; Developer ID signing and
+notarization complement this verification and do not replace it. Publish macOS
+builds through `.github/workflows/release-macos.yml`, which requires a successful
+repository CI run for the selected `main` revision.
+
+### Linux
+
+A systemd user unit per installation, Unix-socket IPC, a recorded Secret Service
+or user-only file credential store, XDG state, and process-group/cgroup cleanup.
+See the [Linux operations guide](../../docs/operations/WORKSPACE_LINUX.md).
+
+### Windows
+
+Per-user scheduled-task service management, owner-only named-pipe IPC, DPAPI
+credentials, private local state and Engine Job Object cleanup. The package
+remains unsigned with manual updates. The Windows build and installer scripts
+still predate the headless service/CLI-only layout and are being reworked; see
+[the Windows guide](../../docs/operations/WORKSPACE_WINDOWS_PREVIEW.md) and
+[the installer guide](../../docs/operations/WORKSPACE_WINDOWS_INSTALLER.md).
 
 ## Local vs production builds
 
@@ -279,32 +189,10 @@ A Workspace build targets exactly one Cloud; there is no runtime switch.
 | `pnpm workspace:build:macos:prod` (default) | `https://app.conclaveax.com` | `~/Library/Application Support/Conclave` |
 | `pnpm workspace:build:macos:local` | `http://localhost:8787` | `~/Library/Application Support/Conclave Local` |
 
-Local builds are produced with `--dart-define=CONCLAVE_WORKSPACE_ENVIRONMENT=local`,
-show an orange "LOCAL DEVELOPMENT BUILD" banner, ignore saved or environment
-Cloud URLs, and write to a separate state directory so they never touch a
-production registration or session. Start the local API/web stack first with
-`pnpm app:run:local`. Local builds are a distinct app, **Conclave Workspace Local.app**, with bundle ID
-`com.conclaveax.workspace.local`, LaunchAgent label
-`com.conclaveax.workspace.local.service`, and Keychain service
-`com.conclaveax.workspace.local`. The production and local apps can be installed
-and run at the same time on one Mac; each has its own state directory,
-per-installation lock, IPC socket, and service. The Swift host derives the
-LaunchAgent label from its bundle identifier.
-
-## Linux candidate
-
-Linux includes a systemd user unit per installation, Unix-socket IPC, a
-recorded Secret Service or user-only file credential store, XDG state, and
-process-group/cgroup cleanup. Build with `bash scripts/build-workspace-linux.sh`
-on a Linux host. See the [Linux operations guide](../../docs/operations/WORKSPACE_LINUX.md).
-
-## Windows runtime candidate
-
-Windows x64 includes per-user scheduled-task service management, owner-only named
-pipe IPC, DPAPI credentials, private local state, and Engine Job Object cleanup.
-The package remains unsigned with manual updates. See the [Windows operations
-and qualification guide](../../docs/operations/WORKSPACE_WINDOWS_PREVIEW.md)
-for build instructions, migration behavior, CLI shim limits and device gates.
-
-Windows per-user installer builds and lifecycle requirements are documented in
-[the Inno Setup installer guide](../../docs/operations/WORKSPACE_WINDOWS_INSTALLER.md).
+Local builds are compiled with `CONCLAVE_WORKSPACE_ENVIRONMENT=local`, ignore
+`cloud.url` from `workspace.nano`, and write to a separate state directory so they
+never touch a production registration or session. Start the local API/web stack
+first with `pnpm app:run:local`. The local bundle installs as
+`conclave-workspace-local`; the production and local services can run side by
+side, each with its own state directory, installation lock, IPC socket and
+LaunchAgent label.

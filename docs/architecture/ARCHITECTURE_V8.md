@@ -412,7 +412,7 @@ Workspace
 
 Workspace is the ultimate kill authority over the Engine process tree.
 
-The Engine is separate from the Flutter Workspace process to preserve crash,
+The Engine is separate from the Workspace service process to preserve crash,
 memory, parser, and provider isolation.
 
 ## 8. Engine deployment/versioning
@@ -700,6 +700,8 @@ using the supported schema, and Cloud catalog policy enables it.
 The user cannot add arbitrary catalog/profile entries in v8.
 
 ## 17. Workspace UI
+
+> **Note (2026-10):** the Flutter Workspace UI described in this section was removed. Workspace is a headless Dart service plus the `conclave-workspace` CLI; Worker-centric presentation now lives in AX and the CLI `workers` output. See [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
 
 Keep current UX.
 

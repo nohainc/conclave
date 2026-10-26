@@ -16,7 +16,7 @@ it("packaging rejects missing, mismatched and altered build output", () => {
   for (const name of [
     "workspace",
     "conclave-workspace",
-    "assets/engines/conclave_cli_worker_engine",
+    "assets/engines/conclave-agent",
   ]) {
     writeFileSync(join(root, name), "fixture");
   }

@@ -1,85 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP="${1:-}"
-if [[ -z "$APP" || ! -d "$APP" ]]; then
-  echo "Usage: $(basename "$0") '/path/to/Conclave Workspace.app'" >&2
+# Verifies a built macOS Workspace bundle directory: the unified
+# `conclave-workspace` binary, its `workspace` service alias and the generic
+# CLI Worker Engine, plus their signatures when signed.
+BUNDLE="${1:-}"
+if [[ -z "$BUNDLE" || ! -d "$BUNDLE" ]]; then
+  echo "Usage: $(basename "$0") '/path/to/conclave-workspace'" >&2
   exit 2
 fi
 
-plist_buddy() {
-  if command -v PlistBuddy >/dev/null 2>&1; then
-    PlistBuddy "$@"
-  elif [[ -x /usr/libexec/PlistBuddy ]]; then
-    /usr/libexec/PlistBuddy "$@"
-  else
-    echo "PlistBuddy not found" >&2
-    exit 1
-  fi
-}
-
-plutil_lint() {
-  if command -v plutil >/dev/null 2>&1; then
-    plutil -lint "$1"
-  elif [[ -x /usr/bin/plutil ]]; then
-    /usr/bin/plutil -lint "$1"
-  else
-    true
-  fi
-}
-
-HELPER="$APP/Contents/Helpers/workspace"
-ENGINE="$APP/Contents/Helpers/assets/engines/conclave_cli_worker_engine"
-APP_EXECUTABLE="$APP/Contents/MacOS/$(plist_buddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
-BUNDLE_ID="$(plist_buddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")"
-case "$BUNDLE_ID" in
-  com.conclaveax.workspace|com.conclaveax.workspace.local) ;;
-  *) echo "Unexpected bundle identifier: $BUNDLE_ID" >&2; exit 1 ;;
-esac
-PLIST="$APP/Contents/Library/LaunchAgents/$BUNDLE_ID.service.plist"
-for path in "$HELPER" "$ENGINE" "$APP_EXECUTABLE" "$PLIST"; do
-  [[ -e "$path" ]] || { echo "Missing service bundle item: $path" >&2; exit 1; }
+BINARY="$BUNDLE/conclave-workspace"
+ALIAS="$BUNDLE/workspace"
+ENGINE="$BUNDLE/assets/engines/conclave-agent"
+for path in "$BINARY" "$ALIAS" "$ENGINE"; do
+  [[ -e "$path" ]] || { echo "Missing bundle item: $path" >&2; exit 1; }
 done
-[[ -x "$HELPER" && -x "$ENGINE" ]] || {
-  echo "Service and Engine bundle items must be executable." >&2
+[[ -x "$BINARY" && -x "$ENGINE" ]] || {
+  echo "The service binary and Engine must be executable." >&2
   exit 1
 }
-[[ -x "$APP_EXECUTABLE" ]] || {
-  echo "Workspace app executable must be executable." >&2
-  exit 1
-}
-plist_buddy -c 'Print :Label' "$PLIST" >/dev/null
-[[ "$(plist_buddy -c 'Print :Label' "$PLIST")" == "$BUNDLE_ID.service" ]] || {
-  echo "Unexpected LaunchAgent label." >&2
-  exit 1
-}
-[[ "$(plist_buddy -c 'Print :AssociatedBundleIdentifiers:0' "$PLIST")" == "$BUNDLE_ID" ]] || {
-  echo "LaunchAgent is not associated with the Workspace app bundle." >&2
-  exit 1
-}
-[[ "$(plist_buddy -c 'Print :BundleProgram' "$PLIST")" == "Contents/Helpers/workspace" ]] || {
-  echo "LaunchAgent does not point at the embedded service." >&2
-  exit 1
-}
-[[ "$(plist_buddy -c 'Print :ProgramArguments:0' "$PLIST")" == "Contents/Helpers/workspace" ]] || {
-  echo "LaunchAgent argv[0] does not identify the embedded service." >&2
-  exit 1
-}
-if plist_buddy -c 'Print :SpawnConstraint' "$PLIST" >/dev/null 2>&1; then
-  echo "LaunchAgent must not declare a SpawnConstraint (launchd rejects it)." >&2
-  exit 1
-fi
-[[ "$(plist_buddy -c 'Print :RunAtLoad' "$PLIST")" == "false" ]] || {
-  echo "LaunchAgent must not start on registration (RunAtLoad must be false)." >&2
+[[ -L "$ALIAS" && "$(readlink "$ALIAS")" == "conclave-workspace" ]] || {
+  echo "The workspace alias must be a symlink to conclave-workspace." >&2
   exit 1
 }
 
-plutil_lint "$PLIST" >/dev/null || {
-  echo "LaunchAgent manifest is not valid plist data." >&2
-  exit 1
-}
-
-if codesign -dv "$APP" >/dev/null 2>&1; then
+if codesign -dv "$BINARY" >/dev/null 2>&1; then
   team_id() {
     codesign -dv --verbose=4 "$1" 2>&1 \
       | awk -F= '/^TeamIdentifier=/ && $2 != "not set" && $2 != "" && !s{print $2; s=1}'
@@ -89,23 +35,20 @@ if codesign -dv "$APP" >/dev/null 2>&1; then
       | awk -F= '/^Identifier=/ && !s{print $2; s=1}'
   }
 
-  codesign --verify --strict --verbose=2 "$HELPER"
+  codesign --verify --strict --verbose=2 "$BINARY"
   codesign --verify --strict --verbose=2 "$ENGINE"
-  codesign --verify --strict --verbose=2 "$APP_EXECUTABLE"
-  codesign --verify --deep --strict --verbose=2 "$APP"
 
-  # Dart AOT executables are hardened-runtime code. Keep the helper-specific
-  # entitlements intact after the application bundle is sealed; otherwise
-  # launchd can terminate the service with OS_REASON_CODESIGNING even though a
-  # shallow signature check succeeds.
-  HELPER_ENTITLEMENTS="$(codesign -d --entitlements :- "$HELPER" 2>/dev/null || true)"
+  # Dart AOT executables are hardened-runtime code and need the helper
+  # entitlements, otherwise launchd can terminate the service with
+  # OS_REASON_CODESIGNING even though a shallow signature check succeeds.
+  BINARY_ENTITLEMENTS="$(codesign -d --entitlements :- "$BINARY" 2>/dev/null || true)"
   ENGINE_ENTITLEMENTS="$(codesign -d --entitlements :- "$ENGINE" 2>/dev/null || true)"
   for entitlement in \
     com.apple.security.cs.allow-jit \
     com.apple.security.cs.allow-unsigned-executable-memory \
     com.apple.security.cs.disable-library-validation; do
-    [[ "$HELPER_ENTITLEMENTS" == *"$entitlement"* ]] || {
-      echo "The service helper is missing hardened-runtime entitlement: $entitlement" >&2
+    [[ "$BINARY_ENTITLEMENTS" == *"$entitlement"* ]] || {
+      echo "conclave-workspace is missing hardened-runtime entitlement: $entitlement" >&2
       exit 1
     }
     [[ "$ENGINE_ENTITLEMENTS" == *"$entitlement"* ]] || {
@@ -114,32 +57,29 @@ if codesign -dv "$APP" >/dev/null 2>&1; then
     }
   done
 
-  APP_TEAM_ID="$(team_id "$APP")"
-  HELPER_TEAM_ID="$(team_id "$HELPER")"
-  ENGINE_TEAM_ID="$(team_id "$ENGINE")"
-  APP_EXECUTABLE_TEAM_ID="$(team_id "$APP_EXECUTABLE")"
-  HELPER_IDENTIFIER="$(identifier "$HELPER")"
-  if [[ -n "$APP_TEAM_ID" || -n "$APP_EXECUTABLE_TEAM_ID" || -n "$HELPER_TEAM_ID" || -n "$ENGINE_TEAM_ID" ]]; then
-    codesign --verify --strict --verbose=2 \
-      --test-requirement '=anchor apple generic' "$APP_EXECUTABLE"
-    codesign --verify --strict --verbose=2 \
-      --test-requirement '=anchor apple generic' "$HELPER"
-    codesign --verify --strict --verbose=2 \
-      --test-requirement '=anchor apple generic' "$ENGINE"
-  fi
-  [[ "$HELPER_IDENTIFIER" == "workspace" ]] || {
-    echo "The signed service helper has an unexpected designated identifier: ${HELPER_IDENTIFIER:-missing}." >&2
+  [[ "$(identifier "$BINARY")" == "conclave-workspace" ]] || {
+    echo "conclave-workspace has an unexpected designated identifier: $(identifier "$BINARY")." >&2
+    exit 1
+  }
+  [[ "$(identifier "$ENGINE")" == "conclave-agent" ]] || {
+    echo "The Worker Engine has an unexpected designated identifier: $(identifier "$ENGINE")." >&2
     exit 1
   }
 
-  # Apple-signed release bundles must have one signing team across the app,
-  # service, and Worker Engine. Ad-hoc development signatures have no team
-  # identifier and are intentionally allowed for UI-only development builds.
-  if [[ -n "$APP_TEAM_ID" || -n "$APP_EXECUTABLE_TEAM_ID" || -n "$HELPER_TEAM_ID" || -n "$ENGINE_TEAM_ID" ]]; then
-    [[ -n "$APP_TEAM_ID" && "$APP_TEAM_ID" == "$APP_EXECUTABLE_TEAM_ID" && "$APP_TEAM_ID" == "$HELPER_TEAM_ID" && "$APP_TEAM_ID" == "$ENGINE_TEAM_ID" ]] || {
-      echo "Workspace app, app executable, service helper, and Worker Engine are not signed by the same team." >&2
+  # Apple-signed bundles must have one signing team across the binary and the
+  # Engine. Ad-hoc signatures have no team identifier and are allowed for
+  # development builds.
+  BINARY_TEAM_ID="$(team_id "$BINARY")"
+  ENGINE_TEAM_ID="$(team_id "$ENGINE")"
+  if [[ -n "$BINARY_TEAM_ID" || -n "$ENGINE_TEAM_ID" ]]; then
+    codesign --verify --strict --verbose=2 \
+      --test-requirement '=anchor apple generic' "$BINARY"
+    codesign --verify --strict --verbose=2 \
+      --test-requirement '=anchor apple generic' "$ENGINE"
+    [[ -n "$BINARY_TEAM_ID" && "$BINARY_TEAM_ID" == "$ENGINE_TEAM_ID" ]] || {
+      echo "conclave-workspace and the Worker Engine are not signed by the same team." >&2
       exit 1
     }
   fi
 fi
-echo "Workspace service bundle is structurally valid: $APP"
+echo "Workspace bundle is structurally valid: $BUNDLE"

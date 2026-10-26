@@ -9,8 +9,8 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-command -v flutter >/dev/null 2>&1 || {
-  echo "Flutter is required." >&2
+command -v dart >/dev/null 2>&1 || {
+  echo "The Dart SDK is required." >&2
   exit 1
 }
 
@@ -19,7 +19,7 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "Usage: $(basename "$0") [options]"
       echo ""
-      echo "Runs static analysis and the test suite for the Conclave Workspace app."
+      echo "Runs static analysis and the test suite for the Conclave Workspace."
       echo ""
       echo "Options:"
       echo "  --help, -h  Show this help message"
@@ -34,9 +34,9 @@ done
 
 echo "Running Conclave Workspace macOS analysis and tests"
 cd "$WORKSPACE_DIR"
-flutter pub get
+dart pub get
 echo "Running static analysis..."
-flutter analyze
+dart analyze
 echo "Running test suite..."
-flutter test
+dart test
 echo "All checks passed."

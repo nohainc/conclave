@@ -34,8 +34,8 @@ are implementation details shown only in Advanced Diagnostics.
   (discussion) and Work.
 - **Conclave Cloud** — TypeScript/Cloudflare collaboration, scheduling,
   Workspace Gateway, Worker catalog and Profile release control plane.
-- **Conclave Workspace** — native Flutter/Dart desktop execution/security
-  supervisor.
+- **Conclave Workspace** — headless Dart execution/security service and
+  management CLI (`conclave-workspace`) for macOS, Linux and Windows.
 - **Conclave Profile Lab** — internal macOS Flutter/Dart engineering desktop
   application for Worker and Tool Profile authoring, testing, and lifecycle
   management.
@@ -66,8 +66,9 @@ browser login and upgrades. Provider CLIs and their logins are separate.
 Run `pnpm check` from the repository root to verify architecture and schema
 consistency, generated protocol and Wrangler bindings, TypeScript formatting,
 lint and builds, Cloud tests, Dart formatting and analysis across all Dart
-packages, Workspace and AX Flutter tests, and fixture acceptance flows. The
-command requires Node.js, pnpm, Dart, and Flutter.
+packages, Workspace Dart tests, AX Flutter tests, and fixture acceptance flows. The
+command requires Node.js, pnpm, Dart, and Flutter (Flutter is needed for AX and
+Profile Lab, not for Workspace).
 
 `./scripts/start-local.sh` starts the AX frontend on `http://localhost:3000`
 and a local API gateway on `http://localhost:8787`. By default the gateway
@@ -128,7 +129,8 @@ Workflow graphs or edit Conclave's internal orchestration prompts in v1.
 
 ## Technology stack
 
-- Flutter + Dart for AX and Conclave Workspace.
+- Flutter + Dart for AX; pure Dart (no Flutter) for the Conclave Workspace
+  service and CLI.
 - TypeScript for Conclave Cloud.
 - Dart AOT for the generic CLI Worker Engine.
 - Cloudflare Workers + Workflows + Durable Objects.

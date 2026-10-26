@@ -16,10 +16,10 @@ if [[ -z "$DART" ]]; then
   exit 1
 fi
 if [[ ! -f "$WORKSPACE_DIR/.dart_tool/package_config.json" ]]; then
-  echo "Workspace dependencies are not resolved; run flutter pub get first." >&2
+  echo "Workspace dependencies are not resolved; run dart pub get first." >&2
   exit 1
 fi
-if [[ ! -x "$WORKSPACE_DIR/assets/engines/conclave_cli_worker_engine" ]]; then
+if [[ ! -x "$WORKSPACE_DIR/assets/engines/conclave-agent" && ! -x "$WORKSPACE_DIR/assets/engines/conclave_cli_worker_engine" ]]; then
   echo "The generic CLI Worker Engine is missing; build it first." >&2
   exit 1
 fi

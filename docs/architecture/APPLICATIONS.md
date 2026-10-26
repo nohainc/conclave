@@ -5,7 +5,7 @@
 Conclave defines four primary product surfaces:
 1. **Conclave AX** (`apps/app`): Human web interface for space orchestration, thread binding, and approvals.
 2. **Conclave Cloud** (`apps/cloud`): Authoritative Cloud API, database, Profile publication authority, and Workspace Gateway.
-3. **Conclave Workspace** (`apps/workspace`): Native machine-side desktop application and execution runtime.
+3. **Conclave Workspace** (`apps/workspace`): Headless machine-side execution runtime (Dart service) with a management CLI.
 4. **Conclave Profile Lab** (`apps/profile_lab`): Internal administrative desktop engineering application for Worker catalog management, Profile authoring, sandbox testing, release promotion, and revocation.
 
 ---
@@ -43,8 +43,8 @@ page. See the [Workspaces UX and data contract](WORKSPACES_UX_CONTRACT.md).
 Home summarizes Spaces, Workspaces, and locally ready Workers. Both the
 Workspace count and Ready Workers count open `/workspaces`; AX does not expose
 a global Worker inventory. Getting Started guides users to add a Workspace,
-configure Workers in the Conclave Workspace desktop app, and create a Space.
-Authentication and local readiness problems direct users back to that desktop
+configure Workers with the Conclave Workspace CLI, and create a Space.
+Authentication and local readiness problems direct users back to that local
 runtime.
 
 Profile avatars are user-owned profile data. AX uploads the selected image to
@@ -114,10 +114,9 @@ latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
 **User-facing product name:** Conclave Workspace
 
 **Technology**
-- Flutter;
-- Dart;
-- native desktop application/runtime;
-- macOS first, then Windows/Linux.
+- Dart (no Flutter);
+- headless background service and management CLI (`conclave-workspace`);
+- macOS, Linux and Windows.
 
 **Targets**
 - macOS first;
@@ -139,7 +138,7 @@ latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
 - child-process supervision;
 - assignment execution/cancellation;
 - logs, diagnostics and updates;
-- minimal local UX.
+- a management CLI over authenticated local IPC (no GUI).
 
 One normal Conclave Workspace installation runs per machine/OS-user installation.
 
@@ -147,15 +146,14 @@ Each logical Worker Type has one local Worker slot in a Workspace. Provider
 CLIs own their sign-in; safe Worker readiness is synchronized to Cloud, and AX
 Thread policy determines how that capacity is used.
 
-Conclave Workspace is background-first. Human desktop authentication is
+Conclave Workspace is background-first. Human CLI authentication is
 distinct from Workspace runtime participation and from Worker/provider
-credentials. Signing in establishes management identity; an explicit **Connect
-Workspace** action registers/recovers runtime participation. A connected
+credentials. Signing in (`conclave-workspace login`) establishes management identity; an explicit **Connect
+Workspace** action (`connect`) registers/recovers runtime participation. A connected
 Workspace may auto-start/reconnect in the background after OS login using its
 runtime credential even when the human management session later requires
-reauthentication. The management UI may be locally locked without stopping
-runtime execution. Signed-out and locked users do not see the normal Workspace
-or Workers management surfaces. Provider credentials remain local.
+reauthentication. A signed-out management client never stops runtime
+execution. Provider credentials remain local.
 
 Spaces, Threads, Discuss, Work orchestration and Space administration remain in Conclave AX.
 
@@ -244,10 +242,11 @@ fallback. AX is not required for normal Workspace repair or registration.
 
 ## Desktop lifecycle
 
-The canonical Workspace desktop lifecycle is defined by
-[ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md) and the
-[release validation runbook](../operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md).
-The product distinguishes Sign in, Connect/Disconnect Workspace, Lock/Unlock,
+The Workspace lifecycle dimensions are defined by
+[ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md) (its GUI-specific
+parts are superseded by the headless design in
+[WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md)).
+The product distinguishes Sign in, Connect/Disconnect Workspace,
 Release ownership, Sign out, and Reset. These actions must not be aliases for
 one another.
 

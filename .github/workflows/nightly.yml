@@ -28,7 +28,7 @@ jobs:
           node-version: 24
       - name: Prepare dependencies and Worker engine
         working-directory: apps/workspace
-        run: flutter pub get
+        run: dart pub get
       - run: bash scripts/build-cli-worker-engine.sh
       - name: Build Workspace debug bundle without release signing
         run: bash scripts/build-workspace-macos.sh --debug --prepared

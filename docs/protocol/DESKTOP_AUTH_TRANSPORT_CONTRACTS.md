@@ -1,5 +1,7 @@
 # Desktop Authentication and Runtime Transport Contracts
 
+> **Updated (2026-10).** The credential and transport contracts below are current. The lifecycle sections were written for the Flutter `Workspace.app`; the GUI-only management-lock and launch-at-login dimensions were removed, and Workspace is now a headless Dart service plus the `conclave-workspace` CLI configured by `workspace.nano` (see [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md)).
+
 **Contract:** `conclave.desktop-auth-transport` **1.0**
 **Canonical validators/types:** `packages/workspace-runtime-protocol/src/desktop-auth-transport.ts`
 
@@ -181,13 +183,12 @@ Reset local Workspace has published fixed semantics: it removes local
 registration/runtime identity, local Worker registry entries, and the desktop
 human session. It preserves
 the stable installation ID and owner binding, Work Root metadata/content,
-launch-at-login, management preferences, and other local files. Disconnect
+`workspace.nano`, and other local files. Disconnect
 also preserves its non-secret registration and cached owner metadata so the
 owner can choose Release later; `desiredRuntimeState = disconnected` prevents
 that retained record from starting the runtime. It preserves the human session.
-Connect presents an
-explicit launch-at-login option on macOS 13 and later; it uses the native
-`SMAppService.mainApp` login item registration.
+Host service registration (login startup) is managed separately with
+`conclave-workspace service install|uninstall`.
 
 ## Runtime transport abstraction
 
@@ -255,21 +256,21 @@ derived status:
 | --- | --- |
 | `HumanAuthState` | `signed_out`, `signed_in`, `reauth_required` |
 | `WorkspaceParticipationState` | `disconnected`, `connecting`, `connected`, `disconnecting` |
-| `ManagementLockState` | `unlocked`, `locked` |
 | `DesiredRuntimeState` | `connected`, `disconnected` |
 | `RuntimeTransportProjection` | `websocket`, `http_long_poll`, `reconnecting`, `offline`, `authentication_required` |
 
-`WorkspaceLifecycleState` carries the first four dimensions. Transport is
+`WorkspaceLifecycleState` carries the first three dimensions (`humanAuth`,
+`participation`, `desiredRuntime`); the GUI-only management-lock dimension was
+removed with the Flutter Workspace app. Transport is
 represented separately by `RuntimeTransportProjection` (and the richer
 `RuntimeTransportStatus` diagnostics contract). No state is inferred from
 another: signed-in does not imply connected; connected does not imply a valid
-human session; locked does not imply disconnected; and HTTPS fallback does
+human session; and HTTPS fallback does
 not imply management reauthentication. Implementations must not add a
-combined `isConnected` or `isUnlocked` value that hides these dimensions.
+combined `isConnected` value that hides these dimensions.
 
 `WorkspaceLifecyclePreferences` is a strict, non-secret local persistence
-shape: desired runtime state, launch-at-login preference, management-lock
-preference, optional auto-lock timeout, and optional cached owner user ID/display
+shape: desired runtime state and optional cached owner user ID/display
 name. Owner metadata is display-only and non-authoritative. Human sessions,
 runtime credentials, and Worker/provider credentials are excluded and remain
 in secure storage.
@@ -318,8 +319,9 @@ The concrete management operation boundaries are:
 | Sign out | Human session revoke/removal | Allowed directly while disconnected; while connected requires an explicit Disconnect and sign out transition |
 | Reset local Workspace | Fresh local authentication and explicit destructive confirmation | Removes only the data enumerated in ADR-014; distinct from Cloud Release |
 
-On macOS, launch-at-login is a user preference implemented through
-`SMAppService.mainApp`. It is not enabled merely by installing the app. On
-startup, the runtime follows persisted `DesiredRuntimeState` and secure runtime
-credential independently of human-session validation; opening the window then
-routes to unlocked, locked, or reauthentication-required management UI.
+Startup at login is owned by the host service registration (macOS LaunchAgent,
+systemd user unit with linger, Windows logon task); it is not a runtime
+preference. On startup the service follows the persisted desired connection state
+(`cloud.connect_on_start` in `workspace.nano`) and the secure runtime credential
+independently of human-session validation; a management client that finds the
+human session expired asks for reauthentication.

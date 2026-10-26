@@ -1,5 +1,7 @@
 # Workspace Desktop Lifecycle Release Validation
 
+> **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `conclave-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md). Read this document as history.
+
 **Status:** Release gate; production-device scenarios not yet recorded  
 **Applies to:** Conclave Workspace macOS release and the deployed Cloud API  
 **Design authority:** [ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md), [ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md)

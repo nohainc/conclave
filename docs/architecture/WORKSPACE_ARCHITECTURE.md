@@ -14,23 +14,24 @@ workspace (headless Dart service)
                  │ authenticated local IPC (status and operations)
                  │ workspace.nano (restart-applied desired configuration)
                  │
-Conclave Workspace.app / conclave-workspace
-    optional management clients, account/setup flows, host service controls
+conclave-workspace (management CLI)
+    account/setup flows, configuration editing, host service controls
 
 workspace → Worker subsystem → conclave-agent → provider CLI
 ```
 
-Workspace.app must not create a Cloud connection, run readiness checks, spawn
-the Worker Engine, or execute an assignment. It may display a cached snapshot,
-but the Service is authoritative. The Worker Engine is an execution primitive;
+The CLI (and any future management client) must not create a Cloud connection,
+run readiness checks, spawn the Worker Engine, or execute an assignment. The
+Service is authoritative; clients only send IPC requests and display results. The Worker Engine is an execution primitive;
 it receives a profile, command, environment policy, working directory, input,
 execution options, and cancellation, and returns output. It has no Cloud,
 Space, Thread, Workflow, D1, or UI dependency.
 
-The service is a standalone Dart executable (`workspace`) and keeps the
+The service is the unified Dart executable `conclave-workspace` (run as
+`conclave-workspace run`, or invoked under its alias name `workspace`) and keeps the
 generic Engine as a separately supervised child (`conclave-agent`). The service
 holds the per-installation lock, owns process cleanup, and is the only runtime
-owner. Closing Workspace.app closes its IPC client and does not stop execution.
+owner. Closing a terminal or the CLI closes its IPC client and does not stop execution.
 At startup the compiled Dart processes set their macOS diagnostic names to
 those product names. This affects only Activity Monitor/process diagnostics;
 it does not change the executable, IPC protocol, Workspace credentials, or
@@ -52,9 +53,9 @@ Service: registered → stopped | starting → running | failed
 Cloud:   disconnected | connecting | connected | reconnecting
 ```
 
-`Stop Service` drains/cancels according to the bounded service policy,
+`service stop` drains/cancels according to the bounded service policy,
 disconnects Cloud, terminates child Engines, and leaves host registration in
-place. `Unregister Service` is a separate destructive host operation. At startup
+place. `service uninstall` is a separate destructive host operation. At startup
 the service reads `workspace.nano` exactly once and connects only when
 `cloud.connect_on_start` is true. Runtime operations (`connection.*`,
 `worker.*`, assignment controls, logs, and diagnostics) cross authenticated
@@ -79,23 +80,22 @@ re-sends every unacknowledged outcome on a timer (20 s, doubling up to 16x)
 until Cloud's terminal `assignment.ack` marks it reconciled. A reconnect cancels
 the timer and the connect-time sync takes over, so the two paths never overlap.
 
-Workspace release checks are also service-owned. The UI sends an
-`updates.check` IPC request; the service performs the authenticated release
+Workspace release checks are also service-owned. A client sends an
+`updates.check` IPC request (`conclave-workspace updates` reports which updater
+manages the installation); the service performs the authenticated release
 lookup without disconnecting or reconnecting Cloud. If update support is not
-configured, the UI reports that state instead of using a connection retry as a
-fallback.
+configured, the client reports that state instead of using a connection retry as
+a fallback.
 
 Human management authentication is a separate concern from runtime
-authentication. Workspace.app keeps the short-lived `DesktopHumanSession` for
-sign-in, account ownership checks, and management commands. The Workspace
-Service uses the registered Workspace runtime identity and secure runtime
-credential for Cloud reconnect and execution. Signing out of Workspace.app
-revokes and removes only the human management session; it does not disconnect
-Cloud, stop or unregister the service, release Workspace ownership, remove the
-runtime credential, or disable Workers. The service may therefore remain
-running and connected while the UI asks the user to sign in again. Explicit
-Disconnect Cloud, Stop Service, Release, and Reset actions retain their own
-separate lifecycle semantics.
+authentication. `conclave-workspace login` (browser approval) and
+`login --password` use a short-lived `DesktopHumanSession` for sign-in, account
+ownership checks, and registration. The Workspace Service uses the registered
+Workspace runtime identity and secure runtime credential for Cloud reconnect and
+execution. Losing or expiring the human session does not disconnect Cloud, stop
+or unregister the service, release Workspace ownership, remove the runtime
+credential, or disable Workers. Explicit `disconnect`, `service stop`, ownership
+release, and reset actions retain their own separate lifecycle semantics.
 
 ## Worker subsystem
 
@@ -116,18 +116,13 @@ catalog is retained. These probes never call a model and do not repeat Profile
 Lab's schema-validation or event-replay authoring tests. Status icons accompany
 each returned check and the last-check timestamps; an unavailable saved result
 is marked unknown rather than inferred as successful. Detailed evidence remains
-visible without a separate verification heading or overall-result row. CLI
-version, model discovery and authentication/sign-in check rows are hidden from
-the management UI only; all probes and their service evidence remain unchanged.
-Workspace name is editable while the service is stopped and either Cloud
-registration has not happened or the local service is explicitly unregistered. Work Root is locked
-while the service is starting, running or stopping. Parallel capacity remains
-visible while stopped, with mutations and polling disabled until the service
-is available again.
+visible without a separate verification heading or overall-result row. The service
+retains every probe and its evidence. Workspace name, Work Root and parallel
+capacity are configured in `workspace.nano` and apply when the service restarts.
 
 Per-Worker updates use `workers.refreshWorker` with `workerTypeId`. An older
-running service that rejects the command must be replaced with the current app's
-helper and restarted after active work finishes. The UI explains this recovery;
+running service that rejects the command must be replaced with the current
+binary and restarted after active work finishes. The client reports this recovery;
 it does not fall back to refreshing every Worker or restart active work.
 
 
@@ -143,7 +138,7 @@ resolveWorker · refresh · execute · cancel · recoverOrphanedProcesses · shu
 Worker lifecycle (`absent`, `installing`, `ready`, `degraded`, `failed`,
 `removing`) is separate from activation (`enabled` or `disabled`). A Worker
 Engine process is started on demand for a probe or assignment and is always
-tracked by the one process supervisor. No UI polling loop or idle Engine is
+tracked by the one process supervisor. No client polling loop or idle Engine is
 required.
 
 ### Worker management and verification
@@ -189,7 +184,7 @@ sub-tests or synthetic percentages are inferred by the manager. Failure retains 
 shown as passed. Testing preserves activation and may consume provider quota.
 
 Progress is Service memory, available to newly attached IPC clients, and is never
-restored from the UI's display cache. Persisted last passive/live timestamps,
+restored from a client's display cache. Persisted last passive/live timestamps,
 live pass/fail and safe failure details remain visible after a test ends or the
 service stops. A stopped service is presented as stale evidence, not live
 availability. Missing progress fields from an older service are supported;
@@ -252,8 +247,8 @@ registry, credential, Work Root, Profile, Engine, or session identity changes.
 
 Browsers cannot browse or verify local folders, and whether a provider CLI can
 write to a path depends on the host account the service runs as. The
-Workspace owner therefore maintains an explicit Allowed Folders list in
-Workspace.app; Spaces can only choose from that list.
+Workspace owner therefore maintains an explicit Allowed Folders list with
+`conclave-workspace folders`; Spaces can only choose from that list.
 
 - The list is private service state at
   `<Application Support>/Registry/allowed-folders.json` (schema version 1).
@@ -275,9 +270,9 @@ Workspace.app; Spaces can only choose from that list.
   Workspace belongs to the requesting user, and switching a Space to another
   Workspace detaches its folders (files untouched).
 
-Workspace.app shows an Allowed folders card on the Workspace tab. Adding a
-folder uses the native picker and local step-up authentication; removing one
-asks for confirmation and states that files stay on disk.
+`conclave-workspace folders [list]`, `folders add PATH [--name NAME]` and
+`folders remove ID` call the same IPC commands. Removing a folder never touches
+its files.
 
 The service publishes the path-free summaries as an optional
 `allowedFolders` array in each full `worker.inventory` snapshot
@@ -381,12 +376,12 @@ fallback settings in packaged builds.
 
 | Variable | Classification | Purpose |
 | --- | --- | --- |
-| `CONCLAVE_WORKSPACE_VERSION` | build/release | UI and service version |
+| `CONCLAVE_WORKSPACE_VERSION` | build/release | service and CLI version |
+| `CONCLAVE_WORKSPACE_ENVIRONMENT` | build-time define | `local` or `production` target Cloud; selects the state directory and pins the Cloud URL for local builds |
 | `CONCLAVE_RELEASE_TRUST_KEYS_JSON` | build/release | public Workspace application-release trust roots |
-| `CONCLAVE_MACOS_SIGN_IDENTITY` | build/release | application/service signing |
+| `CONCLAVE_MACOS_SIGN_IDENTITY` | build/release | service and Engine signing |
 | `CONCLAVE_MACOS_NOTARY_PROFILE` | release-only | notarization keychain profile |
 | `CONCLAVE_DART_EXECUTABLE` | build/test-only | select a Dart SDK for Engine builds |
-| `CONCLAVE_DEVELOPMENT_CLOUD_URL` | development-only | loopback Cloud origin for dev runner |
 | `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY` | development-only | unsigned local Profile drafts |
 | `CONCLAVE_WORKSPACE_DEVELOPMENT_DATA_DIR` | development-only | isolated dev state root |
 | `CONCLAVE_WORKSPACE_BUNDLE_DIR` | test/development-only | explicit bundled Engine location |
@@ -406,26 +401,32 @@ There is one Worker Engine source and build:
 ```text
 engines/cli_worker
        ↓ scripts/build-cli-worker-engine.sh
-apps/workspace/assets/engines/conclave_cli_worker_engine
-apps/profile_lab/assets/engines/conclave_cli_worker_engine
+apps/workspace/assets/engines/conclave-agent
+apps/profile_lab/assets/engines/conclave-agent
 ```
 
 The two app paths are materialized copies for their bundles, not independent
-source artifacts. `scripts/build-workspace.sh` is the cross-platform entry
-point; `scripts/build-workspace-macos.sh` assembles the signed macOS app and
-LaunchAgent; `scripts/build-workspace-service.sh` builds the standalone service
-for focused development; `scripts/run-workspace-service.sh` launches that
-compiled executable by default and reserves `--source` for Dart debugging;
-`scripts/check-workspace-service.sh` and
-`scripts/verify-workspace-service-bundle.sh` validate the service package.
-`scripts/package-workspace-macos.sh` (`pnpm workspace:package:macos`) wraps the
-built app into a drag-to-Applications `.dmg` and an `/Applications` `.pkg`.
-The app is the single install unit: it already embeds the service, the Engine,
-and the LaunchAgent manifest. The installer has no scripts and does not
-register or start the service; Workspace.app registers it through SMAppService,
-so upgrades keep existing Application Support state. Set
+source artifacts. The script also writes the legacy `conclave_cli_worker_engine`
+name for consumers that have not migrated (Profile Lab, Windows tooling and
+already published Linux packages); new code uses `conclave-agent`.
+
+`scripts/build-workspace-service.sh` compiles the unified `conclave-workspace`
+binary (plus the `workspace` alias and the Engine) into `dist/conclave-workspace/`,
+or `dist/conclave-workspace/linux-<arch>/` when cross-compiling.
+`scripts/run-workspace-service.sh` launches that compiled executable by default
+and reserves `--source` for Dart debugging; `scripts/check-workspace-service.sh`
+compiles the service and runs a one-shot lifecycle in temporary directories.
+`scripts/build-workspace-macos.sh` produces the signed macOS bundle directory
+(`conclave-workspace`, the `workspace` symlink, `assets/engines/conclave-agent`)
+and a zip; `scripts/verify-workspace-service-bundle.sh` validates it and
+`scripts/package-workspace-macos.sh` wraps it in a `.pkg`. There is no `.app` and
+no `SMAppService`: the installer does not register or start the service, and
+`conclave-workspace service install` writes the per-user LaunchAgent, so upgrades
+keep existing Application Support state. Linux uses
+`scripts/build-workspace-linux-headless.sh` and `scripts/package-workspace-linux.sh`
+(see [Linux releases](../deployment/WORKSPACE_LINUX_RELEASES.md)). Set
 `CONCLAVE_MACOS_INSTALLER_SIGN_IDENTITY` (Developer ID Installer) and
-`CONCLAVE_MACOS_NOTARY_PROFILE` for distributable artifacts.
+`CONCLAVE_MACOS_NOTARY_PROFILE` for distributable macOS artifacts.
 Signing and launchd checks are release/device evidence and cannot be replaced
 by a successful Dart compile.
 
@@ -435,16 +436,16 @@ Focused suites are organized around the ownership model:
 
 | Suite | Protects |
 | --- | --- |
-| Workspace UI | management screens and IPC projections |
+| Workspace CLI | commands, `workspace.nano` handling and IPC projections |
 | Workspace Service/runtime | lifecycle, assignment recovery, configuration, filesystems |
 | Workspace IPC | authentication, versioning, commands, events |
 | Worker Engine | profile/command execution and process cleanup |
 | Workspace Cloud | runtime authentication, sessions, inventory, admission |
 | Workspace DB | schema and migration contracts |
 
-Architecture tests assert that the UI does not construct Cloud/Engine runtime
+Architecture tests assert that the CLI does not construct Cloud/Engine runtime
 objects or spawn processes, the Engine does not import Cloud domain code, the
-Service composes Cloud and Workers, `Stop Service` does not unregister, and
+Service composes Cloud and Workers, `service stop` does not unregister, and
 `Disconnect Cloud` leaves the service process available. Historical migration
 tests remain where they protect existing installations; obsolete architecture
 tests should be removed only after an equivalent boundary test exists.
@@ -452,7 +453,8 @@ tests should be removed only after an equivalent boundary test exists.
 ## Future portability
 
 The shared service and protocol remain platform-independent Dart. macOS host
-registration is behind `WorkspaceServiceManager`. Linux and Windows support is
+registration (a user LaunchAgent driven through `launchctl`) is behind
+`WorkspaceServiceManager` in `macos_service_manager.dart`. Linux and Windows support is
 decided in [ADR-021](../decisions/ADR-021-workspace-service-linux-windows.md)
 and is implemented in platform adapters. Windows x64 runtime source support
 includes per-user logon tasks, owner-only named pipes, DPAPI and process jobs;
@@ -474,14 +476,13 @@ Service or `0600` file credential store; see the
 - Headless operation is primary. Hosts are configured through `workspace.nano`
   and managed through the `conclave-workspace` client over authenticated local
   IPC. Existing Cloud email/password sign-in works in the terminal without a
-  browser; browser approval remains an MFA fallback. The Flutter application is
-  an optional second management client.
+  browser; browser approval remains an MFA fallback.
 
 ### Profile-declared model discovery
 
 The Worker Engine owns bounded CLI model discovery under the current Profile;
 the Service persists and republishes public metadata through existing inventory
-and IPC events. UI refresh requests go through the Service and do not run provider
+and IPC events. Client refresh requests go through the Service and do not run provider
 commands. Workflow/request settings remain the authoritative selection surface.
 See [Gemini/AGY profile and discovery contract](GEMINI_AGY_PROFILE.md), including
 its required live readiness test and Cloud-owned Chat/Work policy boundary.
@@ -521,11 +522,10 @@ the authorized Service runs. Details are in the
 
 ### Shared capability presentation
 
-The management client's read-only model/effort view uses
-`conclave_design/ModelEffortSelector` with public capability projections from
-`conclave_protocol`. It displays the Service-owned catalog, actual per-model
-efforts/defaults and freshness without performing discovery or execution.
-AX and Profile Lab use the same selector and pure selection rules; their host
+AX and Profile Lab use `conclave_design/ModelEffortSelector` with public
+capability projections from `conclave_protocol`; the Workspace CLI (`workers`)
+prints the Service-owned catalog. They display the actual per-model efforts,
+defaults and freshness without performing discovery or execution, and their host
 adapters supply authorized catalogs. See the shared presentation contract in
 [Worker Execution Options v2](../specifications/WORKER_EXECUTION_OPTIONS_V2.md#phase-6-shared-flutter-modeleffort-selection).
 
@@ -553,9 +553,9 @@ retains ownership and wire contracts. Host Stop requests graceful service exit
 through private runtime metadata, then bounds forced task termination. Disconnect
 Cloud is unchanged and does not stop the service. Stop leaves the logon task
 registered. Engine 1.3.1 and the service own nested kill-on-close Windows jobs;
-the UI never launches provider/Engine processes. Runtime credentials remain local.
+no client launches provider/Engine processes. Runtime credentials remain local.
 
 The Windows package reuses canonical Engine/service builds. CI qualifies native
-primitives, compiled-service lifecycle and UI startup. Signed releases, logon/reboot
+primitives and compiled-service lifecycle. Signed releases, logon/reboot
 and real published Profile execution need target-device evidence. See the
 [Windows operations guide](../operations/WORKSPACE_WINDOWS_PREVIEW.md).

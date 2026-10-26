@@ -50,7 +50,7 @@ const files = Object.fromEntries(
   [
     "workspace",
     "conclave-workspace",
-    "assets/engines/conclave_cli_worker_engine",
+    "assets/engines/conclave-agent",
   ].map((name) => [name, digest(readFileSync(join(bundle, name)))]),
 );
 const expected = { schemaVersion: 1, version, sourceDigest, files };

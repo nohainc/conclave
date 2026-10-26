@@ -193,7 +193,11 @@ export const RuntimeTransportStatusSchema = z
     }
   });
 
-/** ADR-014 lifecycle dimensions are deliberately independent of one another. */
+/**
+ * ADR-014 lifecycle dimensions are deliberately independent of one another.
+ * The GUI-only management-lock and launch-at-login dimensions were removed with
+ * the Flutter Workspace app.
+ */
 export const HumanAuthStateSchema = z.enum([
   "signed_out",
   "signed_in",
@@ -205,13 +209,11 @@ export const WorkspaceParticipationStateSchema = z.enum([
   "connected",
   "disconnecting",
 ]);
-export const ManagementLockStateSchema = z.enum(["unlocked", "locked"]);
 export const DesiredRuntimeStateSchema = z.enum(["connected", "disconnected"]);
 export const WorkspaceLifecycleStateSchema = z
   .object({
     humanAuth: HumanAuthStateSchema,
     participation: WorkspaceParticipationStateSchema,
-    managementLock: ManagementLockStateSchema,
     desiredRuntime: DesiredRuntimeStateSchema,
   })
   .strict();
@@ -220,9 +222,6 @@ export const WorkspaceLifecycleStateSchema = z
 export const WorkspaceLifecyclePreferencesSchema = z
   .object({
     desiredRuntime: DesiredRuntimeStateSchema,
-    launchAtLogin: z.boolean(),
-    managementLockPreference: ManagementLockStateSchema,
-    autoLockTimeoutSeconds: z.number().int().positive().optional(),
     ownerUserId: id.optional(),
     ownerDisplayName: id.optional(),
   })
@@ -335,7 +334,6 @@ export type HumanAuthState = z.infer<typeof HumanAuthStateSchema>;
 export type WorkspaceParticipationState = z.infer<
   typeof WorkspaceParticipationStateSchema
 >;
-export type ManagementLockState = z.infer<typeof ManagementLockStateSchema>;
 export type DesiredRuntimeState = z.infer<typeof DesiredRuntimeStateSchema>;
 export type WorkspaceLifecycleState = z.infer<
   typeof WorkspaceLifecycleStateSchema

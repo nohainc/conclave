@@ -23,9 +23,9 @@ gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Concl
 KEY="$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1=="fpr" {print $10; exit}')"
 # Deliberately label the same fixture payload as an older package for upgrade
 # acceptance; production packaging otherwise requires a matching build manifest.
-node "$ROOT/scripts/workspace-build-manifest.mjs" record "$ROOT/dist/conclave-workspace/linux-$ARCH/service" '0.0.1~test'
+node "$ROOT/scripts/workspace-build-manifest.mjs" record "$ROOT/dist/conclave-workspace/linux-$ARCH" '0.0.1~test'
 CONCLAVE_WORKSPACE_VERSION=0.0.1~test bash "$ROOT/scripts/package-workspace-linux.sh" "$ARCH"
-node "$ROOT/scripts/workspace-build-manifest.mjs" record "$ROOT/dist/conclave-workspace/linux-$ARCH/service" "$VERSION"
+node "$ROOT/scripts/workspace-build-manifest.mjs" record "$ROOT/dist/conclave-workspace/linux-$ARCH" "$VERSION"
 OLD="$ROOT/dist/conclave-workspace/deb/conclave-workspace_0.0.1~test_${DEB_ARCH}.deb"
 python3 "$ROOT/scripts/release/build-apt-repository.py" --output "$TEST_ROOT/repo" --signing-key "$KEY" "$OLD"
 cat > "$TEST_ROOT/conclave.sources" <<SOURCES
@@ -79,7 +79,7 @@ conclave-workspace --data-dir "$STATE" status
 conclave-workspace --data-dir "$STATE" workers
 python3 - <<'PYENGINE'
 import subprocess
-result = subprocess.run(['/usr/lib/conclave-workspace/assets/engines/conclave_cli_worker_engine'], capture_output=True, text=True, timeout=10)
+result = subprocess.run(['/usr/lib/conclave-workspace/assets/engines/conclave-agent'], capture_output=True, text=True, timeout=10)
 assert result.returncode == 64, result
 assert 'Engine options are incomplete or invalid' in result.stderr
 PYENGINE

@@ -49,11 +49,11 @@ assignment directly to a Workspace or provider CLI. Cloud authorizes and
 schedules work, then dispatches it through the Workspace Runtime Protocol.
 Workspace executes it with the generic CLI Worker Engine.
 
-The Workspace desktop's owner-authenticated account and registration requests
+The Workspace CLI's owner-authenticated account and registration requests
 remain explicitly scoped management routes on Cloud's human-authenticated HTTP
 surface, as defined by ADR-013/ADR-014. They use the Human Product Protocol's
 HTTPS management surface, not the Workspace Runtime Protocol. Those requests
-do not carry runtime assignments and do not make the Workspace desktop an AX
+do not carry runtime assignments and do not make the Workspace CLI an AX
 client. The separate runtime credential and Workspace Runtime Protocol remain
 required for machine participation.
 
@@ -194,7 +194,7 @@ wire contracts.
 | Flow | Client | Server/process peer | Protocol | Credentials allowed |
 | --- | --- | --- | --- | --- |
 | Product and collaboration actions/read models | Conclave AX | Cloud human API/realtime | Human Product Protocol | Human session |
-| Desktop owner/account management | Workspace management UI | Cloud management routes | Human Product Protocol, HTTPS management surface | Human session |
+| Owner/account management | Workspace management CLI | Cloud management routes | Human Product Protocol, HTTPS management surface | Human session |
 | Inventory, assignments, progress, cancellation | Workspace runtime | Cloud Workspace Gateway | Workspace Runtime Protocol | Workspace runtime credential |
 | Local setup, readiness, execution, progress, result | Workspace supervisor | CLI Worker Engine process | Local Worker Protocol 4.1 | Bounded non-secret settings; no provider tokens or account secrets |
 

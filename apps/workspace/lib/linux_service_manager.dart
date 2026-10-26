@@ -155,9 +155,13 @@ WantedBy=default.target
       supported: result.exitCode == 0,
       helperPresent: executable.existsSync(),
       plistPresent: unit.existsSync(),
-      enginePresent: File(
-        '${executable.parent.path}/assets/engines/conclave_cli_worker_engine',
-      ).existsSync(),
+      enginePresent:
+          File(
+            '${executable.parent.path}/assets/engines/conclave-agent',
+          ).existsSync() ||
+          File(
+            '${executable.parent.path}/assets/engines/conclave_cli_worker_engine',
+          ).existsSync(),
       registration: unit.existsSync() && values['UnitFileState'] == 'enabled'
           ? ServiceInstallationState.registered
           : ServiceInstallationState.notRegistered,

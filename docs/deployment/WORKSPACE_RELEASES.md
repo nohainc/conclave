@@ -2,7 +2,7 @@
 
 Workspace application releases use the Cloud API under `/api/workspace-releases`. Architecture v8 has three release classes:
 
-1. **Workspace application:** signed and notarized desktop application.
+1. **Workspace:** the signed `conclave-workspace` service/CLI bundle (macOS: signed and notarized zip/pkg; Linux: signed APT package).
 2. **CLI Worker Engine:** generic executable bundled with a Workspace release; it has no separate Cloud release catalog.
 3. **Worker Profile:** one current provider integration payload per logical Worker, published through Cloud with digest and revision validation.
 

@@ -87,7 +87,7 @@ describe("CI acceptance orchestration", () => {
     expect(workflow).not.toContain("pnpm check\n");
   });
 
-  it.each(["workspace", "profile-lab"])(
+  it.each(["profile-lab"])(
     "%s prepared build reuses preparation; default release cleans",
     (name) => {
       const root = mkdtempSync(join(tmpdir(), "conclave-ci-"));
@@ -209,6 +209,75 @@ describe("CI acceptance orchestration", () => {
       }
     },
   );
+
+  it("workspace macOS build is a pure Dart bundle; prepared reuses preparation", () => {
+    const root = mkdtempSync(join(tmpdir(), "conclave-ci-"));
+    const app = join(root, "apps", "workspace");
+    const bin = join(root, "bin");
+    const log = join(root, "commands");
+    mkdirSync(join(root, "scripts"), { recursive: true });
+    mkdirSync(join(app, ".dart_tool"), { recursive: true });
+    mkdirSync(join(app, "assets", "engines"), { recursive: true });
+    mkdirSync(bin);
+    writeFileSync(join(app, "pubspec.yaml"), "version: 1.0.0\n");
+    writeFileSync(join(app, ".dart_tool", "package_config.json"), "{}\n");
+    const engine = join(app, "assets", "engines", "conclave-agent");
+    writeFileSync(engine, "#!/bin/sh\nexit 0\n");
+    chmodSync(engine, 0o755);
+    const mocks = {
+      uname: "echo Darwin",
+      node: "echo '{}'",
+      security:
+        'echo "1) ABC Apple Development: vitalii@nohainc.com (7X62W6499P)"',
+      codesign: 'if [ "$1" = "-dv" ] || [ "$1" = "-d" ]; then exit 1; fi; exit 0',
+      ditto: 'if [ "$1" = "-c" ]; then for last; do :; done; touch "$last"; else mkdir -p "$2" && cp -R "$1/." "$2"; fi',
+      dart: `echo "dart $1 $2" >> "$CI_TEST_LOG"\nwhile [ "$1" != "-o" ] && [ "$#" -gt 0 ]; do shift; done; if [ "$1" = "-o" ]; then shift; mkdir -p "$(dirname "$1")"; touch "$1"; chmod 755 "$1"; fi`,
+    };
+    for (const [command, script] of Object.entries(mocks)) {
+      writeFileSync(join(bin, command), `#!/bin/sh\n${script}\n`);
+      chmodSync(join(bin, command), 0o755);
+    }
+    writeFileSync(
+      join(root, "scripts", "build-cli-worker-engine.sh"),
+      'echo engine >> "$CI_TEST_LOG"\n',
+    );
+    for (const name of [
+      "build-workspace-macos.sh",
+      "verify-workspace-service-bundle.sh",
+    ]) {
+      copyFileSync(
+        new URL(`../scripts/${name}`, import.meta.url),
+        join(root, "scripts", name),
+      );
+    }
+    const script = join(root, "scripts", "build-workspace-macos.sh");
+    const run = (args) =>
+      spawnSync("bash", [script, ...args], {
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          CI_TEST_LOG: log,
+        },
+      });
+    try {
+      const prepared = run(["--prepared"]);
+      expect(prepared.status, prepared.stderr.toString()).toBe(0);
+      expect(readFileSync(log, "utf8")).toBe("dart compile exe\n");
+      const bundle = join(root, "dist", "conclave-workspace", "macos", "conclave-workspace");
+      for (const file of ["conclave-workspace", "workspace", "assets/engines/conclave-agent"]) {
+        expect(readFileSync(join(bundle, file)) !== undefined).toBe(true);
+      }
+      writeFileSync(log, "");
+      expect(run([]).status).toBe(0);
+      expect(readFileSync(log, "utf8")).toBe(
+        "dart pub get\nengine\ndart compile exe\n",
+      );
+      rmSync(engine);
+      expect(run(["--prepared"]).status).toBe(1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 
   it("public site production deployment is decoupled with path filtering and self-contained validation", () => {
     const workflow = source(".github/workflows/deploy-site.yml");

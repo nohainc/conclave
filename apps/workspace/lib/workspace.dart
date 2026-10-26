@@ -293,10 +293,11 @@ class WorkspaceRuntime {
       await workerReadinessMonitor?.dispose();
       workerCatalogCoordinator?.dispose();
       toolProfileCatalog?.close();
-      for (final subscription in _signalSubscriptions) {
+      final subscriptions = List<StreamSubscription<void>>.from(_signalSubscriptions);
+      _signalSubscriptions.clear();
+      for (final subscription in subscriptions) {
         await subscription.cancel();
       }
-      _signalSubscriptions.clear();
       await _lock?.unlock();
       await _lock?.close();
       _lock = null;
@@ -337,10 +338,11 @@ class WorkspaceRuntime {
     await workerReadinessMonitor?.dispose();
     workerCatalogCoordinator?.dispose();
     toolProfileCatalog?.close();
-    for (final subscription in _signalSubscriptions) {
+    final subscriptions = List<StreamSubscription<void>>.from(_signalSubscriptions);
+    _signalSubscriptions.clear();
+    for (final subscription in subscriptions) {
       await subscription.cancel();
     }
-    _signalSubscriptions.clear();
     try {
       await cloudConnection?.close();
     } finally {

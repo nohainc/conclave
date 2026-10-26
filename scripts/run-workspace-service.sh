@@ -50,7 +50,8 @@ if [[ ! -f "$WORKSPACE_DIR/.dart_tool/package_config.json" ]]; then
   exit 1
 fi
 
-ENGINE="$WORKSPACE_DIR/assets/engines/conclave_cli_worker_engine"
+ENGINE="$WORKSPACE_DIR/assets/engines/conclave-agent"
+[[ -x "$ENGINE" ]] || ENGINE="$WORKSPACE_DIR/assets/engines/conclave_cli_worker_engine"
 if [[ ! -x "$ENGINE" ]]; then
   echo "The bundled CLI Worker Engine is missing. Run scripts/build-cli-worker-engine.sh first." >&2
   exit 1

@@ -2,7 +2,7 @@
 
 The headless install unit contains `workspace`, `conclave-workspace`, and
 one canonical generic CLI Worker Engine. Provider CLIs are installed separately.
-The optional Flutter desktop bundle continues to use its existing Linux build.
+There is no Flutter desktop bundle; the headless install unit is the only Linux artifact.
 
 ## Production repository
 
@@ -35,7 +35,7 @@ deployments to the `main` branch.
 
 ## Build from macOS or Linux
 
-Dart 3.8+ supports cross-compiling Linux x64/arm64 executables. Install Flutter,
+Dart 3.8+ supports cross-compiling Linux x64/arm64 executables. Install the Dart SDK,
 Node.js, Python 3 and dpkg (`brew install dpkg` on macOS). Supply the production
 public application-release trust roots, then:
 
@@ -47,7 +47,7 @@ bash scripts/build-workspace-linux-headless.sh arm64
 bash scripts/package-workspace-linux.sh arm64
 ```
 
-Outputs are under `dist/conclave-workspace`: `linux-<arch>/service`, headless
+Outputs are under `dist/conclave-workspace`: `linux-<arch>`, headless
 `.tar.gz` bundles, and `deb/conclave-workspace_<version>_<amd64|arm64>.deb`.
 `CONCLAVE_WORKSPACE_VERSION` overrides the pubspec version at compile/package
 time; use a new version for every release. Build-only target inputs are

@@ -8,7 +8,7 @@
 | --- | --- |
 | Conclave AX | Flutter + Dart, Web |
 | Cloud | TypeScript + Cloudflare Workers |
-| Conclave Workspace | Flutter + Dart desktop/background runtime |
+| Conclave Workspace | Pure Dart headless service + CLI (no Flutter) |
 | Local Worker Protocol | Protocol 4.0, versioned NDJSON |
 | Local CLI execution | Generic Dart CLI Worker Engine + current Worker Profiles |
 | Database | Cloudflare D1 |
@@ -19,7 +19,7 @@
 | Workspace-to-Cloud boundary | Workspace Runtime Protocol |
 | Workspace-to-Engine boundary | Local Worker Protocol 4.0 over stdin/stdout |
 | TypeScript tests | Vitest |
-| Dart/Flutter tests | `dart test` / `flutter test` |
+| Dart/Flutter tests | `dart test` (Workspace, packages) / `flutter test` (AX, Profile Lab) |
 | CI and deployment | GitHub Actions + Wrangler |
 
 ## Applications and runtime

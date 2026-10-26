@@ -293,11 +293,11 @@ Gateway exchange, or cleanup fails the deployment workflow. The smoke uses DML
 only for disposable rows and does not change production table definitions.
 
 That automated deployment acceptance does not replace the packaged desktop
-lifecycle release run. Before publishing a Workspace desktop release, execute
-the ten production scenarios in the
-[Workspace desktop lifecycle release validation runbook](../operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md),
-including native login-item restart and local authentication on a supported
-macOS installation. The runbook distinguishes automated CI evidence from
+lifecycle release run. Before publishing a Workspace release, execute
+the production scenarios in the
+[Workspace lifecycle release validation runbook](../operations/WORKSPACE_DESKTOP_LIFECYCLE_RELEASE_VALIDATION.md)
+(written for the earlier desktop app; apply the scenarios that still map to the
+CLI and service, such as restart persistence and reauthentication). The runbook distinguishes automated CI evidence from
 required production-device evidence.
 
 The custom-domain route in `infra/cloudflare/app.wrangler.jsonc` targets `app.conclaveax.com`. Because `conclaveax.com` is already on Cloudflare, the Worker custom domain can create/manage the required DNS routing and certificate during deployment.
@@ -393,7 +393,7 @@ Before production backend deployment:
 1. provision production D1/R2 resources; the deployment workflow applies the
    checked-in D1 migrations to `conclave-v8-production`;
 2. configure required application-release, callback, and other production secrets;
-3. run Workspace desktop lifecycle and Cloud runtime release validations;
+3. run Workspace lifecycle and Cloud runtime release validations;
 4. run the external-user security gate, including tenant isolation and
    backup/restore verification;
 5. enable API/CI ingress only after the release gates pass.

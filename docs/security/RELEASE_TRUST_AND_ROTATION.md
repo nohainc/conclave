@@ -84,9 +84,9 @@ Use an overlap window; do not replace a key in place:
 6. Record key ID, release class, activation date, overlap, revocation reason,
    and last supported client version in the release operations record.
 
-Because the native Workspace `.app` update transaction is not complete, trust
-root rotation currently depends on distributing a new signed/notarized app
-through the release/onboarding channel. Do not revoke the only key trusted by
+Because the self-update transaction for the macOS bundle is not complete, trust
+root rotation currently depends on distributing a new signed/notarized bundle
+(zip or pkg) through the release/onboarding channel. Do not revoke the only key trusted by
 installed clients until a recovery distribution path is available.
 
 ## Revocation

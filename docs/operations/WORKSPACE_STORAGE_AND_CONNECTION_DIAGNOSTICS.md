@@ -75,7 +75,7 @@ Workspace removal, and uninstall/reinstall preserve the user Work Root.
 
 ## Connection stages
 
-The runtime records these stages for the UI and diagnostics:
+The runtime records these stages for `conclave-workspace status` and diagnostics:
 
 1. `validating`: local runtime credential and WebSocket endpoint are checked.
 2. `connecting`: DNS/TLS and the HTTP WebSocket upgrade are attempted.
@@ -101,7 +101,7 @@ receives 400, check that Cloud is running the release which forwards the
 original upgrade `Request` into the Durable Object (`c1b8708` or a later
 commit). A repository commit does not deploy the production Cloud Worker.
 
-When fallback is active, the UI reports **Connected · HTTPS fallback** and
+When fallback is active, status reports **Connected · HTTPS fallback** and
 explains that WebSocket is unavailable while work can continue. Diagnostics
 retain both the latest WSS failure and current fallback health. Fallback does
 not indicate human-session expiry; management reauthentication does not mean

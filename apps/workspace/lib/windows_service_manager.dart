@@ -88,9 +88,13 @@ $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name } else { $null }
       supported: true,
       helperPresent: executable.existsSync(),
       plistPresent: true,
-      enginePresent: File(
-        '${executable.parent.path}/assets/engines/conclave_cli_worker_engine.exe',
-      ).existsSync(),
+      enginePresent:
+          File(
+            '${executable.parent.path}/assets/engines/conclave-agent.exe',
+          ).existsSync() ||
+          File(
+            '${executable.parent.path}/assets/engines/conclave_cli_worker_engine.exe',
+          ).existsSync(),
       registration: result['registered'] == true
           ? ServiceInstallationState.registered
           : ServiceInstallationState.notRegistered,

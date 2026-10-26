@@ -380,9 +380,13 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
                 : LinuxWorkspaceServiceManager(dataDirectory: root));
     try {
       if (action == 'stop' || action == 'restart' || action == 'uninstall') {
-        final info = await manager.getInfo();
-        if (info.processRunning) {
-          await _send(dataDir, 'service.prepareStop', {});
+        try {
+          final info = await manager.getInfo();
+          if (info.processRunning) {
+            await _send(dataDir, 'service.prepareStop', {});
+          }
+        } catch (_) {
+          // If IPC is already down or unreachable, continue to OS service manager
         }
       }
       final info = await switch (action) {

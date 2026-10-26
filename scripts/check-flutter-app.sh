@@ -11,24 +11,27 @@ PREPARED=0
 if [[ "${1:-}" == "--prepared" ]]; then PREPARED=1; shift; fi
 [[ $# == 0 ]] || { echo "Unknown argument: $1" >&2; exit 1; }
 cd "$ROOT/apps/$APP"
+# The Workspace is a pure Dart service/CLI (no Flutter SDK dependency).
+if [[ "$APP" == workspace ]]; then PUB=(dart pub); else PUB=(flutter pub); fi
 if [[ "$PREPARED" == 0 ]]; then
-  flutter pub get
+  "${PUB[@]}" get
   if [[ "$APP" != app ]]; then
     bash "$ROOT/scripts/build-cli-worker-engine.sh"
   fi
 else
   [[ -f .dart_tool/package_config.json ]] || { echo "Resolve dependencies first." >&2; exit 1; }
-  if [[ "$APP" != app && ! -x assets/engines/conclave_cli_worker_engine ]]; then
+  if [[ "$APP" != app && ! -x assets/engines/conclave-agent && ! -x assets/engines/conclave_cli_worker_engine ]]; then
     echo "Build the Engine before prepared app checks." >&2; exit 1
   fi
 fi
 FORMAT_PATHS=(lib test)
 if [[ -d bin ]]; then FORMAT_PATHS+=(bin); fi
 dart format --output=none --set-exit-if-changed "${FORMAT_PATHS[@]}"
-flutter analyze
 if [[ "$APP" == workspace ]]; then
-  DART_EXECUTABLE="$(command -v dart)" flutter test --concurrency=1
+  dart analyze
+  DART_EXECUTABLE="$(command -v dart)" dart test --concurrency=1
   bash "$ROOT/scripts/check-workspace-service.sh"
 else
+  flutter analyze
   flutter test
 fi
