@@ -44,3 +44,11 @@ The nightly macOS workflow builds Workspace in debug mode with ad-hoc signing.
 This checks native compilation and bundle assembly without installing a release
 certificate on the nightly runner. It does not validate launchd activation,
 release signing, or notarization; those require the signed release workflow.
+
+## Headless Linux packages
+
+The service, management CLI and bundled Engine can be cross-compiled from macOS
+and distributed as one Debian package through a signed vendor APT repository.
+See [Linux release operations](WORKSPACE_LINUX_RELEASES.md) for build commands,
+protected signing/publication setup, native package tests and update operations.
+APT manages this install unit; its separate application self-updater is disabled.

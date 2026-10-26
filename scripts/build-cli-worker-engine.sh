@@ -15,6 +15,16 @@ if [[ -z "${CONCLAVE_DART_EXECUTABLE:-}" && -x "$DART_DIR/cache/dart-sdk/bin/dar
   DART_BIN="$DART_DIR/cache/dart-sdk/bin/dart"
 fi
 
+TARGET_FLAGS=()
+CROSS_BUILD=0
+if [[ -n "${CONCLAVE_BUILD_TARGET_OS:-}${CONCLAVE_BUILD_TARGET_ARCH:-}" ]]; then
+  [[ "${CONCLAVE_BUILD_TARGET_OS:-}" == linux ]] || { echo "Only Linux cross-builds are supported." >&2; exit 2; }
+  case "${CONCLAVE_BUILD_TARGET_ARCH:-}" in x64|arm64) ;; *) echo "Target architecture must be x64 or arm64." >&2; exit 2 ;; esac
+  TARGET_FLAGS=(--target-os=linux "--target-arch=$CONCLAVE_BUILD_TARGET_ARCH")
+  CROSS_BUILD=1
+  OUTPUT_DIR="$ROOT/dist/cli-worker-engine/linux-$CONCLAVE_BUILD_TARGET_ARCH"
+fi
+
 VERSION="$(awk '/^version:/ {print $2; exit}' "$ENGINE_DIR/pubspec.yaml")"
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "CLI Worker Engine version must be stable semantic version text." >&2
@@ -25,7 +35,7 @@ if [[ ! -f "$ENGINE_DIR/.dart_tool/package_config.json" ]]; then
 fi
 
 mkdir -p "$OUTPUT_DIR"
-mkdir -p "$ROOT/apps/profile_lab/assets/engines"
+if [[ "$CROSS_BUILD" == 0 ]]; then mkdir -p "$ROOT/apps/profile_lab/assets/engines"; fi
 if [[ "$(uname -s)" =~ ^(MINGW|MSYS|CYGWIN) ]]; then
   OUTPUT="$OUTPUT_DIR/conclave_cli_worker_engine.exe"
   PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/conclave_cli_worker_engine.exe"
@@ -33,10 +43,15 @@ else
   OUTPUT="$OUTPUT_DIR/conclave_cli_worker_engine"
   PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/conclave_cli_worker_engine"
 fi
-(cd "$ENGINE_DIR" && "$DART_BIN" compile exe \
+(cd "$ENGINE_DIR" && "$DART_BIN" compile exe ${TARGET_FLAGS[@]+"${TARGET_FLAGS[@]}"} \
   "-DENGINE_VERSION=$VERSION" \
   bin/conclave_cli_worker.dart \
   -o "$OUTPUT")
+if [[ "$CROSS_BUILD" == 1 ]]; then
+  chmod 755 "$OUTPUT"
+  echo "Built generic CLI Worker Engine $VERSION: $OUTPUT"
+  exit 0
+fi
 # The Engine is built once from engines/cli_worker. Workspace and Profile Lab
 # only receive materialized copies of that same artifact; they must never drift
 # into independently maintained binaries.

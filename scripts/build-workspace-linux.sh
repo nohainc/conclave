@@ -46,7 +46,7 @@ BUILD="$WORKSPACE_DIR/build/linux/$ARCH/$MODE/bundle"
 rm -rf "$OUTPUT"
 mkdir -p "$OUTPUT"
 cp -R "$BUILD/." "$OUTPUT/"
-cp "$SERVICE_BUILD/conclave-service" "$OUTPUT/"
+cp "$SERVICE_BUILD/conclave-service" "$SERVICE_BUILD/conclave-workspace" "$OUTPUT/"
 # The standalone service discovers assets relative to its own executable; the
 # Flutter UI uses its data/flutter_assets copy of the same Engine.
 cp -R "$SERVICE_BUILD/assets" "$OUTPUT/"
@@ -68,6 +68,7 @@ for engine in "$OUTPUT/data/flutter_assets/assets/engines/conclave_cli_worker_en
   }
 done
 chmod 755 "$OUTPUT/conclave_workspace" "$OUTPUT/conclave-service" \
+  "$OUTPUT/conclave-workspace" \
   "$OUTPUT/assets/engines/conclave_cli_worker_engine"
 
 tar -C "$OUTPUT" -czf "$ARCHIVE" .

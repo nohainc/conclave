@@ -10,6 +10,7 @@ import 'local_worker_permissions.dart';
 import 'platform_runtime.dart';
 import 'work_root.dart';
 import 'workspace.dart';
+import 'workspace_headless_auth.dart';
 import 'workspace_configuration.dart';
 import 'workspace_lifecycle.dart';
 import 'workspace_lifecycle_store.dart';
@@ -41,6 +42,7 @@ class WorkspaceManagerService {
   bool _snapshotDirty = false;
   Map<String, Object?>? _previousSnapshot;
   bool _closed = false;
+  WorkspaceHeadlessAuth? _headlessAuth;
   WorkspaceCloudConnection? _observedConnection;
   WorkerCatalogCoordinator? _observedCatalog;
   WorkerReadinessMonitor? _observedReadiness;
@@ -396,6 +398,28 @@ class WorkspaceManagerService {
     final registry = workspace.localWorkerRegistry;
     final workerSubsystem = workspace.workerSubsystem;
     switch (command) {
+      case 'auth.start':
+        if (reloadRuntime == null ||
+            (connection?.activeAssignmentCount ?? 0) > 0 ||
+            connection?.isConnected == true) {
+          throw const WorkspaceManagerProtocolException('login_not_ready',
+              'Disconnect Cloud and finish active work before signing in.');
+        }
+        final registration =
+            WorkspaceRegistrationStore(workspace.config.dataDirectory)
+                .readSync();
+        _headlessAuth ??= WorkspaceHeadlessAuth(
+          dataDirectory: workspace.config.dataDirectory,
+          cloudUrl: resolveWorkspaceCloudUrl(
+              registration?.cloudUrl ?? workspace.config.cloudUri?.toString()),
+          credentialStore: workspace.credentialStore,
+          reloadRuntime: _reloadRuntime,
+        );
+        return _headlessAuth!.start();
+      case 'auth.status':
+        return _headlessAuth?.status() ?? const {'phase': 'idle'};
+      case 'auth.cancel':
+        return await _headlessAuth?.cancel() ?? const {'phase': 'idle'};
       case 'service.getStatus':
         return snapshot();
       case 'service.getVersion':
@@ -959,6 +983,7 @@ class WorkspaceManagerService {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    await _headlessAuth?.close();
     final connection = _observedConnection;
     if (connection != null) connection.onStateChanged = null;
     _observedConnection = null;
