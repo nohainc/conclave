@@ -25,13 +25,15 @@ const executionErrorMessages = <String, String>{
   'model_not_supported': 'The selected model is not supported by this Worker.',
   'permission_denied':
       'A local permission required for this assignment was denied.',
-  'space_folder_exists': 'A folder with this Space\'s name already exists on the Workspace and is not empty. Confirm to use it.',
+  'space_folder_exists':
+      'A folder with this Space\'s name already exists on the Workspace and is not empty. Confirm to use it.',
   'quota_exhausted': 'The provider\'s usage limit has been reached.',
   'provider_unavailable': 'The provider is temporarily unavailable.',
   'timeout': 'The assignment exceeded its time limit.',
   'cancelled': 'The assignment was cancelled.',
   'execution_failed': 'The assignment could not be completed.',
-  'context_limit_exceeded': 'This conversation exceeds the supported context limit. Clear AI History and retry; the latest answer is kept as context.',
+  'context_limit_exceeded':
+      'This conversation exceeds the supported context limit. Clear AI History and retry; the latest answer is kept as context.',
 };
 
 const workspaceRuntimeProtocolSchemaName =
@@ -108,7 +110,11 @@ const realtimeEventOptionalEnvelopeFields = <String>[
   'workspaceId',
   'stream',
 ];
-const realtimeStreamKinds = <String>{'execution_workspace', 'space', 'user'};
+const realtimeStreamKinds = <String>{
+  'execution_workspace',
+  'space',
+  'user',
+};
 const collaborationRealtimeEventTypes = <String>{
   'space.created',
   'space.updated',
