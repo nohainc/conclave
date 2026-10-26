@@ -286,7 +286,7 @@ const PHASE_FAILURE_MESSAGE: Record<AssignmentDeadlinePhase, string> = {
   command_delivery:
     "Workspace did not acknowledge the assignment. Check its connection and retry.",
   queue_wait:
-    "The Workspace did not start the assignment before its queue wait limit. Retry when the Workspace is less busy.",
+    "The Workspace did not start the assignment before its queue wait limit. Retry the step.",
   startup:
     "The Workspace was cleared to start the assignment but did not report the provider as started. Retry the step.",
   provider_execution: "The assignment exceeded its execution deadline.",

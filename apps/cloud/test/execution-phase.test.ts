@@ -116,6 +116,49 @@ describe("failureCategory", () => {
         startPermitIssuedAt: T,
       }),
     ).toBe("startup_timeout");
+    // A wait the Workspace reported for the Thread is never called a slot
+    // shortage, and a timeout without a reported wait is not either.
+    expect(
+      failed({
+        errorCode: "timeout",
+        dispatchedAt: T,
+        acknowledgedAt: T,
+        startupStage: "waiting_for_space",
+      }),
+    ).toBe("thread_busy");
+    expect(
+      failed({
+        errorCode: "timeout",
+        dispatchedAt: T,
+        acknowledgedAt: T,
+        errorJson: JSON.stringify({
+          error: {
+            code: "timeout",
+            details: {
+              diagnostic: JSON.stringify({
+                component: "workspace_service",
+                stage: "space_wait",
+              }),
+            },
+          },
+        }),
+      }),
+    ).toBe("thread_busy");
+    expect(
+      failed({
+        errorCode: "timeout",
+        dispatchedAt: T,
+        acknowledgedAt: T,
+        startupStage: "worker_resolved",
+      }),
+    ).toBe("startup_timeout");
+    expect(
+      failed({
+        errorCode: "execution_failed",
+        dispatchedAt: T,
+        acknowledgedAt: T,
+      }),
+    ).toBe("workspace_start_failed");
     expect(
       failed({
         errorCode: "model_not_supported",

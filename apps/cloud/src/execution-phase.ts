@@ -33,6 +33,8 @@ export type FailureCategory =
   | "sync_incomplete"
   | "worker_unavailable"
   | "capacity_exceeded"
+  | "thread_busy"
+  | "workspace_start_failed"
   | "profile_incompatible"
   | "space_folder_confirmation_required"
   | "provider_start_failed"
@@ -50,6 +52,9 @@ export const FAILURE_CATEGORY_MESSAGES: Readonly<
   worker_unavailable: "Worker is not ready",
   capacity_exceeded:
     "No Worker slot became free in time. Retry when another request finishes",
+  thread_busy:
+    "The previous request in this Thread was still running, so this one could not start in time. Retry when it finishes.",
+  workspace_start_failed: "The Workspace could not start the request",
   profile_incompatible: "Worker Profile is incompatible",
   space_folder_confirmation_required:
     "A folder with this Space's name already exists and is not empty",
@@ -148,13 +153,20 @@ const STARTING_STARTUP_STAGES = new Set([
 
 interface ParsedError {
   readonly diagnosticStage: string | null;
+  /**
+   * Stage reported by the Workspace Service for its own wait. Only these
+   * fixed identifiers are read; Service text never reaches users.
+   */
+  readonly serviceWaitStage: "space_wait" | "queue_wait" | null;
   readonly revocationObservedStatus: string | null;
 }
 
 function parseError(errorJson: string | null | undefined): ParsedError {
   let revocationObservedStatus: string | null = null;
   let diagnosticStage: string | null = null;
-  if (!errorJson) return { diagnosticStage, revocationObservedStatus };
+  let serviceWaitStage: ParsedError["serviceWaitStage"] = null;
+  if (!errorJson)
+    return { diagnosticStage, serviceWaitStage, revocationObservedStatus };
   try {
     const parsed = JSON.parse(errorJson) as Record<string, unknown>;
     const revocation = parsed.revocation as Record<string, unknown> | undefined;
@@ -176,11 +188,17 @@ function parseError(errorJson: string | null | undefined): ParsedError {
       ) {
         diagnosticStage = diagnostic.stage;
       }
+      if (
+        diagnostic.component === "workspace_service" &&
+        (diagnostic.stage === "space_wait" || diagnostic.stage === "queue_wait")
+      ) {
+        serviceWaitStage = diagnostic.stage;
+      }
     }
   } catch {
     // Malformed error_json carries no usable evidence.
   }
-  return { diagnosticStage, revocationObservedStatus };
+  return { diagnosticStage, serviceWaitStage, revocationObservedStatus };
 }
 
 export function deriveExecutionPhase(
@@ -241,7 +259,7 @@ export function deriveFailureCategory(
   const phase = deriveExecutionPhase(evidence);
   if (phase === "uncertain") return "state_uncertain";
   if (phase !== "failed") return null;
-  const { diagnosticStage } = parseError(evidence.errorJson);
+  const { diagnosticStage, serviceWaitStage } = parseError(evidence.errorJson);
   const code = evidence.errorCode ?? "execution_failed";
 
   if (code === "context_limit_exceeded") return "context_limit_exceeded";
@@ -274,9 +292,22 @@ export function deriveFailureCategory(
       evidence.startupStage !== undefined &&
       STARTING_STARTUP_STAGES.has(evidence.startupStage));
   if (code === "timeout") {
-    return permitted ? "startup_timeout" : "capacity_exceeded";
+    if (permitted) return "startup_timeout";
+    // Name the wait only when the Workspace reported it. Cloud does not see
+    // slot usage, so "no slot" is never inferred from a timeout alone.
+    if (
+      evidence.startupStage === "waiting_for_space" ||
+      serviceWaitStage === "space_wait"
+    )
+      return "thread_busy";
+    if (
+      evidence.startupStage === "queued_for_slot" ||
+      serviceWaitStage === "queue_wait"
+    )
+      return "capacity_exceeded";
+    return "startup_timeout";
   }
-  return permitted ? "provider_start_failed" : "worker_unavailable";
+  return permitted ? "provider_start_failed" : "workspace_start_failed";
 }
 
 /**
