@@ -5,10 +5,12 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { hashToken } from "../../../packages/security/src/index.js";
 import { identityService } from "../src/auth/index.js";
+import * as authModule from "../src/auth/index.js";
 import {
   handleApproveDesktopAuthIntent,
   handleClaimDesktopAuthIntent,
   handleCreateDesktopAuthIntent,
+  handleDesktopPasswordSignIn,
   handleDesktopAuthIntentStatus,
   handleDesktopAuthIntentBrowserStatus,
   handleCancelDesktopAuthIntent,
@@ -135,6 +137,87 @@ describe("desktop human authentication", () => {
     });
     return { db, env, sqlite };
   }
+
+  it("headless password login uses Better Auth and returns only a desktop session", async () => {
+    const { env, sqlite } = await setup();
+    const now = new Date().toISOString();
+    sqlite
+      .prepare(
+        "INSERT INTO users (id, email, display_name, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)",
+      )
+      .run("human-1", "person@example.test", "Person", now, now);
+    const verifier = vi
+      .spyOn(authModule, "handleBetterAuthRequest")
+      .mockImplementation(async (request) => {
+        if (new URL(request.url).pathname.endsWith("/sign-out"))
+          return Response.json({ success: true });
+        expect(new URL(request.url).pathname).toBe("/api/auth/sign-in/email");
+        expect(request.headers.get("cookie")).toBeNull();
+        expect(await request.json()).toEqual({
+          email: "person@example.test",
+          password: "private-password",
+          rememberMe: false,
+        });
+        return Response.json(
+          { user: { id: "human-1" } },
+          {
+            headers: {
+              "Set-Cookie": "session=private-cookie; HttpOnly; Secure",
+            },
+          },
+        );
+      });
+    const response = await handleDesktopPasswordSignIn(
+      new Request("https://app.conclave.test/api/desktop-auth/password", {
+        method: "POST",
+        body: JSON.stringify({
+          email: "person@example.test",
+          password: "private-password",
+        }),
+      }),
+      env,
+    );
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    const text = await response.text();
+    expect(text).not.toContain("private-password");
+    expect(text).not.toContain("private-cookie");
+    const session = JSON.parse(text);
+    expect(session.audience).toBe("conclave.desktop.management");
+    expect(session.user.userId).toBe("human-1");
+    expect(verifier).toHaveBeenCalledTimes(2);
+    expect(
+      sqlite.prepare("SELECT token_hash FROM desktop_human_sessions").get()
+        ?.token_hash,
+    ).toBe(await hashToken(session.credential));
+  });
+
+  it("headless password login rejects invalid passwords, rate limits and MFA", async () => {
+    const { env } = await setup();
+    const verifier = vi.spyOn(authModule, "handleBetterAuthRequest");
+    const request = () =>
+      new Request("https://app.conclave.test/api/desktop-auth/password", {
+        method: "POST",
+        body: JSON.stringify({
+          email: "person@example.test",
+          password: "private-password",
+        }),
+      });
+    verifier.mockResolvedValue(
+      Response.json({ error: "private-error" }, { status: 401 }),
+    );
+    await expect(handleDesktopPasswordSignIn(request(), env)).rejects.toThrow(
+      "sign-in failed",
+    );
+    verifier.mockResolvedValue(Response.json({}, { status: 429 }));
+    await expect(handleDesktopPasswordSignIn(request(), env)).rejects.toThrow(
+      "Too many",
+    );
+    verifier.mockResolvedValue(Response.json({ twoFactorRedirect: true }));
+    await expect(handleDesktopPasswordSignIn(request(), env)).rejects.toThrow(
+      "additional verification",
+    );
+  });
 
   for (const [email, verified, allowed] of [
     ["vitalii@nohainc.com", 1, true],

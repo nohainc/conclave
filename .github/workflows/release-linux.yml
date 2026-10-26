@@ -78,6 +78,8 @@ jobs:
           bash scripts/package-workspace-linux.sh '${{ matrix.arch }}'
       - name: Test actual APT install and upgrade
         run: bash scripts/test-workspace-linux-package.sh '${{ matrix.arch }}'
+      - name: Test headless setup without a keyring or Workers
+        run: bash scripts/test-workspace-headless-candidate.sh 'dist/conclave-workspace/linux-${{ matrix.arch }}/service'
       - name: Retain tested candidates
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

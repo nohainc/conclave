@@ -51,6 +51,14 @@ Service does not need. A system-level systemd unit is likewise not the default.
 
 ### 2.3 Secret store
 
+Linux auto-selection requires an installed `secret-tool` and a running Secret
+Service owner on the user bus. A headless systemd bus alone is insufficient.
+The recorded store remains authoritative; setup validates private credential
+write/read/delete before contacting Cloud and never silently changes an existing
+store. Headless `setup` uses the same Cloud email/password verifier as AX,
+through a scoped desktop-session exchange; password input remains ephemeral.
+Accounts requiring additional verification retain the browser fallback.
+
 | Platform | Store |
 | --- | --- |
 | macOS | Keychain (existing) |

@@ -28,8 +28,36 @@ enum LinuxCredentialStoreKind {
 /// every later reader uses it. There is no fallback after selection.
 class LinuxCredentialStoreSelector {
   LinuxCredentialStoreSelector(this.stateDirectory,
-      {Map<String, String>? environment})
-      : environment = environment ?? Platform.environment;
+      {Map<String, String>? environment,
+      bool Function()? secretServiceAvailable})
+      : environment = environment ?? Platform.environment,
+        _secretServiceAvailable = secretServiceAvailable ?? _probeSecretService;
+
+  final bool Function() _secretServiceAvailable;
+
+  static bool _probeSecretService() {
+    if (!Platform.isLinux) return false;
+    try {
+      final helper = Process.runSync('which', ['secret-tool']);
+      if (helper.exitCode != 0) return false;
+      // A user bus also exists on headless systemd hosts. Require an actual
+      // Secret Service owner; never activate or unlock a desktop keyring here.
+      final owner = Process.runSync('busctl', [
+        '--user',
+        '--timeout=2',
+        'call',
+        'org.freedesktop.DBus',
+        '/org/freedesktop/DBus',
+        'org.freedesktop.DBus',
+        'NameHasOwner',
+        's',
+        'org.freedesktop.secrets'
+      ]);
+      return owner.exitCode == 0 && owner.stdout.toString().trim() == 'b true';
+    } on ProcessException {
+      return false;
+    }
+  }
 
   final Directory stateDirectory;
   final Map<String, String> environment;
@@ -54,7 +82,7 @@ class LinuxCredentialStoreSelector {
               'CONCLAVE_WORKSPACE_SECRET_STORE must be secret-service or file'));
     }
     final bus = environment['DBUS_SESSION_BUS_ADDRESS'];
-    return bus != null && bus.isNotEmpty
+    return bus != null && bus.isNotEmpty && _secretServiceAvailable()
         ? LinuxCredentialStoreKind.secretService
         : LinuxCredentialStoreKind.file;
   }

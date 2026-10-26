@@ -52,6 +52,9 @@ Follow the one-time repository setup there, then install with:
 ```bash
 sudo apt update
 sudo apt install conclave-workspace
+conclave-workspace setup
+# Existing Cloud email/password; no browser needed on the server.
+sudo loginctl enable-linger "$USER"
 ```
 
 The package includes the service, management CLI and Worker Engine. See the

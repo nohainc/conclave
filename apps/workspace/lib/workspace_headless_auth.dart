@@ -31,19 +31,52 @@ class WorkspaceHeadlessAuth {
   Future<void>? _operation;
   bool _cancelled = false;
   bool _committing = false;
+  bool _starting = false;
   Map<String, Object?> _status = const {'phase': 'idle'};
 
   Map<String, Object?> status() => Map.of(_status);
 
-  Future<Map<String, Object?>> start() async {
-    if (_operation != null || _client != null) {
+  Future<Map<String, Object?>> start({String? email, String? password}) async {
+    if (_starting || _operation != null || _client != null) {
       throw const WorkspaceManagerProtocolException(
           'login_in_progress', 'Sign-in is already in progress.');
     }
     _cancelled = false;
+    _starting = true;
+    // Test a private temporary credential before creating any remote state.
+    // A broken keyring must not leave a Cloud-only Workspace behind.
+    final probeKey = 'setup-storage-probe-$pid';
+    try {
+      if (credentialStore is CredentialStorePreflight) {
+        await (credentialStore as CredentialStorePreflight).verifyWritable();
+      } else {
+        await credentialStore.write(probeKey, 'storage-preflight');
+        if (await credentialStore.read(probeKey) != 'storage-preflight') {
+          throw StateError('Credential storage readback failed');
+        }
+        await credentialStore.delete(probeKey);
+      }
+    } on Object {
+      _starting = false;
+      throw const WorkspaceManagerProtocolException(
+          'credential_store_unavailable',
+          'Credential storage is unavailable. Check the recorded Linux credential store before signing in. No Cloud registration was started.');
+    }
     final client = _clientFactory(cloudUrl);
     _client = client;
+    _starting = false;
     try {
+      if (email != null || password != null) {
+        if (email == null ||
+            email.trim().isEmpty ||
+            password == null ||
+            password.isEmpty) {
+          throw const FormatException('Email and password are required');
+        }
+        _status = const {'phase': 'pending', 'stage': 'password_sign_in'};
+        _operation = _complete(client, null, email: email, password: password);
+        return status();
+      }
       final intent = await client.createIntent();
       _intent = intent;
       _status = {
@@ -61,11 +94,15 @@ class WorkspaceHeadlessAuth {
     }
   }
 
-  Future<void> _complete(
-      DesktopAuthClient client, DesktopAuthIntent intent) async {
+  Future<void> _complete(DesktopAuthClient client, DesktopAuthIntent? intent,
+      {String? email, String? password}) async {
+    var stage = email == null ? 'approval' : 'password_sign_in';
     try {
-      final session = await client.waitForApprovalAndClaim(intent,
-          isCancelled: () => _cancelled);
+      final session = email == null
+          ? await client.waitForApprovalAndClaim(intent!,
+              isCancelled: () => _cancelled)
+          : await client.signInWithPassword(email, password!);
+      stage = 'session_validation';
       await client.validateSession(session);
       final registration = WorkspaceRegistrationStore(dataDirectory).readSync();
       final installationId =
@@ -78,6 +115,7 @@ class WorkspaceHeadlessAuth {
               registration.ownerUserId != session.userId)) {
         throw StateError('Existing owner differs.');
       }
+      stage = 'ownership';
       final ownership = await client.checkWorkspaceOwnership(
           session: session,
           installationId: installationId,
@@ -85,44 +123,75 @@ class WorkspaceHeadlessAuth {
           runtimeId: registration?.workspaceRuntimeId);
       final fresh = registration == null &&
           ownership.state == WorkspaceOwnershipState.unbound;
+      final recoverCloudOnlyRegistration = registration == null &&
+          ownership.state == WorkspaceOwnershipState.ownedByCurrentUser &&
+          ownership.ownerMatchesCurrentSession == true &&
+          ownership.ownerUserId == session.userId &&
+          ownership.workspaceId != null;
       final existing = registration != null &&
           ownership.state == WorkspaceOwnershipState.ownedByCurrentUser &&
           ownership.workspaceId == registration.workspaceId &&
           ownership.workspaceRuntimeId == registration.workspaceRuntimeId &&
           ownership.ownerUserId == session.userId &&
           registration.installationId == installationId;
-      if (!fresh && !existing) throw StateError('Ownership requires recovery.');
+      if (!fresh && !recoverCloudOnlyRegistration && !existing) {
+        throw StateError('Ownership requires recovery.');
+      }
       if (_cancelled) throw StateError('Cancelled.');
       _committing = true;
-      if (fresh) {
+      stage = 'registration';
+      if (fresh || recoverCloudOnlyRegistration) {
         await WorkspaceRegistrationService(
                 dataDirectory: dataDirectory, credentialStore: credentialStore)
             .registerWithDesktopSession(
                 cloudUrl: cloudUrl,
                 desktopCredential: session.credential,
                 expectedOwnerUserId: session.userId,
+                expectedWorkspaceId:
+                    recoverCloudOnlyRegistration ? ownership.workspaceId : null,
                 facts: SafeMachineFacts.collect(
                     installationId: installationId,
-                    name: previous.customWorkspaceName ??
+                    name: ownership.workspaceName ??
+                        previous.customWorkspaceName ??
                         Platform.localHostname));
       } else if ((await credentialStore.read(registration!.workspaceRuntimeId))
               ?.isNotEmpty !=
           true) {
-        throw StateError('Runtime credential needs explicit recovery.');
+        await WorkspaceRegistrationService(
+                dataDirectory: dataDirectory, credentialStore: credentialStore)
+            .registerWithDesktopSession(
+                cloudUrl: cloudUrl,
+                desktopCredential: session.credential,
+                expectedOwnerUserId: session.userId,
+                expectedWorkspaceId: registration.workspaceId,
+                facts: SafeMachineFacts.collect(
+                    installationId: installationId,
+                    name: registration.name,
+                    hostname: registration.hostname));
       }
+      stage = 'session_storage';
       await credentialStore.write(
           desktopHumanCredentialKey, jsonEncode(session.toSecureJson()));
       await preferences.write(previous.copyWith(
           ownerUserId: session.userId, ownerDisplayName: session.displayName));
+      stage = 'runtime_reload';
       await reloadRuntime();
       _status = const {'phase': 'complete'};
-    } on Object {
-      // Remote response text and credentials never enter public diagnostics.
+    } on Object catch (error) {
+      // Only enumerated, locally-authored password errors cross IPC. Remote
+      // response text and credentials never enter public diagnostics.
+      final passwordFailure =
+          error is DesktopPasswordSignInException ? error : null;
       _status = {
         'phase': _cancelled ? 'cancelled' : 'failed',
+        'stage': stage,
+        'code': _cancelled
+            ? 'login_cancelled'
+            : passwordFailure?.code ?? 'login_${stage}_failed',
         'message': _cancelled
             ? 'Sign-in cancelled.'
-            : 'Sign-in or registration failed. Check Cloud access and existing ownership. Local state was retained; if registration completed, retry login.'
+            : passwordFailure?.message ??
+                'Sign-in or registration failed. Check Cloud access and existing ownership. Local state was retained; if registration completed, retry login.'
       };
     } finally {
       _committing = false;

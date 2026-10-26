@@ -11,12 +11,17 @@ import 'package:test/test.dart';
 
 class _Credentials implements SecureCredentialStore {
   final values = <String, String>{};
+  bool failWrites = false;
   @override
   String? readSync(String key) => values[key];
   @override
   Future<String?> read(String key) async => values[key];
   @override
-  Future<void> write(String key, String value) async => values[key] = value;
+  Future<void> write(String key, String value) async {
+    if (failWrites) throw StateError('private-storage-error');
+    values[key] = value;
+  }
+
   @override
   Future<void> delete(String key) async => values.remove(key);
 }
@@ -27,14 +32,29 @@ class _Auth extends DesktopAuthClient {
   WorkspaceOwnership ownership =
       const WorkspaceOwnership(state: WorkspaceOwnershipState.unbound);
   bool cancelled = false;
+  int intentsCreated = 0;
+  int passwordSignIns = 0;
   @override
-  Future<DesktopAuthIntent> createIntent() async => DesktopAuthIntent(
-      intentId: 'intent',
-      pollToken: 'private-poll-token',
-      verificationUrl:
-          Uri.parse('https://example.test/approve?intentId=intent'),
-      expiresAt: DateTime.now().add(const Duration(minutes: 5)),
-      pollIntervalMs: 1000);
+  Future<DesktopHumanSession> signInWithPassword(
+      String email, String password) {
+    expect(email, 'u@example.test');
+    expect(password, 'private-password');
+    passwordSignIns++;
+    return approval.future;
+  }
+
+  @override
+  Future<DesktopAuthIntent> createIntent() async {
+    intentsCreated++;
+    return DesktopAuthIntent(
+        intentId: 'intent',
+        pollToken: 'private-poll-token',
+        verificationUrl:
+            Uri.parse('https://example.test/approve?intentId=intent'),
+        expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+        pollIntervalMs: 1000);
+  }
+
   @override
   Future<DesktopHumanSession> waitForApprovalAndClaim(DesktopAuthIntent intent,
           {bool Function()? isCancelled}) =>
@@ -85,26 +105,111 @@ void main() {
     await root.delete(recursive: true);
   });
 
-  test('fresh approval registers once, stores secrets privately and reloads',
-      () async {
+  test('unavailable storage fails before creating a Cloud intent', () async {
+    credentials.failWrites = true;
+    final auth = WorkspaceHeadlessAuth(
+        dataDirectory: root,
+        cloudUrl: 'https://example.test',
+        credentialStore: credentials,
+        reloadRuntime: () async => fail('must not reload'),
+        clientFactory: (_) => client);
+    await expectLater(
+        auth.start(),
+        throwsA(isA<WorkspaceManagerProtocolException>()
+            .having((e) => e.code, 'code', 'credential_store_unavailable')));
+    expect(client.intentsCreated, 0);
+    expect(credentials.values, isEmpty);
+    await auth.close();
+  });
+
+  for (final passwordLogin in [false, true]) {
+    test(
+        'fresh login (password=$passwordLogin) registers once and stores only credentials',
+        () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      var registrations = 0;
+      server.listen((request) async {
+        expect(request.uri.path, '/api/workspace-runtime/register');
+        expect(request.headers.value(HttpHeaders.authorizationHeader),
+            'Bearer private-human-token');
+        final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+        expect(body['installationId'],
+            await InstallationIdentityStore(root).getOrCreate());
+        registrations++;
+        request.response.statusCode = 201;
+        request.response.write(jsonEncode({
+          'workspaceRuntimeId': 'runtime',
+          'workspaceId': 'workspace',
+          'workspaceName': 'Server',
+          'ownerUserId': 'user',
+          'runtimeCredential': 'private-runtime-token'
+        }));
+        await request.response.close();
+      });
+      var reloads = 0;
+      final auth = WorkspaceHeadlessAuth(
+          dataDirectory: root,
+          cloudUrl: 'http://127.0.0.1:${server.port}',
+          credentialStore: credentials,
+          reloadRuntime: () async {
+            reloads++;
+          },
+          clientFactory: (_) => client);
+      final pending = await auth.start(
+          email: passwordLogin ? 'u@example.test' : null,
+          password: passwordLogin ? 'private-password' : null);
+      if (passwordLogin) {
+        expect(pending.containsKey('verificationUrl'), isFalse);
+        expect(client.intentsCreated, 0);
+      } else {
+        expect(pending['verificationUrl'], contains('/approve'));
+      }
+      expect(jsonEncode(pending), isNot(contains('private-poll-token')));
+      await expectLater(
+          auth.start(), throwsA(isA<WorkspaceManagerProtocolException>()));
+      client.approval.complete(session());
+      expect((await terminal(auth))['phase'], 'complete');
+      expect(registrations, 1);
+      expect(reloads, 1);
+      expect(credentials.values['runtime'], 'private-runtime-token');
+      expect(credentials.values[desktopHumanCredentialKey],
+          contains('private-human-token'));
+      expect(jsonEncode(auth.status()), isNot(contains('private-')));
+      expect(
+          jsonEncode(credentials.values), isNot(contains('private-password')));
+      expect(WorkspaceRegistrationStore(root).readSync()!.workspaceId,
+          'workspace');
+      await auth.close();
+    });
+  }
+
+  test('recovers a Cloud registration missing from local state', () async {
+    final installationId = await InstallationIdentityStore(root).getOrCreate();
+    client.ownership = const WorkspaceOwnership(
+        state: WorkspaceOwnershipState.ownedByCurrentUser,
+        workspaceId: 'workspace',
+        workspaceName: 'gmktec',
+        workspaceRuntimeId: 'stale-runtime',
+        ownerUserId: 'user',
+        ownerMatchesCurrentSession: true,
+        runtimeState: 'offline');
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
-    var registrations = 0;
-    server.listen((request) async {
+    final requestFuture = server.first.then((request) async {
       expect(request.uri.path, '/api/workspace-runtime/register');
       expect(request.headers.value(HttpHeaders.authorizationHeader),
           'Bearer private-human-token');
       final body = jsonDecode(await utf8.decoder.bind(request).join()) as Map;
-      expect(body['installationId'],
-          await InstallationIdentityStore(root).getOrCreate());
-      registrations++;
-      request.response.statusCode = 201;
+      expect(body['installationId'], installationId);
+      expect(body['proposedWorkspaceName'], 'gmktec');
+      request.response.statusCode = HttpStatus.created;
       request.response.write(jsonEncode({
-        'workspaceRuntimeId': 'runtime',
+        'workspaceRuntimeId': 'replacement-runtime',
         'workspaceId': 'workspace',
-        'workspaceName': 'Server',
+        'workspaceName': 'gmktec',
         'ownerUserId': 'user',
-        'runtimeCredential': 'private-runtime-token'
+        'runtimeCredential': 'replacement-runtime-token'
       }));
       await request.response.close();
     });
@@ -113,25 +218,20 @@ void main() {
         dataDirectory: root,
         cloudUrl: 'http://127.0.0.1:${server.port}',
         credentialStore: credentials,
-        reloadRuntime: () async {
-          reloads++;
-        },
+        reloadRuntime: () async => reloads++,
         clientFactory: (_) => client);
-    final pending = await auth.start();
-    expect(pending['verificationUrl'], contains('/approve'));
-    expect(jsonEncode(pending), isNot(contains('private-poll-token')));
-    await expectLater(
-        auth.start(), throwsA(isA<WorkspaceManagerProtocolException>()));
+
+    await auth.start();
     client.approval.complete(session());
     expect((await terminal(auth))['phase'], 'complete');
-    expect(registrations, 1);
-    expect(reloads, 1);
-    expect(credentials.values['runtime'], 'private-runtime-token');
-    expect(credentials.values[desktopHumanCredentialKey],
-        contains('private-human-token'));
-    expect(jsonEncode(auth.status()), isNot(contains('private-')));
+    await requestFuture;
+    final registration = WorkspaceRegistrationStore(root).readSync();
+    expect(registration?.installationId, installationId);
+    expect(registration?.workspaceId, 'workspace');
+    expect(registration?.workspaceRuntimeId, 'replacement-runtime');
     expect(
-        WorkspaceRegistrationStore(root).readSync()!.workspaceId, 'workspace');
+        credentials.values['replacement-runtime'], 'replacement-runtime-token');
+    expect(reloads, 1);
     await auth.close();
   });
 

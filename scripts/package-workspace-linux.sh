@@ -9,6 +9,7 @@ VERSION="${CONCLAVE_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$RO
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+~.-][A-Za-z0-9.+~-]+)?$ ]] || { echo "Invalid package version: $VERSION" >&2; exit 2; }
 command -v dpkg-deb >/dev/null || { echo "Install dpkg (apt-get install dpkg-dev; brew install dpkg)." >&2; exit 1; }
 BUNDLE="$ROOT/dist/conclave-workspace/linux-$ARCH/service"
+node "$ROOT/scripts/workspace-build-manifest.mjs" verify "$BUNDLE" "$VERSION"
 # Verify ELF target rather than accidentally packaging this Mac's executables.
 python3 - "$BUNDLE" "$ELF_MACHINE" <<'PY'
 import pathlib, struct, sys

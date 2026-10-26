@@ -29,9 +29,14 @@ abstract interface class NativeSecureCredentialBridge {
   Future<void> delete({required String service, required String account});
 }
 
+abstract interface class CredentialStorePreflight {
+  Future<void> verifyWritable();
+}
+
 /// Uses the platform's native credential service rather than a plaintext file.
 /// Unsupported platforms fail closed and return no credential.
-class PlatformSecureCredentialStore implements SecureCredentialStore {
+class PlatformSecureCredentialStore
+    implements SecureCredentialStore, CredentialStorePreflight {
   const PlatformSecureCredentialStore({
     this.service = conclaveWorkspaceIsLocalBuild
         ? 'com.conclaveax.workspace.local'
@@ -77,6 +82,22 @@ class PlatformSecureCredentialStore implements SecureCredentialStore {
   }
 
   String _cacheKey(String key) => '$service\u0000$key';
+
+  @override
+  Future<void> verifyWritable() async {
+    final key = 'setup-storage-probe-$pid';
+    try {
+      await write(key, 'storage-preflight');
+      // Verify the backing store, not the value cached by write().
+      _cache.remove(_cacheKey(key));
+      _loaded.remove(_cacheKey(key));
+      if (await read(key) != 'storage-preflight') {
+        throw StateError('Credential storage readback failed');
+      }
+    } finally {
+      await delete(key);
+    }
+  }
 
   @override
   String? readSync(String key) {

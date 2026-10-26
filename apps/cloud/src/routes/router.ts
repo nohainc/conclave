@@ -120,6 +120,12 @@ export async function routeWorkerRequest(
       return await handlers.handleCreateDesktopAuthIntent!(request, env);
     }
     if (
+      request.method === "POST" &&
+      url.pathname === "/api/desktop-auth/password"
+    ) {
+      return await handlers.handleDesktopPasswordSignIn!(request, env);
+    }
+    if (
       request.method === "GET" &&
       url.pathname === "/api/desktop-auth/session"
     ) {

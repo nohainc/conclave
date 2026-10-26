@@ -21,7 +21,11 @@ export GNUPGHOME="$TEST_ROOT/gnupg"
 mkdir -m 700 "$GNUPGHOME"
 gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Conclave package test <test@example.invalid>' ed25519 sign 1d
 KEY="$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1=="fpr" {print $10; exit}')"
+# Deliberately label the same fixture payload as an older package for upgrade
+# acceptance; production packaging otherwise requires a matching build manifest.
+node "$ROOT/scripts/workspace-build-manifest.mjs" record "$ROOT/dist/conclave-workspace/linux-$ARCH/service" '0.0.1~test'
 CONCLAVE_WORKSPACE_VERSION=0.0.1~test bash "$ROOT/scripts/package-workspace-linux.sh" "$ARCH"
+node "$ROOT/scripts/workspace-build-manifest.mjs" record "$ROOT/dist/conclave-workspace/linux-$ARCH/service" "$VERSION"
 OLD="$ROOT/dist/conclave-workspace/deb/conclave-workspace_0.0.1~test_${DEB_ARCH}.deb"
 python3 "$ROOT/scripts/release/build-apt-repository.py" --output "$TEST_ROOT/repo" --signing-key "$KEY" "$OLD"
 cat > "$TEST_ROOT/conclave.sources" <<SOURCES

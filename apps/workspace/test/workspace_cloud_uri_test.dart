@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:conclave_workspace/workspace.dart';
+import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:test/test.dart';
 
@@ -19,6 +20,17 @@ class _NoCredentials implements SecureCredentialStore {
 }
 
 void main() {
+  test('headless management derives a secret-free HTTP origin from transport',
+      () {
+    expect(
+        WorkspaceConfigurationResolver.cloudHttpOrigin(Uri.parse(
+            'wss://user:secret@cloud.example.test:8443/api/workspace-gateway/connect?token=secret')),
+        'https://cloud.example.test:8443');
+    expect(
+        WorkspaceConfigurationResolver.cloudHttpOrigin(
+            Uri.parse('ws://127.0.0.1:9/api/workspace-gateway/connect')),
+        'http://127.0.0.1:9');
+  });
   WorkspaceConfig configFor(String cloudUrl) => WorkspaceConfig.fromArgs(
         ['--cloud-url', cloudUrl, '--workspace-runtime-id', 'runtime-test'],
         credentialStore: _NoCredentials(),

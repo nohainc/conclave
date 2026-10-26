@@ -22,6 +22,12 @@ command -v flutter >/dev/null 2>&1 || {
   echo "Flutter SDK is required to resolve Workspace dependencies." >&2
   exit 1
 }
+
+# Invalidate any prior success marker before this build can fail. Packaging
+# must never accept leftover executables after a failed rebuild.
+if [[ "${CONCLAVE_BUILD_TARGET_OS:-}" == linux ]]; then
+  rm -f "$OUT_DIR/build-manifest.json"
+fi
 command -v dart >/dev/null 2>&1 || {
   echo "Dart SDK is required to compile the Workspace service." >&2
   exit 1
@@ -56,3 +62,6 @@ dart compile exe ${TARGET_FLAGS[@]+"${TARGET_FLAGS[@]}"} \
   bin/conclave_workspace_cli.dart \
   -o "$OUT_DIR/$CLI_NAME"
 echo "Built headless Workspace service at $OUT_DIR/$OUTPUT_NAME"
+if [[ "${CONCLAVE_BUILD_TARGET_OS:-}" == linux ]]; then
+  node "$ROOT/scripts/workspace-build-manifest.mjs" record "$OUT_DIR" "$VERSION"
+fi

@@ -188,6 +188,127 @@ export function randomSecret(prefix: string): string {
   return `${prefix}${btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "")}`;
 }
 
+/** Headless email/password uses the same Better Auth verifier and restrictions
+ * as AX. Its temporary cookie never crosses the desktop credential boundary.
+ */
+export async function handleDesktopPasswordSignIn(
+  request: Request,
+  env: SecurityEnv,
+): Promise<Response> {
+  const body = (await request.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  if (
+    !body ||
+    Object.keys(body).some((key) => !["email", "password"].includes(key)) ||
+    typeof body.email !== "string" ||
+    !body.email.trim() ||
+    body.email.length > 320 ||
+    typeof body.password !== "string" ||
+    !body.password ||
+    body.password.length > 128
+  ) {
+    throw new HttpError(400, "Email and password are required");
+  }
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    Origin: new URL(request.url).origin,
+  });
+  for (const name of ["cf-connecting-ip", "user-agent"]) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  const signedIn = await handleBetterAuthRequest(
+    new Request(new URL("/api/auth/sign-in/email", request.url), {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        email: body.email.trim(),
+        password: body.password,
+        rememberMe: false,
+      }),
+    }),
+    env,
+  );
+  if (!signedIn.ok) {
+    throw new HttpError(
+      signedIn.status === 429 ? 429 : signedIn.status >= 500 ? 503 : 401,
+      signedIn.status === 429
+        ? "Too many sign-in attempts; try later"
+        : signedIn.status >= 500
+          ? "Cloud authentication is unavailable; try again later"
+          : "Email/password sign-in failed. Check your credentials and account status.",
+    );
+  }
+  const result = (await signedIn.json()) as { twoFactorRedirect?: boolean };
+  if (result.twoFactorRedirect) {
+    throw new HttpError(
+      403,
+      "This account requires additional verification. Use browser sign-in; headless password login cannot bypass it.",
+    );
+  }
+  const cookies = signedIn.headers
+    .getSetCookie()
+    .map((value) => value.split(";")[0])
+    .join("; ");
+  if (!cookies) throw new HttpError(401, "Account verification is required");
+  const authenticatedHeaders = new Headers(headers);
+  authenticatedHeaders.set("Cookie", cookies);
+  try {
+    const identity = await identityService.resolve(
+      new Request(request.url, { headers: authenticatedHeaders }),
+      env,
+    );
+    if (!identity) throw new HttpError(401, "Account verification is required");
+    const created = await handleCreateDesktopAuthIntent(
+      new Request(new URL("/api/desktop-auth/intents", request.url), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          clientName: "Conclave Headless Workspace",
+          contractVersion: "1.1",
+        }),
+      }),
+      env,
+    );
+    const intent = (await created.json()) as {
+      intentId: string;
+      pollToken: string;
+    };
+    await handleApproveDesktopAuthIntent(
+      new Request(request.url, {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: "{}",
+      }),
+      env,
+      intent.intentId,
+    );
+    const claimed = await handleClaimDesktopAuthIntent(
+      new Request(request.url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ pollToken: intent.pollToken }),
+      }),
+      env,
+      intent.intentId,
+    );
+    claimed.headers.set("Cache-Control", "no-store");
+    return claimed;
+  } finally {
+    // This cookie is only an internal bridge to an independent desktop session.
+    await handleBetterAuthRequest(
+      new Request(new URL("/api/auth/sign-out", request.url), {
+        method: "POST",
+        headers: authenticatedHeaders,
+        body: "{}",
+      }),
+      env,
+    ).catch(() => undefined);
+  }
+}
+
 export async function handleCreateDesktopAuthIntent(
   request: Request,
   env: SecurityEnv,

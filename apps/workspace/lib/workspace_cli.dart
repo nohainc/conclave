@@ -21,13 +21,16 @@ class WorkspaceCli {
     required this.err,
     WorkspaceCliRequest? request,
     WorkspaceServiceManager Function(Directory)? hostManager,
+    ({String email, String password}) Function()? readCredentials,
   })  : _request = request,
-        _hostManager = hostManager;
+        _hostManager = hostManager,
+        _readCredentials = readCredentials;
 
   final StringSink out;
   final StringSink err;
   final WorkspaceCliRequest? _request;
   final WorkspaceServiceManager Function(Directory)? _hostManager;
+  final ({String email, String password}) Function()? _readCredentials;
 
   static const usage = '''
 Usage: conclave-workspace [--data-dir DIR] [--json] <command>
@@ -35,6 +38,8 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
   service install|uninstall|start|stop|restart|status
                             Manage this user's Linux systemd service
   login [status|cancel]     Browser approval and Cloud registration
+  login --password         Sign in with existing Cloud email/password
+  setup                    Start service, sign in and connect (headless)
   status                    Service snapshot (connection, workers, slots)
   health | version
   connect | disconnect      Connect or disconnect the Cloud connection
@@ -71,6 +76,10 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     if (rest.length == 2 && rest.first == 'service') {
       return _service(dataDir, rest[1], json);
     }
+    if ((rest.length == 1 && rest.first == 'setup') ||
+        (rest.length == 2 && rest[0] == 'login' && rest[1] == '--password')) {
+      return _passwordLogin(dataDir, json, setup: rest.first == 'setup');
+    }
     final call = _resolve(rest);
     if (call == null) {
       err.write(usage);
@@ -95,6 +104,116 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
           '(${error.path}). Is the service installed for this user?');
       return 69;
     }
+  }
+
+  Future<int> _passwordLogin(String? dataDir, bool json,
+      {required bool setup}) async {
+    try {
+      if (setup) {
+        if (await _service(dataDir, 'install', json) != 0 ||
+            await _service(dataDir, 'start', json) != 0) {
+          return 1;
+        }
+        var ready = false;
+        for (var attempt = 0; attempt < 40; attempt++) {
+          try {
+            final health = await _send(dataDir, 'service.getHealth', {});
+            if (health is Map && health['healthy'] == true) {
+              ready = true;
+              break;
+            }
+          } on Object {/* Wait for authenticated IPC during startup. */}
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+        }
+        if (!ready) {
+          err.writeln(
+              'Service did not become healthy. Run conclave-workspace health.');
+          return 69;
+        }
+        final snapshot = await _send(dataDir, 'service.getStatus', {});
+        if (snapshot is Map &&
+            snapshot['workspace'] is Map &&
+            (snapshot['workspace'] as Map)['workspaceId'] != null) {
+          return await _finishConnection(dataDir, json);
+        }
+      }
+      final ({String email, String password}) credentials;
+      if (_readCredentials != null) {
+        credentials = _readCredentials();
+      } else {
+        final terminal = stdin.hasTerminal;
+        if (terminal) err.write('Cloud email: ');
+        final email = stdin.readLineSync() ?? '';
+        final oldEcho = terminal ? stdin.echoMode : true;
+        String password;
+        try {
+          if (terminal) {
+            err.write('Cloud password: ');
+            stdin.echoMode = false;
+          }
+          password = stdin.readLineSync() ?? '';
+        } finally {
+          if (terminal) {
+            stdin.echoMode = oldEcho;
+            err.writeln();
+          }
+        }
+        credentials = (email: email, password: password);
+      }
+      if (credentials.email.trim().isEmpty || credentials.password.isEmpty) {
+        err.writeln('Cloud email and password are required.');
+        return 64;
+      }
+      await _send(dataDir, 'auth.start', {
+        'email': credentials.email.trim(),
+        'password': credentials.password
+      });
+      for (var attempt = 0; attempt < 120; attempt++) {
+        final status = await _send(dataDir, 'auth.status', {});
+        if (status is Map && status['phase'] == 'complete') {
+          if (setup) return await _finishConnection(dataDir, json);
+          _print(status, json);
+          return 0;
+        }
+        if (status is Map && status['phase'] != 'pending') {
+          _print(status, json);
+          return 1;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+      err.writeln('Sign-in is pending. Run conclave-workspace login status.');
+      return 69;
+    } on WorkspaceManagerProtocolException catch (error) {
+      err.writeln('conclave-workspace: ${error.message} (${error.code})');
+      return 1;
+    } on Object {
+      // Never render exceptions that may contain the private login payload.
+      err.writeln(
+          'Headless sign-in failed. Check service health and login status.');
+      return 1;
+    }
+  }
+
+  Future<int> _finishConnection(String? dataDir, bool json) async {
+    await _send(dataDir, 'connection.connect', {});
+    for (var attempt = 0; attempt < 60; attempt++) {
+      final snapshot = await _send(dataDir, 'service.getStatus', {});
+      if (snapshot is Map &&
+          snapshot['cloud'] is Map &&
+          (snapshot['cloud'] as Map)['synchronized'] == true) {
+        _print({
+          'phase': 'complete',
+          'message': 'Workspace is online. No Workers are required.'
+        }, json);
+        err.writeln(
+            'For startup without login: sudo loginctl enable-linger ${Platform.environment['USER'] ?? '<user>'}');
+        return 0;
+      }
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+    err.writeln(
+        'Registered, but Cloud is not ready. Run conclave-workspace status.');
+    return 69;
   }
 
   (String, Map<String, Object?>)? _resolve(List<String> a) {

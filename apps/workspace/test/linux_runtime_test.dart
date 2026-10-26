@@ -49,17 +49,27 @@ void main() {
   });
 
   group('credential store', () {
-    test('selection prefers Secret Service only with a session bus', () {
+    test('selection requires a real Secret Service as well as a session bus',
+        () {
       final state = Directory('${root.path}/state');
       expect(
           LinuxCredentialStoreSelector(state, environment: const {})
               .preferred(),
           LinuxCredentialStoreKind.file);
       expect(
-          LinuxCredentialStoreSelector(state, environment: const {
-            'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus'
-          }).preferred(),
+          LinuxCredentialStoreSelector(state,
+              secretServiceAvailable: () => true,
+              environment: const {
+                'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus'
+              }).preferred(),
           LinuxCredentialStoreKind.secretService);
+      expect(
+          LinuxCredentialStoreSelector(state,
+              secretServiceAvailable: () => false,
+              environment: const {
+                'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/bus'
+              }).preferred(),
+          LinuxCredentialStoreKind.file);
       expect(
           LinuxCredentialStoreSelector(state, environment: const {
             'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus',
@@ -107,6 +117,8 @@ void main() {
           ..writeAsStringSync('file');
       }
       await store.write('runtime-linux-test', 'token');
+      await store.verifyWritable();
+      expect(store.credentialDirectory!.listSync(), hasLength(1));
       expect(store.readSync('runtime-linux-test'), 'token');
       await store.delete('runtime-linux-test');
       expect(store.readSync('runtime-linux-test'), isNull);
@@ -157,6 +169,14 @@ void main() {
           throwsArgumentError);
     });
 
+    test('path directives escape percent without ExecStart quotes', () {
+      final special = LinuxWorkspaceServiceManager(
+          executable: File('${root.path}/app 100%/conclave-service'));
+      expect(special.workingDirectory(), '${root.path}/app 100%%');
+      expect(special.unitContents(),
+          contains('WorkingDirectory=${root.path}/app 100%%\n'));
+    });
+
     test('register, stop and unregister keep installation state', () async {
       final registered = await manager.register();
       expect(registered.registered, isTrue);
@@ -164,6 +184,11 @@ void main() {
       expect(unit.path, matches(RegExp(r'conclave-workspace-.+\.service$')));
       final contents = unit.readAsStringSync();
       expect(contents, contains('ExecStart=${manager.execStart()}'));
+      expect(
+          contents,
+          contains(
+              'WorkingDirectory=${manager.executable.parent.absolute.path}'));
+      expect(contents, isNot(contains('WorkingDirectory="')));
       expect(contents, contains('state 100%%'));
       expect(contents, contains('KillMode=mixed'));
       expect(contents, contains('WantedBy=default.target'));

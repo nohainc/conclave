@@ -58,6 +58,20 @@ the sole source of Engine builds. Packages set the build-time
 `CONCLAVE_WORKSPACE_PACKAGE_MANAGER=apt` so the application updater cannot compete
 with APT. Never promote candidates containing CI fixture trust anchors.
 
+Linux builds write a versioned build manifest with hashes of all three
+executables and the relevant source tree. A new build invalidates any old
+success marker before compiling. Packaging checks the manifest, version,
+source digest and binary digests, refusing stale output after a failed build.
+Run `pnpm exec vitest run scripts/workspace-build-manifest.test.mjs` to exercise
+missing-manifest, mismatched-version and altered-binary rejection.
+
+The headless email/password setup also requires the matching Cloud
+`/api/desktop-auth/password` endpoint. Deploy that backward-compatible endpoint
+before publishing a CLI that advertises `setup`. Browser approval remains
+available for accounts requiring additional verification; runtime connection
+and restarts never require a new password while the runtime credential remains
+valid. No database migration is needed for this setup route.
+
 Production builds require the genuine Workspace application-release public
 roots even though APT manages this installation. The initial application key
 `conclave/workspace-2026-10` was provisioned independently of the APT signing key;
@@ -125,7 +139,7 @@ Concurrent releases are serialized. Missing keys or roots fail closed.
 For example:
 
 ```bash
-gh workflow run release-linux.yml --repo nohainc/conclave --ref main -f version=1.0.3 -f publish=true
+gh workflow run release-linux.yml --repo nohainc/conclave --ref main -f version=1.0.4 -f publish=true
 ```
 
 A non-publish run retains candidates as workflow artifacts. It uses configured

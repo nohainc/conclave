@@ -28,19 +28,46 @@ It installs binaries under `/usr/lib/conclave-workspace`, and symlinks under
 `/usr/bin`; GTK and a desktop session are not needed.
 
 ```bash
-conclave-workspace service install
-conclave-workspace service start
-conclave-workspace login
-# Open the returned verificationUrl on another computer and approve sign-in.
-conclave-workspace login status
-# After phase is complete:
-conclave-workspace connect
-conclave-workspace workers check
+conclave-workspace setup
+# Enter your existing Conclave Cloud email and password at the prompts.
+# Password input is hidden. Never pass it as a command-line argument.
 conclave-workspace status
-loginctl enable-linger "$USER"
+sudo loginctl enable-linger "$USER"
 ```
 
-`login` starts a service-owned approval operation and returns immediately. Poll
+`setup` registers/enables and starts the systemd **user** service, waits for
+authenticated local IPC, signs in through Cloud's existing Better Auth
+email/password verifier, registers or recovers this installation, and waits for
+Cloud synchronization. It never installs or probes Workers. Zero Workers is a
+supported online state. Already registered installations reconnect without
+asking for a password. The runtime credential persists across logout and service
+restart; it is independent of the management session's expiry. No browser is
+needed on the server and no public inbound port is opened.
+
+For an already running service, `conclave-workspace login --password` performs
+only account sign-in/registration; follow it with `conclave-workspace connect`.
+Accounts that require additional verification must use the existing browser
+flow (`conclave-workspace login`, opening the returned URL on another device).
+Password sign-in does not bypass MFA, disabled accounts or ownership checks.
+Passwords and temporary authentication cookies are never stored in Workspace
+state, CLI output or diagnostics. The temporary Cloud login session is closed
+after issuing the separate desktop management session.
+
+Before contacting Cloud, login tests credential write/read/delete. A fresh
+Linux install selects Secret Service only when both `secret-tool` and an active
+`org.freedesktop.secrets` service are available. A systemd user D-Bus by itself
+does not qualify. Otherwise it selects the documented headless file store:
+`0700` directory and `0600` files owned by the service user. An existing recorded
+store remains authoritative; it is never silently replaced. If it is broken,
+setup fails before remote registration. Review the recorded store and preserve
+existing keys before any explicit repair.
+
+Login failures report a safe `stage` and `code` through `login status`, without
+returning server response text or secrets. A Cloud-only registration can be
+recovered under the same installation identity after same-owner verification;
+setup does not create a replacement Workspace to conceal a failed local write.
+
+Browser `login` starts a service-owned approval operation and returns immediately. Poll
 `login status` for `pending`, `complete`, `failed` or `cancelled`; use
 `login cancel` to cancel before registration commits. No comparison code is
 printed because the existing Cloud approval contract uses a verification URL.

@@ -138,6 +138,16 @@ class WorkspaceConfigurationResolver {
         : Directory(path);
   }
 
+  static String cloudHttpOrigin(Uri gateway) => Uri(
+          scheme: switch (gateway.scheme) {
+            'wss' || 'https' => 'https',
+            'ws' || 'http' => 'http',
+            _ => throw ArgumentError('Unsupported Cloud transport'),
+          },
+          host: gateway.host,
+          port: gateway.hasPort ? gateway.port : null)
+      .toString();
+
   static Uri? workspaceGatewayUri(String value, {String? workspaceRuntimeId}) {
     final uri = Uri.tryParse(value);
     if (uri == null) return null;

@@ -410,12 +410,22 @@ class WorkspaceManagerService {
                 .readSync();
         _headlessAuth ??= WorkspaceHeadlessAuth(
           dataDirectory: workspace.config.dataDirectory,
-          cloudUrl: resolveWorkspaceCloudUrl(
-              registration?.cloudUrl ?? workspace.config.cloudUri?.toString()),
+          cloudUrl: resolveWorkspaceCloudUrl(registration?.cloudUrl ??
+              (workspace.config.cloudUri == null
+                  ? null
+                  : WorkspaceConfigurationResolver.cloudHttpOrigin(
+                      workspace.config.cloudUri!))),
           credentialStore: workspace.credentialStore,
           reloadRuntime: _reloadRuntime,
         );
-        return _headlessAuth!.start();
+        if ((payload['email'] != null && payload['email'] is! String) ||
+            (payload['password'] != null && payload['password'] is! String)) {
+          throw const WorkspaceManagerProtocolException(
+              'invalid_login', 'Email and password must be text.');
+        }
+        return _headlessAuth!.start(
+            email: payload['email'] as String?,
+            password: payload['password'] as String?);
       case 'auth.status':
         return _headlessAuth?.status() ?? const {'phase': 'idle'};
       case 'auth.cancel':

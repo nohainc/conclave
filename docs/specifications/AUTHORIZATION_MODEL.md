@@ -78,6 +78,16 @@ The reconciliation is audited; ambiguous state requires operator investigation.
 
 ## Secret boundary
 
+`POST /api/desktop-auth/password` supports headless Workspace setup with an
+existing account's email/password. It delegates verification and rate limiting
+to the same Better Auth sign-in route as AX, refuses incomplete/MFA challenges,
+then issues only a `conclave.desktop.management` session using the existing
+single-use claim mechanism. Its temporary authentication cookie is not returned
+to the caller and the temporary web session is signed out. Passwords are never
+persisted by Workspace or Conclave application tables. Responses are no-store.
+This does not transfer installation ownership or create a Profile Lab session;
+normal ownership and registration checks still apply.
+
 Provider credentials stay in the local provider CLI configuration. Runtime credentials are stored in the operating system secure store. Cloud persistence, assignment messages, diagnostics, audit records, and artifacts must not contain plaintext secrets.
 
 ## Space member rights v1

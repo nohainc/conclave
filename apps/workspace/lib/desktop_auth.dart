@@ -238,6 +238,26 @@ class WorkspaceOwnership {
   }
 }
 
+class DesktopPasswordSignInException implements Exception {
+  const DesktopPasswordSignInException(this.statusCode);
+  final int statusCode;
+  String get code => switch (statusCode) {
+        401 => 'invalid_credentials',
+        403 => 'additional_verification_required',
+        429 => 'sign_in_rate_limited',
+        404 => 'cloud_upgrade_required',
+        _ => 'cloud_sign_in_unavailable',
+      };
+  String get message => switch (statusCode) {
+        401 => 'Check your existing Cloud email/password and account status.',
+        403 =>
+          'This account requires additional verification. Use browser sign-in on another device.',
+        429 => 'Too many sign-in attempts. Wait before retrying.',
+        404 => 'Cloud must be updated to support headless password sign-in.',
+        _ => 'Cloud sign-in is unavailable. Check connectivity and retry.',
+      };
+}
+
 class DesktopAuthClient {
   DesktopAuthClient({required String cloudUrl, HttpClient? httpClient})
       : _cloudOrigin = _normalizeOrigin(cloudUrl),
@@ -267,7 +287,9 @@ class DesktopAuthClient {
   Uri _api(String path) => _cloudOrigin.replace(path: '/api$path');
 
   Future<Map<String, dynamic>> _requestJson(String method, Uri uri,
-      {Map<String, Object?>? body, String? bearer}) async {
+      {Map<String, Object?>? body,
+      String? bearer,
+      bool passwordRequest = false}) async {
     final request =
         await (method == 'GET' ? _http.getUrl(uri) : _http.postUrl(uri))
             .timeout(const Duration(seconds: 20));
@@ -292,6 +314,9 @@ class DesktopAuthClient {
       // Error response text is intentionally not copied into diagnostics.
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (passwordRequest) {
+        throw DesktopPasswordSignInException(response.statusCode);
+      }
       final message = decoded['error'] is String
           ? decoded['error'] as String
           : 'Cloud sign-in failed (HTTP ${response.statusCode})';
@@ -313,6 +338,13 @@ class DesktopAuthClient {
     // Cloud endpoint and is independently restricted to HTTPS or loopback by
     // DesktopAuthIntent.fromJson.
     return intent;
+  }
+
+  Future<DesktopHumanSession> signInWithPassword(
+      String email, String password) async {
+    final result = await _requestJson('POST', _api('/desktop-auth/password'),
+        body: {'email': email, 'password': password}, passwordRequest: true);
+    return DesktopHumanSession.fromJson(result);
   }
 
   Future<void> openVerification(DesktopAuthIntent intent) async {

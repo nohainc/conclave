@@ -10,5 +10,5 @@ bash "$ROOT/scripts/build-workspace-service.sh"
 BUNDLE="$ROOT/dist/conclave-workspace/linux-$ARCH/service"
 cp "$ROOT/docs/operations/WORKSPACE_LINUX.md" "$BUNDLE/README.md"
 ARCHIVE="$ROOT/dist/conclave-workspace/conclave-workspace-headless-linux-$ARCH.tar.gz"
-tar -C "$BUNDLE" -czf "$ARCHIVE" .
+COPYFILE_DISABLE=1 tar --no-xattrs -C "$BUNDLE" -czf "$ARCHIVE" .
 echo "Built headless Linux bundle: $ARCHIVE"

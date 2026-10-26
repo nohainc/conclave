@@ -70,6 +70,16 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
         dataDirectory.absolute.path,
       ].map(quoteExecArgument).join(' ');
 
+  // Path directives are not ExecStart argument lists: quotes become literal
+  // path characters. Escape unit-file specifiers and backslashes instead.
+  String workingDirectory() {
+    final path = executable.parent.absolute.path;
+    if (path.contains(RegExp(r'[\r\n\x00]'))) {
+      throw ArgumentError('Working directory contains a control character');
+    }
+    return path.replaceAll(r'\', r'\\').replaceAll('%', '%%');
+  }
+
   String unitContents() => '''
 [Unit]
 Description=Conclave Workspace Service
@@ -79,7 +89,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStart=${execStart()}
-WorkingDirectory=${quoteExecArgument(executable.parent.absolute.path)}
+WorkingDirectory=${workingDirectory()}
 Restart=on-failure
 RestartSec=5
 # SIGTERM lets the service stop its Engine and provider CLIs; anything left in

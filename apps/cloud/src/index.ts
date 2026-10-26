@@ -93,6 +93,7 @@ export const routeHandlers = {
   handleSession: handlers.handleSession,
   handleSessionLogout: handlers.handleSessionLogout,
   handleCreateDesktopAuthIntent: handlers.handleCreateDesktopAuthIntent,
+  handleDesktopPasswordSignIn: handlers.handleDesktopPasswordSignIn,
   handleDesktopAuthIntentStatus: handlers.handleDesktopAuthIntentStatus,
   handleDesktopAuthIntentBrowserStatus:
     handlers.handleDesktopAuthIntentBrowserStatus,

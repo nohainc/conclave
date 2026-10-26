@@ -23,6 +23,7 @@ export {
   handleCompleteProfileLabStepUp,
   handleSessionLogout,
   handleCreateDesktopAuthIntent,
+  handleDesktopPasswordSignIn,
   handleDesktopAuthIntentStatus,
   handleDesktopAuthIntentBrowserStatus,
   handleCancelDesktopAuthIntent,
