@@ -21,11 +21,8 @@ void main() {
     connectOnStart: true,
     workspaceName: 'GMKtec',
     parallelSlots: slots,
+    workRoot: '${root.path}/work',
     folders: {
-      'root': root.path,
-      'conclave': '${root.path}/conclave',
-      'state': '${root.path}/state',
-      'work': '${root.path}/work',
       'models': '${root.path}/models',
     },
   );
@@ -41,7 +38,8 @@ void main() {
     final loaded = store.readSync()!;
     expect(loaded.workspaceName, 'GMKtec');
     expect(loaded.parallelSlots, 6);
-    expect(loaded.folders['work'], '${root.path}/work');
+    expect(loaded.workRoot, '${root.path}/work');
+    expect(loaded.folders['models'], '${root.path}/models');
     if (!Platform.isWindows) {
       expect(store.file.statSync().mode & 0x1ff, 0x180);
     }
@@ -101,10 +99,7 @@ void main() {
       expect(generated.cloudUrl, 'https://app.conclaveax.com');
       expect(generated.workspaceName, 'Workspace');
       expect(generated.connectOnStart, isFalse);
-      expect(
-        generated.folders.keys,
-        containsAll(['root', 'conclave', 'state', 'work']),
-      );
+      expect(generated.workRoot, isNotEmpty);
       expect(store.file.existsSync(), isTrue);
     },
   );

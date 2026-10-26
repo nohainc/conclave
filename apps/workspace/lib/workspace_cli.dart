@@ -43,7 +43,7 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
   login [status|cancel]     Browser approval and Cloud registration
   login --password         Sign in with existing Cloud email/password
   setup                    Start service, sign in and connect (headless)
-  status                    Service snapshot (connection, workers, slots)
+  status                    Service summary (connection, workers, slots)
   health | version
   connect | disconnect      Connect or disconnect the Cloud connection
   pause | resume            Stop or resume accepting new work
@@ -54,7 +54,10 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
   slots                     Parallel execution slots
   assignments               Active assignment ids
   assignments cancel ID
-  folders                   Allowed folders
+  folders [list]            List allowed Space folders
+  folders add PATH [--name NAME]
+                            Add an allowed Space folder
+  folders remove ID         Remove an allowed Space folder
   metrics | logs
   updates                   Show which updater manages this installation
 ''';
@@ -86,6 +89,9 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
         (rest.length == 2 && rest[0] == 'login' && rest[1] == '--password')) {
       return _passwordLogin(dataDir, json, setup: rest.first == 'setup');
     }
+    if (rest.length >= 2 && rest.first == 'folders' && rest[1] != 'list') {
+      return _folders(dataDir, rest.sublist(1), json);
+    }
     final call = _resolve(rest);
     if (call == null) {
       err.write(usage);
@@ -98,7 +104,11 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
       } else if (call.$1 == 'connection.disconnect') {
         await _updateConnectionSetting(dataDir, false);
       }
-      _print(result, json);
+      if (call.$1 == 'service.getStatus' && !json && result is Map<String, Object?>) {
+        _printStatusSummary(result);
+      } else {
+        _print(result, json);
+      }
       return 0;
     } on WorkspaceManagerProtocolException catch (error) {
       err.writeln('conclave-workspace: ${error.message} (${error.code})');
@@ -295,6 +305,7 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
       case ('assignments', 'cancel') when id != null:
         return ('execution.cancelAssignment', {'assignmentId': id});
       case ('folders', null):
+      case ('folders', 'list'):
         return ('folders.list', {});
       case ('updates', null):
         return ('updates.status', {});
@@ -454,6 +465,68 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     if (settings.connectOnStart != connected) {
       await store.write(settings.copyWith(connectOnStart: connected));
     }
+  }
+
+  Future<int> _folders(String? dataDir, List<String> args, bool json) async {
+    if (args.isEmpty) {
+      err.write(usage);
+      return 64;
+    }
+    final action = args[0];
+    if (action == 'remove' && args.length == 2) {
+      try {
+        final result = await _send(dataDir, 'folders.remove', {'folderId': args[1]});
+        _print(result, json);
+        return 0;
+      } on WorkspaceManagerProtocolException catch (error) {
+        err.writeln('conclave-workspace: ${error.message} (${error.code})');
+        return 1;
+      }
+    }
+    if (action == 'add' && args.length >= 2) {
+      final path = args[1];
+      String? name;
+      for (var i = 2; i < args.length; i++) {
+        if (args[i] == '--name' && i + 1 < args.length) {
+          name = args[++i];
+        }
+      }
+      try {
+        final result = await _send(dataDir, 'folders.add', {
+          'path': path,
+          if (name != null) 'displayName': name,
+        });
+        _print(result, json);
+        return 0;
+      } on WorkspaceManagerProtocolException catch (error) {
+        err.writeln('conclave-workspace: ${error.message} (${error.code})');
+        return 1;
+      }
+    }
+    err.write(usage);
+    return 64;
+  }
+
+  void _printStatusSummary(Map<String, Object?> snapshot) {
+    final workspace = snapshot['workspace'] as Map<String, Object?>? ?? const {};
+    final cloud = snapshot['cloud'] as Map<String, Object?>? ?? const {};
+    final service = snapshot['service'] as Map<String, Object?>? ?? const {};
+    final assignments = snapshot['assignments'] as Map<String, Object?>? ?? const {};
+    final workers = (snapshot['workers'] as List?)?.length ?? 0;
+
+    final name = workspace['name'] ?? 'Workspace';
+    final cloudState = cloud['state'] ?? 'offline';
+    final connected = cloud['connected'] == true;
+    final cloudUrl = cloud['transport'] != null ? '${cloud['transport']} (${cloud['lifecycleState']})' : '${cloud['lifecycleState'] ?? cloudState}';
+    final workRoot = workspace['workRoot'] ?? 'Not configured';
+    final activeCount = assignments['activeCount'] ?? 0;
+    final healthy = service['serviceHealthy'] == true;
+
+    out.writeln('Workspace:     $name (${healthy ? 'healthy' : 'unhealthy'})');
+    out.writeln('Cloud:         ${connected ? 'Connected' : 'Disconnected'} ($cloudUrl)');
+    out.writeln('Work Root:     $workRoot');
+    out.writeln('Workers:       $workers configured');
+    out.writeln('Active Work:   $activeCount running');
   }
 
   void _print(Object? result, bool json) {

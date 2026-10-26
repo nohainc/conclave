@@ -5,7 +5,6 @@ import 'package:nanomarkup/nanomarkup.dart' as nano;
 import 'local_worker_permissions.dart';
 import 'platform_runtime.dart';
 import 'work_root.dart';
-import 'workspace_paths.dart';
 
 /// Versioned, non-secret desired configuration for the Workspace service.
 ///
@@ -19,7 +18,8 @@ final class WorkspaceSettings {
     required this.connectOnStart,
     required this.workspaceName,
     required this.parallelSlots,
-    required this.folders,
+    required this.workRoot,
+    this.folders = const {},
   });
 
   static const schemaVersion = 1;
@@ -30,12 +30,13 @@ final class WorkspaceSettings {
   final String workspaceName;
   final int parallelSlots;
 
-  /// Named absolute paths available to management clients. `work` is the
-  /// service's Work Root; the other reserved entries document its layout.
-  /// Additional names are permitted for future clients but grant no access.
+  /// The primary Work Root path where worker runs and scratch workspaces live.
+  final String workRoot;
+
+  /// Optional named project folders mapped locally.
   final Map<String, String> folders;
 
-  String get workRootPath => folders['work']!;
+  String get workRootPath => workRoot;
 
   WorkspaceSettings copyWith({
     bool? serviceEnabled,
@@ -43,15 +44,20 @@ final class WorkspaceSettings {
     bool? connectOnStart,
     String? workspaceName,
     int? parallelSlots,
+    String? workRoot,
     Map<String, String>? folders,
-  }) => WorkspaceSettings(
-    serviceEnabled: serviceEnabled ?? this.serviceEnabled,
-    cloudUrl: cloudUrl ?? this.cloudUrl,
-    connectOnStart: connectOnStart ?? this.connectOnStart,
-    workspaceName: workspaceName ?? this.workspaceName,
-    parallelSlots: parallelSlots ?? this.parallelSlots,
-    folders: Map.unmodifiable(folders ?? this.folders),
-  );
+  }) {
+    final updatedFolders = folders ?? this.folders;
+    return WorkspaceSettings(
+      serviceEnabled: serviceEnabled ?? this.serviceEnabled,
+      cloudUrl: cloudUrl ?? this.cloudUrl,
+      connectOnStart: connectOnStart ?? this.connectOnStart,
+      workspaceName: workspaceName ?? this.workspaceName,
+      parallelSlots: parallelSlots ?? this.parallelSlots,
+      workRoot: workRoot ?? (folders != null && folders.containsKey('work') ? folders['work']! : this.workRoot),
+      folders: Map.unmodifiable(updatedFolders),
+    );
+  }
 
   Map<String, Object> toNanoValue() => <String, Object>{
     'version': schemaVersion.toString(),
@@ -60,12 +66,19 @@ final class WorkspaceSettings {
       'url': cloudUrl,
       'connect_on_start': connectOnStart.toString(),
     },
-    'workspace': <String, Object>{'name': workspaceName},
+    'workspace': <String, Object>{
+      'name': workspaceName,
+      'work_root': workRoot,
+    },
     'execution': <String, Object>{'parallel_slots': parallelSlots.toString()},
-    'folders': <String, Object>{...folders},
+    if (folders.isNotEmpty) 'folders': <String, Object>{...folders},
   };
 
-  factory WorkspaceSettings.fromNanoValue(Object value) {
+  factory WorkspaceSettings.fromNanoValue(
+    Object value, {
+    Directory? dataDirectory,
+    PlatformRuntime? platform,
+  }) {
     if (value is! Map) {
       throw const FormatException('Workspace configuration must be a mapping');
     }
@@ -88,10 +101,9 @@ final class WorkspaceSettings {
     final cloud = _mapping(root, 'cloud');
     final workspace = _mapping(root, 'workspace');
     final execution = _mapping(root, 'execution');
-    final folderValues = _mapping(root, 'folders');
     _onlyKeys(service, const {'enabled'}, 'service');
     _onlyKeys(cloud, const {'url', 'connect_on_start'}, 'cloud');
-    _onlyKeys(workspace, const {'name'}, 'workspace');
+    _onlyKeys(workspace, const {'name', 'work_root'}, 'workspace');
     _onlyKeys(execution, const {'parallel_slots'}, 'execution');
 
     final cloudUrl = _requiredString(cloud, 'url', 'cloud');
@@ -118,25 +130,40 @@ final class WorkspaceSettings {
         'execution.parallel_slots must be between $minParallelSlots and $maxParallelSlots',
       );
     }
+
+    String? workRoot = workspace['work_root'] as String?;
+    if (workRoot != null) {
+      if (!_isAbsolutePath(workRoot)) {
+        throw const FormatException('workspace.work_root must be an absolute path');
+      }
+    }
+
     final folders = <String, String>{};
-    for (final entry in folderValues.entries) {
-      final path = entry.value;
-      if (path is! String || !_isAbsolutePath(path)) {
-        throw FormatException('folders.${entry.key} must be an absolute path');
-      }
-      folders[entry.key] = path;
-    }
-    for (final required in const {'root', 'conclave', 'state', 'work'}) {
-      if (!folders.containsKey(required)) {
-        throw FormatException('folders.$required is required');
+    if (root.containsKey('folders')) {
+      final folderValues = _mapping(root, 'folders');
+      for (final entry in folderValues.entries) {
+        final path = entry.value;
+        if (path is! String || !_isAbsolutePath(path)) {
+          throw FormatException('folders.${entry.key} must be an absolute path');
+        }
+        folders[entry.key] = path;
       }
     }
+    // Backward-compatibility: if legacy work folder was specified in folders instead
+    if (workRoot == null && folders.containsKey('work')) {
+      workRoot = folders['work'];
+    }
+
+    final runtime = platform ?? currentPlatformRuntime;
+    workRoot ??= WorkRootResolver(platform: runtime).defaultPath;
+
     return WorkspaceSettings(
       serviceEnabled: _boolean(service, 'enabled'),
       cloudUrl: cloudUrl,
       connectOnStart: _boolean(cloud, 'connect_on_start'),
       workspaceName: name,
       parallelSlots: slots,
+      workRoot: workRoot,
       folders: Map.unmodifiable(folders),
     );
   }
@@ -146,7 +173,6 @@ final class WorkspaceSettings {
     PlatformRuntime? platform,
   }) {
     final runtime = platform ?? currentPlatformRuntime;
-    final paths = WorkspacePaths(dataDirectory, platform: runtime);
     final work = WorkRootResolver(platform: runtime).defaultPath;
     return WorkspaceSettings(
       serviceEnabled: true,
@@ -154,18 +180,8 @@ final class WorkspaceSettings {
       connectOnStart: false,
       workspaceName: 'Workspace',
       parallelSlots: defaultLocalWorkerConcurrency,
-      folders: Map.unmodifiable(<String, String>{
-        'root': runtime.homeDirectory,
-        'conclave': paths.applicationDataRoot.absolute.path,
-        'state': dataDirectory.absolute.path,
-        'work': Directory(work).absolute.path,
-        'profiles': paths.profilesDirectory.absolute.path,
-        'engines': paths.enginesDirectory.absolute.path,
-        'logs': paths.logsDirectory.absolute.path,
-        'cache': Directory(
-          '${dataDirectory.absolute.path}${Platform.pathSeparator}cache',
-        ).path,
-      }),
+      workRoot: Directory(work).absolute.path,
+      folders: const {},
     );
   }
 
@@ -229,7 +245,11 @@ final class WorkspaceSettingsStore {
   WorkspaceSettings? readSync() {
     if (!file.existsSync()) return null;
     final value = nano.decodeBytes(file.readAsBytesSync());
-    return WorkspaceSettings.fromNanoValue(value);
+    return WorkspaceSettings.fromNanoValue(
+      value,
+      dataDirectory: dataDirectory,
+      platform: platform,
+    );
   }
 
   Future<void> write(WorkspaceSettings settings) async {

@@ -23,12 +23,19 @@ void main() {
     expect((await run(['login', 'status'])).$4, ['auth.status {}']);
     expect((await run(['login', 'cancel'])).$4, ['auth.cancel {}']);
     expect((await run(['updates'])).$4, ['updates.status {}']);
-    expect((await run(['status'])).$4, ['service.getStatus {}']);
+    expect((await run(['--json', 'status'])).$4, ['service.getStatus {}']);
     expect((await run(['workers', 'test', 'w1'])).$4, [
       'workers.testWorker {workerId: w1}',
     ]);
     expect((await run(['--json', 'assignments', 'cancel', 'a1'])).$4, [
       'execution.cancelAssignment {assignmentId: a1}',
+    ]);
+    expect((await run(['folders', 'list'])).$4, ['folders.list {}']);
+    expect((await run(['folders', 'add', '/path/to/project', '--name', 'MyProj'])).$4, [
+      'folders.add {path: /path/to/project, displayName: MyProj}',
+    ]);
+    expect((await run(['folders', 'remove', 'folder-123'])).$4, [
+      'folders.remove {folderId: folder-123}',
     ]);
   });
 
