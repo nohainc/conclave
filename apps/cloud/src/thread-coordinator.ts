@@ -289,7 +289,10 @@ export class ThreadExecutionCoordinator implements DurableObject {
           ? "cancelled"
           : "completed";
     const pendingKey = `pending:${lease.workRequestId}`;
-    if (status !== "completed" && (await this.workerMayBeRunning(lease.workRequestId))) {
+    if (
+      status !== "completed" &&
+      (await this.workerMayBeRunning(lease.workRequestId))
+    ) {
       // The Thread is not free while its Worker may still be running: the
       // next request would only wait for it in the Workspace. Keep the lease
       // and finish once the Worker has stopped (or when the Workflow reports
@@ -408,7 +411,8 @@ export class ThreadExecutionCoordinator implements DurableObject {
         .first<{ expiresAt: string | null }>();
       if (nextExpiry?.expiresAt)
         await this.state.storage.setAlarm(Date.parse(nextExpiry.expiresAt));
-      if (stillWaiting) await this.scheduleAlarm(Date.now() + PENDING_RECHECK_MS);
+      if (stillWaiting)
+        await this.scheduleAlarm(Date.now() + PENDING_RECHECK_MS);
     }
     return this.status();
   }
