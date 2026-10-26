@@ -43,6 +43,21 @@ are implementation details shown only in Advanced Diagnostics.
   supported local CLI Workers.
 - **Tool Profiles** — signed immutable official provider integration releases.
 
+## Install Workspace on Ubuntu
+
+Headless Workspace packages for Ubuntu 22.04 and newer are available for amd64
+and ARM64 through the [signed APT repository](https://nohainc.github.io/conclave/).
+Follow the one-time repository setup there, then install with:
+
+```bash
+sudo apt update
+sudo apt install conclave-workspace
+```
+
+The package includes the service, management CLI and Worker Engine. See the
+[Linux operator guide](docs/operations/WORKSPACE_LINUX.md) for user-service setup,
+browser login and upgrades. Provider CLIs and their logins are separate.
+
 ## Repository checks
 
 Run `pnpm check` from the repository root to verify architecture and schema

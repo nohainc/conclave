@@ -38,18 +38,29 @@ See [the attempted run](https://github.com/nohainc/conclave/actions/runs/4031816
 Local Linux container checks supplied executable package evidence despite that
 runner blocker. They do not replace the main-branch CI requirement for publication.
 
-## Remaining release gates
+## Production release 1.0.3
 
-- Production roots, a dedicated OpenPGP key, main-restricted release
-  environments and GitHub Pages hosting were provisioned on 2026-10-26. The
-  publisher now uses its scoped job token; no personal publishing token is needed.
-- GitHub runner access was restored after the source repository became public.
-  [Main CI](https://github.com/nohainc/conclave/actions/runs/40321734230) and
-  [native package CI](https://github.com/nohainc/conclave/actions/runs/40321734928)
-  passed for `f074b5fe`, including actual Ubuntu ARM64 runners. Production
-  publication requires passing CI for its own exact commit.
-- Verify the public HTTPS repository and a fresh install from a separate Ubuntu
-  host after its Pages/static-site deployment completes.
+Published on 2026-10-26 from `15233c7a59d19c488124b4ff1208378293dbf993`:
+
+- [Main CI](https://github.com/nohainc/conclave/actions/runs/40323885933) passed.
+- [Production release workflow](https://github.com/nohainc/conclave/actions/runs/40324479519)
+  passed native builds, signed test-repository upgrades, production signing,
+  GitHub Pages deployment, and fresh public HTTPS APT installation on both
+  Ubuntu 22.04 amd64 and ARM64 runners.
+- [Public APT repository](https://nohainc.github.io/conclave/) and
+  [GitHub release](https://github.com/nohainc/conclave/releases/tag/workspace-linux-v1.0.3)
+  provide version 1.0.3. Both downloaded Debian packages were independently
+  verified against the signature-bound SHA256 indexes after deployment.
+- Dedicated production OpenPGP signing material and independent application
+  trust roots are configured. Signing and deployment environments are restricted
+  to main. No personal publishing token is required.
+
+No CI fixture key is trusted by these production packages. The private backups
+remain outside the source checkout; see the
+[release operations guide](../deployment/WORKSPACE_LINUX_RELEASES.md).
+
+## Remaining target-host qualification
+
 - Qualify systemd user registration/start, reboot/linger, provider credentials
   and actual assignments on a target Ubuntu host.
 - Exercise browser approval against production Cloud on that host. The local
