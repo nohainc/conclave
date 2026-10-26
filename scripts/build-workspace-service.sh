@@ -12,10 +12,10 @@ if [[ -n "${CONCLAVE_BUILD_TARGET_OS:-}${CONCLAVE_BUILD_TARGET_ARCH:-}" ]]; then
   OUT_DIR="$ROOT/dist/conclave-workspace/linux-$CONCLAVE_BUILD_TARGET_ARCH/service"
 fi
 ENGINE_NAME="conclave_cli_worker_engine"
-OUTPUT_NAME="conclave-service"
+OUTPUT_NAME="workspace"
 if [[ -z "${CONCLAVE_BUILD_TARGET_OS:-}" ]] && [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
   ENGINE_NAME="conclave_cli_worker_engine.exe"
-  OUTPUT_NAME="conclave-service.exe"
+  OUTPUT_NAME="workspace.exe"
 fi
 
 command -v flutter >/dev/null 2>&1 || {

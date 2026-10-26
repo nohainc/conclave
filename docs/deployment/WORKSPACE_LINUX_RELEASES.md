@@ -1,6 +1,6 @@
 # Linux Workspace APT releases
 
-The headless install unit contains `conclave-service`, `conclave-workspace`, and
+The headless install unit contains `workspace`, `conclave-workspace`, and
 one canonical generic CLI Worker Engine. Provider CLIs are installed separately.
 The optional Flutter desktop bundle continues to use its existing Linux build.
 

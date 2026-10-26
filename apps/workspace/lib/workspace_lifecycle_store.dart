@@ -16,24 +16,6 @@ class WorkspaceLifecyclePreferencesStore {
   File get file => File(
       '${dataDirectory.path}${Platform.pathSeparator}workspace-lifecycle.json');
 
-  bool get needsRuntimeCredentialMigrationCheck {
-    if (!file.existsSync()) return true;
-    try {
-      final decoded = jsonDecode(file.readAsStringSync());
-      if (decoded is! Map) return true;
-      final version = decoded['schemaVersion'];
-      if (version is int && version >= currentSchemaVersion) return false;
-      return _parseDesiredRuntime(
-            decoded['desiredCloudState'] ??
-                decoded['desiredRuntimeState'] ??
-                decoded['desiredRuntime'],
-          ) ==
-          null;
-    } on Object {
-      return true;
-    }
-  }
-
   WorkspaceLifecyclePreferences readSync() {
     if (!file.existsSync()) return _defaults;
     try {
@@ -42,59 +24,12 @@ class WorkspaceLifecyclePreferencesStore {
       final map = Map<String, dynamic>.from(decoded);
       return _preferencesFromMap(
         map,
-        desiredRuntime: _parseDesiredRuntime(
-              map['desiredCloudState'] ??
-                  map['desiredRuntimeState'] ??
-                  map['desiredRuntime'],
-            ) ??
+        desiredRuntime: _parseDesiredRuntime(map['desiredCloudState']) ??
             DesiredRuntimeState.disconnected,
       );
     } on Object {
       return _defaults;
     }
-  }
-
-  /// Upgrades the unversioned lifecycle file once, preserving an explicit
-  /// disconnected marker. Older installs without saved intent reconnect only
-  /// when both the registration and its secure runtime credential exist.
-  Future<bool> migrateLegacyIfNeeded({
-    required bool hasRuntimeRegistrationAndCredential,
-  }) async {
-    if (!file.existsSync()) {
-      if (!hasRuntimeRegistrationAndCredential) return false;
-      await write(_defaults.copyWith(
-        desiredRuntime: DesiredRuntimeState.connected,
-      ));
-      return true;
-    }
-
-    Map<String, dynamic> decoded = const {};
-    try {
-      final value = jsonDecode(file.readAsStringSync());
-      if (value is Map) decoded = Map<String, dynamic>.from(value);
-    } on Object {
-      // A corrupt/unreadable legacy preference file has no trustworthy
-      // disconnected marker. Recover connected intent only from a complete
-      // local registration plus credential; otherwise use the safe default.
-    }
-
-    final version = decoded['schemaVersion'];
-    if (version is int && version >= currentSchemaVersion) return false;
-
-    final legacyDesired = _parseDesiredRuntime(
-      decoded['desiredCloudState'] ??
-          decoded['desiredRuntimeState'] ??
-          decoded['desiredRuntime'],
-    );
-    final preferences = _preferencesFromMap(
-      decoded,
-      desiredRuntime: legacyDesired ??
-          (hasRuntimeRegistrationAndCredential
-              ? DesiredRuntimeState.connected
-              : DesiredRuntimeState.disconnected),
-    );
-    await write(preferences);
-    return true;
   }
 
   Future<void> write(WorkspaceLifecyclePreferences preferences) async {
@@ -106,11 +41,7 @@ class WorkspaceLifecyclePreferencesStore {
       await temporary.writeAsString(
         jsonEncode({
           'schemaVersion': currentSchemaVersion,
-          // desiredCloudState is the authoritative name. Keep the older
-          // desiredRuntimeState key during the local-file migration window so
-          // older Workspace services continue to understand the intent.
           'desiredCloudState': preferences.desiredCloudState.name,
-          'desiredRuntimeState': preferences.desiredCloudState.name,
           'launchAtLogin': preferences.launchAtLogin,
           'preventSleep': preferences.preventSleep,
           'managementLockPreference': preferences.managementLockPreference.name,

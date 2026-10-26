@@ -13,7 +13,6 @@ import 'workspace.dart';
 import 'workspace_headless_auth.dart';
 import 'workspace_configuration.dart';
 import 'workspace_lifecycle.dart';
-import 'workspace_lifecycle_store.dart';
 import 'workspace_manager_ipc.dart';
 import 'local_worker_setup.dart';
 import 'workspace_registration.dart';
@@ -27,12 +26,14 @@ import 'worker_diagnostic_store.dart';
 class WorkspaceManagerService {
   static const _workerReadinessCommandTimeout = Duration(seconds: 40);
 
-  WorkspaceManagerService(
-    WorkspaceRuntime workspace, {
-    this.reloadRuntime,
-  }) : _workspace = workspace;
+  WorkspaceManagerService(WorkspaceRuntime workspace, {this.reloadRuntime})
+    : _workspace = workspace,
+      _desiredCloudState = workspace.config.connectOnStart
+          ? DesiredCloudConnectionState.connected
+          : DesiredCloudConnectionState.disconnected;
 
   WorkspaceRuntime _workspace;
+  DesiredCloudConnectionState _desiredCloudState;
   WorkspaceRuntime get workspace => _workspace;
   final Future<WorkspaceRuntime> Function()? reloadRuntime;
   final StreamController<Map<String, Object?>> _events =
@@ -92,7 +93,8 @@ class WorkspaceManagerService {
 
   Future<Map<String, Object?>> snapshot() async {
     final connection = workspace.cloudConnection;
-    final workers = await (workspace.workerSubsystem?.listWorkers() ??
+    final workers =
+        await (workspace.workerSubsystem?.listWorkers() ??
         workspace.localWorkerRegistry?.list() ??
         Future.value(const <LocalWorker>[]));
     final registration = WorkspaceRegistrationStore(
@@ -111,12 +113,10 @@ class WorkspaceManagerService {
       }
     }
     final activeIds = connection?.activeAssignmentIds ?? const <String>[];
-    final preferences = WorkspaceLifecyclePreferencesStore(
-      workspace.config.dataDirectory,
-    ).readSync();
     final processRunning = workspace.isRunning;
     final connectionStage = connection?.connectionStage;
-    final authenticated = connectionStage == WorkspaceConnectionStage.ready ||
+    final authenticated =
+        connectionStage == WorkspaceConnectionStage.ready ||
         connectionStage == WorkspaceConnectionStage.synchronizing ||
         connectionStage == WorkspaceConnectionStage.switchingToWebSocket;
     final synchronized = connection?.lastInventorySyncAt != null;
@@ -135,23 +135,30 @@ class WorkspaceManagerService {
     );
     final journalRecords =
         await connection?.assignmentJournal?.reconcile() ?? const {};
-    final recoveryRequired = journalRecords.values
+    final recoveryRequired =
+        journalRecords.values
         .where((record) => record.status == AssignmentStatus.interrupted)
-        .map((record) => {
+            .map(
+              (record) => {
               'assignmentId': record.assignmentId,
               'state': record.result?['recoveryState'] ?? 'outcome_unknown',
               'workerId': record.workerId,
               'updatedAt': record.updatedAt.toIso8601String(),
-            })
+              },
+            )
         .toList()
-      ..sort((left, right) => (left['assignmentId']! as String)
-          .compareTo(right['assignmentId']! as String));
+          ..sort(
+            (left, right) => (left['assignmentId']! as String).compareTo(
+              right['assignmentId']! as String,
+            ),
+          );
     return {
       'service': {
         // A service snapshot only exists after the process has been launched;
         // host registration remains authoritative in WorkspaceServiceInfo.
         'registered': processRunning,
-        'processState': state['processState'] ??
+        'processState':
+            state['processState'] ??
             (workspace.isRunning ? 'ready' : 'stopped'),
         'startedAt': state['startedAt'],
         'version': conclaveWorkspaceAppVersion,
@@ -164,31 +171,34 @@ class WorkspaceManagerService {
       },
       'cloud': {
         'state': WorkspaceServiceState.cloudStateFor(
-          configured: workspace.config.cloudUri != null &&
+          configured:
+              workspace.config.cloudUri != null &&
               workspace.config.workspaceId != null,
           authenticated: workspace.config.authToken?.isNotEmpty == true,
           stage: connection?.connectionStage,
         ).name,
         'lifecycleState': lifecycle.cloud.name,
         'connected': connection?.isConnected ?? false,
-        'desiredConnectionState': preferences.desiredCloudState.name,
+        'desiredConnectionState': _desiredCloudState.name,
         'connectionStage': connectionStage?.name ?? 'offline',
         'authenticated': authenticated,
         'synchronized': synchronized,
         'transport': connection?.activeTransportMode,
-        'acceptingNewWork': connection?.isConnected == true &&
+        'acceptingNewWork':
+            connection?.isConnected == true &&
             connection?.acceptingNewWork == true,
         'lastError': connection?.lastConnectionError,
         'reconnectCount': connection?.reconnectCount ?? 0,
-        'lastInventorySyncAt':
-            connection?.lastInventorySyncAt?.toIso8601String(),
+        'lastInventorySyncAt': connection?.lastInventorySyncAt
+            ?.toIso8601String(),
       },
       'workspace': {
         'workspaceId': workspace.config.workspaceId,
         'workspaceRuntimeId': workspace.config.workspaceRuntimeId,
         'name': registration?.name,
         'cloudUrl': registration?.cloudUrl,
-        'workRoot': workspace.workRoot?.path ??
+        'workRoot':
+            workspace.workRoot?.path ??
             workspace.config.workRootPath ??
             WorkRootResolver().defaultPath,
       },
@@ -217,7 +227,8 @@ class WorkspaceManagerService {
         CloudConnectionState.connecting,
       WorkspaceConnectionStage.reconnecting =>
         CloudConnectionState.reconnecting,
-      _ => connection?.lastConnectionError == null
+      _ =>
+        connection?.lastConnectionError == null
           ? CloudConnectionState.disconnected
           : CloudConnectionState.failed,
     };
@@ -225,7 +236,8 @@ class WorkspaceManagerService {
 
   Future<Map<String, Object?>> _slotSnapshot() async {
     final subsystem = workspace.workerSubsystem;
-    final slots = subsystem?.slotSnapshot() ??
+    final slots =
+        subsystem?.slotSnapshot() ??
         const <String, Object?>{'workers': <Object?>[], 'busySessions': 0};
     final names = <String, String>{};
     final workers =
@@ -237,8 +249,7 @@ class WorkspaceManagerService {
       'active': slots['active'] ?? 0,
       'queued': slots['queued'] ?? 0,
       // The configured total, not the last limit applied to an admission.
-      'limit': await (subsystem?.parallelSlots() ??
-          Future.value(defaultLocalWorkerConcurrency)),
+      'limit': workspace.config.parallelSlots,
       'workers': [
         for (final raw in (slots['workers'] as List).whereType<Map>())
           {
@@ -253,15 +264,18 @@ class WorkspaceManagerService {
   }
 
   Map<String, Object?> _workerCatalogSnapshot() {
-    final checks = workspace.workerReadinessMonitor?.checks ??
+    final checks =
+        workspace.workerReadinessMonitor?.checks ??
         const <String, WorkerCheckProgress>{};
     final checkJson = checks.map((key, value) => MapEntry(key, value.toJson()));
-    final catalog = (workspace.workerSubsystem?.catalog ??
+    final catalog =
+        (workspace.workerSubsystem?.catalog ??
             workspace.workerCatalogCoordinator)
         ?.snapshot;
     if (catalog == null) {
       return {
-        'descriptors': workspace.toolProfileCatalog?.workers
+        'descriptors':
+            workspace.toolProfileCatalog?.workers
                 .map((descriptor) => descriptor.toJson())
                 .toList() ??
             const [],
@@ -273,10 +287,12 @@ class WorkspaceManagerService {
     }
     return {
       'checks': checkJson,
-      'descriptors':
-          catalog.descriptors.map((descriptor) => descriptor.toJson()).toList(),
+      'descriptors': catalog.descriptors
+          .map((descriptor) => descriptor.toJson())
+          .toList(),
       'views': catalog.workers
-          .map((view) => {
+          .map(
+            (view) => {
                 if (view.descriptor != null)
                   'descriptor': view.descriptor!.toJson(),
                 'catalogRetired': view.catalogRetired,
@@ -287,7 +303,8 @@ class WorkspaceManagerService {
                 'profileMessage': view.profileAvailability.message,
                 'profileDetails': view.profileAvailability.details,
                 'providerToolState': view.providerToolState.name,
-              })
+            },
+          )
           .toList(),
       'catalogConfirmed': catalog.catalogConfirmed,
       'catalogError': catalog.catalogError,
@@ -305,8 +322,10 @@ class WorkspaceManagerService {
   void _rejectRemovingWorker(Object? workerId) {
     if (workerId is String &&
         (workspace.workerSubsystem?.isRemoving(workerId) ?? false)) {
-      throw const WorkspaceManagerProtocolException('worker_removing',
-          'This Worker is being removed after its current work finishes.');
+      throw const WorkspaceManagerProtocolException(
+        'worker_removing',
+        'This Worker is being removed after its current work finishes.',
+      );
     }
   }
 
@@ -369,10 +388,12 @@ class WorkspaceManagerService {
         }
         final before = _nested(previous, 'assignments', 'activeIds');
         final after = _nested(current, 'assignments', 'activeIds');
-        final beforeIds =
-            before is List ? before.cast<String>().toSet() : <String>{};
-        final afterIds =
-            after is List ? after.cast<String>().toSet() : <String>{};
+        final beforeIds = before is List
+            ? before.cast<String>().toSet()
+            : <String>{};
+        final afterIds = after is List
+            ? after.cast<String>().toSet()
+            : <String>{};
         for (final id in afterIds.difference(beforeIds)) {
           _events.add({'name': 'assignment.started', 'assignmentId': id});
         }
@@ -402,30 +423,30 @@ class WorkspaceManagerService {
         if (reloadRuntime == null ||
             (connection?.activeAssignmentCount ?? 0) > 0 ||
             connection?.isConnected == true) {
-          throw const WorkspaceManagerProtocolException('login_not_ready',
-              'Disconnect Cloud and finish active work before signing in.');
+          throw const WorkspaceManagerProtocolException(
+            'login_not_ready',
+            'Disconnect Cloud and finish active work before signing in.',
+          );
         }
-        final registration =
-            WorkspaceRegistrationStore(workspace.config.dataDirectory)
-                .readSync();
         _headlessAuth ??= WorkspaceHeadlessAuth(
           dataDirectory: workspace.config.dataDirectory,
-          cloudUrl: resolveWorkspaceCloudUrl(registration?.cloudUrl ??
-              (workspace.config.cloudUri == null
-                  ? null
-                  : WorkspaceConfigurationResolver.cloudHttpOrigin(
-                      workspace.config.cloudUri!))),
+          cloudUrl: WorkspaceConfigurationResolver.cloudHttpOrigin(
+            workspace.config.cloudUri!,
+          ),
           credentialStore: workspace.credentialStore,
           reloadRuntime: _reloadRuntime,
         );
         if ((payload['email'] != null && payload['email'] is! String) ||
             (payload['password'] != null && payload['password'] is! String)) {
           throw const WorkspaceManagerProtocolException(
-              'invalid_login', 'Email and password must be text.');
+            'invalid_login',
+            'Email and password must be text.',
+          );
         }
         return _headlessAuth!.start(
             email: payload['email'] as String?,
-            password: payload['password'] as String?);
+          password: payload['password'] as String?,
+        );
       case 'auth.status':
         return _headlessAuth?.status() ?? const {'phase': 'idle'};
       case 'auth.cancel':
@@ -460,8 +481,10 @@ class WorkspaceManagerService {
       case 'connection.connect':
       case 'connection.reconnect':
         if (connection == null) {
-          throw const WorkspaceManagerProtocolException('not_configured',
-              'Workspace Cloud connection is not configured.');
+          throw const WorkspaceManagerProtocolException(
+            'not_configured',
+            'Workspace Cloud connection is not configured.',
+          );
         }
         connection.validateConfiguration();
         if (connection.connectionStage == WorkspaceConnectionStage.ready &&
@@ -511,11 +534,14 @@ class WorkspaceManagerService {
         if (registry == null && workerSubsystem == null) return const [];
         final workerId = payload['workerId'];
         if (workerId is String) {
-          final worker = await (workerSubsystem?.resolveWorker(workerId) ??
+          final worker =
+              await (workerSubsystem?.resolveWorker(workerId) ??
               registry?.find(workerId));
           if (worker == null) {
             throw const WorkspaceManagerProtocolException(
-                'worker_not_found', 'Worker does not exist.');
+              'worker_not_found',
+              'Worker does not exist.',
+            );
           }
           return worker.toJson();
         }
@@ -528,7 +554,9 @@ class WorkspaceManagerService {
         if (registry == null) return snapshot();
         if ((connection?.activeAssignmentCount ?? 0) > 0) {
           throw const WorkspaceManagerProtocolException(
-              'assignments_active', 'Wait for active work to finish first.');
+            'assignments_active',
+            'Wait for active work to finish first.',
+          );
         }
         await (workerSubsystem?.reset() ?? registry.reset());
         return snapshot();
@@ -540,7 +568,9 @@ class WorkspaceManagerService {
         final refreshType = payload['workerTypeId'];
         if (refreshType is! String || refreshType.isEmpty) {
           throw const WorkspaceManagerProtocolException(
-              'invalid_request', 'workerTypeId is required.');
+            'invalid_request',
+            'workerTypeId is required.',
+          );
         }
         await (workerSubsystem?.refreshWorker(refreshType) ??
             workspace.workerCatalogCoordinator?.refreshWorker(refreshType));
@@ -549,7 +579,9 @@ class WorkspaceManagerService {
         final workerTypeId = payload['workerTypeId'];
         if (workerTypeId is! String) {
           throw const WorkspaceManagerProtocolException(
-              'invalid_request', 'workerTypeId is required.');
+            'invalid_request',
+            'workerTypeId is required.',
+          );
         }
         await (workerSubsystem?.ensureProfile(
               workerTypeId,
@@ -564,7 +596,9 @@ class WorkspaceManagerService {
         final workerTypeId = payload['workerTypeId'];
         if (workerTypeId is! String || registry == null) {
           throw const WorkspaceManagerProtocolException(
-              'invalid_request', 'workerTypeId is required.');
+            'invalid_request',
+            'workerTypeId is required.',
+          );
         }
         final coordinator = workspace.workerCatalogCoordinator;
         if (coordinator == null) {
@@ -574,11 +608,15 @@ class WorkspaceManagerService {
           );
         }
         final removing = workerSubsystem?.removingWorkerIds ?? const {};
-        if ((await registry.list()).any((worker) =>
+        if ((await registry.list()).any(
+          (worker) =>
             worker.workerTypeId == workerTypeId &&
-            removing.contains(worker.id))) {
-          throw const WorkspaceManagerProtocolException('worker_removing',
-              'This Worker is being removed. Add it again after removal finishes.');
+              removing.contains(worker.id),
+        )) {
+          throw const WorkspaceManagerProtocolException(
+            'worker_removing',
+            'This Worker is being removed. Add it again after removal finishes.',
+          );
         }
         var descriptor = coordinator.entryForWorker(workerTypeId);
         if (descriptor == null) {
@@ -586,8 +624,10 @@ class WorkspaceManagerService {
           descriptor = coordinator.entryForWorker(workerTypeId);
         }
         if (descriptor == null) {
-          throw const WorkspaceManagerProtocolException('worker_not_found',
-              'Worker is not in the approved Cloud catalog.');
+          throw const WorkspaceManagerProtocolException(
+            'worker_not_found',
+            'Worker is not in the approved Cloud catalog.',
+          );
         }
         final worker = await LocalWorkerSetupService(registry: registry)
             .createCatalogWorker(
@@ -602,17 +642,22 @@ class WorkspaceManagerService {
             () => workspace.workerReadinessMonitor?.checkNow(
                   mode: LocalWorkerProbeMode.passive,
                   workerTypeId: workerTypeId,
-                ));
+          ),
+        );
         return (await registry.find(worker.id))?.toJson();
       case 'workers.removeWorker':
         final removeId = payload['workerId'];
         if (removeId is! String || removeId.isEmpty) {
           throw const WorkspaceManagerProtocolException(
-              'invalid_request', 'workerId is required.');
+            'invalid_request',
+            'workerId is required.',
+          );
         }
         if (workerSubsystem == null) {
           throw const WorkspaceManagerProtocolException(
-              'not_configured', 'Local Worker registry is not available.');
+            'not_configured',
+            'Local Worker registry is not available.',
+          );
         }
         final removed = await workerSubsystem.removeWorker(removeId);
         return {
@@ -624,12 +669,16 @@ class WorkspaceManagerService {
         _rejectRemovingWorker(payload['workerId']);
         if (registry == null) {
           throw const WorkspaceManagerProtocolException(
-              'not_configured', 'Local Worker registry is not available.');
+            'not_configured',
+            'Local Worker registry is not available.',
+          );
         }
         final workerId = payload['workerId'];
         if (workerId is! String) {
           throw const WorkspaceManagerProtocolException(
-              'invalid_request', 'workerId is required.');
+            'invalid_request',
+            'workerId is required.',
+          );
         }
         final worker = command == 'workers.disableWorker'
             ? await (workerSubsystem?.disableWorker(workerId) ??
@@ -650,7 +699,9 @@ class WorkspaceManagerService {
                 ));
         if (worker == null) {
           throw const WorkspaceManagerProtocolException(
-              'worker_not_found', 'Worker does not exist.');
+            'worker_not_found',
+            'Worker does not exist.',
+          );
         }
         return worker.toJson();
       case 'workers.testWorker':
@@ -659,13 +710,18 @@ class WorkspaceManagerService {
         final workerId = payload['workerId'];
         if (workerId is! String || registry == null) {
           throw const WorkspaceManagerProtocolException(
-              'invalid_request', 'workerId is required.');
+            'invalid_request',
+            'workerId is required.',
+          );
         }
-        final worker = await (workerSubsystem?.resolveWorker(workerId) ??
+        final worker =
+            await (workerSubsystem?.resolveWorker(workerId) ??
             registry.find(workerId));
         if (worker == null) {
           throw const WorkspaceManagerProtocolException(
-              'worker_not_found', 'Worker does not exist.');
+            'worker_not_found',
+            'Worker does not exist.',
+          );
         }
         final tested = await _runWorkerReadinessResult(
           workerSubsystem?.testWorker(workerId) ??
@@ -682,12 +738,15 @@ class WorkspaceManagerService {
         final workerTypeId = payload['workerTypeId'];
         if (workerTypeId != null && workerTypeId is! String) {
           throw const WorkspaceManagerProtocolException(
-              'invalid_request', 'workerTypeId must be a string.');
+            'invalid_request',
+            'workerTypeId must be a string.',
+          );
         }
         final mode = payload['mode'] == 'live'
             ? LocalWorkerProbeMode.live
             : LocalWorkerProbeMode.passive;
-        await _runWorkerReadiness(() =>
+        await _runWorkerReadiness(
+          () =>
             workerSubsystem?.refreshReadiness(
               mode: mode,
               workerTypeId: workerTypeId as String?,
@@ -695,34 +754,26 @@ class WorkspaceManagerService {
             workspace.workerReadinessMonitor?.checkNow(
               mode: mode,
               workerTypeId: workerTypeId as String?,
-            ));
+              ),
+        );
         return snapshot();
       case 'workers.rollbackProfile':
         final workerTypeId = payload['workerTypeId'];
         if (workerTypeId is! String) {
           throw const WorkspaceManagerProtocolException(
-              'invalid_request', 'workerTypeId is required.');
+            'invalid_request',
+            'workerTypeId is required.',
+          );
         }
         final passed = workerSubsystem != null
             ? await workerSubsystem.rollbackProfile(workerTypeId)
-            : await workspace.workerReadinessMonitor
-                    ?.rollbackToolProfile(workerTypeId) ??
+            : await workspace.workerReadinessMonitor?.rollbackToolProfile(
+                    workerTypeId,
+                  ) ??
                 false;
         return {'passed': passed, 'snapshot': await snapshot()};
       case 'execution.getSlots':
         return _slotSnapshot();
-      case 'execution.setParallelSlots':
-        {
-          final slots = payload['slots'];
-          if (slots is! int ||
-              slots < minParallelSlots ||
-              slots > maxParallelSlots) {
-            throw WorkspaceManagerProtocolException('invalid_request',
-                'slots must be between $minParallelSlots and $maxParallelSlots.');
-          }
-          await workerSubsystem?.setParallelSlots(slots);
-          return _slotSnapshot();
-        }
       case 'execution.resetSlots':
         {
           // Stop what is running or waiting, then discard bookkeeping that did
@@ -751,7 +802,9 @@ class WorkspaceManagerService {
         final assignmentId = payload['assignmentId'];
         if (assignmentId is! String) {
           throw const WorkspaceManagerProtocolException(
-              'invalid_request', 'assignmentId is required.');
+            'invalid_request',
+            'assignmentId is required.',
+          );
         }
         final cancelled =
             await connection?.cancelActiveAssignment(assignmentId) ?? false;
@@ -759,18 +812,16 @@ class WorkspaceManagerService {
       case 'configuration.get':
         return {
           'workspace': await snapshot().then((value) => value['workspace']),
-          'workRoot': workspace.workRoot?.path ??
+          'workRoot':
+              workspace.workRoot?.path ??
               workspace.config.workRootPath ??
               WorkRootResolver().defaultPath,
+          'settingsFile': workspace.config.settingsFile?.path,
+          'folders': workspace.config.folders,
+          'parallelSlots': workspace.config.parallelSlots,
+          'serviceEnabled': workspace.config.serviceEnabled,
+          'connectOnStart': workspace.config.connectOnStart,
         };
-      case 'configuration.update':
-        throw const WorkspaceManagerProtocolException(
-          'service_running',
-          'Stop the service and change Work Root in Workspace.app.',
-        );
-      case 'configuration.reload':
-        await _reloadRuntime();
-        return snapshot();
       case 'diagnostics.getLogs':
         return {'text': await _readLogTail()};
       case 'diagnostics.getMetrics':
@@ -807,10 +858,16 @@ class WorkspaceManagerService {
           if (path is! String ||
               (displayName != null && displayName is! String)) {
             throw const WorkspaceManagerProtocolException(
-                'invalid_request', 'path is required.');
+              'invalid_request',
+              'path is required.',
+            );
           }
-          final folder = await _allowedFolderCall(() =>
-              _allowedFolders().add(path, displayName: displayName as String?));
+          final folder = await _allowedFolderCall(
+            () => _allowedFolders().add(
+              path,
+              displayName: displayName as String?,
+            ),
+          );
           return folder.toJson();
         }
       case 'folders.remove':
@@ -818,7 +875,9 @@ class WorkspaceManagerService {
           final id = payload['folderId'];
           if (id is! String) {
             throw const WorkspaceManagerProtocolException(
-                'invalid_request', 'folderId is required.');
+              'invalid_request',
+              'folderId is required.',
+            );
           }
           // Only the allowance is forgotten; the folder stays on disk.
           return {'removed': await _allowedFolders().remove(id)};
@@ -829,13 +888,18 @@ class WorkspaceManagerService {
           final displayName = payload['displayName'];
           if (id is! String || displayName is! String) {
             throw const WorkspaceManagerProtocolException(
-                'invalid_request', 'folderId and displayName are required.');
+              'invalid_request',
+              'folderId and displayName are required.',
+            );
           }
           final folder = await _allowedFolderCall(
-              () => _allowedFolders().rename(id, displayName));
+            () => _allowedFolders().rename(id, displayName),
+          );
           if (folder == null) {
             throw const WorkspaceManagerProtocolException(
-                'folder_not_found', 'Folder is not allowed.');
+              'folder_not_found',
+              'Folder is not allowed.',
+            );
           }
           return folder.toJson();
         }
@@ -844,10 +908,13 @@ class WorkspaceManagerService {
           final id = payload['folderId'];
           if (id != null && id is! String) {
             throw const WorkspaceManagerProtocolException(
-                'invalid_request', 'folderId must be a string.');
+              'invalid_request',
+              'folderId must be a string.',
+            );
           }
           return _allowedFolderSnapshot(
-              await _allowedFolders().recheck(id: id as String?));
+            await _allowedFolders().recheck(id: id as String?),
+          );
         }
       default:
         throw WorkspaceManagerProtocolException(
@@ -864,9 +931,11 @@ class WorkspaceManagerService {
     final paths = WorkspacePaths(workspace.config.dataDirectory);
     return _allowedFolderRegistry ??= AllowedFolderRegistry(
       registryDirectory: paths.spaceDirectoryRegistryDirectory,
-      workRoot: workspace.workRoot ??
+      workRoot:
+          workspace.workRoot ??
           Directory(
-              workspace.config.workRootPath ?? WorkRootResolver().defaultPath),
+            workspace.config.workRootPath ?? WorkRootResolver().defaultPath,
+          ),
       applicationDataRoot: paths.applicationDataRoot,
       homeDirectory: currentPlatformRuntime.homeDirectory,
     );
@@ -893,11 +962,9 @@ class WorkspaceManagerService {
   }
 
   Future<void> _setDesiredCloudState(
-      DesiredCloudConnectionState desired) async {
-    final store = WorkspaceLifecyclePreferencesStore(
-      workspace.config.dataDirectory,
-    );
-    await store.write(store.readSync().copyWith(desiredCloudState: desired));
+    DesiredCloudConnectionState desired,
+  ) async {
+    _desiredCloudState = desired;
   }
 
   Future<void> _runWorkerReadiness(Future<void>? Function() operation) async {
@@ -942,20 +1009,17 @@ class WorkspaceManagerService {
     await current.stop();
     try {
       final replacement = await rebuild();
-      final desired = WorkspaceLifecyclePreferencesStore(
-        replacement.config.dataDirectory,
-      ).readSync().desiredCloudState;
       await replacement.start(connectCloud: false);
       _workspace = replacement;
       _allowedFolderRegistry = null;
       _bindWorkspaceEvents(replacement);
-      if (desired == DesiredCloudConnectionState.connected) {
+      if (_desiredCloudState == DesiredCloudConnectionState.connected) {
         // Completing configuration reload means the local runtime is ready,
         // not that Cloud is reachable. Its transport owns retry/backoff.
-        unawaited(replacement.cloudConnection?.connect().catchError(
-                  (Object _) {},
-                ) ??
-            Future<void>.value());
+        unawaited(
+          replacement.cloudConnection?.connect().catchError((Object _) {}) ??
+              Future<void>.value(),
+        );
       }
     } on Object {
       throw const WorkspaceManagerProtocolException(
@@ -983,8 +1047,10 @@ class WorkspaceManagerService {
     final handle = await file.open();
     try {
       await handle.setPosition(start);
-      return utf8.decode(await handle.read(length - start),
-          allowMalformed: true);
+      return utf8.decode(
+        await handle.read(length - start),
+        allowMalformed: true,
+      );
     } finally {
       await handle.close();
     }

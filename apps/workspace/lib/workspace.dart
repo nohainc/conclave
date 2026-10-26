@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'cloud_connection.dart';
 import 'local_worker_registry.dart';
+import 'local_worker_permissions.dart';
 import 'workspace_configuration.dart';
 import 'secure_credentials.dart';
 import 'platform_runtime.dart';
@@ -30,9 +31,8 @@ export 'space_directory.dart';
 export 'workspace_worker_subsystem.dart';
 
 typedef WorkspaceStatusProvider = Future<Map<String, Object?>> Function();
-typedef WorkspaceUpdateHandler = Future<Map<String, Object?>> Function(
-  Map<String, Object?> request,
-);
+typedef WorkspaceUpdateHandler =
+    Future<Map<String, Object?>> Function(Map<String, Object?> request);
 
 class WorkspaceConfig {
   const WorkspaceConfig({
@@ -43,6 +43,11 @@ class WorkspaceConfig {
     this.workspaceId,
     this.authToken,
     this.workRootPath,
+    this.serviceEnabled = true,
+    this.connectOnStart = false,
+    this.parallelSlots = defaultLocalWorkerConcurrency,
+    this.folders = const {},
+    this.settingsFile,
   });
 
   final Directory dataDirectory;
@@ -52,6 +57,11 @@ class WorkspaceConfig {
   final String? workspaceId;
   final String? authToken;
   final String? workRootPath;
+  final bool serviceEnabled;
+  final bool connectOnStart;
+  final int parallelSlots;
+  final Map<String, String> folders;
+  final File? settingsFile;
 
   WorkRootResolver get workRootResolver =>
       WorkRootResolver(overridePath: workRootPath);
@@ -74,6 +84,11 @@ class WorkspaceConfig {
       workspaceId: resolved.workspaceId,
       authToken: resolved.credentials.runtimeToken,
       workRootPath: resolved.workRootPath,
+      serviceEnabled: resolved.settings.serviceEnabled,
+      connectOnStart: resolved.settings.connectOnStart,
+      parallelSlots: resolved.settings.parallelSlots,
+      folders: resolved.settings.folders,
+      settingsFile: resolved.settingsFile,
     );
   }
 
@@ -83,8 +98,11 @@ class WorkspaceConfig {
 }
 
 class WorkspaceLogger {
-  WorkspaceLogger(this._output,
-      {this.redact = _identity, this.context = const {}});
+  WorkspaceLogger(
+    this._output, {
+    this.redact = _identity,
+    this.context = const {},
+  });
   IOSink _output;
   final String Function(String) redact;
   final Map<String, Object?> context;
@@ -123,9 +141,10 @@ class WorkspaceLogger {
       return <String, Object?>{
         for (final entry in value.entries.take(80))
           entry.key.toString():
-              RegExp(r'(secret|token|password|api[_-]?key|authorization|cookie|raw[_-]?credential|private[_-]?key)',
-                          caseSensitive: false)
-                      .hasMatch(entry.key.toString())
+              RegExp(
+                r'(secret|token|password|api[_-]?key|authorization|cookie|raw[_-]?credential|private[_-]?key)',
+                caseSensitive: false,
+              ).hasMatch(entry.key.toString())
                   ? '[redacted]'
                   : _sanitize(entry.value, depth: depth + 1),
       };
@@ -156,22 +175,28 @@ class WorkspaceRuntime {
   })  : _configuredLogOutput = logOutput,
         credentialStore =
             credentialStore ?? const PlatformSecureCredentialStore(),
-        localWorkerRegistry = localWorkerRegistry ??
+       localWorkerRegistry =
+           localWorkerRegistry ??
             (config.workspaceId == null
                 ? null
                 : LocalWorkerRegistry(
                     dataDirectory: config.dataDirectory,
                     workspaceId: config.workspaceId!,
                   )),
-        _log = WorkspaceLogger(logOutput ?? stdout,
+       _log = WorkspaceLogger(
+         logOutput ?? stdout,
             redact: redactLog ?? WorkspaceLogger._identity,
             context: {
               'serviceVersion': conclaveWorkspaceAppVersion,
               if (config.workspaceId != null) 'workspaceId': config.workspaceId,
-            }) {
+         },
+       ) {
     if (logFileMaxBytes <= 0) {
       throw ArgumentError.value(
-          logFileMaxBytes, 'logFileMaxBytes', 'must be positive');
+        logFileMaxBytes,
+        'logFileMaxBytes',
+        'must be positive',
+      );
     }
   }
 
@@ -214,8 +239,9 @@ class WorkspaceRuntime {
       config.dataDirectory.path,
       directory: true,
     );
-    final lockFile = WorkspacePaths(config.dataDirectory)
-        .installationLockFile(config.installationId);
+    final lockFile = WorkspacePaths(
+      config.dataDirectory,
+    ).installationLockFile(config.installationId);
     try {
       _lock = await lockFile.open(mode: FileMode.writeOnlyAppend);
       await _lock!.lock(FileLock.exclusive);
@@ -278,8 +304,10 @@ class WorkspaceRuntime {
       await _ownedLogOutput?.close();
       _ownedLogOutput = null;
       if (_configuredLogOutput == null) _log.attach(stdout);
-      await _writeServiceState(WorkspaceServiceProcessState.failed,
-          failure: error.toString());
+      await _writeServiceState(
+        WorkspaceServiceProcessState.failed,
+        failure: error.toString(),
+      );
       rethrow;
     }
     if (connectCloud) {
@@ -329,10 +357,13 @@ class WorkspaceRuntime {
     if (_configuredLogOutput == null) _log.attach(stdout);
   }
 
-  Future<void> _writeServiceState(WorkspaceServiceProcessState processState,
-      {String? failure}) {
+  Future<void> _writeServiceState(
+    WorkspaceServiceProcessState processState, {
+    String? failure,
+  }) {
     final connection = cloudConnection;
-    final nextWrite = _stateWriteQueue.then((_) => writeWorkspaceServiceState(
+    final nextWrite = _stateWriteQueue.then(
+      (_) => writeWorkspaceServiceState(
           config.dataDirectory,
           WorkspaceServiceState(
             processState: processState,
@@ -350,7 +381,8 @@ class WorkspaceRuntime {
             activeAssignments: connection?.activeAssignmentCount ?? 0,
             failure: failure,
           ),
-        ));
+      ),
+    );
     _stateWriteQueue = nextWrite.catchError((Object _) {});
     return nextWrite;
   }
@@ -358,15 +390,19 @@ class WorkspaceRuntime {
   Future<IOSink> _openLogFile() async {
     final logsDirectory = WorkspacePaths(config.dataDirectory).logsDirectory;
     await logsDirectory.create(recursive: true);
-    await currentPlatformRuntime.restrictPermissions(logsDirectory.path,
-        directory: true);
+    await currentPlatformRuntime.restrictPermissions(
+      logsDirectory.path,
+      directory: true,
+    );
     final current = File('${logsDirectory.path}/workspace.log');
     if (await current.exists() && await current.length() >= logFileMaxBytes) {
       await _rotateLogFile(current);
     }
     await current.create();
-    await currentPlatformRuntime.restrictPermissions(current.path,
-        directory: false);
+    await currentPlatformRuntime.restrictPermissions(
+      current.path,
+      directory: false,
+    );
     return current.openWrite(mode: FileMode.append);
   }
 
@@ -381,8 +417,10 @@ class WorkspaceRuntime {
     _ownedLogOutput = null;
     await _rotateLogFile(current);
     await current.create();
-    await currentPlatformRuntime.restrictPermissions(current.path,
-        directory: false);
+    await currentPlatformRuntime.restrictPermissions(
+      current.path,
+      directory: false,
+    );
     _ownedLogOutput = current.openWrite(mode: FileMode.append);
     _log.attach(_ownedLogOutput!);
   }

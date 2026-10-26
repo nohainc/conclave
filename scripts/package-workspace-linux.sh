@@ -14,7 +14,7 @@ node "$ROOT/scripts/workspace-build-manifest.mjs" verify "$BUNDLE" "$VERSION"
 python3 - "$BUNDLE" "$ELF_MACHINE" <<'PY'
 import pathlib, struct, sys
 root, machine = pathlib.Path(sys.argv[1]), int(sys.argv[2])
-for name in ('conclave-service', 'conclave-workspace', 'assets/engines/conclave_cli_worker_engine'):
+for name in ('workspace', 'conclave-workspace', 'assets/engines/conclave_cli_worker_engine'):
     path = root / name
     header = path.read_bytes()[:20]
     if header[:6] != b'\x7fELF\x02\x01' or struct.unpack('<H', header[18:20])[0] != machine:
@@ -24,11 +24,11 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 PAYLOAD="$STAGE/usr/lib/conclave-workspace"
 mkdir -p "$STAGE/DEBIAN" "$PAYLOAD/assets/engines" "$STAGE/usr/bin" "$STAGE/usr/share/doc/conclave-workspace"
-install -m 755 "$BUNDLE/conclave-service" "$BUNDLE/conclave-workspace" "$PAYLOAD/"
+install -m 755 "$BUNDLE/workspace" "$BUNDLE/conclave-workspace" "$PAYLOAD/"
 install -m 755 "$BUNDLE/assets/engines/conclave_cli_worker_engine" "$PAYLOAD/assets/engines/"
 # Symlinks keep Platform.resolvedExecutable beside the service and Engine.
 ln -s ../lib/conclave-workspace/conclave-workspace "$STAGE/usr/bin/conclave-workspace"
-ln -s ../lib/conclave-workspace/conclave-service "$STAGE/usr/bin/conclave-service"
+ln -s ../lib/conclave-workspace/workspace "$STAGE/usr/bin/workspace"
 install -m 644 "$ROOT/docs/operations/WORKSPACE_LINUX.md" "$STAGE/usr/share/doc/conclave-workspace/README.md"
 cat > "$STAGE/DEBIAN/control" <<CONTROL
 Package: conclave-workspace

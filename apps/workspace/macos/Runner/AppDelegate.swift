@@ -9,7 +9,7 @@ private enum WorkspaceBackgroundService {
   static let launchAgentLabel =
     "\(Bundle.main.bundleIdentifier ?? "com.conclaveax.workspace").service"
   static let launchAgentPlist = "\(launchAgentLabel).plist"
-  static let helperRelativePath = "Contents/Helpers/conclave-service"
+  static let helperRelativePath = "Contents/Helpers/workspace"
   static let engineRelativePath =
     "Contents/Helpers/assets/engines/conclave_cli_worker_engine"
 

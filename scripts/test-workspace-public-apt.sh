@@ -36,7 +36,8 @@ APT_ARGS=(-o "Dir::Etc::sourcelist=$TEMP/conclave.sources" -o 'Dir::Etc::sourcep
 sudo apt-get "${APT_ARGS[@]}" update
 sudo apt-get "${APT_ARGS[@]}" install --no-install-recommends -y "conclave-workspace=$CONCLAVE_WORKSPACE_VERSION"
 installed=1
-CONCLAVE_WORKSPACE_SECRET_STORE='file' conclave-service --data-dir "$TEMP/state" --work-root "$TEMP/work" > "$TEMP/service.log" 2>&1 &
+mkdir -p "$TEMP/home"
+HOME="$TEMP/home" CONCLAVE_WORKSPACE_SECRET_STORE='file' workspace --data-dir "$TEMP/state" > "$TEMP/service.log" 2>&1 &
 service_pid=$!
 ready=0
 for _ in $(seq 1 60); do

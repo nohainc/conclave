@@ -14,11 +14,12 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
     File? executable,
     Directory? unitDirectory,
     SystemctlRunner? systemctl,
-  })  : dataDirectory = dataDirectory ??
+  }) : dataDirectory =
+           dataDirectory ??
             WorkspaceConfigurationResolver.resolveDataDirectory(const []),
-        executable = executable ??
-            File(
-                '${File(Platform.resolvedExecutable).parent.path}/conclave-service'),
+       executable =
+           executable ??
+           File('${File(Platform.resolvedExecutable).parent.path}/workspace'),
         unitDirectory = unitDirectory ?? defaultUnitDirectory(),
         _systemctl = systemctl ?? _runSystemctl;
 
@@ -35,9 +36,10 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
     return Directory('$base/systemd/user');
   }
 
-  static Future<ProcessResult> _runSystemctl(List<String> args) =>
-      Process.run('systemctl', ['--user', ...args])
-          .timeout(const Duration(seconds: 30));
+  static Future<ProcessResult> _runSystemctl(List<String> args) => Process.run(
+    'systemctl',
+    ['--user', ...args],
+  ).timeout(const Duration(seconds: 30));
 
   Future<String> _unitName() async {
     await dataDirectory.create(recursive: true);
@@ -45,7 +47,7 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
     if (!RegExp(r'^[A-Za-z0-9._-]{8,128}$').hasMatch(id)) {
       throw StateError('Invalid installation identity');
     }
-    return 'conclave-workspace-$id.service';
+    return 'workspace-$id.service';
   }
 
   /// Quotes one ExecStart word. systemd expands `%` specifiers and `$`
@@ -80,7 +82,8 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
     return path.replaceAll(r'\', r'\\').replaceAll('%', '%%');
   }
 
-  String unitContents() => '''
+  String unitContents() =>
+      '''
 [Unit]
 Description=Conclave Workspace Service
 After=network-online.target
@@ -107,7 +110,8 @@ WantedBy=default.target
     final result = await _systemctl(args);
     if (result.exitCode != 0) {
       throw StateError(
-          'systemctl --user ${args.join(' ')} failed: ${result.stderr}'.trim());
+        'systemctl --user ${args.join(' ')} failed: ${result.stderr}'.trim(),
+      );
     }
   }
 
@@ -120,7 +124,8 @@ WantedBy=default.target
     if (!lines.contains(expected)) {
       throw StateError(
           'Registered service ${unit.path} points to a different service; '
-          'preserve state and unregister it explicitly first.');
+        'preserve state and unregister it explicitly first.',
+      );
     }
   }
 
@@ -151,13 +156,14 @@ WantedBy=default.target
       helperPresent: executable.existsSync(),
       plistPresent: unit.existsSync(),
       enginePresent: File(
-              '${executable.parent.path}/assets/engines/conclave_cli_worker_engine')
-          .existsSync(),
+        '${executable.parent.path}/assets/engines/conclave_cli_worker_engine',
+      ).existsSync(),
       registration: unit.existsSync() && values['UnitFileState'] == 'enabled'
           ? ServiceInstallationState.registered
           : ServiceInstallationState.notRegistered,
-      process:
-          running ? ServiceRuntimeState.running : ServiceRuntimeState.stopped,
+      process: running
+          ? ServiceRuntimeState.running
+          : ServiceRuntimeState.stopped,
       pid: pid == null || pid == 0 ? null : pid,
       launchdState: values['SubState'] ?? active ?? 'unknown',
       lastExitCode: int.tryParse(values['ExecMainStatus'] ?? ''),

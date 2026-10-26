@@ -15,7 +15,7 @@ $Sentinel = [guid]::NewGuid().ToString()
 Set-Content $State $Sentinel
 Run-Setup
 $Engine = 'assets/engines/conclave_cli_worker_engine.exe'
-foreach ($File in @('conclave_workspace.exe', 'conclave-service.exe', $Engine)) {
+foreach ($File in @('conclave_workspace.exe', 'workspace.exe', $Engine)) {
     if ((Get-FileHash (Join-Path $Target $File)).Hash -ne
         (Get-FileHash (Join-Path $Root "dist/conclave-workspace/windows/release/$File")).Hash) {
         throw "Installed file mismatch: $File"
@@ -24,7 +24,7 @@ foreach ($File in @('conclave_workspace.exe', 'conclave-service.exe', $Engine)) 
 $PreviousService = $env:CONCLAVE_TEST_WINDOWS_SERVICE
 Push-Location (Join-Path $Root 'apps/workspace')
 try {
-    $env:CONCLAVE_TEST_WINDOWS_SERVICE = Join-Path $Target 'conclave-service.exe'
+    $env:CONCLAVE_TEST_WINDOWS_SERVICE = Join-Path $Target 'workspace.exe'
     flutter test test/windows_service_lifecycle_test.dart
     if ($LASTEXITCODE -ne 0) { throw 'Installed service lifecycle test failed.' }
 } finally {

@@ -44,6 +44,26 @@ asking for a password. The runtime credential persists across logout and service
 restart; it is independent of the management session's expiry. No browser is
 needed on the server and no public inbound port is opened.
 
+## Configure the service
+
+The package creates `<state>/workspace.nano` on first setup. Inspect and
+validate it with:
+
+```bash
+conclave-workspace config path
+conclave-workspace config show
+conclave-workspace config validate
+```
+
+Stop the service before editing this Nano Markup file, then restart it. Settings
+are applied only at process startup; the service has no live configuration
+mutation command. The file controls `service.enabled`, `cloud.url`,
+`cloud.connect_on_start`, `workspace.name`, `execution.parallel_slots` (1–10),
+and the named absolute-path `folders` map. Required aliases are `root`,
+`conclave`, `state`, and `work`; additional aliases describe useful locations
+but do not grant Worker access. Passwords, tokens, and registration IDs must
+never be added to this file.
+
 For an already running service, `conclave-workspace login --password` performs
 only account sign-in/registration; follow it with `conclave-workspace connect`.
 Accounts that require additional verification must use the existing browser
@@ -76,10 +96,10 @@ none is returned to the CLI. Sign-in refuses a different owner or ambiguous/stal
 registration; existing installations needing recovery must use the desktop
 recovery flow. A fresh registration does not connect Cloud until `connect`.
 
-The service uses the default Linux Work Root (`~/Documents/Conclave`) unless
-configured otherwise. For a custom Work Root, use the foreground service with
-`--work-root /absolute/path` under your own supervisor, or configure the persisted
-Work Root through the desktop manager before using the systemd unit.
+The service uses the Work Root in `<state>/workspace.nano` (initially
+`~/Documents/Conclave`). Edit the configuration while the service is stopped,
+then restart it; there is no live settings mutation or command-line Work Root
+override.
 Pass `--data-dir DIR` on **every** CLI command when using a custom state root.
 `service install` registers/enables the systemd user unit but does not start it.
 `service stop` preserves its registration; `service uninstall` removes the user
@@ -128,7 +148,7 @@ Extract the whole archive to a stable per-user directory, e.g.
 needs GTK 3. Register and start the service from the management UI.
 
 - The service is a **systemd user unit**
-  `~/.config/systemd/user/conclave-workspace-<installation-id>.service`, run as
+  `~/.config/systemd/user/workspace-<installation-id>.service`, run as
   the logged-in user so provider CLIs see their own logins. Stop keeps the unit
   enabled; Disconnect Cloud keeps the service running; Unregister disables and
   removes only the unit file.
@@ -145,7 +165,7 @@ Run the service as the foreground main process; the supervisor/container owns
 restarts and SIGTERM performs a graceful stop:
 
 ```bash
-./conclave-service --data-dir /data/state --work-root /data/work
+./workspace --data-dir /data/state
 ```
 
 Persist the state root, Work Root, and the provider CLI credential directories

@@ -9,11 +9,14 @@ import 'windows_native.dart';
 /// service; this adapter never starts an Engine or contacts Cloud.
 class WindowsWorkspaceServiceManager implements WorkspaceServiceManager {
   WindowsWorkspaceServiceManager({Directory? dataDirectory, File? executable})
-      : dataDirectory = dataDirectory ??
+    : dataDirectory =
+          dataDirectory ??
             WorkspaceConfigurationResolver.resolveDataDirectory(const []),
-        executable = executable ??
+      executable =
+          executable ??
             File(
-                '${File(Platform.resolvedExecutable).parent.path}/conclave-service.exe');
+            '${File(Platform.resolvedExecutable).parent.path}/workspace.exe',
+          );
   final Directory dataDirectory;
   final File executable;
   Future<String> _identity() async {
@@ -30,7 +33,7 @@ class WindowsWorkspaceServiceManager implements WorkspaceServiceManager {
     final id = await _identity();
     final script = r'''
 $ErrorActionPreference = 'Stop'
-$name = 'Conclave Workspace ' + $env:CONCLAVE_WORKSPACE_TASK_ID
+$name = 'Workspace ' + $env:CONCLAVE_WORKSPACE_TASK_ID
 $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
 switch ($env:CONCLAVE_WORKSPACE_TASK_OPERATION) {
@@ -60,22 +63,22 @@ $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name } else { $null }
       bytes.add(code & 255);
       bytes.add(code >> 8);
     }
-    final result = await Process.run('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-EncodedCommand',
-      base64Encode(bytes)
-    ], environment: {
+    final result = await Process.run(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-EncodedCommand', base64Encode(bytes)],
+      environment: {
       'CONCLAVE_WORKSPACE_TASK_ID': id,
       'CONCLAVE_WORKSPACE_TASK_OPERATION': operation,
       'CONCLAVE_WORKSPACE_TASK_EXECUTABLE': executable.absolute.path,
       'CONCLAVE_WORKSPACE_TASK_DATA': dataDirectory.absolute.path,
-    }).timeout(const Duration(seconds: 30));
+      },
+    ).timeout(const Duration(seconds: 30));
     if (result.exitCode != 0) {
       throw StateError('Windows service $operation failed: ${result.stderr}');
     }
     return Map<String, Object?>.from(
-        jsonDecode(result.stdout.toString()) as Map);
+      jsonDecode(result.stdout.toString()) as Map,
+    );
   }
 
   @override
@@ -86,8 +89,8 @@ $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name } else { $null }
       helperPresent: executable.existsSync(),
       plistPresent: true,
       enginePresent: File(
-              '${executable.parent.path}/assets/engines/conclave_cli_worker_engine.exe')
-          .existsSync(),
+        '${executable.parent.path}/assets/engines/conclave_cli_worker_engine.exe',
+      ).existsSync(),
       registration: result['registered'] == true
           ? ServiceInstallationState.registered
           : ServiceInstallationState.notRegistered,

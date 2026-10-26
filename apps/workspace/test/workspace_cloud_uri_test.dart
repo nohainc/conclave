@@ -1,23 +1,7 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/workspace.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';
-import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:test/test.dart';
-
-class _NoCredentials implements SecureCredentialStore {
-  @override
-  String? readSync(String key) => null;
-
-  @override
-  Future<String?> read(String key) async => null;
-
-  @override
-  Future<void> write(String key, String value) async {}
-
-  @override
-  Future<void> delete(String key) async {}
-}
 
 void main() {
   test('headless management derives a secret-free HTTP origin from transport',
@@ -31,13 +15,14 @@ void main() {
             Uri.parse('ws://127.0.0.1:9/api/workspace-gateway/connect')),
         'http://127.0.0.1:9');
   });
-  WorkspaceConfig configFor(String cloudUrl) => WorkspaceConfig.fromArgs(
-        ['--cloud-url', cloudUrl, '--workspace-runtime-id', 'runtime-test'],
-        credentialStore: _NoCredentials(),
-      );
+  Uri configFor(String cloudUrl) =>
+      WorkspaceConfigurationResolver.workspaceGatewayUri(
+        cloudUrl,
+        workspaceRuntimeId: 'runtime-test',
+      )!;
 
   test('HTTPS origin becomes WSS with a materialized default port', () {
-    final uri = configFor('https://app.conclaveax.com/#discard-me').cloudUri!;
+    final uri = configFor('https://app.conclaveax.com/#discard-me');
 
     expect(uri.scheme, 'wss');
     expect(uri.host, 'app.conclaveax.com');
@@ -49,8 +34,8 @@ void main() {
   });
 
   test('explicit Cloud ports are preserved', () {
-    final standardPort = configFor('https://cloud.example.test:443').cloudUri!;
-    final uri = configFor('https://cloud.example.test:8443').cloudUri!;
+    final standardPort = configFor('https://cloud.example.test:443');
+    final uri = configFor('https://cloud.example.test:8443');
 
     expect(standardPort.port, 443);
     expect(uri.scheme, 'wss');
@@ -60,7 +45,7 @@ void main() {
   test('Cloud URL secrets are never copied into the WebSocket query', () {
     final uri = configFor(
       'https://cloud.example.test?source=desktop&authToken=must-not-leak&api_key=also-secret',
-    ).cloudUri!;
+    );
 
     expect(uri.queryParameters['source'], 'desktop');
     expect(uri.queryParameters['workspaceRuntimeId'], 'runtime-test');
@@ -69,7 +54,7 @@ void main() {
   });
 
   test('local HTTP origin keeps its explicit development port', () {
-    final uri = configFor('http://127.0.0.1:8787').cloudUri!;
+    final uri = configFor('http://127.0.0.1:8787');
 
     expect(uri.scheme, 'ws');
     expect(uri.host, '127.0.0.1');
@@ -81,7 +66,7 @@ void main() {
       () {
     final uri = configFor(
       'wss://cloud.example.test/api/workspace-gateway/connect?source=desktop#old',
-    ).cloudUri!;
+    );
 
     expect(uri.scheme, 'wss');
     expect(uri.port, 443);
@@ -104,7 +89,7 @@ void main() {
     });
 
     final uri =
-        configFor('ws://${server.address.address}:${server.port}').cloudUri!;
+        configFor('ws://${server.address.address}:${server.port}');
     final socket = await WebSocket.connect(uri.toString());
     expect(await socket.first, 'ready');
   });

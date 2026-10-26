@@ -33,11 +33,10 @@ cd "$WORKSPACE_DIR"
 "$DART" compile exe \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
   bin/conclave_workspace_service.dart \
-  -o "$TEMP_ROOT/conclave-service"
-"$TEMP_ROOT/conclave-service" \
+  -o "$TEMP_ROOT/workspace"
+"$TEMP_ROOT/workspace" \
   --once \
-  --data-dir "$TEMP_ROOT/data" \
-  --work-root "$TEMP_ROOT/work"
+  --data-dir "$TEMP_ROOT/data"
 
 test -s "$TEMP_ROOT/data/installation-id"
 echo "Workspace Service compiled, started headlessly, and stopped cleanly."

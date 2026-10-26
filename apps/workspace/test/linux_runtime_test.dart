@@ -18,14 +18,16 @@ void main() {
     test('uses XDG_STATE_HOME and ignores relative values', () {
       expect(
         WorkspacePaths.linuxXdgStateDirectory(
-                homeDirectory: '/home/u', xdgStateHome: '/var/state')
-            .path,
+          homeDirectory: '/home/u',
+          xdgStateHome: '/var/state',
+        ).path,
         '/var/state/conclave/workspace',
       );
       expect(
         WorkspacePaths.linuxXdgStateDirectory(
-                homeDirectory: '/home/u', xdgStateHome: 'relative')
-            .path,
+          homeDirectory: '/home/u',
+          xdgStateHome: 'relative',
+        ).path,
         '/home/u/.local/state/conclave/workspace',
       );
     });
@@ -35,56 +37,77 @@ void main() {
       final target = Directory('${root.path}/state/conclave/workspace');
       expect(
           WorkspacePaths.resolveLinuxStateDirectory(
-                  legacy: legacy, target: target)
-              .path,
-          target.path);
+          legacy: legacy,
+          target: target,
+        ).path,
+        target.path,
+      );
       legacy.createSync();
       expect(
           WorkspacePaths.resolveLinuxStateDirectory(
-                  legacy: legacy, target: target)
-              .path,
-          legacy.path);
+          legacy: legacy,
+          target: target,
+        ).path,
+        legacy.path,
+      );
       expect(target.existsSync(), isFalse);
     });
   });
 
   group('credential store', () {
-    test('selection requires a real Secret Service as well as a session bus',
+    test(
+      'selection requires a real Secret Service as well as a session bus',
         () {
       final state = Directory('${root.path}/state');
       expect(
-          LinuxCredentialStoreSelector(state, environment: const {})
-              .preferred(),
-          LinuxCredentialStoreKind.file);
+          LinuxCredentialStoreSelector(
+            state,
+            environment: const {},
+          ).preferred(),
+          LinuxCredentialStoreKind.file,
+        );
       expect(
-          LinuxCredentialStoreSelector(state,
+          LinuxCredentialStoreSelector(
+            state,
               secretServiceAvailable: () => true,
               environment: const {
-                'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus'
-              }).preferred(),
-          LinuxCredentialStoreKind.secretService);
+              'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus',
+            },
+          ).preferred(),
+          LinuxCredentialStoreKind.secretService,
+        );
       expect(
-          LinuxCredentialStoreSelector(state,
+          LinuxCredentialStoreSelector(
+            state,
               secretServiceAvailable: () => false,
-              environment: const {
-                'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/bus'
-              }).preferred(),
-          LinuxCredentialStoreKind.file);
+            environment: const {'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/bus'},
+          ).preferred(),
+          LinuxCredentialStoreKind.file,
+        );
       expect(
-          LinuxCredentialStoreSelector(state, environment: const {
+          LinuxCredentialStoreSelector(
+            state,
+            environment: const {
             'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus',
             'CONCLAVE_WORKSPACE_SECRET_STORE': 'file',
-          }).preferred(),
-          LinuxCredentialStoreKind.file);
-    });
+            },
+          ).preferred(),
+          LinuxCredentialStoreKind.file,
+        );
+      },
+    );
 
     test('the first write records the store for later readers', () {
       final state = Directory('${root.path}/state');
-      final headless =
-          LinuxCredentialStoreSelector(state, environment: const {});
+      final headless = LinuxCredentialStoreSelector(
+        state,
+        environment: const {},
+      );
       expect(headless.selectForWrite(), LinuxCredentialStoreKind.file);
-      final desktop = LinuxCredentialStoreSelector(state,
-          environment: const {'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/bus'});
+      final desktop = LinuxCredentialStoreSelector(
+        state,
+        environment: const {'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/bus'},
+      );
       expect(desktop.effective(), LinuxCredentialStoreKind.file);
       expect(desktop.selectForWrite(), LinuxCredentialStoreKind.file);
     });
@@ -109,8 +132,9 @@ void main() {
         platform: 'linux',
         credentialDirectory: Directory('${root.path}/state/Credentials'),
       );
-      if (LinuxCredentialStoreSelector(Directory('${root.path}/state'))
-              .preferred() !=
+      if (LinuxCredentialStoreSelector(
+            Directory('${root.path}/state'),
+          ).preferred() !=
           LinuxCredentialStoreKind.file) {
         File('${root.path}/state/credential-store')
           ..createSync(recursive: true)
@@ -133,7 +157,7 @@ void main() {
     setUp(() {
       calls = [];
       show = {'ActiveState': 'inactive', 'UnitFileState': 'disabled'};
-      final executable = File('${root.path}/app dir/conclave-service')
+      final executable = File('${root.path}/app dir/workspace')
         ..createSync(recursive: true);
       manager = LinuxWorkspaceServiceManager(
         dataDirectory: Directory('${root.path}/state 100%'),
@@ -163,31 +187,38 @@ void main() {
         manager.unitDirectory.listSync().whereType<File>().single;
 
     test('quotes ExecStart words and escapes systemd specifiers', () {
-      expect(LinuxWorkspaceServiceManager.quoteExecArgument(r'a "b" 5% $x\'),
-          r'"a \"b\" 5%% $$x\\"');
-      expect(() => LinuxWorkspaceServiceManager.quoteExecArgument('a\nb'),
-          throwsArgumentError);
+      expect(
+        LinuxWorkspaceServiceManager.quoteExecArgument(r'a "b" 5% $x\'),
+        r'"a \"b\" 5%% $$x\\"',
+      );
+      expect(
+        () => LinuxWorkspaceServiceManager.quoteExecArgument('a\nb'),
+        throwsArgumentError,
+      );
     });
 
     test('path directives escape percent without ExecStart quotes', () {
       final special = LinuxWorkspaceServiceManager(
-          executable: File('${root.path}/app 100%/conclave-service'));
+        executable: File('${root.path}/app 100%/workspace'),
+      );
       expect(special.workingDirectory(), '${root.path}/app 100%%');
-      expect(special.unitContents(),
-          contains('WorkingDirectory=${root.path}/app 100%%\n'));
+      expect(
+        special.unitContents(),
+        contains('WorkingDirectory=${root.path}/app 100%%\n'),
+      );
     });
 
     test('register, stop and unregister keep installation state', () async {
       final registered = await manager.register();
       expect(registered.registered, isTrue);
       final unit = unitFile();
-      expect(unit.path, matches(RegExp(r'conclave-workspace-.+\.service$')));
+      expect(unit.path, matches(RegExp(r'workspace-.+\.service$')));
       final contents = unit.readAsStringSync();
       expect(contents, contains('ExecStart=${manager.execStart()}'));
       expect(
           contents,
-          contains(
-              'WorkingDirectory=${manager.executable.parent.absolute.path}'));
+        contains('WorkingDirectory=${manager.executable.parent.absolute.path}'),
+      );
       expect(contents, isNot(contains('WorkingDirectory="')));
       expect(contents, contains('state 100%%'));
       expect(contents, contains('KillMode=mixed'));
@@ -206,18 +237,22 @@ void main() {
       await manager.unregister();
       expect(unit.existsSync(), isFalse);
       expect(manager.dataDirectory.existsSync(), isTrue);
-      expect(calls.map((c) => c.first),
-          containsAllInOrder(['daemon-reload', 'enable', 'start', 'stop']));
-      expect(calls.map((c) => c.first),
-          containsAllInOrder(['disable', 'daemon-reload']));
+      expect(
+        calls.map((c) => c.first),
+        containsAllInOrder(['daemon-reload', 'enable', 'start', 'stop']),
+      );
+      expect(
+        calls.map((c) => c.first),
+        containsAllInOrder(['disable', 'daemon-reload']),
+      );
     });
 
     test('refuses to take over a unit that points elsewhere', () async {
       await manager.register();
       final unit = unitFile();
-      unit.writeAsStringSync(unit
-          .readAsStringSync()
-          .replaceFirst('conclave-service', 'other-service'));
+      unit.writeAsStringSync(
+        unit.readAsStringSync().replaceFirst('/workspace', '/other-service'),
+      );
       await expectLater(manager.register(), throwsStateError);
       await expectLater(manager.start(), throwsStateError);
       expect(unit.readAsStringSync(), contains('other-service'));

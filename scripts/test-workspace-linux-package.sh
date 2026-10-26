@@ -40,19 +40,20 @@ APT_ARGS=(-o "Dir::Etc::sourcelist=$TEST_ROOT/conclave.sources" -o 'Dir::Etc::so
 sudo apt-get "${APT_ARGS[@]}" update
 sudo apt-get "${APT_ARGS[@]}" install -y conclave-workspace=0.0.1~test
 STATE="$TEST_ROOT/state"
-CONCLAVE_WORKSPACE_SECRET_STORE='file' conclave-service --data-dir "$STATE" --work-root "$TEST_ROOT/work" --once
+mkdir -p "$TEST_ROOT/home"
+HOME="$TEST_ROOT/home" CONCLAVE_WORKSPACE_SECRET_STORE='file' workspace --data-dir "$STATE" --once
 identity="$(cat "$STATE/installation-id")"
-mkdir -p "$STATE/sessions" "$TEST_ROOT/work"
+mkdir -p "$STATE/sessions" "$TEST_ROOT/home/Documents/Conclave"
 printf 'keep session\n' > "$STATE/sessions/preserve-test"
-printf 'keep user work\n' > "$TEST_ROOT/work/preserve-test"
+printf 'keep user work\n' > "$TEST_ROOT/home/Documents/Conclave/preserve-test"
 python3 "$ROOT/scripts/release/build-apt-repository.py" --output "$TEST_ROOT/repo" --signing-key "$KEY" "$PACKAGE"
 sudo apt-get "${APT_ARGS[@]}" update
 sudo apt-get "${APT_ARGS[@]}" install --only-upgrade -y conclave-workspace
 [[ "$(dpkg-query --show --showformat='${Version}' conclave-workspace)" == "$VERSION" ]]
 [[ "$(cat "$STATE/installation-id")" == "$identity" ]]
 grep -qx 'keep session' "$STATE/sessions/preserve-test"
-grep -qx 'keep user work' "$TEST_ROOT/work/preserve-test"
-CONCLAVE_WORKSPACE_SECRET_STORE='file' conclave-service --data-dir "$STATE" --work-root "$TEST_ROOT/work" > "$TEST_ROOT/service.log" 2>&1 &
+grep -qx 'keep user work' "$TEST_ROOT/home/Documents/Conclave/preserve-test"
+HOME="$TEST_ROOT/home" CONCLAVE_WORKSPACE_SECRET_STORE='file' workspace --data-dir "$STATE" > "$TEST_ROOT/service.log" 2>&1 &
 service_pid=$!
 ready=0
 for _ in $(seq 1 60); do

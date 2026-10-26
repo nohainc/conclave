@@ -28,7 +28,7 @@ Engine must be the account that logged in to the CLIs.
 | --- | --- | --- |
 | macOS | launchd LaunchAgent (existing) | per-user, at login |
 | Linux desktop/server | **systemd user unit** (`~/.config/systemd/user/`) | per-user; `loginctl enable-linger` for start at boot without a session |
-| Linux headless/container | none — service is the foreground main process | `conclave-workspace-service run --foreground`; the container/supervisor owns restarts |
+| Linux headless/container | none — service is the foreground main process | `workspace --data-dir /data/state`; the container/supervisor owns restarts |
 | Windows | **per-user logon task** (Task Scheduler, "at logon", run only when user is logged on, no elevated rights) | per-user, in the interactive user session |
 
 Windows Service Control Manager (LocalSystem or a virtual service account) is

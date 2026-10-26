@@ -3,11 +3,10 @@ import 'dart:io';
 import 'dart:math';
 
 import 'secure_credentials.dart';
-import 'workspace_lifecycle.dart';
-import 'workspace_lifecycle_store.dart';
 import 'workspace_paths.dart';
 import 'workspace_registration_models.dart';
 import 'platform_runtime.dart';
+import 'workspace_settings.dart';
 
 /// The inputs consumed by the headless Workspace Service. These values are
 /// resolved once at process startup instead of being reread independently by
@@ -16,24 +15,26 @@ class ResolvedWorkspaceConfiguration {
   const ResolvedWorkspaceConfiguration({
     required this.dataDirectory,
     required this.registration,
-    required this.preferences,
     required this.credentials,
     required this.cloudUri,
     required this.workspaceRuntimeId,
     required this.installationId,
     required this.workspaceId,
     required this.workRootPath,
+    required this.settings,
+    required this.settingsFile,
   });
 
   final Directory dataDirectory;
   final WorkspaceRegistration? registration;
-  final WorkspaceLifecyclePreferences preferences;
   final WorkspaceCredentials credentials;
   final Uri? cloudUri;
   final String? workspaceRuntimeId;
   final String? installationId;
   final String? workspaceId;
   final String? workRootPath;
+  final WorkspaceSettings settings;
+  final File settingsFile;
 }
 
 class WorkspaceCredentials {
@@ -51,29 +52,28 @@ class WorkspaceConfigurationResolver {
     bool ignoreSavedRegistration = false,
   }) {
     final index = args.indexOf('--data-dir');
-    final cloudIndex = args.indexOf('--cloud-url');
     final workspaceRuntimeIndex = args.indexOf('--workspace-runtime-id');
     final installationIndex = args.indexOf('--installation-id');
     final workspaceIndex = args.indexOf('--workspace-id');
-    final workRootIndex = args.indexOf('--work-root');
     final path = index >= 0 && index + 1 < args.length
         ? args[index + 1]
         : Platform.environment['CONCLAVE_WORKSPACE_DATA_DIR'];
-    final dataDirectory =
-        path == null ? WorkspacePaths.defaultStateDirectory() : Directory(path);
-    final savedRegistration =
-        WorkspaceRegistrationStore(dataDirectory).readSync();
+    final dataDirectory = path == null
+        ? WorkspacePaths.defaultStateDirectory()
+        : Directory(path);
+    final settingsStore = WorkspaceSettingsStore(dataDirectory);
+    final settings =
+        settingsStore.readSync() ??
+        WorkspaceSettings.defaults(dataDirectory: dataDirectory);
+    final savedRegistration = WorkspaceRegistrationStore(
+      dataDirectory,
+    ).readSync();
     final registration = ignoreSavedRegistration ? null : savedRegistration;
-    final preferences =
-        WorkspaceLifecyclePreferencesStore(dataDirectory).readSync();
-    final cloudUrl = cloudIndex >= 0 && cloudIndex + 1 < args.length
-        ? args[cloudIndex + 1]
-        // Local builds are pinned to the local Cloud API.
-        : conclaveWorkspaceIsLocalBuild
+    // Local builds are pinned to the local Cloud API; packaged builds take
+    // all non-secret behavior from workspace.nano.
+    final cloudUrl = conclaveWorkspaceIsLocalBuild
             ? conclaveLocalCloudUrl
-            : (!ignoreSavedRegistration && savedRegistration?.cloudUrl != null
-                ? savedRegistration!.cloudUrl
-                : Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL']);
+        : settings.cloudUrl;
     final workspaceRuntimeId =
         workspaceRuntimeIndex >= 0 && workspaceRuntimeIndex + 1 < args.length
             ? args[workspaceRuntimeIndex + 1]
@@ -92,22 +92,18 @@ class WorkspaceConfigurationResolver {
         : (!ignoreSavedRegistration && registration != null
             ? registration.workspaceId
             : Platform.environment['CONCLAVE_WORKSPACE_ID']);
-    final workRootPath = workRootIndex >= 0 && workRootIndex + 1 < args.length
-        ? args[workRootIndex + 1]
-        : preferences.workRootPath ??
-            Platform.environment['CONCLAVE_WORKSPACE_WORK_ROOT'];
-    final secureStore = credentialStore ??
+    final workRootPath = settings.workRootPath;
+    final secureStore =
+        credentialStore ??
         PlatformSecureCredentialStore(
-            credentialDirectory:
-                Directory('${dataDirectory.path}/Credentials'));
+          credentialDirectory: Directory('${dataDirectory.path}/Credentials'),
+        );
     final runtimeToken = workspaceRuntimeId == null
         ? null
         : secureStore.readSync(workspaceRuntimeId);
-    final configuredCloudUrl = cloudUrl ?? registration?.cloudUrl;
     return ResolvedWorkspaceConfiguration(
       dataDirectory: dataDirectory,
       registration: registration,
-      preferences: preferences,
       credentials: WorkspaceCredentials(
         // Secure storage is authoritative. The environment token remains only
         // for isolated fixture launches without a saved credential.
@@ -115,16 +111,18 @@ class WorkspaceConfigurationResolver {
             ? null
             : runtimeToken ?? Platform.environment['CONCLAVE_WORKSPACE_TOKEN'],
       ),
-      cloudUri: configuredCloudUrl == null
+      cloudUri: ignoreSavedRegistration
           ? null
           : workspaceGatewayUri(
-              configuredCloudUrl,
+              cloudUrl,
               workspaceRuntimeId: workspaceRuntimeId,
             ),
       workspaceRuntimeId: workspaceRuntimeId,
       installationId: installationId,
       workspaceId: workspaceId,
       workRootPath: workRootPath,
+      settings: settings,
+      settingsFile: settingsStore.file,
     );
   }
 
@@ -145,8 +143,8 @@ class WorkspaceConfigurationResolver {
             _ => throw ArgumentError('Unsupported Cloud transport'),
           },
           host: gateway.host,
-          port: gateway.hasPort ? gateway.port : null)
-      .toString();
+    port: gateway.hasPort ? gateway.port : null,
+  ).toString();
 
   static Uri? workspaceGatewayUri(String value, {String? workspaceRuntimeId}) {
     final uri = Uri.tryParse(value);
@@ -252,7 +250,8 @@ class WorkspaceRegistrationStore {
   final PlatformRuntime? platform;
 
   File get file => File(
-      '${dataDirectory.path}${Platform.pathSeparator}workspace-registration.json');
+    '${dataDirectory.path}${Platform.pathSeparator}workspace-registration.json',
+  );
 
   WorkspaceRegistration? readSync() {
     if (!file.existsSync()) return null;
@@ -269,8 +268,10 @@ class WorkspaceRegistrationStore {
   Future<void> write(WorkspaceRegistration registration) async {
     await dataDirectory.create(recursive: true);
     await file.writeAsString(jsonEncode(registration.toJson()), flush: true);
-    await (platform ?? currentPlatformRuntime)
-        .restrictPermissions(file.path, directory: false);
+    await (platform ?? currentPlatformRuntime).restrictPermissions(
+      file.path,
+      directory: false,
+    );
   }
 
   Future<void> clear() async {
@@ -310,8 +311,10 @@ class InstallationIdentityStore {
         : generateInstallationId();
     await dataDirectory.create(recursive: true);
     await file.writeAsString(identity, flush: true);
-    await (platform ?? currentPlatformRuntime)
-        .restrictPermissions(file.path, directory: false);
+    await (platform ?? currentPlatformRuntime).restrictPermissions(
+      file.path,
+      directory: false,
+    );
     return identity;
   }
 
@@ -351,8 +354,10 @@ class LocalWorkspaceIdentityStore {
       }
       await dataDirectory.create(recursive: true);
       await file.writeAsString(registryWorkspaceId, flush: true);
-      await (platform ?? currentPlatformRuntime)
-          .restrictPermissions(file.path, directory: false);
+      await (platform ?? currentPlatformRuntime).restrictPermissions(
+        file.path,
+        directory: false,
+      );
       return registryWorkspaceId;
     }
     if (await file.exists()) {
@@ -364,8 +369,10 @@ class LocalWorkspaceIdentityStore {
         : 'local-${_randomToken()}';
     await dataDirectory.create(recursive: true);
     await file.writeAsString(identity, flush: true);
-    await (platform ?? currentPlatformRuntime)
-        .restrictPermissions(file.path, directory: false);
+    await (platform ?? currentPlatformRuntime).restrictPermissions(
+      file.path,
+      directory: false,
+    );
     return identity;
   }
 

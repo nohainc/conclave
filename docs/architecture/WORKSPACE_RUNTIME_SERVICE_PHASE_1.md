@@ -123,17 +123,17 @@ Worker tests execute through IPC with a bounded response timeout. The local
 never an authority for Worker configuration or assignment admission. Cached
 controls are disabled while the service is stopped.
 
-Runtime executables are named `conclave-service` and `conclave-agent`. The
+Runtime executables are named `workspace` (formerly `conclave-service`) and `conclave-agent`. The
 service LaunchAgent label and installation identity are unchanged. Shared
 bundled Engine asset names are unchanged; Workspace materialization assigns
 the process name. Existing independent legacy daemons are not managed here.
 
-Work Root selection while stopped is persisted by `StoppedWorkspaceConfiguration`
-in the existing local lifecycle preferences file. It validates path separation
-and access under the same installation lock used by the service. The GUI cannot
-change Work Root through a running service; `configuration.update` rejects that
-operation. Configuration is read at startup, requires no Cloud round trip, and
-does not move files. IPC startup and configuration reload do not await Cloud
+Work Root selection is persisted in `<state>/workspace.nano` (`folders.work`);
+see `WORKSPACE_ARCHITECTURE.md` (Restart-applied configuration). The file is read
+once at process start, so a change takes effect after a restart; the GUI cannot
+change Work Root through a running service (`configuration.update` is an
+unknown command). Configuration requires no Cloud round trip and does not move
+files. IPC startup and configuration reload do not await Cloud
 connectivity. A slow/offline Cloud handshake does not block local management.
 
 ## IPC startup reliability

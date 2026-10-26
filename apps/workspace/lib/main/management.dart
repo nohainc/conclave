@@ -7,10 +7,13 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
     if (context == null) return;
     final dataDirectory = lifecycle.config.dataDirectory;
     final registration = WorkspaceRegistrationStore(dataDirectory).readSync();
-    final cloudUrl = resolveWorkspaceCloudUrl(registration?.cloudUrl);
+    final cloudUrl = WorkspaceConfigurationResolver.cloudHttpOrigin(
+      lifecycle.config.cloudUri!,
+    );
     try {
-      final encoded =
-          await lifecycle.credentialStore.read(desktopHumanCredentialKey);
+      final encoded = await lifecycle.credentialStore.read(
+        desktopHumanCredentialKey,
+      );
       if (encoded == null) {
         throw StateError('Sign in to your Conclave account first.');
       }
@@ -27,8 +30,9 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       } finally {
         authClient.close();
       }
-      final installationId =
-          await InstallationIdentityStore(dataDirectory).getOrCreate();
+      final installationId = await InstallationIdentityStore(
+        dataDirectory,
+      ).getOrCreate();
       final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
       final preferences = preferenceStore.readSync();
       final workspaceName = (name != null && name.trim().isNotEmpty)
@@ -43,17 +47,25 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       final facts = SafeMachineFacts.collect(
           installationId: installationId,
           name: workspaceName,
-          hostname: Platform.localHostname);
+        hostname: Platform.localHostname,
+      );
+      final registered =
       await WorkspaceRegistrationService(
               dataDirectory: dataDirectory,
-              credentialStore: lifecycle.credentialStore)
-          .registerWithDesktopSession(
+            credentialStore: lifecycle.credentialStore,
+          ).registerWithDesktopSession(
         cloudUrl: cloudUrl,
         desktopCredential: session.credential,
         facts: facts,
         expectedOwnerUserId: session.userId,
       );
-      await preferenceStore.write(WorkspaceLifecyclePreferences(
+      await lifecycle.writeSettings(
+        cloudUrl: registered.cloudUrl,
+        workspaceName: registered.name,
+        connectOnStart: false,
+      );
+      await preferenceStore.write(
+        WorkspaceLifecyclePreferences(
         desiredRuntime: DesiredRuntimeState.disconnected,
         launchAtLogin: preferences.launchAtLogin,
         preventSleep: preferences.preventSleep,
@@ -63,22 +75,26 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
         ownerDisplayName: session.displayName,
         customWorkspaceName: workspaceName,
         workRootPath: preferences.workRootPath,
-      ));
+        ),
+      );
       // Cloud ownership registration does not start the local service. If a
       // service is already running, ask it to reload the persisted identity;
       // otherwise the user can start it explicitly from Workspace Service.
       if (lifecycle.running) {
-        await lifecycle.request('configuration.reload');
+        await lifecycle.restartService();
       }
       if (mounted) {
         _updateState(() => _workerRevision++);
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Workspace registered.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Workspace registered.')));
       }
     } catch (error) {
       if (mounted) {
         showCopyableErrorSnackBar(
-            context, 'Could not register Workspace: $error');
+          context,
+          'Could not register Workspace: $error',
+        );
       }
     }
   }
@@ -103,8 +119,9 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
     }
     final cloudUrl = registration.cloudUrl;
     try {
-      final encoded =
-          await lifecycle.credentialStore.read(desktopHumanCredentialKey);
+      final encoded = await lifecycle.credentialStore.read(
+        desktopHumanCredentialKey,
+      );
       if (encoded == null) {
         throw StateError('Sign in to your Conclave account first.');
       }
@@ -138,7 +155,8 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
         );
       }
       await lifecycle.ensureBackgroundService();
-      await preferenceStore.write(WorkspaceLifecyclePreferences(
+      await preferenceStore.write(
+        WorkspaceLifecyclePreferences(
         desiredRuntime: DesiredRuntimeState.connected,
         launchAtLogin: preferences.launchAtLogin,
         preventSleep: preferences.preventSleep,
@@ -149,8 +167,16 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
         customWorkspaceName:
             preferences.customWorkspaceName ?? registration.name,
         workRootPath: preferences.workRootPath,
-      ));
-      await lifecycle.request('configuration.reload');
+        ),
+      );
+      await lifecycle.writeSettings(
+        cloudUrl: registration.cloudUrl,
+        workspaceName: name?.trim().isNotEmpty == true
+            ? name!.trim()
+            : registration.name,
+        connectOnStart: true,
+      );
+      await lifecycle.restartService();
       final deadline = DateTime.now().add(const Duration(seconds: 45));
       while (DateTime.now().isBefore(deadline)) {
         if (lifecycle.uiSnapshot.workspaceReady) {
@@ -169,12 +195,15 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       if (mounted) {
         _updateState(() => _workerRevision++);
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Workspace is connected and Ready.')));
+          const SnackBar(content: Text('Workspace is connected and Ready.')),
+        );
       }
     } catch (error) {
       if (mounted) {
         showCopyableErrorSnackBar(
-            context, 'Could not connect Workspace: $error');
+          context,
+          'Could not connect Workspace: $error',
+        );
       }
     }
   }
@@ -185,10 +214,9 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
   }) async {
     final dialogContext = _navigatorKey.currentContext;
     if (dialogContext == null) return null;
-    final registration = WorkspaceRegistrationStore(
-      widget.lifecycle.config.dataDirectory,
-    ).readSync();
-    final cloudUrl = resolveWorkspaceCloudUrl(registration?.cloudUrl);
+    final cloudUrl = WorkspaceConfigurationResolver.cloudHttpOrigin(
+      widget.lifecycle.config.cloudUri!,
+    );
     final client = DesktopAuthClient(cloudUrl: cloudUrl);
     try {
       final intent = await client.createIntent();
@@ -256,11 +284,13 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       final ownerUserId = registration.ownerUserId;
       if (ownerUserId == null) {
         throw StateError(
-            'Verify this Workspace owner by reconnecting before release.');
+          'Verify this Workspace owner by reconnecting before release.',
+        );
       }
       DesktopHumanSession? session;
-      final storedSessionData =
-          await lifecycle.credentialStore.read(desktopHumanCredentialKey);
+      final storedSessionData = await lifecycle.credentialStore.read(
+        desktopHumanCredentialKey,
+      );
       if (storedSessionData != null) {
         try {
           final decoded = jsonDecode(storedSessionData);
@@ -300,7 +330,7 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
         );
       }
       final installationId = registration.installationId;
-      await lifecycle.request('connection.disconnect');
+      await lifecycle.disconnectCloud();
       await authClient.releaseWorkspace(
         session: session,
         installationId: installationId,
@@ -311,27 +341,33 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
       await WorkspaceRegistrationStore(dataDirectory).clear();
       final preferenceStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
       final preferences = preferenceStore.readSync();
-      await preferenceStore.write(WorkspaceLifecyclePreferences(
+      await preferenceStore.write(
+        WorkspaceLifecyclePreferences(
         desiredRuntime: DesiredRuntimeState.disconnected,
         launchAtLogin: preferences.launchAtLogin,
         preventSleep: preferences.preventSleep,
         managementLockPreference: preferences.managementLockPreference,
         autoLockTimeout: preferences.autoLockTimeout,
         workRootPath: preferences.workRootPath,
-      ));
-      await lifecycle.request('configuration.reload');
+        ),
+      );
+      await lifecycle.restartService();
       if (mounted) {
         _updateState(() => _workerRevision++);
         ScaffoldMessenger.of(dialogContext).showSnackBar(
           const SnackBar(
               content: Text(
-                  'Workspace ownership released. Local Workers and files are preserved.')),
+              'Workspace ownership released. Local Workers and files are preserved.',
+            ),
+          ),
         );
       }
     } catch (error) {
       if (mounted) {
         showCopyableErrorSnackBar(
-            dialogContext, 'Could not release Workspace ownership: $error');
+          dialogContext,
+          'Could not release Workspace ownership: $error',
+        );
       }
     } finally {
       authClient.close();
@@ -392,8 +428,9 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
         if (ownerUserId == null) {
           return;
         }
-        final resetAuthClient =
-            DesktopAuthClient(cloudUrl: registration.cloudUrl);
+        final resetAuthClient = DesktopAuthClient(
+          cloudUrl: registration.cloudUrl,
+        );
         final resetSession = await _reauthenticateWorkspaceOwner(
           ownerUserId,
           revokeAfterVerification: false,
@@ -403,7 +440,7 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
           return;
         }
         if (!await _requireStepUp('Reset local Workspace')) return;
-        await lifecycle.request('connection.disconnect');
+        await lifecycle.disconnectCloud();
         final installationId = registration.installationId;
         await resetAuthClient.disconnectWorkspace(
           session: resetSession,
@@ -430,7 +467,7 @@ extension _WorkspaceManagementActions on _ConclaveWorkspaceAppState {
         WorkspaceLifecyclePreferences.afterLocalWorkspaceReset(preferences),
       );
       await lifecycle.request('workers.reset');
-      await lifecycle.request('configuration.reload');
+      await lifecycle.restartService();
       if (mounted) {
         _updateState(() => _workerRevision++);
         ScaffoldMessenger.of(dialogContext).showSnackBar(

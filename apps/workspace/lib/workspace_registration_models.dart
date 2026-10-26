@@ -13,16 +13,11 @@ const conclaveWorkspaceEnvironment = String.fromEnvironment(
 );
 const conclaveWorkspaceIsLocalBuild = conclaveWorkspaceEnvironment == 'local';
 
-/// Cloud origin used when no explicit argument overrides it. Local builds
-/// always use the local API and ignore any saved or environment URL, so a
-/// local build can never silently talk to production.
+/// Cloud origin used by registration clients. Local builds always use the
+/// local API; packaged builds receive the value from workspace.nano.
 String resolveWorkspaceCloudUrl(String? savedCloudUrl) {
   if (conclaveWorkspaceIsLocalBuild) return conclaveLocalCloudUrl;
   if (savedCloudUrl != null && savedCloudUrl.isNotEmpty) return savedCloudUrl;
-  final fromEnvironment = Platform.environment['CONCLAVE_WORKSPACE_CLOUD_URL'];
-  if (fromEnvironment != null && fromEnvironment.isNotEmpty) {
-    return fromEnvironment;
-  }
   return conclaveProductionCloudUrl;
 }
 

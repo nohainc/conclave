@@ -16,7 +16,7 @@ void main() {
 import Foundation
 precondition(workspaceServiceHasTrustedSignature(URL(fileURLWithPath: "/bin/echo")))
 precondition(!workspaceServiceHasTrustedSignature(URL(fileURLWithPath: CommandLine.arguments[0])))
-precondition(!workspaceServiceHasTrustedSignature(URL(fileURLWithPath: "/nonexistent/conclave-service")))
+precondition(!workspaceServiceHasTrustedSignature(URL(fileURLWithPath: "/nonexistent/workspace")))
 for state in ["running", "not running"] {
   let fixture = """
   gui/501/service = {

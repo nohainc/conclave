@@ -36,7 +36,7 @@ jobs:
         shell: pwsh
         working-directory: apps/workspace
         env:
-          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\service\conclave-service.exe
+          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\service\workspace.exe
         run: |
           flutter test test/windows_runtime_test.dart test/windows_service_lifecycle_test.dart test/windows_service_manager_test.dart
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -56,7 +56,7 @@ jobs:
         shell: pwsh
         working-directory: apps/workspace
         env:
-          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\windows\release\conclave-service.exe
+          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\windows\release\workspace.exe
         run: |
           flutter test test/windows_service_lifecycle_test.dart
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

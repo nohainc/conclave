@@ -6,11 +6,10 @@ import 'workspace_configuration.dart';
 import 'linux_service_manager.dart';
 import 'workspace_background_service.dart';
 import 'workspace_manager_ipc.dart';
+import 'workspace_settings.dart';
 
-typedef WorkspaceCliRequest = Future<Object?> Function(
-  String command,
-  Map<String, Object?> payload,
-);
+typedef WorkspaceCliRequest =
+    Future<Object?> Function(String command, Map<String, Object?> payload);
 
 /// Management CLI for a running Workspace service. It only speaks the local
 /// authenticated IPC protocol: it never starts Engines, provider CLIs, or
@@ -37,6 +36,8 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
 
   service install|uninstall|start|stop|restart|status
                             Manage this user's Linux systemd service
+  config init|show|validate|path
+                            Manage the restart-applied workspace.nano file
   login [status|cancel]     Browser approval and Cloud registration
   login --password         Sign in with existing Cloud email/password
   setup                    Start service, sign in and connect (headless)
@@ -76,6 +77,9 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     if (rest.length == 2 && rest.first == 'service') {
       return _service(dataDir, rest[1], json);
     }
+    if (rest.length == 2 && rest.first == 'config') {
+      return _config(dataDir, rest[1], json);
+    }
     if ((rest.length == 1 && rest.first == 'setup') ||
         (rest.length == 2 && rest[0] == 'login' && rest[1] == '--password')) {
       return _passwordLogin(dataDir, json, setup: rest.first == 'setup');
@@ -87,6 +91,11 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     }
     try {
       final result = await _send(dataDir, call.$1, call.$2);
+      if (call.$1 == 'connection.connect') {
+        await _updateConnectionSetting(dataDir, true);
+      } else if (call.$1 == 'connection.disconnect') {
+        await _updateConnectionSetting(dataDir, false);
+      }
       _print(result, json);
       return 0;
     } on WorkspaceManagerProtocolException catch (error) {
@@ -96,20 +105,31 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
       err.writeln('conclave-workspace: service request timed out.');
       return 69;
     } on SocketException {
-      err.writeln('conclave-workspace: the Workspace service is not running '
-          'or its socket is unreachable.');
+      err.writeln(
+        'conclave-workspace: the Workspace service is not running '
+        'or its socket is unreachable.',
+      );
       return 69;
     } on FileSystemException catch (error) {
-      err.writeln('conclave-workspace: cannot read service state '
-          '(${error.path}). Is the service installed for this user?');
+      err.writeln(
+        'conclave-workspace: cannot read service state '
+        '(${error.path}). Is the service installed for this user?',
+      );
       return 69;
     }
   }
 
-  Future<int> _passwordLogin(String? dataDir, bool json,
-      {required bool setup}) async {
+  Future<int> _passwordLogin(
+    String? dataDir,
+    bool json, {
+    required bool setup,
+  }) async {
     try {
       if (setup) {
+        final root = WorkspaceConfigurationResolver.resolveDataDirectory([
+          if (dataDir != null) ...['--data-dir', dataDir],
+        ]);
+        await WorkspaceSettingsStore(root).ensureDefaults();
         if (await _service(dataDir, 'install', json) != 0 ||
             await _service(dataDir, 'start', json) != 0) {
           return 1;
@@ -122,12 +142,15 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
               ready = true;
               break;
             }
-          } on Object {/* Wait for authenticated IPC during startup. */}
+          } on Object {
+            /* Wait for authenticated IPC during startup. */
+          }
           await Future<void>.delayed(const Duration(milliseconds: 250));
         }
         if (!ready) {
           err.writeln(
-              'Service did not become healthy. Run conclave-workspace health.');
+            'Service did not become healthy. Run conclave-workspace health.',
+          );
           return 69;
         }
         final snapshot = await _send(dataDir, 'service.getStatus', {});
@@ -166,11 +189,12 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
       }
       await _send(dataDir, 'auth.start', {
         'email': credentials.email.trim(),
-        'password': credentials.password
+        'password': credentials.password,
       });
       for (var attempt = 0; attempt < 120; attempt++) {
         final status = await _send(dataDir, 'auth.status', {});
         if (status is Map && status['phase'] == 'complete') {
+          await _synchronizeRegistrationSettings(dataDir);
           if (setup) return await _finishConnection(dataDir, json);
           _print(status, json);
           return 0;
@@ -189,7 +213,8 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     } on Object {
       // Never render exceptions that may contain the private login payload.
       err.writeln(
-          'Headless sign-in failed. Check service health and login status.');
+        'Headless sign-in failed. Check service health and login status.',
+      );
       return 1;
     }
   }
@@ -201,18 +226,21 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
       if (snapshot is Map &&
           snapshot['cloud'] is Map &&
           (snapshot['cloud'] as Map)['synchronized'] == true) {
+        await _updateConnectionSetting(dataDir, true);
         _print({
           'phase': 'complete',
-          'message': 'Workspace is online. No Workers are required.'
+          'message': 'Workspace is online. No Workers are required.',
         }, json);
         err.writeln(
-            'For startup without login: sudo loginctl enable-linger ${Platform.environment['USER'] ?? '<user>'}');
+          'For startup without login: sudo loginctl enable-linger ${Platform.environment['USER'] ?? '<user>'}',
+        );
         return 0;
       }
       await Future<void>.delayed(const Duration(seconds: 1));
     }
     err.writeln(
-        'Registered, but Cloud is not ready. Run conclave-workspace status.');
+      'Registered, but Cloud is not ready. Run conclave-workspace status.',
+    );
     return 69;
   }
 
@@ -277,42 +305,57 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
   }
 
   Future<Object?> _send(
-      String? dataDir, String command, Map<String, Object?> payload) async {
+    String? dataDir,
+    String command,
+    Map<String, Object?> payload,
+  ) async {
     final request = _request;
     if (request != null) return request(command, payload);
     final root = WorkspaceConfigurationResolver.resolveDataDirectory([
-      if (dataDir != null) ...['--data-dir', dataDir]
+      if (dataDir != null) ...['--data-dir', dataDir],
     ]);
     final runtime = Directory('${root.path}/runtime');
-    final key =
-        (await File('${runtime.path}/manager-ipc.key').readAsString()).trim();
+    final key = (await File(
+      '${runtime.path}/manager-ipc.key',
+    ).readAsString()).trim();
     final client = await WorkspaceManagerIpcClient.connect(
       socketPath: workspaceManagerEndpoint(runtime),
       key: key,
     );
     try {
-      return await client.request(command,
-          payload: payload, timeout: const Duration(seconds: 60));
+      return await client.request(
+        command,
+        payload: payload,
+        timeout: const Duration(seconds: 60),
+      );
     } finally {
       await client.close();
     }
   }
 
   Future<int> _service(String? dataDir, String action, bool json) async {
-    if (!const {'install', 'uninstall', 'start', 'stop', 'restart', 'status'}
-        .contains(action)) {
+    if (!const {
+      'install',
+      'uninstall',
+      'start',
+      'stop',
+      'restart',
+      'status',
+    }.contains(action)) {
       err.write(usage);
       return 64;
     }
     if (_hostManager == null && !Platform.isLinux) {
       err.writeln(
-          'Service commands require Linux with a systemd user session.');
+        'Service commands require Linux with a systemd user session.',
+      );
       return 69;
     }
     final root = WorkspaceConfigurationResolver.resolveDataDirectory([
-      if (dataDir != null) ...['--data-dir', dataDir]
+      if (dataDir != null) ...['--data-dir', dataDir],
     ]);
-    final manager = _hostManager?.call(root) ??
+    final manager =
+        _hostManager?.call(root) ??
         LinuxWorkspaceServiceManager(dataDirectory: root);
     try {
       if (action == 'stop' || action == 'restart' || action == 'uninstall') {
@@ -332,7 +375,7 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
       _print({
         'registration': info.registration.name,
         'process': info.process.name,
-        'pid': info.pid
+        'pid': info.pid,
       }, json);
       return 0;
     } on Object catch (error) {
@@ -341,12 +384,85 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     }
   }
 
+  Future<int> _config(String? dataDir, String action, bool json) async {
+    if (!const {'init', 'show', 'validate', 'path'}.contains(action)) {
+      err.write(usage);
+      return 64;
+    }
+    final root = WorkspaceConfigurationResolver.resolveDataDirectory([
+      if (dataDir != null) ...['--data-dir', dataDir],
+    ]);
+    final store = WorkspaceSettingsStore(root);
+    try {
+      if (action == 'path') {
+        out.writeln(store.file.absolute.path);
+        return 0;
+      }
+      if (action == 'init') {
+        await store.ensureDefaults();
+      }
+      final settings = store.readSync();
+      if (settings == null) {
+        err.writeln(
+          'workspace.nano does not exist. Run conclave-workspace config init.',
+        );
+        return 66;
+      }
+      if (action == 'show') {
+        if (json) {
+          _print(settings.toNanoValue(), true);
+        } else {
+          out.write(store.file.readAsStringSync());
+        }
+      } else {
+        _print({
+          'valid': true,
+          'path': store.file.absolute.path,
+          'version': WorkspaceSettings.schemaVersion,
+          'restartRequiredToApply': true,
+        }, json);
+      }
+      return 0;
+    } on Object catch (error) {
+      err.writeln('conclave-workspace: invalid workspace.nano: $error');
+      return 65;
+    }
+  }
+
+  Future<void> _synchronizeRegistrationSettings(String? dataDir) async {
+    final root = WorkspaceConfigurationResolver.resolveDataDirectory([
+      if (dataDir != null) ...['--data-dir', dataDir],
+    ]);
+    final registration = WorkspaceRegistrationStore(root).readSync();
+    if (registration == null) return;
+    final store = WorkspaceSettingsStore(root);
+    final settings = await store.ensureDefaults();
+    await store.write(
+      settings.copyWith(
+        cloudUrl: registration.cloudUrl,
+        workspaceName: registration.name,
+      ),
+    );
+  }
+
+  Future<void> _updateConnectionSetting(String? dataDir, bool connected) async {
+    final root = WorkspaceConfigurationResolver.resolveDataDirectory([
+      if (dataDir != null) ...['--data-dir', dataDir],
+    ]);
+    final store = WorkspaceSettingsStore(root);
+    final settings = await store.ensureDefaults();
+    if (settings.connectOnStart != connected) {
+      await store.write(settings.copyWith(connectOnStart: connected));
+    }
+  }
+
   void _print(Object? result, bool json) {
     if (result is Map && result['text'] is String && !json) {
       out.writeln(result['text']);
     } else {
       out.writeln(
-          const JsonEncoder.withIndent('  ').convert(result ?? {'ok': true}));
+        const JsonEncoder.withIndent('  ').convert(result ?? {'ok': true}),
+      );
     }
   }
 }

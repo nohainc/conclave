@@ -47,7 +47,7 @@ begin
   try
     Locator := CreateOleObject('WbemScripting.SWbemLocator');
     Services := Locator.ConnectServer('', 'root\CIMV2');
-    Processes := Services.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = ''conclave_workspace.exe'' OR Name = ''conclave-service.exe''');
+    Processes := Services.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = ''conclave_workspace.exe'' OR Name = ''workspace.exe'' OR Name = ''conclave-service.exe''');
     Result := Processes.Count > 0;
   except
     // If process inspection fails, preserve the existing installation.

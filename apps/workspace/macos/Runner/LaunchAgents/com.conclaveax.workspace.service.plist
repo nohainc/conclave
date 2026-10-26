@@ -9,10 +9,10 @@
 		<string>com.conclaveax.workspace</string>
 	</array>
 	<key>BundleProgram</key>
-	<string>Contents/Helpers/conclave-service</string>
+	<string>Contents/Helpers/workspace</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>Contents/Helpers/conclave-service</string>
+		<string>Contents/Helpers/workspace</string>
 		<string>--background-service</string>
 	</array>
 	<key>RunAtLoad</key>

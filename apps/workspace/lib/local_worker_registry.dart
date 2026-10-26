@@ -22,7 +22,9 @@ enum WorkerReadinessState {
   setupRequired('setup_required', 'Setup required'),
   signInRequired('sign_in_required', 'Sign in required'),
   runtimeUnavailable(
-      'worker_runtime_unavailable', 'Conclave integration needs attention'),
+    'worker_runtime_unavailable',
+    'Conclave integration needs attention',
+  ),
   testFailed('test_failed', 'Test failed');
 
   const WorkerReadinessState(this.wireValue, this.label);
@@ -62,9 +64,12 @@ class LocalWorker {
     this.modelCatalog,
     this.lastLiveTestProfileDigest,
     this.lastLiveTestToolVersion,
-  })  : localPermissions =
-            ({...localPermissions, ...executionPermissionIds}.toList()..sort()),
-        activationState = activationState ??
+  }) : localPermissions = ({
+         ...localPermissions,
+         ...executionPermissionIds,
+       }.toList()..sort()),
+       activationState =
+           activationState ??
             (status == LocalWorkerStatus.disabled ||
                     status == LocalWorkerStatus.removed
                 ? LocalWorkerActivationState.disabled
@@ -151,16 +156,15 @@ class LocalWorker {
     bool clearLastLiveTestDetails = false,
     bool clearReadinessIssueCode = false,
     bool clearLastLiveTestIssueCode = false,
-  }) =>
-      LocalWorker(
+  }) => LocalWorker(
         id: id,
         workspaceId: workspaceId,
         workerTypeId: workerTypeId ?? this.workerTypeId,
         localPermissions: localPermissions ?? this.localPermissions,
-        localConcurrencyLimit:
-            localConcurrencyLimit ?? this.localConcurrencyLimit,
+    localConcurrencyLimit: localConcurrencyLimit ?? this.localConcurrencyLimit,
         status: status ?? this.status,
-        activationState: activationState ??
+    activationState:
+        activationState ??
             (status == null
                 ? this.activationState
                 : status == LocalWorkerStatus.disabled ||
@@ -182,8 +186,7 @@ class LocalWorker {
             : lastLiveTestIssueCode ?? this.lastLiveTestIssueCode,
         toolVersion: clearToolVersion ? null : toolVersion ?? this.toolVersion,
         toolName: clearToolName ? null : toolName ?? this.toolName,
-        modelCatalog:
-            clearModelCatalog ? null : modelCatalog ?? this.modelCatalog,
+    modelCatalog: clearModelCatalog ? null : modelCatalog ?? this.modelCatalog,
         lastLiveTestProfileDigest:
             lastLiveTestProfileDigest ?? this.lastLiveTestProfileDigest,
         lastLiveTestToolVersion:
@@ -250,7 +253,8 @@ class LocalWorker {
     };
     if (json.keys.any((key) => !allowedKeys.contains(key))) {
       throw const FormatException(
-          'Worker registry contains an unsupported field');
+        'Worker registry contains an unsupported field',
+      );
     }
     String required(String key) {
       final value = json[key];
@@ -264,7 +268,8 @@ class LocalWorker {
       final value = json[key];
       if (value is! List || value.any((item) => item is! String)) {
         throw FormatException(
-            'Worker registry field $key must be a string list');
+          'Worker registry field $key must be a string list',
+        );
       }
       return value.cast<String>();
     }
@@ -280,14 +285,16 @@ class LocalWorker {
     final toolPath = json['providerToolPath'];
     if (json['lastLiveTestProfileDigest'] != null &&
         (json['lastLiveTestProfileDigest'] is! String ||
-            !RegExp(r'^[0-9a-f]{64}$')
-                .hasMatch(json['lastLiveTestProfileDigest'] as String))) {
+            !RegExp(
+              r'^[0-9a-f]{64}$',
+            ).hasMatch(json['lastLiveTestProfileDigest'] as String))) {
       throw const FormatException('Invalid live Profile identity');
     }
     if (json['lastLiveTestToolVersion'] != null &&
         (json['lastLiveTestToolVersion'] is! String ||
-            !RegExp(r'^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$')
-                .hasMatch(json['lastLiveTestToolVersion'] as String))) {
+            !RegExp(
+              r'^[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}$',
+            ).hasMatch(json['lastLiveTestToolVersion'] as String))) {
       throw const FormatException('Invalid live CLI identity');
     }
     if (lastLiveTestAt != null && lastLiveTestAt is! String ||
@@ -296,7 +303,8 @@ class LocalWorker {
         readinessIssueCode != null && readinessIssueCode is! String ||
         lastLiveTestIssueCode != null && lastLiveTestIssueCode is! String) {
       throw const FormatException(
-          'Worker readiness diagnostic fields are invalid');
+        'Worker readiness diagnostic fields are invalid',
+      );
     }
     if (toolVersion != null &&
         (toolVersion is! String ||
@@ -329,13 +337,15 @@ class LocalWorker {
       }
     }
     final activationValue = json['activationState'];
-    final activation = LocalWorkerActivationState.values
-        .where((item) => item.name == activationValue);
+    final activation = LocalWorkerActivationState.values.where(
+      (item) => item.name == activationValue,
+    );
     if (activationValue is! String || activation.isEmpty) {
       throw const FormatException('Worker activation state is invalid');
     }
-    final parsedReadinessState =
-        WorkerReadinessState.parse(json['readinessState']);
+    final parsedReadinessState = WorkerReadinessState.parse(
+      json['readinessState'],
+    );
     if (parsedReadinessState == null) {
       throw const FormatException('Worker readiness state is invalid');
     }
@@ -346,7 +356,8 @@ class LocalWorker {
         revision is! int ||
         revision < 1) {
       throw const FormatException(
-          'Worker registry state or revision is invalid');
+        'Worker registry state or revision is invalid',
+      );
     }
     final activationState = activation.first;
     final readinessState = parsedReadinessState;
@@ -381,7 +392,8 @@ class LocalWorker {
       modelCatalog: json['modelCatalog'] == null
           ? null
           : DiscoveredModelCatalog.fromJson(
-              Map<String, Object?>.from(json['modelCatalog'] as Map)),
+              Map<String, Object?>.from(json['modelCatalog'] as Map),
+            ),
     );
   }
 }
@@ -425,6 +437,7 @@ class LocalWorkerRegistry {
     PlatformRuntime? platform,
     DateTime Function()? clock,
     String Function()? idGenerator,
+    this.configuredParallelSlots = defaultLocalWorkerConcurrency,
     this.onWorkerRemoving,
     this.onChanged,
   })  : platform = platform ?? currentPlatformRuntime,
@@ -432,7 +445,16 @@ class LocalWorkerRegistry {
         idGenerator = idGenerator ?? _newWorkerId {
     if (workspaceId.trim().isEmpty) {
       throw ArgumentError(
-          'Workspace ID is required for the local Worker registry');
+        'Workspace ID is required for the local Worker registry',
+      );
+    }
+    if (configuredParallelSlots < minParallelSlots ||
+        configuredParallelSlots > maxParallelSlots) {
+      throw ArgumentError.value(
+        configuredParallelSlots,
+        'configuredParallelSlots',
+        'outside the supported range',
+      );
     }
   }
 
@@ -441,12 +463,14 @@ class LocalWorkerRegistry {
   final PlatformRuntime platform;
   final DateTime Function() clock;
   final String Function() idGenerator;
+  final int configuredParallelSlots;
   final Future<void> Function(String workerId)? onWorkerRemoving;
   final FutureOr<void> Function()? onChanged;
   Future<void> _tail = Future<void>.value();
 
   File get file => File(
-      '${dataDirectory.path}${Platform.pathSeparator}configured-workers.json');
+    '${dataDirectory.path}${Platform.pathSeparator}configured-workers.json',
+  );
 
   Future<T> _locked<T>(Future<T> Function() action) async {
     final previous = _tail;
@@ -460,26 +484,34 @@ class LocalWorkerRegistry {
     }
   }
 
-  Future<List<LocalWorker>> list({bool includeRemoved = false}) =>
-      _locked(() async => (await _read())
-          .where((worker) =>
-              includeRemoved || worker.status != LocalWorkerStatus.removed)
-          .toList());
+  Future<List<LocalWorker>> list({bool includeRemoved = false}) => _locked(
+    () async => (await _read())
+        .where(
+          (worker) =>
+              includeRemoved || worker.status != LocalWorkerStatus.removed,
+        )
+        .toList(),
+  );
 
   /// The Workspace-wide parallel slot total (shared by all Workers).
-  Future<int> parallelSlots() => _locked(() async =>
+  Future<int> parallelSlots() => _locked(
+    () async =>
       (await _read())
           .where((worker) => worker.status != LocalWorkerStatus.removed)
           .map((worker) => worker.localConcurrencyLimit)
           .firstOrNull ??
-      defaultLocalWorkerConcurrency);
+        configuredParallelSlots,
+  );
 
   /// Sets the Workspace-wide parallel slot total on every Worker record and
   /// advances each revision so Cloud accepts the new inventory.
   Future<int> setParallelSlots(int slots) {
     if (slots < minParallelSlots || slots > maxParallelSlots) {
-      throw ArgumentError.value(slots, 'slots',
-          'must be between $minParallelSlots and $maxParallelSlots');
+      throw ArgumentError.value(
+        slots,
+        'slots',
+        'must be between $minParallelSlots and $maxParallelSlots',
+      );
     }
     return _locked(() async {
       final workers = await _read();
@@ -492,11 +524,13 @@ class LocalWorkerRegistry {
           continue;
         }
         changed = true;
-        next.add(worker.copyWith(
+        next.add(
+          worker.copyWith(
           localConcurrencyLimit: slots,
           revision: worker.revision + 1,
           updatedAt: now,
-        ));
+          ),
+        );
       }
       if (changed) await _write(next);
       return slots;
@@ -516,22 +550,24 @@ class LocalWorkerRegistry {
     int? localConcurrencyLimit,
     LocalWorkerStatus status = LocalWorkerStatus.needsAttention,
     WorkerReadinessState? readinessState,
-  }) =>
-      _locked(() async {
+  }) => _locked(() async {
         final workers = await _read();
         final normalizedTypeId = catalogEntry.workerTypeId;
         if (catalogEntry.engineFamily != 'cli' ||
-            !RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$')
-                .hasMatch(normalizedTypeId)) {
+        !RegExp(
+          r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$',
+        ).hasMatch(normalizedTypeId)) {
           throw ArgumentError('Worker slot is not in the approved catalog');
         }
-        final existingSlot = workers
-            .indexWhere((worker) => worker.workerTypeId == normalizedTypeId);
+    final existingSlot = workers.indexWhere(
+      (worker) => worker.workerTypeId == normalizedTypeId,
+    );
         final now = clock().toUtc().toIso8601String();
         if (existingSlot >= 0 &&
             workers[existingSlot].status != LocalWorkerStatus.removed) {
           throw ArgumentError(
-              'This Worker Type is already configured in this Workspace');
+        'This Worker Type is already configured in this Workspace',
+      );
         }
         final previous = existingSlot < 0 ? null : workers[existingSlot];
         final worker = LocalWorker(
@@ -539,12 +575,13 @@ class LocalWorkerRegistry {
           workspaceId: workspaceId,
           workerTypeId: normalizedTypeId,
           localPermissions: List.unmodifiable(localPermissions),
-          localConcurrencyLimit: localConcurrencyLimit ??
+      localConcurrencyLimit:
+          localConcurrencyLimit ??
               workers
                   .where((worker) => worker.status != LocalWorkerStatus.removed)
                   .map((worker) => worker.localConcurrencyLimit)
                   .firstOrNull ??
-              defaultLocalWorkerConcurrency,
+          configuredParallelSlots,
           status: status,
           readinessState: readinessState,
           revision: (previous?.revision ?? 0) + 1,
@@ -569,8 +606,7 @@ class LocalWorkerRegistry {
   Future<LocalWorker> update(
     String workerId,
     LocalWorker Function(LocalWorker current) change,
-  ) =>
-      _locked(() async {
+  ) => _locked(() async {
         final workers = await _read();
         final index = workers.indexWhere((worker) => worker.id == workerId);
         if (index < 0) throw StateError('Worker does not exist');
@@ -586,8 +622,7 @@ class LocalWorkerRegistry {
         if (updated.id != current.id ||
             updated.workspaceId != workspaceId ||
             updated.createdAt != current.createdAt) {
-          throw StateError(
-              'Worker identity and ownership fields are immutable');
+      throw StateError('Worker identity and ownership fields are immutable');
         }
         _validateWorker(updated);
         _validateTypeUnique(workers, updated, excludingId: workerId);
@@ -649,7 +684,8 @@ class LocalWorkerRegistry {
           decoded['workers'] is! List ||
           decoded['checksum'] is! String) {
         throw const FormatException(
-            'unsupported or incomplete registry document');
+          'unsupported or incomplete registry document',
+        );
       }
       final schemaVersion = decoded['schemaVersion'] as int;
       final rawWorkers = decoded['workers'] as List;
@@ -694,9 +730,11 @@ class LocalWorkerRegistry {
       if (changed != null) {
         // Notify after the registry's mutation lock is released; inventory
         // providers read this registry to build their Cloud snapshot.
-        unawaited(Future<void>.delayed(Duration.zero)
-            .then((_) => changed())
-            .catchError((Object _) {}));
+        unawaited(
+          Future<void>.delayed(
+            Duration.zero,
+          ).then((_) => changed()).catchError((Object _) {}),
+        );
       }
     } finally {
       if (await temporary.exists()) await temporary.delete();
@@ -720,23 +758,31 @@ class LocalWorkerRegistry {
   void _validateWorker(LocalWorker worker) {
     if (worker.workspaceId != workspaceId ||
         worker.id.trim().isEmpty ||
-        !RegExp(r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$')
-            .hasMatch(worker.workerTypeId) ||
+        !RegExp(
+          r'^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$',
+        ).hasMatch(worker.workerTypeId) ||
         worker.workerTypeId.length > 96 ||
         worker.localConcurrencyLimit < 1 ||
         worker.revision < 1) {
       throw ArgumentError(
-          'Worker registry record violates identity or configuration invariants');
+        'Worker registry record violates identity or configuration invariants',
+      );
     }
   }
 
-  void _validateTypeUnique(List<LocalWorker> workers, LocalWorker candidate,
-      {String? excludingId}) {
-    if (workers.any((worker) =>
+  void _validateTypeUnique(
+    List<LocalWorker> workers,
+    LocalWorker candidate, {
+    String? excludingId,
+  }) {
+    if (workers.any(
+      (worker) =>
         worker.id != excludingId &&
-        worker.workerTypeId == candidate.workerTypeId)) {
+          worker.workerTypeId == candidate.workerTypeId,
+    )) {
       throw ArgumentError(
-          'A Workspace can have only one record per Worker Type');
+        'A Workspace can have only one record per Worker Type',
+      );
     }
   }
 
@@ -748,8 +794,10 @@ class LocalWorkerRegistry {
   }
 
   String _checksumRaw(int schemaVersion, Object workers) {
-    final canonical =
-        jsonEncode({'schemaVersion': schemaVersion, 'workers': workers});
+    final canonical = jsonEncode({
+      'schemaVersion': schemaVersion,
+      'workers': workers,
+    });
     return sha256.convert(utf8.encode(canonical)).toString();
   }
 }

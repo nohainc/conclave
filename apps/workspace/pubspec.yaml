@@ -4,7 +4,7 @@ publish_to: none
 version: 1.0.4
 
 environment:
-  sdk: ">=3.5.0 <4.0.0"
+  sdk: ">=3.12.0 <4.0.0"
   flutter: ">=3.24.0"
 
 dependencies:
@@ -23,6 +23,7 @@ dependencies:
   conclave_cli_worker_runtime:
     path: ../../packages/conclave_cli_worker_runtime
   cryptography: ^2.9.0
+  nanomarkup: ^1.0.0
 
 dev_dependencies:
   flutter_test:

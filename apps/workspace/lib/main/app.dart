@@ -41,59 +41,36 @@ Future<void> revokeAndForgetDesktopHumanSession({
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final dataDirectory = WorkspaceConfig.resolveDataDirectory(const []);
+  final settings = await WorkspaceSettingsStore(dataDirectory).ensureDefaults();
   await WorkspacePaths.preserveMacWorkRoot(
-    configuredWorkRoot: Platform.environment['CONCLAVE_WORKSPACE_WORK_ROOT'],
+    configuredWorkRoot: settings.workRootPath,
   );
   const credentialStore = PlatformSecureCredentialStore(
     nativeKeychain: FlutterMacKeychainBridge(),
   );
-  final dataDirectory = WorkspaceConfig.resolveDataDirectory(const []);
-  final preferencesStore = WorkspaceLifecyclePreferencesStore(dataDirectory);
   final registration = WorkspaceRegistrationStore(dataDirectory).readSync();
-  var runtimeCredentialLoaded = false;
-  var hasRuntimeCredential = false;
-  if (preferencesStore.needsRuntimeCredentialMigrationCheck &&
-      registration != null) {
-    hasRuntimeCredential = (await credentialStore
-                .readForSynchronousConfig(registration.workspaceRuntimeId))
-            ?.isNotEmpty ==
-        true;
-    runtimeCredentialLoaded = true;
-  }
-  try {
-    await preferencesStore.migrateLegacyIfNeeded(
-      hasRuntimeRegistrationAndCredential:
-          registration != null && hasRuntimeCredential,
+  if (registration != null) {
+    await credentialStore.readForSynchronousConfig(
+      registration.workspaceRuntimeId,
     );
-  } on Object catch (error) {
-    // A failed preference migration must not prevent the management shell from
-    // opening. The unversioned state reader still preserves any valid explicit
-    // intent; otherwise its safe default suppresses runtime auto-connect.
-    debugPrint('Could not migrate Workspace lifecycle preferences: $error');
-  }
-  final startupPreferences = preferencesStore.readSync();
-  final desiredRuntime = startupPreferences.desiredRuntime;
-  if (registration != null &&
-      desiredRuntime == DesiredRuntimeState.connected &&
-      !runtimeCredentialLoaded) {
-    await credentialStore
-        .readForSynchronousConfig(registration.workspaceRuntimeId);
   }
   await credentialStore.read(desktopHumanCredentialKey);
   final config = WorkspaceConfig.fromArgs(
     const [],
     credentialStore: credentialStore,
-    ignoreSavedRegistration: desiredRuntime == DesiredRuntimeState.disconnected,
   );
   // The UI is a local management client only. Runtime composition, Cloud
   // connectivity, Worker Engine supervision, and assignment processing are
   // owned by the standalone Workspace Service.
-  runApp(ConclaveWorkspaceApp(
+  runApp(
+    ConclaveWorkspaceApp(
     lifecycle: WorkspaceLifecycleController(
       config,
       credentialStore: credentialStore,
     ),
-  ));
+    ),
+  );
 }
 
 class ConclaveWorkspaceApp extends StatefulWidget {
@@ -205,7 +182,9 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       final context = _navigatorKey.currentContext;
       if (mounted && context != null) {
         showCopyableErrorSnackBar(
-            context, 'Could not register service: $error');
+          context,
+          'Could not register service: $error',
+        );
       }
     }
   }
@@ -245,9 +224,9 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
         widget.lifecycle.config.dataDirectory,
       ).readSync();
       if (registration == null ||
-          (await widget.lifecycle.credentialStore
-                      .read(registration.workspaceRuntimeId))
-                  ?.isNotEmpty !=
+          (await widget.lifecycle.credentialStore.read(
+                registration.workspaceRuntimeId,
+              ))?.isNotEmpty !=
               true) {
         // Authentication and credential recovery remain a management concern;
         // the actual Cloud connection is still opened by the service over IPC.
@@ -295,8 +274,9 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       if (mounted) {
         final context = _navigatorKey.currentContext;
         if (context != null) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(message)));
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
         }
       }
     } on Object catch (error) {
@@ -352,9 +332,11 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(browserOpened
+              Text(
+                browserOpened
                   ? 'Complete sign-in and approve Conclave Workspace in your browser. This window will update automatically.'
-                  : description),
+                    : description,
+              ),
               if (browserError != null) ...[
                 const SizedBox(height: 12),
                 SelectableText(browserError!),
@@ -410,11 +392,13 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
                       }
                     },
               icon: const Icon(Icons.open_in_browser),
-              label: Text(browserOpening
+              label: Text(
+                browserOpening
                   ? 'Opening…'
                   : browserOpened
                       ? 'Open browser again'
-                      : 'Open browser'),
+                    : 'Open browser',
+              ),
             ),
           ],
         ),
@@ -422,12 +406,10 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     );
     try {
       return await Future.any<DesktopHumanSession>([
-        client.waitForApprovalAndClaim(
-          intent,
-          isCancelled: () => cancelled,
+        client.waitForApprovalAndClaim(intent, isCancelled: () => cancelled),
+        dialogResult.then(
+          (_) => throw StateError('Workspace sign-in was cancelled.'),
         ),
-        dialogResult
-            .then((_) => throw StateError('Workspace sign-in was cancelled.')),
       ]);
     } on StateError {
       if (cancelled) return null;
@@ -444,17 +426,18 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     final lifecycle = widget.lifecycle;
     final dialogContext = _navigatorKey.currentContext;
     if (dialogContext == null) return;
-    final registration =
-        WorkspaceRegistrationStore(lifecycle.config.dataDirectory).readSync();
-    final cloudUrl = resolveWorkspaceCloudUrl(registration?.cloudUrl);
+    final cloudUrl = WorkspaceConfigurationResolver.cloudHttpOrigin(
+      lifecycle.config.cloudUri!,
+    );
     final client = DesktopAuthClient(cloudUrl: cloudUrl);
     DesktopHumanSession? previousSession;
     var failureContext = 'creating the sign-in request';
     DesktopHumanSession? claimedSession;
     var sessionCommitted = false;
     try {
-      final previousRecord =
-          await lifecycle.credentialStore.read(desktopHumanCredentialKey);
+      final previousRecord = await lifecycle.credentialStore.read(
+        desktopHumanCredentialKey,
+      );
       if (previousRecord != null) {
         try {
           final decoded = jsonDecode(previousRecord);
@@ -576,7 +559,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
                 previousSession.userId != session.userId &&
                 !await _requireStepUp('Switch the Workspace account')) {
               throw StateError(
-                  'Local authentication is required to switch accounts.');
+                'Local authentication is required to switch accounts.',
+              );
             }
             if (staleOwnershipForRepair != null) {
               final staleRegistration = existingRegistration;
@@ -618,7 +602,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
             if (existingRegistration != null && !registrationRepaired) {
               await WorkspaceRegistrationStore(
                 lifecycle.config.dataDirectory,
-              ).write(WorkspaceRegistration(
+              ).write(
+                WorkspaceRegistration(
                 workspaceRuntimeId: existingRegistration.workspaceRuntimeId,
                 workspaceId: existingRegistration.workspaceId,
                 cloudUrl: existingRegistration.cloudUrl,
@@ -626,7 +611,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
                 hostname: existingRegistration.hostname,
                 ownerUserId: cloudOwnerUserId,
                 installationId: installationId,
-              ));
+                ),
+              );
             }
           }
           if (previousSession != null &&
@@ -634,7 +620,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
               installationId == null &&
               !await _requireStepUp('Switch the Workspace account')) {
             throw StateError(
-                'Local authentication is required to switch accounts.');
+              'Local authentication is required to switch accounts.',
+            );
           }
         },
       );
@@ -651,7 +638,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
         lifecycle.config.dataDirectory,
       );
       final preferences = preferenceStore.readSync();
-      await preferenceStore.write(WorkspaceLifecyclePreferences(
+      await preferenceStore.write(
+        WorkspaceLifecyclePreferences(
         desiredRuntime: effectiveRegistration == null
             ? DesiredRuntimeState.disconnected
             : preferences.desiredRuntime,
@@ -663,7 +651,8 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
         ownerDisplayName: session.displayName,
         customWorkspaceName: preferences.customWorkspaceName,
         workRootPath: preferences.workRootPath,
-      ));
+        ),
+      );
       Object? restartFailure;
       if (registrationRepaired) {
         try {
@@ -673,7 +662,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
             );
           } else {
             await lifecycle.ensureBackgroundService();
-            await lifecycle.request('configuration.reload');
+            await lifecycle.restartService();
           }
         } on Object catch (error) {
           restartFailure = error;
@@ -683,9 +672,11 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       setState(() => _workerRevision++);
       ScaffoldMessenger.of(dialogContext).showSnackBar(
         SnackBar(
-          content: Text(restartFailure == null
+          content: Text(
+            restartFailure == null
               ? 'Signed in as ${session.displayName}.'
-              : 'Signed in as ${session.displayName}, but the repaired Workspace could not restart: $restartFailure'),
+                : 'Signed in as ${session.displayName}, but the repaired Workspace could not restart: $restartFailure',
+          ),
         ),
       );
     } catch (error) {
@@ -709,11 +700,11 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
 
   Future<void> _signOutDesktopHuman() async {
     final lifecycle = widget.lifecycle;
-    final registration =
-        WorkspaceRegistrationStore(lifecycle.config.dataDirectory).readSync();
     await revokeAndForgetDesktopHumanSession(
       credentialStore: lifecycle.credentialStore,
-      cloudUrl: resolveWorkspaceCloudUrl(registration?.cloudUrl),
+      cloudUrl: WorkspaceConfigurationResolver.cloudHttpOrigin(
+        lifecycle.config.cloudUri!,
+      ),
     );
     if (mounted) setState(() => _workerRevision++);
   }
@@ -726,10 +717,7 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
       if (mounted) {
         final ctx = _navigatorKey.currentContext;
         if (ctx != null) {
-          showCopyableErrorSnackBar(
-            ctx,
-            'Could not change Work Root: $error',
-          );
+          showCopyableErrorSnackBar(ctx, 'Could not change Work Root: $error');
         }
       }
       return;
@@ -748,16 +736,13 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
   Future<DesktopHumanSession?> _restoreDesktopSession(
     DesktopHumanSession session,
   ) async {
-    final registration =
-        WorkspaceRegistrationStore(widget.lifecycle.config.dataDirectory)
-            .readSync();
-    final cloudUrl = resolveWorkspaceCloudUrl(registration?.cloudUrl);
+    final cloudUrl = WorkspaceConfigurationResolver.cloudHttpOrigin(
+      widget.lifecycle.config.cloudUri!,
+    );
     final client = DesktopAuthClient(cloudUrl: cloudUrl);
     try {
       await client.validateSession(session);
-      final refreshWindow = DateTime.now().toUtc().add(
-            const Duration(days: 5),
-          );
+      final refreshWindow = DateTime.now().toUtc().add(const Duration(days: 5));
       if (session.expiresAt.toUtc().isAfter(refreshWindow)) return session;
       try {
         return await client.rotateSession(session);
@@ -779,17 +764,9 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
     final trimmed = newName.trim();
     if (trimmed.isEmpty) return;
     final lifecycle = widget.lifecycle;
-    final preferenceStore = WorkspaceLifecyclePreferencesStore(
-      lifecycle.config.dataDirectory,
-    );
-    final preferences = preferenceStore.readSync();
-    if (preferences.customWorkspaceName != trimmed) {
-      await preferenceStore.write(
-        preferences.copyWith(customWorkspaceName: trimmed),
-      );
+    await lifecycle.changeWorkspaceName(trimmed);
       if (mounted) setState(() {});
     }
-  }
 
   Future<void> _changePreventSleep(bool value) async {
     final preferenceStore = WorkspaceLifecyclePreferencesStore(
@@ -868,12 +845,14 @@ class _ConclaveWorkspaceAppState extends State<ConclaveWorkspaceApp>
           constraints: const BoxConstraints(minWidth: 750, minHeight: 700),
           child: lifecycle.hidden
               ? const Center(
-                  child: Text('Workspace is running in the background.'))
+                  child: Text('Workspace is running in the background.'),
+                )
               : WorkspaceShellRouter(
                   snapshot: lifecycle.uiSnapshot,
                   credentialStore: lifecycle.credentialStore,
-                  cloudUrl:
-                      resolveWorkspaceCloudUrl(lifecycle.uiSnapshot.cloudUrl),
+                  cloudUrl: WorkspaceConfigurationResolver.cloudHttpOrigin(
+                    lifecycle.config.cloudUri!,
+                  ),
                   refreshToken: _workerRevision,
                   restoreSession: _restoreDesktopSession,
                   onSignIn: _signInDesktopHuman,

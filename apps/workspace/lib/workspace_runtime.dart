@@ -30,8 +30,7 @@ String _runtimeFailureDiagnostic(
   String code, {
   String? detail,
   Map<String, Object?> context = const {},
-}) =>
-    jsonEncode({
+}) => jsonEncode({
       'schemaVersion': 1,
       'component': 'workspace_service',
       'stage': stage,
@@ -55,10 +54,13 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           '${Platform.pathSeparator}logs',
         ),
       );
-  final secureCredentialStore = credentialStore ??
+  final secureCredentialStore =
+      credentialStore ??
       PlatformSecureCredentialStore(
-          credentialDirectory:
-              Directory('${config.dataDirectory.path}/Credentials'));
+        credentialDirectory: Directory(
+          '${config.dataDirectory.path}/Credentials',
+        ),
+      );
   final releaseTrustPolicy = workerTrustPolicy;
   CliWorkerEngineSupervisor? cliWorkerEngineSupervisor;
   final installationId = await InstallationIdentityStore(
@@ -74,6 +76,11 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           workspaceId: config.workspaceId,
           authToken: config.authToken,
           workRootPath: config.workRootPath,
+          serviceEnabled: config.serviceEnabled,
+          connectOnStart: config.connectOnStart,
+          parallelSlots: config.parallelSlots,
+          folders: config.folders,
+          settingsFile: config.settingsFile,
         );
   final localWorkspaceId = await LocalWorkspaceIdentityStore(
     effectiveConfig.dataDirectory,
@@ -84,6 +91,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
   final localWorkerRegistry = LocalWorkerRegistry(
     dataDirectory: effectiveConfig.dataDirectory,
     workspaceId: localWorkspaceId,
+    configuredParallelSlots: effectiveConfig.parallelSlots,
     onChanged: () async {
       await workerCatalogCoordinator?.refreshLocalWorkers();
       await connection?.refreshWorkerInventory();
@@ -92,19 +100,23 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       await cliWorkerEngineSupervisor?.cancelWorker(workerId);
     },
   );
-  const developmentDraftRoot =
-      String.fromEnvironment('CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY');
+  await localWorkerRegistry.setParallelSlots(effectiveConfig.parallelSlots);
+  const developmentDraftRoot = String.fromEnvironment(
+    'CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY',
+  );
   DevelopmentToolProfiles? developmentProfiles;
   if (developmentDraftRoot.isNotEmpty) {
     final cloudUri = effectiveConfig.cloudUri;
     if (cloudUri == null) {
       throw StateError(
-          'Unsigned development Profiles require a loopback Cloud connection');
+        'Unsigned development Profiles require a loopback Cloud connection',
+      );
     }
     developmentProfiles = DevelopmentToolProfiles(
       draftsRoot: Directory(developmentDraftRoot),
       snapshotsRoot: Directory(
-          '${config.dataDirectory.absolute.path}/development_profiles'),
+        '${config.dataDirectory.absolute.path}/development_profiles',
+      ),
       cloudUri: cloudUri,
       releaseBuild: const bool.fromEnvironment('dart.vm.product'),
     );
@@ -140,8 +152,10 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             final supervisor = cliWorkerEngineSupervisor;
             if (supervisor == null) return false;
             final workers = (await localWorkerRegistry.list())
-                .where((worker) =>
-                    worker.workerTypeId == candidate.logicalWorkerTypeId)
+                .where(
+                  (worker) =>
+                      worker.workerTypeId == candidate.logicalWorkerTypeId,
+                )
                 .toList();
             if (workers.isEmpty) return false;
             final worker = workers.first;
@@ -154,19 +168,22 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             );
             if (!result.ready) {
               throw WorkerProfileProbeFailure(
-                  result.issueCode ?? 'provider_failure');
+                result.issueCode ?? 'provider_failure',
+              );
             }
             return true;
           },
           onRevocationsApplied: (workerTypeIds) async {
             for (final workerTypeId in workerTypeIds) {
-              unawaited(readinessMonitor
+              unawaited(
+                readinessMonitor
                   .checkNow(
                     mode: LocalWorkerProbeMode.passive,
                     workerTypeId: workerTypeId,
                     includeDisabled: true,
                   )
-                  .catchError((_) {}));
+                    .catchError((_) {}),
+              );
             }
           },
         );
@@ -227,7 +244,8 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
         .toList();
   } on Object catch (error) {
     stderr.writeln(
-        'Workspace local Worker registry unavailable at startup: $error');
+      'Workspace local Worker registry unavailable at startup: $error',
+    );
     activeWorkerIds = const <String>[];
   }
   final workRoot = await config.workRootResolver.resolve();
@@ -244,12 +262,16 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     applicationDataRoot: workspacePaths.applicationDataRoot,
     homeDirectory: currentPlatformRuntime.homeDirectory,
   );
-  final inputStaging = WorkRequestInputStaging(Directory(
-      '${workspacePaths.applicationSupportDirectory.path}${Platform.pathSeparator}staged-inputs'));
+  final inputStaging = WorkRequestInputStaging(
+    Directory(
+      '${workspacePaths.applicationSupportDirectory.path}${Platform.pathSeparator}staged-inputs',
+    ),
+  );
   final inputCloudUri = config.cloudUri;
   final inputRuntimeId = config.workspaceRuntimeId;
   final inputToken = config.authToken;
-  final inputDelivery = inputCloudUri == null ||
+  final inputDelivery =
+      inputCloudUri == null ||
           inputRuntimeId == null ||
           inputRuntimeId.isEmpty ||
           inputToken == null ||
@@ -275,8 +297,9 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       // catalog has never synchronized, the assignment fails promptly with a
       // specific reason and a background refresh repairs the next attempt.
       final catalogCoordinator = workerCatalogCoordinator;
-      final catalogEntry =
-          catalogCoordinator?.entryForWorker(worker.workerTypeId);
+      final catalogEntry = catalogCoordinator?.entryForWorker(
+        worker.workerTypeId,
+      );
       final catalogAvailable =
           catalogCoordinator == null || catalogEntry != null;
       final catalogConfirmed =
@@ -287,7 +310,8 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       return AssignmentLogicalWorker(
         id: worker.id,
         workerTypeId: worker.workerTypeId,
-        enabled: catalogAvailable &&
+        enabled:
+            catalogAvailable &&
             worker.activationState == LocalWorkerActivationState.enabled,
         ready: catalogAvailable && worker.status == LocalWorkerStatus.ready,
         permissions: worker.localPermissions.toSet(),
@@ -327,9 +351,11 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       // so the next assignment can start, and fail this one promptly.
       if (coordinator != null &&
           result.unavailable == WorkerLaunchUnavailable.noProfile) {
-        unawaited(coordinator
+        unawaited(
+          coordinator
             .ensureWorkerProfileAvailable(worker.workerTypeId)
-            .catchError((_) {}));
+              .catchError((_) {}),
+        );
       }
       const code = 'worker_not_ready';
       throw AssignmentExecutionFailure(
@@ -371,12 +397,18 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     onEngineProcessStarted: (context) =>
         connection?.traceAssignmentStage(context, 'engine_process_created'),
     cancelToolProfileAssignment: cliWorkerEngineSupervisor?.cancel,
-    executeWithActivity: (worker, workingDirectory, context, payload,
-        {onProgress,
+    executeWithActivity:
+        (
+          worker,
+          workingDirectory,
+          context,
+          payload, {
+          onProgress,
         onSlotReserved,
         authorizeStart,
         onEngineProcessStarted,
-        onActivity}) async {
+          onActivity,
+        }) async {
       final supervisor = cliWorkerEngineSupervisor;
       final coordinator = workerCatalogCoordinator;
       if (coordinator == null || supervisor == null) {
@@ -416,26 +448,33 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
         );
       }
 
-      final plan = workerHandler.pinnedLaunchPlan(context.assignmentId) ??
+          final plan =
+              workerHandler.pinnedLaunchPlan(context.assignmentId) ??
           await unpinnedPlan();
       final release = plan.release;
       final workerSessionValue = payload['workerSession'];
       final workerSession = workerSessionValue == null
           ? null
           : WorkerSessionContext.fromJson(
-              Map<String, Object?>.from(workerSessionValue as Map));
+                  Map<String, Object?>.from(workerSessionValue as Map),
+                );
       final input = payload['input'];
       final modelValue =
           payload['model'] ?? (input is Map ? input['model'] : null);
-      final reasoningEffortValue = payload['reasoningEffort'] ??
+          final reasoningEffortValue =
+              payload['reasoningEffort'] ??
           (input is Map ? input['reasoningEffort'] : null);
-      final sessionPolicyValue = payload['sessionPolicy'] ??
+          final sessionPolicyValue =
+              payload['sessionPolicy'] ??
           (input is Map ? input['sessionPolicy'] : null) ??
           'stateless';
       final sessionKeyValue =
-          payload['sessionKey'] ?? (input is Map ? input['sessionKey'] : null);
-      if (!const {'stateless', 'durable_session'}
-              .contains(sessionPolicyValue) ||
+              payload['sessionKey'] ??
+              (input is Map ? input['sessionKey'] : null);
+          if (!const {
+                'stateless',
+                'durable_session',
+              }.contains(sessionPolicyValue) ||
           (sessionPolicyValue == 'durable_session') !=
               (sessionKeyValue is String)) {
         throw AssignmentExecutionFailure(
@@ -487,7 +526,8 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           localDiagnostic: _runtimeFailureDiagnostic(
             'assignment_capacity',
             'worker_not_ready',
-            detail: 'The effective Cloud and local Worker capacity was invalid',
+                detail:
+                    'The effective Cloud and local Worker capacity was invalid',
           ),
         );
       }
@@ -502,10 +542,12 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             throw const AllowedFolderViolation(
                 'profile_unsupported',
                 'This Worker cannot use additional folders yet. Detach the '
-                    "Space's additional folders or choose another Worker.");
+                      "Space's additional folders or choose another Worker.",
+                );
           }
-          additionalDirectories =
-              await allowedFolders.resolveForExecution(folderIds);
+              additionalDirectories = await allowedFolders.resolveForExecution(
+                folderIds,
+              );
         }
       } on AllowedFolderViolation catch (error) {
         throw AssignmentExecutionFailure(
@@ -548,12 +590,16 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           workerSession: workerSession,
           statelessContext: payload["statelessContext"] == null
               ? null
-              : ConversationBootstrap.fromJson(Map<String, Object?>.from(
-                  payload["statelessContext"] as Map)),
+                  : ConversationBootstrap.fromJson(
+                      Map<String, Object?>.from(
+                        payload["statelessContext"] as Map,
+                      ),
+                    ),
           model: modelValue is String && modelValue.trim().isNotEmpty
               ? modelValue.trim()
               : null,
-          reasoningEffort: reasoningEffortValue is String &&
+              reasoningEffort:
+                  reasoningEffortValue is String &&
                   reasoningEffortValue.trim().isNotEmpty
               ? reasoningEffortValue.trim()
               : null,
@@ -596,20 +642,25 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
         if ((release.profile['model'] as Map?)?['discovery'] != null) {
           try {
             final file = File(
-                '${workspacePaths.workerStateDirectory(worker.id).path}/model-catalog.json');
+                  '${workspacePaths.workerStateDirectory(worker.id).path}/model-catalog.json',
+                );
             if (await file.length() > 128 * 1024) {
               throw const FormatException('Catalog exceeds limit');
             }
             final catalog = DiscoveredModelCatalog.fromJson(
                 Map<String, Object?>.from(
-                    jsonDecode(await file.readAsString()) as Map));
-            final currentDescriptor =
-                coordinator.entryForWorker(worker.workerTypeId);
+                    jsonDecode(await file.readAsString()) as Map,
+                  ),
+                );
+                final currentDescriptor = coordinator.entryForWorker(
+                  worker.workerTypeId,
+                );
             final currentResolution = currentDescriptor == null
                 ? null
                 : await launchPlans.resolve(
                     workerTypeId: worker.workerTypeId,
-                    profileDefinitionId: currentDescriptor.profileDefinitionId,
+                        profileDefinitionId:
+                            currentDescriptor.profileDefinitionId,
                     providerCliVersion: catalog.providerToolVersion,
                   );
             if (catalog.profileDigest == release.payloadDigest &&
@@ -617,12 +668,17 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
                     catalog.profileDigest) {
               await localWorkerRegistry.update(
                   worker.id,
-                  (current) => current.toolVersion != null &&
+                    (current) =>
+                        current.toolVersion != null &&
                           current.toolVersion != catalog.providerToolVersion
                       ? current
                       : current.copyWith(
-                          modelCatalog: catalog.withStale(catalog.stale ||
-                              current.modelCatalog?.stale == true)));
+                            modelCatalog: catalog.withStale(
+                              catalog.stale ||
+                                  current.modelCatalog?.stale == true,
+                            ),
+                          ),
+                  );
             }
           } on Object {
             // A catalog/cache failure must not replace the assignment outcome.
@@ -634,8 +690,9 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
   WorkspaceUpdateController? updateController;
   String? updateAvailable;
   var lastUpdateCheck = DateTime.fromMillisecondsSinceEpoch(0);
-  const packageManager =
-      String.fromEnvironment('CONCLAVE_WORKSPACE_PACKAGE_MANAGER');
+  const packageManager = String.fromEnvironment(
+    'CONCLAVE_WORKSPACE_PACKAGE_MANAGER',
+  );
   if (config.cloudUri != null && packageManager != 'apt') {
     updateController = WorkspaceUpdateController(
       cloudUri: config.cloudUri!,
@@ -665,7 +722,8 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     }
   }
 
-  connection = config.cloudUri != null &&
+  connection =
+      config.cloudUri != null &&
           config.workspaceRuntimeId != null &&
           config.workspaceId != null
       ? WorkspaceCloudConnection(
@@ -717,8 +775,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
               workerTypeId: worker.workerTypeId,
               profileDefinitionId: descriptor.profileDefinitionId,
               providerCliVersion: worker.toolVersion,
-            ))
-                .plan;
+            )).plan;
             if (plan == null) {
               return const {
                 'status': 'error',
@@ -777,8 +834,9 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           ),
           fallbackFactory: (uri) {
             final gatewayPath = uri.path.indexOf('/api/workspace-gateway');
-            final basePath =
-                gatewayPath < 0 ? '' : uri.path.substring(0, gatewayPath);
+            final basePath = gatewayPath < 0
+                ? ''
+                : uri.path.substring(0, gatewayPath);
             final baseUri = uri.replace(
               scheme: uri.scheme == 'wss' ? 'https' : 'http',
               path: basePath,
@@ -810,7 +868,8 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     assignmentHandler: workerHandler,
     workerStateDirectory: workspacePaths.workerStateDirectory,
     onRemovalChanged: () => unawaited(
-        workerCatalogCoordinator?.refreshLocalWorkers() ?? Future.value()),
+      workerCatalogCoordinator?.refreshLocalWorkers() ?? Future.value(),
+    ),
   );
   final engine = WorkspaceRuntime(
     config: effectiveConfig,
@@ -851,9 +910,11 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
     updateHandler: (request) async {
       final controller = updateController;
       if (controller == null) {
-        throw StateError(packageManager == 'apt'
+        throw StateError(
+          packageManager == 'apt'
             ? 'Update this installation using apt, then restart the user service.'
-            : 'Workspace updates are not configured');
+              : 'Workspace updates are not configured',
+        );
       }
       final action = request['action'] as String? ?? 'status';
       if (action == 'check') {
@@ -875,10 +936,12 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
               // Allow the IPC response to flush and release the engine lock
               // before the replacement process starts using the same data
               // directory.
-              unawaited(Future<void>.delayed(
+              unawaited(
+                Future<void>.delayed(
                 const Duration(milliseconds: 150),
                 () => exit(0),
-              ));
+                ),
+              );
               return true;
             } on Object {
               return false;

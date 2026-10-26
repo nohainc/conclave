@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the unsigned Linux Workspace bundle: Flutter management UI, the
-# standalone conclave-service, and the canonical generic Worker Engine.
+# standalone workspace service, and the canonical generic Worker Engine.
 set -euo pipefail
 
 MODE="${1:-release}"
@@ -46,7 +46,7 @@ BUILD="$WORKSPACE_DIR/build/linux/$ARCH/$MODE/bundle"
 rm -rf "$OUTPUT"
 mkdir -p "$OUTPUT"
 cp -R "$BUILD/." "$OUTPUT/"
-cp "$SERVICE_BUILD/conclave-service" "$SERVICE_BUILD/conclave-workspace" "$OUTPUT/"
+cp "$SERVICE_BUILD/workspace" "$SERVICE_BUILD/conclave-workspace" "$OUTPUT/"
 # The standalone service discovers assets relative to its own executable; the
 # Flutter UI uses its data/flutter_assets copy of the same Engine.
 cp -R "$SERVICE_BUILD/assets" "$OUTPUT/"
@@ -56,7 +56,7 @@ DART_PAYLOAD="lib/libapp.so"
 [[ "$MODE" == "debug" ]] && DART_PAYLOAD="data/flutter_assets/kernel_blob.bin"
 for file in conclave_workspace lib/libflutter_linux_gtk.so "$DART_PAYLOAD" \
   data/flutter_assets/assets/engines/conclave_cli_worker_engine \
-  assets/engines/conclave_cli_worker_engine conclave-service; do
+  assets/engines/conclave_cli_worker_engine workspace; do
   [[ -e "$OUTPUT/$file" ]] || { echo "Bundle is missing $file" >&2; exit 1; }
 done
 CANONICAL="$(sha256sum "$WORKSPACE_DIR/assets/engines/conclave_cli_worker_engine" | cut -d' ' -f1)"
@@ -67,7 +67,7 @@ for engine in "$OUTPUT/data/flutter_assets/assets/engines/conclave_cli_worker_en
     exit 1
   }
 done
-chmod 755 "$OUTPUT/conclave_workspace" "$OUTPUT/conclave-service" \
+chmod 755 "$OUTPUT/conclave_workspace" "$OUTPUT/workspace" \
   "$OUTPUT/conclave-workspace" \
   "$OUTPUT/assets/engines/conclave_cli_worker_engine"
 

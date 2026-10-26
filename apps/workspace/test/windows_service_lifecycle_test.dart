@@ -17,13 +17,11 @@ void main() {
     }
     final root = await Directory.systemTemp.createTemp('conclave-lifecycle-');
     final data = Directory('${root.path}/state');
-    final work = Directory('${root.path}/work');
     Process? service;
     WorkspaceManagerIpcClient? client;
     final diagnostics = StringBuffer();
     Future<void> start() async {
-      service = await Process.start(
-          executable, ['--data-dir', data.path, '--work-root', work.path]);
+      service = await Process.start(executable, ['--data-dir', data.path]);
       unawaited(
           service!.stdout.transform(utf8.decoder).forEach(diagnostics.write));
       unawaited(
@@ -68,8 +66,6 @@ void main() {
         '--once',
         '--data-dir',
         data.path,
-        '--work-root',
-        work.path
       ]).timeout(const Duration(seconds: 15));
       expect(duplicate.exitCode, isNot(0));
       expect(await client!.request('service.getHealth'),

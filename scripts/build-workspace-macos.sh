@@ -235,14 +235,14 @@ mkdir -p "$HELPERS_DIR/assets/engines" "$LAUNCH_AGENTS_DIR"
   --define="CONCLAVE_RELEASE_TRUST_KEYS_JSON=$PUBLIC_RELEASE_ROOTS" \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
   "$WORKSPACE_DIR/bin/conclave_workspace_service.dart" \
-  -o "$HELPERS_DIR/conclave-service"
+  -o "$HELPERS_DIR/workspace"
 ENGINE="$WORKSPACE_DIR/assets/engines/conclave_cli_worker_engine"
 if [[ ! -x "$ENGINE" ]]; then
   echo "The generic CLI Worker Engine is missing: $ENGINE" >&2
   exit 1
 fi
 cp "$ENGINE" "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
-chmod 755 "$HELPERS_DIR/conclave-service" \
+chmod 755 "$HELPERS_DIR/workspace" \
   "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
 sed "s/com\\.conclaveax\\.workspace/$BUNDLE_ID/g" \
   "$WORKSPACE_DIR/macos/Runner/LaunchAgents/com.conclaveax.workspace.service.plist" \
@@ -279,9 +279,9 @@ if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
     "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
   codesign --force --options runtime --timestamp \
     --entitlements "$WORKSPACE_DIR/macos/Runner/WorkspaceHelper.entitlements" \
-    --identifier "conclave-service" \
+    --identifier "workspace" \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" \
-    "$HELPERS_DIR/conclave-service"
+    "$HELPERS_DIR/workspace"
 
   # Flutter may leave the app executable ad-hoc signed even when the outer
   # bundle is later sealed with the configured Apple identity. SMAppService
@@ -303,7 +303,7 @@ if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
     --entitlements "$APP_ENTITLEMENTS" \
     --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" "$APP"
   codesign --verify --strict --verbose=2 \
-    "$HELPERS_DIR/conclave-service"
+    "$HELPERS_DIR/workspace"
   codesign --verify --strict --verbose=2 \
     "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
   codesign --verify --deep --strict --verbose=2 "$APP"
@@ -321,8 +321,8 @@ else
     "$HELPERS_DIR/assets/engines/conclave_cli_worker_engine"
   codesign --force --options runtime \
     --entitlements "$WORKSPACE_DIR/macos/Runner/WorkspaceHelper.entitlements" \
-    --identifier "conclave-service" \
-    --sign - "$HELPERS_DIR/conclave-service"
+    --identifier "workspace" \
+    --sign - "$HELPERS_DIR/workspace"
   APP_EXECUTABLE="$APP/Contents/MacOS/$(plist_buddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
   codesign --force --options runtime \
     --entitlements "$APP_ENTITLEMENTS" \

@@ -92,19 +92,28 @@ separate process, Cloud-connection, and execution state in
 `workspace-state.json`.
 
 The service exposes a versioned, authenticated local IPC protocol for status,
-connection, Worker, assignment, configuration, log, and diagnostics commands.
+connection, Worker, assignment, log, and diagnostics commands.
 Service restart and shutdown remain host-manager operations. The Flutter
 management shell connects through this protocol and does not create or control
 an in-process execution runtime. See the canonical architecture document for
 the command surface, ownership map, and validation gates.
 
+Headless execution is the primary product architecture. Non-secret behavior is
+defined in the strict, versioned Nano Markup file `<state>/workspace.nano`:
+Cloud origin/startup intent, display name, parallel execution slots, and a map
+of named absolute folders. The service reads it once at startup. Use
+`conclave-workspace config init|show|validate|path`, edit the file while stopped,
+and restart the service to apply it. Credentials and identity are stored
+elsewhere. The Flutter app is an optional management client for the same service
+and configuration, not another runtime owner.
+
 For development, first run `scripts/build-workspace-service.sh`, then
-`scripts/run-workspace-service.sh` starts the compiled `conclave-service`
+`scripts/run-workspace-service.sh` starts the compiled `workspace`
 against the existing local configuration without building the Flutter app.
 Use `scripts/run-workspace-service.sh --source` only when debugging Dart source
 directly; that mode intentionally appears as a Dart VM process.
 Compiled service and Engine processes set their macOS diagnostic names at
-startup, so Activity Monitor shows `conclave-service` and `conclave-agent`
+startup, so Activity Monitor shows `workspace` and `conclave-agent`
 instead of the Dart runtime prefix. This changes only the local display name;
 IPC, Workspace credentials, and Cloud authentication are unchanged.
 `scripts/check-workspace-service.sh` compiles it and runs a one-shot lifecycle
@@ -179,7 +188,7 @@ Work Root are editable only while the service is stopped. The Workers section
 has a catalog refresh control in its heading, while actionable service and
 Cloud errors remain visible in context.
 
-Packaged runtime process names are `conclave-service` and `conclave-agent`.
+Packaged runtime process names are `workspace` and `conclave-agent`.
 The latter is the separately isolated generic CLI Worker Engine, materialized
 under the existing Workspace Engine registry. LaunchAgent identity remains
 `com.conclaveax.workspace.service`; assets retain their shared Engine names.

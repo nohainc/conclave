@@ -5,6 +5,7 @@ import 'package:conclave_workspace/secure_credentials.dart';
 import 'package:conclave_workspace/workspace.dart';
 import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/workspace_service_lifecycle.dart';
+import 'package:conclave_workspace/workspace_settings.dart';
 
 class _MemoryCredentials implements SecureCredentialStore {
   final values = <String, String>{};
@@ -29,19 +30,21 @@ void main() {
     addTearDown(() => root.delete(recursive: true));
     final credentials = _MemoryCredentials()
       ..values['runtime-1'] = 'runtime-secret';
+    final settingsStore = WorkspaceSettingsStore(root);
+    final defaults = await settingsStore.ensureDefaults();
+    await settingsStore.write(defaults.copyWith(
+      cloudUrl: 'https://example.test',
+      folders: {...defaults.folders, 'work': '${root.path}/work'},
+    ));
 
     final resolved = const WorkspaceConfigurationResolver().resolve(
       [
         '--data-dir',
         root.path,
-        '--cloud-url',
-        'https://example.test',
         '--workspace-runtime-id',
         'runtime-1',
         '--workspace-id',
         'workspace-1',
-        '--work-root',
-        '${root.path}/work',
       ],
       credentialStore: credentials,
     );

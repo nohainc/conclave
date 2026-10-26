@@ -37,8 +37,8 @@ jobs:
         run: |
           state="$(mktemp -d)"
           CONCLAVE_WORKSPACE_SECRET_STORE=file \
-            dist/conclave-workspace/linux/release/conclave-service \
-            --data-dir "$state/state" --work-root "$state/work" --once
+            dist/conclave-workspace/linux/release/workspace \
+            --data-dir "$state/state" --once
           test -f "$state/state/installation-id"
       - name: Smoke test packaged UI startup
         run: |

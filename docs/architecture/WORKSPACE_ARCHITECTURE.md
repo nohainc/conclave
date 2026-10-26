@@ -7,24 +7,17 @@ new code should follow this document.
 ## Ownership
 
 ```text
-Conclave Workspace.app
-    management UI, account/setup forms, native service controls, IPC client
+workspace (headless Dart service)
+    Cloud transport, assignments, state, workers, sessions, logs,
+    diagnostics, Work Root access; authoritative on every platform
+                 ▲
+                 │ authenticated local IPC (status and operations)
+                 │ workspace.nano (restart-applied desired configuration)
                  │
-                 ├── macOS host manager
-                 │     register/start/stop/restart/unregister and process facts
-                 │
-                 └── authenticated local IPC
-                              │
-                    Conclave Workspace Service
-                    Cloud transport, assignments, state, workers, sessions,
-                    logs, diagnostics, and Work Root access
-                              │
-                         Worker subsystem
-                         registry, catalog, profiles, readiness, supervision
-                              │
-                       generic CLI Worker Engine
-                              │
-                       current Worker Profile → provider CLI
+Conclave Workspace.app / conclave-workspace
+    optional management clients, account/setup flows, host service controls
+
+workspace → Worker subsystem → conclave-agent → provider CLI
 ```
 
 Workspace.app must not create a Cloud connection, run readiness checks, spawn
@@ -34,7 +27,7 @@ it receives a profile, command, environment policy, working directory, input,
 execution options, and cancellation, and returns output. It has no Cloud,
 Space, Thread, Workflow, D1, or UI dependency.
 
-The service is a standalone Dart executable (`conclave-service`) and keeps the
+The service is a standalone Dart executable (`workspace`) and keeps the
 generic Engine as a separately supervised child (`conclave-agent`). The service
 holds the per-installation lock, owns process cleanup, and is the only runtime
 owner. Closing Workspace.app closes its IPC client and does not stop execution.
@@ -61,11 +54,11 @@ Cloud:   disconnected | connecting | connected | reconnecting
 
 `Stop Service` drains/cancels according to the bounded service policy,
 disconnects Cloud, terminates child Engines, and leaves host registration in
-place. `Unregister Service` is a separate destructive host operation. Starting
-the service does not implicitly request a Cloud connection; persisted Cloud
-intent is restored by the service after it starts. All runtime commands
-(`connection.*`, `worker.*`, assignment controls, configuration, logs, and
-diagnostics) cross authenticated versioned IPC. Host operations cannot be
+place. `Unregister Service` is a separate destructive host operation. At startup
+the service reads `workspace.nano` exactly once and connects only when
+`cloud.connect_on_start` is true. Runtime operations (`connection.*`,
+`worker.*`, assignment controls, logs, and diagnostics) cross authenticated
+versioned IPC. Configuration is not mutated or reloaded through IPC. Host operations cannot be
 implemented through IPC because they must start or stop a process that may not
 exist.
 
@@ -341,13 +334,50 @@ never places tokens in application tables or forwards Cloud credentials to a
 Worker Engine. IPC authorization, installation ownership, execution admission,
 and Work Root boundaries are enforced by the service.
 
-## Configuration sources
+## Restart-applied configuration
 
-Persisted registration, lifecycle preferences, secure credentials, Worker
-registry, Profiles, sessions, and Work Root are authoritative for a normal
-service installation. Environment variables are explicit build/development
-inputs or temporary command-line overrides; a LaunchAgent must not depend on a
-shell profile or hidden environment fallback.
+`<state>/workspace.nano` is the only non-secret behavior configuration. It is
+strict, versioned Nano Markup parsed with `nohainc/nanomarkup.dart`; unknown
+behavior keys, invalid scalar values, relative paths, credentialed URLs, and
+missing required folders fail validation. The service reads it once at process
+start. The CLI and desktop app edit it atomically and use the host manager to
+restart the process. The service exposes active values read-only; it accepts no
+settings mutation or live reload command.
+
+```text
+..
+    version 1
+    service..
+        enabled true
+    cloud..
+        url https://app.conclaveax.com
+        connect_on_start true
+    workspace..
+        name My Workspace
+    execution..
+        parallel_slots 5
+    folders..
+        root /home/me
+        conclave /home/me/.local/share/conclave/workspace
+        state /home/me/.local/state/conclave/workspace
+        work /home/me/Documents/Conclave
+        profiles /home/me/.local/share/conclave/workspace/Profiles
+        engines /home/me/.local/share/conclave/workspace/Engines
+        logs /home/me/.local/state/conclave/workspace/logs
+        cache /home/me/.local/state/conclave/workspace/cache
+```
+
+`root`, `conclave`, `state`, and `work` are required. Extra aliases are allowed
+for platform locations, but aliases do not grant Worker filesystem access.
+Allowed folders remain a separate security registry. The state directory is a
+bootstrap selected by the platform default or `--data-dir`; `folders.state`
+documents it and cannot relocate the file that contains it.
+
+Secrets, identities, Cloud registration, Worker registry, Profiles, sessions,
+and transient state remain in dedicated stores and never belong in
+`workspace.nano`. Environment variables are build/development/test inputs,
+credential-store selection, or the bootstrap state-directory override—not
+fallback settings in packaged builds.
 
 | Variable | Classification | Purpose |
 | --- | --- | --- |
@@ -361,8 +391,6 @@ shell profile or hidden environment fallback.
 | `CONCLAVE_WORKSPACE_DEVELOPMENT_DATA_DIR` | development-only | isolated dev state root |
 | `CONCLAVE_WORKSPACE_BUNDLE_DIR` | test/development-only | explicit bundled Engine location |
 | `CONCLAVE_WORKSPACE_DATA_DIR` | CLI/test override | explicit state directory; persisted state wins in packaged service |
-| `CONCLAVE_WORKSPACE_CLOUD_URL` | CLI/test override | explicit Cloud origin before registration exists |
-| `CONCLAVE_WORKSPACE_WORK_ROOT` | CLI/test override | explicit Work Root before preferences exist |
 | `CONCLAVE_WORKSPACE_RUNTIME_ID`, `CONCLAVE_WORKSPACE_INSTALLATION_ID`, `CONCLAVE_WORKSPACE_ID` | CLI/test override | fixture identity values; never production secrets |
 | `CONCLAVE_WORKSPACE_TOKEN` | test-only | fixture credential; production uses secure storage |
 
@@ -443,9 +471,11 @@ Service or `0600` file credential store; see the
   DPAPI secret store; `%LOCALAPPDATA%\Conclave\Workspace`.
 - On every platform the Service, Engine, and provider CLIs run as the same
   user that owns the CLI logins; Conclave never manages provider credentials.
-- Headless hosts are managed through a `conclave-workspace` IPC client
-  over authenticated local IPC. Browser approval and registration remain
-  service-owned; Linux host commands use the existing systemd adapter.
+- Headless operation is primary. Hosts are configured through `workspace.nano`
+  and managed through the `conclave-workspace` client over authenticated local
+  IPC. Existing Cloud email/password sign-in works in the terminal without a
+  browser; browser approval remains an MFA fallback. The Flutter application is
+  an optional second management client.
 
 ### Profile-declared model discovery
 

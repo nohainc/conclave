@@ -17,8 +17,9 @@ void main() {
 
   setUp(() async {
     id = 0;
-    directory =
-        await Directory.systemTemp.createTemp('conclave-worker-registry-');
+    directory = await Directory.systemTemp.createTemp(
+      'conclave-worker-registry-',
+    );
     registry = LocalWorkerRegistry(
       dataDirectory: directory,
       workspaceId: 'workspace-1',
@@ -50,9 +51,13 @@ void main() {
       ),
     );
 
-    final document = jsonDecode(
-      await File('${directory.path}/configured-workers.json').readAsString(),
-    ) as Map<String, dynamic>;
+    final document =
+        jsonDecode(
+              await File(
+                '${directory.path}/configured-workers.json',
+              ).readAsString(),
+            )
+            as Map<String, dynamic>;
     final record = (document['workers'] as List).single as Map;
     expect(document['schemaVersion'], 19);
     expect(record['workerId'], worker.id);
@@ -81,11 +86,14 @@ void main() {
     ]) {
       expect(record.containsKey(obsolete), isFalse, reason: obsolete);
     }
-    expect((await registry.list()).single.toolPath,
-        '/Users/test/.local/bin/codex');
+    expect(
+      (await registry.list()).single.toolPath,
+      '/Users/test/.local/bin/codex',
+    );
   });
 
-  test('every Worker always has full local access and all permissions',
+  test(
+    'every Worker always has full local access and all permissions',
       () async {
     final worker = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
@@ -97,7 +105,8 @@ void main() {
     final reloaded = (await registry.find(worker.id))!;
     expect(reloaded.fullLocalAccessAuthorized, isTrue);
     expect(reloaded.localPermissions, containsAll(executionPermissionIds));
-  });
+    },
+  );
 
   test(
       'reset is performed by the runtime owner and shuts down local Worker instances',
@@ -116,7 +125,8 @@ void main() {
 
     expect(removed, [worker.id]);
     expect(await ownerRegistry.list(), isEmpty);
-  });
+    },
+  );
 
   test('rejects legacy and unknown fields in the current schema', () async {
     final worker = await registry.create(
@@ -138,14 +148,17 @@ void main() {
     );
   });
 
-  test('parallel slots are one Workspace total stored on every Worker',
+  test(
+    'parallel slots are one Workspace total stored on every Worker',
       () async {
     final a = await registry.create(
-        catalogEntry: logicalWorkerCatalogFixture('chatgpt'));
+        catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
+      );
     expect(a.localConcurrencyLimit, 5);
     expect(await registry.parallelSlots(), 5);
     final b = await registry.create(
-        catalogEntry: logicalWorkerCatalogFixture('claude'));
+        catalogEntry: logicalWorkerCatalogFixture('claude'),
+      );
     await registry.setParallelSlots(8);
     expect(await registry.parallelSlots(), 8);
     for (final worker in await registry.list()) {
@@ -155,27 +168,46 @@ void main() {
     expect((await registry.find(b.id))!.revision, b.revision + 1);
     // A Worker added later joins the same total.
     final c = await registry.create(
-        catalogEntry: logicalWorkerCatalogFixture('gemini'));
+        catalogEntry: logicalWorkerCatalogFixture('gemini'),
+      );
     expect(c.localConcurrencyLimit, 8);
     expect(() => registry.setParallelSlots(0), throwsArgumentError);
     expect(() => registry.setParallelSlots(11), throwsArgumentError);
-  });
+    },
+  );
+
+  test(
+    'configured parallel slots apply before the first Worker exists',
+    () async {
+      final configured = LocalWorkerRegistry(
+        dataDirectory: directory,
+        workspaceId: 'workspace-1',
+        configuredParallelSlots: 7,
+        idGenerator: () => 'configured-worker',
+      );
+
+      expect(await configured.parallelSlots(), 7);
+      final worker = await configured.create(
+        catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
+      );
+      expect(worker.localConcurrencyLimit, 7);
+    },
+  );
 
   test('keeps one local Worker instance per logical Worker Type', () async {
     final chatgpt = await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
     );
     expect(chatgpt.workerTypeId, 'chatgpt');
-    await registry.create(
-      catalogEntry: logicalWorkerCatalogFixture('gemini'),
-    );
+    await registry.create(catalogEntry: logicalWorkerCatalogFixture('gemini'));
     await expectLater(
       registry.create(catalogEntry: logicalWorkerCatalogFixture('chatgpt')),
       throwsArgumentError,
     );
   });
 
-  test('creates logical Workers from catalog entries, including future types',
+  test(
+    'creates logical Workers from catalog entries, including future types',
       () async {
     const entry = WorkerDescriptor(
       workerTypeId: 'approved-cli',
@@ -206,7 +238,8 @@ void main() {
       ),
       throwsArgumentError,
     );
-  });
+    },
+  );
 
   test(
       'schema reset clears registry but preserves profiles, state, and Work Root',
@@ -220,7 +253,7 @@ void main() {
           'productWorkerTypeId': 'chatgpt',
           'authStrategy': 'browser_auth',
           'localPermissions': ['repository:read'],
-        }
+          },
       ],
       'checksum': 'legacy-checksum-is-not-interpreted',
     });
@@ -243,10 +276,14 @@ void main() {
     expect(reset['schemaVersion'], 19);
     expect(reset['workers'], isEmpty);
     for (final preserved in preservedFiles) {
-      expect(await preserved.readAsString(), 'preserve',
-          reason: preserved.path);
+        expect(
+          await preserved.readAsString(),
+          'preserve',
+          reason: preserved.path,
+        );
     }
-  });
+    },
+  );
 
   test('removal deletes the Worker record and its settings', () async {
     final worker = await registry.create(
@@ -255,9 +292,13 @@ void main() {
     await registry.remove(worker.id);
 
     expect(await registry.list(includeRemoved: true), isEmpty);
-    final saved = jsonDecode(
-      await File('${directory.path}/configured-workers.json').readAsString(),
-    ) as Map;
+    final saved =
+        jsonDecode(
+              await File(
+                '${directory.path}/configured-workers.json',
+              ).readAsString(),
+            )
+            as Map;
     expect(saved['workers'], isEmpty);
 
     final readded = await registry.create(
@@ -266,7 +307,8 @@ void main() {
     expect(readded.revision, 1);
   });
 
-  test('backup uses current schema and excludes provider configuration',
+  test(
+    'backup uses current schema and excludes provider configuration',
       () async {
     await registry.create(
       catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
@@ -282,5 +324,6 @@ void main() {
     ]) {
       expect(jsonEncode(backup), isNot(contains(legacy)));
     }
-  });
+    },
+  );
 }

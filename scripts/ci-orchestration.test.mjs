@@ -114,8 +114,8 @@ describe("CI acceptance orchestration", () => {
 <plist version="1.0"><dict>
 <key>Label</key><string>com.conclaveax.workspace.service</string>
 <key>AssociatedBundleIdentifiers</key><array><string>com.conclaveax.workspace</string></array>
-<key>BundleProgram</key><string>Contents/Helpers/conclave-service</string>
-<key>ProgramArguments</key><array><string>Contents/Helpers/conclave-service</string></array>
+<key>BundleProgram</key><string>Contents/Helpers/workspace</string>
+<key>ProgramArguments</key><array><string>Contents/Helpers/workspace</string></array>
 <key>RunAtLoad</key><false/>
 </dict></plist>
 `,
@@ -154,7 +154,7 @@ describe("CI acceptance orchestration", () => {
                   : command === "codesign"
                     ? 'if [ "$1" = "-dv" ] || [ "$1" = "-d" ]; then exit 1; fi; exit 0'
                     : command === "PlistBuddy"
-                      ? 'if [ "$1" = "-c" ] && [ "$2" = "Print :CFBundleExecutable" ]; then echo Conclave; elif [ "$1" = "-c" ] && [ "$2" = "Print :CFBundleIdentifier" ]; then echo com.conclaveax.workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :Label" ]; then echo com.conclaveax.workspace.service; elif [ "$1" = "-c" ] && [ "$2" = "Print :AssociatedBundleIdentifiers:0" ]; then echo com.conclaveax.workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :BundleProgram" ]; then echo Contents/Helpers/conclave-service; elif [ "$1" = "-c" ] && [ "$2" = "Print :ProgramArguments:0" ]; then echo Contents/Helpers/conclave-service; elif [ "$1" = "-c" ] && [ "$2" = "Print :RunAtLoad" ]; then echo false; else exit 1; fi'
+                      ? 'if [ "$1" = "-c" ] && [ "$2" = "Print :CFBundleExecutable" ]; then echo Conclave; elif [ "$1" = "-c" ] && [ "$2" = "Print :CFBundleIdentifier" ]; then echo com.conclaveax.workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :Label" ]; then echo com.conclaveax.workspace.service; elif [ "$1" = "-c" ] && [ "$2" = "Print :AssociatedBundleIdentifiers:0" ]; then echo com.conclaveax.workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :BundleProgram" ]; then echo Contents/Helpers/workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :ProgramArguments:0" ]; then echo Contents/Helpers/workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :RunAtLoad" ]; then echo false; else exit 1; fi'
                       : command === "flutter"
                         ? `echo "flutter $*" >> "$CI_TEST_LOG"\nif [ "$1" = build ]; then app='build/macos/Build/Products/Release/Conclave ${name === "workspace" ? "Workspace" : "Profile Lab"}.app'; mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks"; printf '%s' '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Conclave</string></dict></plist>' > "$app/Contents/Info.plist"; touch "$app/Contents/MacOS/Conclave"; chmod 755 "$app/Contents/MacOS/Conclave"; fi`
                         : "exit 0";

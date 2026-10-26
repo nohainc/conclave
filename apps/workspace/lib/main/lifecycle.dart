@@ -14,7 +14,8 @@ bool _hasValidCachedDesktopSession(SecureCredentialStore credentialStore) {
 }
 
 String? _readUserEmailFromCredentialStore(
-    SecureCredentialStore credentialStore) {
+  SecureCredentialStore credentialStore,
+) {
   try {
     final stored = credentialStore.readSync(desktopHumanCredentialKey);
     if (stored == null || stored.isEmpty) return null;
@@ -40,14 +41,14 @@ class WorkspaceLifecycleController extends ChangeNotifier {
       _managerSnapshot = initialManagerSnapshot;
       _managerConnected = true;
       final service = initialManagerSnapshot['service'];
-      final processState =
-          service is Map ? service['processState']?.toString() : null;
+      final processState = service is Map
+          ? service['processState']?.toString()
+          : null;
       _serviceInfo = _serviceInfo.copyWith(
         process: switch (processState) {
           'ready' => WorkspaceServiceProcessStatus.running,
           'starting' ||
-          'initializing' =>
-            WorkspaceServiceProcessStatus.starting,
+          'initializing' => WorkspaceServiceProcessStatus.starting,
           'stopping' => WorkspaceServiceProcessStatus.stopping,
           'stopped' => WorkspaceServiceProcessStatus.stopped,
           'failed' => WorkspaceServiceProcessStatus.failed,
@@ -88,13 +89,11 @@ class WorkspaceLifecycleController extends ChangeNotifier {
   bool _closed = false;
   late final IpcWorkspaceWorkerCatalog workerCatalog =
       IpcWorkspaceWorkerCatalog(
-          (command, {payload = const {}}) => request(
-                command,
-                payload: payload,
-              ),
+        (command, {payload = const {}}) => request(command, payload: payload),
           cacheFile: File(
             '${config.dataDirectory.path}/runtime/manager-worker-display.json',
-          ));
+        ),
+      );
   // Fail closed until the human session has been restored by the shell router.
   bool _managementAuthRequired = true;
   static final _desktopShell = DesktopShell();
@@ -121,15 +120,41 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     if (_managerConnected) {
       throw StateError('Stop the service before changing Work Root.');
     }
-    final installationId = config.installationId ??
-        WorkspaceRegistrationStore(config.dataDirectory)
-            .readSync()
-            ?.installationId ??
-        InstallationIdentityStore(config.dataDirectory).readSync();
-    await StoppedWorkspaceConfiguration(config.dataDirectory,
-            installationId: installationId)
-        .setWorkRoot(path);
+    final target = Directory(path);
+    if (!target.existsSync()) {
+      await target.create(recursive: true);
+    }
+    final resolvedPath = await target.resolveSymbolicLinks();
+    final store = WorkspaceSettingsStore(config.dataDirectory);
+    final settings = await store.ensureDefaults();
+    await store.write(
+      settings.copyWith(
+        folders: {...settings.folders, 'work': resolvedPath},
+      ),
+    );
     notifyListeners();
+  }
+
+  Future<void> changeWorkspaceName(String name) async {
+    await writeSettings(workspaceName: name.trim());
+    if (_serviceInfo.processRunning) await restartService();
+    notifyListeners();
+  }
+
+  Future<void> writeSettings({
+    String? cloudUrl,
+    bool? connectOnStart,
+    String? workspaceName,
+  }) async {
+    final store = WorkspaceSettingsStore(config.dataDirectory);
+    final settings = await store.ensureDefaults();
+    await store.write(
+      settings.copyWith(
+        cloudUrl: cloudUrl,
+        connectOnStart: connectOnStart,
+        workspaceName: workspaceName,
+      ),
+    );
   }
 
   /// Touch the configured Work Root before starting the background service.
@@ -194,7 +219,8 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     if (info.registration ==
         WorkspaceBackgroundServiceRegistration.approvalRequired) {
       throw StateError(
-          'Approve Conclave Workspace in System Settings → General → Login Items, then start the service again.');
+        'Approve Conclave Workspace in System Settings → General → Login Items, then start the service again.',
+      );
     }
     try {
       if (!info.registered ||
@@ -211,11 +237,13 @@ class WorkspaceLifecycleController extends ChangeNotifier {
       if (info.registration ==
           WorkspaceBackgroundServiceRegistration.approvalRequired) {
         throw StateError(
-            'Approve Conclave Workspace in System Settings → General → Login Items, then start the service again.');
+          'Approve Conclave Workspace in System Settings → General → Login Items, then start the service again.',
+        );
       }
       if (!info.registered) {
         throw StateError(
-            'Workspace Service could not be registered (${info.registration.name}).');
+          'Workspace Service could not be registered (${info.registration.name}).',
+        );
       }
       // Registration and process launch are separate host operations. The
       // explicit start call returns immediately; IPC readiness is proven in
@@ -271,9 +299,11 @@ class WorkspaceLifecycleController extends ChangeNotifier {
         'IPC key': await File('${runtime.path}/manager-ipc.key').exists()
             ? 'Found'
             : 'Missing',
-        'IPC socket': await FileSystemEntity.type(
+        'IPC socket':
+            await FileSystemEntity.type(
                     '${runtime.path}/manager.sock',
-                    followLinks: false) !=
+                  followLinks: false,
+                ) !=
                 FileSystemEntityType.notFound
             ? 'Found'
             : 'Missing',
@@ -317,8 +347,10 @@ class WorkspaceLifecycleController extends ChangeNotifier {
 
   Future<WorkspaceServiceInfo> restartService() async {
     if (_managerConnected) {
-      await request('service.prepareStop',
-          timeout: const Duration(seconds: 20));
+      await request(
+        'service.prepareStop',
+        timeout: const Duration(seconds: 20),
+      );
     }
     await _closeManagerConnection();
     _serviceInfo = await _hostServiceManager.restart();
@@ -364,12 +396,21 @@ class WorkspaceLifecycleController extends ChangeNotifier {
 
   Future<void> connectCloud() async {
     await request('connection.connect');
+    await _writeConnectionIntent(true);
     notifyListeners();
   }
 
   Future<void> disconnectCloud() async {
     await request('connection.disconnect');
+    await _writeConnectionIntent(false);
     notifyListeners();
+  }
+
+  Future<void> _writeConnectionIntent(bool connected) async {
+    final settings = WorkspaceSettingsStore(config.dataDirectory).readSync();
+    if (settings?.connectOnStart != connected) {
+      await writeSettings(connectOnStart: connected);
+    }
   }
 
   /// Checks the installed Workspace release through the running service.
@@ -438,8 +479,11 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     if (!_managerConnected || manager == null) {
       throw const SocketException('Workspace service is not connected.');
     }
-    final result =
-        await manager.request(command, payload: payload, timeout: timeout);
+    final result = await manager.request(
+      command,
+      payload: payload,
+      timeout: timeout,
+    );
     if (result is Map && result['service'] is Map) {
       _acceptSnapshot(Map<String, Object?>.from(result));
     }
@@ -461,8 +505,9 @@ class WorkspaceLifecycleController extends ChangeNotifier {
   }
 
   Future<void> _openManagerConnection() async {
-    final runtimeDirectory =
-        WorkspacePaths(config.dataDirectory).runtimeDirectory;
+    final runtimeDirectory = WorkspacePaths(
+      config.dataDirectory,
+    ).runtimeDirectory;
     final keyFile = File('${runtimeDirectory.path}/manager-ipc.key');
     WorkspaceManagerIpcConnection? connection;
     StreamSubscription<Map<String, Object?>>? events;
@@ -473,7 +518,9 @@ class WorkspaceLifecycleController extends ChangeNotifier {
         throw StateError('Workspace service IPC key is invalid.');
       }
       connection = WorkspaceManagerIpcConnection(
-          socketPath: workspaceManagerEndpoint(runtimeDirectory), key: key);
+        socketPath: workspaceManagerEndpoint(runtimeDirectory),
+        key: key,
+      );
       _manager = connection;
       events = connection.events.listen((event) {
         if (!_closed && identical(_manager, connection)) {
@@ -568,17 +615,17 @@ class WorkspaceLifecycleController extends ChangeNotifier {
         };
         final workerCatalog = _managerSnapshot['workerCatalog'];
         if (workerCatalog is Map) {
-          this
-              .workerCatalog
-              .acceptSnapshot(Map<String, Object?>.from(workerCatalog));
+          this.workerCatalog.acceptSnapshot(
+            Map<String, Object?>.from(workerCatalog),
+          );
         }
         break;
       case 'worker.catalogChanged':
         final workerCatalog = event['workerCatalog'];
         if (workerCatalog is Map) {
-          this
-              .workerCatalog
-              .acceptSnapshot(Map<String, Object?>.from(workerCatalog));
+          this.workerCatalog.acceptSnapshot(
+            Map<String, Object?>.from(workerCatalog),
+          );
         }
         break;
     }
@@ -590,8 +637,9 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     _managerSnapshot = snapshot;
     final service = snapshot['service'];
     if (service is Map) {
-      final startedAt =
-          DateTime.tryParse(service['startedAt']?.toString() ?? '');
+      final startedAt = DateTime.tryParse(
+        service['startedAt']?.toString() ?? '',
+      );
       final version = service['version']?.toString();
       _serviceInfo = _serviceInfo.copyWith(
         startedAt: startedAt,
@@ -600,8 +648,9 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     }
     final workerCatalogSnapshot = snapshot['workerCatalog'];
     if (workerCatalogSnapshot is Map) {
-      workerCatalog
-          .acceptSnapshot(Map<String, Object?>.from(workerCatalogSnapshot));
+      workerCatalog.acceptSnapshot(
+        Map<String, Object?>.from(workerCatalogSnapshot),
+      );
     }
     _managerConnected = true;
     _serviceInfo = _serviceInfo.copyWith(
@@ -627,12 +676,14 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     LocalWorkerProbeMode mode = LocalWorkerProbeMode.passive,
     String? workerTypeId,
   }) async {
-    await request('workers.checkReadiness',
+    await request(
+      'workers.checkReadiness',
         timeout: const Duration(minutes: 2),
         payload: {
           'mode': mode.name,
           if (workerTypeId != null) 'workerTypeId': workerTypeId,
-        });
+      },
+    );
   }
 
   /// Slot usage reported by the Workspace Service.
@@ -643,15 +694,22 @@ class WorkspaceLifecycleController extends ChangeNotifier {
 
   /// Sets the Workspace-wide number of parallel execution slots.
   Future<Map<String, Object?>> setParallelSlots(int slots) async {
-    final result =
-        await request('execution.setParallelSlots', payload: {'slots': slots});
-    return result is Map ? Map<String, Object?>.from(result) : const {};
+    if (slots < minParallelSlots || slots > maxParallelSlots) {
+      throw ArgumentError.value(slots, 'slots', 'outside supported range');
+    }
+    final store = WorkspaceSettingsStore(config.dataDirectory);
+    final settings = await store.ensureDefaults();
+    await store.write(settings.copyWith(parallelSlots: slots));
+    if (_serviceInfo.processRunning) await restartService();
+    return loadWorkerSlots();
   }
 
   /// Stops running and waiting work and clears stuck slot bookkeeping.
   Future<Map<String, Object?>> resetWorkerSlots() async {
-    final result = await request('execution.resetSlots',
-        timeout: const Duration(seconds: 60));
+    final result = await request(
+      'execution.resetSlots',
+      timeout: const Duration(seconds: 60),
+    );
     return result is Map ? Map<String, Object?>.from(result) : const {};
   }
 
@@ -673,7 +731,8 @@ class WorkspaceLifecycleController extends ChangeNotifier {
         break;
       case 'togglePause':
         await request(
-            acceptingNewWork ? 'connection.pause' : 'connection.resume');
+          acceptingNewWork ? 'connection.pause' : 'connection.resume',
+        );
         break;
       case 'diagnostics':
         final result = await request('diagnostics.getDiagnostics');
@@ -697,9 +756,10 @@ class WorkspaceLifecycleController extends ChangeNotifier {
 
   static Future<void> openPath(String path) => _desktopShell.openPath(path);
 
-  static Future<String?> chooseDirectory(
-          {String? initialPath, String? prompt}) =>
-      _desktopShell.chooseDirectory(initialPath: initialPath, prompt: prompt);
+  static Future<String?> chooseDirectory({
+    String? initialPath,
+    String? prompt,
+  }) => _desktopShell.chooseDirectory(initialPath: initialPath, prompt: prompt);
 
   static Future<String?> requestWorkRootAccess({String? initialPath}) =>
       _desktopShell.requestWorkRootAccess(initialPath: initialPath);
@@ -710,19 +770,21 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     final cloud = _managerSnapshot['cloud'];
     final assignments = _managerSnapshot['assignments'];
     final cloudMap = cloud is Map ? cloud : const <String, Object?>{};
-    final assignmentMap =
-        assignments is Map ? assignments : const <String, Object?>{};
-    final preferences =
-        WorkspaceLifecyclePreferencesStore(config.dataDirectory).readSync();
+    final assignmentMap = assignments is Map
+        ? assignments
+        : const <String, Object?>{};
+    final preferences = WorkspaceLifecyclePreferencesStore(
+      config.dataDirectory,
+    ).readSync();
     final state = startupError != null
         ? 'Attention'
         : cloudMap['connected'] == true
             ? 'Connected'
-            : preferences.desiredCloudState ==
-                    DesiredCloudConnectionState.connected
+        : preferences.desiredCloudState == DesiredCloudConnectionState.connected
                 ? 'Connecting'
                 : 'Disconnected';
-    unawaited(_desktopShell.publishStatus({
+    unawaited(
+      _desktopShell.publishStatus({
       'state': state,
       'transportMode': cloudMap['transport'] ?? 'offline',
       'fallbackHealth': 'service managed',
@@ -734,32 +796,38 @@ class WorkspaceLifecycleController extends ChangeNotifier {
       'reauthRequired': _managementAuthRequired,
       'runtimeRunning': cloudMap['connected'] == true,
       'serviceRunning': uiSnapshot.serviceHealthy,
-    }));
+      }),
+    );
   }
 
   WorkspaceUiSnapshot get _ipcUiSnapshot {
-    final registration =
-        WorkspaceRegistrationStore(config.dataDirectory).readSync();
-    final preferences =
-        WorkspaceLifecyclePreferencesStore(config.dataDirectory).readSync();
+    final registration = WorkspaceRegistrationStore(
+      config.dataDirectory,
+    ).readSync();
+    final settings = WorkspaceSettingsStore(config.dataDirectory).readSync();
     final service = _managerSnapshot['service'];
     final cloud = _managerSnapshot['cloud'];
     final workspaceState = _managerSnapshot['workspace'];
     final assignments = _managerSnapshot['assignments'];
     final serviceMap = service is Map ? service : const <String, Object?>{};
     final cloudMap = cloud is Map ? cloud : const <String, Object?>{};
-    final workspaceMap =
-        workspaceState is Map ? workspaceState : const <String, Object?>{};
-    final assignmentsMap =
-        assignments is Map ? assignments : const <String, Object?>{};
+    final workspaceMap = workspaceState is Map
+        ? workspaceState
+        : const <String, Object?>{};
+    final assignmentsMap = assignments is Map
+        ? assignments
+        : const <String, Object?>{};
     final processState = serviceMap['processState']?.toString();
-    final serviceProcessRunning = serviceMap['processRunning'] == true ||
+    final serviceProcessRunning =
+        serviceMap['processRunning'] == true ||
         processState == 'ready' ||
         _serviceInfo.process == WorkspaceServiceProcessStatus.running;
-    final serviceIpcReady = serviceMap['ipcReady'] == true ||
+    final serviceIpcReady =
+        serviceMap['ipcReady'] == true ||
         _managerConnected ||
         _serviceInfo.ipc == WorkspaceServiceIpcStatus.ready;
-    final serviceHealthy = serviceMap['serviceHealthy'] == true ||
+    final serviceHealthy =
+        serviceMap['serviceHealthy'] == true ||
         (serviceProcessRunning && serviceIpcReady);
     final cloudState = cloudMap['state']?.toString();
     final stage = !serviceProcessRunning
@@ -779,23 +847,29 @@ class WorkspaceLifecycleController extends ChangeNotifier {
         ? assignmentsMap['activeCount'] as int
         : 0;
     final connected = serviceProcessRunning && cloudMap['connected'] == true;
-    final desired = (cloudMap['desiredConnectionState']?.toString() ??
-            preferences.desiredCloudState.name) ==
+    final desired =
+        (cloudMap['desiredConnectionState']?.toString() ??
+            (settings?.connectOnStart == true
+                ? DesiredCloudConnectionState.connected.name
+                : DesiredCloudConnectionState.disconnected.name)) ==
         DesiredCloudConnectionState.connected.name;
     final authenticated = cloudMap['authenticated'] == true;
     final synchronized = cloudMap['synchronized'] == true;
     final acceptingWork = cloudMap['acceptingNewWork'] == true;
-    final cloudConnecting = stage == WorkspaceConnectionStage.validating ||
+    final cloudConnecting =
+        stage == WorkspaceConnectionStage.validating ||
         stage == WorkspaceConnectionStage.connecting ||
         stage == WorkspaceConnectionStage.authenticating ||
         stage == WorkspaceConnectionStage.synchronizing ||
         stage == WorkspaceConnectionStage.switchingToWebSocket;
     final registrationPresent = registration != null;
-    final runtimeId = workspaceMap['workspaceRuntimeId']?.toString() ??
+    final runtimeId =
+        workspaceMap['workspaceRuntimeId']?.toString() ??
         registration?.workspaceRuntimeId;
     final workspaceId =
         workspaceMap['workspaceId']?.toString() ?? registration?.workspaceId;
-    final workspaceName = preferences.customWorkspaceName ??
+    final workspaceName =
+        settings?.workspaceName ??
         workspaceMap['name']?.toString() ??
         registration?.name ??
         resolveFriendlyComputerNameSync();
@@ -835,9 +909,7 @@ class WorkspaceLifecycleController extends ChangeNotifier {
               ? 'Register this Workspace'
               : serviceHealthy
                   ? connected
-                      ? (activeCount > 0
-                          ? 'Work in progress'
-                          : 'Workspace is ready')
+                ? (activeCount > 0 ? 'Work in progress' : 'Workspace is ready')
                       : 'Workspace Service is running'
                   : 'Workspace is offline',
       detail: !_managerConnected
@@ -860,10 +932,13 @@ class WorkspaceLifecycleController extends ChangeNotifier {
           serviceMap['installationId']?.toString() ?? config.installationId,
       workspaceRuntimeId: runtimeId,
       hostname: registration?.hostname ?? Platform.localHostname,
-      cloudUrl: workspaceMap['cloudUrl']?.toString() ?? registration?.cloudUrl,
+      cloudUrl:
+          workspaceMap['cloudUrl']?.toString() ??
+          settings?.cloudUrl ??
+          registration?.cloudUrl,
       workRootPath: serviceHealthy
           ? workspaceMap['workRoot']?.toString() ?? config.workRootPath
-          : preferences.workRootPath ??
+          : settings?.workRootPath ??
               config.workRootPath ??
               WorkRootResolver().defaultPath,
       registered: registrationPresent || workspaceId != null,
@@ -913,8 +988,10 @@ class WorkspaceLifecycleController extends ChangeNotifier {
   /// Drain through authenticated IPC, then stop through the OS host boundary.
   Future<void> stopService() async {
     if (_managerConnected) {
-      await request('service.prepareStop',
-          timeout: const Duration(seconds: 20));
+      await request(
+        'service.prepareStop',
+        timeout: const Duration(seconds: 20),
+      );
     }
     try {
       _serviceInfo = await _hostServiceManager.stop();
@@ -927,7 +1004,8 @@ class WorkspaceLifecycleController extends ChangeNotifier {
     }
     if (_managerConnected) {
       throw StateError(
-          'macOS has not stopped the service. Check Login Items and Diagnostics.');
+        'macOS has not stopped the service. Check Login Items and Diagnostics.',
+      );
     }
     await _closeManagerConnection();
     _serviceInfo = _serviceInfo.copyWith(
@@ -1083,8 +1161,10 @@ class WorkspaceUiSnapshot {
       return 'Running · Management unavailable';
     }
     if (serviceDiagnostics.isNotEmpty &&
-        !const {'stopped', 'not running'}
-            .contains(serviceDiagnostics['launchd'])) {
+        !const {
+          'stopped',
+          'not running',
+        }.contains(serviceDiagnostics['launchd'])) {
       return 'Status unavailable';
     }
     return 'Stopped';

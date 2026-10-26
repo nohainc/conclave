@@ -12,42 +12,60 @@ import 'package:conclave_workspace/worker_readiness.dart';
 import 'support/logical_worker_catalog_fixture.dart';
 
 void main() {
-  test('service streams running check progress and terminal evidence over IPC',
+  test(
+    'service streams running check progress and terminal evidence over IPC',
       () async {
     final root = await Directory('/tmp').createTemp('ws-check-progress-');
     addTearDown(() => root.delete(recursive: true));
-    final registry =
-        LocalWorkerRegistry(dataDirectory: root, workspaceId: 'workspace-test');
+      final registry = LocalWorkerRegistry(
+        dataDirectory: root,
+        workspaceId: 'workspace-test',
+      );
     await registry.create(
         catalogEntry: logicalWorkerCatalogFixture('chatgpt'),
         localPermissions: const ['repository:read'],
-        status: LocalWorkerStatus.ready);
+        status: LocalWorkerStatus.ready,
+      );
     final assessment = Completer<WorkerReadinessAssessment>();
     final monitor = WorkerReadinessMonitor(
-        registry: registry, assessWorker: (_) => assessment.future);
+        registry: registry,
+        assessWorker: (_) => assessment.future,
+      );
     addTearDown(monitor.dispose);
     final workspace = Workspace(
         config: WorkspaceConfig(dataDirectory: root),
         localWorkerRegistry: registry,
-        workerReadinessMonitor: monitor);
+        workerReadinessMonitor: monitor,
+      );
     final manager = WorkspaceManagerService(workspace);
     await manager.start();
     addTearDown(manager.close);
-    final key =
-        (await File('${root.path}/runtime/manager-ipc.key').readAsString())
-            .trim();
+      final key = (await File(
+        '${root.path}/runtime/manager-ipc.key',
+      ).readAsString()).trim();
     final client = await WorkspaceManagerIpcClient.connect(
-        socketPath: '${root.path}/runtime/manager.sock', key: key);
+        socketPath: '${root.path}/runtime/manager.sock',
+        key: key,
+      );
     addTearDown(client.close);
     await client.subscribe();
     await expectLater(
         client.request('workers.refreshWorker'),
-        throwsA(isA<WorkspaceManagerProtocolException>()
-            .having((e) => e.code, 'code', 'invalid_request')));
+        throwsA(
+          isA<WorkspaceManagerProtocolException>().having(
+            (e) => e.code,
+            'code',
+            'invalid_request',
+          ),
+        ),
+      );
     expect(
-        await client.request('workers.refreshWorker',
-            payload: {'workerTypeId': 'chatgpt'}),
-        isA<Map>());
+        await client.request(
+          'workers.refreshWorker',
+          payload: {'workerTypeId': 'chatgpt'},
+        ),
+        isA<Map>(),
+      );
     final runningEvent = client.events.firstWhere((event) {
       final catalog = event['workerCatalog'];
       if (event['name'] != 'worker.catalogChanged' || catalog is! Map) {
@@ -63,33 +81,36 @@ void main() {
     expect(
         (((event['workerCatalog'] as Map)['checks'] as Map)['chatgpt']
             as Map)['outcome'],
-        'running');
-    assessment
-        .complete(const WorkerReadinessAssessment(WorkerReadinessState.ready));
+        'running',
+      );
+      assessment.complete(
+        const WorkerReadinessAssessment(WorkerReadinessState.ready),
+      );
     await check;
     final catalog = (await manager.snapshot())['workerCatalog'] as Map;
-    expect(((catalog['checks'] as Map)['chatgpt'] as Map)['outcome'], 'passed');
-  }, skip: Platform.isWindows ? 'POSIX only' : false);
+      expect(
+        ((catalog['checks'] as Map)['chatgpt'] as Map)['outcome'],
+        'passed',
+      );
+    },
+    skip: Platform.isWindows ? 'POSIX only' : false,
+  );
 
-  test('snapshot separates service health from persisted Cloud intent',
+  test(
+    'snapshot separates service health from configured Cloud intent',
       () async {
     final root = await Directory('/tmp').createTemp('ws-state-');
     addTearDown(() => root.delete(recursive: true));
-    final preferences = WorkspaceLifecyclePreferencesStore(root);
-    await preferences.write(const WorkspaceLifecyclePreferences(
-      desiredCloudState: DesiredCloudConnectionState.connected,
-      launchAtLogin: false,
-      managementLockPreference: ManagementLockState.unlocked,
-    ));
     final connection = WorkspaceCloudConnection(
       uri: Uri.parse('https://cloud.example.test'),
       workspaceRuntimeId: 'runtime-test',
       workspaceId: 'workspace-test',
-      factory: (_) async => throw StateError('fixture must stay disconnected'),
+        factory: (_) async =>
+            throw StateError('fixture must stay disconnected'),
     );
     addTearDown(connection.close);
     final workspace = Workspace(
-      config: WorkspaceConfig(dataDirectory: root),
+        config: WorkspaceConfig(dataDirectory: root, connectOnStart: true),
       cloudConnection: connection,
     );
     final manager = WorkspaceManagerService(workspace);
@@ -100,20 +121,25 @@ void main() {
     expect(cloud['desiredConnectionState'], 'connected');
     expect(cloud['connected'], isFalse);
     expect(cloud['acceptingNewWork'], isFalse);
-  });
+    },
+  );
 
-  test('allowed folders are managed over IPC without touching user files',
+  test(
+    'allowed folders are managed over IPC without touching user files',
       () async {
     final root = await Directory('/tmp').createTemp('ws-folders-');
     addTearDown(() => root.delete(recursive: true));
     final workRoot = await Directory('${root.path}/work').create();
     final shared = await Directory('${root.path}/shared').create();
     File('${shared.path}/notes.md').writeAsStringSync('keep');
-    final manager = WorkspaceManagerService(Workspace(
+      final manager = WorkspaceManagerService(
+        Workspace(
       config: WorkspaceConfig(
           dataDirectory: Directory('${root.path}/state'),
-          workRootPath: workRoot.path),
-    ));
+            workRootPath: workRoot.path,
+          ),
+        ),
+      );
     try {
       await manager.start();
     } on SocketException catch (error) {
@@ -124,36 +150,54 @@ void main() {
       rethrow;
     }
     addTearDown(manager.close);
-    final key = (await File('${root.path}/state/runtime/manager-ipc.key')
-            .readAsString())
-        .trim();
+      final key = (await File(
+        '${root.path}/state/runtime/manager-ipc.key',
+      ).readAsString()).trim();
     final client = await WorkspaceManagerIpcClient.connect(
       socketPath: '${root.path}/state/runtime/manager.sock',
       key: key,
     );
     addTearDown(client.close);
 
-    final added = await client.request('folders.add',
-        payload: {'path': shared.path, 'displayName': 'Shared docs'}) as Map;
+      final added =
+          await client.request(
+                'folders.add',
+                payload: {'path': shared.path, 'displayName': 'Shared docs'},
+              )
+              as Map;
     expect(added['displayName'], 'Shared docs');
     expect(added['status'], 'available');
     await expectLater(
         client.request('folders.add', payload: {'path': workRoot.path}),
-        throwsA(isA<WorkspaceManagerProtocolException>()
-            .having((error) => error.code, 'code', 'protected')));
+        throwsA(
+          isA<WorkspaceManagerProtocolException>().having(
+            (error) => error.code,
+            'code',
+            'protected',
+          ),
+        ),
+      );
 
     final listed = await client.request('folders.list') as Map;
     expect((listed['folders'] as List).single['id'], added['id']);
     expect(
-        await client
-            .request('folders.remove', payload: {'folderId': added['id']}),
-        {'removed': true});
-    expect(((await client.request('folders.list') as Map)['folders'] as List),
-        isEmpty);
+        await client.request(
+          'folders.remove',
+          payload: {'folderId': added['id']},
+        ),
+        {'removed': true},
+      );
+      expect(
+        ((await client.request('folders.list') as Map)['folders'] as List),
+        isEmpty,
+      );
     expect(File('${shared.path}/notes.md').readAsStringSync(), 'keep');
-  }, skip: Platform.isWindows ? 'POSIX only' : false);
+    },
+    skip: Platform.isWindows ? 'POSIX only' : false,
+  );
 
-  test('update checks are handled by the service without reconnecting Cloud',
+  test(
+    'update checks are handled by the service without reconnecting Cloud',
       () async {
     final root = await Directory('/tmp').createTemp('ws-updates-');
     addTearDown(() => root.delete(recursive: true));
@@ -177,9 +221,9 @@ void main() {
       rethrow;
     }
     addTearDown(manager.close);
-    final key =
-        (await File('${root.path}/runtime/manager-ipc.key').readAsString())
-            .trim();
+      final key = (await File(
+        '${root.path}/runtime/manager-ipc.key',
+      ).readAsString()).trim();
     final client = await WorkspaceManagerIpcClient.connect(
       socketPath: '${root.path}/runtime/manager.sock',
       key: key,
@@ -188,7 +232,9 @@ void main() {
 
     expect(await client.request('updates.check'), {'phase': 'idle'});
     expect(checks, 1);
-  }, skip: Platform.isWindows ? 'POSIX only' : false);
+    },
+    skip: Platform.isWindows ? 'POSIX only' : false,
+  );
 
   test(
       'prepareStop drains Cloud admission while process shutdown stays host-owned',
@@ -206,10 +252,12 @@ void main() {
       },
     );
     addTearDown(connection.close);
-    final manager = WorkspaceManagerService(Workspace(
+      final manager = WorkspaceManagerService(
+        Workspace(
       config: WorkspaceConfig(dataDirectory: root),
       cloudConnection: connection,
-    ));
+        ),
+      );
     try {
       await manager.start();
     } on SocketException catch (error) {
@@ -220,33 +268,48 @@ void main() {
       rethrow;
     }
     addTearDown(manager.close);
-    final key =
-        (await File('${root.path}/runtime/manager-ipc.key').readAsString())
-            .trim();
+      final key = (await File(
+        '${root.path}/runtime/manager-ipc.key',
+      ).readAsString()).trim();
     final client = await WorkspaceManagerIpcClient.connect(
-        socketPath: '${root.path}/runtime/manager.sock', key: key);
+        socketPath: '${root.path}/runtime/manager.sock',
+        key: key,
+      );
     addTearDown(client.close);
     await expectLater(
-        client.request('configuration.update',
-            payload: {'workRootPath': '${root.path}/work'}),
-        throwsA(isA<WorkspaceManagerProtocolException>()
-            .having((error) => error.code, 'code', 'service_running')));
+        client.request(
+          'configuration.update',
+          payload: {'workRootPath': '${root.path}/work'},
+        ),
+        throwsA(
+          isA<WorkspaceManagerProtocolException>().having(
+            (error) => error.code,
+            'code',
+            'unsupported_command',
+          ),
+        ),
+      );
     await client.request('service.prepareStop');
     expect(connection.acceptingNewWork, isFalse);
     expect(cloudAttempts, 0);
     // The IPC process remains available until the native host stops it.
     expect(await client.request('service.getStatus'), isA<Map>());
-    await expectLater(client.request('service.shutdown'),
-        throwsA(isA<WorkspaceManagerProtocolException>()));
-  }, skip: Platform.isWindows ? 'POSIX only' : false);
-  test('configuration reload responds before a slow Cloud handshake', () async {
+      await expectLater(
+        client.request('service.shutdown'),
+        throwsA(isA<WorkspaceManagerProtocolException>()),
+      );
+    },
+    skip: Platform.isWindows ? 'POSIX only' : false,
+  );
+  test('configuration changes require a host restart', () async {
     final root = await Directory('/tmp').createTemp('ws-reload-');
     addTearDown(() => root.delete(recursive: true));
     final cloudGate = Completer<void>();
     var attempts = 0;
     final connection = WorkspaceCloudConnection(
       uri: Uri.parse(
-          'wss://cloud.example.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-test'),
+        'wss://cloud.example.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-test',
+      ),
       workspaceRuntimeId: 'runtime-test',
       workspaceId: 'workspace-test',
       factory: (_) async {
@@ -257,7 +320,9 @@ void main() {
     );
     final replacement = Workspace(
       config: WorkspaceConfig(
-          dataDirectory: root, workRootPath: '${root.path}-work'),
+        dataDirectory: root,
+        workRootPath: '${root.path}-work',
+      ),
       cloudConnection: connection,
     );
     // User work cannot be nested inside this isolated application-data root.
@@ -268,25 +333,41 @@ void main() {
       if (await work.exists()) await work.delete(recursive: true);
     });
     final preferences = WorkspaceLifecyclePreferencesStore(root);
-    await preferences.write(preferences
-        .readSync()
-        .copyWith(desiredRuntime: DesiredRuntimeState.connected));
+    await preferences.write(
+      preferences.readSync().copyWith(
+        desiredRuntime: DesiredRuntimeState.connected,
+      ),
+    );
     final manager = WorkspaceManagerService(
         Workspace(config: WorkspaceConfig(dataDirectory: root)),
-        reloadRuntime: () async => replacement);
+      reloadRuntime: () async => replacement,
+    );
     await manager.start();
     addTearDown(manager.close);
-    final key =
-        (await File('${root.path}/runtime/manager-ipc.key').readAsString())
-            .trim();
+    final key = (await File(
+      '${root.path}/runtime/manager-ipc.key',
+    ).readAsString()).trim();
     final client = await WorkspaceManagerIpcClient.connect(
-        socketPath: '${root.path}/runtime/manager.sock', key: key);
+      socketPath: '${root.path}/runtime/manager.sock',
+      key: key,
+    );
     addTearDown(client.close);
-    await client.request('configuration.reload',
-        timeout: const Duration(seconds: 2));
-    expect(attempts, 1);
+    await expectLater(
+      client.request(
+        'configuration.reload',
+        timeout: const Duration(seconds: 2),
+      ),
+      throwsA(
+        isA<WorkspaceManagerProtocolException>().having(
+          (error) => error.code,
+          'code',
+          'unsupported_command',
+        ),
+      ),
+    );
+    expect(attempts, 0);
     expect(cloudGate.isCompleted, isFalse);
-    expect(replacement.isRunning, isTrue);
+    expect(replacement.isRunning, isFalse);
     cloudGate.complete();
   }, skip: Platform.isWindows ? 'POSIX only' : false);
 }

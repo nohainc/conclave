@@ -28,7 +28,7 @@ plutil_lint() {
   fi
 }
 
-HELPER="$APP/Contents/Helpers/conclave-service"
+HELPER="$APP/Contents/Helpers/workspace"
 ENGINE="$APP/Contents/Helpers/assets/engines/conclave_cli_worker_engine"
 APP_EXECUTABLE="$APP/Contents/MacOS/$(plist_buddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
 BUNDLE_ID="$(plist_buddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")"
@@ -57,11 +57,11 @@ plist_buddy -c 'Print :Label' "$PLIST" >/dev/null
   echo "LaunchAgent is not associated with the Workspace app bundle." >&2
   exit 1
 }
-[[ "$(plist_buddy -c 'Print :BundleProgram' "$PLIST")" == "Contents/Helpers/conclave-service" ]] || {
+[[ "$(plist_buddy -c 'Print :BundleProgram' "$PLIST")" == "Contents/Helpers/workspace" ]] || {
   echo "LaunchAgent does not point at the embedded service." >&2
   exit 1
 }
-[[ "$(plist_buddy -c 'Print :ProgramArguments:0' "$PLIST")" == "Contents/Helpers/conclave-service" ]] || {
+[[ "$(plist_buddy -c 'Print :ProgramArguments:0' "$PLIST")" == "Contents/Helpers/workspace" ]] || {
   echo "LaunchAgent argv[0] does not identify the embedded service." >&2
   exit 1
 }
@@ -127,7 +127,7 @@ if codesign -dv "$APP" >/dev/null 2>&1; then
     codesign --verify --strict --verbose=2 \
       --test-requirement '=anchor apple generic' "$ENGINE"
   fi
-  [[ "$HELPER_IDENTIFIER" == "conclave-service" ]] || {
+  [[ "$HELPER_IDENTIFIER" == "workspace" ]] || {
     echo "The signed service helper has an unexpected designated identifier: ${HELPER_IDENTIFIER:-missing}." >&2
     exit 1
   }

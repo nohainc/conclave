@@ -6,7 +6,7 @@ set -euo pipefail
 #   - an installer .pkg that installs into /Applications
 #
 # The app bundle is self-contained: it embeds the headless Workspace Service
-# (Contents/Helpers/conclave-service), the generic CLI Worker Engine
+# (Contents/Helpers/workspace), the generic CLI Worker Engine
 # (Contents/Helpers/assets/engines/conclave_cli_worker_engine), and the
 # SMAppService LaunchAgent manifest (Contents/Library/LaunchAgents). The
 # installer does not register or start the service; Workspace.app does that

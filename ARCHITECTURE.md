@@ -300,7 +300,7 @@ The user owns a private People directory of known collaborators and participates
 
 Workspace manager lifecycle: the two-tab Flutter app exposes **Start Service**
 and **Stop Service** through macOS host management, while runtime commands and
-Worker tests use authenticated local IPC. The `conclave-service` process owns
+Worker tests use authenticated local IPC. The `workspace` service process owns
 Cloud WebSocket/HTTP fallback; `conclave-agent` is its separate generic CLI
 Worker Engine. Service process health and Cloud connectivity are distinct.
 Stopping drains work before unregistering; closing the UI preserves execution.

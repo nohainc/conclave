@@ -48,7 +48,7 @@ const sourceDigest = digest(
 const bundle = resolve(directory);
 const files = Object.fromEntries(
   [
-    "conclave-service",
+    "workspace",
     "conclave-workspace",
     "assets/engines/conclave_cli_worker_engine",
   ].map((name) => [name, digest(readFileSync(join(bundle, name)))]),
