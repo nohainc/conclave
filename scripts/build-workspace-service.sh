@@ -3,13 +3,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
-OUT_DIR="$ROOT/dist/conclave-workspace/service"
+OUT_DIR="$ROOT/dist/conclave-workspace"
 TARGET_FLAGS=()
 if [[ -n "${CONCLAVE_BUILD_TARGET_OS:-}${CONCLAVE_BUILD_TARGET_ARCH:-}" ]]; then
   [[ "${CONCLAVE_BUILD_TARGET_OS:-}" == linux ]] || { echo "Only Linux cross-builds are supported." >&2; exit 2; }
   case "${CONCLAVE_BUILD_TARGET_ARCH:-}" in x64|arm64) ;; *) echo "Target architecture must be x64 or arm64." >&2; exit 2 ;; esac
   TARGET_FLAGS=(--target-os=linux "--target-arch=$CONCLAVE_BUILD_TARGET_ARCH")
-  OUT_DIR="$ROOT/dist/conclave-workspace/linux-$CONCLAVE_BUILD_TARGET_ARCH/service"
+  OUT_DIR="$ROOT/dist/conclave-workspace/linux-$CONCLAVE_BUILD_TARGET_ARCH"
 fi
 ENGINE_NAME="conclave-agent"
 OUTPUT_NAME="conclave-workspace"

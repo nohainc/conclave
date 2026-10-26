@@ -3,13 +3,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
-SERVICE_DIR="$ROOT/dist/conclave-workspace/service"
-SERVICE_NAME="workspace"
-ENGINE_NAME="conclave_cli_worker_engine"
+SERVICE_DIR="$ROOT/dist/conclave-workspace"
+SERVICE_NAME="conclave-workspace"
+ENGINE_NAME="conclave-agent"
 
 if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
-  SERVICE_NAME="workspace.exe"
-  ENGINE_NAME="conclave_cli_worker_engine.exe"
+  SERVICE_NAME="conclave-workspace.exe"
+  ENGINE_NAME="conclave-agent.exe"
 fi
 
 SOURCE_MODE="0"
