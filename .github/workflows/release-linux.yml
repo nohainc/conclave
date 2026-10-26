@@ -92,11 +92,18 @@ jobs:
     needs: [preflight, build]
     runs-on: ubuntu-24.04
     environment: workspace-linux-release
+    outputs:
+      fingerprint: ${{ steps.signing.outputs.fingerprint }}
     permissions:
-      contents: read
+      contents: write
       actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Export public signing identity
+        id: signing
+        env:
+          FINGERPRINT: ${{ vars.CONCLAVE_APT_SIGNING_FINGERPRINT }}
+        run: echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
       - name: Download tested packages
         env:
           GH_TOKEN: ${{ github.token }}
@@ -105,6 +112,45 @@ jobs:
         env:
           CONCLAVE_APT_PRIVATE_KEY: ${{ secrets.CONCLAVE_APT_PRIVATE_KEY }}
           CONCLAVE_APT_SIGNING_FINGERPRINT: ${{ vars.CONCLAVE_APT_SIGNING_FINGERPRINT }}
-          CONCLAVE_APT_REPOSITORY: ${{ vars.CONCLAVE_APT_REPOSITORY }}
-          GH_TOKEN: ${{ secrets.CONCLAVE_APT_PUBLISH_TOKEN }}
+          CONCLAVE_WORKSPACE_VERSION: ${{ needs.preflight.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: bash scripts/release/publish-apt-repository.sh candidates
+      - name: Upload signed APT site
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: dist/apt-repository
+
+  deploy:
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    needs: publish
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy signed APT repository
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+
+  verify-public:
+    needs: [preflight, publish, deploy]
+    if: inputs.publish
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, ubuntu-22.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Verify installation from public HTTPS APT
+        env:
+          CONCLAVE_APT_URL: ${{ needs.deploy.outputs.page_url }}
+          CONCLAVE_APT_SIGNING_FINGERPRINT: ${{ needs.publish.outputs.fingerprint }}
+          CONCLAVE_WORKSPACE_VERSION: ${{ needs.preflight.outputs.version }}
+        run: bash scripts/test-workspace-public-apt.sh

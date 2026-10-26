@@ -40,10 +40,14 @@ runner blocker. They do not replace the main-branch CI requirement for publicati
 
 ## Remaining release gates
 
-- Configure production application-release roots, a dedicated protected OpenPGP
-  APT signing key, public HTTPS package hosting and a scoped publication token.
-- Restore GitHub Actions billing/runner access, merge reviewed changes, pass CI
-  for the exact main commit, and run the protected publication workflow.
+- Production roots, a dedicated OpenPGP key, main-restricted release
+  environments and GitHub Pages hosting were provisioned on 2026-10-26. The
+  publisher now uses its scoped job token; no personal publishing token is needed.
+- GitHub runner access was restored after the source repository became public.
+  [Main CI](https://github.com/nohainc/conclave/actions/runs/40321734230) and
+  [native package CI](https://github.com/nohainc/conclave/actions/runs/40321734928)
+  passed for `f074b5fe`, including actual Ubuntu ARM64 runners. Production
+  publication requires passing CI for its own exact commit.
 - Verify the public HTTPS repository and a fresh install from a separate Ubuntu
   host after its Pages/static-site deployment completes.
 - Qualify systemd user registration/start, reboot/linger, provider credentials

@@ -4,6 +4,35 @@ The headless install unit contains `conclave-service`, `conclave-workspace`, and
 one canonical generic CLI Worker Engine. Provider CLIs are installed separately.
 The optional Flutter desktop bundle continues to use its existing Linux build.
 
+## Production repository
+
+The APT site is served by GitHub Pages at:
+
+```text
+https://nohainc.github.io/conclave/
+```
+
+The signing-key fingerprint is:
+
+```text
+6EA013D12EF79CBDC34D66058182CCCFCF4175F2
+```
+
+This dedicated OpenPGP key was created on 2026-10-26 and expires on 2028-10-25.
+Its private backup and revocation certificate are outside the source checkout,
+under `~/.config/conclave/release-keys` on the provisioning Mac (directory 0700,
+private exports 0600). Keep an additional secured offline backup. Never commit
+these files or upload private material as a build artifact.
+
+The repository's `apt-repository` branch retains package data and old versions;
+`main` retains source. The Pages artifact is an explicit whitelist of `pool`,
+`dists`, the public key, the installation page and `.nojekyll`. Neither source
+history nor signing material is copied into the site. No extra repository or
+personal access token is needed: the publisher uses a job-scoped GITHUB_TOKEN
+with contents write permission, and the official Pages deployment action uses
+`pages: write` and an OIDC token. Both signing and Pages environments restrict
+deployments to the `main` branch.
+
 ## Build from macOS or Linux
 
 Dart 3.8+ supports cross-compiling Linux x64/arm64 executables. Install Flutter,
@@ -11,7 +40,7 @@ Node.js, Python 3 and dpkg (`brew install dpkg` on macOS). Supply the production
 public application-release trust roots, then:
 
 ```bash
-export CONCLAVE_RELEASE_TRUST_KEYS_JSON='YOUR_PRODUCTION_PUBLIC_ROOTS_JSON'
+export CONCLAVE_RELEASE_TRUST_KEYS_JSON="$(gh variable get CONCLAVE_RELEASE_TRUST_KEYS_JSON --repo nohainc/conclave)"
 bash scripts/build-workspace-linux-headless.sh x64
 bash scripts/package-workspace-linux.sh x64
 bash scripts/build-workspace-linux-headless.sh arm64
@@ -21,100 +50,102 @@ bash scripts/package-workspace-linux.sh arm64
 Outputs are under `dist/conclave-workspace`: `linux-<arch>/service`, headless
 `.tar.gz` bundles, and `deb/conclave-workspace_<version>_<amd64|arm64>.deb`.
 `CONCLAVE_WORKSPACE_VERSION` overrides the pubspec version at compile/package
-time; use a new version for every release. The target OS/architecture inputs
-`CONCLAVE_BUILD_TARGET_OS=linux` and `CONCLAVE_BUILD_TARGET_ARCH=x64|arm64` are
-build-only. Target Engine artifacts live under `dist/cli-worker-engine` and do
-not replace native Workspace or Profile Lab assets. The canonical Engine script
-remains the sole source of Engine builds. Headless packages set the build-time
+time; use a new version for every release. Build-only target inputs are
+`CONCLAVE_BUILD_TARGET_OS=linux` and `CONCLAVE_BUILD_TARGET_ARCH=x64|arm64`.
+Target Engine artifacts live under `dist/cli-worker-engine` and do not replace
+native Workspace or Profile Lab assets. The canonical Engine script remains
+the sole source of Engine builds. Packages set the build-time
 `CONCLAVE_WORKSPACE_PACKAGE_MANAGER=apt` so the application updater cannot compete
 with APT. Never promote candidates containing CI fixture trust anchors.
 
-Cross-compiling proves compilation, not Linux behavior. Test on the target OS.
-Current retained evidence is in [Linux package acceptance](../acceptance/WORKSPACE_LINUX_PACKAGES.md).
-The `Release Linux Workspace` workflow builds on Ubuntu 22.04 for amd64 and
-arm64, analyzes Workspace, tests registration/IPC/Linux adapters, signs a disposable
-test repository, and performs real APT installation, upgrade, service IPC,
-SIGTERM shutdown and package removal. It verifies that installation identity,
-session files and Work Root data survive upgrade/removal.
+Production builds require the genuine Workspace application-release public
+roots even though APT manages this installation. The initial application key
+`conclave/workspace-2026-10` was provisioned independently of the APT signing key;
+no fixture key is trusted by production packages. Existing configured application
+roots must be retained during later rotations, following the
+[release trust contract](../security/RELEASE_TRUST_AND_ROTATION.md).
 
-Local checks:
+## Validation
+
+Cross-compilation proves compilation, not Linux behavior. The Linux release
+workflow builds and tests natively on Ubuntu 22.04 amd64 and ARM64. ARM64 CI
+bootstraps the official stable Flutter source tag whose commit matches the
+release manifest, since the archive action cannot resolve a Linux ARM64 SDK.
+Other hosts use the existing SDK action; Pub cache keys include architecture.
+
+The workflow analyzes Workspace and tests CLI/registration/IPC/Linux adapters.
+It then signs a disposable test repository and performs actual APT installation,
+upgrade, service IPC, Engine startup, SIGTERM shutdown and removal, checking that
+installation identity, sessions and Work Root data survive. Repository contract
+tests exercise real signing and publishing against a local bare git remote,
+retain old versions and check that only package data is exported.
 
 ```bash
-python3 scripts/release/test-apt-repository.py # needs dpkg and GnuPG
+python3 scripts/release/test-apt-repository.py # dpkg and GnuPG required
 # Linux only, on a disposable machine with sudo, after building a package:
 bash scripts/test-workspace-linux-package.sh x64
 ```
 
-## Provision public hosting and signing
+After Pages deployment, separate fresh amd64 and ARM64 runners verify the
+public key fingerprint, signed InRelease and actual HTTPS APT installation.
+They start the installed service as a normal user, check health/version/APT
+update ownership, execute the bundled Engine and stop gracefully. See
+`scripts/test-workspace-public-apt.sh` and the workflow's `verify-public` jobs.
+Earlier local qualification is retained in
+[Linux package acceptance](../acceptance/WORKSPACE_LINUX_PACKAGES.md).
 
-APT needs a static HTTPS repository, not registration in Ubuntu's official
-archive. Keep it separate from the private source repository. A dedicated public
-GitHub repository (for example `nohainc/conclave-packages`) can serve its
-`gh-pages` branch through GitHub Pages. Initialize that branch with an index page
-and enable Pages for the branch root. Never publish application source, signing
-material, or user data to this repository. GitHub Pages size limits apply; monitor
-repository growth and migrate static hosting before approaching those limits.
-
-Generate a dedicated OpenPGP signing key in protected release infrastructure.
-Keep a secured offline backup and record its full fingerprint. Do not reuse the
-Workspace application metadata Ed25519 key. Export its public binary key as
-`conclave-archive-keyring.gpg`; distribute the fingerprint through a separately
-trusted publication channel. The repository generator exports only public key
-material, signs `InRelease` and `Release.gpg`, and verifies its signature.
-
-Configure these values in the private source repository:
+## Release configuration
 
 | Scope | Name | Value |
 | --- | --- | --- |
-| Repository variable | `CONCLAVE_RELEASE_TRUST_KEYS_JSON` | Existing production public application-release roots |
-| `workspace-linux-release` environment variable | `CONCLAVE_APT_SIGNING_FINGERPRINT` | Full OpenPGP signing fingerprint |
-| `workspace-linux-release` environment variable | `CONCLAVE_APT_REPOSITORY` | Dedicated `owner/repository` for package hosting |
-| `workspace-linux-release` environment secret | `CONCLAVE_APT_PRIVATE_KEY` | ASCII-armored signing private key for noninteractive GPG signing |
-| `workspace-linux-release` environment secret | `CONCLAVE_APT_PUBLISH_TOKEN` | Dedicated token with contents write access only to the package repository |
+| Repository variable | `CONCLAVE_RELEASE_TRUST_KEYS_JSON` | Production application-release public roots |
+| `workspace-linux-release` environment variable | `CONCLAVE_APT_SIGNING_FINGERPRINT` | Full OpenPGP signing fingerprint above |
+| `workspace-linux-release` environment secret | `CONCLAVE_APT_PRIVATE_KEY` | Armored signing private key for noninteractive GPG signing |
+| `workspace-linux-release` environment variable | `CONCLAVE_WORKSPACE_SIGNING_KEY_ID` | Initial independent application key ID: `workspace-2026-10` |
+| `workspace-linux-release` environment secret | `CONCLAVE_WORKSPACE_ED25519_SEED` | Application metadata key backup, separate from the APT key |
 
-Protect the environment with release-operator approval and restrict deployment
-to `main`. The signing key must be available noninteractively in this protected
-environment; private key material is imported only into an ephemeral `0700`
-GnuPG directory and removed after publishing. Never print it. A publisher token
-is needed because the source repository's GITHUB_TOKEN cannot write a separate
-repository, and its pushes would not trigger the target Pages build.
+APT publishing uses only the OpenPGP secret. The application public root is a
+compile-time input; its private seed is not used to sign APT metadata. Private
+APT material is imported into an ephemeral `0700` GnuPG directory only after
+successful builds/tests and removed after publishing. The key is available
+noninteractively only in the main-restricted release environment.
 
 ## Publish and upgrade
 
 Dispatch `Release Linux Workspace` from `main` with an immutable version and
 `publish=true`. Publication requires successful push-triggered repository CI for
-that exact commit, followed by successful package tests for both architectures.
-The release job downloads those tested packages without rebuilding them, clones
-the existing public repository, adds the new versions, generates signed indexes,
-and pushes a regular fast-forward commit to `gh-pages`. Concurrent releases are
-serialized. Missing keys/hosting/trust roots fail closed. A non-publish run uses
-fixture roots only when production roots are not configured and retains candidates
-as private workflow artifacts.
+that exact commit, followed by successful native package tests for both
+architectures. The signing job downloads those tested packages without rebuilding
+them, validates their exact version/architecture pair, adds them to the existing
+package-data branch, generates signed indexes, and pushes a fast-forward commit.
+It exports only the public site tree to the official Pages artifact action. The
+next job deploys Pages, then both public-install acceptance jobs must pass.
+Concurrent releases are serialized. Missing keys or roots fail closed.
 
-The static tree contains `pool`, `dists/stable`, a public key and `.nojekyll`.
-Existing versions and by-hash indexes are retained for rollback and clients
-mid-update. Replacing an existing version/architecture with different bytes is
-rejected. `Release` does not expire during quiet release periods; it has a signed
-publication date and is regenerated for each release. Upload to other static
-hosts by building a staging copy of the existing repository and atomically
-switching the served tree. Never run the generator against a live served tree.
+For example:
 
-Wait for the package repository's Pages deployment to succeed, download its
-public `InRelease` and verify it with the recorded signing key, then perform a
-fresh install and upgrade from the public HTTPS endpoint on a separate Ubuntu
-host. Successful git push alone is not proof of public availability. See the
-[Linux operator guide](../operations/WORKSPACE_LINUX.md) for installation commands.
+```bash
+gh workflow run release-linux.yml --repo nohainc/conclave --ref main -f version=1.0.3 -f publish=true
+```
 
+A non-publish run retains candidates as workflow artifacts. It uses configured
+production roots when available, falling back to fixture roots only when no
+production roots exist. Candidate testing alone does not publish anything.
+
+Existing package versions and by-hash indexes are retained for rollback and
+clients mid-update. Replacing an existing version/architecture with different
+bytes is rejected. Retry failed deployment jobs with the existing artifact;
+never rebuild different bytes under an already published version. If a rebuild
+is required, increment the package version. The signed Release has a publication
+date and no expiry during quiet release periods. Monitor Pages/repository size
+and migrate static hosting before approaching its limits.
+
+See the [Linux operator guide](../operations/WORKSPACE_LINUX.md) for installation.
 APT upgrades require a user-service stop/start around package replacement; no
 root maintainer script touches running users' assignments. Existing installation
 IDs, registration, runtime credentials, Work Root, Profiles and sessions remain
 in the original state directory. No data migration is introduced. An archive
-install must stop/unregister its old user unit before registering the `/usr/lib`
-service location; the existing manager refuses to silently change a unit pointing
-at another executable. Reboot/linger, real provider assignments and browser
-approval against production still need target-host acceptance evidence.
-
-Linux ARM64 CI bootstraps the stable Flutter source tag whose commit matches the
-official release manifest, because the SDK archive action cannot resolve an
-official Linux ARM64 archive. Other hosts retain the existing SDK action. Pub
-caches include the host architecture.
+install must stop/unregister its old user unit before registering the packaged
+service; the manager refuses to silently change a unit pointing at another
+executable. Reboot/linger, real provider assignments and production browser
+approval still need target-host acceptance evidence.

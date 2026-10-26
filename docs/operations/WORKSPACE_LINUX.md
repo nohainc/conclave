@@ -9,12 +9,11 @@ for publication setup and qualification requirements.
 
 ## Install the headless Debian package
 
-The public APT endpoint must be provisioned before these commands work. Use the
-HTTPS repository URL and independently verify the signing-key fingerprint from
-the publisher; do not substitute the private source repository URL.
+Use the production HTTPS repository below. Verify the public signing key against
+fingerprint `6EA013D12EF79CBDC34D66058182CCCFCF4175F2` before installing it.
 
 ```bash
-APT_URL=https://YOUR-PACKAGE-HOST/REPOSITORY
+APT_URL=https://nohainc.github.io/conclave
 curl --fail --location "$APT_URL/conclave-archive-keyring.gpg" -o /tmp/conclave-archive-keyring.gpg
 gpg --show-keys --with-fingerprint /tmp/conclave-archive-keyring.gpg
 sudo install -D -m 644 /tmp/conclave-archive-keyring.gpg /etc/apt/keyrings/conclave-archive-keyring.gpg

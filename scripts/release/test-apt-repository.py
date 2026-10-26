@@ -54,6 +54,42 @@ class RepositoryTest(unittest.TestCase):
                     payload = (output / fields['Filename']).read_bytes()
                     self.assertEqual(hashlib.sha256(payload).hexdigest(), fields['SHA256'])
                 subprocess.run(['gpgv', '--keyring', str(output / 'conclave-archive-keyring.gpg'), str(output / 'dists/stable/InRelease')], check=True)
+                # Exercise the real publisher against a local bare git remote,
+                # with only GitHub transport mocked. No production credentials.
+                remote = root / 'remote.git'
+                subprocess.run(['git', 'init', '--quiet', '--bare', str(remote)], check=True)
+                wrappers = root / 'bin'
+                wrappers.mkdir()
+                real_git = shutil.which('git')
+                (wrappers / 'gh').write_text("#!/bin/sh\ncase \"$*\" in *visibility*) echo PUBLIC ;; esac\n")
+                (wrappers / 'git').write_text(
+                    "#!/usr/bin/env python3\nimport os,sys\n"
+                    "args=[os.environ['APT_TEST_REMOTE'] if arg=='https://github.com/test/apt.git' else arg for arg in sys.argv[1:]]\n"
+                    "os.execv(os.environ['APT_TEST_GIT'],[os.environ['APT_TEST_GIT'],*args])\n")
+                for wrapper in wrappers.iterdir():
+                    wrapper.chmod(0o755)
+                private = subprocess.check_output(['gpg', '--batch', '--armor', '--export-secret-keys', key], text=True)
+                publisher_env = dict(os.environ, PATH=str(wrappers) + os.pathsep + os.environ['PATH'],
+                                     APT_TEST_REMOTE=str(remote), APT_TEST_GIT=real_git,
+                                     CONCLAVE_APT_PRIVATE_KEY=private, CONCLAVE_APT_SIGNING_FINGERPRINT=key,
+                                     GITHUB_REPOSITORY='test/apt', GITHUB_REF='refs/heads/main', GH_TOKEN='fixture')
+                publisher = Path(__file__).with_name('publish-apt-repository.sh').resolve()
+                exported = root / 'site'
+                for version in ('2.0.0', '2.0.1'):
+                    candidates = root / ('candidates-' + version)
+                    candidates.mkdir()
+                    for arch in ('amd64', 'arm64'):
+                        shutil.copyfile(package(version, arch), candidates / f'{arch}.deb')
+                    publisher_env['CONCLAVE_WORKSPACE_VERSION'] = version
+                    result = subprocess.run(['bash', str(publisher), str(candidates), str(exported)],
+                                            env=publisher_env, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse((exported / '.git').exists())
+                self.assertEqual({item.name for item in exported.iterdir()},
+                                 {'pool', 'dists', 'conclave-archive-keyring.gpg', '.nojekyll', 'index.html'})
+                self.assertEqual(len(list((exported / 'pool').rglob('*.deb'))), 4)
+                self.assertIn(key, (exported / 'index.html').read_text())
+                self.assertNotIn('PRIVATE KEY', (exported / 'index.html').read_text())
                 with self.assertRaisesRegex(ValueError, 'immutable'):
                     module.build(output, [package('1.0.0', 'amd64', 'changed')], key)
                 signed = output / 'dists/stable/InRelease'
