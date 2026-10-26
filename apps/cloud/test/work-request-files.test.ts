@@ -3,7 +3,6 @@ import {
   workRequestFileMetadata,
   isWorkRequestFileId,
   verifyWorkRequestFile,
-  workRequestFileKey,
   workRequestFileName,
 } from "../src/routes/work-request-files.js";
 

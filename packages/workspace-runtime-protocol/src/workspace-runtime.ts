@@ -53,7 +53,6 @@ export type WorkspaceRuntimeMessageType =
 /** Maximum characters of raw provider usage output carried in one message. */
 export const WORKER_USAGE_OUTPUT_MAX_CHARS = 64 * 1024;
 
-
 const nonEmptyString = z.string().trim().min(1);
 const timestamp = z.string().datetime();
 

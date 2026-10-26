@@ -82,8 +82,16 @@ it("owners manage all Threads while collaborators manage only their assigned Thr
           thread.id,
         ),
       ).rejects.toMatchObject({ status: 403 });
-      await handleUpdateThread(request(user, { status: "archived" }), env, thread.id);
-      await handleUpdateThread(request(user, { status: "active" }), env, thread.id);
+      await handleUpdateThread(
+        request(user, { status: "archived" }),
+        env,
+        thread.id,
+      );
+      await handleUpdateThread(
+        request(user, { status: "active" }),
+        env,
+        thread.id,
+      );
       await expect(
         handleDeleteThread(request(user, {}, "DELETE"), env, thread.id),
       ).rejects.toMatchObject({ status: 403 });

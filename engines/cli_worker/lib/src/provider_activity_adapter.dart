@@ -487,8 +487,8 @@ class ProviderActivityAdapter {
 
   List<ProviderActivityObservation> _normalizeCopilot(
     Map event, {
-      required bool declarativeMatched,
-    }) {
+    required bool declarativeMatched,
+  }) {
     final type = event['type'];
     if (type is! String) return _diagnostic('missing_event_type');
     switch (type) {
@@ -583,7 +583,9 @@ class ProviderActivityAdapter {
             details: {'diagnostic': 'provider_error'},
           ),
         ];
-      case 'assistant.message_delta' || 'session.tools_updated' || 'assistant.turn_end':
+      case 'assistant.message_delta' ||
+          'session.tools_updated' ||
+          'assistant.turn_end':
         return const [];
       default:
         return const [];
@@ -1288,8 +1290,11 @@ class ProviderActivityAdapter {
   String _copilotToolTitle(String name) => switch (name.toLowerCase()) {
     'bash' || 'shell' || 'command' || 'run' => 'Running a command',
     'view' || 'read' || 'ls' || 'glob' || 'grep' => 'Reading files',
-    'create' || 'write' || 'edit' || 'apply_patch' || 'patch' =>
-      'Editing files',
+    'create' ||
+    'write' ||
+    'edit' ||
+    'apply_patch' ||
+    'patch' => 'Editing files',
     'search' || 'web_search' || 'fetch' || 'lookup' => 'Searching the web',
     _ => 'Running a tool',
   };
