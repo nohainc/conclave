@@ -383,11 +383,25 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
         'restart' => manager.restart(),
         _ => manager.getInfo(),
       };
-      _print({
-        'registration': info.registration.name,
-        'process': info.process.name,
-        'pid': info.pid,
-      }, json);
+      if (json) {
+        _print({
+          'registration': info.registration.name,
+          'process': info.process.name,
+          'pid': info.pid,
+        }, true);
+      } else {
+        final registered = info.registration == ServiceInstallationState.registered;
+        final running = info.process == ServiceRuntimeState.running;
+        final registrationText = registered ? 'Installed' : 'Not installed';
+        final processText = running ? 'Running (pid: ${info.pid})' : 'Stopped';
+        out.writeln('Service:       $registrationText');
+        out.writeln('Status:        $processText');
+        if (!registered) {
+          out.writeln('Hint:          Run conclave-workspace service install');
+        } else if (!running) {
+          out.writeln('Hint:          Run conclave-workspace service start');
+        }
+      }
       return 0;
     } on Object catch (error) {
       err.writeln('conclave-workspace: $error');

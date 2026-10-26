@@ -91,7 +91,15 @@ class MacOsWorkspaceServiceManager implements WorkspaceServiceManager {
     final label = await _serviceLabel();
     await launchAgentsDirectory.create(recursive: true);
     final plist = _plistFile(label);
-    await File('${dataDirectory.path}/logs').create(recursive: true);
+    final logDir = Directory('${dataDirectory.path}/logs');
+    if (logDir.existsSync()) {
+      // If a regular file exists with this name, remove it so the directory can be created.
+      final stat = logDir.statSync();
+      if (stat.type != FileSystemEntityType.directory) {
+        logDir.deleteSync(recursive: true);
+      }
+    }
+    await logDir.create(recursive: true);
     await plist.writeAsString(plistContents(label), flush: true);
     await _launchctl(['load', '-w', plist.path]);
     return getInfo();
@@ -110,6 +118,17 @@ class MacOsWorkspaceServiceManager implements WorkspaceServiceManager {
     return getInfo();
   }
 
+  Future<String> _currentUid() async {
+    final env = Platform.environment['UID'];
+    if (env != null && env.isNotEmpty) return env;
+    try {
+      final res = await Process.run('id', ['-u']);
+      final out = res.stdout.toString().trim();
+      if (out.isNotEmpty) return out;
+    } catch (_) {}
+    return '501';
+  }
+
   @override
   Future<WorkspaceServiceInfo> start() async {
     final label = await _serviceLabel();
@@ -117,23 +136,41 @@ class MacOsWorkspaceServiceManager implements WorkspaceServiceManager {
     if (!plist.existsSync()) {
       await register();
     }
-    await _launchctl(['start', label]);
+    final uid = await _currentUid();
+    try {
+      await _launchctl(['kickstart', '-k', 'gui/$uid/$label']);
+    } catch (_) {
+      await _launchctl(['start', label]);
+    }
+    // Give launchd a brief window to spawn and register the PID
+    for (var i = 0; i < 10; i++) {
+      final current = await getInfo();
+      if (current.process == ServiceRuntimeState.running) {
+        return current;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
     return getInfo();
   }
 
   @override
   Future<WorkspaceServiceInfo> stop() async {
     final label = await _serviceLabel();
+    final uid = await _currentUid();
     try {
-      await _launchctl(['stop', label]);
-    } catch (_) {}
+      await _launchctl(['kill', 'SIGTERM', 'gui/$uid/$label']);
+    } catch (_) {
+      try {
+        await _launchctl(['stop', label]);
+      } catch (_) {}
+    }
     return getInfo();
   }
 
   @override
   Future<WorkspaceServiceInfo> restart() async {
     await stop();
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await Future<void>.delayed(const Duration(milliseconds: 500));
     return start();
   }
 
@@ -163,7 +200,7 @@ class MacOsWorkspaceServiceManager implements WorkspaceServiceManager {
       );
     }
 
-    final uid = Platform.environment['UID'] ?? '501';
+    final uid = await _currentUid();
     final target = 'gui/$uid/$label';
     final result = await _launchctl(['print', target]);
     final out = '${result.stdout}\n${result.stderr}';
