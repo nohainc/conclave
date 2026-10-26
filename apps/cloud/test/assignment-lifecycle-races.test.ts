@@ -138,6 +138,8 @@ describe("assignment lifecycle ordering", () => {
   });
 
   it("never regresses or leaves a terminal state for any ordering of the evidence", async () => {
+    // Exhaust all 30 distinct orders, each with a fresh migrated SQL fixture.
+    // Shared CI runners need a larger budget than a single transition test.
     const evidence = [
       "admit",
       "admit",
@@ -184,7 +186,7 @@ describe("assignment lifecycle ordering", () => {
       // before or after it.
       expect(f.row().status, key).toBe("completed");
     }
-  });
+  }, 30_000);
 
   it("makes terminal outcomes immutable when the result arrives more than once", async () => {
     const f = await seed("running");

@@ -63,7 +63,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-flutter
       - name: Install package tools
-        run: sudo apt-get update && sudo apt-get install -y dpkg-dev gnupg
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev gnupg libglu1-mesa
       - name: Validate CLI, registration and Linux adapters
         working-directory: apps/workspace
         run: |

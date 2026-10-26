@@ -113,3 +113,8 @@ install must stop/unregister its old user unit before registering the `/usr/lib`
 service location; the existing manager refuses to silently change a unit pointing
 at another executable. Reboot/linger, real provider assignments and browser
 approval against production still need target-host acceptance evidence.
+
+Linux ARM64 CI bootstraps the stable Flutter source tag whose commit matches the
+official release manifest, because the SDK archive action cannot resolve an
+official Linux ARM64 archive. Other hosts retain the existing SDK action. Pub
+caches include the host architecture.
