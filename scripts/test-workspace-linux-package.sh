@@ -89,5 +89,5 @@ service_pid=''
 sudo apt-get remove -y conclave-workspace
 [[ "$(cat "$STATE/installation-id")" == "$identity" ]]
 grep -qx 'keep session' "$STATE/sessions/preserve-test"
-grep -qx 'keep user work' "$TEST_ROOT/work/preserve-test"
+grep -qx 'keep user work' "$TEST_ROOT/home/Documents/Conclave/preserve-test"
 echo 'APT install, upgrade, IPC, graceful stop and removal preserved user state.'
