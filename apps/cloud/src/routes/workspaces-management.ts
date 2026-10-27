@@ -207,6 +207,12 @@ export async function handleRevokeWorkspace(
     .bind(now, workspaceId)
     .run();
 
+  await env.CONCLAVE_DB.prepare(
+    "UPDATE workspace_installations SET status = 'released', released_at = ?1, updated_at = ?1 WHERE workspace_id = ?2 AND status = 'active'",
+  )
+    .bind(now, workspaceId)
+    .run();
+
   if (!alreadyRevoked) {
     await recordAudit(
       env,

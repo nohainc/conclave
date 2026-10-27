@@ -381,6 +381,19 @@ extension _AxAppViews on _AxAppStateMixin {
                         widget.dataSource is AxWorkspaceSharingDataSource
                             ? widget.dataSource as AxWorkspaceSharingDataSource
                             : null,
+                    onRevoke: (workspace) async {
+                      try {
+                        await store.workspaces.revoke(workspace.id);
+                        await store.workspaces.list();
+                        if (mounted) {
+                          _showSnackBar('Workspace unregisters from Cloud.');
+                        }
+                      } catch (error) {
+                        if (mounted) {
+                          _showSnackBar(error.toString());
+                        }
+                      }
+                    },
                   ))));
 
   Widget _accountProviderIcon(BuildContext context, String providerId,

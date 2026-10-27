@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:conclave_workspace/workspace_cli.dart';
 import 'package:conclave_workspace/linux_service_manager.dart';
+import 'package:conclave_workspace/workspace_configuration.dart';
 import 'package:conclave_workspace/workspace_settings.dart';
 import 'package:test/test.dart';
 
@@ -39,6 +40,15 @@ void main() {
         ]);
     expect((await run(['folders', 'remove', 'folder-123'])).$4, [
       'folders.remove {folderId: folder-123}',
+    ]);
+    expect((await run(['workers', 'catalog'])).$4, [
+      'workers.getCatalogSnapshot {}',
+    ]);
+    expect((await run(['workers', 'add', 'gemini'])).$4, [
+      'workers.configureWorker {workerTypeId: gemini}',
+    ]);
+    expect((await run(['workers', 'remove', 'w1'])).$4, [
+      'workers.removeWorker {workerId: w1}',
     ]);
   });
 
@@ -244,6 +254,66 @@ void main() {
       expect(WorkspaceSettingsStore(root).readSync()!.connectOnStart, isTrue);
       await send('disconnect');
       expect(WorkspaceSettingsStore(root).readSync()!.connectOnStart, isFalse);
+    });
+
+    test('work-dir displays and updates work root', () async {
+      await WorkspaceSettingsStore(root).ensureDefaults();
+      final out1 = StringBuffer(), err1 = StringBuffer();
+      final code1 = await WorkspaceCli(
+        out: out1,
+        err: err1,
+      ).run(['--data-dir', root.path, 'work-dir']);
+      expect(code1, 0);
+      expect(out1.toString().trim(), isNotEmpty);
+
+      final newWorkPath = Directory('${root.path}/custom-work').path;
+      final out2 = StringBuffer(), err2 = StringBuffer();
+      final code2 = await WorkspaceCli(
+        out: out2,
+        err: err2,
+      ).run(['--data-dir', root.path, 'work-dir', newWorkPath]);
+      expect(code2, 0);
+      expect(out2.toString(), contains('Work Root updated to'));
+
+      final out3 = StringBuffer(), err3 = StringBuffer();
+      final code3 = await WorkspaceCli(
+        out: out3,
+        err: err3,
+      ).run(['--data-dir', root.path, 'work-dir']);
+      expect(code3, 0);
+      expect(out3.toString().trim(), equals(newWorkPath));
+    });
+
+    test('unregister and reset clear workspace state', () async {
+      final regStore = WorkspaceRegistrationStore(root);
+      await regStore.write(const WorkspaceRegistration(
+        workspaceRuntimeId: 'rt-1',
+        workspaceId: 'ws-1',
+        cloudUrl: 'https://conclave.test',
+        name: 'Test WS',
+        hostname: 'testhost',
+        installationId: 'inst-1',
+      ));
+      expect(regStore.readSync(), isNotNull);
+
+      final outUnreg = StringBuffer(), errUnreg = StringBuffer();
+      final unregCode = await WorkspaceCli(
+        out: outUnreg,
+        err: errUnreg,
+        request: (c, p) async => {'ok': true},
+      ).run(['--data-dir', root.path, 'unregister']);
+      expect(unregCode, 0);
+      expect(outUnreg.toString(), contains('unregistered'));
+      expect(regStore.readSync(), isNull);
+
+      final outReset = StringBuffer(), errReset = StringBuffer();
+      final resetCode = await WorkspaceCli(
+        out: outReset,
+        err: errReset,
+        request: (c, p) async => {'ok': true},
+      ).run(['--data-dir', root.path, 'reset']);
+      expect(resetCode, 0);
+      expect(outReset.toString(), contains('reset complete'));
     });
   });
 }

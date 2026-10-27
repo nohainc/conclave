@@ -61,7 +61,7 @@ void main() {
     expect(
         WorkRootResolver(platform: FakePlatform('linux', '/home/tester'))
             .defaultPath,
-        '/home/tester/.local/share/conclave/work');
+        '/home/tester/Documents/Conclave');
     expect(
         WorkRootResolver(platform: FakePlatform('windows', 'C:\\Users\\tester'))
             .defaultPath,

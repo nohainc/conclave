@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'desktop_auth.dart';
+import 'secure_credentials.dart';
 import 'workspace_configuration.dart';
 import 'linux_service_manager.dart';
 import 'macos_service_manager.dart';
@@ -43,11 +45,17 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
   login [status|cancel]     Browser approval and Cloud registration
   login --password         Sign in with existing Cloud email/password
   setup                    Start service, sign in and connect (headless)
+  unregister               Unregister workspace from Cloud and clear local identity
+  reset                    Stop service, unregister and erase local runtime state
+  work-dir [PATH]          View or update the Work Root directory
   status                    Service summary (connection, workers, slots)
   health | version
   connect | disconnect      Connect or disconnect the Cloud connection
   pause | resume            Stop or resume accepting new work
-  workers                   List Workers
+  workers                   List configured Workers
+  workers catalog           List available catalog Workers
+  workers add TYPE          Add a Worker from the catalog (e.g. gemini, chatgpt)
+  workers remove ID         Remove a configured Worker
   workers check [TYPE]      Check provider CLI readiness
   workers test ID           Run a Worker test
   workers enable|disable ID
@@ -92,6 +100,15 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     if (rest.length >= 2 && rest.first == 'folders' && rest[1] != 'list') {
       return _folders(dataDir, rest.sublist(1), json);
     }
+    if (rest.isNotEmpty && rest.first == 'work-dir') {
+      return _workDir(dataDir, rest.sublist(1), json);
+    }
+    if (rest.length == 1 && rest.first == 'unregister') {
+      return _unregister(dataDir, json);
+    }
+    if (rest.length == 1 && rest.first == 'reset') {
+      return _reset(dataDir, json);
+    }
     final call = _resolve(rest);
     if (call == null) {
       err.write(usage);
@@ -115,6 +132,22 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
             call.$1 == 'connection.pause' ||
             call.$1 == 'connection.resume') {
           _printConnectionSummary(call.$1, result);
+          return 0;
+        }
+        if (call.$1 == 'workers.getCatalogSnapshot') {
+          _printCatalogSummary(result);
+          return 0;
+        }
+        if (call.$1 == 'workers.configureWorker') {
+          final id = result['id'] ?? result['workerTypeId'] ?? 'worker';
+          final name = result['name'] ?? result['displayName'] ?? id;
+          out.writeln('Worker added: $name ($id)');
+          return 0;
+        }
+        if (call.$1 == 'workers.removeWorker') {
+          final id = result['workerId'] ?? 'worker';
+          final state = result['state'] ?? 'removed';
+          out.writeln('Worker $state: $id');
           return 0;
         }
       }
@@ -300,6 +333,12 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
         return ('connection.resume', {});
       case ('workers', null):
         return ('workers.list', {});
+      case ('workers', 'catalog') when a.length == 2:
+        return ('workers.getCatalogSnapshot', {});
+      case ('workers', 'add') when id != null:
+        return ('workers.configureWorker', {'workerTypeId': id});
+      case ('workers', 'remove') when id != null:
+        return ('workers.removeWorker', {'workerId': id});
       case ('workers', 'check'):
         return ('workers.checkReadiness', {if (id != null) 'workerTypeId': id});
       case ('workers', 'test') when id != null:
@@ -535,6 +574,188 @@ Usage: conclave-workspace [--data-dir DIR] [--json] <command>
     }
     err.write(usage);
     return 64;
+  }
+
+  void _printCatalogSummary(Map<String, Object?> snapshot) {
+    final descriptors = snapshot['descriptors'] as List? ?? const [];
+    if (descriptors.isEmpty) {
+      out.writeln('No catalog workers available.');
+      return;
+    }
+    out.writeln('Available Workers:');
+    for (final item in descriptors) {
+      if (item is! Map) continue;
+      final typeId = item['workerTypeId'] ?? item['id'] ?? '';
+      final name = item['displayName'] ?? item['name'] ?? typeId;
+      final description = item['description'] ?? '';
+      final descPart =
+          description.toString().isNotEmpty ? ' - $description' : '';
+      out.writeln('  $typeId ($name)$descPart');
+    }
+  }
+
+  Future<int> _workDir(String? dataDir, List<String> args, bool json) async {
+    final root = WorkspaceConfigurationResolver.resolveDataDirectory([
+      if (dataDir != null) ...['--data-dir', dataDir],
+    ]);
+    final store = WorkspaceSettingsStore(root);
+    final settings = await store.ensureDefaults();
+    if (args.isEmpty) {
+      if (json) {
+        _print({'workRoot': settings.workRoot}, true);
+      } else {
+        out.writeln(settings.workRoot);
+      }
+      return 0;
+    }
+    if (args.length == 1) {
+      final rawPath = args[0].trim();
+      if (rawPath.isEmpty) {
+        err.writeln('Path cannot be empty.');
+        return 64;
+      }
+      final resolvedDir = Directory(rawPath).absolute;
+      await store.write(settings.copyWith(workRoot: resolvedDir.path));
+      if (json) {
+        _print({
+          'workRoot': resolvedDir.path,
+          'restartRequiredToApply': true,
+        }, true);
+      } else {
+        out.writeln('Work Root updated to: ${resolvedDir.path}');
+        out.writeln(
+            'Note: Restart service to apply changes (conclave-workspace service restart).');
+      }
+      return 0;
+    }
+    err.write(usage);
+    return 64;
+  }
+
+  Future<int> _unregister(String? dataDir, bool json) async {
+    final root = WorkspaceConfigurationResolver.resolveDataDirectory([
+      if (dataDir != null) ...['--data-dir', dataDir],
+    ]);
+    final registrationStore = WorkspaceRegistrationStore(root);
+    final registration = registrationStore.readSync();
+    if (registration == null) {
+      if (json) {
+        _print({
+          'unregistered': false,
+          'message': 'No workspace registration found.'
+        }, true);
+      } else {
+        out.writeln('No workspace registration found.');
+      }
+      return 0;
+    }
+
+    // Try to notify Cloud if session credentials exist
+    final credentialStore = PlatformSecureCredentialStore(
+      credentialDirectory: Directory('${root.path}/Credentials'),
+    );
+    final rawSession = await credentialStore.read(desktopHumanCredentialKey);
+    if (rawSession != null && rawSession.isNotEmpty) {
+      try {
+        final session = DesktopHumanSession.fromSecureJson(
+          jsonDecode(rawSession) as Map<String, dynamic>,
+        );
+        final client = DesktopAuthClient(cloudUrl: registration.cloudUrl);
+        try {
+          await client.releaseWorkspace(
+            session: session,
+            installationId: registration.installationId,
+            workspaceId: registration.workspaceId,
+            runtimeId: registration.workspaceRuntimeId,
+          );
+        } finally {
+          client.close();
+        }
+      } catch (_) {
+        // Cloud release failure shouldn't prevent clearing local registration
+      }
+    }
+
+    await registrationStore.clear();
+    await credentialStore.delete(registration.workspaceRuntimeId);
+
+    // Stop or disconnect service if running
+    try {
+      await _send(dataDir, 'connection.disconnect', {});
+    } catch (_) {}
+
+    if (json) {
+      _print({
+        'unregistered': true,
+        'workspaceId': registration.workspaceId,
+        'name': registration.name,
+      }, true);
+    } else {
+      out.writeln(
+          'Workspace ${registration.name} (${registration.workspaceId}) unregistered.');
+      out.writeln(
+          'Hint: Run conclave-workspace login or conclave-workspace setup to register anew.');
+    }
+    return 0;
+  }
+
+  Future<int> _reset(String? dataDir, bool json) async {
+    final root = WorkspaceConfigurationResolver.resolveDataDirectory([
+      if (dataDir != null) ...['--data-dir', dataDir],
+    ]);
+    // 1. Unregister from Cloud first if registered
+    await _unregister(dataDir, true);
+
+    // 2. Stop and uninstall host service
+    try {
+      await _service(dataDir, 'stop', true);
+    } catch (_) {}
+    try {
+      await _service(dataDir, 'uninstall', true);
+    } catch (_) {}
+
+    // 3. Clear credentials
+    final credentialStore = PlatformSecureCredentialStore(
+      credentialDirectory: Directory('${root.path}/Credentials'),
+    );
+    try {
+      await credentialStore.delete(desktopHumanCredentialKey);
+    } catch (_) {}
+
+    // 4. Delete runtime files and local registration
+    final filesToDelete = [
+      'workspace-registration.json',
+      'local-workspace-id',
+      'configured-workers.json',
+      'workspace-lifecycle.json',
+      'workspace.lock',
+      'workspace.nano',
+    ];
+    for (final filename in filesToDelete) {
+      final f = File('${root.path}${Platform.pathSeparator}$filename');
+      if (f.existsSync()) {
+        try {
+          f.deleteSync();
+        } catch (_) {}
+      }
+    }
+    final dirsToDelete = ['runtime', 'logs', 'Credentials'];
+    for (final dirname in dirsToDelete) {
+      final d = Directory('${root.path}${Platform.pathSeparator}$dirname');
+      if (d.existsSync()) {
+        try {
+          d.deleteSync(recursive: true);
+        } catch (_) {}
+      }
+    }
+
+    if (json) {
+      _print({'reset': true, 'dataDir': root.path}, true);
+    } else {
+      out.writeln(
+          'Workspace reset complete. All local runtime state cleared from ${root.path}.');
+    }
+    return 0;
   }
 
   void _printStatusSummary(Map<String, Object?> snapshot) {

@@ -36,13 +36,15 @@ class WorkspacesPage extends StatefulWidget {
     this.sharingSource,
     this.people = const [],
     this.personAccessSource,
+    this.onRevoke,
     // Retained as optional compatibility inputs while callers are audited.
     VoidCallback? onAdd,
     ValueChanged<AxWorkspace>? onRename,
     ValueChanged<AxWorkspace>? onUpdate,
-    ValueChanged<AxWorkspace>? onRevoke,
     Future<void> Function(AxWorkspace)? onConnect,
   });
+
+  final ValueChanged<AxWorkspace>? onRevoke;
 
   /// Owner-only, Profile-defined usage commands; reports remain local view state.
   final AxWorkerUsageDataSource? workerUsageSource;
@@ -262,6 +264,55 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             workers: widget.workspaceWorkers,
             source: widget.memberAccessSource!,
             expandable: true,
+          ),
+        ],
+        if (!workspace.shared && widget.onRevoke != null) ...[
+          const SizedBox(height: 32),
+          Divider(color: Theme.of(context).colorScheme.outlineVariant),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: ValueKey('revoke-workspace-${workspace.id}'),
+              icon:
+                  const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+              label: const Text(
+                'Unregister Workspace',
+                style: TextStyle(color: Colors.red),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.red),
+              ),
+              onPressed: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    constraints: ConclaveDialogStyle.small,
+                    title: Text('Unregister ${workspace.name}?'),
+                    content: const Text(
+                      'This will disconnect and revoke the Workspace registration in Cloud. You can register it again at any time with conclave-workspace login.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        key: const ValueKey('confirm-revoke-workspace'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Unregister'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) {
+                  widget.onRevoke!(workspace);
+                }
+              },
+            ),
           ),
         ],
       ],

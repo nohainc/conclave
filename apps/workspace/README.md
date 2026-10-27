@@ -59,9 +59,16 @@ conclave-workspace service install|start|stop|restart|status|uninstall
 conclave-workspace setup                 # headless: install, start, sign in, connect
 conclave-workspace login                 # browser approval and Cloud registration
 conclave-workspace login --password      # existing Cloud email/password sign-in
+conclave-workspace unregister            # unregister from Cloud and clear identity
+conclave-workspace reset                 # stop, unregister and clear local runtime state
+conclave-workspace work-dir [PATH]       # inspect or update primary Work Root path
 conclave-workspace connect | disconnect  # Cloud connection intent
 conclave-workspace pause | resume        # stop or resume accepting new work
 conclave-workspace status | health | version | logs | metrics
+conclave-workspace workers               # list configured workers
+conclave-workspace workers catalog       # list available catalog workers
+conclave-workspace workers add TYPE      # add worker from catalog (gemini, chatgpt, etc.)
+conclave-workspace workers remove ID     # remove a configured worker
 conclave-workspace workers [check|test|enable|disable]
 conclave-workspace slots | assignments [cancel ID] | folders [add|remove]
 ~~~

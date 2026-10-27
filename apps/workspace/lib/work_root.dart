@@ -15,16 +15,7 @@ class WorkRootResolver {
 
   String get defaultPath {
     final separator = platform.isWindows ? r'\' : '/';
-    if (platform.isWindows) {
-      return _join([platform.homeDirectory, 'Documents', 'Conclave'],
-          separator: separator);
-    }
-    if (platform.operatingSystem == 'macos') {
-      return _join([platform.homeDirectory, 'Documents', 'Conclave'],
-          separator: separator);
-    }
-    return _join(
-        [platform.homeDirectory, '.local', 'share', 'conclave', 'work'],
+    return _join([platform.homeDirectory, 'Documents', 'Conclave'],
         separator: separator);
   }
 

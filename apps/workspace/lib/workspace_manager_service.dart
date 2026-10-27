@@ -637,13 +637,19 @@ class WorkspaceManagerService {
             'workerId is required.',
           );
         }
-        if (workerSubsystem == null) {
+        if (workerSubsystem == null && registry == null) {
           throw const WorkspaceManagerProtocolException(
             'not_configured',
             'Local Worker registry is not available.',
           );
         }
-        final removed = await workerSubsystem.removeWorker(removeId);
+        var removed = false;
+        if (workerSubsystem != null) {
+          removed = await workerSubsystem.removeWorker(removeId);
+        } else {
+          await registry!.remove(removeId);
+          removed = true;
+        }
         return {
           'workerId': removeId,
           'state': removed ? 'removed' : 'removing',
