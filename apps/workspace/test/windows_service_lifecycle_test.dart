@@ -21,7 +21,8 @@ void main() {
     WorkspaceManagerIpcClient? client;
     final diagnostics = StringBuffer();
     Future<void> start() async {
-      service = await Process.start(executable, ['--data-dir', data.path]);
+      service =
+          await Process.start(executable, ['run', '--data-dir', data.path]);
       unawaited(
           service!.stdout.transform(utf8.decoder).forEach(diagnostics.write));
       unawaited(
@@ -63,6 +64,7 @@ void main() {
       expect(await client!.request('service.getHealth'),
           containsPair('healthy', true));
       final duplicate = await Process.run(executable, [
+        'run',
         '--once',
         '--data-dir',
         data.path,

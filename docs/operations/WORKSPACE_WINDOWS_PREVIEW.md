@@ -6,13 +6,6 @@ Worker Engine. The package is an unsigned qualification candidate, with manual
 updates; Windows installer packaging and release signing remain separate ADR-021
 phases.
 
-> **Status:** the Flutter management UI was removed. `build-workspace-windows.ps1`,
-> `package-workspace-windows.ps1` and the Windows workflows still assume the old
-> `conclave_workspace.exe` GUI bundle and are pending rework to the headless
-> layout (`conclave-workspace.exe`, `workspace.exe`, `assets/engines/conclave-agent.exe`).
-> The runtime behavior below (scheduled task, named pipes, DPAPI, Job Objects)
-> is unchanged.
-
 ## Build and run
 
 Install the Dart SDK, Node.js and Git for Windows Bash. Supply
@@ -34,7 +27,7 @@ For manual updates, stop the service, replace the complete application directory
 and start the service again. Do not replace individual Engine or service files.
 
 The **Build Windows Workspace preview** Actions workflow builds on Windows and
-runs native runtime, compiled-service lifecycle, and UI startup tests. It uses
+runs native runtime, compiled-service lifecycle, and CLI help tests. It uses
 configured public trust roots or the existing nightly CI-only public root. A
 CI-root build cannot verify production application releases. No private release
 keys or provider credentials are needed by CI.

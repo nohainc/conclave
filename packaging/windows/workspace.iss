@@ -29,7 +29,7 @@ WizardStyle=modern
 DisableProgramGroupPage=yes
 CloseApplications=no
 RestartApplications=no
-UninstallDisplayIcon={app}\conclave_workspace.exe
+UninstallDisplayIcon={app}\conclave-workspace.exe
 SetupLogging=yes
 #ifdef SignInstaller
 ; Signs Setup.exe and the embedded uninstaller with the "conclave" sign tool
@@ -41,12 +41,6 @@ SignedUninstaller=yes
 [Files]
 Source: "{#BundleDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-[Icons]
-Name: "{group}\Conclave Workspace"; Filename: "{app}\conclave_workspace.exe"; WorkingDir: "{app}"
-
-[Run]
-Filename: "{app}\conclave_workspace.exe"; Description: "Open Conclave Workspace"; Flags: nowait postinstall skipifsilent
-
 [Code]
 // Never force-close the service or provider processes during an assignment.
 function WorkspaceRunning(): Boolean;
@@ -56,7 +50,7 @@ begin
   try
     Locator := CreateOleObject('WbemScripting.SWbemLocator');
     Services := Locator.ConnectServer('', 'root\CIMV2');
-    Processes := Services.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = ''conclave_workspace.exe'' OR Name = ''workspace.exe'' OR Name = ''conclave-service.exe''');
+    Processes := Services.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = ''conclave-workspace.exe'' OR Name = ''workspace.exe'' OR Name = ''conclave-service.exe''');
     Result := Processes.Count > 0;
   except
     // If process inspection fails, preserve the existing installation.

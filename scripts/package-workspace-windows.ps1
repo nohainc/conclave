@@ -10,9 +10,7 @@ $Root = Split-Path $PSScriptRoot -Parent
 $Bundle = Join-Path $Root 'dist/conclave-workspace/windows/release'
 $Output = Join-Path $Root 'dist/conclave-workspace/installer'
 if (-not (Test-Path $Compiler)) { throw 'Inno Setup 6 ISCC.exe is required.' }
-foreach ($File in @('conclave_workspace.exe', 'workspace.exe', 'flutter_windows.dll',
-    'data/app.so', 'assets/engines/conclave_cli_worker_engine.exe',
-    'data/flutter_assets/assets/engines/conclave_cli_worker_engine.exe')) {
+foreach ($File in @('conclave-workspace.exe', 'assets/engines/conclave-agent.exe')) {
     if (-not (Test-Path (Join-Path $Bundle $File))) { throw "Missing release bundle file: $File" }
 }
 $VersionLine = (Select-String -Path (Join-Path $Root 'apps/workspace/pubspec.yaml') -Pattern '^version:').Line

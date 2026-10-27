@@ -54,12 +54,15 @@ class WorkspaceCli {
       ('assignments', 'Active assignment ids'),
       ('assignments cancel ID', 'Cancel an active assignment'),
     ]),
-    _HelpEntry('config', [
-      (
-        'config init|show|validate|path',
-        'Manage the restart-applied workspace.nano file',
-      ),
-    ], always: true),
+    _HelpEntry(
+        'config',
+        [
+          (
+            'config init|show|validate|path',
+            'Manage the restart-applied workspace.nano file',
+          ),
+        ],
+        always: true),
     _HelpEntry('connect', [('connect', 'Connect to Cloud')]),
     _HelpEntry('disconnect', [('disconnect', 'Disconnect from Cloud')]),
     _HelpEntry('folders', [
@@ -79,9 +82,12 @@ class WorkspaceCli {
     _HelpEntry('register', [
       ('register', 'Register this Workspace with Cloud (after login)'),
     ]),
-    _HelpEntry('reset', [
-      ('reset', 'Stop service, unregister and erase local runtime state'),
-    ], always: true),
+    _HelpEntry(
+        'reset',
+        [
+          ('reset', 'Stop service, unregister and erase local runtime state'),
+        ],
+        always: true),
     _HelpEntry('resume', [('resume', 'Resume accepting new work')]),
     _HelpEntry('service', [
       (
@@ -89,13 +95,19 @@ class WorkspaceCli {
         'Manage the host background service (macOS/Linux/Windows)',
       ),
     ]),
-    _HelpEntry('setup', [
-      ('setup', 'Start service, sign in and connect (headless)'),
-    ], always: true),
+    _HelpEntry(
+        'setup',
+        [
+          ('setup', 'Start service, sign in and connect (headless)'),
+        ],
+        always: true),
     _HelpEntry('slots', [('slots', 'Parallel execution slots')]),
     _HelpEntry('status', [('status', 'Service summary')], always: true),
     _HelpEntry('unregister', [
-      ('unregister', 'Unregister workspace from Cloud and clear local identity'),
+      (
+        'unregister',
+        'Unregister workspace from Cloud and clear local identity'
+      ),
     ]),
     _HelpEntry('version', [('version', 'Show the version')], always: true),
     _HelpEntry('work-dir', [
@@ -263,7 +275,8 @@ class WorkspaceCli {
               call.$2['workerTypeId'] ??
               'worker';
           final id = result['workerId'] ?? result['id'];
-          out.writeln(id == null ? 'Worker added: $type' : 'Worker added: $type ($id)');
+          out.writeln(
+              id == null ? 'Worker added: $type' : 'Worker added: $type ($id)');
           return 0;
         }
         if (call.$1 == 'workers.removeWorker') {
@@ -391,7 +404,9 @@ class WorkspaceCli {
     ]);
     final store = WorkspaceSettingsStore(root);
     final path = store.file.absolute.path;
-    if (!store.file.existsSync()) return (path: path, state: 'missing', error: null);
+    if (!store.file.existsSync()) {
+      return (path: path, state: 'missing', error: null);
+    }
     try {
       store.readSync();
       return (path: path, state: 'valid', error: null);
@@ -430,7 +445,8 @@ class WorkspaceCli {
   void _writeServiceLines(bool registered, bool running, int? pid,
       {bool hint = true}) {
     out.writeln('Service:       ${registered ? 'Installed' : 'Not installed'}');
-    out.writeln('Status:        ${running ? 'Running (pid: $pid)' : 'Stopped'}');
+    out.writeln(
+        'Status:        ${running ? 'Running (pid: $pid)' : 'Stopped'}');
     if (!hint) return;
     if (!registered) {
       out.writeln('Hint:          Run conclave-workspace service install');
@@ -645,10 +661,10 @@ class WorkspaceCli {
     // 3. Workspace name (an already registered Workspace keeps its name).
     final registration = WorkspaceRegistrationStore(root).readSync();
     if (registration == null) {
-      final answer = _ask('Workspace name [${settings.workspaceName}]: ')?.trim();
-      final name = (answer == null || answer.isEmpty)
-          ? settings.workspaceName
-          : answer;
+      final answer =
+          _ask('Workspace name [${settings.workspaceName}]: ')?.trim();
+      final name =
+          (answer == null || answer.isEmpty) ? settings.workspaceName : answer;
       if (name.length > 120) {
         err.writeln('Workspace name must be at most 120 characters.');
         return 64;
@@ -672,13 +688,9 @@ class WorkspaceCli {
       out.writeln('Workspace is already registered: ${registration.name}');
     }
     // 5. Offer to start the service.
-    final reply = _ask('Start the Workspace service now? [Y/n]: ')
-        ?.trim()
-        .toLowerCase();
-    if (reply != null &&
-        reply.isNotEmpty &&
-        reply != 'y' &&
-        reply != 'yes') {
+    final reply =
+        _ask('Start the Workspace service now? [Y/n]: ')?.trim().toLowerCase();
+    if (reply != null && reply.isNotEmpty && reply != 'y' && reply != 'yes') {
       out.writeln(
         'Setup complete. Start the service when you are ready: '
         'conclave-workspace service install && '
@@ -911,7 +923,8 @@ class WorkspaceCli {
         out.writeln('Status:        $processText');
         if (action != 'status') {
           if (!registered) {
-            out.writeln('Hint:          Run conclave-workspace service install');
+            out.writeln(
+                'Hint:          Run conclave-workspace service install');
           } else if (!running) {
             out.writeln('Hint:          Run conclave-workspace service start');
           }
@@ -1121,7 +1134,8 @@ class WorkspaceCli {
     }
   }
 
-  Future<DesktopHumanSession?> _storedSession(SecureCredentialStore store) async {
+  Future<DesktopHumanSession?> _storedSession(
+      SecureCredentialStore store) async {
     try {
       final raw = await store.read(desktopHumanCredentialKey);
       if (raw == null || raw.isEmpty) return null;

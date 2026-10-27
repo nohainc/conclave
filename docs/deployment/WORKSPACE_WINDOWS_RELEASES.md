@@ -10,8 +10,8 @@ Release tagged `workspace-windows-v<version>`.
 Signing is done by [`scripts/sign-workspace-windows.ps1`](../../scripts/sign-workspace-windows.ps1).
 Every signature uses SHA-256 and an RFC 3161 timestamp, and is verified with
 `signtool verify /pa` and `Get-AuthenticodeSignature` before packaging and again
-on the installer. The bundled Engine is signed once and copied to its second
-bundle location so both copies stay byte-identical.
+on the installer. The headless bundle contains `conclave-workspace.exe` and
+`assets/engines/conclave-agent.exe`; both are signed before packaging.
 
 ## One-time setup
 
@@ -21,7 +21,7 @@ bundle location so both copies stay byte-identical.
      then create a *Public Trust* certificate profile. Create an Entra ID app
      registration with a client secret and grant it the
      *Trusted Signing Certificate Profile Signer* role on the account.
-     Signatures build SmartScreen reputation immediately and no key leaves Azure.
+     The signing key stays in Azure; device qualification still includes SmartScreen.
    - **Certificate file (OV).** Buy an OV code-signing certificate that the CA
      will issue as an exportable PFX. EV and most new OV certificates are only
      issued on hardware tokens/HSMs and cannot be used with this backend; use
@@ -61,7 +61,7 @@ bundle location so both copies stay byte-identical.
 
 - Right-click Setup.exe → Properties → Digital Signatures shows the Conclave
   publisher with a timestamp; `Get-AuthenticodeSignature` reports `Valid` for
-  Setup.exe, `conclave_workspace.exe`, `workspace.exe` and the Engine.
+  Setup.exe, `conclave-workspace.exe` and the Engine.
 - The installer UAC/SmartScreen prompt names the publisher (no "Unknown
   publisher").
 - Sign-in, registration, service install/start, a real provider assignment,
@@ -77,7 +77,20 @@ bundle location so both copies stay byte-identical.
   GitHub Releases and not through the in-app updater. Adding per-platform
   packages to the catalog is a separate Cloud schema change.
 - SmartScreen reputation with an OV certificate accrues per certificate over
-  downloads; expect warnings for early releases. Azure Trusted Signing avoids
-  most of this.
+  downloads; expect warnings for early releases. Check actual SmartScreen behavior on a Windows device.
 - When a certificate is renewed or rotated, earlier timestamped releases stay
   valid. Revoke compromised certificates with the CA/Azure and re-release.
+
+## Current release prerequisites
+
+The release environment is `workspace-windows-release`. Add signing secrets
+through GitHub Settings → Environments → workspace-windows-release; never
+commit certificates or secrets. Windows packaging uses the unified Dart CLI
+and `run` service command, without a Flutter UI or a second service executable.
+The installer does not automatically register or start the service. After
+installation, run `conclave-workspace.exe service install` and `setup` from
+PowerShell in the installation directory. No runtime-state migration is added.
+
+The pinned Trusted Signing client `1.0.53` was confirmed in the official NuGet
+version index on 2026-10-27. Signing and device qualification still require a
+configured public-trust signing identity and a Windows host.

@@ -4,7 +4,6 @@ import 'dart:math';
 
 import 'secure_credentials.dart';
 import 'workspace_paths.dart';
-import 'workspace_registration_models.dart';
 import 'platform_runtime.dart';
 import 'workspace_settings.dart';
 

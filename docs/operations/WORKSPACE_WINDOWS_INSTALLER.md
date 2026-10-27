@@ -15,9 +15,7 @@ The workflow pins compiler 6.7.3 from the official release with a SHA-256 check.
 `apps/workspace/pubspec.yaml`; prerelease versions require an explicit packaging
 policy before they can be packaged.
 
-The installer copies the complete canonical bundle, including both Engine
-locations, to `%LOCALAPPDATA%\Programs\Conclave\Workspace` and adds a Start
-menu shortcut and Windows uninstall entry. It requires no administrator rights.
+The installer copies the complete canonical bundle, including the unified CLI/service and bundled Engine, to `%LOCALAPPDATA%\Programs\Conclave\Workspace` and adds a Windows uninstall entry. It requires no administrator rights.
 A stable AppId enables in-place upgrades. Silent installation supports
 `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`.
 
@@ -33,7 +31,7 @@ sessions, provider logins, or Work Root files. Reinstall to the same location to
 recover a retained registration. No schema, protocol, or state migration occurs.
 
 The disposable Windows runner tests silent installation, installed executable
-hashes and installed-service lifecycle, repeat installation, UI startup, rejection while running, and uninstall.
+hashes and installed-service lifecycle, repeat installation, CLI/service startup, rejection while running, and uninstall.
 Real assignment upgrade recovery, reboot/logon, and interactive desktop
 qualification remain release checks. CI uses the existing compile-only trust
 root; this installer does not establish production release trust.

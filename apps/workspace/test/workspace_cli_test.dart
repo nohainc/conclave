@@ -206,13 +206,13 @@ void main() {
     }) =>
         (state) => LinuxWorkspaceServiceManager(
               dataDirectory: state,
-              executable: '${root.path}/workspace',
+              executable: File('${root.path}/workspace'),
               unitDirectory: Directory('${root.path}/units'),
               systemctl: (args) async => ProcessResult(
                 0,
                 0,
                 'UnitFileState=enabled\nActiveState='
-                '${active ? 'active\nMainPID=1' : 'inactive'}',
+                    '${active ? 'active\nMainPID=1' : 'inactive'}',
                 '',
               ),
             );
@@ -345,7 +345,7 @@ void main() {
         err: err,
         hostManager: (state) => LinuxWorkspaceServiceManager(
           dataDirectory: state,
-          executable: '/bin/conclave-workspace',
+          executable: File('/bin/conclave-workspace'),
           unitDirectory: Directory('${root.path}/units'),
           systemctl: (args) async => ProcessResult(
             0,
@@ -394,7 +394,8 @@ void main() {
     });
 
     test('status validates an existing config file', () async {
-      final state = Directory('${root.path}/state')..createSync(recursive: true);
+      final state = Directory('${root.path}/state')
+        ..createSync(recursive: true);
       await WorkspaceSettingsStore(state).ensureDefaults();
       var result = await runDown(['status']);
       expect(result.$1, 0);
@@ -595,7 +596,8 @@ void main() {
       expect(out3.toString().trim(), equals(newWorkPath));
     });
 
-    test('unregister releases in Cloud, then forgets only the registration', () async {
+    test('unregister releases in Cloud, then forgets only the registration',
+        () async {
       final regStore = WorkspaceRegistrationStore(root);
       await regStore.write(const WorkspaceRegistration(
         workspaceRuntimeId: 'rt-1',

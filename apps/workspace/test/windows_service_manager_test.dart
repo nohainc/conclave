@@ -40,7 +40,7 @@ void main() {
         '-Command',
         r'''
 $ErrorActionPreference = 'Stop'
-$x = [xml](Export-ScheduledTask -TaskName ('Conclave Workspace ' + $env:CONCLAVE_TEST_INSTALLATION))
+$x = [xml](Export-ScheduledTask -TaskName ('Workspace ' + $env:CONCLAVE_TEST_INSTALLATION))
 $id = [string]$x.Task.Principals.Principal.UserId
 if (-not $id.StartsWith('S-')) { $id = ([System.Security.Principal.NTAccount]::new($id)).Translate([System.Security.Principal.SecurityIdentifier]).Value }
 # Task Scheduler may omit the schema-default LeastPrivilege value.

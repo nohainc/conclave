@@ -36,9 +36,9 @@ jobs:
         shell: pwsh
         working-directory: apps/workspace
         env:
-          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\service\workspace.exe
+          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\conclave-workspace.exe
         run: |
-          flutter test test/windows_runtime_test.dart test/windows_service_lifecycle_test.dart test/windows_service_manager_test.dart
+          dart test test/windows_runtime_test.dart test/windows_service_lifecycle_test.dart test/windows_service_manager_test.dart
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Validate Windows process jobs and CLI shims
         shell: pwsh
@@ -47,7 +47,7 @@ jobs:
           dart pub get
           dart test test/windows_cli_shim_test.dart test/windows_process_job_test.dart
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Build and package Windows UI
+      - name: Build and package Windows CLI
         shell: pwsh
         env:
           CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
@@ -56,23 +56,15 @@ jobs:
         shell: pwsh
         working-directory: apps/workspace
         env:
-          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\windows\release\workspace.exe
+          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\windows\release\conclave-workspace.exe
         run: |
-          flutter test test/windows_service_lifecycle_test.dart
+          dart test test/windows_service_lifecycle_test.dart
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Smoke test packaged UI startup
+      - name: Smoke test packaged CLI
         shell: pwsh
         run: |
-          $bundle = Join-Path $PWD 'dist/conclave-workspace/windows/release'
-          $app = Start-Process (Join-Path $bundle 'conclave_workspace.exe') -WorkingDirectory $bundle -PassThru
-          try {
-            Start-Sleep -Seconds 8
-            $app.Refresh()
-            if ($app.HasExited) { throw "Packaged UI exited early with code $($app.ExitCode)" }
-            Write-Host 'Packaged Windows UI remained running after startup.'
-          } finally {
-            if (-not $app.HasExited) { Stop-Process -Id $app.Id -Force }
-          }
+          & ./dist/conclave-workspace/windows/release/conclave-workspace.exe --help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build unsigned per-user installer
         shell: pwsh
         run: ./scripts/package-workspace-windows.ps1 -Compiler "$env:RUNNER_TEMP/inno-setup/ISCC.exe"

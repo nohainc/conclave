@@ -77,6 +77,11 @@ jobs:
           $compilerDir = Join-Path $env:RUNNER_TEMP 'inno-setup'
           $install = Start-Process $setup -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$compilerDir`"") -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "Compiler installation failed: $($install.ExitCode)" }
+      - name: Install .NET 8 for Azure signing
+        if: vars.CONCLAVE_WINDOWS_SIGNING == 'azure'
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '8.0.x'
       - name: Configure Azure Trusted Signing client
         if: vars.CONCLAVE_WINDOWS_SIGNING == 'azure'
         shell: pwsh
@@ -106,7 +111,8 @@ jobs:
         shell: pwsh
         run: |
           Push-Location apps/workspace
-          flutter test test/windows_runtime_test.dart test/windows_service_manager_test.dart
+          dart pub get
+          dart test test/windows_runtime_test.dart
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Pop-Location
           Push-Location packages/conclave_cli_worker_runtime
@@ -129,12 +135,7 @@ jobs:
           CONCLAVE_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.CONCLAVE_WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
           $bundle = Join-Path $PWD 'dist/conclave-workspace/windows/release'
-          $engine = 'assets/engines/conclave_cli_worker_engine.exe'
-          $uiEngine = Join-Path $bundle "data/flutter_assets/$engine"
-          # Sign the Engine once and reuse it so both bundled copies stay byte-identical.
-          Remove-Item $uiEngine
           ./scripts/sign-workspace-windows.ps1 -Bundle $bundle
-          Copy-Item (Join-Path $bundle $engine) $uiEngine
           ./scripts/sign-workspace-windows.ps1 -Bundle $bundle -VerifyOnly
           $archive = "dist/conclave-workspace/Conclave-Workspace-$env:CONCLAVE_WORKSPACE_VERSION-windows-x64.zip"
           Compress-Archive -Path "$bundle/*" -DestinationPath $archive -Force
@@ -142,9 +143,9 @@ jobs:
         shell: pwsh
         working-directory: apps/workspace
         env:
-          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\windows\release\workspace.exe
+          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\windows\release\conclave-workspace.exe
         run: |
-          flutter test test/windows_service_lifecycle_test.dart
+          dart test test/windows_service_lifecycle_test.dart test/windows_service_manager_test.dart
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build signed installer
         shell: pwsh
