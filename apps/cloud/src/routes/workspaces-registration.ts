@@ -980,6 +980,7 @@ export async function handleRegisterWorkspaceFromDesktop(
       : (existing?.workspaceName ?? name);
   if (
     workspaceName &&
+    outcome === "created" &&
     (await workspaceNameTaken(
       env.CONCLAVE_DB,
       session.userId,

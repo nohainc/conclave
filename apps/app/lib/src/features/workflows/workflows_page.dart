@@ -540,9 +540,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                                   'workflow-clear-worker-${definition.id}'),
                               onTap: () => updateSelection(
                                   const AxWorkflowSelection(
-                                      worker: null,
-                                      model: null,
-                                      effort: null)),
+                                      worker: null, model: null, effort: null)),
                               child: Text('Clear',
                                   style: Theme.of(context)
                                       .textTheme
