@@ -94,6 +94,7 @@ void main() {
   test('maps commands to IPC requests', () async {
     expect((await run(['--json', 'status'])).$4, ['service.getStatus {}']);
     expect((await run(['workers', 'test', 'w1'])).$4, [
+      'workers.list {}',
       'workers.testWorker {workerId: w1}',
     ]);
     expect((await run(['--json', 'assignments', 'cancel', 'a1'])).$4, [
@@ -116,6 +117,7 @@ void main() {
       'workers.configureWorker {workerTypeId: gemini}',
     ]);
     expect((await run(['workers', 'remove', 'w1'])).$4, [
+      'workers.list {}',
       'workers.removeWorker {workerId: w1}',
     ]);
   });

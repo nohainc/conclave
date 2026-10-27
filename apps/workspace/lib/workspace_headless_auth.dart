@@ -115,8 +115,7 @@ class WorkspaceHeadlessAuth {
     final previous = preferences.readSync();
     if ((previous.ownerUserId != null &&
             previous.ownerUserId != session.userId) ||
-        (registration != null &&
-            registration.ownerUserId != session.userId)) {
+        (registration != null && registration.ownerUserId != session.userId)) {
       throw StateError('Existing owner differs.');
     }
     setStage('ownership');
@@ -128,8 +127,8 @@ class WorkspaceHeadlessAuth {
     // Cloud released this installation (for example from the web app). An
     // explicit registration claims it as a new Workspace and drops the stale
     // local identity.
-    final releasedRebind = replaceReleased &&
-        ownership.state == WorkspaceOwnershipState.released;
+    final releasedRebind =
+        replaceReleased && ownership.state == WorkspaceOwnershipState.released;
     if (releasedRebind && registration != null) {
       await WorkspaceRegistrationStore(dataDirectory).clear();
       await credentialStore.delete(registration.workspaceRuntimeId);
