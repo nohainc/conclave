@@ -587,8 +587,6 @@ String _machine(AxWorkspace workspace) {
   return os.isEmpty ? '—' : os;
 }
 
-String _display(String value) => value.isEmpty ? '—' : value;
-
 String _statusLabel(AxWorkspace workspace) =>
     workspace.status.toLowerCase() == 'offline' && !workspace.hasRuntimeIdentity
         ? 'Not connected'

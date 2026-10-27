@@ -8,12 +8,8 @@ import {
   parseJson,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
-import {
-  hasControlCharacters,
-  workspaceNameTaken,
-} from "./workspaces-shared.js";
+import { hasControlCharacters } from "./workspaces-shared.js";
 import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "../assignment-transitions.js";
-import { releasedWorkspaceCleanup } from "../workspace-gateway/release-cleanup.js";
 
 type WorkspaceOwnershipRow = {
   runtimeId: string;
@@ -38,8 +34,7 @@ type WorkspaceOwnershipFailureCode =
   | "installation_binding_ambiguous"
   | "workspace_runtime_missing"
   | "workspace_identity_mismatch"
-  | "release_required"
-  | "workspace_name_taken";
+  | "release_required";
 
 const otherAccountOwnershipMessage =
   "This Workspace installation is owned by another Conclave account. Sign in as its current owner, then disconnect and release ownership before switching accounts.";
@@ -807,7 +802,6 @@ export async function handleReleaseDesktopWorkspace(
       `UPDATE workspace_space_grants SET status = 'revoked', updated_at = ?1
         WHERE workspace_id = ?2 AND status IN ('active', 'suspended')`,
     ).bind(now, workspaceId),
-    ...releasedWorkspaceCleanup(env.CONCLAVE_DB, workspaceId),
     env.CONCLAVE_DB.prepare(
       `INSERT INTO workspace_audit_log
         (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
@@ -978,22 +972,6 @@ export async function handleRegisterWorkspaceFromDesktop(
     name && name.trim().length > 0
       ? name.trim()
       : (existing?.workspaceName ?? name);
-  if (
-    workspaceName &&
-    outcome === "created" &&
-    (await workspaceNameTaken(
-      env.CONCLAVE_DB,
-      session.userId,
-      workspaceName,
-      workspaceId,
-    ))
-  ) {
-    return workspaceOwnershipFailure(
-      "workspace_name_taken",
-      `You already have a Workspace named "${workspaceName}". Choose another name.`,
-      409,
-    );
-  }
   const runtimeId = `runtime-${crypto.randomUUID()}`;
   const credential = `conclave_workspace_tok_${crypto.randomUUID().replace(/-/g, "")}`;
   const credentialHash = await hashToken(credential);
