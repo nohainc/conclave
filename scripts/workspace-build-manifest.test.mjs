@@ -14,7 +14,6 @@ it("packaging rejects missing, mismatched and altered build output", () => {
   roots.push(root);
   mkdirSync(join(root, "assets/engines"), { recursive: true });
   for (const name of [
-    "workspace",
     "conclave-workspace",
     "assets/engines/conclave-agent",
   ]) {
@@ -30,6 +29,6 @@ it("packaging rejects missing, mismatched and altered build output", () => {
   run("record");
   expect(() => run("verify")).not.toThrow();
   expect(() => run("verify", "1.0.5")).toThrow();
-  writeFileSync(join(root, "workspace"), "stale");
+  writeFileSync(join(root, "conclave-workspace"), "stale");
   expect(() => run("verify")).toThrow();
 });
