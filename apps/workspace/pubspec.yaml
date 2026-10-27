@@ -1,7 +1,7 @@
 name: conclave_workspace
 description: Conclave AX Workspace headless service and CLI.
 publish_to: none
-version: 1.0.5
+version: 1.0.6
 
 environment:
   sdk: ">=3.5.0 <4.0.0"
