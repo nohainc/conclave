@@ -202,7 +202,10 @@ class WorkspaceCli {
     if (rest.length == 1 && rest.first == 'setup') {
       return _setup(dataDir, json);
     }
-    if (rest.length == 1 && rest.first == 'login') {
+    if ((rest.length == 1 && rest.first == 'login') ||
+        (rest.length == 2 &&
+            rest.first == 'login' &&
+            rest[1] == '--password')) {
       return _login(dataDir, json);
     }
     if (rest.length >= 2 && rest.first == 'folders' && rest[1] != 'list') {
@@ -549,6 +552,7 @@ class WorkspaceCli {
         }
         return 0;
       }
+      _print(status, json);
       err.writeln(
         'Sign-in failed: ${status['message'] ?? 'unknown error'}'
         '${status['code'] == null ? '' : ' (${status['code']})'}',

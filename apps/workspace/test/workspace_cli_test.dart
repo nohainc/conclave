@@ -24,10 +24,15 @@ class _MemoryCredentials implements SecureCredentialStore {
 }
 
 class _FakeAuthClient extends DesktopAuthClient {
-  _FakeAuthClient() : super(cloudUrl: 'https://example.test');
+  _FakeAuthClient({this.failPassword = false})
+      : super(cloudUrl: 'https://example.test');
+  final bool failPassword;
   @override
   Future<DesktopHumanSession> signInWithPassword(
       String email, String password) async {
+    if (failPassword) {
+      throw const DesktopPasswordSignInException(401);
+    }
     expect(email, 'user@example.test');
     expect(password, 'private-password');
     return DesktopHumanSession(
@@ -148,6 +153,26 @@ void main() {
       expect('$out$err', isNot(contains('user@example.test')));
     },
   );
+
+  test('login --password accepts alias and prints json failure on error',
+      () async {
+    final root = Directory.systemTemp.createTempSync('cli-login-fail');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final store = _MemoryCredentials();
+    final out = StringBuffer(), err = StringBuffer();
+    final code = await WorkspaceCli(
+      out: out,
+      err: err,
+      readCredentials: () =>
+          (email: 'bad@example.test', password: 'bad-password'),
+      authClientFactory: (_) => _FakeAuthClient(failPassword: true),
+      credentialStore: store,
+    ).run(['--data-dir', root.path, 'login', '--password']);
+    expect(code, 1);
+    final json = jsonDecode(out.toString()) as Map<String, dynamic>;
+    expect(json['phase'], 'failed');
+    expect(json['stage'], 'password_sign_in');
+  });
 
   test('register without a stored sign-in asks to run login', () async {
     final root = Directory.systemTemp.createTempSync('cli-register');
@@ -367,9 +392,8 @@ void main() {
       expect(version, isNot(contains('{')));
     });
 
-    test('browser login and login status/cancel no longer exist', () async {
+    test('login status/cancel no longer exist', () async {
       for (final args in [
-        ['login', '--password'],
         ['login', 'status'],
         ['login', 'cancel'],
       ]) {
