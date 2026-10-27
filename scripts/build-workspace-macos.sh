@@ -164,9 +164,6 @@ dart compile exe \
   -o "$BUNDLE/conclave-workspace"
 cp "$ENGINE" "$BUNDLE/assets/engines/conclave-agent"
 chmod 755 "$BUNDLE/conclave-workspace" "$BUNDLE/assets/engines/conclave-agent"
-# `workspace` is the service alias: the binary runs the daemon when invoked
-# under that name, so a symlink keeps it a single signed executable.
-ln -sf conclave-workspace "$BUNDLE/workspace"
 
 SIGN_ARGS=(--force --options runtime --entitlements "$ENTITLEMENTS")
 if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
@@ -211,7 +208,7 @@ if [[ "$INSTALL_BUNDLE" == "1" ]]; then
     ln -sf "$INSTALL_ROOT/conclave-workspace" "$BIN_DIR/conclave-workspace-local"
   else
     ln -sf "$INSTALL_ROOT/conclave-workspace" "$BIN_DIR/conclave-workspace"
-    ln -sf "$INSTALL_ROOT/workspace" "$BIN_DIR/workspace"
+    rm -f "$BIN_DIR/workspace"
   fi
   echo "Installed: $INSTALL_ROOT (links in $BIN_DIR; make sure it is on PATH)"
   echo "Restart a running service with: $BIN_DIR/conclave-workspace$([[ "$TARGET_ENV" == "local" ]] && echo -local) service restart"

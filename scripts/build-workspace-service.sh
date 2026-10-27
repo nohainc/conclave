@@ -47,12 +47,6 @@ dart compile exe ${TARGET_FLAGS[@]+"${TARGET_FLAGS[@]}"} \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
   bin/conclave_workspace.dart \
   -o "$OUT_DIR/$OUTPUT_NAME"
-# Also create symlink or copy for 'workspace' alias
-if [[ "$OUTPUT_NAME" == *.exe ]]; then
-  cp "$OUT_DIR/$OUTPUT_NAME" "$OUT_DIR/workspace.exe"
-else
-  ln -sf "$OUTPUT_NAME" "$OUT_DIR/workspace"
-fi
 echo "Built unified Conclave Workspace at $OUT_DIR/$OUTPUT_NAME"
 if [[ "${CONCLAVE_BUILD_TARGET_OS:-}" == linux ]]; then
   node "$ROOT/scripts/workspace-build-manifest.mjs" record "$OUT_DIR" "$VERSION"

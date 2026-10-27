@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Verifies a built macOS Workspace bundle directory: the unified
-# `conclave-workspace` binary, its `workspace` service alias and the generic
-# CLI Worker Engine, plus their signatures when signed.
+# `conclave-workspace` binary and the generic CLI Worker Engine, plus their
+# signatures when signed.
 BUNDLE="${1:-}"
 if [[ -z "$BUNDLE" || ! -d "$BUNDLE" ]]; then
   echo "Usage: $(basename "$0") '/path/to/conclave-workspace'" >&2
@@ -11,17 +11,12 @@ if [[ -z "$BUNDLE" || ! -d "$BUNDLE" ]]; then
 fi
 
 BINARY="$BUNDLE/conclave-workspace"
-ALIAS="$BUNDLE/workspace"
 ENGINE="$BUNDLE/assets/engines/conclave-agent"
-for path in "$BINARY" "$ALIAS" "$ENGINE"; do
+for path in "$BINARY" "$ENGINE"; do
   [[ -e "$path" ]] || { echo "Missing bundle item: $path" >&2; exit 1; }
 done
 [[ -x "$BINARY" && -x "$ENGINE" ]] || {
   echo "The service binary and Engine must be executable." >&2
-  exit 1
-}
-[[ -L "$ALIAS" && "$(readlink "$ALIAS")" == "conclave-workspace" ]] || {
-  echo "The workspace alias must be a symlink to conclave-workspace." >&2
   exit 1
 }
 

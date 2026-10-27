@@ -11,10 +11,7 @@ class WindowsWorkspaceServiceManager implements WorkspaceServiceManager {
   WindowsWorkspaceServiceManager({Directory? dataDirectory, File? executable})
       : dataDirectory = dataDirectory ??
             WorkspaceConfigurationResolver.resolveDataDirectory(const []),
-        executable = executable ??
-            File(
-              '${File(Platform.resolvedExecutable).parent.path}/workspace.exe',
-            );
+        executable = executable ?? File(Platform.resolvedExecutable);
   final Directory dataDirectory;
   final File executable;
   Future<String> _identity() async {
@@ -37,7 +34,7 @@ $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
 switch ($env:CONCLAVE_WORKSPACE_TASK_OPERATION) {
   'register' {
     if ($task -and $task.Actions.Execute -ne $env:CONCLAVE_WORKSPACE_TASK_EXECUTABLE) { throw 'Existing task points to a different service; preserve state and unregister it explicitly first.' }
-    $arguments = '--data-dir "' + $env:CONCLAVE_WORKSPACE_TASK_DATA + '"'
+    $arguments = 'run --data-dir "' + $env:CONCLAVE_WORKSPACE_TASK_DATA + '"'
     $action = New-ScheduledTaskAction -Execute $env:CONCLAVE_WORKSPACE_TASK_EXECUTABLE -Argument $arguments -WorkingDirectory (Split-Path $env:CONCLAVE_WORKSPACE_TASK_EXECUTABLE)
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
     $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited

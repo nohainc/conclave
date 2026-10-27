@@ -13,7 +13,7 @@ trap cleanup EXIT
 # The default configuration is disconnected, so fake login data cannot leave
 # this host or create remote registration. A user bus alone must not pick a keyring.
 DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/conclave-no-secret-service \
-  "$BUNDLE/workspace" --data-dir "$CHECK_ROOT/state" > "$CHECK_ROOT/service.log" 2>&1 &
+  "$BUNDLE/conclave-workspace" run --data-dir "$CHECK_ROOT/state" > "$CHECK_ROOT/service.log" 2>&1 &
 service_pid=$!
 ready=0
 for _ in $(seq 1 40); do

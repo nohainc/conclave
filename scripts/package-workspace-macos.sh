@@ -88,7 +88,6 @@ if [[ "$TARGET_ENV" == "local" ]]; then
   ln -s "../lib/$BUNDLE_NAME/conclave-workspace" "$BIN/conclave-workspace-local"
 else
   ln -s "../lib/$BUNDLE_NAME/conclave-workspace" "$BIN/conclave-workspace"
-  ln -s "../lib/$BUNDLE_NAME/workspace" "$BIN/workspace"
 fi
 xattr -crs "$STAGING/root"
 

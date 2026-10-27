@@ -16,8 +16,7 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
     SystemctlRunner? systemctl,
   })  : dataDirectory = dataDirectory ??
             WorkspaceConfigurationResolver.resolveDataDirectory(const []),
-        executable = executable ??
-            File('${File(Platform.resolvedExecutable).parent.path}/workspace'),
+        executable = executable ?? File(Platform.resolvedExecutable),
         unitDirectory = unitDirectory ?? defaultUnitDirectory(),
         _systemctl = systemctl ?? _runSystemctl;
 
@@ -66,6 +65,7 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
 
   String execStart() => [
         executable.absolute.path,
+        'run',
         '--data-dir',
         dataDirectory.absolute.path,
       ].map(quoteExecArgument).join(' ');
