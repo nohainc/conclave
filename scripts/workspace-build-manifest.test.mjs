@@ -13,10 +13,7 @@ it("packaging rejects missing, mismatched and altered build output", () => {
   const root = mkdtempSync(join(tmpdir(), "workspace-manifest-"));
   roots.push(root);
   mkdirSync(join(root, "assets/engines"), { recursive: true });
-  for (const name of [
-    "conclave-workspace",
-    "assets/engines/conclave-agent",
-  ]) {
+  for (const name of ["conclave-workspace", "assets/engines/conclave-agent"]) {
     writeFileSync(join(root, name), "fixture");
   }
   const run = (mode, version = "1.0.4") =>

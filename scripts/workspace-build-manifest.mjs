@@ -47,9 +47,10 @@ const sourceDigest = digest(
 );
 const bundle = resolve(directory);
 const files = Object.fromEntries(
-  ["conclave-workspace", "assets/engines/conclave-agent"].map(
-    (name) => [name, digest(readFileSync(join(bundle, name)))],
-  ),
+  ["conclave-workspace", "assets/engines/conclave-agent"].map((name) => [
+    name,
+    digest(readFileSync(join(bundle, name))),
+  ]),
 );
 const expected = { schemaVersion: 1, version, sourceDigest, files };
 const manifest = join(bundle, "build-manifest.json");
