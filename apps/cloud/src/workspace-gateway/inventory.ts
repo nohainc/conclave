@@ -87,7 +87,8 @@ export async function recordWorkspaceWorkerInventory(
         model_catalog_json: string | null;
       }>();
     // A Worker ID is permanently owned by the Workspace that first synced
-    // it, and its local revision only moves forward.
+    // it, and its local revision only moves forward. Releasing a Workspace
+    // deletes its Workers, so a new registration starts clean.
     if (previous && previous.workspace_id !== workspaceId) {
       continue;
     }

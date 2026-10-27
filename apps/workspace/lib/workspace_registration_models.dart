@@ -13,12 +13,13 @@ const conclaveWorkspaceEnvironment = String.fromEnvironment(
 );
 const conclaveWorkspaceIsLocalBuild = conclaveWorkspaceEnvironment == 'local';
 
-/// Cloud origin used by registration clients. Local builds always use the
-/// local API; packaged builds receive the value from workspace.nano.
+/// Cloud origin used by registration clients: the value from workspace.nano,
+/// falling back to this build's default (local API for local builds).
 String resolveWorkspaceCloudUrl(String? savedCloudUrl) {
-  if (conclaveWorkspaceIsLocalBuild) return conclaveLocalCloudUrl;
   if (savedCloudUrl != null && savedCloudUrl.isNotEmpty) return savedCloudUrl;
-  return conclaveProductionCloudUrl;
+  return conclaveWorkspaceIsLocalBuild
+      ? conclaveLocalCloudUrl
+      : conclaveProductionCloudUrl;
 }
 
 const conclaveWorkspaceAppVersion =
@@ -228,6 +229,7 @@ enum WorkspaceRegistrationErrorKind {
   workspaceRuntimeMissing,
   workspaceIdentityMismatch,
   releaseRequired,
+  workspaceNameTaken,
   registrationConflict,
   accessDenied,
   serverValidationFailure,
@@ -341,6 +343,18 @@ class WorkspaceRegistrationException implements Exception {
             'This installation must be released before it can be transferred.',
         action:
             'Sign in as the current owner and use Release ownership before connecting another account.',
+        statusCode: statusCode,
+        serverError: serverError,
+        serverCode: serverCode,
+      );
+    }
+    if (lowerCode == 'workspace_name_taken') {
+      return WorkspaceRegistrationException(
+        kind: WorkspaceRegistrationErrorKind.workspaceNameTaken,
+        message: 'You already have a Workspace with this name.',
+        action: 'Change workspace.name in workspace.nano '
+            '(see: conclave-workspace config path), then run: '
+            'conclave-workspace register',
         statusCode: statusCode,
         serverError: serverError,
         serverCode: serverCode,

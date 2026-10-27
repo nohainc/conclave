@@ -46,7 +46,7 @@ if [[ "$SOURCE_MODE" == "0" ]]; then
 fi
 
 if [[ ! -f "$WORKSPACE_DIR/.dart_tool/package_config.json" ]]; then
-  echo "Workspace dependencies are not resolved. Run flutter pub get in apps/workspace first." >&2
+  echo "Workspace dependencies are not resolved. Run dart pub get in apps/workspace first." >&2
   exit 1
 fi
 

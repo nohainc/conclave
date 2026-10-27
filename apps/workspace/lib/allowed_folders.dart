@@ -185,10 +185,12 @@ class AllowedFolderRegistry {
                 'This folder overlaps a folder that is already allowed.');
           }
         }
+        final name = _displayName(displayName, canonical);
+        _rejectTakenName(folders, name);
         final now = _clock();
         final folder = AllowedFolder(
           id: _newId(folders),
-          displayName: _displayName(displayName, canonical),
+          displayName: name,
           path: canonical,
           status: await probe(canonical),
           addedAt: now,
@@ -210,6 +212,13 @@ class AllowedFolderRegistry {
   Future<AllowedFolder?> rename(String id, String displayName) =>
       _serial(() async {
         final folders = await _read();
+        final current = folders.where((folder) => folder.id == id).firstOrNull;
+        if (current != null) {
+          _rejectTakenName(
+            folders.where((folder) => folder.id != id),
+            _displayName(displayName, current.path),
+          );
+        }
         AllowedFolder? renamed;
         final updated = [
           for (final folder in folders)
@@ -400,6 +409,16 @@ class AllowedFolderRegistry {
       }
       final id = buffer.toString();
       if (existing.every((folder) => folder.id != id)) return id;
+    }
+  }
+
+  /// Folder names are unique within a Workspace (case-insensitive): Spaces
+  /// and Cloud show folders by name.
+  static void _rejectTakenName(Iterable<AllowedFolder> others, String name) {
+    final key = name.toLowerCase();
+    if (others.any((folder) => folder.displayName.toLowerCase() == key)) {
+      throw AllowedFolderViolation(
+          'name_taken', 'A folder named "$name" is already allowed.');
     }
   }
 

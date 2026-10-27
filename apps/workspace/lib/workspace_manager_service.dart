@@ -396,6 +396,29 @@ class WorkspaceManagerService {
     return value is Map ? value[child] : null;
   }
 
+  /// The sign-in/registration helper. It replaces the runtime identity, so it
+  /// only runs while Cloud is disconnected and no work is active.
+  WorkspaceHeadlessAuth _headlessAuthForRegistration() {
+    final connection = workspace.cloudConnection;
+    if (reloadRuntime == null ||
+        (connection?.activeAssignmentCount ?? 0) > 0 ||
+        connection?.isConnected == true) {
+      throw const WorkspaceManagerProtocolException(
+        'login_not_ready',
+        'Disconnect Cloud and finish active work before registering: '
+            'conclave-workspace disconnect',
+      );
+    }
+    return _headlessAuth ??= WorkspaceHeadlessAuth(
+      dataDirectory: workspace.config.dataDirectory,
+      cloudUrl: WorkspaceConfigurationResolver.cloudHttpOrigin(
+        workspace.config.cloudUri!,
+      ),
+      credentialStore: workspace.credentialStore,
+      reloadRuntime: _reloadRuntime,
+    );
+  }
+
   Future<Object?> _dispatch(
     String command,
     Map<String, Object?> payload,
@@ -404,28 +427,15 @@ class WorkspaceManagerService {
     final registry = workspace.localWorkerRegistry;
     final workerSubsystem = workspace.workerSubsystem;
     switch (command) {
+      case 'auth.register':
+        return _headlessAuthForRegistration().register();
       case 'auth.start':
-        if (reloadRuntime == null ||
-            (connection?.activeAssignmentCount ?? 0) > 0 ||
-            connection?.isConnected == true) {
-          throw const WorkspaceManagerProtocolException(
-            'login_not_ready',
-            'Disconnect Cloud and finish active work before signing in.',
-          );
-        }
-        _headlessAuth ??= WorkspaceHeadlessAuth(
-          dataDirectory: workspace.config.dataDirectory,
-          cloudUrl: WorkspaceConfigurationResolver.cloudHttpOrigin(
-            workspace.config.cloudUri!,
-          ),
-          credentialStore: workspace.credentialStore,
-          reloadRuntime: _reloadRuntime,
-        );
-        if ((payload['email'] != null && payload['email'] is! String) ||
-            (payload['password'] != null && payload['password'] is! String)) {
+        _headlessAuthForRegistration();
+        // Only email/password sign-in is supported; there is no browser flow.
+        if (payload['email'] is! String || payload['password'] is! String) {
           throw const WorkspaceManagerProtocolException(
             'invalid_login',
-            'Email and password must be text.',
+            'Email and password are required.',
           );
         }
         return _headlessAuth!.start(
@@ -434,8 +444,6 @@ class WorkspaceManagerService {
         );
       case 'auth.status':
         return _headlessAuth?.status() ?? const {'phase': 'idle'};
-      case 'auth.cancel':
-        return await _headlessAuth?.cancel() ?? const {'phase': 'idle'};
       case 'service.getStatus':
         return snapshot();
       case 'service.getVersion':

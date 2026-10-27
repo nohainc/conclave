@@ -56,19 +56,20 @@ protocol and never starts Engines or provider CLIs itself.
 
 ~~~text
 conclave-workspace service install|start|stop|restart|status|uninstall
-conclave-workspace setup                 # headless: install, start, sign in, connect
-conclave-workspace login                 # browser approval and Cloud registration
-conclave-workspace login --password      # existing Cloud email/password sign-in
+conclave-workspace setup                 # config, name, login, register, then optionally start the service
+conclave-workspace login                 # Cloud email/password sign-in (stores the session only)
+conclave-workspace register              # register this Workspace with Cloud (after login)
+conclave-workspace logout                # delete the stored sign-in session
 conclave-workspace unregister            # unregister from Cloud and clear identity
 conclave-workspace reset                 # stop, unregister and clear local runtime state
 conclave-workspace work-dir [PATH]       # inspect or update primary Work Root path
 conclave-workspace connect | disconnect  # Cloud connection intent
 conclave-workspace pause | resume        # stop or resume accepting new work
-conclave-workspace status | health | version | logs | metrics
+conclave-workspace status | version | logs | metrics
 conclave-workspace workers               # list configured workers
 conclave-workspace workers catalog       # list available catalog workers
 conclave-workspace workers add TYPE      # add worker from catalog (gemini, chatgpt, etc.)
-conclave-workspace workers remove ID     # remove a configured worker
+conclave-workspace workers remove TYPE   # remove a configured worker
 conclave-workspace workers [check|test|enable|disable]
 conclave-workspace slots | assignments [cancel ID] | folders [add|remove]
 ~~~
@@ -106,8 +107,8 @@ the same Workspace installation.
 
 ## Cloud connection
 
-Sign in with `conclave-workspace login` (browser-assisted) or
-`login --password`. Workspace verifies installation ownership, registers or
+Sign in with `conclave-workspace login` (Cloud email and password), then run
+`conclave-workspace register`. Workspace verifies installation ownership, registers or
 recovers through `POST /api/workspace-runtime/register`, and then connects to the
 Workspace Gateway using its runtime credential. The service journals assignment
 outcomes and classifies interrupted work on startup before accepting new work.

@@ -179,8 +179,10 @@ class MacOsWorkspaceServiceManager implements WorkspaceServiceManager {
         await _launchctl(['kill', 'SIGTERM', 'gui/$uid/$label']);
       } catch (_) {}
     }
-    // Give launchd a moment to register process termination
-    for (var i = 0; i < 20; i++) {
+    // The service drains work and stops its Engine before exiting, and launchd
+    // only force-kills it after its exit timeout (20 s by default). Wait for the
+    // process to be gone so callers never see a stale "running" state.
+    for (var i = 0; i < 150; i++) {
       await Future<void>.delayed(const Duration(milliseconds: 200));
       final current = await getInfo();
       if (current.process == ServiceRuntimeState.stopped) {

@@ -34,14 +34,17 @@ conclave-workspace status
 sudo loginctl enable-linger "$USER"
 ```
 
-`setup` registers/enables and starts the systemd **user** service, waits for
-authenticated local IPC, signs in through Cloud's existing Better Auth
-email/password verifier, registers or recovers this installation, and waits for
-Cloud synchronization. It never installs or probes Workers. Zero Workers is a
-supported online state. Already registered installations reconnect without
-asking for a password. The runtime credential persists across logout and service
-restart; it is independent of the management session's expiry. No browser is
-needed on the server and no public inbound port is opened.
+`setup` refuses to run while the service is already running. Otherwise it creates
+`workspace.nano` if it is missing, asks for the Workspace name (Enter keeps the
+machine name), signs in through Cloud's existing Better Auth email/password
+verifier, registers or recovers this installation, and finally asks whether
+to start the systemd **user** service. If you answer yes it installs and starts
+the service, waits for authenticated local IPC and for Cloud synchronization.
+It never installs or probes Workers. Zero Workers is a supported online state.
+An already registered installation skips the name and password prompts. The
+runtime credential persists across logout and service restart; it is independent
+of the management session's expiry. No browser is needed on the server and no
+public inbound port is opened.
 
 ## Configure the service
 
@@ -111,7 +114,7 @@ conclave-workspace service stop
 sudo apt update
 sudo apt install --only-upgrade conclave-workspace
 conclave-workspace service start
-conclave-workspace health
+conclave-workspace status
 ```
 
 APT updates the complete service/CLI/Engine unit. Package installation, upgrade,
@@ -172,7 +175,7 @@ Manage a running service with `conclave-workspace` (ADR-021 §2.6). It speaks
 the local authenticated IPC only; pass `--data-dir` if the service did:
 
 ```bash
-./conclave-workspace status          # also: health, version, metrics, logs
+./conclave-workspace status          # also: version, metrics, logs
 ./conclave-workspace connect         # disconnect, pause, resume
 ./conclave-workspace workers         # workers check|test|enable|disable
 ./conclave-workspace slots           # assignments, assignments cancel ID, folders

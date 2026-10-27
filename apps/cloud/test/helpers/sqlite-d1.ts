@@ -105,6 +105,7 @@ export function sqliteD1(
     "0087_thread_history_permissions.sql",
     "0088_work_request_inputs.sql",
     "0089_reply_references.sql",
+    "0090_released_workspace_cleanup.sql",
   ]) {
     sqlite.exec(
       readFileSync(

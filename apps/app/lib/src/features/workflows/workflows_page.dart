@@ -517,7 +517,12 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            '${selection.worker} · Unavailable',
+                            // The saved Worker id belongs to a Worker that is
+                            // not in this Workspace (removed, or a different
+                            // Workspace/environment). Do not show the raw id.
+                            'Saved Worker is no longer available',
+                            key: ValueKey(
+                                'workflow-missing-worker-${definition.id}'),
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context)
                                 .textTheme
@@ -527,6 +532,27 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                                     fontWeight: FontWeight.w600),
                           ),
                         ),
+                        if (widget.canEdit && !_changingWorkspace)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: InkWell(
+                              key: ValueKey(
+                                  'workflow-clear-worker-${definition.id}'),
+                              onTap: () => updateSelection(
+                                  const AxWorkflowSelection(
+                                      worker: null,
+                                      model: null,
+                                      effort: null)),
+                              child: Text('Clear',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(
+                                          color: colors.onErrorContainer,
+                                          decoration:
+                                              TextDecoration.underline)),
+                            ),
+                          ),
                       ],
                     ),
                   ),

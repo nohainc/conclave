@@ -9,6 +9,8 @@ import {
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
 import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "../assignment-transitions.js";
+import { workspaceNameTaken } from "./workspaces-shared.js";
+import { releasedWorkspaceCleanup } from "../workspace-gateway/release-cleanup.js";
 
 export async function handleListWorkspaces(
   request: Request,
@@ -145,6 +147,11 @@ export async function handleUpdateWorkspace(
   if (name.length < 1 || name.length > 120) {
     throw new HttpError(400, "Workspace name must be 1 to 120 characters");
   }
+  if (
+    await workspaceNameTaken(env.CONCLAVE_DB, context.userId, name, workspaceId)
+  ) {
+    throw new HttpError(409, `You already have a Workspace named "${name}"`);
+  }
   const now = new Date().toISOString();
   const result = await env.CONCLAVE_DB.prepare(
     "UPDATE execution_workspaces SET name = ?1, updated_at = ?2 WHERE id = ?3 AND owner_user_id = ?4 AND status <> 'revoked'",
@@ -212,6 +219,10 @@ export async function handleRevokeWorkspace(
   )
     .bind(now, workspaceId)
     .run();
+
+  await env.CONCLAVE_DB.batch(
+    releasedWorkspaceCleanup(env.CONCLAVE_DB, workspaceId),
+  );
 
   if (!alreadyRevoked) {
     await recordAudit(

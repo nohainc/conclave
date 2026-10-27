@@ -582,7 +582,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Direct'), findsNothing);
     expect(find.text('Work'), findsOneWidget);
-    expect(find.text('offline · Unavailable'), findsOneWidget);
+    expect(find.text('Saved Worker is no longer available'), findsOneWidget);
+    expect(find.text('Clear'), findsOneWidget);
     expect(find.text('High'), findsOneWidget);
     expect(find.text('2 steps'), findsOneWidget);
     await tester

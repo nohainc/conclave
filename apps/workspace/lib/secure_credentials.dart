@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'credential_backend.dart';
@@ -191,12 +193,15 @@ class PlatformSecureCredentialStore
     }
     if (_effectivePlatform == 'macos') {
       final keychain = nativeKeychain;
-      if (keychain == null) {
-        throw UnsupportedError(
-          'Native macOS Keychain access is unavailable in this process',
-        );
+      if (keychain != null) {
+        await keychain.write(service: service, account: key, value: value);
+      } else {
+        // The pure Dart CLI/service has no native Keychain bridge. Use the
+        // `security` tool, reading the command from stdin (`-i`) so the
+        // credential never appears in the process list. The value is hex
+        // encoded (-X), which also avoids any quoting problems.
+        await _writeWithSecurityTool(key, value);
       }
-      await keychain.write(service: service, account: key, value: value);
       _cache[cacheKey] = value;
       _loaded.add(cacheKey);
       return;
@@ -216,6 +221,29 @@ class PlatformSecureCredentialStore
     _cache[cacheKey] = value;
     _loaded.add(cacheKey);
   }
+
+  Future<void> _writeWithSecurityTool(String key, String value) async {
+    final hex = utf8
+        .encode(value)
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    final process = await Process.start('security', ['-i']);
+    process.stdin.writeln(
+      'add-generic-password -a "${_escape(key)}" -s "${_escape(service)}" '
+      '-U -X $hex',
+    );
+    await process.stdin.close();
+    // Drain output so the process cannot block on a full pipe.
+    unawaited(process.stdout.drain<void>());
+    unawaited(process.stderr.drain<void>());
+    final exitCode = await process.exitCode;
+    if (exitCode != 0) {
+      throw StateError('macOS Keychain rejected the write');
+    }
+  }
+
+  static String _escape(String value) =>
+      value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
 
   @override
   Future<void> delete(String key) async {

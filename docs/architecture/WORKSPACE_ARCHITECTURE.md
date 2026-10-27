@@ -81,16 +81,17 @@ until Cloud's terminal `assignment.ack` marks it reconciled. A reconnect cancels
 the timer and the connect-time sync takes over, so the two paths never overlap.
 
 Workspace release checks are also service-owned. A client sends an
-`updates.check` IPC request (`conclave-workspace updates` reports which updater
-manages the installation); the service performs the authenticated release
+`updates.check` IPC request (the CLI no longer has a command for it); the service performs the authenticated release
 lookup without disconnecting or reconnecting Cloud. If update support is not
 configured, the client reports that state instead of using a connection retry as
 a fallback.
 
 Human management authentication is a separate concern from runtime
-authentication. `conclave-workspace login` (browser approval) and
-`login --password` use a short-lived `DesktopHumanSession` for sign-in, account
-ownership checks, and registration. The Workspace Service uses the registered
+authentication. `conclave-workspace login` (Cloud email and password) stores a
+short-lived `DesktopHumanSession`; `conclave-workspace register` uses it for
+account ownership checks and registration (a Workspace that Cloud has released
+is claimed as a new one); `conclave-workspace logout` deletes the stored session
+locally and leaves the registration and runtime credential in place. The Workspace Service uses the registered
 Workspace runtime identity and secure runtime credential for Cloud reconnect and
 execution. Losing or expiring the human session does not disconnect Cloud, stop
 or unregister the service, release Workspace ownership, remove the runtime

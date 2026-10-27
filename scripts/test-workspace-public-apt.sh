@@ -41,18 +41,17 @@ HOME="$TEMP/home" CONCLAVE_WORKSPACE_SECRET_STORE='file' conclave-workspace run 
 service_pid=$!
 ready=0
 for _ in $(seq 1 60); do
-  if conclave-workspace --data-dir "$TEMP/state" --json health > "$TEMP/health.json" 2>/dev/null; then ready=1; break; fi
+  if conclave-workspace --data-dir "$TEMP/state" --json status > "$TEMP/health.json" 2>/dev/null &&
+    python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("service", {}).get("serviceHealthy") is True else 1)' "$TEMP/health.json"; then ready=1; break; fi
   sleep 1
 done
 if [[ "$ready" != 1 ]]; then cat "$TEMP/service.log"; exit 1; fi
 conclave-workspace --data-dir "$TEMP/state" --json version > "$TEMP/version.json"
-conclave-workspace --data-dir "$TEMP/state" --json updates > "$TEMP/updates.json"
 python3 - "$TEMP" "$CONCLAVE_WORKSPACE_VERSION" <<'PY'
 import json, pathlib, subprocess, sys
 root = pathlib.Path(sys.argv[1])
-assert json.loads((root / 'health.json').read_text())['healthy'] is True
+assert json.loads((root / 'health.json').read_text())['service']['serviceHealthy'] is True
 assert json.loads((root / 'version.json').read_text())['version'] == sys.argv[2]
-assert json.loads((root / 'updates.json').read_text()) == {'phase': 'managed', 'packageManager': 'apt'}
 engine_path = next(p for p in ('/usr/lib/conclave-workspace/assets/engines/conclave-agent', '/usr/lib/conclave-workspace/assets/engines/conclave_cli_worker_engine') if pathlib.Path(p).exists())
 engine = subprocess.run([engine_path], capture_output=True, text=True, timeout=10)
 assert engine.returncode == 64 and 'Engine options are incomplete or invalid' in engine.stderr
@@ -60,4 +59,4 @@ PY
 kill "$service_pid"
 wait "$service_pid"
 service_pid=''
-echo "Public APT signature, installation, service version/health, update ownership and Engine startup verified: $CONCLAVE_WORKSPACE_VERSION ($(dpkg --print-architecture))."
+echo "Public APT signature, installation, service version/status and Engine startup verified: $CONCLAVE_WORKSPACE_VERSION ($(dpkg --print-architecture))."

@@ -57,24 +57,20 @@ HOME="$TEST_ROOT/home" CONCLAVE_WORKSPACE_SECRET_STORE='file' conclave-workspace
 service_pid=$!
 ready=0
 for _ in $(seq 1 60); do
-  if conclave-workspace --data-dir "$STATE" --json health > "$TEST_ROOT/health.json" 2>/dev/null; then ready=1; break; fi
+  if conclave-workspace --data-dir "$STATE" --json status > "$TEST_ROOT/health.json" 2>/dev/null &&
+    python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("service", {}).get("serviceHealthy") is True else 1)' "$TEST_ROOT/health.json"; then ready=1; break; fi
   sleep 1
 done
 if [[ "$ready" != 1 ]]; then cat "$TEST_ROOT/service.log"; exit 1; fi
 python3 - "$TEST_ROOT/health.json" <<'PY'
 import json, sys
-assert json.load(open(sys.argv[1]))['healthy'] is True
+assert json.load(open(sys.argv[1]))['service']['serviceHealthy'] is True
 PY
 conclave-workspace --data-dir "$STATE" --json version > "$TEST_ROOT/version.json"
 python3 - "$TEST_ROOT/version.json" "$VERSION" <<'PYVERSION'
 import json, sys
 assert json.load(open(sys.argv[1]))['version'] == sys.argv[2]
 PYVERSION
-conclave-workspace --data-dir "$STATE" --json updates > "$TEST_ROOT/updates.json"
-python3 - "$TEST_ROOT/updates.json" <<'PYUPDATES'
-import json, sys
-assert json.load(open(sys.argv[1])) == {'phase': 'managed', 'packageManager': 'apt'}
-PYUPDATES
 conclave-workspace --data-dir "$STATE" status
 conclave-workspace --data-dir "$STATE" workers
 python3 - <<'PYENGINE'

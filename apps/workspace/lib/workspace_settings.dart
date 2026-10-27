@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:nanomarkup/nanomarkup.dart' as nano;
 
+import 'friendly_computer_name.dart';
 import 'local_worker_permissions.dart';
 import 'platform_runtime.dart';
 import 'work_root.dart';
+import 'workspace_registration_models.dart';
 
 /// Versioned, non-secret desired configuration for the Workspace service.
 ///
@@ -178,18 +180,28 @@ final class WorkspaceSettings {
     );
   }
 
+  /// Parallel slots written to a newly created workspace.nano.
+  static const initialParallelSlots = 3;
+
+  /// [workspaceName] is the display name for a new file (the machine name when
+  /// `config init` creates it); it falls back to a generic name.
   static WorkspaceSettings defaults({
     required Directory dataDirectory,
     PlatformRuntime? platform,
+    String? workspaceName,
   }) {
     final runtime = platform ?? currentPlatformRuntime;
     final work = WorkRootResolver(platform: runtime).defaultPath;
     return WorkspaceSettings(
       serviceEnabled: true,
-      cloudUrl: 'https://app.conclaveax.com',
+      // Local builds are pinned to the local Cloud; write that so the file
+      // reflects what the service actually uses.
+      cloudUrl: conclaveWorkspaceIsLocalBuild
+          ? conclaveLocalCloudUrl
+          : conclaveProductionCloudUrl,
       connectOnStart: false,
-      workspaceName: 'Workspace',
-      parallelSlots: defaultLocalWorkerConcurrency,
+      workspaceName: workspaceName ?? 'Workspace',
+      parallelSlots: initialParallelSlots,
       workRoot: Directory(work).absolute.path,
       folders: const {},
     );
@@ -282,9 +294,16 @@ final class WorkspaceSettingsStore {
   Future<WorkspaceSettings> ensureDefaults() async {
     final existing = readSync();
     if (existing != null) return existing;
+    // The computer's host name (without a domain suffix such as `.local`).
+    var name = Platform.localHostname.trim().split('.').first.trim();
+    if (name.isEmpty) {
+      name = (await resolveFriendlyComputerName(platform: platform)).trim();
+    }
+    if (name.length > 120) name = name.substring(0, 120).trim();
     final settings = WorkspaceSettings.defaults(
       dataDirectory: dataDirectory,
       platform: platform,
+      workspaceName: name.isEmpty ? null : name,
     );
     await write(settings);
     return settings;

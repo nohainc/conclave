@@ -17,7 +17,8 @@ DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/conclave-no-secret-service \
 service_pid=$!
 ready=0
 for _ in $(seq 1 40); do
-  if "$BUNDLE/conclave-workspace" --data-dir "$CHECK_ROOT/state" health > "$CHECK_ROOT/health.json" 2>/dev/null; then ready=1; break; fi
+  if "$BUNDLE/conclave-workspace" --data-dir "$CHECK_ROOT/state" --json status > "$CHECK_ROOT/health.json" 2>/dev/null &&
+    python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("service", {}).get("serviceHealthy") is True else 1)' "$CHECK_ROOT/health.json"; then ready=1; break; fi
   sleep 0.25
 done
 [[ "$ready" == 1 ]] || { cat "$CHECK_ROOT/service.log"; exit 1; }
@@ -28,7 +29,7 @@ fi
 python3 - "$CHECK_ROOT" <<'PY'
 import json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
-assert json.loads((root / 'health.json').read_text())['healthy'] is True
+assert json.loads((root / 'health.json').read_text())['service']['serviceHealthy'] is True
 status = json.loads((root / 'login.json').read_text())
 assert status['phase'] == 'failed', status
 assert status['stage'] == 'password_sign_in', status

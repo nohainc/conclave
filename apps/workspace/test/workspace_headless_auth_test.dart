@@ -105,6 +105,55 @@ void main() {
     await root.delete(recursive: true);
   });
 
+  test('signIn stores only the session and registers nothing', () async {
+    client.approval.complete(session());
+    final auth = WorkspaceHeadlessAuth(
+        dataDirectory: root,
+        cloudUrl: 'https://example.test',
+        credentialStore: credentials,
+        reloadRuntime: () async => fail('sign-in must not reload'),
+        clientFactory: (_) => client);
+    final result = await auth.signIn(
+        email: 'u@example.test', password: 'private-password');
+    expect(result['phase'], 'complete');
+    expect(credentials.values.keys, [desktopHumanCredentialKey]);
+    expect(WorkspaceRegistrationStore(root).readSync(), isNull);
+  });
+
+  test('register needs a stored sign-in', () async {
+    final auth = WorkspaceHeadlessAuth(
+        dataDirectory: root,
+        cloudUrl: 'https://example.test',
+        credentialStore: credentials,
+        reloadRuntime: () async => fail('must not reload'),
+        clientFactory: (_) => client);
+    final result = await auth.register();
+    expect(result['phase'], 'failed');
+    expect(result['code'], 'not_signed_in');
+    expect(WorkspaceRegistrationStore(root).readSync(), isNull);
+  });
+
+  test('register rejects an expired sign-in', () async {
+    credentials.values[desktopHumanCredentialKey] = jsonEncode(
+        DesktopHumanSession(
+                credential: 'private-human-token',
+                sessionId: 'session',
+                userId: 'user',
+                displayName: 'User',
+                email: 'u@example.test',
+                expiresAt: DateTime.now().subtract(const Duration(minutes: 1)))
+            .toSecureJson());
+    final auth = WorkspaceHeadlessAuth(
+        dataDirectory: root,
+        cloudUrl: 'https://example.test',
+        credentialStore: credentials,
+        reloadRuntime: () async => fail('must not reload'),
+        clientFactory: (_) => client);
+    final result = await auth.register();
+    expect(result['code'], 'session_expired');
+    expect(WorkspaceRegistrationStore(root).readSync(), isNull);
+  });
+
   test('unavailable storage fails before creating a Cloud intent', () async {
     credentials.failWrites = true;
     final auth = WorkspaceHeadlessAuth(

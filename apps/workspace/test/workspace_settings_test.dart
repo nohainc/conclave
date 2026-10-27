@@ -97,7 +97,10 @@ void main() {
       final generated = await store.ensureDefaults();
 
       expect(generated.cloudUrl, 'https://app.conclaveax.com');
-      expect(generated.workspaceName, 'Workspace');
+      // A new file is named after this machine and starts with 3 slots.
+      expect(generated.workspaceName, isNotEmpty);
+      expect(generated.workspaceName.length, lessThanOrEqualTo(120));
+      expect(generated.parallelSlots, 3);
       expect(generated.connectOnStart, isFalse);
       expect(generated.workRoot, isNotEmpty);
       expect(store.file.existsSync(), isTrue);

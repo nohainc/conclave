@@ -67,11 +67,9 @@ class WorkspaceConfigurationResolver {
       dataDirectory,
     ).readSync();
     final registration = ignoreSavedRegistration ? null : savedRegistration;
-    // Local builds are pinned to the local Cloud API; packaged builds take
-    // all non-secret behavior from workspace.nano.
-    final cloudUrl = conclaveWorkspaceIsLocalBuild
-        ? conclaveLocalCloudUrl
-        : settings.cloudUrl;
+    // workspace.nano is authoritative. Local builds only differ in the
+    // default `config init` / `reset` write (the local Cloud URL).
+    final cloudUrl = settings.cloudUrl;
     final workspaceRuntimeId =
         workspaceRuntimeIndex >= 0 && workspaceRuntimeIndex + 1 < args.length
             ? args[workspaceRuntimeIndex + 1]
