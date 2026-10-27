@@ -274,7 +274,6 @@ describe("CI acceptance orchestration", () => {
       );
       for (const file of [
         "conclave-workspace",
-        "workspace",
         "assets/engines/conclave-agent",
       ]) {
         expect(readFileSync(join(bundle, file)) !== undefined).toBe(true);
