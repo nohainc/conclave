@@ -679,15 +679,6 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     }
   }
 
-  /// Space whose page should open with the inline edit form showing.
-  String? _pendingSpaceEditId;
-
-  /// Sidebar "Edit Space": open the Space page in edit mode.
-  Future<void> _editSpace(AxSpace space) async {
-    setState(() => _pendingSpaceEditId = space.id);
-    _navigateTo(AxNavigation.space(space.id));
-  }
-
   /// Saves an inline Space edit; returns an error for the form or null.
   Future<String?> _saveSpaceEdits(
       AxSpace space, String name, String description) async {

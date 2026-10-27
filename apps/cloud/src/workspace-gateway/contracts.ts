@@ -104,6 +104,8 @@ export interface WorkspaceGatewayEnv {
   CONCLAVE_ARTIFACTS?: R2Bucket;
   /** Used to wake the Workflow that waits for a terminal assignment. */
   CONCLAVE_RUN_WORKFLOW?: WorkflowSignalEnv["CONCLAVE_RUN_WORKFLOW"];
+  /** Lets a terminal assignment schedule the lost-Workflow check. */
+  CONCLAVE_THREAD_COORDINATOR?: DurableObjectNamespace;
 }
 
 export interface WorkspaceAssignmentCorrelation {

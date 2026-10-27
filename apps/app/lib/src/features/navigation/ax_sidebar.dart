@@ -13,7 +13,6 @@ class AxSidebar extends AppSidebar {
     super.onToggleSpaceExpanded,
     super.onCreateSpace,
     super.onCreateThread,
-    super.onEditSpace,
     super.onArchiveSpace,
     super.onDeleteSpace,
     super.onRenameThread,

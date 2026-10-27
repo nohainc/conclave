@@ -1,4 +1,5 @@
 import { tryLogDiagnosticEvent } from "./observability.js";
+import { scheduleLostWorkflowCheck } from "./thread-coordinator.js";
 
 /**
  * Event type the Workflow waits for. Cloudflare Workflows event types cannot
@@ -40,6 +41,8 @@ export interface WorkflowSignalEnv {
   readonly CONCLAVE_RUN_WORKFLOW?: {
     get(id: string): Promise<WorkflowInstanceLike>;
   };
+  /** Settles the request if its Workflow never finishes it. */
+  readonly CONCLAVE_THREAD_COORDINATOR?: DurableObjectNamespace;
 }
 
 export type WorkflowSignalOutcome =
@@ -87,6 +90,9 @@ export async function signalAssignmentTerminal(
       .first<SignalRow>();
     if (!row || !TERMINAL_STATUSES.includes(row.status)) return "not_terminal";
     if (row.workflow_signaled_at) return "already_signaled";
+    // A Workflow may be gone (for example after a restart) and never finish
+    // the request; the Thread coordinator checks after a grace period.
+    await scheduleLostWorkflowCheck(env, assignmentId);
     const stamp = async (): Promise<void> => {
       await env.CONCLAVE_DB.prepare(
         `UPDATE worker_assignments SET workflow_signaled_at = ?1

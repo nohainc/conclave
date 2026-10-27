@@ -1,4 +1,5 @@
 import { beginAssignmentRevocation } from "./assignment-revocation.js";
+import { extendLeaseForLiveAssignment } from "./thread-coordinator.js";
 
 /**
  * Process liveness reported by the Workspace Service on every heartbeat.
@@ -93,6 +94,14 @@ export async function applyEngineLivenessReport(
         )
         .bind(row.id, now)
         .run();
+      // A live Worker keeps its Thread lease alive, so the lease does not
+      // depend only on the Workflow waking up to renew it.
+      const nowMs = Date.parse(now);
+      await extendLeaseForLiveAssignment(
+        db,
+        row.id,
+        Number.isFinite(nowMs) ? nowMs : Date.now(),
+      ).run();
       continue;
     }
     const missing = (row.engine_missing_reports ?? 0) + 1;

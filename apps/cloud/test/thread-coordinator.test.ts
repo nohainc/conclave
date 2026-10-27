@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyExpiredLease,
   leaseIsCurrent,
+  MAX_LEASE_LIFETIME_MS,
   selectNextStatefulRequest,
   THREAD_LEASE_MS,
 } from "../src/thread-coordinator.js";
@@ -117,5 +119,117 @@ describe("Thread execution coordinator", () => {
       { id: "new", createdAt: "2026-09-24T00:00:02.000Z" },
     ]);
     expect(withoutUpdates.map((w) => w.id)).toEqual(["new", "old"]);
+  });
+
+  describe("expired lease validation", () => {
+    const now = Date.parse("2026-10-27T18:18:40.000Z");
+    const minutesAgo = (m: number) => new Date(now - m * 60_000).toISOString();
+    const running = (aliveMinutesAgo: number) => ({
+      id: "A1",
+      attemptId: "T1",
+      status: "running",
+      engineAliveAt: minutesAgo(aliveMinutesAgo),
+      runningAt: minutesAgo(48),
+      updatedAt: minutesAgo(48),
+    });
+
+    it("keeps a request whose Worker is still alive", () => {
+      expect(
+        classifyExpiredLease(
+          {
+            acquiredAt: minutesAgo(48),
+            workspaceOnline: true,
+            assignments: [running(1)],
+          },
+          now,
+        ),
+      ).toEqual({ action: "extend" });
+    });
+
+    it("fails and stops a silent Worker", () => {
+      expect(
+        classifyExpiredLease(
+          {
+            acquiredAt: minutesAgo(48),
+            workspaceOnline: true,
+            assignments: [running(20)],
+          },
+          now,
+        ),
+      ).toEqual({
+        action: "fail",
+        reason: "worker_lost",
+        revokeAssignmentIds: ["A1"],
+      });
+    });
+
+    it("does not trust heartbeats from an offline Workspace", () => {
+      expect(
+        classifyExpiredLease(
+          {
+            acquiredAt: minutesAgo(48),
+            workspaceOnline: false,
+            assignments: [running(1)],
+          },
+          now,
+        ).action,
+      ).toBe("fail");
+    });
+
+    it("stops extending at the maximum lifetime", () => {
+      expect(
+        classifyExpiredLease(
+          {
+            acquiredAt: new Date(now - MAX_LEASE_LIFETIME_MS).toISOString(),
+            workspaceOnline: true,
+            assignments: [running(1)],
+          },
+          now,
+        ),
+      ).toMatchObject({ action: "fail", reason: "max_runtime_exceeded" });
+    });
+
+    it("settles a finished Worker with its real outcome", () => {
+      const done = { ...running(1), status: "completed" };
+      expect(
+        classifyExpiredLease(
+          {
+            acquiredAt: minutesAgo(48),
+            workspaceOnline: true,
+            assignments: [done],
+          },
+          now,
+        ),
+      ).toEqual({ action: "complete" });
+      expect(
+        classifyExpiredLease(
+          {
+            acquiredAt: minutesAgo(48),
+            workspaceOnline: true,
+            assignments: [],
+          },
+          now,
+        ),
+      ).toMatchObject({ action: "fail", reason: "workflow_lost" });
+    });
+
+    it("fails a finished step when later steps can no longer start", () => {
+      const done = { ...running(1), status: "completed" };
+      expect(
+        classifyExpiredLease(
+          {
+            acquiredAt: minutesAgo(48),
+            workspaceOnline: true,
+            assignments: [done],
+            remainingSteps: 1,
+          },
+          now,
+        ),
+      ).toEqual({
+        action: "fail",
+        reason: "workflow_lost",
+        revokeAssignmentIds: [],
+      });
+    });
   });
 });

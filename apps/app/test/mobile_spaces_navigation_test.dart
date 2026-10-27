@@ -113,7 +113,8 @@ void main() {
           .whereType<Text>()
           .map((text) => text.data)
           .toList();
-      expect(labels.indexOf('Open Space') + 1, labels.indexOf('Edit Space'));
+      expect(labels.indexOf('Open Space') + 1, labels.indexOf('Select Space'));
+      expect(labels, isNot(contains('Edit Space')));
       await tester.tapAt(const Offset(5, 500));
       await tester.pumpAndSettle();
 

@@ -186,8 +186,6 @@ extension _AxAppViews on _AxAppStateMixin {
       onOpenThread: (threadId) => _openThread(space.id, threadId),
       onSaveEdits: (name, description) =>
           _saveSpaceEdits(space, name, description),
-      startEditing: _pendingSpaceEditId == space.id,
-      onEditingStarted: () => _pendingSpaceEditId = null,
       onArchive: () => _archiveSpace(space),
       onDelete: () => _deleteSpace(space.id),
     );

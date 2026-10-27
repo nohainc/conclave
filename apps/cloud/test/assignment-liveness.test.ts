@@ -51,6 +51,46 @@ describe("engine liveness", () => {
     ).toEqual(new Set(["A1"]));
   });
 
+  it("a live Engine keeps its Thread lease alive", async () => {
+    const { f, workspaceId } = await seed();
+    const lease = (expiresAt: string) =>
+      f.sqlite
+        .prepare(
+          `INSERT INTO thread_runtime_leases
+             (id,thread_id,work_request_id,workspace_id,fencing_token,status,acquired_at,expires_at)
+           VALUES('L','W','R','WS',1,'active',?,?)`,
+        )
+        .run(NOW, expiresAt);
+    const expiry = () =>
+      (
+        f.sqlite
+          .prepare(
+            "SELECT expires_at AS e FROM thread_runtime_leases WHERE id='L'",
+          )
+          .get() as { e: string }
+      ).e;
+    // Less than half the lease left: extended to a full lease from now.
+    lease("2026-10-17T10:01:00.000Z");
+    await applyEngineLivenessReport(
+      f.db as never,
+      workspaceId,
+      report(["A1"]),
+      NOW,
+    );
+    expect(expiry()).toBe("2026-10-17T10:30:00.000Z");
+    // Plenty left: unchanged.
+    f.sqlite.exec(
+      "UPDATE thread_runtime_leases SET expires_at='2026-10-17T10:25:00.000Z'",
+    );
+    await applyEngineLivenessReport(
+      f.db as never,
+      workspaceId,
+      report(["A1"]),
+      NOW,
+    );
+    expect(expiry()).toBe("2026-10-17T10:25:00.000Z");
+  });
+
   it("waits for repeated missing reports before declaring the Engine lost", async () => {
     const { f, workspaceId } = await seed();
     const first = await applyEngineLivenessReport(

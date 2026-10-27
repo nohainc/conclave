@@ -74,7 +74,6 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                     onToggleSpaceExpanded: _toggleSpaceExpanded,
                                     onCreateSpace: _createSpace,
                                     onCreateThread: _createThread,
-                                    onEditSpace: _editSpace,
                                     onArchiveSpace: _archiveSpace,
                                     onDeleteSpace: (space) =>
                                         _deleteSpace(space.id),
@@ -681,7 +680,6 @@ extension _AxAppShellViews on _AxAppStateMixin {
             _toggleSpaceExpanded(spaceId);
           },
           onCreateThread: _createThread,
-          onEditSpace: _editSpace,
           onArchiveSpace: _archiveSpace,
           onDeleteSpace: (space) => _deleteSpace(space.id),
           onRenameThread: _renameThreadFromSidebar,

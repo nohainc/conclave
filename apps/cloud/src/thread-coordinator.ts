@@ -6,9 +6,14 @@
  * Active filesystem identity is the ID-derived Thread directory.
  */
 
+import { STEP_HARD_CAP_MS } from "@conclave/core";
+import { revokeAssignment } from "./assignment-revocation.js";
+import { createEventPublisher } from "./event-publisher.js";
+
 export interface ThreadCoordinatorEnv {
   readonly CONCLAVE_DB: D1Database;
   readonly CONCLAVE_WORKSPACE_GATEWAY?: DurableObjectNamespace;
+  readonly CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
 }
 
 export type CoordinatorRequestRow = {
@@ -31,6 +36,145 @@ export type CoordinatorLeaseRow = {
 };
 
 export const THREAD_LEASE_MS = 30 * 60_000;
+
+/**
+ * A Workflow finishes its request within seconds of the last step ending.
+ * If the request is still running this long after, the Workflow is presumed
+ * lost and the coordinator settles the request itself.
+ */
+export const LOST_WORKFLOW_GRACE_MS = 5 * 60_000;
+
+/** A Worker that reported a heartbeat or progress this recently is alive. */
+export const WORKER_ALIVE_WINDOW_MS = 5 * 60_000;
+
+/**
+ * Longest a lease can be kept alive by Worker liveness alone: the step hard
+ * cap plus room for queueing and the Service's own timeout report.
+ */
+export const MAX_LEASE_LIFETIME_MS = STEP_HARD_CAP_MS + 30 * 60_000;
+
+const TERMINAL_ASSIGNMENT_STATUSES = new Set([
+  "completed",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "lost",
+]);
+
+export type ExpiredLeaseAssignment = {
+  id: string;
+  attemptId: string | null;
+  status: string;
+  engineAliveAt: string | null;
+  runningAt: string | null;
+  updatedAt: string | null;
+};
+
+export type ExpiredLeaseFacts = {
+  acquiredAt: string;
+  workspaceOnline: boolean;
+  assignments: readonly ExpiredLeaseAssignment[];
+  /** Workflow steps not started yet (no assignment, not terminal). */
+  remainingSteps?: number;
+};
+
+export type ExpiredLeaseFailureReason =
+  "worker_lost" | "max_runtime_exceeded" | "workflow_lost";
+
+export type ExpiredLeaseDecision =
+  | { action: "extend" }
+  | { action: "complete" }
+  | {
+      action: "fail";
+      reason: ExpiredLeaseFailureReason;
+      revokeAssignmentIds: string[];
+    };
+
+export const EXPIRED_LEASE_MESSAGES: Record<ExpiredLeaseFailureReason, string> =
+  {
+    worker_lost:
+      "The Worker stopped responding, so the request could not finish.",
+    max_runtime_exceeded:
+      "The request ran longer than the maximum allowed time.",
+    workflow_lost:
+      "Cloud lost track of this request, so its remaining steps could not run.",
+  };
+
+/**
+ * An expired lease only proves that nothing renewed it. Before the request is
+ * failed, the Worker's own evidence decides: a live Worker keeps the request
+ * running, a finished Worker settles it with its real outcome, and only a
+ * silent or overrunning Worker fails it (and is stopped).
+ */
+export function classifyExpiredLease(
+  facts: ExpiredLeaseFacts,
+  now = Date.now(),
+): ExpiredLeaseDecision {
+  const open = facts.assignments.filter(
+    (row) => !TERMINAL_ASSIGNMENT_STATUSES.has(row.status),
+  );
+  if (open.length === 0) {
+    const latest = [...facts.assignments].sort((a, b) =>
+      (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""),
+    )[0];
+    // Later steps cannot start without the Workflow, so only a finished
+    // last step completes the request.
+    return latest?.status === "completed" && !(facts.remainingSteps ?? 0)
+      ? { action: "complete" }
+      : { action: "fail", reason: "workflow_lost", revokeAssignmentIds: [] };
+  }
+  const revokeAssignmentIds = open.map((row) => row.id);
+  const acquired = Date.parse(facts.acquiredAt);
+  if (Number.isFinite(acquired) && now - acquired >= MAX_LEASE_LIFETIME_MS) {
+    return {
+      action: "fail",
+      reason: "max_runtime_exceeded",
+      revokeAssignmentIds,
+    };
+  }
+  const lastSign = Math.max(
+    ...open.flatMap((row) =>
+      [row.engineAliveAt, row.runningAt, row.updatedAt]
+        .map((value) => (value ? Date.parse(value) : NaN))
+        .filter(Number.isFinite),
+    ),
+  );
+  if (
+    facts.workspaceOnline &&
+    Number.isFinite(lastSign) &&
+    now - lastSign <= WORKER_ALIVE_WINDOW_MS
+  ) {
+    return { action: "extend" };
+  }
+  return { action: "fail", reason: "worker_lost", revokeAssignmentIds };
+}
+
+/**
+ * Extends the Thread lease of a running assignment's Work Request when its
+ * Worker proves it is alive. Writes only when less than half the lease is
+ * left, so frequent heartbeats cost one indexed no-op update.
+ */
+export function extendLeaseForLiveAssignment(
+  db: D1Database,
+  assignmentId: string,
+  nowMs = Date.now(),
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE thread_runtime_leases SET expires_at = ?2
+        WHERE status = 'active' AND expires_at < ?3
+          AND work_request_id = (
+            SELECT COALESCE(wa.work_request_id, wt.work_request_id)
+              FROM worker_assignments wa
+              LEFT JOIN workflow_tasks wt ON wt.id = wa.task_id
+             WHERE wa.id = ?1)`,
+    )
+    .bind(
+      assignmentId,
+      new Date(nowMs + THREAD_LEASE_MS).toISOString(),
+      new Date(nowMs + THREAD_LEASE_MS / 2).toISOString(),
+    );
+}
 
 export function selectNextStatefulRequest(
   rows: readonly CoordinatorRequestRow[],
@@ -171,6 +315,14 @@ export class ThreadExecutionCoordinator implements DurableObject {
       if (path === "/complete")
         return await this.complete(await request.json());
       if (path === "/reconcile") return await this.reconcile();
+      if (path === "/check-after") {
+        const body = (await request.json()) as { delayMs?: unknown };
+        const delay = Number(body.delayMs);
+        await this.scheduleAlarm(
+          Date.now() + (Number.isFinite(delay) && delay > 0 ? delay : 0),
+        );
+        return json({ scheduled: true });
+      }
       return json({ error: "Not found" }, { status: 404 });
     } catch (error) {
       return json(
@@ -382,21 +534,7 @@ export class ThreadExecutionCoordinator implements DurableObject {
   private async reconcile(fromAlarm = false): Promise<Response> {
     const threadId = await this.threadId();
     const stillWaiting = await this.settlePending();
-    const now = new Date().toISOString();
-    await this.env.CONCLAVE_DB.prepare(
-      `UPDATE thread_runtime_leases SET status = 'expired', released_at = ?1
-       WHERE thread_id = ?2 AND status = 'active' AND expires_at <= ?1`,
-    )
-      .bind(now, threadId)
-      .run();
-    await this.env.CONCLAVE_DB.prepare(
-      `UPDATE work_requests SET status = 'failed', updated_at = ?1
-       WHERE thread_id = ?2 AND status = 'running'
-         AND id IN (SELECT work_request_id FROM thread_runtime_leases
-                    WHERE thread_id = ?2 AND status = 'expired' AND released_at = ?1)`,
-    )
-      .bind(now, threadId)
-      .run();
+    await this.settleExpiredLeases(threadId);
     const active = await this.env.CONCLAVE_DB.prepare(
       "SELECT id FROM thread_runtime_leases WHERE thread_id = ?1 AND status = 'active' LIMIT 1",
     )
@@ -415,6 +553,194 @@ export class ThreadExecutionCoordinator implements DurableObject {
         await this.scheduleAlarm(Date.now() + PENDING_RECHECK_MS);
     }
     return this.status();
+  }
+
+  /**
+   * Validates leases before anything is failed: expired leases, and leases
+   * whose last step ended a while ago without the Workflow finishing.
+   */
+  private async settleExpiredLeases(threadId: string): Promise<void> {
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString();
+    const leases = await this.env.CONCLAVE_DB.prepare(
+      `SELECT l.id, l.work_request_id AS workRequestId,
+              l.acquired_at AS acquiredAt, l.workspace_id AS workspaceId,
+              l.expires_at AS expiresAt, w.status AS workspaceStatus
+         FROM thread_runtime_leases l
+         LEFT JOIN execution_workspaces w ON w.id = l.workspace_id
+        WHERE l.thread_id = ?1 AND l.status = 'active'`,
+    )
+      .bind(threadId)
+      .all<{
+        id: string;
+        workRequestId: string;
+        acquiredAt: string;
+        workspaceId: string;
+        expiresAt: string;
+        workspaceStatus: string | null;
+      }>();
+    for (const lease of leases.results ?? []) {
+      const expired = Date.parse(lease.expiresAt) <= nowMs;
+      const assignments = await this.env.CONCLAVE_DB.prepare(
+        `SELECT wa.id, wa.attempt_id AS attemptId, wa.status,
+                wa.engine_alive_at AS engineAliveAt,
+                wa.running_at AS runningAt, wa.updated_at AS updatedAt
+           FROM worker_assignments wa
+           LEFT JOIN workflow_tasks wt ON wt.id = wa.task_id
+          WHERE COALESCE(wa.work_request_id, wt.work_request_id) = ?1`,
+      )
+        .bind(lease.workRequestId)
+        .all<ExpiredLeaseAssignment>();
+      const rows = assignments.results ?? [];
+      const remaining = await this.env.CONCLAVE_DB.prepare(
+        `SELECT COUNT(*) AS count FROM workflow_tasks wt
+          WHERE wt.work_request_id = ?1 AND wt.status IN ('queued', 'waiting')
+            AND NOT EXISTS (SELECT 1 FROM worker_assignments wa WHERE wa.task_id = wt.id)`,
+      )
+        .bind(lease.workRequestId)
+        .first<{ count: number }>();
+      const remainingSteps = Number(remaining?.count ?? 0);
+      if (!expired) {
+        // Early settle only when every step has ended long enough ago that
+        // a live Workflow would already have finished the request.
+        const allEnded =
+          rows.length > 0 &&
+          remainingSteps === 0 &&
+          rows.every((row) => TERMINAL_ASSIGNMENT_STATUSES.has(row.status));
+        const lastEnded = Math.max(
+          ...rows.map((row) => Date.parse(row.updatedAt ?? "")),
+        );
+        if (
+          !allEnded ||
+          !Number.isFinite(lastEnded) ||
+          nowMs - lastEnded < LOST_WORKFLOW_GRACE_MS
+        ) {
+          continue;
+        }
+      }
+      const decision = classifyExpiredLease(
+        {
+          acquiredAt: lease.acquiredAt,
+          workspaceOnline: lease.workspaceStatus === "online",
+          assignments: rows,
+          remainingSteps,
+        },
+        nowMs,
+      );
+      if (decision.action === "extend") {
+        const expiresAt = new Date(nowMs + THREAD_LEASE_MS).toISOString();
+        await this.env.CONCLAVE_DB.prepare(
+          "UPDATE thread_runtime_leases SET expires_at = ?1 WHERE id = ?2 AND status = 'active'",
+        )
+          .bind(expiresAt, lease.id)
+          .run();
+        console.warn(
+          `Thread lease ${lease.id} expired while its Worker is alive; extended.`,
+        );
+        continue;
+      }
+      if (decision.action === "complete") {
+        await this.env.CONCLAVE_DB.prepare(
+          `UPDATE workflow_tasks SET status = 'completed', updated_at = ?1,
+                  finished_at = COALESCE(finished_at, ?1)
+            WHERE work_request_id = ?2 AND status IN ('queued', 'running', 'waiting')`,
+        )
+          .bind(now, lease.workRequestId)
+          .run();
+        await this.release(
+          { id: lease.id, workRequestId: lease.workRequestId },
+          "completed",
+        );
+        await this.publishWorkRequestOutcome(threadId, lease, "completed");
+        continue;
+      }
+      const message = EXPIRED_LEASE_MESSAGES[decision.reason];
+      await this.env.CONCLAVE_DB.batch([
+        this.env.CONCLAVE_DB.prepare(
+          "UPDATE thread_runtime_leases SET status = 'expired', released_at = ?1 WHERE id = ?2 AND status = 'active'",
+        ).bind(now, lease.id),
+        this.env.CONCLAVE_DB.prepare(
+          "UPDATE work_requests SET status = 'failed', updated_at = ?1 WHERE id = ?2 AND status = 'running'",
+        ).bind(now, lease.workRequestId),
+        this.env.CONCLAVE_DB.prepare(
+          "UPDATE runs SET status = 'failed', finished_at = COALESCE(finished_at, ?1), updated_at = ?1 WHERE work_request_id = ?2 AND status = 'running'",
+        ).bind(now, lease.workRequestId),
+        // The reason is kept with the steps, where the Work view shows
+        // step errors, so it survives a reload.
+        this.env.CONCLAVE_DB.prepare(
+          `UPDATE workflow_tasks SET status = 'failed', error = COALESCE(error, ?3),
+                  updated_at = ?1, finished_at = COALESCE(finished_at, ?1)
+            WHERE work_request_id = ?2 AND status IN ('queued', 'running', 'waiting')`,
+        ).bind(now, lease.workRequestId, message),
+      ]);
+      // A failed request must not keep a Worker changing files.
+      for (const row of rows) {
+        if (!decision.revokeAssignmentIds.includes(row.id)) continue;
+        try {
+          await revokeAssignment(this.env, {
+            assignmentId: row.id,
+            ...(row.attemptId ? { attemptId: row.attemptId } : {}),
+            intent: {
+              status: "failed",
+              reason: message,
+              source:
+                decision.reason === "max_runtime_exceeded"
+                  ? "execution_deadline"
+                  : "worker_process_lost",
+              failure: {
+                error: {
+                  code:
+                    decision.reason === "max_runtime_exceeded"
+                      ? "timeout"
+                      : "provider_unavailable",
+                  message,
+                  retryable: true,
+                },
+                failedAt: now,
+              },
+            },
+          });
+        } catch (error) {
+          console.error(`Failed to revoke assignment ${row.id}`, error);
+        }
+      }
+      await this.publishWorkRequestOutcome(threadId, lease, "failed", message);
+    }
+  }
+
+  private async publishWorkRequestOutcome(
+    threadId: string,
+    lease: { workRequestId: string; workspaceId: string },
+    status: "completed" | "failed",
+    message?: string,
+  ): Promise<void> {
+    try {
+      const row = await this.env.CONCLAVE_DB.prepare(
+        `SELECT t.space_id AS spaceId, r.requested_by_user_id AS userId
+           FROM work_requests r JOIN threads t ON t.id = r.thread_id
+          WHERE r.id = ?1`,
+      )
+        .bind(lease.workRequestId)
+        .first<{ spaceId: string; userId: string | null }>();
+      if (!row) return;
+      const type = `work_request.${status}` as const;
+      await createEventPublisher(this.env).publish({
+        type,
+        workspaceId: lease.workspaceId,
+        spaceId: row.spaceId,
+        idempotencyKey: `work-request:${lease.workRequestId}:${type}`,
+        payload: {
+          entityId: lease.workRequestId,
+          workRequestId: lease.workRequestId,
+          threadId,
+          ...(row.userId ? { requestedByUserId: row.userId } : {}),
+          status,
+          ...(message ? { message } : {}),
+        },
+      });
+    } catch (error) {
+      console.error(`Failed to publish work_request.${status}`, error);
+    }
   }
 
   private async startNext(threadId: string): Promise<void> {
@@ -475,5 +801,45 @@ export class ThreadExecutionCoordinator implements DurableObject {
     const value = await this.state.storage.get<string>("threadId");
     if (value) return value;
     throw new Error("Coordinator identity is not initialized");
+  }
+}
+
+/**
+ * Asks the Thread coordinator to look at the request again after the lost
+ * Workflow grace, once an assignment has ended. A live Workflow finishes the
+ * request long before; a lost one is settled by the coordinator.
+ */
+export async function scheduleLostWorkflowCheck(
+  env: {
+    readonly CONCLAVE_DB: D1Database;
+    readonly CONCLAVE_THREAD_COORDINATOR?: DurableObjectNamespace;
+  },
+  assignmentId: string,
+): Promise<void> {
+  if (!env.CONCLAVE_THREAD_COORDINATOR) return;
+  try {
+    const row = await env.CONCLAVE_DB.prepare(
+      `SELECT wr.thread_id AS threadId FROM worker_assignments wa
+         LEFT JOIN workflow_tasks wt ON wt.id = wa.task_id
+         JOIN work_requests wr
+           ON wr.id = COALESCE(wa.work_request_id, wt.work_request_id)
+        WHERE wa.id = ?1 AND wr.mode = 'stateful' AND wr.status = 'running'`,
+    )
+      .bind(assignmentId)
+      .first<{ threadId: string }>();
+    if (!row) return;
+    await env.CONCLAVE_THREAD_COORDINATOR.getByName(row.threadId).fetch(
+      "https://thread-coordinator/check-after",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-thread-id": row.threadId,
+        },
+        body: JSON.stringify({ delayMs: LOST_WORKFLOW_GRACE_MS + 30_000 }),
+      },
+    );
+  } catch (error) {
+    console.error("Failed to schedule lost Workflow check", error);
   }
 }

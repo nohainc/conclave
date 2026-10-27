@@ -808,7 +808,7 @@ void main() {
 
       await tester.tap(find.byTooltip('Space menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Edit Space'), findsOneWidget);
+      expect(find.text('Select Space'), findsOneWidget);
       expect(find.text('Archive Space'), findsOneWidget);
       expect(find.text('Delete Space'), findsOneWidget);
       expect(find.text('Workflows'), findsNothing);

@@ -17,7 +17,6 @@ class AppSidebar extends StatelessWidget {
     ValueChanged<String>? onToggleSpaceExpanded,
     VoidCallback? onCreateSpace,
     this.onCreateThread,
-    this.onEditSpace,
     this.onArchiveSpace,
     this.onDeleteSpace,
     this.onRenameThread,
@@ -53,7 +52,6 @@ class AppSidebar extends StatelessWidget {
   final ValueChanged<String> onToggleSpaceExpanded;
   final VoidCallback onCreateSpace;
   final ValueChanged<AxSpace>? onCreateThread;
-  final Future<void> Function(AxSpace space)? onEditSpace;
   final Future<void> Function(AxSpace space)? onArchiveSpace;
   final Future<void> Function(AxSpace space)? onDeleteSpace;
   final Future<void> Function(AxThread thread, String name)? onRenameThread;
@@ -260,7 +258,6 @@ class AppSidebar extends StatelessWidget {
                     onToggleSpaceExpanded: onToggleSpaceExpanded,
                     onCreateSpace: onCreateSpace,
                     onCreateThread: onCreateThread,
-                    onEditSpace: onEditSpace,
                     onArchiveSpace: onArchiveSpace,
                     onDeleteSpace: onDeleteSpace,
                     onRenameThread: onRenameThread,

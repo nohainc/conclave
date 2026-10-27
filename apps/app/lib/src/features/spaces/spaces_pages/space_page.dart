@@ -9,8 +9,6 @@ class SpacePage extends StatelessWidget {
     required this.dataSource,
     required this.onOpenThread,
     this.onSaveEdits,
-    this.startEditing = false,
-    this.onEditingStarted,
     required this.onArchive,
     required this.onDelete,
     this.onSpaceUpdated,
@@ -34,9 +32,6 @@ class SpacePage extends StatelessWidget {
   /// under the form, or null on success. Without it the page saves directly.
   final Future<String?> Function(String name, String description)? onSaveEdits;
 
-  /// Opens the inline edit form once, e.g. from the sidebar's Edit Space.
-  final bool startEditing;
-  final VoidCallback? onEditingStarted;
   final VoidCallback onArchive;
   final VoidCallback onDelete;
   final ValueChanged<AxSpace>? onSpaceUpdated;
@@ -54,8 +49,6 @@ class SpacePage extends StatelessWidget {
         dataSource: dataSource,
         onOpenThread: onOpenThread,
         onSaveEdits: onSaveEdits,
-        startEditing: startEditing,
-        onEditingStarted: onEditingStarted,
         onArchive: onArchive,
         onDelete: onDelete,
         onSpaceUpdated: onSpaceUpdated,
@@ -76,8 +69,6 @@ class _SpaceWorkspace extends StatefulWidget {
     required this.dataSource,
     required this.onOpenThread,
     this.onSaveEdits,
-    this.startEditing = false,
-    this.onEditingStarted,
     required this.onArchive,
     required this.onDelete,
     this.onSpaceUpdated,
@@ -99,9 +90,6 @@ class _SpaceWorkspace extends StatefulWidget {
   /// under the form, or null on success. Without it the page saves directly.
   final Future<String?> Function(String name, String description)? onSaveEdits;
 
-  /// Opens the inline edit form once, e.g. from the sidebar's Edit Space.
-  final bool startEditing;
-  final VoidCallback? onEditingStarted;
   final VoidCallback onArchive;
   final VoidCallback onDelete;
   final ValueChanged<AxSpace>? onSpaceUpdated;
@@ -146,7 +134,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
     super.initState();
     _configureQueries();
     _bindActiveSection();
-    _consumeStartEditing();
   }
 
   void _configureQueries() {
@@ -226,9 +213,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
   void didUpdateWidget(_SpaceWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.space.id != widget.space.id) _editing = false;
-    if (widget.startEditing && !oldWidget.startEditing) {
-      _consumeStartEditing();
-    }
     if (oldWidget.space.id != widget.space.id ||
         oldWidget.dataSource != widget.dataSource ||
         oldWidget.spaceThreads != widget.spaceThreads ||
@@ -250,15 +234,6 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
   }
 
   void _updateState(VoidCallback callback) => setState(callback);
-
-  void _consumeStartEditing() {
-    if (!widget.startEditing) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (!_editing) _startEditing();
-      widget.onEditingStarted?.call();
-    });
-  }
 
   @override
   Widget build(BuildContext context) {

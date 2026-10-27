@@ -94,7 +94,7 @@ void main() {
       scaffoldKey.currentState!.openDrawer();
       await tester.pumpAndSettle();
       final row = find.text(isThread ? 'Thread A' : 'Space A');
-      final action = find.text(isThread ? 'Rename Thread' : 'Edit Space');
+      final action = find.text(isThread ? 'Rename Thread' : 'Select Space');
 
       // Moving to scroll before the hold threshold cancels menu activation.
       final gesture = await tester.startGesture(tester.getCenter(row));
@@ -177,5 +177,66 @@ void main() {
     await tester.pump();
     expect(threadMenu, findsOneWidget);
     expect(find.text('Rename Thread'), findsOneWidget);
+  });
+
+  testWidgets('Select Space menu item navigates without opening edit fields',
+      (tester) async {
+    AxNavigation? navigatedTo;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SpaceTree(
+          shellContext: const AxShellContext(
+            navigation: AxNavigation.home(),
+            spaces: [_space],
+          ),
+          onNavigateTo: (route) => navigatedTo = route,
+        ),
+      ),
+    ));
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.text('Space A')));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Space menu'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit Space'), findsNothing);
+    await tester.tap(find.text('Select Space'));
+    await tester.pumpAndSettle();
+
+    expect(navigatedTo?.kind, AxRouteKind.space);
+    expect(navigatedTo?.spaceId, 'space-a');
+    expect(find.byKey(const ValueKey('space-edit-form')), findsNothing);
+  });
+
+  testWidgets('Select Space in the page layout selects without navigating',
+      (tester) async {
+    final selectedSpaces = <String>[];
+    AxNavigation? navigatedTo;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SpaceTree(
+          pageLayout: true,
+          shellContext: const AxShellContext(
+            navigation: AxNavigation.spaces(),
+            spaces: [_space],
+          ),
+          onNavigateTo: (route) => navigatedTo = route,
+          onToggleSpaceExpanded: selectedSpaces.add,
+        ),
+      ),
+    ));
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.text('Space A')));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Space menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select Space'));
+    await tester.pumpAndSettle();
+
+    expect(selectedSpaces, ['space-a']);
+    expect(navigatedTo, isNull);
   });
 }
