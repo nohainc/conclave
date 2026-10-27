@@ -157,19 +157,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                 for (final workspace in widget.workspaces)
                   Tab(
                       key: Key('workspace-tab-${workspace.id}'),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Tooltip(
-                          message: _statusLabel(workspace),
-                          child: Icon(Icons.circle,
-                              key: Key('workspace-tab-status-${workspace.id}'),
-                              size: 9,
-                              color: workspace.status.toLowerCase() == 'online'
-                                  ? ConclaveColors.successText(isDark)
-                                  : ConclaveColors.neutral),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(workspace.name),
-                      ])),
+                      text: workspace.name),
               ],
             ),
           ),
@@ -198,10 +186,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
       key: Key('workspace-detail-${workspace.id}'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        Row(
           children: [
             if (machineName.isNotEmpty && machineName != '—') ...[
               Text(
@@ -210,6 +195,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                       fontWeight: FontWeight.w600,
                     ),
               ),
+              const SizedBox(width: 8),
             ],
             if (machineOs != '—') ...[
               Text(
@@ -218,22 +204,26 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
               ),
+              const SizedBox(width: 8),
             ],
             if (workspace.shared) ...[
               const Chip(
                   key: ValueKey('workspace-shared-badge'),
                   avatar: Icon(Icons.people_outline, size: 16),
                   label: Text('Shared with you')),
+              const SizedBox(width: 8),
             ],
-            if (configurations != null &&
-                configurations.source is AxWorkflowWorkspaceDataSource)
-              _DefaultWorkspaceControl(
-                key: ValueKey('default-workspace-${workspace.id}'),
-                configurations: configurations,
-                workspace: workspace,
-              ),
+            const Spacer(),
+            _StatusPill(status: _statusLabel(workspace)),
           ],
         ),
+        if (configurations != null &&
+            configurations.source is AxWorkflowWorkspaceDataSource)
+          _DefaultWorkspaceControl(
+            key: ValueKey('default-workspace-${workspace.id}'),
+            configurations: configurations,
+            workspace: workspace,
+          ),
         const SizedBox(height: 16),
         _WorkspaceCardBody(
           workers: workers,
@@ -556,6 +546,26 @@ class _WorkerCard extends StatelessWidget {
   }
 }
 
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.status});
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final online = status.toLowerCase() == 'online';
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      avatar: Icon(Icons.circle,
+          size: 9,
+          color: online
+              ? ConclaveColors.successText(
+                  Theme.of(context).brightness == Brightness.dark)
+              : ConclaveColors.neutral),
+      label: Text(_display(status)),
+    );
+  }
+}
+
 class _EmptyWorkspaces extends StatelessWidget {
   const _EmptyWorkspaces();
 
@@ -586,6 +596,8 @@ String _machine(AxWorkspace workspace) {
   };
   return os.isEmpty ? '—' : os;
 }
+
+String _display(String value) => value.isEmpty ? '—' : value;
 
 String _statusLabel(AxWorkspace workspace) =>
     workspace.status.toLowerCase() == 'offline' && !workspace.hasRuntimeIdentity
@@ -662,7 +674,7 @@ class _DefaultWorkspaceControlState extends State<_DefaultWorkspaceControl> {
               children: [
                 if (selected)
                   const Padding(
-                      padding: EdgeInsets.zero,
+                      padding: EdgeInsets.only(top: 8),
                       child: Chip(
                           key: ValueKey('default-workspace-badge'),
                           avatar: Icon(Icons.check, size: 16),
