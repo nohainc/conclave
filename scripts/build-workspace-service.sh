@@ -4,6 +4,37 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
 OUT_DIR="$ROOT/dist/conclave-workspace"
+ENVIRONMENT="${CONCLAVE_WORKSPACE_ENVIRONMENT:-production}"
+
+for arg in "$@"; do
+  case "$arg" in
+    --local)
+      ENVIRONMENT="local"
+      ;;
+    --production)
+      ENVIRONMENT="production"
+      ;;
+    --help|-h)
+      cat <<'USAGE'
+Usage: scripts/build-workspace-service.sh [--local|--production]
+
+Builds the unified Conclave Workspace service and bundled CLI Worker Engine.
+
+Options:
+  --local       Build for local Cloud development (http://localhost:8787).
+                Can also be set via CONCLAVE_WORKSPACE_ENVIRONMENT=local.
+  --production  Build for production Cloud (https://app.conclaveax.com) [default].
+                Can also be set via CONCLAVE_WORKSPACE_ENVIRONMENT=production.
+USAGE
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $arg" >&2
+      exit 1
+      ;;
+  esac
+done
+
 TARGET_FLAGS=()
 if [[ -n "${CONCLAVE_BUILD_TARGET_OS:-}${CONCLAVE_BUILD_TARGET_ARCH:-}" ]]; then
   [[ "${CONCLAVE_BUILD_TARGET_OS:-}" == linux ]] || { echo "Only Linux cross-builds are supported." >&2; exit 2; }
@@ -41,7 +72,7 @@ cp "$ENGINE_SOURCE" "$OUT_DIR/assets/engines/"
 cp "$ENGINE_SOURCE" "$OUT_DIR/"
 dart compile exe ${TARGET_FLAGS[@]+"${TARGET_FLAGS[@]}"} \
   --define="CONCLAVE_WORKSPACE_VERSION=$VERSION" \
-  --define="CONCLAVE_WORKSPACE_ENVIRONMENT=${CONCLAVE_WORKSPACE_ENVIRONMENT:-production}" \
+  --define="CONCLAVE_WORKSPACE_ENVIRONMENT=$ENVIRONMENT" \
   --define="CONCLAVE_WORKSPACE_PACKAGE_MANAGER=${CONCLAVE_WORKSPACE_PACKAGE_MANAGER:-}" \
   --define="CONCLAVE_RELEASE_TRUST_KEYS_JSON=$PUBLIC_RELEASE_ROOTS" \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
