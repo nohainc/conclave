@@ -45,6 +45,69 @@ on the installer. The headless bundle contains `conclave-workspace.exe` and
    | secret (pfx) | `CONCLAVE_WINDOWS_CERTIFICATE_PASSWORD` | PFX password |
    | variable (pfx, optional) | `CONCLAVE_WINDOWS_TIMESTAMP_URL` | RFC 3161 server (default DigiCert) |
 
+## Selected backend: Azure Artifact Signing Basic
+
+Artifact Signing is Microsoft's current name for Trusted Signing. Conclave's
+existing `CONCLAVE_WINDOWS_TRUSTED_SIGNING_*` variable names remain unchanged.
+The GitHub environment selects `CONCLAVE_WINDOWS_SIGNING=azure`.
+
+### First activation
+
+1. Create a paid Azure pay-as-you-go subscription. Free, trial and sponsored
+   subscriptions are not supported. Complete billing and identity checks in
+   Azure, not in repository files or chat.
+2. Confirm publisher eligibility before creating the paid signing account.
+   EU-registered organizations qualify for public identity validation;
+   individual applicants currently must be based in the US or Canada. Use the
+   publisher's actual legal name; approval remains Microsoft's decision.
+3. In Azure Portal, open Subscriptions → your subscription → Resource providers
+   and register `Microsoft.CodeSigning`.
+4. Create an **Artifact Signing Account**, selecting **Basic** and an available
+   region. Suggested resource group: `conclave-signing`; suggested account name:
+   `conclavesigning` (subject to availability). Record the actual account name
+   and regional endpoint shown by Azure.
+5. In the account's Access control (IAM), assign your onboarding user the
+   **Artifact Signing Identity Verifier** role if needed. Submit an
+   organization **Public** identity validation and complete Microsoft's email
+   and document checks. Validation must finish before production signing.
+6. Create a **Public Trust** certificate profile, for example
+   `workspace-public`, linked to the approved identity. Public Trust Test and
+   Private Trust profiles are not production signing identities.
+7. Create a dedicated Entra app registration for GitHub releases. Grant its
+   service principal the certificate profile signer role using Azure IAM at
+   the intended signing scope. Add its tenant ID, client ID and client secret
+   to the GitHub environment secrets listed above. Set the endpoint, account
+   and profile variables to the real Azure values. Never commit the secret.
+8. Run the signed release dry run, qualify the signed installer, and publish
+   only after the release CI gate passes.
+
+### Infrequent releases and stopping signing charges
+
+Basic is listed at USD 9.99 per month for 5,000 signatures, with overage billed
+separately. Microsoft states that the SKU charge is not prorated; confirm local
+currency, taxes and billing periods in Azure. Annual totals based on active
+months are estimates, not a guaranteed invoice.
+
+After successful publication, download and retain the signed artifacts and
+checksums. If no further signing is needed, delete only the intended
+**Artifact Signing Account** to stop its future account charges. Deleting only
+the certificate profile is insufficient. Do not delete the subscription,
+resource group or identity validation as a shortcut. Account deletion removes
+its profiles but does not invalidate certificates already used for signing.
+Existing signatures still depend on their normal trust and timestamp checks.
+
+Identity validations remain at subscription scope. On the next activation,
+create an account and a new Public Trust profile and select the retained
+validation while it remains valid. Recheck or recreate signer role assignments
+and update GitHub account/profile/endpoint variables before signing again.
+Deletion disables future signing until this setup is restored. A subscription
+may still have charges from other Azure resources.
+
+References, checked 2026-10-27:
+[Microsoft setup guide](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart),
+[billing and deletion FAQ](https://learn.microsoft.com/en-us/azure/artifact-signing/faq),
+and [Basic pricing](https://learn.microsoft.com/en-us/azure/artifact-signing/how-to-change-sku).
+
 ## Publishing a release
 
 1. Set `version:` in `apps/workspace/pubspec.yaml` to the release version
