@@ -1,7 +1,11 @@
 # Windows Workspace installer
 
 The Windows build workflow produces an unsigned per-user Inno Setup installer
-alongside the ZIP candidate. This is not a signed production release.
+alongside the ZIP candidate. This is not a signed production release; signed
+releases are produced by the Windows release workflow described in
+[Windows Workspace releases](../deployment/WORKSPACE_WINDOWS_RELEASES.md).
+`scripts/package-workspace-windows.ps1 -Sign` signs the installer and
+uninstaller and refuses to package a bundle with unsigned binaries.
 
 Run `scripts/build-workspace-windows.ps1`, then
 `scripts/package-workspace-windows.ps1` on Windows with Inno Setup 6 installed.
@@ -30,6 +34,6 @@ recover a retained registration. No schema, protocol, or state migration occurs.
 
 The disposable Windows runner tests silent installation, installed executable
 hashes and installed-service lifecycle, repeat installation, UI startup, rejection while running, and uninstall.
-Real assignment upgrade recovery, reboot/logon, signing, and interactive desktop
+Real assignment upgrade recovery, reboot/logon, and interactive desktop
 qualification remain release checks. CI uses the existing compile-only trust
 root; this installer does not establish production release trust.

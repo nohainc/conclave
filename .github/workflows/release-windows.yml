@@ -1,0 +1,214 @@
+name: Release Windows Workspace
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Immutable release version (must match apps/workspace/pubspec.yaml)
+        type: string
+        required: true
+      publish:
+        description: Publish the signed installer as a GitHub Release (main and passing CI required)
+        type: boolean
+        default: false
+      release_notes:
+        description: Release notes for the GitHub Release
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-workspace-release
+  cancel-in-progress: false
+
+jobs:
+  require-ci:
+    name: Require passing CI on main
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require matching pubspec version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          pubspec="$(awk '/^version:/ {print $2; exit}' apps/workspace/pubspec.yaml)"
+          [[ "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "${pubspec%%+*}" == "$REQUESTED_VERSION" ]] || { echo "pubspec version $pubspec does not match $REQUESTED_VERSION" >&2; exit 1; }
+      - name: Require successful CI for this commit
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/require-ci-success.sh
+
+  build:
+    name: Build, sign, and test Windows installer
+    needs: require-ci
+    runs-on: windows-2022
+    environment: workspace-windows-release
+    timeout-minutes: 75
+    env:
+      CONCLAVE_WORKSPACE_VERSION: ${{ inputs.version }}
+      # Releases never fall back to the compile-only CI trust root.
+      CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON }}
+      CONCLAVE_WINDOWS_SIGNING: ${{ vars.CONCLAVE_WINDOWS_SIGNING }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+      - uses: ./.github/actions/setup-flutter
+      - name: Require release configuration
+        shell: pwsh
+        run: |
+          if (-not $env:CONCLAVE_RELEASE_TRUST_KEYS_JSON) { throw 'vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON is required.' }
+          if ($env:CONCLAVE_WINDOWS_SIGNING -notin @('azure', 'pfx')) { throw 'vars.CONCLAVE_WINDOWS_SIGNING must be azure or pfx.' }
+      - name: Install pinned Inno Setup compiler
+        shell: pwsh
+        run: |
+          $setup = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.3.exe'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe' -OutFile $setup
+          if ((Get-FileHash $setup -Algorithm SHA256).Hash -ne '9c73c3bae7ed48d44112a0f48e66742c00090bdb5bef71d9d3c056c66e97b732') { throw 'Inno Setup checksum mismatch.' }
+          $compilerDir = Join-Path $env:RUNNER_TEMP 'inno-setup'
+          $install = Start-Process $setup -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$compilerDir`"") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Compiler installation failed: $($install.ExitCode)" }
+      - name: Configure Azure Trusted Signing client
+        if: vars.CONCLAVE_WINDOWS_SIGNING == 'azure'
+        shell: pwsh
+        env:
+          CLIENT_VERSION: ${{ vars.CONCLAVE_WINDOWS_TRUSTED_SIGNING_CLIENT_VERSION || '1.0.53' }}
+        run: |
+          $package = Join-Path $env:RUNNER_TEMP 'trusted-signing-client.zip'
+          Invoke-WebRequest "https://www.nuget.org/api/v2/package/Microsoft.Trusted.Signing.Client/$env:CLIENT_VERSION" -OutFile $package
+          $client = Join-Path $env:RUNNER_TEMP 'trusted-signing-client'
+          Expand-Archive $package $client -Force
+          $dlib = Join-Path $client 'bin/x64/Azure.CodeSigning.Dlib.dll'
+          # The client must carry a valid Microsoft Authenticode signature.
+          $signature = Get-AuthenticodeSignature $dlib
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') { throw 'Trusted Signing client is not Microsoft-signed.' }
+          "CONCLAVE_WINDOWS_TRUSTED_SIGNING_DLIB=$dlib" >> $env:GITHUB_ENV
+      - name: Configure certificate file signing
+        if: vars.CONCLAVE_WINDOWS_SIGNING == 'pfx'
+        shell: pwsh
+        env:
+          CERTIFICATE_PFX: ${{ secrets.CONCLAVE_WINDOWS_CERTIFICATE_PFX }}
+        run: |
+          if (-not $env:CERTIFICATE_PFX) { throw 'secrets.CONCLAVE_WINDOWS_CERTIFICATE_PFX is required.' }
+          $path = Join-Path $env:RUNNER_TEMP 'conclave-windows-signing.pfx'
+          [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:CERTIFICATE_PFX))
+          "CONCLAVE_WINDOWS_CERTIFICATE_PATH=$path" >> $env:GITHUB_ENV
+      - name: Validate Windows runtime and CLI shims
+        shell: pwsh
+        run: |
+          Push-Location apps/workspace
+          flutter test test/windows_runtime_test.dart test/windows_service_manager_test.dart
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+          Push-Location packages/conclave_cli_worker_runtime
+          dart pub get
+          dart test test/windows_cli_shim_test.dart test/windows_process_job_test.dart
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+      - name: Build Windows release bundle
+        shell: pwsh
+        run: ./scripts/build-workspace-windows.ps1
+      - name: Sign every bundled executable and library
+        shell: pwsh
+        env:
+          CONCLAVE_WINDOWS_TRUSTED_SIGNING_ENDPOINT: ${{ vars.CONCLAVE_WINDOWS_TRUSTED_SIGNING_ENDPOINT }}
+          CONCLAVE_WINDOWS_TRUSTED_SIGNING_ACCOUNT: ${{ vars.CONCLAVE_WINDOWS_TRUSTED_SIGNING_ACCOUNT }}
+          CONCLAVE_WINDOWS_TRUSTED_SIGNING_PROFILE: ${{ vars.CONCLAVE_WINDOWS_TRUSTED_SIGNING_PROFILE }}
+          AZURE_TENANT_ID: ${{ secrets.CONCLAVE_WINDOWS_AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.CONCLAVE_WINDOWS_AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.CONCLAVE_WINDOWS_AZURE_CLIENT_SECRET }}
+          CONCLAVE_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.CONCLAVE_WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $bundle = Join-Path $PWD 'dist/conclave-workspace/windows/release'
+          $engine = 'assets/engines/conclave_cli_worker_engine.exe'
+          $uiEngine = Join-Path $bundle "data/flutter_assets/$engine"
+          # Sign the Engine once and reuse it so both bundled copies stay byte-identical.
+          Remove-Item $uiEngine
+          ./scripts/sign-workspace-windows.ps1 -Bundle $bundle
+          Copy-Item (Join-Path $bundle $engine) $uiEngine
+          ./scripts/sign-workspace-windows.ps1 -Bundle $bundle -VerifyOnly
+          $archive = "dist/conclave-workspace/Conclave-Workspace-$env:CONCLAVE_WORKSPACE_VERSION-windows-x64.zip"
+          Compress-Archive -Path "$bundle/*" -DestinationPath $archive -Force
+      - name: Validate signed service lifecycle
+        shell: pwsh
+        working-directory: apps/workspace
+        env:
+          CONCLAVE_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\conclave-workspace\windows\release\workspace.exe
+        run: |
+          flutter test test/windows_service_lifecycle_test.dart
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build signed installer
+        shell: pwsh
+        env:
+          CONCLAVE_WINDOWS_TRUSTED_SIGNING_ENDPOINT: ${{ vars.CONCLAVE_WINDOWS_TRUSTED_SIGNING_ENDPOINT }}
+          CONCLAVE_WINDOWS_TRUSTED_SIGNING_ACCOUNT: ${{ vars.CONCLAVE_WINDOWS_TRUSTED_SIGNING_ACCOUNT }}
+          CONCLAVE_WINDOWS_TRUSTED_SIGNING_PROFILE: ${{ vars.CONCLAVE_WINDOWS_TRUSTED_SIGNING_PROFILE }}
+          AZURE_TENANT_ID: ${{ secrets.CONCLAVE_WINDOWS_AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.CONCLAVE_WINDOWS_AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.CONCLAVE_WINDOWS_AZURE_CLIENT_SECRET }}
+          CONCLAVE_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.CONCLAVE_WINDOWS_CERTIFICATE_PASSWORD }}
+        run: ./scripts/package-workspace-windows.ps1 -Compiler "$env:RUNNER_TEMP/inno-setup/ISCC.exe" -Sign
+      - name: Test signed install, upgrade and uninstall
+        shell: pwsh
+        run: ./scripts/test-workspace-windows-installer.ps1
+      - name: Write checksums
+        shell: pwsh
+        run: |
+          $files = @(Get-Item "dist/conclave-workspace/installer/Conclave-Workspace-$env:CONCLAVE_WORKSPACE_VERSION-windows-x64-Setup.exe",
+                             "dist/conclave-workspace/Conclave-Workspace-$env:CONCLAVE_WORKSPACE_VERSION-windows-x64.zip")
+          New-Item -ItemType Directory -Force dist/windows-release | Out-Null
+          $files | Copy-Item -Destination dist/windows-release
+          $files | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } |
+            Set-Content dist/windows-release/SHA256SUMS -Encoding ascii
+      - name: Remove signing material
+        if: always()
+        shell: pwsh
+        run: Remove-Item (Join-Path $env:RUNNER_TEMP 'conclave-windows-signing.pfx') -ErrorAction SilentlyContinue
+      - name: Retain signed release candidate
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conclave-workspace-windows-x64-release
+          path: dist/windows-release/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    if: inputs.publish
+    needs: build
+    runs-on: ubuntu-24.04
+    environment: workspace-windows-release
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download signed candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name conclave-workspace-windows-x64-release --dir release
+      - name: Verify checksums and create immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.release_notes }}
+        run: |
+          set -euo pipefail
+          (cd release && sha256sum -c SHA256SUMS)
+          tag="workspace-windows-v$VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "$tag already exists; Windows releases are immutable." >&2
+            exit 1
+          fi
+          gh release create "$tag" release/* --target "$GITHUB_SHA" \
+            --title "Conclave Workspace $VERSION for Windows" \
+            --notes "${NOTES:-Signed Conclave Workspace $VERSION for Windows x64.}"

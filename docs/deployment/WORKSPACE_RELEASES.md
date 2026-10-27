@@ -2,7 +2,7 @@
 
 Workspace application releases use the Cloud API under `/api/workspace-releases`. Architecture v8 has three release classes:
 
-1. **Workspace:** the signed `conclave-workspace` service/CLI bundle (macOS: signed and notarized zip/pkg; Linux: signed APT package).
+1. **Workspace:** the signed `conclave-workspace` service/CLI bundle (macOS: signed and notarized zip/pkg; Linux: signed APT package; Windows: Authenticode-signed installer).
 2. **CLI Worker Engine:** generic executable bundled with a Workspace release; it has no separate Cloud release catalog.
 3. **Worker Profile:** one current provider integration payload per logical Worker, published through Cloud with digest and revision validation.
 
@@ -52,3 +52,10 @@ and distributed as one Debian package through a signed vendor APT repository.
 See [Linux release operations](WORKSPACE_LINUX_RELEASES.md) for build commands,
 protected signing/publication setup, native package tests and update operations.
 APT manages this install unit; its separate application self-updater is disabled.
+
+## Windows installer
+
+The Windows bundle and Inno Setup installer are Authenticode-signed and
+published as GitHub Releases. See [Windows release operations](WORKSPACE_WINDOWS_RELEASES.md)
+for signing identity setup, required secrets, the release procedure and
+device qualification.

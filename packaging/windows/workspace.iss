@@ -12,6 +12,9 @@ AppId={{77334D81-D586-4FF6-BC89-CB844B9A9D37}
 AppName=Conclave Workspace
 AppVersion={#AppVersion}
 AppPublisher=Conclave
+VersionInfoVersion={#AppVersion}
+VersionInfoProductName=Conclave Workspace
+VersionInfoCompany=Conclave
 DefaultDirName={localappdata}\Programs\Conclave\Workspace
 DefaultGroupName=Conclave
 PrivilegesRequired=lowest
@@ -28,6 +31,12 @@ CloseApplications=no
 RestartApplications=no
 UninstallDisplayIcon={app}\conclave_workspace.exe
 SetupLogging=yes
+#ifdef SignInstaller
+; Signs Setup.exe and the embedded uninstaller with the "conclave" sign tool
+; passed by scripts/package-workspace-windows.ps1 -Sign.
+SignTool=conclave
+SignedUninstaller=yes
+#endif
 
 [Files]
 Source: "{#BundleDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
