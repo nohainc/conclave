@@ -5,20 +5,20 @@ Origin: Conclave
 Label: Conclave Workspace
 Suite: stable
 Codename: stable
-Date: Tue, 27 Oct 2026 09:22:10 GMT
+Date: Tue, 27 Oct 2026 18:58:32 GMT
 Architectures: amd64 arm64
 Components: main
 Acquire-By-Hash: yes
 Description: Conclave Workspace packages
 SHA256:
- 90a63b4ee03226854463bb56dcfe8a716ad9733d7a13f6d75590c25cfddfb04d 3455 main/binary-amd64/Packages
- 6607516904358cb4fb6776af106058fd5b822326406a48031ba06dd2f469764d 728 main/binary-amd64/Packages.gz
- 461e9618108da5aa6a67e731d1dc29697c49e30f923c58a69603ed0035691b23 3455 main/binary-arm64/Packages
- 74e870462f07ab5b69d3c3517434b7e4ccaa8b626b9a6cb9e6a77bcdae51c85d 725 main/binary-arm64/Packages.gz
+ 9a15113bcb42110824682767dff95baab5693f7fb704684a91a506dc661115a9 4146 main/binary-amd64/Packages
+ f5708b9549cde1e50e0f12c4e6bf6c72f997d0a25839e62c21fa933829c5b120 787 main/binary-amd64/Packages.gz
+ 4655b5c1bfc58ca24071bc5370ac27e500781aee99e12651d00ed06b0d9183ee 4146 main/binary-arm64/Packages
+ b9c7407d206a691209e07fbae8eb88b1d17a9695a9cf0459267c9809ab02d70f 785 main/binary-arm64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYIAB0WIQRuoBPRLvecvcNNZgWBgszPz0F18gUCauBtQgAKCRCBgszPz0F1
-8r3lAQDd4ViDJuDy5Ugg/+pSxn/+nxeYpXjjZ6p3Jleh/SMQYQD8Dt+Y/QfqHCgZ
-0k1bF8zhXGUKej6Bl8f06KLv9lD80gw=
-=u0ub
+iHUEARYIAB0WIQRuoBPRLvecvcNNZgWBgszPz0F18gUCauD0WAAKCRCBgszPz0F1
+8l9KAP9O6DonyG6lWv/Cj5UJ/Uab44Z9/BeAhnszeulFPg9juQEAiYC/QV9enUAI
+43Qm0bCTnzTFesn7wZe3rrS7sq+xaQo=
+=C80m
 -----END PGP SIGNATURE-----
