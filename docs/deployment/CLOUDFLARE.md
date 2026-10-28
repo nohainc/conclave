@@ -502,3 +502,26 @@ paths, marker filenames, token prefixes and auth audiences now use Syntila.
 The former database and app deployment remain intact. Existing email sender
 addresses on `conclaveax.com` remain configured. OAuth providers need credentials
 and callbacks registered for the new origin before they can be enabled.
+
+## OAuth restoration after the Syntila domain cutover
+
+Production Google and GitHub OAuth callbacks are registered at
+`https://syntila.app/api/auth/callback/google` and
+`https://syntila.app/api/auth/callback/github`. The Google browser origin and
+GitHub homepage are `https://syntila.app`. Existing provider client IDs and
+secrets were retained.
+
+Run the manual `Sync production OAuth` GitHub Actions workflow to restore only
+the four OAuth settings on `syntila-app`. It leaves `BETTER_AUTH_SECRET` intact,
+so restoring OAuth does not invalidate existing sessions or encrypted tokens.
+The normal deploy and OAuth sync prefer the `SYNTILA_AUTH_*` repository secrets
+and fall back to the existing `CONCLAVE_AUTH_*` names until those repository
+secrets are renamed. Worker bindings always use `SYNTILA_AUTH_*`. Secret values
+are never printed; the temporary file is private and removed after the job.
+
+The restoration run on 2026-10-28 succeeded. Both live sign-in initiation routes
+returned HTTP 302 to the correct provider with a Syntila callback and an OAuth
+state cookie. Final provider consent and authenticated account linking still
+need to be completed by the account owner. Explicit linking retains the same
+email requirement and implicit account linking remains disabled. No database
+migration or application session-secret rotation was required.

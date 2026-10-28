@@ -316,3 +316,33 @@ describe("CI acceptance orchestration", () => {
     );
   });
 });
+
+describe("production OAuth secret continuity", () => {
+  it("resolves existing repository secret names in both deployment paths", () => {
+    for (const path of [
+      ".github/workflows/deploy-cloud.yml",
+      ".github/workflows/sync-production-oauth.yml",
+    ]) {
+      for (const suffix of [
+        "GITHUB_CLIENT_ID",
+        "GITHUB_CLIENT_SECRET",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+      ]) {
+        expect(source(path)).toContain(
+          `secrets.SYNTILA_AUTH_${suffix} || secrets.CONCLAVE_AUTH_${suffix}`,
+        );
+      }
+    }
+  });
+  it("syncs only OAuth credentials without rotating the session encryption secret", () => {
+    const workflow = source(".github/workflows/sync-production-oauth.yml");
+    expect(workflow).toContain(
+      "secret bulk oauth-secrets.json --name syntila-app",
+    );
+    expect(workflow).not.toContain("secrets.BETTER_AUTH_SECRET");
+    expect(workflow).toContain("mode: 0o600");
+    expect(workflow).toContain("if: always()");
+    expect(workflow).toContain("rm -f oauth-secrets.json");
+  });
+});
