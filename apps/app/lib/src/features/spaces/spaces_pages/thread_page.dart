@@ -163,6 +163,10 @@ class _ThreadPageState extends State<ThreadPage>
   Map<String, Object?>? _previousWorkReplies;
   bool _followWork = true;
   bool _followChat = true;
+
+  /// Chat messages being edited in place. While any is open the page never
+  /// scrolls on its own, so the edited text stays where the person put it.
+  int _editingMessages = 0;
   // Opening a tab positions it once the Thread view state and history exist:
   // bottom when nothing is new, otherwise the first unread item at the top.
   bool _openChatPending = true;
@@ -468,6 +472,7 @@ class _ThreadPageState extends State<ThreadPage>
   /// rows whose height settles a frame later. A jump queued before an anchor
   /// took hold (such as the first unread message on open) is dropped.
   void _jumpToLatest(ScrollController controller, {int pass = 0}) {
+    if (_editingMessages > 0) return;
     final generation = _interactionGeneration;
     final anchor = controller == _workHistoryController
         ? _workIncomingAnchor
@@ -489,6 +494,7 @@ class _ThreadPageState extends State<ThreadPage>
   }
 
   void _scheduleFollowLatest(ScrollController controller, {int attempt = 0}) {
+    if (_editingMessages > 0) return;
     final isWork = controller == _workHistoryController;
     final follow = isWork ? _followWork : _followChat;
     if (!follow && !(isWork ? _openWorkPending : _openChatPending)) return;
@@ -2383,6 +2389,14 @@ class _ThreadPageState extends State<ThreadPage>
                                   context, message.workRequest!)
                               : _DiscussionMessageBubble(
                                   item: message,
+                                  onEditingChanged: (editing) {
+                                    _editingMessages = (_editingMessages +
+                                            (editing ? 1 : -1))
+                                        .clamp(0, 1 << 20);
+                                    // Editing a message means reading it, not
+                                    // the newest content.
+                                    if (editing) _followChat = false;
+                                  },
                                   grouped: _continuesDiscussionGroup(
                                       messages, index,
                                       breakAt: _firstUnreadChatId),

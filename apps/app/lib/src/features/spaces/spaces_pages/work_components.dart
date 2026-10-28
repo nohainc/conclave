@@ -353,7 +353,8 @@ class _WorkComposer extends StatelessWidget {
           ),
       ],
       itemCount: workTimeline.length,
-      itemId: (index) => workTimeline[index].id,
+      // AI History is a list read top-down, not a conversation anchored at
+      // its newest message: rows keep their place and open downward.
       empty: empty,
       separatorBuilder: (_, __) => const SizedBox(height: 6),
       findChildIndexCallback: (key) {
@@ -373,9 +374,15 @@ class _WorkComposer extends StatelessWidget {
                   ? null
                   : DateTime.tryParse(workTimeline[index - 1].createdAt)
                       ?.toLocal(),
-              child: requestCard(context, request,
-                  responseAnchorKey:
-                      incomingAnchor.keyFor((request.id, 'response'))),
+              // AI History is a compact, scannable list: each request is one
+              // row that expands its full text and response on tap.
+              child: _AiHistoryEntry(
+                request: request,
+                expandedChild: requestCard(context, request,
+                    showPromptBubble: false,
+                    responseAnchorKey:
+                        incomingAnchor.keyFor((request.id, 'response'))),
+              ),
             ),
           ),
         );
@@ -386,7 +393,7 @@ class _WorkComposer extends StatelessWidget {
   /// The live Work Request card (prompt, Worker status, activity, answer) used
   /// by both the Conversation and AI History.
   Widget requestCard(BuildContext context, AxWorkRequest request,
-          {GlobalKey? responseAnchorKey}) =>
+          {GlobalKey? responseAnchorKey, bool showPromptBubble = true}) =>
       ListenableBuilder(
         listenable: Listenable.merge([
           activityStore.listenableForRequest(request),
@@ -394,6 +401,7 @@ class _WorkComposer extends StatelessWidget {
         ]),
         builder: (context, _) => _WorkTimelineCard(
           responseAnchorKey: responseAnchorKey,
+          showPromptBubble: showPromptBubble,
           request: request,
           activities: activityStore.forRequest(request),
           clockOffset: activityStore.clockOffsetForRequest(request),
@@ -1509,6 +1517,7 @@ String? _workResponseText(AxWorkRequest request) =>
 class _WorkTimelineCard extends StatelessWidget {
   const _WorkTimelineCard({
     this.responseAnchorKey,
+    this.showPromptBubble = true,
     required this.request,
     required this.activities,
     required this.realtimeStatus,
@@ -1529,6 +1538,7 @@ class _WorkTimelineCard extends StatelessWidget {
   /// Starts a reply to this request or its answer (Reply v1).
   final ValueChanged<AxReplyReference>? onReply;
   final GlobalKey? responseAnchorKey;
+  final bool showPromptBubble;
   final AxWorkRequest request;
   final List<AxWorkActivity> activities;
   final AxWorkRealtimeStatus realtimeStatus;
@@ -1801,7 +1811,7 @@ class _WorkTimelineCard extends StatelessWidget {
         : Opacity(
             opacity: senderIconOpacity,
             child: Image.asset(
-              SyntilaBrandAssets.logoPng32,
+              SyntilaBrandAssets.logoPng32For(isDark),
               width: 24,
               height: 24,
               fit: BoxFit.contain,
@@ -1816,103 +1826,107 @@ class _WorkTimelineCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // User prompt bubble
-        _MessageHover(
-          builder: (context, showMeta) => LayoutBuilder(
-            builder: (context, constraints) {
-              final maxBubbleWidth =
-                  math.min(640.0, constraints.maxWidth * 0.9);
-              return Align(
-                alignment:
-                    isOwnRequest ? Alignment.centerRight : Alignment.centerLeft,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                  child: _withMessageMeta(
-                    own: isOwnRequest,
-                    visible: showMeta,
-                    meta: requestMeta,
-                    bubble: Container(
-                      decoration: BoxDecoration(
-                        color: isOwnRequest
-                            ? SyntilaColors.ownMessageBackground(isDark)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding:
-                          EdgeInsets.fromLTRB(isOwnRequest ? 14 : 0, 8, 14, 8),
-                      child: Column(
-                        crossAxisAlignment: isOwnRequest
-                            ? CrossAxisAlignment.end
-                            : CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (showRequesterIdentity) ...[
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                CircleAvatar(
-                                  radius: 12,
-                                  backgroundColor:
-                                      SyntilaColors.primarySoftColor(isDark),
-                                  child: Text(
-                                    requesterInitials,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: SyntilaColors.primaryForeground(
-                                          isDark),
+        if (showPromptBubble) ...[
+          // User prompt bubble
+          _MessageHover(
+            builder: (context, showMeta) => LayoutBuilder(
+              builder: (context, constraints) {
+                final maxBubbleWidth =
+                    math.min(640.0, constraints.maxWidth * 0.9);
+                return Align(
+                  alignment: isOwnRequest
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                    child: _withMessageMeta(
+                      own: isOwnRequest,
+                      visible: showMeta,
+                      meta: requestMeta,
+                      bubble: Container(
+                        decoration: BoxDecoration(
+                          color: isOwnRequest
+                              ? SyntilaColors.ownMessageBackground(isDark)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: EdgeInsets.fromLTRB(
+                            isOwnRequest ? 14 : 0, 8, 14, 8),
+                        child: Column(
+                          crossAxisAlignment: isOwnRequest
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (showRequesterIdentity) ...[
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 12,
+                                    backgroundColor:
+                                        SyntilaColors.primarySoftColor(isDark),
+                                    child: Text(
+                                      requesterInitials,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: SyntilaColors.primaryForeground(
+                                            isDark),
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  effectiveRequesterName,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: SyntilaColors.textSecondary(isDark),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    effectiveRequesterName,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color:
+                                          SyntilaColors.textSecondary(isDark),
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                          ],
-                          if (request.replyTo != null)
-                            _ReplyQuote(reference: request.replyTo!),
-                          CollapsibleOwnMessage(
-                            key: ValueKey(request.id),
-                            data: request.prompt,
-                            enabled: isOwnRequest,
-                            toggleColor: metaColor,
-                            crossAxisAlignment: isOwnRequest
-                                ? CrossAxisAlignment.end
-                                : CrossAxisAlignment.start,
-                            child: _MemoizedWorkMarkdown(
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                            ],
+                            if (request.replyTo != null)
+                              _ReplyQuote(reference: request.replyTo!),
+                            CollapsibleOwnMessage(
+                              key: ValueKey(request.id),
                               data: request.prompt,
-                              fitContent: true,
+                              enabled: isOwnRequest,
+                              toggleColor: metaColor,
+                              crossAxisAlignment: isOwnRequest
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
+                              child: _MemoizedWorkMarkdown(
+                                data: request.prompt,
+                                fitContent: true,
+                              ),
                             ),
-                          ),
-                          if (request.attachments.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (final file in request.attachments)
-                                  AttachmentCard(file: file.toJson()),
-                              ],
-                            ),
+                            if (request.attachments.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  for (final file in request.attachments)
+                                    AttachmentCard(file: file.toJson()),
+                                ],
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              );
-            },
+                );
+              },
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
+          const SizedBox(height: 4),
+        ],
         // AI Execution & response bubble
         _MessageHover(
           builder: (context, showMeta) => LayoutBuilder(
@@ -2284,7 +2298,8 @@ class _WorkActivityTrail extends StatelessWidget {
                         ? Icons.error_outline_rounded
                         : Icons.check_circle_outline_rounded,
                     size: 14,
-                    color: item.isError ? SyntilaColors.errorText(isDark) : color,
+                    color:
+                        item.isError ? SyntilaColors.errorText(isDark) : color,
                   ),
                   const SizedBox(width: 7),
                   Expanded(
@@ -2528,7 +2543,12 @@ class _DiscussionMessageBubble extends StatefulWidget {
     this.grouped = false,
     this.onDelete,
     this.onReply,
+    this.onEditingChanged,
   });
+
+  /// Reports when the message enters or leaves edit mode, so the page stops
+  /// following the newest content while it is being edited.
+  final ValueChanged<bool>? onEditingChanged;
 
   /// Replies to this message; null for removed or unsaved messages.
   final VoidCallback? onReply;
@@ -2563,8 +2583,15 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
 
   @override
   void dispose() {
+    if (_isEditing) widget.onEditingChanged?.call(false);
     _editController.dispose();
     super.dispose();
+  }
+
+  void _setEditing(bool editing) {
+    if (_isEditing == editing) return;
+    setState(() => _isEditing = editing);
+    widget.onEditingChanged?.call(editing);
   }
 
   void _saveEdit() {
@@ -2572,7 +2599,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
     if (text.trim().isNotEmpty) {
       widget.onEdit(text);
     }
-    setState(() => _isEditing = false);
+    _setEditing(false);
   }
 
   Future<void> _confirmDelete(BuildContext context) async {
@@ -2700,10 +2727,10 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                 tooltip: 'Edit',
                 icon: Icons.edit_outlined,
                 color: metaColor,
-                onTap: () => setState(() {
+                onTap: () {
                   _editController.text = widget.item.text;
-                  _isEditing = true;
-                }),
+                  _setEditing(true);
+                },
               ),
             ],
             _TimelineAction(
@@ -2798,10 +2825,10 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   TextButton(
-                                    onPressed: () => setState(() {
+                                    onPressed: () {
                                       _editController.text = widget.item.text;
-                                      _isEditing = false;
-                                    }),
+                                      _setEditing(false);
+                                    },
                                     child: const Text('Cancel'),
                                   ),
                                   const SizedBox(width: 8),
@@ -3572,6 +3599,145 @@ class _ReplyQuote extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// One AI History request, collapsed to a single row of its prompt, author,
+/// time and status. Tapping expands it to the full request and response.
+/// Requests still processing, and failed ones, start expanded so progress
+/// and the Retry / Report controls stay visible.
+class _AiHistoryEntry extends StatefulWidget {
+  const _AiHistoryEntry({required this.request, required this.expandedChild});
+
+  final AxWorkRequest request;
+  final Widget expandedChild;
+
+  @override
+  State<_AiHistoryEntry> createState() => _AiHistoryEntryState();
+}
+
+class _AiHistoryEntryState extends State<_AiHistoryEntry> {
+  late bool _expanded = _needsAttention;
+
+  /// Expands or collapses the row while it stays where it was clicked: the
+  /// timeline lays older rows out upward from its anchor, so without this an
+  /// opened row would push its own header (and everything above) up.
+  void _toggle() {
+    final box = context.findRenderObject() as RenderBox?;
+    final before = box?.localToGlobal(Offset.zero).dy;
+    setState(() => _expanded = !_expanded);
+    if (before == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final after = (context.findRenderObject() as RenderBox?)
+          ?.localToGlobal(Offset.zero)
+          .dy;
+      final scrollable = Scrollable.maybeOf(context);
+      if (after == null || scrollable == null) return;
+      final position = scrollable.position;
+      final target = (position.pixels + after - before)
+          .clamp(position.minScrollExtent, position.maxScrollExtent);
+      if (target != position.pixels) position.jumpTo(target);
+    });
+  }
+
+  bool get _needsAttention => const {'queued', 'running', 'waiting', 'failed'}
+      .contains(widget.request.status);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final request = widget.request;
+    final collapsedPrompt =
+        request.prompt.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final fullPrompt = request.prompt.trim();
+    final created = DateTime.tryParse(request.createdAt)?.toLocal();
+    final time = created == null
+        ? ''
+        : '${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
+    final (statusLabel, statusColor) = switch (request.status) {
+      'failed' => ('Failed', colors.error),
+      'cancelled' => ('Cancelled', colors.onSurfaceVariant),
+      'completed' => ('', colors.onSurfaceVariant),
+      _ => ('Processing', colors.primary),
+    };
+    final header = InkWell(
+      key: ValueKey('ai-history-entry-${request.id}'),
+      borderRadius: BorderRadius.circular(8),
+      onTap: _toggle,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              crossAxisAlignment: _expanded
+                  ? CrossAxisAlignment.start
+                  : CrossAxisAlignment.center,
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(top: _expanded ? 1 : 0),
+                  child: Icon(
+                      _expanded ? Icons.expand_more : Icons.chevron_right,
+                      size: 18,
+                      color: colors.onSurfaceVariant),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    (_expanded ? fullPrompt : collapsedPrompt).isEmpty
+                        ? 'Request'
+                        : (_expanded ? fullPrompt : collapsedPrompt),
+                    maxLines: _expanded ? null : 1,
+                    overflow: _expanded ? null : TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                if (statusLabel.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Text(statusLabel,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: statusColor)),
+                ],
+                const SizedBox(width: 8),
+                Text(
+                  [
+                    if (request.requestedByName.isNotEmpty)
+                      request.requestedByName,
+                    if (time.isNotEmpty) time,
+                  ].join(' · '),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: colors.onSurfaceVariant),
+                ),
+              ],
+            ),
+            if (_expanded && request.attachments.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 22, top: 8),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final file in request.attachments)
+                      AttachmentCard(file: file.toJson()),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        header,
+        if (_expanded) widget.expandedChild,
+      ],
     );
   }
 }

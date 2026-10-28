@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'syntila_markdown_body.dart';
 
 /// A compact source preview for long own messages, with full Markdown on demand.
 class CollapsibleOwnMessage extends StatefulWidget {
@@ -46,7 +47,7 @@ class _CollapsibleOwnMessageState extends State<CollapsibleOwnMessage> {
   Widget build(BuildContext context) {
     if (!widget.enabled) return _withFooter(context, widget.child, null);
     return LayoutBuilder(builder: (context, constraints) {
-      final style = DefaultTextStyle.of(context).style;
+      final style = SyntilaMessageTypography.fromTheme(Theme.of(context));
       final painter = TextPainter(
         text: TextSpan(text: widget.data, style: style),
         textDirection: Directionality.of(context),
@@ -72,7 +73,8 @@ class _CollapsibleOwnMessageState extends State<CollapsibleOwnMessage> {
         context,
         _expanded
             ? widget.child
-            : Text(widget.data, maxLines: 4, overflow: TextOverflow.ellipsis),
+            : Text(widget.data,
+                maxLines: 4, overflow: TextOverflow.ellipsis, style: style),
         toggle,
       );
     });

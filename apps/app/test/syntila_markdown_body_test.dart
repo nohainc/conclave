@@ -536,6 +536,10 @@ void main() {
     final darkSheet =
         SyntilaMarkdownStyleSheet.fromTheme(SyntilaBrand.darkTheme());
 
+    expect(lightSheet.p?.fontSize, 14);
+    expect(darkSheet.p?.fontSize, 14);
+    expect(lightSheet.p?.height, 1.5);
+    expect(darkSheet.p?.height, 1.5);
     expect(lightSheet.a?.color, SyntilaColors.primaryForegroundLight);
     expect(darkSheet.a?.color, SyntilaColors.primaryForegroundDark);
     expect(lightSheet.codeblockDecoration, isNotNull);

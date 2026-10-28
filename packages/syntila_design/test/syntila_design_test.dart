@@ -299,12 +299,52 @@ void main() {
       expect(SyntilaSpacing.xxxl, 48.0);
 
       expect(SyntilaBrandAssets.logoMasterSvg, contains('logo.svg'));
+      expect(SyntilaBrandAssets.logoDarkMasterSvg, contains('logo_dark.svg'));
       expect(SyntilaBrandAssets.logoPng32, contains('32.png'));
       expect(SyntilaBrandAssets.logoPng64, contains('64.png'));
       expect(SyntilaBrandAssets.logoPng128, contains('128.png'));
       expect(SyntilaBrandAssets.logoPng192, contains('192.png'));
       expect(SyntilaBrandAssets.logoPng512, contains('512.png'));
       expect(SyntilaBrandAssets.logoPng1024, contains('logo.png'));
+      expect(SyntilaBrandAssets.logoDarkPng32, contains('logo_dark_32.png'));
+      expect(SyntilaBrandAssets.logoDarkPng64, contains('logo_dark_64.png'));
+      expect(SyntilaBrandAssets.logoDarkPng128, contains('logo_dark_128.png'));
+      expect(SyntilaBrandAssets.logoDarkPng192, contains('logo_dark_192.png'));
+      expect(SyntilaBrandAssets.logoDarkPng512, contains('logo_dark_512.png'));
+      expect(SyntilaBrandAssets.logoDarkPng1024, contains('logo_dark.png'));
+      expect(
+          SyntilaBrandAssets.logoPng1024For(false), SyntilaBrandAssets.logoPng1024);
+      expect(SyntilaBrandAssets.logoPng1024For(true),
+          SyntilaBrandAssets.logoDarkPng1024);
+      expect(
+          SyntilaBrandAssets.logoPng32For(false), SyntilaBrandAssets.logoPng32);
+      expect(SyntilaBrandAssets.logoPng32For(true),
+          SyntilaBrandAssets.logoDarkPng32);
+    });
+
+    testWidgets('SyntilaBrand.logoMark selects light vs dark logo asset by theme',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: SyntilaBrand.lightTheme(),
+          home: Scaffold(body: SyntilaBrand.logoMark(size: 32)),
+        ),
+      );
+      final lightImage = tester.widget<Image>(find.byType(Image));
+      expect((lightImage.image as AssetImage).assetName,
+          SyntilaBrandAssets.logoPng1024);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: SyntilaBrand.darkTheme(),
+          themeAnimationDuration: Duration.zero,
+          home: Scaffold(body: SyntilaBrand.logoMark(size: 32)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final darkImage = tester.widget<Image>(find.byType(Image));
+      expect((darkImage.image as AssetImage).assetName,
+          SyntilaBrandAssets.logoDarkPng1024);
     });
   });
 }

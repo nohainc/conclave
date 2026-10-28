@@ -1,4 +1,5 @@
 import 'package:syntila_app/src/features/common/collapsible_own_message.dart';
+import 'package:syntila_app/src/features/common/syntila_markdown_body.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -18,8 +19,16 @@ void main() {
       );
 
   testWidgets('long own messages expand and collapse', (tester) async {
-    await tester.pumpWidget(host('One\nTwo\nThree\nFour\nFive'));
+    const content = 'One\nTwo\nThree\nFour\nFive';
+    await tester.pumpWidget(host(content));
     expect(find.text('Full Markdown'), findsNothing);
+    final collapsed = tester.widget<Text>(find.text(content));
+    expect(
+      collapsed.style?.fontSize,
+      SyntilaMessageTypography.fromTheme(
+              Theme.of(tester.element(find.text(content))))
+          .fontSize,
+    );
     await tester.tap(find.text('Show more'));
     await tester.pump();
     expect(find.text('Full Markdown'), findsOneWidget);

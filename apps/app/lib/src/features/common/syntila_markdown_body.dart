@@ -230,9 +230,9 @@ abstract final class SyntilaMessageTypography {
   static TextStyle fromTheme(ThemeData theme) => TextStyle(
         fontFamily: SyntilaTypography.fontFamily,
         fontFamilyFallback: SyntilaTypography.fontFamilyFallback,
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: FontWeight.w400,
-        height: 1.6,
+        height: 1.5,
         color: SyntilaColors.textPrimary(theme.brightness == Brightness.dark),
       );
 }
@@ -257,12 +257,12 @@ abstract final class SyntilaMarkdownStyleSheet {
       a: TextStyle(
           color: SyntilaColors.primaryForeground(isDark),
           decoration: TextDecoration.underline),
-      h1: heading(26),
-      h2: heading(22),
-      h3: heading(19),
-      h4: heading(17),
-      h5: heading(15),
-      h6: heading(14),
+      h1: heading(22),
+      h2: heading(19),
+      h3: heading(17),
+      h4: heading(15),
+      h5: heading(14),
+      h6: heading(13),
       em: const TextStyle(fontStyle: FontStyle.italic),
       strong: const TextStyle(fontWeight: FontWeight.w700),
       del: const TextStyle(decoration: TextDecoration.lineThrough),

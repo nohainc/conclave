@@ -11,6 +11,7 @@ export const CANONICAL_SVG_MASTERS = [
   "syntila_wordmark.svg",
   "syntila_wordmark_dark.svg",
   "syntila_logo.svg",
+  "syntila_logo_dark.svg",
 ];
 
 export const REQUIRED_CANONICAL_PNGS = [
@@ -21,6 +22,12 @@ export const REQUIRED_CANONICAL_PNGS = [
   "syntila_email_logo.png",
   "syntila_logo_64.png",
   "syntila_logo_32.png",
+  "syntila_logo_dark.png",
+  "syntila_logo_dark_512.png",
+  "syntila_logo_dark_192.png",
+  "syntila_logo_dark_128.png",
+  "syntila_logo_dark_64.png",
+  "syntila_logo_dark_32.png",
 ];
 
 export const MACOS_APP_ICON_SIZES = [16, 32, 64, 128, 256, 512, 1024];
@@ -90,11 +97,19 @@ export function verifyCanonicalSvgMasters(rootDir) {
     const content = readFileSync(svgPath, "utf8");
 
     const sourcePath = join(canonicalDir, "syntila_source.png");
-    const approvedRaster =
+    const sourceDarkPath = join(canonicalDir, "syntila_source_dark.png");
+    const matchesLightSource =
       existsSync(sourcePath) &&
       content.includes(
         `data:image/png;base64,${readFileSync(sourcePath).toString("base64")}`,
-      ) &&
+      );
+    const matchesDarkSource =
+      existsSync(sourceDarkPath) &&
+      content.includes(
+        `data:image/png;base64,${readFileSync(sourceDarkPath).toString("base64")}`,
+      );
+    const approvedRaster =
+      (matchesLightSource || matchesDarkSource) &&
       (content.match(/<image\b/g) || []).length === 1;
     if (
       /data:image\/|<image\s|xlink:href="data:/i.test(content) &&
@@ -180,9 +195,11 @@ export function verifyRequiredGeneratedIcons(rootDir) {
     "syntila_mark_dark.svg",
     "syntila_mark_monochrome.svg",
     "syntila_logo.svg",
+    "syntila_logo_dark.svg",
     "syntila_wordmark.svg",
     "syntila_wordmark_dark.svg",
     "syntila_logo.png",
+    "syntila_logo_dark.png",
     "syntila_email_logo.png",
     "favicon.png",
     "favicon.svg",
@@ -256,6 +273,10 @@ export function verifyBrandingHashSync(rootDir) {
       target: join(rootDir, "apps/site/public/syntila_logo.svg"),
     },
     {
+      source: join(canonicalDir, "syntila_logo_dark.svg"),
+      target: join(rootDir, "apps/site/public/syntila_logo_dark.svg"),
+    },
+    {
       source: join(canonicalDir, "syntila_mark.svg"),
       target: join(rootDir, "apps/site/public/syntila_mark.svg"),
     },
@@ -286,6 +307,10 @@ export function verifyBrandingHashSync(rootDir) {
     {
       source: join(canonicalDir, "syntila_logo.png"),
       target: join(rootDir, "apps/site/public/syntila_logo.png"),
+    },
+    {
+      source: join(canonicalDir, "syntila_logo_dark.png"),
+      target: join(rootDir, "apps/site/public/syntila_logo_dark.png"),
     },
   );
 

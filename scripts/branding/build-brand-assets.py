@@ -7,6 +7,7 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SOURCE = ROOT / 'assets/branding/syntila_source.png'
+SOURCE_DARK = ROOT / 'assets/branding/syntila_source_dark.png'
 CHECK = '--check' in sys.argv
 errors = []
 
@@ -19,26 +20,34 @@ def put(path, data):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
 
-def render(size, maskable=False):
+def render(size, maskable=False, source=SOURCE):
     with tempfile.TemporaryDirectory() as tmp:
         output = pathlib.Path(tmp) / 'icon.png'
         inset = round(size * (0.60 if maskable else 0.90))
-        subprocess.run(['magick', str(SOURCE), '-filter', 'Lanczos', '-resize', f'{inset}x{inset}',
+        subprocess.run(['magick', str(source), '-filter', 'Lanczos', '-resize', f'{inset}x{inset}',
                         '-background', '#121217' if maskable else 'none', '-gravity', 'center',
                         '-extent', f'{size}x{size}', '-strip', '-define', 'png:color-type=6', str(output)], check=True)
         return output.read_bytes()
 
 payload = base64.b64encode(SOURCE.read_bytes()).decode()
+payload_dark = base64.b64encode((SOURCE_DARK if SOURCE_DARK.exists() else SOURCE).read_bytes()).decode()
 image = f'<image href="data:image/png;base64,{payload}" x="64" y="64" width="1152" height="1152" preserveAspectRatio="xMidYMid meet"/>'
+image_dark = f'<image href="data:image/png;base64,{payload_dark}" x="64" y="64" width="1152" height="1152" preserveAspectRatio="xMidYMid meet"/>'
 svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1280">{image}</svg>\n'.encode()
-assets = {name: svg for name in ['syntila_logo.svg', 'syntila_mark.svg', 'syntila_mark_dark.svg', 'syntila_mark_monochrome.svg', 'syntila_mark_twotone.svg']}
-for name, color in [('syntila_wordmark.svg', '#20202A'), ('syntila_wordmark_dark.svg', '#F4F4F6')]:
-    assets[name] = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 96"><g transform="scale(.075)">{image}</g><text x="106" y="62" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="800" letter-spacing="0.06em" fill="{color}">SYNTILA</text></svg>\n').encode()
-icons = {size: render(size) for size in [16, 32, 64, 128, 192, 256, 512, 1024]}
+svg_dark = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1280">{image_dark}</svg>\n'.encode()
+assets = {name: svg for name in ['syntila_logo.svg', 'syntila_mark.svg', 'syntila_mark_monochrome.svg', 'syntila_mark_twotone.svg']}
+assets['syntila_logo_dark.svg'] = svg_dark
+assets['syntila_mark_dark.svg'] = svg_dark
+for name, color, mark_image in [('syntila_wordmark.svg', '#1E2023', image), ('syntila_wordmark_dark.svg', '#EFEFF0', image_dark)]:
+    assets[name] = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 96"><g transform="scale(.075)">{mark_image}</g><text x="106" y="62" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="800" letter-spacing="0.06em" fill="{color}">SYNTILA</text></svg>\n').encode()
+icons = {size: render(size, False, SOURCE) for size in [16, 32, 64, 128, 192, 256, 512, 1024]}
+icons_dark = {size: render(size, False, SOURCE_DARK if SOURCE_DARK.exists() else SOURCE) for size in [32, 64, 128, 192, 512, 1024]}
 assets['syntila_logo.png'] = icons[1024]
+assets['syntila_logo_dark.png'] = icons_dark[1024]
 assets['syntila_email_logo.png'] = icons[128]
 for size in [32, 64, 128, 192, 512]:
     assets[f'syntila_logo_{size}.png'] = icons[size]
+    assets[f'syntila_logo_dark_{size}.png'] = icons_dark[size]
 for name, data in assets.items():
     put(f'assets/branding/{name}', data)
     for app in ['app', 'workspace', 'profile_lab']:
@@ -65,7 +74,7 @@ with tempfile.TemporaryDirectory() as tmp:
 import re
 social = ROOT / 'apps/site/public/social-preview.svg'
 content = social.read_text()
-content = re.sub(r'<image\b[^>]*>', f'<image href="data:image/png;base64,{payload}" x="72" y="68" width="48" height="48"/>', content)
+content = re.sub(r'<image\b[^>]*>', f'<image href="data:image/png;base64,{payload_dark}" x="72" y="68" width="48" height="48"/>', content)
 put('apps/site/public/social-preview.svg', content.encode())
 with tempfile.TemporaryDirectory() as tmp:
     source = pathlib.Path(tmp) / 'social.svg'

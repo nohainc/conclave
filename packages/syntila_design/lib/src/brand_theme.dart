@@ -60,11 +60,13 @@ abstract final class SyntilaBrand {
     double size = 28,
     BorderRadius? borderRadius,
     BoxFit fit = BoxFit.contain,
+    Brightness? brightness,
   }) =>
       SyntilaBrandAssets.logoMark(
         size: size,
         borderRadius: borderRadius,
         fit: fit,
+        brightness: brightness,
       );
 
   // Responsive Breakpoints
